@@ -72,6 +72,15 @@ const (
 	// ConnectionServiceGetConnectionHealthProcedure is the procedure name of the ConnectionService's
 	// GetConnectionHealth RPC.
 	ConnectionServiceGetConnectionHealthProcedure = "/pantherclaw.v1.ConnectionService/GetConnectionHealth"
+	// ConnectionServiceListConnectionInventoryProcedure is the procedure name of the
+	// ConnectionService's ListConnectionInventory RPC.
+	ConnectionServiceListConnectionInventoryProcedure = "/pantherclaw.v1.ConnectionService/ListConnectionInventory"
+	// ConnectionServiceDismissInventoryItemProcedure is the procedure name of the ConnectionService's
+	// DismissInventoryItem RPC.
+	ConnectionServiceDismissInventoryItemProcedure = "/pantherclaw.v1.ConnectionService/DismissInventoryItem"
+	// ConnectionServiceDraftPackageFromInventoryProcedure is the procedure name of the
+	// ConnectionService's DraftPackageFromInventory RPC.
+	ConnectionServiceDraftPackageFromInventoryProcedure = "/pantherclaw.v1.ConnectionService/DraftPackageFromInventory"
 )
 
 var (
@@ -186,6 +195,28 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	connectionServiceListConnectionInventorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("ListConnectionInventory"),
+			Procedure:        ConnectionServiceListConnectionInventoryProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	connectionServiceDismissInventoryItemSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("DismissInventoryItem"),
+			Procedure:  ConnectionServiceDismissInventoryItemProcedure,
+		}
+	})
+	connectionServiceDraftPackageFromInventorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("DraftPackageFromInventory"),
+			Procedure:  ConnectionServiceDraftPackageFromInventoryProcedure,
+		}
+	})
 )
 
 // ConnectionServiceClient is a client for the pantherclaw.v1.ConnectionService service.
@@ -258,6 +289,25 @@ type ConnectionServiceClient interface {
 	// over the last 30 days.
 	// permission: connection.read
 	GetConnectionHealth(context.Context, *v1.GetConnectionHealthRequest) (*v1.GetConnectionHealthResponse, error)
+	// ListConnectionInventory lists what the connection's gateway found its
+	// upstream MCP server listing (F352, G0 M15 D23): tools, resources and
+	// resource templates, each NEW until a reviewed package version covers
+	// it. A NEW item is inert: never served, listed to agents or dispatched
+	// (HR-414). Descriptions are the upstream server's UNTRUSTED text
+	// (HR-415).
+	// permission: connection.read
+	ListConnectionInventory(context.Context, *v1.ListConnectionInventoryRequest) (*v1.ListConnectionInventoryResponse, error)
+	// DismissInventoryItem dismisses a NEW inventory item with a reason; its
+	// review entry closes REJECTED (HR-417). The item stays inert.
+	// permission: connection.manage
+	DismissInventoryItem(context.Context, *v1.DismissInventoryItemRequest) (*v1.DismissInventoryItemResponse, error)
+	// DraftPackageFromInventory generates an unsigned draft package from NEW
+	// inventory items (Team edition and above). The draft fails manifest
+	// validation until a person fills in what todo lists, and it enters only
+	// through the normal signature check and tool review (HR-416). The
+	// server never signs it.
+	// permission: package.import
+	DraftPackageFromInventory(context.Context, *v1.DraftPackageFromInventoryRequest) (*v1.DraftPackageFromInventoryResponse, error)
 }
 
 // NewConnectionServiceClient constructs a client for the pantherclaw.v1.ConnectionService service.
@@ -336,6 +386,25 @@ type ConnectionServiceHandler interface {
 	// over the last 30 days.
 	// permission: connection.read
 	GetConnectionHealth(context.Context, *v1.GetConnectionHealthRequest) (*v1.GetConnectionHealthResponse, error)
+	// ListConnectionInventory lists what the connection's gateway found its
+	// upstream MCP server listing (F352, G0 M15 D23): tools, resources and
+	// resource templates, each NEW until a reviewed package version covers
+	// it. A NEW item is inert: never served, listed to agents or dispatched
+	// (HR-414). Descriptions are the upstream server's UNTRUSTED text
+	// (HR-415).
+	// permission: connection.read
+	ListConnectionInventory(context.Context, *v1.ListConnectionInventoryRequest) (*v1.ListConnectionInventoryResponse, error)
+	// DismissInventoryItem dismisses a NEW inventory item with a reason; its
+	// review entry closes REJECTED (HR-417). The item stays inert.
+	// permission: connection.manage
+	DismissInventoryItem(context.Context, *v1.DismissInventoryItemRequest) (*v1.DismissInventoryItemResponse, error)
+	// DraftPackageFromInventory generates an unsigned draft package from NEW
+	// inventory items (Team edition and above). The draft fails manifest
+	// validation until a person fills in what todo lists, and it enters only
+	// through the normal signature check and tool review (HR-416). The
+	// server never signs it.
+	// permission: package.import
+	DraftPackageFromInventory(context.Context, *v1.DraftPackageFromInventoryRequest) (*v1.DraftPackageFromInventoryResponse, error)
 }
 
 // RegisterConnectionServiceHandler registers svc as the pantherclaw.v1.ConnectionService
@@ -358,6 +427,9 @@ func RegisterConnectionServiceHandler(server *connect.Server, svc ConnectionServ
 		connect.Method{Spec: connectionServiceGetConnectionCapabilitiesSpec(), Handler: adapter.getConnectionCapabilities},
 		connect.Method{Spec: connectionServiceTestConnectionSpec(), Handler: adapter.testConnection},
 		connect.Method{Spec: connectionServiceGetConnectionHealthSpec(), Handler: adapter.getConnectionHealth},
+		connect.Method{Spec: connectionServiceListConnectionInventorySpec(), Handler: adapter.listConnectionInventory},
+		connect.Method{Spec: connectionServiceDismissInventoryItemSpec(), Handler: adapter.dismissInventoryItem},
+		connect.Method{Spec: connectionServiceDraftPackageFromInventorySpec(), Handler: adapter.draftPackageFromInventory},
 	)
 }
 
@@ -422,6 +494,18 @@ func (UnimplementedConnectionServiceHandler) TestConnection(context.Context, *v1
 
 func (UnimplementedConnectionServiceHandler) GetConnectionHealth(context.Context, *v1.GetConnectionHealthRequest) (*v1.GetConnectionHealthResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.GetConnectionHealth is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) ListConnectionInventory(context.Context, *v1.ListConnectionInventoryRequest) (*v1.ListConnectionInventoryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.ListConnectionInventory is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) DismissInventoryItem(context.Context, *v1.DismissInventoryItemRequest) (*v1.DismissInventoryItemResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.DismissInventoryItem is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) DraftPackageFromInventory(context.Context, *v1.DraftPackageFromInventoryRequest) (*v1.DraftPackageFromInventoryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.DraftPackageFromInventory is not implemented")
 }
 
 type connectionServiceClient struct {
@@ -543,6 +627,30 @@ func (c *connectionServiceClient) TestConnection(ctx context.Context, req *v1.Te
 func (c *connectionServiceClient) GetConnectionHealth(ctx context.Context, req *v1.GetConnectionHealthRequest) (*v1.GetConnectionHealthResponse, error) {
 	var res v1.GetConnectionHealthResponse
 	if err := c.client.CallUnary(ctx, connectionServiceGetConnectionHealthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) ListConnectionInventory(ctx context.Context, req *v1.ListConnectionInventoryRequest) (*v1.ListConnectionInventoryResponse, error) {
+	var res v1.ListConnectionInventoryResponse
+	if err := c.client.CallUnary(ctx, connectionServiceListConnectionInventorySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) DismissInventoryItem(ctx context.Context, req *v1.DismissInventoryItemRequest) (*v1.DismissInventoryItemResponse, error) {
+	var res v1.DismissInventoryItemResponse
+	if err := c.client.CallUnary(ctx, connectionServiceDismissInventoryItemSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) DraftPackageFromInventory(ctx context.Context, req *v1.DraftPackageFromInventoryRequest) (*v1.DraftPackageFromInventoryResponse, error) {
+	var res v1.DraftPackageFromInventoryResponse
+	if err := c.client.CallUnary(ctx, connectionServiceDraftPackageFromInventorySpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -724,6 +832,42 @@ func (h connectionServiceHandler) getConnectionHealth(ctx context.Context, _ con
 		return err
 	}
 	res, err := h.svc.GetConnectionHealth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) listConnectionInventory(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListConnectionInventoryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListConnectionInventory(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) dismissInventoryItem(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DismissInventoryItemRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DismissInventoryItem(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) draftPackageFromInventory(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DraftPackageFromInventoryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DraftPackageFromInventory(ctx, &req)
 	if err != nil {
 		return err
 	}

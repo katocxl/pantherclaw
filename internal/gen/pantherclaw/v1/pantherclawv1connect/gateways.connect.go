@@ -89,6 +89,19 @@ const (
 	// GatewayServiceReportLocalRefusalProcedure is the procedure name of the GatewayService's
 	// ReportLocalRefusal RPC.
 	GatewayServiceReportLocalRefusalProcedure = "/pantherclaw.v1.GatewayService/ReportLocalRefusal"
+	// GatewayServiceReportStatusProcedure is the procedure name of the GatewayService's ReportStatus
+	// RPC.
+	GatewayServiceReportStatusProcedure = "/pantherclaw.v1.GatewayService/ReportStatus"
+	// GatewayServicePutMCPStateProcedure is the procedure name of the GatewayService's PutMCPState RPC.
+	GatewayServicePutMCPStateProcedure = "/pantherclaw.v1.GatewayService/PutMCPState"
+	// GatewayServiceGetMCPStateProcedure is the procedure name of the GatewayService's GetMCPState RPC.
+	GatewayServiceGetMCPStateProcedure = "/pantherclaw.v1.GatewayService/GetMCPState"
+	// GatewayServiceDeleteMCPStateProcedure is the procedure name of the GatewayService's
+	// DeleteMCPState RPC.
+	GatewayServiceDeleteMCPStateProcedure = "/pantherclaw.v1.GatewayService/DeleteMCPState"
+	// GatewayServiceReportInventoryProcedure is the procedure name of the GatewayService's
+	// ReportInventory RPC.
+	GatewayServiceReportInventoryProcedure = "/pantherclaw.v1.GatewayService/ReportInventory"
 )
 
 var (
@@ -513,6 +526,42 @@ var (
 			Procedure:  GatewayServiceReportLocalRefusalProcedure,
 		}
 	})
+	gatewayServiceReportStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportStatus"),
+			Procedure:  GatewayServiceReportStatusProcedure,
+		}
+	})
+	gatewayServicePutMCPStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("PutMCPState"),
+			Procedure:  GatewayServicePutMCPStateProcedure,
+		}
+	})
+	gatewayServiceGetMCPStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("GetMCPState"),
+			Procedure:        GatewayServiceGetMCPStateProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	gatewayServiceDeleteMCPStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("DeleteMCPState"),
+			Procedure:  GatewayServiceDeleteMCPStateProcedure,
+		}
+	})
+	gatewayServiceReportInventorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportInventory"),
+			Procedure:  GatewayServiceReportInventoryProcedure,
+		}
+	})
 )
 
 // GatewayServiceClient is a client for the pantherclaw.v1.GatewayService service.
@@ -592,6 +641,35 @@ type GatewayServiceClient interface {
 	// the gateway serves.
 	// permission: gateway.observe
 	ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error)
+	// ReportStatus reports one gateway replica's status (G0 M15 D10,
+	// HR-410): its version, build, start time, the config version it serves
+	// and each connection's serving state. The org and gateway come from the
+	// certificate alone; connections the gateway does not serve are dropped.
+	// A failed report never stops the gateway serving.
+	// permission: gateway.observe
+	ReportStatus(context.Context, *v1.ReportStatusRequest) (*v1.ReportStatusResponse, error)
+	// PutMCPState writes one MCP hold, task or session of the calling
+	// gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version. An
+	// update keeps the entry's binding, and a connection the gateway does
+	// not serve is refused (D42).
+	// permission: gateway.sync
+	PutMCPState(context.Context, *v1.PutMCPStateRequest) (*v1.PutMCPStateResponse, error)
+	// GetMCPState reads one live MCP hold, task or session of the calling
+	// gateway; an expired entry is not found.
+	// permission: gateway.sync
+	GetMCPState(context.Context, *v1.GetMCPStateRequest) (*v1.GetMCPStateResponse, error)
+	// DeleteMCPState deletes one MCP hold, task or session of the calling
+	// gateway; a missing entry is not an error.
+	// permission: gateway.sync
+	DeleteMCPState(context.Context, *v1.DeleteMCPStateRequest) (*v1.DeleteMCPStateResponse, error)
+	// ReportInventory reports what an upstream MCP server lists behind one
+	// of the calling gateway's kind-mcp connections (F352, G0 M15 D20): its
+	// tools, resources and resource templates. A new item no active reviewed
+	// package version covers opens a TOOL_REVIEW entry and stays inert
+	// (HR-414); descriptions are UNTRUSTED (HR-415). Reports are capped and
+	// accepted only for connections the gateway serves (HR-418).
+	// permission: gateway.observe
+	ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error)
 }
 
 // NewGatewayServiceClient constructs a client for the pantherclaw.v1.GatewayService service.
@@ -698,6 +776,35 @@ type GatewayServiceHandler interface {
 	// the gateway serves.
 	// permission: gateway.observe
 	ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error)
+	// ReportStatus reports one gateway replica's status (G0 M15 D10,
+	// HR-410): its version, build, start time, the config version it serves
+	// and each connection's serving state. The org and gateway come from the
+	// certificate alone; connections the gateway does not serve are dropped.
+	// A failed report never stops the gateway serving.
+	// permission: gateway.observe
+	ReportStatus(context.Context, *v1.ReportStatusRequest) (*v1.ReportStatusResponse, error)
+	// PutMCPState writes one MCP hold, task or session of the calling
+	// gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version. An
+	// update keeps the entry's binding, and a connection the gateway does
+	// not serve is refused (D42).
+	// permission: gateway.sync
+	PutMCPState(context.Context, *v1.PutMCPStateRequest) (*v1.PutMCPStateResponse, error)
+	// GetMCPState reads one live MCP hold, task or session of the calling
+	// gateway; an expired entry is not found.
+	// permission: gateway.sync
+	GetMCPState(context.Context, *v1.GetMCPStateRequest) (*v1.GetMCPStateResponse, error)
+	// DeleteMCPState deletes one MCP hold, task or session of the calling
+	// gateway; a missing entry is not an error.
+	// permission: gateway.sync
+	DeleteMCPState(context.Context, *v1.DeleteMCPStateRequest) (*v1.DeleteMCPStateResponse, error)
+	// ReportInventory reports what an upstream MCP server lists behind one
+	// of the calling gateway's kind-mcp connections (F352, G0 M15 D20): its
+	// tools, resources and resource templates. A new item no active reviewed
+	// package version covers opens a TOOL_REVIEW entry and stays inert
+	// (HR-414); descriptions are UNTRUSTED (HR-415). Reports are capped and
+	// accepted only for connections the gateway serves (HR-418).
+	// permission: gateway.observe
+	ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error)
 }
 
 // RegisterGatewayServiceHandler registers svc as the pantherclaw.v1.GatewayService implementation
@@ -719,6 +826,11 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceReportFactsSpec(), Handler: adapter.reportFacts},
 		connect.Method{Spec: gatewayServiceReportRevocationFailureSpec(), Handler: adapter.reportRevocationFailure},
 		connect.Method{Spec: gatewayServiceReportLocalRefusalSpec(), Handler: adapter.reportLocalRefusal},
+		connect.Method{Spec: gatewayServiceReportStatusSpec(), Handler: adapter.reportStatus},
+		connect.Method{Spec: gatewayServicePutMCPStateSpec(), Handler: adapter.putMCPState},
+		connect.Method{Spec: gatewayServiceGetMCPStateSpec(), Handler: adapter.getMCPState},
+		connect.Method{Spec: gatewayServiceDeleteMCPStateSpec(), Handler: adapter.deleteMCPState},
+		connect.Method{Spec: gatewayServiceReportInventorySpec(), Handler: adapter.reportInventory},
 	)
 }
 
@@ -795,6 +907,26 @@ func (UnimplementedGatewayServiceHandler) ReportRevocationFailure(context.Contex
 
 func (UnimplementedGatewayServiceHandler) ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportLocalRefusal is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportStatus(context.Context, *v1.ReportStatusRequest) (*v1.ReportStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportStatus is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) PutMCPState(context.Context, *v1.PutMCPStateRequest) (*v1.PutMCPStateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.PutMCPState is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) GetMCPState(context.Context, *v1.GetMCPStateRequest) (*v1.GetMCPStateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.GetMCPState is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) DeleteMCPState(context.Context, *v1.DeleteMCPStateRequest) (*v1.DeleteMCPStateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.DeleteMCPState is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportInventory is not implemented")
 }
 
 type gatewayServiceClient struct {
@@ -908,6 +1040,46 @@ func (c *gatewayServiceClient) ReportRevocationFailure(ctx context.Context, req 
 func (c *gatewayServiceClient) ReportLocalRefusal(ctx context.Context, req *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error) {
 	var res v1.ReportLocalRefusalResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceReportLocalRefusalSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ReportStatus(ctx context.Context, req *v1.ReportStatusRequest) (*v1.ReportStatusResponse, error) {
+	var res v1.ReportStatusResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) PutMCPState(ctx context.Context, req *v1.PutMCPStateRequest) (*v1.PutMCPStateResponse, error) {
+	var res v1.PutMCPStateResponse
+	if err := c.client.CallUnary(ctx, gatewayServicePutMCPStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) GetMCPState(ctx context.Context, req *v1.GetMCPStateRequest) (*v1.GetMCPStateResponse, error) {
+	var res v1.GetMCPStateResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceGetMCPStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) DeleteMCPState(ctx context.Context, req *v1.DeleteMCPStateRequest) (*v1.DeleteMCPStateResponse, error) {
+	var res v1.DeleteMCPStateResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceDeleteMCPStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ReportInventory(ctx context.Context, req *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error) {
+	var res v1.ReportInventoryResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportInventorySpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -1073,6 +1245,66 @@ func (h gatewayServiceHandler) reportLocalRefusal(ctx context.Context, _ connect
 		return err
 	}
 	res, err := h.svc.ReportLocalRefusal(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) reportStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) putMCPState(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PutMCPStateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PutMCPState(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) getMCPState(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetMCPStateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetMCPState(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) deleteMCPState(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteMCPStateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteMCPState(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) reportInventory(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportInventoryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportInventory(ctx, &req)
 	if err != nil {
 		return err
 	}

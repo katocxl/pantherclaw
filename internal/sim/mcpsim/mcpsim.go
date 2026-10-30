@@ -100,6 +100,11 @@ type Faults struct {
 	// Misbehave makes create_refund with an upstream misbehave by its
 	// charge (ChargeInflate and the others): test-only.
 	Misbehave bool
+	// Extra, Resources and Templates are listed beyond the built-in tools
+	// (G0 M15 D24, inventory.go).
+	Extra     []ExtraTool
+	Resources []Resource
+	Templates []ResourceTemplate
 }
 
 // Server is the simulated MCP server.
@@ -113,6 +118,8 @@ type Server struct {
 	answers  []string
 	calls    int
 	params   []http.Header
+	// surface is the reviewed-surface state (surface_m15.go).
+	surface surface
 }
 
 type refund struct {
@@ -221,7 +228,7 @@ func (s *Server) tools() []jsontext.Value {
 	if s.f.GitHub != nil {
 		out = append(out, github.MCPTools...)
 	}
-	return out
+	return append(out, s.extraTools()...)
 }
 
 // declared are the x-mcp-header parameters of a tool as the server lists
@@ -334,6 +341,9 @@ func (s *Server) modern(w http.ResponseWriter, r *http.Request, m message) {
 			writeJSON(w, http.StatusBadRequest, reply(m.ID, nil, rpcError(-32020, "Header mismatch: "+msg)))
 			return
 		}
+		if s.elicit(w, m) {
+			return
+		}
 		if s.f.InputRequired {
 			writeJSON(w, http.StatusOK, reply(m.ID, map[string]any{"resultType": "input_required", "inputRequests": map[string]any{
 				"confirm": map[string]any{"method": "elicitation/create", "params": map[string]any{"message": "Confirm the refund?"}},
@@ -345,7 +355,14 @@ func (s *Server) modern(w http.ResponseWriter, r *http.Request, m message) {
 			result["resultType"] = "complete"
 		}
 		s.answer(w, m.ID, result, rpcErr, nil)
+	case "resources/read":
+		s.readResource(w, m)
 	default:
+		if res, ok := s.lists(m.Method, m.Params); ok && s.hasResources() {
+			res["resultType"] = "complete"
+			writeJSON(w, http.StatusOK, reply(m.ID, res, nil))
+			return
+		}
 		writeJSON(w, http.StatusNotFound, reply(m.ID, nil, rpcError(-32601, "Method not found")))
 	}
 }
@@ -405,7 +422,13 @@ func (s *Server) legacy(w http.ResponseWriter, r *http.Request, m message) {
 	case "tools/call":
 		result, rpcErr := s.call(r.Context(), m.Params)
 		s.answer(w, m.ID, result, rpcErr, s.f.Ask)
+	case "resources/read":
+		s.readResource(w, m)
 	default:
+		if res, ok := s.lists(m.Method, m.Params); ok && s.hasResources() {
+			writeJSON(w, http.StatusOK, reply(m.ID, res, nil))
+			return
+		}
 		writeJSON(w, http.StatusOK, reply(m.ID, nil, rpcError(-32601, "Method not found")))
 	}
 }
@@ -500,6 +523,9 @@ func (s *Server) call(ctx context.Context, params jsontext.Value) (map[string]an
 	}
 	if p.Name == "create_refund" && s.f.Upstream != "" {
 		return s.forward(ctx, p.Arguments), nil
+	}
+	if res, ok := s.callExtra(p.Name, p.Arguments); ok {
+		return res, nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

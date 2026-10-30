@@ -99,6 +99,27 @@ service ConnectionService {
   rpc GetConnectionHealth(GetConnectionHealthRequest) returns (GetConnectionHealthResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ListConnectionInventory lists what the connection's gateway found its
+  // upstream MCP server listing (F352, G0 M15 D23): tools, resources and
+  // resource templates, each NEW until a reviewed package version covers
+  // it. A NEW item is inert: never served, listed to agents or dispatched
+  // (HR-414). Descriptions are the upstream server's UNTRUSTED text
+  // (HR-415).
+  // permission: connection.read
+  rpc ListConnectionInventory(ListConnectionInventoryRequest) returns (ListConnectionInventoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DismissInventoryItem dismisses a NEW inventory item with a reason; its
+  // review entry closes REJECTED (HR-417). The item stays inert.
+  // permission: connection.manage
+  rpc DismissInventoryItem(DismissInventoryItemRequest) returns (DismissInventoryItemResponse);
+  // DraftPackageFromInventory generates an unsigned draft package from NEW
+  // inventory items (Team edition and above). The draft fails manifest
+  // validation until a person fills in what todo lists, and it enters only
+  // through the normal signature check and tool review (HR-416). The
+  // server never signs it.
+  // permission: package.import
+  rpc DraftPackageFromInventory(DraftPackageFromInventoryRequest) returns (DraftPackageFromInventoryResponse);
 }
 
 // ConnectionKind is what a connection reaches.
@@ -1094,4 +1115,151 @@ message GetConnectionHealthRequest {
 message GetConnectionHealthResponse {
   // The health.
   ConnectionHealth health = 1;
+}
+
+// InventoryItemKind is what an upstream MCP server listed.
+enum InventoryItemKind {
+  INVENTORY_ITEM_KIND_UNSPECIFIED = 0;
+  INVENTORY_ITEM_KIND_TOOL = 1;
+  INVENTORY_ITEM_KIND_RESOURCE = 2;
+  INVENTORY_ITEM_KIND_RESOURCE_TEMPLATE = 3;
+}
+
+// InventoryItemState is where an inventory item's review stands.
+enum InventoryItemState {
+  INVENTORY_ITEM_STATE_UNSPECIFIED = 0;
+  // Not covered by an active reviewed package version; inert, with an open
+  // review entry.
+  INVENTORY_ITEM_STATE_NEW = 1;
+  // An active package version pinned for the connection covers it.
+  INVENTORY_ITEM_STATE_COVERED = 2;
+  // A person dismissed it with a reason.
+  INVENTORY_ITEM_STATE_DISMISSED = 3;
+  // A complete listing no longer had it.
+  INVENTORY_ITEM_STATE_VANISHED = 4;
+}
+
+// InventoryItem is one (kind, name, digest) an upstream server listed.
+message InventoryItem {
+  // Item id.
+  string id = 1;
+  // Connection id.
+  string connection_id = 2;
+  // Kind.
+  InventoryItemKind kind = 3;
+  // The tool name, resource URI or URI template.
+  string name = 4;
+  // UNTRUSTED: the listed name of a resource or template.
+  string display_name = 5;
+  // UNTRUSTED: the listed MIME type.
+  string mime_type = 6;
+  // sha256:<hex> of the canonical listing entry.
+  string digest = 7;
+  // UNTRUSTED: the upstream description, at most 8 KiB. Show it flagged;
+  // it is never a served description (HR-415).
+  string description = 8;
+  // The injection scan of the description: clean, flagged, partial or
+  // not_scanned.
+  string description_scan = 9;
+  // State.
+  InventoryItemState state = 10;
+  // The item's TOOL_REVIEW waitlist entry, if one was opened.
+  string review_entry_id = 11;
+  // Who dismissed it.
+  string dismissed_by = 12;
+  // UNTRUSTED: the dismissal reason.
+  string dismiss_reason = 13;
+  // First listed.
+  google.protobuf.Timestamp first_seen_time = 14;
+  // Last listed.
+  google.protobuf.Timestamp last_seen_time = 15;
+  // Last state change.
+  google.protobuf.Timestamp update_time = 16;
+  // Whether the gateway cut the display name or MIME type to 128 bytes.
+  bool display_truncated = 17;
+}
+
+// ListConnectionInventoryRequest selects one page.
+message ListConnectionInventoryRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // Only these states (default all).
+  repeated InventoryItemState states = 2 [(buf.validate.field).repeated = {
+    max_items: 4
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Only these kinds (default all).
+  repeated InventoryItemKind kinds = 3 [(buf.validate.field).repeated = {
+    max_items: 3
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 5 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListConnectionInventoryResponse is one page.
+message ListConnectionInventoryResponse {
+  // Items.
+  repeated InventoryItem items = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// DismissInventoryItemRequest dismisses one NEW item.
+message DismissInventoryItemRequest {
+  // Item id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // UNTRUSTED: why, 1 to 500 characters.
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// DismissInventoryItemResponse returns the dismissed item.
+message DismissInventoryItemResponse {
+  // The item.
+  InventoryItem item = 1;
+}
+
+// DraftPackageFromInventoryRequest names the NEW items to draft.
+message DraftPackageFromInventoryRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // NEW items of that connection, 1 to 100.
+  repeated string item_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 100
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+// DraftPackageFromInventoryResponse is the unsigned draft.
+message DraftPackageFromInventoryResponse {
+  // The draft package manifest (YAML), unsigned. Upstream descriptions are
+  // in comments marked UNTRUSTED, never in a description field.
+  bytes manifest_yaml = 1;
+  // What a person must fill in before the draft validates.
+  repeated string todo = 2;
 }

@@ -68,7 +68,10 @@ type Gateway struct {
 	log         *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
-	reportDrift           DriftReporter
+	reportDrift DriftReporter
+	// reportInventory sends each kind-mcp connection's discovery inventory
+	// from the drift loop (G0 M15 D20); nil sends none.
+	reportInventory       InventoryReporter
 	driftEvery, driftPoll time.Duration
 	// verifications, verifyEvery and verifyHintGap drive the verification
 	// reads (verify.go, G0 M7).
@@ -76,6 +79,8 @@ type Gateway struct {
 	verifyEvery, verifyHintGap time.Duration
 	// submitScan sends an organization scan's findings (orgscan.go, G0 M8).
 	submitScan ScanSubmitter
+	// status reports this replica's status (status.go, G0 M15 D10).
+	status *status
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
@@ -128,6 +133,9 @@ type Deps struct {
 	// ReportDrift tells the server an upstream MCP tool drifted (HR-081);
 	// nil reports nothing.
 	ReportDrift DriftReporter
+	// ReportInventory tells the server what each kind-mcp connection's upstream
+	// server lists (F352, G0 M15 D20); nil reports nothing.
+	ReportInventory InventoryReporter
 	// Verifications claims and reports verification tasks (G0 M7); nil
 	// makes no verification reads.
 	Verifications Verifications
@@ -147,6 +155,11 @@ type Deps struct {
 	// SubmitScan sends an organization scan's findings to the server (G0 M8,
 	// HR-209); nil submits none.
 	SubmitScan ScanSubmitter
+	// ReportStatus sends a status report (G0 M15 D10); nil sends none.
+	ReportStatus StatusReporter
+	// MCPState keeps the MCP face's holds, tasks and sessions on the server
+	// (G0 M15 D14); nil keeps them in this process's memory.
+	MCPState mcp.StateClient
 	// Run is background work (certificate renewal, the containment stream,
 	// configuration sync); nil for none.
 	Run []func(ctx context.Context) error
@@ -189,12 +202,21 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			_, err := ctl.Gateway.ReportDrift(ctx, req)
 			return err
 		},
+		ReportInventory: func(ctx context.Context, conn string, inv dispatch.Inventory) error {
+			_, err := ctl.Gateway.ReportInventory(ctx, inventoryRequest(conn, inv))
+			return err
+		},
 		Verifications: controlVerifications{ctl},
 		ReportFacts: func(ctx context.Context, conn string, obs []*pb.FactObservation) error {
 			_, err := ctl.Gateway.ReportFacts(ctx, &pb.ReportFactsRequest{ConnectionId: conn, Observations: obs})
 			return err
 		},
 		SubmitScan: controlScans{ctl}.submit,
+		ReportStatus: func(ctx context.Context, r *pb.ReportStatusRequest) (int32, error) {
+			res, err := ctl.Gateway.ReportStatus(ctx, r)
+			return res.GetNextReportSeconds(), err
+		},
+		MCPState: ctl.Gateway,
 		ReportRevocation: func(ctx context.Context, conn, purpose string, a broker.Access) error {
 			req := &pb.ReportRevocationFailureRequest{
 				ConnectionId: conn, Purpose: purpose, InstallationId: a.Installation, Repository: a.Repository,
@@ -205,10 +227,12 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			_, err := ctl.Gateway.ReportRevocationFailure(ctx, req)
 			return err
 		},
-		ReportLocalRefusal: func(ctx context.Context, conn, code, operation, run string) error {
-			_, err := ctl.Gateway.ReportLocalRefusal(ctx, &pb.ReportLocalRefusalRequest{
-				ConnectionId: conn, Code: code, Operation: operation, RunId: run,
-			})
+		ReportLocalRefusal: func(ctx context.Context, conn, code, operation, run string, detail dispatch.RefusalDetail) error {
+			req := &pb.ReportLocalRefusalRequest{ConnectionId: conn, Code: code, Operation: operation, RunId: run, QuestionSha256: detail.QuestionSHA256}
+			if detail.ElicitationReason != "" {
+				req.ElicitationReason = &detail.ElicitationReason
+			}
+			_, err := ctl.Gateway.ReportLocalRefusal(ctx, req)
 			return err
 		},
 	}
@@ -282,9 +306,17 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		sdk:  sdk.New(engine, d.Configuration, cfg.PublicURL, log),
 		a2a:  a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log),
-		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
+		log:  log, reportDrift: d.ReportDrift, reportInventory: d.ReportInventory, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 		submitScan: d.SubmitScan,
+		status:     newStatus(d.ReportStatus),
+	}
+	if d.MCPState != nil {
+		var sealer mcp.Sealer
+		if d.Broker != nil {
+			sealer = d.Broker.key
+		}
+		g.mcp.WithServerState(d.MCPState, sealer, d.Org, d.GatewayID)
 	}
 	if e := cfg.Control.VerifyEvery.D(); e > 0 {
 		g.verifyEvery = e
@@ -301,6 +333,8 @@ func (g *Gateway) Run(ctx context.Context) error {
 	eg.Go(func() error { return g.watchDrift(ctx) })
 	eg.Go(func() error { return g.watchA2ACards(ctx) })
 	eg.Go(func() error { return g.watchVerifications(ctx) })
+	eg.Go(func() error { return g.watchStatus(ctx) })
+	eg.Go(func() error { return g.warnUnsharedTasks(ctx) })
 	eg.Go(func() error { <-ctx.Done(); return nil })
 	return eg.Wait()
 }

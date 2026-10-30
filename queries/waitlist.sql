@@ -58,6 +58,9 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
 UPDATE pc.waitlist_entries
 SET state = 'EXPIRED', decided_by = 'system', decided_at = now(), decision_reason = 'EXPIRED'
 WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND kind = ANY (sqlc.arg(kinds)::text[]) AND deadline_at <= now()
+  -- An inventory item's review ends only by coverage, dismissal or
+  -- disappearance (HR-417), never at its deadline.
+  AND subject_type <> 'connection_inventory'
 RETURNING id, kind;
 
 -- Assignment only shows who is working on an entry (HR-177).

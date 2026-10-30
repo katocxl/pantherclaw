@@ -8214,6 +8214,168 @@
         }
       }
     },
+    "/pantherclaw.v1.ConnectionService/ListConnectionInventory": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "ListConnectionInventory",
+        "description": "ListConnectionInventory lists what the connection's gateway found its\n upstream MCP server listing (F352, G0 M15 D23): tools, resources and\n resource templates, each NEW until a reviewed package version covers\n it. A NEW item is inert: never served, listed to agents or dispatched\n (HR-414). Descriptions are the upstream server's UNTRUSTED text\n (HR-415).\n permission: connection.read",
+        "operationId": "pantherclaw.v1.ConnectionService.ListConnectionInventory",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListConnectionInventoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListConnectionInventoryResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConnectionService/DismissInventoryItem": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "DismissInventoryItem",
+        "description": "DismissInventoryItem dismisses a NEW inventory item with a reason; its\n review entry closes REJECTED (HR-417). The item stays inert.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.ConnectionService.DismissInventoryItem",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DismissInventoryItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DismissInventoryItemResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConnectionService/DraftPackageFromInventory": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "DraftPackageFromInventory",
+        "description": "DraftPackageFromInventory generates an unsigned draft package from NEW\n inventory items (Team edition and above). The draft fails manifest\n validation until a person fills in what todo lists, and it enters only\n through the normal signature check and tool review (HR-416). The\n server never signs it.\n permission: package.import",
+        "operationId": "pantherclaw.v1.ConnectionService.DraftPackageFromInventory",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DraftPackageFromInventoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DraftPackageFromInventoryResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ContainmentService/GetKillSwitch": {
       "post": {
         "tags": [
@@ -12959,6 +13121,276 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.ReportLocalRefusalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/ReportStatus": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "ReportStatus",
+        "description": "ReportStatus reports one gateway replica's status (G0 M15 D10,\n HR-410): its version, build, start time, the config version it serves\n and each connection's serving state. The org and gateway come from the\n certificate alone; connections the gateway does not serve are dropped.\n A failed report never stops the gateway serving.\n permission: gateway.observe",
+        "operationId": "pantherclaw.v1.GatewayService.ReportStatus",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReportStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReportStatusResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/PutMCPState": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "PutMCPState",
+        "description": "PutMCPState writes one MCP hold, task or session of the calling\n gateway (G0 M15 D12, HR-411..413), compare-and-set on if_version. An\n update keeps the entry's binding, and a connection the gateway does\n not serve is refused (D42).\n permission: gateway.sync",
+        "operationId": "pantherclaw.v1.GatewayService.PutMCPState",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.PutMCPStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.PutMCPStateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/GetMCPState": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "GetMCPState",
+        "description": "GetMCPState reads one live MCP hold, task or session of the calling\n gateway; an expired entry is not found.\n permission: gateway.sync",
+        "operationId": "pantherclaw.v1.GatewayService.GetMCPState",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetMCPStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetMCPStateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/DeleteMCPState": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "DeleteMCPState",
+        "description": "DeleteMCPState deletes one MCP hold, task or session of the calling\n gateway; a missing entry is not an error.\n permission: gateway.sync",
+        "operationId": "pantherclaw.v1.GatewayService.DeleteMCPState",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DeleteMCPStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DeleteMCPStateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/ReportInventory": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "ReportInventory",
+        "description": "ReportInventory reports what an upstream MCP server lists behind one\n of the calling gateway's kind-mcp connections (F352, G0 M15 D20): its\n tools, resources and resource templates. A new item no active reviewed\n package version covers opens a TOOL_REVIEW entry and stays inert\n (HR-414); descriptions are UNTRUSTED (HR-415). Reports are capped and\n accepted only for connections the gateway serves (HR-418).\n permission: gateway.observe",
+        "operationId": "pantherclaw.v1.GatewayService.ReportInventory",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReportInventoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReportInventoryResponse"
                 }
               }
             }
@@ -41285,6 +41717,29 @@
         ],
         "description": "DestinationClass classifies a connection's target (HR-079)."
       },
+      "pantherclaw.v1.InventoryItemKind": {
+        "type": "string",
+        "title": "InventoryItemKind",
+        "enum": [
+          "INVENTORY_ITEM_KIND_UNSPECIFIED",
+          "INVENTORY_ITEM_KIND_TOOL",
+          "INVENTORY_ITEM_KIND_RESOURCE",
+          "INVENTORY_ITEM_KIND_RESOURCE_TEMPLATE"
+        ],
+        "description": "InventoryItemKind is what an upstream MCP server listed."
+      },
+      "pantherclaw.v1.InventoryItemState": {
+        "type": "string",
+        "title": "InventoryItemState",
+        "enum": [
+          "INVENTORY_ITEM_STATE_UNSPECIFIED",
+          "INVENTORY_ITEM_STATE_NEW",
+          "INVENTORY_ITEM_STATE_COVERED",
+          "INVENTORY_ITEM_STATE_DISMISSED",
+          "INVENTORY_ITEM_STATE_VANISHED"
+        ],
+        "description": "InventoryItemState is where an inventory item's review stands."
+      },
       "pantherclaw.v1.RouteMode": {
         "type": "string",
         "title": "RouteMode",
@@ -42562,6 +43017,99 @@
         "additionalProperties": false,
         "description": "CreateConnectionResponse returns the connection."
       },
+      "pantherclaw.v1.DismissInventoryItemRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Item id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "UNTRUSTED: why, 1 to 500 characters."
+          }
+        },
+        "title": "DismissInventoryItemRequest",
+        "additionalProperties": false,
+        "description": "DismissInventoryItemRequest dismisses one NEW item.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.DismissInventoryItemResponse": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "title": "item",
+            "description": "The item.",
+            "$ref": "#/components/schemas/pantherclaw.v1.InventoryItem"
+          }
+        },
+        "title": "DismissInventoryItemResponse",
+        "additionalProperties": false,
+        "description": "DismissInventoryItemResponse returns the dismissed item."
+      },
+      "pantherclaw.v1.DraftPackageFromInventoryRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 100,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "title": "item_ids",
+            "maxItems": 100,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "NEW items of that connection, 1 to 100."
+          }
+        },
+        "title": "DraftPackageFromInventoryRequest",
+        "additionalProperties": false,
+        "description": "DraftPackageFromInventoryRequest names the NEW items to draft.",
+        "required": [
+          "connectionId",
+          "itemIds"
+        ]
+      },
+      "pantherclaw.v1.DraftPackageFromInventoryResponse": {
+        "type": "object",
+        "properties": {
+          "manifestYaml": {
+            "type": "string",
+            "title": "manifest_yaml",
+            "format": "byte",
+            "description": "The draft package manifest (YAML), unsigned. Upstream descriptions are\n in comments marked UNTRUSTED, never in a description field."
+          },
+          "todo": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "todo",
+            "description": "What a person must fill in before the draft validates."
+          }
+        },
+        "title": "DraftPackageFromInventoryResponse",
+        "additionalProperties": false,
+        "description": "DraftPackageFromInventoryResponse is the unsigned draft."
+      },
       "pantherclaw.v1.GetConnectionCapabilitiesRequest": {
         "type": "object",
         "properties": {
@@ -42736,6 +43284,199 @@
         "title": "GetSealingKeyResponse",
         "additionalProperties": false,
         "description": "GetSealingKeyResponse is everything a seal binds (HR-060, HR-182)."
+      },
+      "pantherclaw.v1.InventoryItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Item id."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "Connection id."
+          },
+          "kind": {
+            "title": "kind",
+            "description": "Kind.",
+            "$ref": "#/components/schemas/pantherclaw.v1.InventoryItemKind"
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "The tool name, resource URI or URI template."
+          },
+          "displayName": {
+            "type": "string",
+            "title": "display_name",
+            "description": "UNTRUSTED: the listed name of a resource or template."
+          },
+          "mimeType": {
+            "type": "string",
+            "title": "mime_type",
+            "description": "UNTRUSTED: the listed MIME type."
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "description": "sha256:\u003chex\u003e of the canonical listing entry."
+          },
+          "description": {
+            "type": "string",
+            "title": "description",
+            "description": "UNTRUSTED: the upstream description, at most 8 KiB. Show it flagged;\n it is never a served description (HR-415)."
+          },
+          "descriptionScan": {
+            "type": "string",
+            "title": "description_scan",
+            "description": "The injection scan of the description: clean, flagged, partial or\n not_scanned."
+          },
+          "state": {
+            "title": "state",
+            "description": "State.",
+            "$ref": "#/components/schemas/pantherclaw.v1.InventoryItemState"
+          },
+          "reviewEntryId": {
+            "type": "string",
+            "title": "review_entry_id",
+            "description": "The item's TOOL_REVIEW waitlist entry, if one was opened."
+          },
+          "dismissedBy": {
+            "type": "string",
+            "title": "dismissed_by",
+            "description": "Who dismissed it."
+          },
+          "dismissReason": {
+            "type": "string",
+            "title": "dismiss_reason",
+            "description": "UNTRUSTED: the dismissal reason."
+          },
+          "firstSeenTime": {
+            "title": "first_seen_time",
+            "description": "First listed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastSeenTime": {
+            "title": "last_seen_time",
+            "description": "Last listed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "Last state change.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "displayTruncated": {
+            "type": "boolean",
+            "title": "display_truncated",
+            "description": "Whether the gateway cut the display name or MIME type to 128 bytes."
+          }
+        },
+        "title": "InventoryItem",
+        "additionalProperties": false,
+        "description": "InventoryItem is one (kind, name, digest) an upstream server listed."
+      },
+      "pantherclaw.v1.ListConnectionInventoryRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "states": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InventoryItemState",
+              "not": {
+                "enum": [
+                  "INVENTORY_ITEM_STATE_UNSPECIFIED"
+                ]
+              }
+            },
+            "title": "states",
+            "maxItems": 4,
+            "description": "Only these states (default all)."
+          },
+          "kinds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InventoryItemKind",
+              "not": {
+                "enum": [
+                  "INVENTORY_ITEM_KIND_UNSPECIFIED"
+                ]
+              }
+            },
+            "title": "kinds",
+            "maxItems": 3,
+            "description": "Only these kinds (default all)."
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListConnectionInventoryRequest",
+        "additionalProperties": false,
+        "description": "ListConnectionInventoryRequest selects one page.",
+        "required": [
+          "connectionId"
+        ]
+      },
+      "pantherclaw.v1.ListConnectionInventoryResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InventoryItem"
+            },
+            "title": "items",
+            "description": "Items."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListConnectionInventoryResponse",
+        "additionalProperties": false,
+        "description": "ListConnectionInventoryResponse is one page."
       },
       "pantherclaw.v1.ListConnectionsRequest": {
         "type": "object",
@@ -51307,6 +52048,18 @@
         "additionalProperties": false,
         "description": "ReportFactsResponse returns one result per observation."
       },
+      "pantherclaw.v1.ConnectionServingState": {
+        "type": "string",
+        "title": "ConnectionServingState",
+        "enum": [
+          "CONNECTION_SERVING_STATE_UNSPECIFIED",
+          "CONNECTION_SERVING_STATE_SERVING",
+          "CONNECTION_SERVING_STATE_CIRCUIT_OPEN",
+          "CONNECTION_SERVING_STATE_DRIFT_QUARANTINED",
+          "CONNECTION_SERVING_STATE_NOT_LOADED"
+        ],
+        "description": "ConnectionServingState is whether a replica serves a connection."
+      },
       "pantherclaw.v1.ContainmentStateKind": {
         "type": "string",
         "title": "ContainmentStateKind",
@@ -51338,6 +52091,18 @@
           "GATEWAY_STATE_REVOKED"
         ],
         "description": "GatewayState is whether a gateway may act."
+      },
+      "pantherclaw.v1.MCPStateKind": {
+        "type": "string",
+        "title": "MCPStateKind",
+        "enum": [
+          "MCP_STATE_KIND_UNSPECIFIED",
+          "MCP_STATE_KIND_HOLD",
+          "MCP_STATE_KIND_TASK",
+          "MCP_STATE_KIND_SESSION",
+          "MCP_STATE_KIND_ELICITATION"
+        ],
+        "description": "MCPStateKind is what an MCP state entry holds (G0 M15 D12)."
       },
       "pantherclaw.v1.ApproverKey": {
         "type": "object",
@@ -51492,6 +52257,47 @@
         "additionalProperties": false,
         "description": "ConnectionStateEntry is one connection's state."
       },
+      "pantherclaw.v1.ConnectionStatus": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "state": {
+            "title": "state",
+            "description": "Its serving state.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ConnectionServingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastDriftCheckTime": {
+            "title": "last_drift_check_time",
+            "description": "When the replica last checked its upstream tools for drift.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/google.protobuf.Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ConnectionStatus",
+        "additionalProperties": false,
+        "description": "ConnectionStatus is one connection's serving state on a replica.",
+        "required": [
+          "connectionId"
+        ]
+      },
       "pantherclaw.v1.CreateGatewayEnrollmentTokenRequest": {
         "type": "object",
         "properties": {
@@ -51569,6 +52375,60 @@
         "additionalProperties": false,
         "description": "CreateGatewayResponse returns the record."
       },
+      "pantherclaw.v1.DeleteMCPStateRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "title": "kind",
+            "description": "Kind.",
+            "$ref": "#/components/schemas/pantherclaw.v1.MCPStateKind",
+            "not": {
+              "enum": [
+                "MCP_STATE_KIND_UNSPECIFIED"
+              ]
+            }
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte",
+            "description": "Key."
+          },
+          "ifVersion": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "if_version",
+            "minimum": 0,
+            "format": "int64",
+            "description": "0: whatever version; otherwise its stored version."
+          }
+        },
+        "title": "DeleteMCPStateRequest",
+        "additionalProperties": false,
+        "description": "DeleteMCPStateRequest deletes an entry.",
+        "required": [
+          "kind",
+          "key"
+        ]
+      },
+      "pantherclaw.v1.DeleteMCPStateResponse": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "title": "deleted",
+            "description": "Whether there was one."
+          }
+        },
+        "title": "DeleteMCPStateResponse",
+        "additionalProperties": false,
+        "description": "DeleteMCPStateResponse says whether an entry was deleted."
+      },
       "pantherclaw.v1.Gateway": {
         "type": "object",
         "properties": {
@@ -51625,6 +52485,19 @@
             "title": "hosting",
             "description": "hosting says who runs the gateway; PantherClaw-hosted ones come only\n from the server's configuration and run no connector (HR-084).",
             "$ref": "#/components/schemas/pantherclaw.v1.GatewayHosting"
+          },
+          "replicas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.GatewayReplica"
+            },
+            "title": "replicas",
+            "description": "The replicas that reported status in the last 24 hours (G0 M15 D10)."
+          },
+          "connected": {
+            "type": "boolean",
+            "title": "connected",
+            "description": "Whether some replica reported in the last 90 seconds."
           }
         },
         "title": "Gateway",
@@ -51878,6 +52751,48 @@
         "additionalProperties": false,
         "description": "GatewayPackage is the exact signed bytes of a pinned package version."
       },
+      "pantherclaw.v1.GatewayReplica": {
+        "type": "object",
+        "properties": {
+          "replicaId": {
+            "type": "string",
+            "title": "replica_id",
+            "description": "Random per process start."
+          },
+          "version": {
+            "type": "string",
+            "title": "version",
+            "description": "Its version."
+          },
+          "build": {
+            "type": "string",
+            "title": "build",
+            "description": "Its build."
+          },
+          "startTime": {
+            "title": "start_time",
+            "description": "When the process started.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "configVersion": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "config_version",
+            "format": "int64",
+            "description": "The config version it serves."
+          },
+          "lastSeenTime": {
+            "title": "last_seen_time",
+            "description": "When it last reported.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GatewayReplica",
+        "additionalProperties": false,
+        "description": "GatewayReplica is one gateway process that reports status (G0 M15 D10)."
+      },
       "pantherclaw.v1.GatewayServiceEnrollRequest": {
         "type": "object",
         "properties": {
@@ -52070,6 +52985,235 @@
         "additionalProperties": false,
         "description": "GetGatewayResponse returns it."
       },
+      "pantherclaw.v1.GetMCPStateRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "title": "kind",
+            "description": "Kind.",
+            "$ref": "#/components/schemas/pantherclaw.v1.MCPStateKind",
+            "not": {
+              "enum": [
+                "MCP_STATE_KIND_UNSPECIFIED"
+              ]
+            }
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte",
+            "description": "Key."
+          }
+        },
+        "title": "GetMCPStateRequest",
+        "additionalProperties": false,
+        "description": "GetMCPStateRequest reads an entry.",
+        "required": [
+          "kind",
+          "key"
+        ]
+      },
+      "pantherclaw.v1.GetMCPStateResponse": {
+        "type": "object",
+        "properties": {
+          "entry": {
+            "title": "entry",
+            "description": "The entry.",
+            "$ref": "#/components/schemas/pantherclaw.v1.MCPStateEntry"
+          }
+        },
+        "title": "GetMCPStateResponse",
+        "additionalProperties": false,
+        "description": "GetMCPStateResponse returns the entry."
+      },
+      "pantherclaw.v1.InventoryResource": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string",
+            "title": "uri",
+            "minLength": 1,
+            "description": "Its URI."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "name",
+            "description": "UNTRUSTED: its name."
+          },
+          "mimeType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "mime_type",
+            "description": "UNTRUSTED: its MIME type."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "description",
+            "description": "UNTRUSTED: its description, at most 8 KiB."
+          },
+          "descriptionTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "description_truncated",
+            "description": "Whether the gateway cut the description to 8 KiB."
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "description": "SHA-256 of the canonical listing entry."
+          },
+          "nameTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "name_truncated",
+            "description": "Whether the gateway cut name to 128 bytes."
+          },
+          "mimeTypeTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "mime_type_truncated",
+            "description": "Whether the gateway cut mime_type to 128 bytes."
+          }
+        },
+        "title": "InventoryResource",
+        "additionalProperties": false,
+        "description": "InventoryResource is one listed resource.",
+        "required": [
+          "uri",
+          "digest"
+        ]
+      },
+      "pantherclaw.v1.InventoryResourceTemplate": {
+        "type": "object",
+        "properties": {
+          "uriTemplate": {
+            "type": "string",
+            "title": "uri_template",
+            "minLength": 1,
+            "description": "Its URI template."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "name",
+            "description": "UNTRUSTED: its name."
+          },
+          "mimeType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "mime_type",
+            "description": "UNTRUSTED: its MIME type."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "description",
+            "description": "UNTRUSTED: its description, at most 8 KiB."
+          },
+          "descriptionTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "description_truncated",
+            "description": "Whether the gateway cut the description to 8 KiB."
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "description": "SHA-256 of the canonical listing entry."
+          },
+          "nameTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "name_truncated",
+            "description": "Whether the gateway cut name to 128 bytes."
+          },
+          "mimeTypeTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "mime_type_truncated",
+            "description": "Whether the gateway cut mime_type to 128 bytes."
+          }
+        },
+        "title": "InventoryResourceTemplate",
+        "additionalProperties": false,
+        "description": "InventoryResourceTemplate is one listed resource template.",
+        "required": [
+          "uriTemplate",
+          "digest"
+        ]
+      },
+      "pantherclaw.v1.InventoryTool": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "description": "Tool name."
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "description": "upstream.ToolDigest of its definition."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "description",
+            "description": "UNTRUSTED: its description, at most 8 KiB."
+          },
+          "descriptionTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "description_truncated",
+            "description": "Whether the gateway cut the description to 8 KiB."
+          }
+        },
+        "title": "InventoryTool",
+        "additionalProperties": false,
+        "description": "InventoryTool is one listed tool.",
+        "required": [
+          "name",
+          "digest"
+        ]
+      },
       "pantherclaw.v1.ListApproverKeysRequest": {
         "type": "object",
         "properties": {
@@ -52202,6 +53346,258 @@
         "additionalProperties": false,
         "description": "ListGatewaysResponse is one page."
       },
+      "pantherclaw.v1.MCPStateEntry": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "not": {
+              "enum": [
+                0
+              ]
+            },
+            "title": "kind",
+            "description": "Kind.",
+            "$ref": "#/components/schemas/pantherclaw.v1.MCPStateKind"
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte",
+            "description": "The SHA-256 of the canonical action (HOLD, TASK) or of the session id\n (SESSION); never the session id itself."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$",
+            "description": "Run id; empty when none."
+          },
+          "instanceId": {
+            "type": "string",
+            "title": "instance_id",
+            "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$",
+            "description": "Agent instance id; empty when none."
+          },
+          "jkt": {
+            "type": "string",
+            "title": "jkt",
+            "maxLength": 64,
+            "description": "The RFC 7638 thumbprint of the key that opened the session (SESSION\n only)."
+          },
+          "actionId": {
+            "type": "string",
+            "title": "action_id",
+            "maxLength": 64,
+            "description": "The held action's id (HOLD and TASK)."
+          },
+          "status": {
+            "type": "string",
+            "title": "status",
+            "enum": [
+              "",
+              "working",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "description": "TASK: working, completed, failed or cancelled."
+          },
+          "busy": {
+            "type": "boolean",
+            "title": "busy",
+            "description": "TASK: a poll claimed it and is resubmitting the action."
+          },
+          "sealedBody": {
+            "type": "string",
+            "title": "sealed_body",
+            "maxLength": 4194304,
+            "format": "byte",
+            "description": "TASK and ELICITATION only: sealed to the gateway's active broker key\n (D13)."
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64",
+            "description": "Server-assigned, +1 per write."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When the entry expires.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "Server-set: when it was last written.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "MCPStateEntry",
+        "required": [
+          "expireTime"
+        ],
+        "additionalProperties": false,
+        "description": "MCPStateEntry is one MCP hold, task or session of a gateway, bound to\n (connection, run, instance) (HR-411..413). The server never opens a\n task's sealed body."
+      },
+      "pantherclaw.v1.MCPStateEntryInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "title": "kind",
+            "description": "Kind.",
+            "$ref": "#/components/schemas/pantherclaw.v1.MCPStateKind",
+            "not": {
+              "enum": [
+                "MCP_STATE_KIND_UNSPECIFIED"
+              ]
+            }
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte",
+            "description": "The SHA-256 of the canonical action (HOLD, TASK) or of the session id\n (SESSION); never the session id itself."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "run_id",
+            "description": "Run id; empty when none.",
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "instanceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "instance_id",
+            "description": "Agent instance id; empty when none.",
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "jkt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "jkt",
+            "maxLength": 64,
+            "description": "The RFC 7638 thumbprint of the key that opened the session (SESSION\n only)."
+          },
+          "actionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "action_id",
+            "maxLength": 64,
+            "description": "The held action's id (HOLD and TASK)."
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "status",
+            "enum": [
+              "",
+              "working",
+              "completed",
+              "failed",
+              "cancelled",
+              null
+            ],
+            "description": "TASK: working, completed, failed or cancelled."
+          },
+          "busy": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "busy",
+            "description": "TASK: a poll claimed it and is resubmitting the action."
+          },
+          "sealedBody": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "sealed_body",
+            "maxLength": 4194304,
+            "format": "byte",
+            "description": "TASK and ELICITATION only: sealed to the gateway's active broker key\n (D13)."
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "version",
+            "format": "int64",
+            "description": "Server-assigned, +1 per write."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When the entry expires.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "Server-set: when it was last written.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/google.protobuf.Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "MCPStateEntry",
+        "required": [
+          "expireTime",
+          "kind",
+          "key",
+          "connectionId"
+        ],
+        "additionalProperties": false,
+        "description": "MCPStateEntry is one MCP hold, task or session of a gateway, bound to\n (connection, run, instance) (HR-411..413). The server never opens a\n task's sealed body.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.MCPStateEntry"
+      },
       "pantherclaw.v1.MintTestActionTokensRequest": {
         "type": "object",
         "properties": {
@@ -52245,6 +53641,50 @@
         "title": "MintTestActionTokensResponse",
         "additionalProperties": false,
         "description": "MintTestActionTokensResponse carries the test's action tokens."
+      },
+      "pantherclaw.v1.PutMCPStateRequest": {
+        "type": "object",
+        "properties": {
+          "entry": {
+            "title": "entry",
+            "description": "The entry.",
+            "$ref": "#/components/schemas/pantherclaw.v1.MCPStateEntryInput"
+          },
+          "ifVersion": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "if_version",
+            "minimum": 0,
+            "format": "int64",
+            "description": "0: the entry must not exist; otherwise its stored version."
+          }
+        },
+        "title": "PutMCPStateRequest",
+        "required": [
+          "entry"
+        ],
+        "additionalProperties": false,
+        "description": "PutMCPStateRequest writes an entry."
+      },
+      "pantherclaw.v1.PutMCPStateResponse": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64",
+            "description": "The entry's version."
+          }
+        },
+        "title": "PutMCPStateResponse",
+        "additionalProperties": false,
+        "description": "PutMCPStateResponse returns the new version."
       },
       "pantherclaw.v1.RegisterBrokerKeyRequest": {
         "type": "object",
@@ -52478,6 +53918,81 @@
         "additionalProperties": false,
         "description": "ReportDriftResponse says what the server did."
       },
+      "pantherclaw.v1.ReportInventoryRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id; the calling gateway must serve it."
+          },
+          "complete": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "complete",
+            "description": "Every page of every list was read, so an item missing here vanished."
+          },
+          "tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InventoryTool"
+            },
+            "title": "tools",
+            "maxItems": 1000,
+            "description": "Tools."
+          },
+          "resources": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InventoryResource"
+            },
+            "title": "resources",
+            "maxItems": 1000,
+            "description": "Resources."
+          },
+          "resourceTemplates": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.InventoryResourceTemplate"
+            },
+            "title": "resource_templates",
+            "maxItems": 1000,
+            "description": "Resource templates."
+          }
+        },
+        "title": "ReportInventoryRequest",
+        "additionalProperties": false,
+        "description": "ReportInventoryRequest is one connection's upstream listing (G0 M15 D20).",
+        "required": [
+          "connectionId"
+        ]
+      },
+      "pantherclaw.v1.ReportInventoryResponse": {
+        "type": "object",
+        "properties": {
+          "newItems": {
+            "type": "integer",
+            "title": "new_items",
+            "format": "int32",
+            "description": "Items that became NEW with this report."
+          }
+        },
+        "title": "ReportInventoryResponse",
+        "additionalProperties": false,
+        "description": "ReportInventoryResponse says how many items became NEW."
+      },
       "pantherclaw.v1.ReportLocalRefusalRequest": {
         "type": "object",
         "properties": {
@@ -52491,7 +54006,8 @@
             "type": "string",
             "title": "code",
             "enum": [
-              "secret_in_payload"
+              "secret_in_payload",
+              "elicitation_refused"
             ],
             "description": "The refusal code."
           },
@@ -52527,6 +54043,36 @@
                 "maxLength": 0
               }
             ]
+          },
+          "elicitationReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "elicitation_reason",
+            "enum": [
+              "url_mode",
+              "undeclared_field",
+              "type_mismatch",
+              "duplicate_field",
+              "too_many_fields",
+              "injection_flagged",
+              null
+            ],
+            "description": "Why an upstream elicitation was refused (G0 M15 D40); set only with\n code elicitation_refused, and unset when no reason below fits.",
+            "nullable": true
+          },
+          "questionSha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "question_sha256",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte",
+            "description": "SHA-256 of the refused question's text, never the text itself; set\n only with code elicitation_refused.",
+            "nullable": true
           }
         },
         "title": "ReportLocalRefusalRequest",
@@ -52787,6 +54333,90 @@
         "title": "ReportRevocationFailureResponse",
         "additionalProperties": false,
         "description": "ReportRevocationFailureResponse is empty."
+      },
+      "pantherclaw.v1.ReportStatusRequest": {
+        "type": "object",
+        "properties": {
+          "replicaId": {
+            "type": "string",
+            "title": "replica_id",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
+            "description": "Random per process start."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "version",
+            "maxLength": 64,
+            "description": "The gateway's version."
+          },
+          "build": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "build",
+            "maxLength": 64,
+            "description": "The gateway's build."
+          },
+          "startTime": {
+            "title": "start_time",
+            "description": "When the process started.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/google.protobuf.Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "configVersion": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "config_version",
+            "minimum": 0,
+            "format": "int64",
+            "description": "The config version it serves."
+          },
+          "connections": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ConnectionStatus"
+            },
+            "title": "connections",
+            "maxItems": 1000,
+            "description": "Each connection's serving state."
+          }
+        },
+        "title": "ReportStatusRequest",
+        "additionalProperties": false,
+        "description": "ReportStatusRequest is one replica's status (G0 M15 D10).",
+        "required": [
+          "replicaId"
+        ]
+      },
+      "pantherclaw.v1.ReportStatusResponse": {
+        "type": "object",
+        "properties": {
+          "nextReportSeconds": {
+            "type": "integer",
+            "title": "next_report_seconds",
+            "format": "int32",
+            "description": "Seconds until the next report."
+          }
+        },
+        "title": "ReportStatusResponse",
+        "additionalProperties": false,
+        "description": "ReportStatusResponse says when to report next."
       },
       "pantherclaw.v1.RevokeGatewayCertificateRequest": {
         "type": "object",

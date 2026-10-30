@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,10 +60,17 @@ import (
 func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection, def *defs.Definition, a actionir.Parsed, want permitWant,
 	t *timer,
 ) Result {
+	if m := mcpTemplate(def); m != nil && m.Resource != "" {
+		return e.sendResource(ctx, r, conn, def, a, want, t)
+	}
 	tool, args, buildErr := egress.BuildMCP(def, a.Action)
 	var params []byte
+	var extra map[string]any
 	if buildErr == nil {
-		params, buildErr = upstream.Params(tool, args)
+		// A retry's answers come from the permitted action only (G0 M15 D33).
+		if extra, buildErr = retryParams(ctx, def, a.Action); buildErr == nil {
+			params, buildErr = upstream.ParamsWith(tool, args, extra)
+		}
 	}
 	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
 	if buildErr == nil {
@@ -127,6 +135,15 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), pclog.Err(err))
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 	}
+	if ir, ok := ctx.Value(inputResponsesKey{}).(InputResponses); ok && ir.Claim != nil {
+		// The elicitation handle is spent only now, after ALLOW and
+		// BeginDispatch, right before the send (G0 M15 D44): a lost race
+		// sends nothing.
+		if err := ir.Claim(ctx); err != nil {
+			e.log.WarnContext(ctx, "gateway.elicitation_handle_spent", slog.String("transaction_id", want.Txn), pclog.Err(err))
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeElicitationHandleSpent, t)
+		}
+	}
 	start := time.Now()
 	land, access, err := e.fly(callCtx, conn, a, want)
 	if err != nil {
@@ -136,7 +153,7 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 			pclog.Err(err))
 		return e.record(ctx, r, want, outcome, 0, nil, 0, class, code, t)
 	}
-	res, err := ce.mcp.Call(callCtx, tool, args, declared, decorate)
+	res, err := ce.mcp.CallWith(callCtx, tool, args, extra, declared, decorate)
 	land()
 	elapsed := time.Since(start)
 	t.lap("target")
@@ -335,7 +352,7 @@ func (e *Engine) listCredential(ctx context.Context, conn *control.Connection) (
 func reviewedTools(conn *control.Connection) map[string][]string {
 	reviewed := map[string][]string{}
 	for i := range conn.Package.Definitions {
-		if m := mcpTemplate(&conn.Package.Definitions[i]); m != nil && !slices.Contains(reviewed[m.Tool], m.UpstreamDigest) {
+		if m := mcpTemplate(&conn.Package.Definitions[i]); m != nil && m.Resource == "" && !slices.Contains(reviewed[m.Tool], m.UpstreamDigest) {
 			reviewed[m.Tool] = append(reviewed[m.Tool], m.UpstreamDigest)
 		}
 	}
@@ -430,7 +447,7 @@ type pinned struct {
 func (e *Engine) refusedUpstream(conn *control.Connection, operation string) string {
 	def, ok := conn.Package.Definition(operation)
 	m := mcpTemplate(def)
-	if !ok || m == nil {
+	if !ok || m == nil || m.Resource != "" {
 		return ""
 	}
 	e.mu.Lock()
@@ -577,4 +594,237 @@ func descriptionOf(v jsontext.Value) *string {
 		return nil
 	}
 	return &s
+}
+
+// sendResource builds, commits, reads and records a resource read through
+// a kind-mcp connection (G0 M15 D31, HR-419): the URI is built from the
+// definition's reviewed upstream template and the permitted action alone,
+// each value percent-encoded, so no value changes the scheme or the
+// authority the template fixes; the request goes to the connection's own
+// endpoint. BeginDispatch binds the canonical {uri} (upstream.ReadParams).
+// A resource template has no listing to check here: discovery reports it
+// (S15b), and the reviewed package pins it.
+func (e *Engine) sendResource(ctx context.Context, r Result, conn *control.Connection, def *defs.Definition, a actionir.Parsed,
+	want permitWant, t *timer,
+) Result {
+	uri, buildErr := ResourceURI(def, a.Action)
+	var params []byte
+	if buildErr == nil {
+		params, buildErr = upstream.ReadParams(uri)
+	}
+	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
+	if buildErr == nil {
+		sum := sha256.Sum256(params)
+		begin.OutboundMethod, begin.OutboundUrl, begin.OutboundBodySha256 = http.MethodPost, conn.GetBaseUrl(), sum[:]
+	}
+	bd, err := e.authority.BeginDispatch(ctx, begin)
+	t.lap("begin")
+	if err != nil {
+		r.Reasons = append(r.Reasons, strings.ToUpper(connect.CodeOf(err).String()))
+		return r.fail(EnforcementFailed, CodeDispatchRefused)
+	}
+	ctx = context.WithoutCancel(ctx)
+	ce, err := e.entry(conn)
+	if buildErr == nil && err != nil {
+		buildErr = err
+	}
+	if buildErr != nil {
+		e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), pclog.Err(buildErr))
+		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
+	}
+	cred := &upstreamCredential{}
+	if conn.GetAccessMode() == "pantherclaw_held" {
+		if cred, err = e.mcpCredential(ctx, conn, def, a.Action.Target); err != nil {
+			return e.credentialFailed(ctx, r, conn, want, err, t)
+		}
+		defer cred.release()
+	}
+	secret := cred.secret
+	token := bd.GetActionToken()
+	decorate := func(req *http.Request) error {
+		if token != "" {
+			req.Header.Set(HeaderAction, token)
+		}
+		return cred.place(req)
+	}
+	callCtx, cancel := callWindow(ctx, conn)
+	defer cancel()
+	start := time.Now()
+	land, access, err := e.fly(callCtx, conn, a, want)
+	if err != nil {
+		outcome, class, code := classifyMCP(upstream.Result{}, fmt.Errorf("%w: %w", upstream.ErrNotSent, err))
+		e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), slog.String("outcome", outcome.String()),
+			pclog.Err(err))
+		return e.record(ctx, r, want, outcome, 0, nil, 0, class, code, t)
+	}
+	res, err := ce.mcp.ReadResource(callCtx, uri, decorate)
+	land()
+	elapsed := time.Since(start)
+	t.lap("target")
+	outcome, class, code := classifyMCP(res, err)
+	e.breaker.record(ctx, conn, outcome)
+	if err != nil {
+		e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), slog.String("outcome", outcome.String()),
+			pclog.Err(err))
+	}
+	var digest []byte
+	if body := answerBody(res); body != nil {
+		sum := sha256.Sum256(body)
+		digest = sum[:]
+		r.Response = &egress.Response{
+			Status: res.Status, Body: egress.Redacted(body, secret), ContentType: "application/json",
+			RequestID: string(egress.Redacted([]byte(res.RequestID), secret)),
+		}
+	}
+	cred.release()
+	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
+		req.CredentialAccess = access()
+		if minted := cred.granted(); minted != nil {
+			req.CredentialAccess = minted
+		}
+	})
+}
+
+// ResourceURI builds a resource read's upstream URI from the definition's
+// reviewed template and the action (HR-419): each variable is a canonical
+// reference to the target or an identifier, enum or integer param, and
+// its value is percent-encoded.
+func ResourceURI(def *defs.Definition, a actionir.ActionIR) (string, error) {
+	m := mcpTemplate(def)
+	tmpl, ok := m.DispatchTemplate()
+	if !ok {
+		return "", fmt.Errorf("%w: %s has no resource template", egress.ErrBuild, def.Operation)
+	}
+	vals, err := def.DecodeParams(a.Params)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", egress.ErrBuild, err)
+	}
+	out := make(map[string]string, len(tmpl.Vars))
+	for _, ref := range tmpl.Vars {
+		var v string
+		switch group, isPart := strings.CutPrefix(ref, "target.id."); {
+		case ref == "target.id":
+			v = a.Target.ID
+		case ref == "target.account":
+			v = a.Target.Account
+		case isPart:
+			v, _ = def.Target.Part(a.Target.ID, group)
+		default:
+			name, _ := strings.CutPrefix(ref, "params.")
+			p, ok := vals[name]
+			switch {
+			case !ok:
+			case p.Type == defs.TypeInteger:
+				v = strconv.FormatInt(p.Int, 10)
+			case p.Type == defs.TypeIdentifier || p.Type == defs.TypeEnum:
+				v = p.Str
+			}
+		}
+		if !defs.SafeValue(v) {
+			// Empty, a dot segment, or a slash, backslash or control character
+			// would change the upstream path (D44, HR-419).
+			return "", fmt.Errorf("%w: %s has no safe value for the resource template", egress.ErrBuild, ref)
+		}
+		out[ref] = v
+	}
+	uri, ok := tmpl.Expand(out)
+	if !ok {
+		return "", fmt.Errorf("%w: the resource template does not expand", egress.ErrBuild)
+	}
+	return uri, nil
+}
+
+// CodeElicitationRefused is the local refusal of an upstream server's
+// elicitation that the reviewed mapping does not allow (G0 M15 D33).
+const CodeElicitationRefused = "elicitation_refused"
+
+// CodeElicitationHandleSpent is a permitted retry whose elicitation handle
+// another request spent first: nothing was sent (G0 M15 D44).
+const CodeElicitationHandleSpent = "elicitation_handle_spent"
+
+// ReportElicitationRefused tells the server an upstream elicitation was
+// refused (G0 M15 D33, D40): machine metadata, the reason and the
+// question's SHA-256 only, never the question.
+func (e *Engine) ReportElicitationRefused(ctx context.Context, conn *control.Connection, a actionir.ActionIR, detail RefusalDetail) {
+	e.reportLocalRefusal(ctx, conn, CodeElicitationRefused, a, detail)
+}
+
+// InputResponses is how a retry answers an upstream server's input
+// requests (G0 M15 D33): for each of its request keys, the agent's action
+// and, when it accepted, the fields its answer filled. The answers
+// themselves travel only as the action's elicitation.<field> params, so
+// what reaches the server is what the Authority permitted. RequestState is
+// the server's opaque state, passed back as it sent it. Claim spends the
+// elicitation's single-use handle; dispatch calls it after ALLOW and
+// BeginDispatch, right before the send (D44).
+type InputResponses struct {
+	Keys         map[string]InputResponse
+	RequestState string
+	Claim        func(context.Context) error
+}
+
+// InputResponse is the answer to one input request.
+type InputResponse struct {
+	// Action is accept, decline or cancel.
+	Action string
+	// Fields are the elicitation fields an accepted answer filled.
+	Fields []string
+}
+
+type inputResponsesKey struct{}
+
+// WithInputResponses marks a call as the retry of an input_required
+// result.
+func WithInputResponses(ctx context.Context, ir InputResponses) context.Context {
+	return context.WithValue(ctx, inputResponsesKey{}, ir)
+}
+
+// retryParams are the extra tools/call params of a retry: inputResponses
+// built from the permitted action's elicitation params, and requestState;
+// nil for any other call.
+func retryParams(ctx context.Context, def *defs.Definition, a actionir.ActionIR) (map[string]any, error) {
+	ir, ok := ctx.Value(inputResponsesKey{}).(InputResponses)
+	if !ok {
+		return nil, nil
+	}
+	vals, err := def.DecodeParams(a.Params)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", egress.ErrBuild, err)
+	}
+	responses := make(map[string]any, len(ir.Keys))
+	for key, resp := range ir.Keys {
+		out := map[string]any{"action": resp.Action}
+		if resp.Action == "accept" {
+			content := make(map[string]any, len(resp.Fields))
+			for _, f := range resp.Fields {
+				v, ok := vals[defs.ElicitationPrefix+f]
+				if !ok {
+					return nil, fmt.Errorf("%w: the permitted action has no answer for %s", egress.ErrBuild, f)
+				}
+				content[f] = elicitValue(v)
+			}
+			out["content"] = content
+		}
+		responses[key] = out
+	}
+	extra := map[string]any{"inputResponses": responses}
+	if ir.RequestState != "" {
+		extra["requestState"] = ir.RequestState
+	}
+	return extra, nil
+}
+
+// elicitValue is an answer in the JSON type of an elicitation form field.
+func elicitValue(v defs.Value) any {
+	switch v.Type {
+	case defs.TypeInteger:
+		return v.Int
+	case defs.TypeDecimal:
+		return jsontext.Value(v.Decimal.String())
+	case defs.TypeBoolean:
+		return v.Bool
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeContent, defs.TypeMoney, defs.TypeIdentifierList, defs.TypeText, defs.TypeCommand,
+		defs.TypePath, defs.TypeQueryFilter:
+	}
+	return v.Str
 }

@@ -79,9 +79,15 @@ type HTTPDispatch struct {
 	Success *SuccessCheck `json:"success,omitzero"`
 }
 
-// MCPDispatch is a call of one tool on an upstream (remote) MCP server.
+// MCPDispatch is a call of one tool on an upstream (remote) MCP server, or
+// a read of one of its resources (G0 M15 D30).
 type MCPDispatch struct {
-	Tool      string            `json:"tool"`
+	Tool string `json:"tool,omitzero"`
+	// Resource is the upstream URI template a resource read is sent to: RFC
+	// 6570 level 1, each variable a reference ({target.id}, {params.x}) the
+	// gateway percent-encodes, so a value never changes the scheme or host
+	// (HR-419). A resource dispatch has no tool or arguments.
+	Resource  string            `json:"resource,omitzero"`
 	Arguments map[string]string `json:"arguments,omitzero"`
 	// UpstreamDigest is "sha256:<hex>" of the canonical upstream tool
 	// definition the package was reviewed against; a server announcing a
@@ -264,7 +270,14 @@ func (d *Definition) validateDispatch() error {
 			return err
 		}
 	}
-	if m := x.MCP; m != nil {
+	if m := x.MCP; m != nil && m.Resource != "" {
+		if !digestRe.MatchString(m.UpstreamDigest) {
+			return invalid("%s.mcp.upstream_digest must be sha256:<64 hex>", at)
+		}
+		if err := d.validateResourceDispatch(at+".mcp", m); err != nil {
+			return err
+		}
+	} else if m != nil {
 		if !toolRe.MatchString(m.Tool) {
 			return invalid("%s.mcp.tool %q", at, m.Tool)
 		}

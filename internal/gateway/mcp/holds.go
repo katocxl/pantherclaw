@@ -4,12 +4,10 @@
 package mcp
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"sync"
+	"errors"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
@@ -85,18 +83,21 @@ type task struct {
 	result           *toolResult
 	// busy: a poll is resubmitting the action; other polls only read.
 	busy bool
+	// actionID is the action's id, and version the server entry's
+	// (state_server.go).
+	actionID string
+	version  int64
+	// retry is the elicitation a held retry answers (G0 M15 D44): kept in
+	// the sealed body, so a resubmission can still answer the server.
+	retry *retryState
 }
 
-type store struct {
-	now   func() time.Time
-	mu    sync.Mutex
-	holds map[key]hold
-	tasks map[string]*task
-	bytes int
-}
-
-func newStore(now func() time.Time) *store {
-	return &store{now: now, holds: map[key]hold{}, tasks: map[string]*task{}}
+// retryState is what a held elicitation retry needs to be resubmitted
+// (D44): the handle and, for each answered request key, the agent's action
+// and the fields it filled. The answers themselves are the action's params.
+type retryState struct {
+	Handle    []byte                            `json:"handle"`
+	Responses map[string]dispatch.InputResponse `json:"responses"`
 }
 
 // actionKey identifies a call without its action id: two calls with equal
@@ -110,173 +111,56 @@ func actionKey(a actionir.ActionIR) key {
 	return sha256.Sum256(v)
 }
 
-// purgeLocked drops what expired.
-func (s *store) purgeLocked(now time.Time) {
-	for k, h := range s.holds {
-		if !now.Before(h.expires) {
-			delete(s.holds, k)
-		}
-	}
-	for id, t := range s.tasks {
-		if !now.Before(t.expires) {
-			s.dropLocked(id)
-		}
-	}
+// holdStore keeps a gateway's holds and tasks (G0 M15 D14): in memory
+// (state_memory.go) or on the server (state_server.go), where every
+// replica sees them and a restart loses nothing. A miss, a conflict or a
+// full store only costs the agent a new action (HR-412).
+type holdStore interface {
+	// heldAction returns the action id of an open hold on the same call
+	// by the same binding.
+	heldAction(k key, b binding) (string, bool)
+	// settle records what an answer means for the call's hold.
+	settle(k key, b binding, action string, res dispatch.Result)
+	// newTask returns a task for a call's answer, or nil; retry is the
+	// elicitation a held retry answers (D44), or nil.
+	newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult, retry *retryState) *task
+	// lookup returns a task of this binding, claiming a working one for
+	// a resubmission when resubmit is set.
+	lookup(id string, b binding, resubmit bool) (snapshot task, claimed, found bool)
+	// finish records a resubmission's answer.
+	finish(snap task, res dispatch.Result, result toolResult) task
+	// release ends a claim of this binding that produced no answer.
+	release(id string, b binding)
+	// cancel forgets a task of this binding and the hold of its call.
+	cancel(id string, b binding) bool
+	// now is the store's clock.
+	now() time.Time
+
+	// An elicitation relayed to the agent (G0 M15 D39), kept like a task:
+	// bound to (connection, run, instance), its body sealed on the server,
+	// within the same bounds. putElicitation writes it compare-and-set
+	// (ifVersion 0: it must not exist) and returns its version;
+	// errStateConflict and errStateFull say why not, any other error that
+	// the store cannot be asked. getElicitation returns a live one;
+	// deleteElicitation deletes it (ifVersion 0: whatever version).
+	putElicitation(k key, b binding, body []byte, expires time.Time, ifVersion int64) (int64, error)
+	getElicitation(k key) (e elicitation, found bool, err error)
+	deleteElicitation(k key, ifVersion int64) (deleted bool, err error)
 }
 
-func (s *store) dropLocked(id string) {
-	if t, ok := s.tasks[id]; ok {
-		s.bytes -= len(t.action.Canonical)
-		delete(s.tasks, id)
-	}
+// elicitation is a stored elicitation (D39).
+type elicitation struct {
+	binding binding
+	body    []byte
+	version int64
+	expires time.Time
 }
 
-// fullLocked reports whether another entry for the instance, keeping
-// extra bytes, would pass the bounds.
-func (s *store) fullLocked(instance string, extra int) bool {
-	if len(s.holds)+len(s.tasks) >= maxEntries || s.bytes+extra > maxTaskBytes {
-		return true
-	}
-	n := 0
-	for _, h := range s.holds {
-		if h.binding.instance == instance {
-			n++
-		}
-	}
-	for _, t := range s.tasks {
-		if t.binding.instance == instance {
-			n++
-		}
-	}
-	return n >= maxPerInstance
-}
-
-// heldAction returns the action id of an open hold on the same call.
-func (s *store) heldAction(k key) (string, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	h, ok := s.holds[k]
-	if !ok || !s.now().Before(h.expires) {
-		return "", false
-	}
-	return h.action, true
-}
-
-// settle records what an answer means for the call's hold. A hold is
-// remembered (within the bounds). An answer without a transaction decided
-// nothing (the gateway refused before asking, or the Authority could not
-// be asked), so an open hold stays. Anything else ends it.
-func (s *store) settle(k key, b binding, action string, res dispatch.Result) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	switch {
-	case res.Class == dispatch.Held:
-		now := s.now()
-		s.purgeLocked(now)
-		if _, ok := s.holds[k]; ok || !s.fullLocked(b.instance, 0) {
-			s.holds[k] = hold{binding: b, action: action, expires: now.Add(holdTTL)}
-		}
-	case res.TransactionID != "":
-		delete(s.holds, k)
-	}
-}
-
-// newTask returns a task for a call's answer res. A held call's task is
-// working and keeps the action to resubmit: the open one for the same
-// call, or a new one. Any other answer (a 2025-11-25 task-augmented call
-// that was not held) makes a completed task with result. It returns nil
-// when the bounds are reached or no random id could be made.
-func (s *store) newTask(b binding, a actionir.Parsed, k key, res dispatch.Result, result toolResult) *task {
-	var raw [32]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return nil
-	}
-	held := res.Class == dispatch.Held
-	if !held {
-		a = actionir.Parsed{}
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
-	s.purgeLocked(now)
-	for _, t := range s.tasks {
-		if held && t.key == k && t.binding == b && t.status == statusWorking && t.action.Action.ActionID == a.Action.ActionID {
-			cp := *t
-			return &cp
-		}
-	}
-	if s.fullLocked(b.instance, len(a.Canonical)) {
-		return nil
-	}
-	t := &task{
-		id: base64.RawURLEncoding.EncodeToString(raw[:]), binding: b, action: a, key: k,
-		created: now, updated: now, expires: now.Add(holdTTL), status: statusWorking,
-	}
-	if !held {
-		t.status, t.result = statusCompleted, &result
-	}
-	s.tasks[t.id] = t
-	s.bytes += len(a.Canonical)
-	cp := *t
-	return &cp
-}
-
-// lookup returns a task of this binding; any other binding, or an expired
-// task, is not found (HR-185). resubmit claims a working task for this
-// poll, which then resubmits it and must call finish or release.
-func (s *store) lookup(id string, b binding, resubmit bool) (snapshot task, claimed, found bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.tasks[id]
-	if !ok || t.binding != b || !s.now().Before(t.expires) {
-		return task{}, false, false
-	}
-	if resubmit && t.status == statusWorking && !t.busy {
-		t.busy, claimed = true, true
-	}
-	return *t, claimed, true
-}
-
-// finish records a resubmission's answer: still held, or completed with
-// the tool result (a tool error included). A task canceled meanwhile is
-// answered from the poll's copy.
-func (s *store) finish(snap task, res dispatch.Result, result toolResult) task {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.tasks[snap.id]
-	if !ok {
-		t = &snap
-		t.status = statusCancelled
-	}
-	t.busy, t.updated = false, s.now()
-	if res.Class != dispatch.Held {
-		t.status, t.result = statusCompleted, &result
-	}
-	return *t
-}
-
-// release ends a claim that produced no answer.
-func (s *store) release(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if t, ok := s.tasks[id]; ok {
-		t.busy = false
-	}
-}
-
-// cancel forgets a task of this binding and the hold of its call, so the
-// next identical call is a new action; it reports whether there was one.
-func (s *store) cancel(id string, b binding) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.tasks[id]
-	if !ok || t.binding != b {
-		return false
-	}
-	delete(s.holds, t.key)
-	s.dropLocked(id)
-	return true
-}
+// Why a state write was refused (D39).
+var (
+	errStateConflict = errors.New("mcp: the state entry changed or exists")
+	errStateFull     = errors.New("mcp: the gateway keeps as much MCP state as it may")
+)
 
 // supportsTasks reports whether a request's client capabilities declare
 // the tasks extension; only then may a task be returned.

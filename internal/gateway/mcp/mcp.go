@@ -110,8 +110,8 @@ type Handler struct {
 	publicURL string
 	origin    string
 	log       *slog.Logger
-	holds     *store
-	sessions  *sessions
+	holds     holdStore
+	sessions  sessionStore
 }
 
 // New returns the MCP face. publicURL is the gateway's base URL: proofs
@@ -143,8 +143,7 @@ type request struct {
 	Params  jsontext.Value `json:"params,omitzero"`
 }
 
-// params are the fields this face reads; others (extensions, input
-// responses) are ignored.
+// params are the fields this face reads; others (extensions) are ignored.
 type params struct {
 	Meta      map[string]jsontext.Value `json:"_meta,omitzero"`
 	Name      string                    `json:"name,omitzero"`
@@ -153,6 +152,10 @@ type params struct {
 	TaskID    string                    `json:"taskId,omitzero"`
 	// Task marks a 2025-11-25 task-augmented tools/call.
 	Task jsontext.Value `json:"task,omitzero"`
+	// InputResponses and RequestState are a 2026-07-28 retry's answers to an
+	// upstream server's input requests (elicitation.go).
+	InputResponses jsontext.Value `json:"inputResponses,omitzero"`
+	RequestState   jsontext.Value `json:"requestState,omitzero"`
 }
 
 type rpcError struct {
@@ -249,22 +252,32 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	switch req.Method {
-	case "tools/call":
+	switch {
+	case req.Method == "tools/call":
 		h.call(w, r, conn, req, p, in)
-	case "tasks/get", "tasks/cancel", "tasks/update":
+	case req.Method == "tasks/get" || req.Method == "tasks/cancel" || req.Method == "tasks/update":
 		h.task(w, r, conn, req, p, in)
-	case "tools/list", "server/discover":
+	case req.Method == "tools/list" || req.Method == "server/discover":
 		if _, ok := h.verify(w, r, req.ID, in); !ok {
 			return
 		}
 		if req.Method == "tools/list" {
 			write(w, http.StatusOK, response{ID: req.ID, Result: listResult(conn)})
 		} else {
-			write(w, http.StatusOK, response{ID: req.ID, Result: discoverResult()})
+			write(w, http.StatusOK, response{ID: req.ID, Result: discoverResult(conn)})
+		}
+	case isResourceMethod(req.Method) && resourceCapability(conn) != nil:
+		// Reviewed resources (resources.go, G0 M15 D31).
+		if req.Method == "resources/read" {
+			h.readResource(w, r, conn, req, p, in, true)
+			return
+		}
+		if _, ok := h.verify(w, r, req.ID, in); ok {
+			write(w, http.StatusOK, response{ID: req.ID, Result: listResources(conn, req.Method, true)})
 		}
 	default:
-		// Only tools are served: no resources, prompts or subscriptions.
+		// Only tools and reviewed resources are served: no prompts or
+		// subscriptions.
 		fail(w, http.StatusNotFound, req.ID, codeMethodNotFound, "Method not found: "+req.Method, nil)
 	}
 }
@@ -496,13 +509,17 @@ func serverInfo() map[string]any {
 	return map[string]any{metaServerInfo: map[string]string{"name": "pantherclaw-gateway", "version": version.Get().Version}}
 }
 
-func discoverResult() map[string]any {
+func discoverResult(conn *control.Connection) map[string]any {
+	caps := map[string]any{
+		"tools":      map[string]any{"listChanged": false},
+		"extensions": map[string]any{extTasks: map[string]any{}},
+	}
+	if rc := resourceCapability(conn); rc != nil {
+		caps["resources"] = rc
+	}
 	return map[string]any{
 		"resultType": "complete", "supportedVersions": []string{ProtocolVersion},
-		"capabilities": map[string]any{
-			"tools":      map[string]any{"listChanged": false},
-			"extensions": map[string]any{extTasks: map[string]any{}},
-		},
+		"capabilities": caps,
 		"instructions": "PantherClaw authorizes every tool call before it runs. A refused call is a tool error " +
 			"whose _meta io.pantherclaw/error says why; a held call carries io.pantherclaw/hold, or becomes a task " +
 			"when the client supports tasks.",
@@ -579,8 +596,12 @@ func (h *Handler) call(w http.ResponseWriter, r *http.Request, conn *control.Con
 	if !ok {
 		return
 	}
+	if out, relayed := h.relay(r.Context(), conn, p.Name, c); relayed {
+		write(w, http.StatusOK, response{ID: req.ID, Result: out})
+		return
+	}
 	if c.res.Class == dispatch.Held && supportsTasks(p.Meta) {
-		if t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result); t != nil {
+		if t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result, c.retry); t != nil {
 			write(w, http.StatusOK, response{ID: req.ID, Result: t.view("task", c.res.TransactionID)})
 			return
 		}
@@ -596,6 +617,9 @@ type called struct {
 	action actionir.Parsed
 	key    key
 	b      binding
+	// retry is the elicitation an answered retry answers (D44); a held
+	// retry's task keeps it.
+	retry *retryState
 }
 
 // callTool maps a tools/call through the connection's package and sends it
@@ -625,12 +649,37 @@ func (h *Handler) callTool(w http.ResponseWriter, r *http.Request, conn *control
 	if len(args) == 0 {
 		args = jsontext.Value("{}")
 	}
-	parsed, err := conn.Mapper.MCP(ctx, mapping.Context{
+	tc := mapping.Context{
 		Org: h.config.Current().Org, Env: in.Env, RunID: in.Run, ActionID: action, AgentInstance: in.Instance, Connection: conn.GetId(),
-	}, p.Name, args)
+	}
+	var parsed actionir.Parsed
+	var err error
+	if len(p.InputResponses) > 0 {
+		// A retry answering the server's input requests: a new action whose
+		// answers are declared params, checked before anything is decided
+		// (G0 M15 D33, HR-420). Its requestState is the handle the gateway
+		// gave out (D39); it is spent only right before the send (D44).
+		var ir dispatch.InputResponses
+		var vals domain.Values
+		ir, vals, c.retry, err = h.answered(conn.Mapper.Elicitation(p.Name), c.b, p)
+		switch {
+		case errors.Is(err, errExpired):
+			c.res = dispatch.Result{Class: dispatch.CannotAuthorize, Code: codeElicitationExpired}
+			c.result = errorResult(c.res, errExpired.Error()+".")
+			return c, true
+		case err != nil:
+			c.res = dispatch.Result{Class: dispatch.CannotAuthorize, Code: "invalid_input_responses"}
+			c.result = errorResult(c.res, "The input responses do not answer the tool's reviewed elicitation fields.")
+			return c, true
+		}
+		parsed, err = conn.Mapper.MCPAnswered(ctx, tc, p.Name, args, vals)
+		ctx = dispatch.WithInputResponses(ctx, ir)
+	} else {
+		parsed, err = conn.Mapper.MCP(ctx, tc, p.Name, args)
+	}
 	k := actionKey(parsed.Action)
 	if err == nil && fresh {
-		if held, ok := h.holds.heldAction(k); ok {
+		if held, ok := h.holds.heldAction(k, c.b); ok {
 			parsed.Action.ActionID, action = held, held
 			parsed, err = actionir.Encode(parsed.Action)
 		}
@@ -717,8 +766,19 @@ func (h *Handler) task(w http.ResponseWriter, r *http.Request, conn *control.Con
 func (h *Handler) resubmit(w http.ResponseWriter, r *http.Request, conn *control.Connection, req request, t task,
 	in dispatch.Inbound,
 ) (task, dispatch.Result, bool) {
-	defer h.holds.release(t.id)
-	res := h.engine.Dispatch(r.Context(), dispatch.Call{Connection: conn, Action: t.action, Workload: in.Creds})
+	defer h.holds.release(t.id, t.binding)
+	ctx := r.Context()
+	if t.retry != nil {
+		// A held elicitation retry answers the server only if its handle is
+		// still live (D44).
+		ir, err := h.resubmitting(t)
+		if err != nil {
+			res := dispatch.Result{Class: dispatch.CannotAuthorize, Code: codeElicitationExpired}
+			return h.holds.finish(t, res, errorResult(res, errExpired.Error()+".")), res, true
+		}
+		ctx = dispatch.WithInputResponses(ctx, ir)
+	}
+	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: t.action, Workload: in.Creds})
 	if res.Class == dispatch.AuthenticationFailed {
 		h.refusePAP(w, r, req.ID, res.PAPError, res.Nonce)
 		return task{}, res, false
@@ -831,7 +891,12 @@ func errorResult(res dispatch.Result, detail string) toolResult {
 	}
 	if res.Response != nil {
 		facts["target_status"] = res.Response.Status
-		text += "\n\nThe target answered " + http.StatusText(res.Response.Status) + ":\n" + string(res.Response.Body)
+		// An upstream server's questions reach the agent only through the
+		// elicitation gate (G0 M15 D33, HR-420): an input_required answer is
+		// never echoed.
+		if res.Code != dispatch.CodeInputRequired {
+			text += "\n\nThe target answered " + http.StatusText(res.Response.Status) + ":\n" + string(res.Response.Body)
+		}
 	}
 	meta := map[string]any{metaError: facts}
 	if res.Class == dispatch.Held {

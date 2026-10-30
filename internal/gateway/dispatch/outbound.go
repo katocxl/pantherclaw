@@ -71,7 +71,7 @@ func (e *Engine) outboundCheck(ctx context.Context, conn *control.Connection, a 
 	res := outbound.Scan(outbound.Input{Args: a.Params, Path: a.Target.ID}, held)
 	if res.HeldSecret {
 		e.log.WarnContext(ctx, "gateway.secret_in_payload", slog.String("connection_id", conn.GetId()), slog.String("run_id", a.RunID), slog.String("operation", a.Operation))
-		e.reportLocalRefusal(ctx, conn, CodeSecretInPayload, a)
+		e.reportLocalRefusal(ctx, conn, CodeSecretInPayload, a, RefusalDetail{})
 		return true, nil
 	}
 	for _, f := range res.Findings {
@@ -84,7 +84,7 @@ func (e *Engine) outboundCheck(ctx context.Context, conn *control.Connection, a 
 // detections see it (G0 M12): the connection, the code, the operation and
 // the run, never the payload or the secret. The refusal stands whatever
 // the report does; a report that fails is only logged.
-func (e *Engine) reportLocalRefusal(ctx context.Context, conn *control.Connection, code string, a actionir.ActionIR) {
+func (e *Engine) reportLocalRefusal(ctx context.Context, conn *control.Connection, code string, a actionir.ActionIR, detail RefusalDetail) {
 	if e.localRefusals == nil {
 		return
 	}
@@ -95,7 +95,7 @@ func (e *Engine) reportLocalRefusal(ctx context.Context, conn *control.Connectio
 	if _, err := ids.ParseUUID(run); err != nil {
 		run = ""
 	}
-	if err := e.localRefusals(context.WithoutCancel(ctx), conn.GetId(), code, operation, run); err != nil {
+	if err := e.localRefusals(context.WithoutCancel(ctx), conn.GetId(), code, operation, run, detail); err != nil {
 		e.log.WarnContext(ctx, "gateway.local_refusal_not_reported", slog.String("connection_id", conn.GetId()),
 			slog.String("code", code), pclog.Err(err))
 	}

@@ -157,6 +157,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env, 
 }
 
 func lookup(args []string) (command, []string, bool) {
+	if len(args) >= 3 {
+		if c, ok := commands[args[0]+" "+args[1]+" "+args[2]]; ok {
+			return c, args[3:], true
+		}
+	}
 	if len(args) >= 2 {
 		if c, ok := commands[args[0]+" "+args[1]]; ok {
 			return c, args[2:], true

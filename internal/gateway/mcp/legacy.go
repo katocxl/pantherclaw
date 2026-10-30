@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"encoding/json/jsontext"
+	"errors"
 	"maps"
 	"net/http"
 	"slices"
@@ -45,7 +46,11 @@ func (h *Handler) legacy(w http.ResponseWriter, r *http.Request, conn *control.C
 		return
 	}
 	sid := sids[0]
-	sess, ok := h.sessions.get(sid)
+	sess, ok, err := h.sessions.get(sid)
+	if err != nil {
+		sessionsUnavailable(w, req.ID)
+		return
+	}
 	if !ok || sess.conn != conn.GetId() {
 		noSession(w, req.ID)
 		return
@@ -70,6 +75,19 @@ func (h *Handler) legacy(w http.ResponseWriter, r *http.Request, conn *control.C
 		h.legacyCall(w, r, conn, req, p, in, sid)
 	case req.Method == "tasks/get" || req.Method == "tasks/result" || req.Method == "tasks/cancel":
 		h.legacyTask(w, r, conn, req, p, in, sid, sess)
+	case isResourceMethod(req.Method) && resourceCapability(conn) != nil:
+		// Reviewed resources (resources.go, G0 M15 D31).
+		if req.Method == "resources/read" {
+			if res, ok := h.readResource(w, r, conn, req, p, in, false); ok && slices.Contains(res.Reasons, "RUN_MISMATCH") {
+				h.sessions.end(sid)
+			} else if ok {
+				h.sessions.touch(sid)
+			}
+			return
+		}
+		if h.verifySession(w, r, req.ID, in, sid, sess) {
+			write(w, http.StatusOK, response{ID: req.ID, Result: listResources(conn, req.Method, false)})
+		}
 	case req.Method == "ping" || req.Method == "tools/list":
 		if !h.verifySession(w, r, req.ID, in, sid, sess) {
 			return
@@ -90,6 +108,12 @@ func (h *Handler) legacy(w http.ResponseWriter, r *http.Request, conn *control.C
 
 func noSession(w http.ResponseWriter, id jsontext.Value) {
 	fail(w, http.StatusNotFound, id, codeInvalidRequest, "Session not found: initialize a new session", nil)
+}
+
+// sessionsUnavailable answers when the session store cannot be asked (G0
+// M15 D14).
+func sessionsUnavailable(w http.ResponseWriter, id jsontext.Value) {
+	fail(w, http.StatusServiceUnavailable, id, codeUnavailable, "session store unavailable", nil)
 }
 
 // initialize opens a session for the verified workload in its run.
@@ -118,19 +142,26 @@ func (h *Handler) initialize(w http.ResponseWriter, r *http.Request, conn *contr
 		return
 	}
 	sid, err := h.sessions.open(conn.GetId(), v.Instance, v.JKT, in.Run, v.RunExpires)
-	if err != nil {
+	if errors.Is(err, errSessionsFull) {
 		fail(w, http.StatusServiceUnavailable, req.ID, codeUnavailable, "the gateway holds too many MCP sessions", nil)
+		return
+	} else if err != nil {
+		sessionsUnavailable(w, req.ID)
 		return
 	}
 	w.Header().Set(HeaderSessionID, sid)
+	caps := map[string]any{
+		"tools": map[string]any{"listChanged": false},
+		"tasks": map[string]any{"cancel": map[string]any{}, "requests": map[string]any{"tools": map[string]any{"call": map[string]any{}}}},
+	}
+	if rc := resourceCapability(conn); rc != nil {
+		caps["resources"] = rc
+	}
 	write(w, http.StatusOK, response{ID: req.ID, Result: map[string]any{
 		"protocolVersion": LegacyVersion,
-		"capabilities": map[string]any{
-			"tools": map[string]any{"listChanged": false},
-			"tasks": map[string]any{"cancel": map[string]any{}, "requests": map[string]any{"tools": map[string]any{"call": map[string]any{}}}},
-		},
-		"serverInfo":   serverInfo()[metaServerInfo],
-		"instructions": discoverResult()["instructions"],
+		"capabilities":    caps,
+		"serverInfo":      serverInfo()[metaServerInfo],
+		"instructions":    discoverResult(conn)["instructions"],
 	}})
 }
 
@@ -157,7 +188,11 @@ func (h *Handler) verifySession(w http.ResponseWriter, r *http.Request, id jsont
 // endSession ends a session on DELETE, for its own workload only.
 func (h *Handler) endSession(w http.ResponseWriter, r *http.Request, conn *control.Connection, body []byte) {
 	sid := r.Header.Get(HeaderSessionID)
-	sess, ok := h.sessions.get(sid)
+	sess, ok, err := h.sessions.get(sid)
+	if err != nil {
+		sessionsUnavailable(w, nil)
+		return
+	}
 	if !ok || sess.conn != conn.GetId() {
 		noSession(w, nil)
 		return
@@ -181,6 +216,8 @@ func (h *Handler) endSession(w http.ResponseWriter, r *http.Request, conn *contr
 // legacyCall serves a 2025-11-25 tools/call; a task-augmented one always
 // answers with a task.
 func (h *Handler) legacyCall(w http.ResponseWriter, r *http.Request, conn *control.Connection, req request, p params, in dispatch.Inbound, sid string) {
+	// 2025-11-25 has no input responses: a retry's are ignored, as before.
+	p.InputResponses, p.RequestState = nil, nil
 	c, ok := h.callTool(w, r, conn, req, p, in)
 	if !ok {
 		return
@@ -195,7 +232,7 @@ func (h *Handler) legacyCall(w http.ResponseWriter, r *http.Request, conn *contr
 		write(w, http.StatusOK, response{ID: req.ID, Result: c.result})
 		return
 	}
-	t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result)
+	t := h.holds.newTask(c.b, c.action, c.key, c.res, c.result, c.retry)
 	if t == nil {
 		// No room for a task: the answer itself, rather than losing it.
 		write(w, http.StatusOK, response{ID: req.ID, Result: c.result})

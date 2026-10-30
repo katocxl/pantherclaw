@@ -1128,6 +1128,27 @@ type PcConnectionGithub struct {
 	UpdatedAt           time.Time
 }
 
+type PcConnectionInventory struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	ConnectionID     ids.UUID
+	Kind             string
+	Name             string
+	DisplayName      string
+	MimeType         string
+	DisplayTruncated bool
+	Digest           string
+	Description      string
+	DescriptionScan  string
+	State            string
+	ReviewEntryID    *ids.UUID
+	DismissedBy      *string
+	DismissReason    *string
+	FirstSeen        time.Time
+	LastSeen         time.Time
+	UpdatedAt        time.Time
+}
+
 type PcConnectionRoute struct {
 	OrgID        ids.OrgID
 	ConnectionID ids.UUID
@@ -1972,6 +1993,37 @@ type PcGatewayEpochDelivery struct {
 	GatewayID   ids.UUID
 	Epoch       int64
 	DeliveredAt time.Time
+}
+
+type PcGatewayMcpState struct {
+	OrgID        ids.OrgID
+	GatewayID    ids.UUID
+	Kind         string
+	Key          []byte
+	ConnectionID ids.UUID
+	RunID        *ids.UUID
+	InstanceID   *ids.UUID
+	Jkt          *string
+	ActionID     *string
+	Status       *string
+	Busy         bool
+	SealedBody   []byte
+	Version      int64
+	ExpireTime   time.Time
+	UpdateTime   time.Time
+	CreatedAt    time.Time
+}
+
+type PcGatewayReplica struct {
+	OrgID         ids.OrgID
+	GatewayID     ids.UUID
+	ReplicaID     string
+	Version       string
+	Build         string
+	StartTime     *time.Time
+	ConfigVersion int64
+	Connections   []byte
+	LastSeen      time.Time
 }
 
 type PcGithubExemption struct {
