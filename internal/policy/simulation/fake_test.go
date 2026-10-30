@@ -36,6 +36,12 @@ type memStore struct {
 	retention int
 	enqueued  []ids.UUID
 	audits    []audit.Event
+	// cohorts holds each cohort's agents the caller may read, members
+	// the cohorts holding each agent, readable the cohorts the caller may
+	// read (D154).
+	cohorts  map[ids.UUID][]ids.UUID
+	members  map[ids.UUID][]ids.UUID
+	readable map[ids.UUID]bool
 }
 
 func newMemStore() *memStore {
@@ -62,6 +68,7 @@ func (m *memStore) Insert(_ context.Context, s simulation.NewSimulation) (simula
 	out := simulation.Simulation{
 		ID: s.ID, Version: s.Version, ContentDigest: s.ContentDigest, WindowStart: now.AddDate(0, 0, -s.Days), WindowEnd: now,
 		Max: s.Max, State: simulation.Queued, Report: simulation.NewReport(), RequestedBy: s.RequestedBy, Created: now,
+		Cohort: s.Cohort, CohortAgents: s.CohortAgents,
 	}
 	m.sims[s.ID] = out
 	return out, nil
@@ -119,7 +126,31 @@ func (m *memStore) Receipts(_ context.Context, s simulation.Simulation, limit in
 			return r.Transaction == c.Transaction && r.Evaluation == c.Evaluation
 		}) + 1
 	}
-	return m.recorded[start:min(len(m.recorded), start+limit)], nil
+	recs := m.recorded[start:]
+	if s.Cohort != nil {
+		recs = slices.DeleteFunc(slices.Clone(recs), func(r simulation.Recorded) bool { return !slices.Contains(s.CohortAgents, r.Agent) })
+	}
+	return recs[:min(len(recs), limit)], nil
+}
+
+func (m *memStore) CohortAgents(_ context.Context, _ tapp.Caller, cohort ids.UUID) ([]ids.UUID, bool, error) {
+	agents, ok := m.cohorts[cohort]
+	if !ok {
+		return nil, false, simulation.ErrCohortNotFound
+	}
+	return agents, false, nil
+}
+
+func (m *memStore) Memberships(context.Context) (map[ids.UUID][]ids.UUID, error) {
+	return m.members, nil
+}
+
+func (m *memStore) ReadableCohorts(_ context.Context, _ tapp.Caller, list []ids.UUID) (map[ids.UUID]bool, error) {
+	out := map[ids.UUID]bool{}
+	for _, id := range list {
+		out[id] = m.readable[id]
+	}
+	return out, nil
 }
 
 func (m *memStore) SampleCounts(_ context.Context, id ids.UUID) (map[replay.Category]map[string]int, error) {

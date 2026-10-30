@@ -226,7 +226,7 @@ func (q *Queries) CountShadowResults(ctx context.Context, orgID ids.OrgID, rollo
 }
 
 const duePolicyRollouts = `-- name: DuePolicyRollouts :many
-SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at FROM pc.policy_rollouts r
+SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at, require_verified_percent FROM pc.policy_rollouts r
 WHERE r.org_id = $1
   AND (r.stage IN ('SHADOW', 'PILOT') OR (r.stage = 'COMPLETE' AND r.completed_at > now() - interval '7 days'))
 ORDER BY r.created_at, r.id
@@ -253,6 +253,7 @@ func (q *Queries) DuePolicyRollouts(ctx context.Context, orgID ids.OrgID) ([]PcP
 			&i.CreatedAt,
 			&i.StageChangedAt,
 			&i.CompletedAt,
+			&i.RequireVerifiedPercent,
 		); err != nil {
 			return nil, err
 		}
@@ -320,7 +321,7 @@ func (q *Queries) GetPolicyCohortByName(ctx context.Context, orgID ids.OrgID, na
 }
 
 const getPolicyRollout = `-- name: GetPolicyRollout :one
-SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at FROM pc.policy_rollouts WHERE org_id = $1 AND id = $2
+SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at, require_verified_percent FROM pc.policy_rollouts WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetPolicyRollout(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPolicyRollout, error) {
@@ -336,6 +337,7 @@ func (q *Queries) GetPolicyRollout(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.CreatedAt,
 		&i.StageChangedAt,
 		&i.CompletedAt,
+		&i.RequireVerifiedPercent,
 	)
 	return i, err
 }
@@ -450,18 +452,20 @@ func (q *Queries) InsertPolicyCohort(ctx context.Context, arg InsertPolicyCohort
 }
 
 const insertPolicyRollout = `-- name: InsertPolicyRollout :one
-INSERT INTO pc.policy_rollouts (org_id, id, version_id, base_version_id, stage, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at
+INSERT INTO pc.policy_rollouts (org_id, id, version_id, base_version_id, stage, created_by, require_verified_percent)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7::integer)
+RETURNING org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at, require_verified_percent
 `
 
 type InsertPolicyRolloutParams struct {
-	OrgID         ids.OrgID
-	ID            ids.UUID
-	VersionID     ids.UUID
-	BaseVersionID *ids.UUID
-	Stage         string
-	CreatedBy     string
+	OrgID                  ids.OrgID
+	ID                     ids.UUID
+	VersionID              ids.UUID
+	BaseVersionID          *ids.UUID
+	Stage                  string
+	CreatedBy              string
+	RequireVerifiedPercent *int32
 }
 
 func (q *Queries) InsertPolicyRollout(ctx context.Context, arg InsertPolicyRolloutParams) (PcPolicyRollout, error) {
@@ -472,6 +476,7 @@ func (q *Queries) InsertPolicyRollout(ctx context.Context, arg InsertPolicyRollo
 		arg.BaseVersionID,
 		arg.Stage,
 		arg.CreatedBy,
+		arg.RequireVerifiedPercent,
 	)
 	var i PcPolicyRollout
 	err := row.Scan(
@@ -484,6 +489,7 @@ func (q *Queries) InsertPolicyRollout(ctx context.Context, arg InsertPolicyRollo
 		&i.CreatedAt,
 		&i.StageChangedAt,
 		&i.CompletedAt,
+		&i.RequireVerifiedPercent,
 	)
 	return i, err
 }
@@ -729,7 +735,7 @@ func (q *Queries) ListPolicyRolloutCohorts(ctx context.Context, orgID ids.OrgID,
 }
 
 const listPolicyRollouts = `-- name: ListPolicyRollouts :many
-SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at FROM pc.policy_rollouts WHERE org_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2
+SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at, require_verified_percent FROM pc.policy_rollouts WHERE org_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2
 `
 
 func (q *Queries) ListPolicyRollouts(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]PcPolicyRollout, error) {
@@ -751,6 +757,7 @@ func (q *Queries) ListPolicyRollouts(ctx context.Context, orgID ids.OrgID, maxRo
 			&i.CreatedAt,
 			&i.StageChangedAt,
 			&i.CompletedAt,
+			&i.RequireVerifiedPercent,
 		); err != nil {
 			return nil, err
 		}
@@ -815,7 +822,7 @@ func (q *Queries) ListRolloutTargets(ctx context.Context, arg ListRolloutTargets
 }
 
 const lockOpenPolicyRollouts = `-- name: LockOpenPolicyRollouts :many
-SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at FROM pc.policy_rollouts
+SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at, require_verified_percent FROM pc.policy_rollouts
 WHERE org_id = $1 AND stage IN ('SHADOW', 'PILOT')
 ORDER BY id
 FOR UPDATE
@@ -842,6 +849,7 @@ func (q *Queries) LockOpenPolicyRollouts(ctx context.Context, orgID ids.OrgID) (
 			&i.CreatedAt,
 			&i.StageChangedAt,
 			&i.CompletedAt,
+			&i.RequireVerifiedPercent,
 		); err != nil {
 			return nil, err
 		}
@@ -854,7 +862,7 @@ func (q *Queries) LockOpenPolicyRollouts(ctx context.Context, orgID ids.OrgID) (
 }
 
 const lockPolicyRollout = `-- name: LockPolicyRollout :one
-SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at FROM pc.policy_rollouts WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at, require_verified_percent FROM pc.policy_rollouts WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 // The rollout, locked until the transaction ends, so stage changes of one
@@ -872,6 +880,7 @@ func (q *Queries) LockPolicyRollout(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.CreatedAt,
 		&i.StageChangedAt,
 		&i.CompletedAt,
+		&i.RequireVerifiedPercent,
 	)
 	return i, err
 }
@@ -943,7 +952,7 @@ func (q *Queries) PilotRolloutForAgent(ctx context.Context, orgID ids.OrgID, age
 }
 
 const pilotsEnforcingCohort = `-- name: PilotsEnforcingCohort :many
-SELECT r.org_id, r.id, r.version_id, r.base_version_id, r.stage, r.created_by, r.created_at, r.stage_changed_at, r.completed_at FROM pc.policy_rollouts r
+SELECT r.org_id, r.id, r.version_id, r.base_version_id, r.stage, r.created_by, r.created_at, r.stage_changed_at, r.completed_at, r.require_verified_percent FROM pc.policy_rollouts r
 WHERE r.org_id = $1 AND r.stage = 'PILOT'
   AND EXISTS (SELECT 1 FROM pc.policy_rollout_cohorts rc
               WHERE rc.org_id = r.org_id AND rc.rollout_id = r.id AND rc.cohort_id = $2 AND rc.mode = 'ENFORCE')
@@ -969,6 +978,7 @@ func (q *Queries) PilotsEnforcingCohort(ctx context.Context, orgID ids.OrgID, co
 			&i.CreatedAt,
 			&i.StageChangedAt,
 			&i.CompletedAt,
+			&i.RequireVerifiedPercent,
 		); err != nil {
 			return nil, err
 		}
@@ -1096,7 +1106,7 @@ func (q *Queries) RolloutDecisionsAfter(ctx context.Context, arg RolloutDecision
 const setPolicyRolloutStage = `-- name: SetPolicyRolloutStage :one
 UPDATE pc.policy_rollouts SET stage = $1
 WHERE org_id = $2 AND id = $3 AND stage = ANY ($4::text[])
-RETURNING org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at
+RETURNING org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at, require_verified_percent
 `
 
 type SetPolicyRolloutStageParams struct {
@@ -1125,6 +1135,7 @@ func (q *Queries) SetPolicyRolloutStage(ctx context.Context, arg SetPolicyRollou
 		&i.CreatedAt,
 		&i.StageChangedAt,
 		&i.CompletedAt,
+		&i.RequireVerifiedPercent,
 	)
 	return i, err
 }

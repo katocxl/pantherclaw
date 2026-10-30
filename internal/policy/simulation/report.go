@@ -26,6 +26,9 @@ const (
 	MaxGroups = 1000
 	MaxRoles  = 100
 	Other     = "other"
+	// MaxCohortGroups bounds the cohorts a report counts by: the org's
+	// first cohorts by name (D154).
+	MaxCohortGroups = 500
 	// RoleStepUp and RoleOther name the burden of a step-up, and of a hold
 	// no rule of the version names a role for.
 	RoleStepUp = "step_up"
@@ -49,6 +52,9 @@ type Report struct {
 	Counts      Counts
 	ByOperation map[string]Counts
 	ByAgent     map[string]Counts
+	// ByCohort counts the decisions of each cohort's agents by cohort id
+	// (D154): a decision of an agent in two cohorts counts in both.
+	ByCohort map[string]Counts
 	// HeldPerDay counts the decisions newly held by the day (UTC,
 	// YYYY-MM-DD) they were recorded, and HeldByRole by the approver role
 	// the version requires (the approval burden forecast).
@@ -59,7 +65,7 @@ type Report struct {
 // NewReport returns an empty report.
 func NewReport() Report {
 	return Report{
-		Counts: Counts{}, ByOperation: map[string]Counts{}, ByAgent: map[string]Counts{},
+		Counts: Counts{}, ByOperation: map[string]Counts{}, ByAgent: map[string]Counts{}, ByCohort: map[string]Counts{},
 		HeldPerDay: map[string]int{}, HeldByRole: map[string]int{},
 	}
 }
@@ -90,6 +96,18 @@ func (r *Report) Add(o Result) {
 	r.Counts[o.Category]++
 	group(r.ByOperation, o.Operation, MaxGroups)[o.Category]++
 	group(r.ByAgent, o.Agent.String(), MaxGroups)[o.Category]++
+	if r.ByCohort == nil {
+		r.ByCohort = map[string]Counts{}
+	}
+	for _, co := range o.Cohorts {
+		// Cohorts beyond the bound are not counted: an "other" cohort
+		// would mean nothing.
+		if c, ok := r.ByCohort[co]; ok {
+			c[o.Category]++
+		} else if len(r.ByCohort) < MaxCohortGroups {
+			r.ByCohort[co] = Counts{o.Category: 1}
+		}
+	}
 	if o.Category == replay.NewlyHeld {
 		bump(r.HeldPerDay, o.Recorded.UTC().Format(time.DateOnly), MaxGroups)
 		bump(r.HeldByRole, o.Role, MaxRoles)
@@ -129,6 +147,9 @@ type Result struct {
 	Limitations []string
 	// Role is the approver role of a newly held decision.
 	Role string
+	// Cohorts are the ids of the cohorts holding the agent when it was
+	// counted.
+	Cohorts []string
 }
 
 // Sample is a stored sample decision.

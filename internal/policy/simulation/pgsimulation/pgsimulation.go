@@ -10,9 +10,11 @@ package pgsimulation
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
+	"github.com/katocxl/pantherclaw/internal/cohorts"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/retention"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -20,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/policy/simulation"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
 
 // Store is the simulation store over a connection pool. Jobs is an
@@ -98,6 +101,7 @@ func simulationOf(r dbq.PcPolicySimulation) (simulation.Simulation, error) {
 		ID: r.ID, Version: r.VersionID, WindowStart: r.WindowStart, WindowEnd: r.WindowEnd, Max: int(r.MaxEvaluations),
 		State: simulation.State(r.State), Evaluated: int(r.Evaluated), Report: simulation.NewReport(), RequestedBy: r.RequestedBy,
 		Created: r.CreatedAt, Started: r.StartedAt, Finished: r.FinishedAt,
+		Cohort: r.CohortID, CohortAgents: r.CohortAgents,
 	}
 	copy(s.ContentDigest[:], r.ContentDigest)
 	if r.Error != nil {
@@ -119,6 +123,11 @@ func simulationOf(r dbq.PcPolicySimulation) (simulation.Simulation, error) {
 		return s, err
 	}
 	s.Report.Counts, s.Report.ByOperation, s.Report.ByAgent = countsOf(counts), groupsOf(wf.Operations), groupsOf(wf.Agents)
+	var byCohort map[string]map[string]int
+	if err := json.Unmarshal(r.ByCohort, &byCohort); err != nil {
+		return s, err
+	}
+	s.Report.ByCohort = groupsOf(byCohort)
 	if b.PerDay != nil {
 		s.Report.HeldPerDay = b.PerDay
 	}
@@ -142,6 +151,7 @@ func (t *txn) Insert(ctx context.Context, s simulation.NewSimulation) (simulatio
 	row, err := t.q.InsertPolicySimulation(ctx, dbq.InsertPolicySimulationParams{
 		OrgID: t.org, ID: s.ID, VersionID: s.Version, ContentDigest: s.ContentDigest[:], Days: int32(s.Days), //nolint:gosec // ≤ 30
 		MaxEvaluations: int32(s.Max), RequestedBy: s.RequestedBy, //nolint:gosec // ≤ 50 000
+		CohortID: s.Cohort, CohortAgents: s.CohortAgents,
 	})
 	switch {
 	case db.IsUniqueViolation(err):
@@ -220,8 +230,12 @@ func (t *txn) Advance(ctx context.Context, s, prev simulation.Simulation) (simul
 	if err != nil {
 		return simulation.Simulation{}, false, err
 	}
+	byCohort, err := json.Marshal(groupsJSON(s.Report.ByCohort))
+	if err != nil {
+		return simulation.Simulation{}, false, err
+	}
 	p := dbq.AdvancePolicySimulationParams{
-		State: string(s.State), Evaluated: int32(s.Evaluated), Counts: counts, ByWorkflow: wf, Burden: burden, //nolint:gosec // ≤ 50 000
+		State: string(s.State), Evaluated: int32(s.Evaluated), Counts: counts, ByWorkflow: wf, Burden: burden, ByCohort: byCohort, //nolint:gosec // ≤ 50 000
 		OrgID: t.org, ID: s.ID,
 	}
 	if c := s.Cursor; c != nil {
@@ -245,6 +259,13 @@ func (t *txn) Receipts(ctx context.Context, s simulation.Simulation, limit int) 
 		return nil, nil
 	}
 	p := dbq.SimulationReceiptsParams{OrgID: t.org, WindowStart: s.WindowStart, WindowEnd: s.WindowEnd, PageLimit: int32(limit)} //nolint:gosec // ≤ chunk
+	if s.Cohort != nil {
+		// Only the snapshot's agents; an empty snapshot reads nothing.
+		p.CohortAgents = s.CohortAgents
+		if p.CohortAgents == nil {
+			p.CohortAgents = []ids.UUID{}
+		}
+	}
 	if c := s.Cursor; c != nil {
 		ev := int32(c.Evaluation) //nolint:gosec // G115: 1..64
 		p.CursorCreatedAt, p.CursorTxn, p.CursorEvaluation = &c.Created, &c.Transaction, &ev
@@ -338,4 +359,24 @@ func optional(id ids.UUID) *ids.UUID {
 		return nil
 	}
 	return &id
+}
+
+// CohortAgents implements simulation.Tx: the cohort's agents the caller
+// may read (D154, HR-480).
+func (t *txn) CohortAgents(ctx context.Context, c tenancy.Caller, cohort ids.UUID) ([]ids.UUID, bool, error) {
+	agents, truncated, err := cohorts.ReadableAgents(ctx, t.tx, c, cohort)
+	if errors.Is(err, cohorts.ErrNotFound) {
+		return nil, false, simulation.ErrCohortNotFound
+	}
+	return agents, truncated, err
+}
+
+// Memberships implements simulation.Tx.
+func (t *txn) Memberships(ctx context.Context) (map[ids.UUID][]ids.UUID, error) {
+	return cohorts.Memberships(ctx, t.tx, simulation.MaxCohortGroups)
+}
+
+// ReadableCohorts implements simulation.Tx.
+func (t *txn) ReadableCohorts(ctx context.Context, c tenancy.Caller, list []ids.UUID) (map[ids.UUID]bool, error) {
+	return cohorts.ReadableCohorts(ctx, t.tx, c, list)
 }

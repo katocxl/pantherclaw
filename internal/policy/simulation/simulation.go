@@ -72,6 +72,9 @@ var (
 	ErrFinished = pcerr.New(pcerr.FailedPrecondition, "SIMULATION_FINISHED", "the simulation has already finished")
 	ErrCategory = pcerr.New(pcerr.InvalidArgument, "INVALID_SIMULATION_CATEGORY", "unknown category")
 	ErrUnwired  = pcerr.New(pcerr.Unavailable, "SIMULATION_UNAVAILABLE", "policy simulation is not available on this server")
+	// ErrCohortNotFound: the cohort of a bulk simulation does not exist or
+	// is outside the caller's scope.
+	ErrCohortNotFound = pcerr.New(pcerr.NotFound, "COHORT_NOT_FOUND", "cohort not found")
 )
 
 // Cursor is the worker's keyset position: the last recorded decision it
@@ -99,6 +102,11 @@ type Simulation struct {
 	Started       *time.Time
 	Finished      *time.Time
 	Error         string
+	// Cohort names the fleet cohort a bulk simulation replays (nil: the
+	// whole org), and CohortAgents its agents the requester could read
+	// when it was asked for (D154).
+	Cohort       *ids.UUID
+	CohortAgents []ids.UUID
 }
 
 // Recorded is a recorded decision of the window: ids, its agent and its
@@ -119,6 +127,9 @@ type NewSimulation struct {
 	Days          int
 	Max           int
 	RequestedBy   string
+	// Cohort and CohortAgents: a bulk simulation's cohort and snapshot.
+	Cohort       *ids.UUID
+	CohortAgents []ids.UUID
 }
 
 // SampleFilter narrows a sample listing.
@@ -162,6 +173,15 @@ type Tx interface {
 	SampleCounts(ctx context.Context, id ids.UUID) (map[replay.Category]map[string]int, error)
 	InsertSample(ctx context.Context, id ids.UUID, s Sample) error
 	Samples(ctx context.Context, id ids.UUID, f SampleFilter, after SampleKey, limit int32) ([]Sample, error)
+	// CohortAgents returns the cohort's agents the caller may read
+	// (ErrCohortNotFound when it may read none of the cohort: missing or
+	// outside its scope), and whether the cohort held more than are read.
+	CohortAgents(ctx context.Context, c tenancy.Caller, cohort ids.UUID) ([]ids.UUID, bool, error)
+	// Memberships maps agents to the cohorts holding them now, over the
+	// org's first MaxCohortGroups cohorts.
+	Memberships(ctx context.Context) (map[ids.UUID][]ids.UUID, error)
+	// ReadableCohorts reports which cohorts the caller may read.
+	ReadableCohorts(ctx context.Context, c tenancy.Caller, cohorts []ids.UUID) (map[ids.UUID]bool, error)
 	// Enqueue adds the simulation's job in this transaction.
 	Enqueue(ctx context.Context, id ids.UUID) error
 	// Audit records an event in this transaction.
@@ -225,6 +245,10 @@ type Request struct {
 	Days int
 	// Max bounds the decisions replayed (0: DefaultMaxEvaluations).
 	Max int
+	// Cohort, when set, replays only the decisions of the fleet cohort's
+	// agents the caller may read now (a bulk simulation, D154): one
+	// simulation under the same caps.
+	Cohort *ids.UUID
 }
 
 // Simulate queues a simulation of a stored policy version over the
@@ -269,9 +293,28 @@ func (s *Service) Simulate(ctx context.Context, in Request) (Simulation, error) 
 		if in.Days > keep {
 			return ErrWindow
 		}
-		if out, err = tx.Insert(ctx, NewSimulation{
+		n := NewSimulation{
 			ID: ids.NewV7(), Version: in.Version, ContentDigest: digest, Days: in.Days, Max: in.Max, RequestedBy: c.Actor().ID,
-		}); err != nil {
+		}
+		details := map[string]string{
+			"version_id": in.Version.String(), "days": strconv.Itoa(in.Days), "max_evaluations": strconv.Itoa(in.Max),
+		}
+		if in.Cohort != nil {
+			// The snapshot: only agents the requester may read (HR-480).
+			agents, truncated, err := tx.CohortAgents(ctx, c, *in.Cohort)
+			if err != nil {
+				return err
+			}
+			n.Cohort, n.CohortAgents = in.Cohort, agents
+			if n.CohortAgents == nil {
+				n.CohortAgents = []ids.UUID{}
+			}
+			details["cohort_id"], details["cohort_agents"] = in.Cohort.String(), strconv.Itoa(len(agents))
+			if truncated {
+				details["cohort_truncated"] = "true"
+			}
+		}
+		if out, err = tx.Insert(ctx, n); err != nil {
 			return err
 		}
 		if err := tx.Enqueue(ctx, out.ID); err != nil {
@@ -279,13 +322,38 @@ func (s *Service) Simulate(ctx context.Context, in Request) (Simulation, error) 
 		}
 		return tx.Audit(ctx, audit.Event{
 			Name: "policy.simulation_requested", Actor: c.Actor(), Outcome: audit.Success,
-			Object: &audit.Object{Type: "policy_simulation", ID: out.ID.String()},
-			Details: map[string]string{
-				"version_id": in.Version.String(), "days": strconv.Itoa(in.Days), "max_evaluations": strconv.Itoa(in.Max),
-			},
+			Object: &audit.Object{Type: "policy_simulation", ID: out.ID.String()}, Details: details,
 		})
 	})
 	return out, err
+}
+
+// readableReport keeps only the per-cohort counts of cohorts the caller
+// may read (HR-480, T-213).
+func readableReport(ctx context.Context, tx Tx, c tenancy.Caller, sims []Simulation) error {
+	var all []ids.UUID
+	for _, s := range sims {
+		for k := range s.Report.ByCohort {
+			if id, err := ids.ParseUUID(k); err == nil {
+				all = append(all, id)
+			}
+		}
+	}
+	if len(all) == 0 {
+		return nil
+	}
+	ok, err := tx.ReadableCohorts(ctx, c, all)
+	if err != nil {
+		return err
+	}
+	for _, s := range sims {
+		for k := range s.Report.ByCohort {
+			if id, err := ids.ParseUUID(k); err != nil || !ok[id] {
+				delete(s.Report.ByCohort, k)
+			}
+		}
+	}
+	return nil
 }
 
 // Get returns a simulation and its report (policy.simulate).
@@ -296,8 +364,10 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (Simulation, error) {
 	}
 	var out Simulation
 	err = s.Store.InTx(ctx, c.Org, true, func(ctx context.Context, tx Tx) error {
-		out, err = tx.Get(ctx, id, false)
-		return err
+		if out, err = tx.Get(ctx, id, false); err != nil {
+			return err
+		}
+		return readableReport(ctx, tx, c, []Simulation{out})
 	})
 	return out, err
 }
@@ -321,7 +391,7 @@ func (s *Service) List(ctx context.Context, pr page.Request) (Page, error) {
 			return err
 		}
 		out.Items, out.Next = page.Finish(pr, rows, func(x Simulation) ids.UUID { return x.ID })
-		return nil
+		return readableReport(ctx, tx, c, out.Items)
 	})
 	return out, err
 }

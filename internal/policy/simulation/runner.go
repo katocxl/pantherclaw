@@ -92,6 +92,15 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 	} else if err != nil {
 		return false, err
 	}
+	// The cohorts holding each agent, read once a step, for the counts
+	// per cohort (D154).
+	var memberships map[ids.UUID][]ids.UUID
+	if err := r.Store.InTx(ctx, org, true, func(ctx context.Context, tx Tx) error {
+		memberships, err = tx.Memberships(ctx)
+		return err
+	}); err != nil {
+		return false, err
+	}
 	for {
 		var recs []Recorded
 		if err := r.Store.InTx(ctx, org, true, func(ctx context.Context, tx Tx) error {
@@ -105,6 +114,9 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 			res, err := r.evaluate(ctx, org, sim.Version, bundle, rec)
 			if err != nil {
 				return false, err
+			}
+			for _, co := range memberships[rec.Agent] {
+				res.Cohorts = append(res.Cohorts, co.String())
 			}
 			results = append(results, res)
 		}
