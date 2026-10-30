@@ -69,3 +69,23 @@ BEGIN
     END IF;
 END
 $$;
+
+-- The keystore role, when `db bootstrap --keystore-password-file` created
+-- it (G0 M18 D171, HR-487): connect, SELECT on pc.keys and pc.deks, and
+-- UPDATE of only their wrapped key and kek_id columns (the both-columns
+-- trigger of migration 00224 applies). The tenant_isolation policies
+-- bind it like pc_app. Here for a role created after migration 00224.
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_keystore') THEN
+        EXECUTE format('GRANT CONNECT ON DATABASE %I TO pc_keystore', current_database());
+        GRANT USAGE ON SCHEMA pc TO pc_keystore;
+        IF to_regprocedure('pc.keystore_rewrap_guard()') IS NOT NULL THEN
+            GRANT SELECT, UPDATE (wrapped_private_key, kek_id) ON pc.keys TO pc_keystore;
+            GRANT SELECT, UPDATE (wrapped_key, kek_id) ON pc.deks TO pc_keystore;
+            GRANT SELECT (id, state) ON pc.orgs TO pc_keystore;
+            GRANT EXECUTE ON FUNCTION pc.org_write_guard() TO pc_keystore;
+        END IF;
+    END IF;
+END
+$$;

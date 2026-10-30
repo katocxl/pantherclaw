@@ -80,7 +80,8 @@ func TestHR062_AlternativeKeysCannotBeSwappedBetweenRows(t *testing.T) {
 	if err := keystore.LoadSigningKeys(ctx, p, kp, keys.NewRegistry()); err != nil {
 		t.Fatal(err)
 	}
-	d.AdminExec(t, `UPDATE pc.keys k SET wrapped_private_key = r.wrapped_private_key
+	// A superuser insider, which also skips the 00224 both-columns trigger.
+	d.AdminExec(t, `SET session_replication_role = replica; UPDATE pc.keys k SET wrapped_private_key = r.wrapped_private_key
 		FROM pc.keys r WHERE k.purpose = 'anchors' AND r.purpose = 'receipts' AND k.org_id = r.org_id`)
 	if err := keystore.LoadSigningKeys(ctx, p, kp, keys.NewRegistry()); !errors.Is(err, keys.ErrUnwrap) {
 		t.Fatalf("swapped wrapped key accepted: %v", err)

@@ -66,7 +66,9 @@ type DB struct {
 	Deleter db.Config
 	// Retention is pc_retention, the role of the retention job (HR-198).
 	Retention db.Config
-	admin     *pgx.ConnConfig
+	// Keystore is pc_keystore, the role of the re-wrap job (G0 M18 D171).
+	Keystore db.Config
+	admin    *pgx.ConnConfig
 }
 
 type cluster struct {
@@ -75,7 +77,9 @@ type cluster struct {
 	// deleterPW is pc_deleter's, bootstrapped like the other roles so
 	// that every test database grants it the org tables (G0 M13 D34).
 	deleterPW pclog.Secret[[]byte]
-	template  string
+	// keystorePW is pc_keystore's, bootstrapped likewise (G0 M18 D171).
+	keystorePW pclog.Secret[[]byte]
+	template   string
 }
 
 var (
@@ -123,6 +127,7 @@ func New(t testing.TB) *DB {
 		AuditRO:   roleConfig(shared.admin, name, db.RoleAuditRO, shared.pw.AuditRO, true),
 		Retention: roleConfig(shared.admin, name, db.RoleRetention, shared.pw.Retention, true),
 		Deleter:   roleConfig(shared.admin, name, db.RoleDeleter, shared.deleterPW, true),
+		Keystore:  roleConfig(shared.admin, name, db.RoleKeystore, shared.keystorePW, true),
 		admin:     shared.admin,
 	}
 }
@@ -220,6 +225,10 @@ func setup(url string) (*cluster, error) {
 	}
 	c.deleterPW = derive(admin.Password, db.RoleDeleter)
 	if err := db.BootstrapDeleterRole(ctx, conn, c.deleterPW); err != nil {
+		return nil, err
+	}
+	c.keystorePW = derive(admin.Password, db.RoleKeystore)
+	if err := db.BootstrapKeystoreRole(ctx, conn, c.keystorePW); err != nil {
 		return nil, err
 	}
 	c.template = "pc_tmpl_" + db.SchemaFingerprint()

@@ -79,7 +79,7 @@ func (s *DEKStore) CurrentDEK(ctx context.Context, org ids.OrgID, purpose string
 			return err
 		}
 		version = uint32(row.Version) //nolint:gosec // G115: versions are positive (CHECK constraint)
-		key, err = s.unwrap(ctx, org, purpose, version, row.WrappedKey)
+		key, err = s.unwrap(ctx, org, purpose, version, row.KekID, row.WrappedKey)
 		return err
 	})
 	return version, key, err
@@ -121,25 +121,25 @@ func (s *DEKStore) DEK(ctx context.Context, org ids.OrgID, purpose string, versi
 	}
 	var key pclog.Secret[[]byte]
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		wrapped, err := dbq.New(tx).GetDEK(ctx, org, purpose, int32(version)) //nolint:gosec // G115: stored versions fit int32
+		row, err := dbq.New(tx).GetDEK(ctx, org, purpose, int32(version)) //nolint:gosec // G115: stored versions fit int32
 		if errors.Is(err, pgx.ErrNoRows) {
 			return pccrypto.ErrUnknownDEK
 		}
 		if err != nil {
 			return err
 		}
-		key, err = s.unwrap(ctx, org, purpose, version, wrapped)
+		key, err = s.unwrap(ctx, org, purpose, version, row.KekID, row.WrappedKey)
 		return err
 	}, db.ReadOnly())
 	return key, err
 }
 
-func (s *DEKStore) unwrap(ctx context.Context, org ids.OrgID, purpose string, version uint32, wrapped []byte) (pclog.Secret[[]byte], error) {
+func (s *DEKStore) unwrap(ctx context.Context, org ids.OrgID, purpose string, version uint32, kekID string, wrapped []byte) (pclog.Secret[[]byte], error) {
 	ref := dekRef{org, purpose, version}
 	if k, ok := s.get(ref); ok {
 		return k, nil
 	}
-	plain, err := s.kp.Unwrap(ctx, wrapped, dekAAD(org, purpose, version))
+	plain, err := unwrapStored(ctx, s.kp, kekID, wrapped, dekAAD(org, purpose, version))
 	if err != nil {
 		return pclog.Secret[[]byte]{}, fmt.Errorf("keystore: unwrap DEK %s/%d: %w", purpose, version, err)
 	}

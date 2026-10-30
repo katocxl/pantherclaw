@@ -22,7 +22,7 @@ import (
 )
 
 func newRestoreRegistry(ctx context.Context, cfg *Config, pool *db.Pool) (*restore.Registry, error) {
-	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	kp, err := newKeyProvider(cfg)
 	if err != nil {
 		return nil, err
 	}
