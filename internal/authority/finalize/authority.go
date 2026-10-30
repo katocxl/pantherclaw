@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"time"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -38,6 +39,10 @@ const (
 	// window is not inside one now (HR-207).
 	ReasonWindowClosed = "CHANGE_WINDOW_CLOSED"
 	maxAttempts        = 3
+	// busyJitterMin and busyJitterSpan bound the wait before the one retry
+	// of a busy budget (HR-505): 5–25 ms.
+	busyJitterMin  = 5 * time.Millisecond
+	busyJitterSpan = 20 * time.Millisecond
 )
 
 // DefaultPermitTTL is the permit lifetime (HR-009).
@@ -162,7 +167,8 @@ func waitOf(ev *pipeline.Evaluation, txn ids.UUID) *Wait {
 // (run, action) never yields a second permit: repeats return the stored
 // decision (HR-005); the same ids with another action hash are denied as
 // tampering (HR-006); an OPEN transaction is evaluated again, at most
-// MaxEvaluations times.
+// MaxEvaluations times. A busy budget is retried once, after a jittered
+// wait, from a fresh snapshot (HR-505); busy again, it is BUDGET_BUSY.
 func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Request) (Result, error) {
 	act := req.Action.Action
 	if org, err := act.OrgID(); err != nil || org != gw.Org || req.Org != gw.Org {
@@ -180,6 +186,7 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 		}}}, nil
 	}
 	req.Gateway = gw.ID // the certificate's gateway, never the request's
+	busyRetried := false
 	for attempt := 0; ; attempt++ {
 		if attempt > maxAttempts+1 {
 			return Result{}, fmt.Errorf("finalize: no stable decision after %d attempts", attempt)
@@ -203,6 +210,15 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 			a.log(ctx).InfoContext(ctx, "authz.decision", slog.String("txn_id", res.TransactionID.String()),
 				slog.String("decision", string(res.Decision)), slog.String("reason_code", ev.Decisive().Code))
 			return res, nil
+		case errors.Is(err, ErrBusy) && !busyRetried:
+			// One retry, evaluated again from a fresh snapshot: the busy
+			// evaluation is never bound later (HR-505, T-219). It is not a
+			// concurrent change, so it does not count as an attempt.
+			busyRetried = true
+			attempt--
+			if err := busyWait(ctx); err != nil {
+				return Result{}, err
+			}
 		case errors.Is(err, ErrParked), errors.Is(err, ErrHoldLimit), errors.Is(err, ErrBusy), errors.As(err, new(*WindowClosedError)):
 			code, detail := pipeline.ReasonReconciliation, "an identical irreversible action is in flight, unknown or recently succeeded"
 			var closed *WindowClosedError
@@ -281,6 +297,24 @@ func (a *Authority) evaluate(ctx context.Context, req pipeline.Request, run, act
 func Holds(ev *pipeline.Evaluation) bool {
 	return ev.Hold != nil && !ev.MonitorPermit() &&
 		(ev.Decision == adomain.RequireApproval || ev.Decision == adomain.RequireStepUp)
+}
+
+// busyWait waits busyJitter, or until ctx ends.
+func busyWait(ctx context.Context) error {
+	t := time.NewTimer(busyJitter())
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// busyJitter is a random wait in [5 ms, 25 ms), so retries that collided
+// on a row do not collide again in step.
+func busyJitter() time.Duration {
+	return busyJitterMin + rand.N(busyJitterSpan) //nolint:gosec // jitter, not a secret
 }
 
 func retryable(err error) bool {
