@@ -884,8 +884,10 @@ message GetCoverageGraphRequest {
 
 // CoverageGraphNode is one node of a coverage graph.
 message CoverageGraphNode {
-  // "agent:<id>", "scope:<connection_id>/<operation>", "route:<route id>"
-  // or "target:<host>".
+  // "agent:<id>", "scope:<connection_id>/<operation>",
+  // "route:<connection_id>/<operation>/<route id or kind>" (one per scope),
+  // or "target:<host>" (the connection's base URL host) or
+  // "target:<connection_id>" for a connection without one.
   string id = 1;
   // "AGENT", "SCOPE", "ROUTE" or "TARGET".
   string kind = 2;
@@ -919,8 +921,10 @@ message GetCoverageGraphResponse {
   // Edges.
   repeated CoverageGraphEdge edges = 2;
   // What the scopes shown say about the agent, as the agent lifecycle
-  // derives it: "PROTECTED", "PARTIALLY_PROTECTED" or "OBSERVED".
+  // derives it: "PROTECTED", "PARTIALLY_PROTECTED" or "OBSERVED"; "UNKNOWN"
+  // when scope_limited is set, since a scope not shown could be weaker.
   string boundary_state = 3;
-  // Set when the caller may not read every scope of the agent.
+  // Set when the caller may not read every scope of the agent, or when the
+  // agent has more scopes than one graph shows (200).
   bool scope_limited = 4;
 }

@@ -175,7 +175,7 @@ func (s *Service) GetCoverageGraph(ctx context.Context, agent ids.UUID, f GraphF
 			return orNotFound(err)
 		}
 		rows, err := r.q.ListCurrentCoverageSnapshotsPage(ctx, dbq.ListCurrentCoverageSnapshotsPageParams{
-			OrgID: r.c.Org, ConnectionID: f.Connection, AgentID: &agent, MaxRows: MaxGraphScopes + 1,
+			OrgID: r.c.Org, ConnectionID: f.Connection, AgentID: &agent, Operation: f.Operation, MaxRows: MaxGraphScopes + 1,
 		})
 		if err != nil {
 			return err
@@ -201,9 +201,6 @@ func (s *Service) GetCoverageGraph(ctx context.Context, agent ids.UUID, f GraphF
 		var scopes []GraphScope
 		for i := range rows {
 			row := rows[i]
-			if f.Operation != nil && row.Operation != *f.Operation {
-				continue
-			}
 			sc := domain.Scope{Agent: row.AgentID, Connection: row.ConnectionID, Operation: row.Operation}
 			if !readable[row.AgentID] {
 				scopes = append(scopes, GraphScope{Scope: sc})

@@ -173,6 +173,7 @@ FROM pc.coverage_snapshots
 WHERE org_id = sqlc.arg(org_id)
   AND (sqlc.narg(connection_id)::uuid IS NULL OR connection_id = sqlc.narg(connection_id)::uuid)
   AND (sqlc.narg(agent_id)::uuid IS NULL OR agent_id = sqlc.narg(agent_id)::uuid)
+  AND (sqlc.narg(operation)::text IS NULL OR operation = sqlc.narg(operation)::text)
   AND (sqlc.narg(after_agent)::uuid IS NULL
        OR (agent_id, connection_id, operation) > (sqlc.narg(after_agent)::uuid, sqlc.narg(after_connection)::uuid,
                                                  sqlc.narg(after_operation)::text))
@@ -403,14 +404,22 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
 ORDER BY agent_id
 LIMIT 200;
 
--- The active grants in effect now of some agents, with their bounds: the
--- access detail links those that allow an operation of the connection
--- (F423).
+-- The active grants in effect now of some agents that allow one of some
+-- operations, with their bounds: the access detail links them (F423). The
+-- operations are filtered here, before the limit, so no matching grant is
+-- cut.
 -- name: CoverageActiveGrantsOfAgents :many
 SELECT g.id, g.agent_id, r.bounds FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+CROSS JOIN LATERAL (SELECT CASE WHEN jsonb_typeof(b->'operations') = 'array' THEN b->'operations' END AS ops
+    FROM (SELECT convert_from(r.bounds, 'UTF8')::jsonb AS b) j) o
 WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = ANY(sqlc.arg(agent_ids)::uuid[]) AND g.state = 'ACTIVE'
   AND r.not_before <= now() AND r.expires_at > now()
+  -- Bounds without operations allow every operation; a pattern "x.*" allows
+  -- the names that start with "x." (grants domain Ops.Matches).
+  AND (o.ops IS NULL OR EXISTS (
+    SELECT 1 FROM jsonb_array_elements_text(o.ops) p(pat), unnest(sqlc.arg(operations)::text[]) op(name)
+    WHERE p.pat = op.name OR (right(p.pat, 1) = '*' AND starts_with(op.name, left(p.pat, -1)))))
 ORDER BY g.id DESC
 LIMIT 500;
 
