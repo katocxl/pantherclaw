@@ -1878,6 +1878,38 @@ type PcExportDestination struct {
 	FailedPushes        int64
 }
 
+type PcExportReceipt struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	DestinationID  ids.UUID
+	Class          string
+	ArtifactID     *ids.UUID
+	Streamed       bool
+	FromSeq        pgtype.Int8
+	ToSeq          pgtype.Int8
+	RequestedBy    ids.UUID
+	ObjectKey      string
+	State          string
+	UploadID       *string
+	AbortState     string
+	SizeBytes      int64
+	Sha256         []byte
+	Parts          int32
+	Etag           *string
+	Attempts       int32
+	LastStatus     *int32
+	FailureCode    *string
+	CreatedAt      time.Time
+	StartedAt      *time.Time
+	DeliveredAt    *time.Time
+	RemovedHereAt  *time.Time
+	NoticeState    string
+	NoticeKey      *string
+	NoticeSha256   []byte
+	NoticeSentAt   *time.Time
+	NoticeAttempts int32
+}
+
 type PcExposureChange struct {
 	OrgID     ids.OrgID
 	ChangeSeq int64

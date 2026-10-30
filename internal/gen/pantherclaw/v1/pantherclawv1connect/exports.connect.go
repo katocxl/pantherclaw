@@ -42,6 +42,15 @@ const (
 	// ExportDestinationServiceReplaceExportDestinationCredentialProcedure is the procedure name of the
 	// ExportDestinationService's ReplaceExportDestinationCredential RPC.
 	ExportDestinationServiceReplaceExportDestinationCredentialProcedure = "/pantherclaw.v1.ExportDestinationService/ReplaceExportDestinationCredential"
+	// ExportDestinationServicePushExportArtifactProcedure is the procedure name of the
+	// ExportDestinationService's PushExportArtifact RPC.
+	ExportDestinationServicePushExportArtifactProcedure = "/pantherclaw.v1.ExportDestinationService/PushExportArtifact"
+	// ExportDestinationServiceGetExportReceiptProcedure is the procedure name of the
+	// ExportDestinationService's GetExportReceipt RPC.
+	ExportDestinationServiceGetExportReceiptProcedure = "/pantherclaw.v1.ExportDestinationService/GetExportReceipt"
+	// ExportDestinationServiceListExportReceiptsProcedure is the procedure name of the
+	// ExportDestinationService's ListExportReceipts RPC.
+	ExportDestinationServiceListExportReceiptsProcedure = "/pantherclaw.v1.ExportDestinationService/ListExportReceipts"
 )
 
 var (
@@ -82,6 +91,29 @@ var (
 			Procedure:  ExportDestinationServiceReplaceExportDestinationCredentialProcedure,
 		}
 	})
+	exportDestinationServicePushExportArtifactSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_exports_proto.Services().ByName("ExportDestinationService").Methods().ByName("PushExportArtifact"),
+			Procedure:  ExportDestinationServicePushExportArtifactProcedure,
+		}
+	})
+	exportDestinationServiceGetExportReceiptSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_exports_proto.Services().ByName("ExportDestinationService").Methods().ByName("GetExportReceipt"),
+			Procedure:        ExportDestinationServiceGetExportReceiptProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	exportDestinationServiceListExportReceiptsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_exports_proto.Services().ByName("ExportDestinationService").Methods().ByName("ListExportReceipts"),
+			Procedure:        ExportDestinationServiceListExportReceiptsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // ExportDestinationServiceClient is a client for the pantherclaw.v1.ExportDestinationService
@@ -105,6 +137,17 @@ type ExportDestinationServiceClient interface {
 	// person only). The target never changes.
 	// permission: siem.manage
 	ReplaceExportDestinationCredential(context.Context, *v1.ReplaceExportDestinationCredentialRequest) (*v1.ReplaceExportDestinationCredentialResponse, error)
+	// PushExportArtifact queues one artifact's push (a person only, who also
+	// needs the artifact's own permission) and returns its receipt. An active
+	// legal hold never blocks a push.
+	// permission: siem.manage
+	PushExportArtifact(context.Context, *v1.PushExportArtifactRequest) (*v1.PushExportArtifactResponse, error)
+	// GetExportReceipt returns one push's receipt.
+	// permission: siem.read
+	GetExportReceipt(context.Context, *v1.GetExportReceiptRequest) (*v1.GetExportReceiptResponse, error)
+	// ListExportReceipts lists receipts, newest first.
+	// permission: siem.read
+	ListExportReceipts(context.Context, *v1.ListExportReceiptsRequest) (*v1.ListExportReceiptsResponse, error)
 }
 
 // NewExportDestinationServiceClient constructs a client for the
@@ -135,6 +178,17 @@ type ExportDestinationServiceHandler interface {
 	// person only). The target never changes.
 	// permission: siem.manage
 	ReplaceExportDestinationCredential(context.Context, *v1.ReplaceExportDestinationCredentialRequest) (*v1.ReplaceExportDestinationCredentialResponse, error)
+	// PushExportArtifact queues one artifact's push (a person only, who also
+	// needs the artifact's own permission) and returns its receipt. An active
+	// legal hold never blocks a push.
+	// permission: siem.manage
+	PushExportArtifact(context.Context, *v1.PushExportArtifactRequest) (*v1.PushExportArtifactResponse, error)
+	// GetExportReceipt returns one push's receipt.
+	// permission: siem.read
+	GetExportReceipt(context.Context, *v1.GetExportReceiptRequest) (*v1.GetExportReceiptResponse, error)
+	// ListExportReceipts lists receipts, newest first.
+	// permission: siem.read
+	ListExportReceipts(context.Context, *v1.ListExportReceiptsRequest) (*v1.ListExportReceiptsResponse, error)
 }
 
 // RegisterExportDestinationServiceHandler registers svc as the
@@ -147,6 +201,9 @@ func RegisterExportDestinationServiceHandler(server *connect.Server, svc ExportD
 		connect.Method{Spec: exportDestinationServiceListExportDestinationsSpec(), Handler: adapter.listExportDestinations},
 		connect.Method{Spec: exportDestinationServiceSetExportDestinationStateSpec(), Handler: adapter.setExportDestinationState},
 		connect.Method{Spec: exportDestinationServiceReplaceExportDestinationCredentialSpec(), Handler: adapter.replaceExportDestinationCredential},
+		connect.Method{Spec: exportDestinationServicePushExportArtifactSpec(), Handler: adapter.pushExportArtifact},
+		connect.Method{Spec: exportDestinationServiceGetExportReceiptSpec(), Handler: adapter.getExportReceipt},
+		connect.Method{Spec: exportDestinationServiceListExportReceiptsSpec(), Handler: adapter.listExportReceipts},
 	)
 }
 
@@ -171,6 +228,18 @@ func (UnimplementedExportDestinationServiceHandler) SetExportDestinationState(co
 
 func (UnimplementedExportDestinationServiceHandler) ReplaceExportDestinationCredential(context.Context, *v1.ReplaceExportDestinationCredentialRequest) (*v1.ReplaceExportDestinationCredentialResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ExportDestinationService.ReplaceExportDestinationCredential is not implemented")
+}
+
+func (UnimplementedExportDestinationServiceHandler) PushExportArtifact(context.Context, *v1.PushExportArtifactRequest) (*v1.PushExportArtifactResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ExportDestinationService.PushExportArtifact is not implemented")
+}
+
+func (UnimplementedExportDestinationServiceHandler) GetExportReceipt(context.Context, *v1.GetExportReceiptRequest) (*v1.GetExportReceiptResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ExportDestinationService.GetExportReceipt is not implemented")
+}
+
+func (UnimplementedExportDestinationServiceHandler) ListExportReceipts(context.Context, *v1.ListExportReceiptsRequest) (*v1.ListExportReceiptsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ExportDestinationService.ListExportReceipts is not implemented")
 }
 
 type exportDestinationServiceClient struct {
@@ -212,6 +281,30 @@ func (c *exportDestinationServiceClient) SetExportDestinationState(ctx context.C
 func (c *exportDestinationServiceClient) ReplaceExportDestinationCredential(ctx context.Context, req *v1.ReplaceExportDestinationCredentialRequest) (*v1.ReplaceExportDestinationCredentialResponse, error) {
 	var res v1.ReplaceExportDestinationCredentialResponse
 	if err := c.client.CallUnary(ctx, exportDestinationServiceReplaceExportDestinationCredentialSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *exportDestinationServiceClient) PushExportArtifact(ctx context.Context, req *v1.PushExportArtifactRequest) (*v1.PushExportArtifactResponse, error) {
+	var res v1.PushExportArtifactResponse
+	if err := c.client.CallUnary(ctx, exportDestinationServicePushExportArtifactSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *exportDestinationServiceClient) GetExportReceipt(ctx context.Context, req *v1.GetExportReceiptRequest) (*v1.GetExportReceiptResponse, error) {
+	var res v1.GetExportReceiptResponse
+	if err := c.client.CallUnary(ctx, exportDestinationServiceGetExportReceiptSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *exportDestinationServiceClient) ListExportReceipts(ctx context.Context, req *v1.ListExportReceiptsRequest) (*v1.ListExportReceiptsResponse, error) {
+	var res v1.ListExportReceiptsResponse
+	if err := c.client.CallUnary(ctx, exportDestinationServiceListExportReceiptsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -275,6 +368,42 @@ func (h exportDestinationServiceHandler) replaceExportDestinationCredential(ctx 
 		return err
 	}
 	res, err := h.svc.ReplaceExportDestinationCredential(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h exportDestinationServiceHandler) pushExportArtifact(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PushExportArtifactRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PushExportArtifact(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h exportDestinationServiceHandler) getExportReceipt(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetExportReceiptRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetExportReceipt(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h exportDestinationServiceHandler) listExportReceipts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListExportReceiptsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListExportReceipts(ctx, &req)
 	if err != nil {
 		return err
 	}

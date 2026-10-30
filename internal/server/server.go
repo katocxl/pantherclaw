@@ -323,6 +323,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	exportDeps := exportsDeps{pool: pool, kp: kp, reg: reg, bill: bill, publicURL: cfg.Auth.PublicURL, logOrigin: cfg.logOrigin(), log: log}
+	if err := wireExportStream(dataRequests, exportDeps); err != nil {
+		return err
+	}
 	ui.deletion = newAccountDeletion(ui.store, dataRequests)
 	ui.wireInvitationEmails(cfg, m5.notifications)
 	// A monitor-mode action with an unknown consequence notifies (HR-206).
@@ -570,6 +574,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM10EdgesJobs(evidenceJobs, jreg, pool, kp, bill, m5, cfg.Auth.PublicURL, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerM20ExportsJobs(evidenceJobs, jreg, exportDeps); err != nil {
 			return err
 		}
 		if evidenceJobs, err = registerAutomationTriggersJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL, autos, log); err != nil {

@@ -37,6 +37,21 @@ service ExportDestinationService {
   // person only). The target never changes.
   // permission: siem.manage
   rpc ReplaceExportDestinationCredential(ReplaceExportDestinationCredentialRequest) returns (ReplaceExportDestinationCredentialResponse);
+  // PushExportArtifact queues one artifact's push (a person only, who also
+  // needs the artifact's own permission) and returns its receipt. An active
+  // legal hold never blocks a push.
+  // permission: siem.manage
+  rpc PushExportArtifact(PushExportArtifactRequest) returns (PushExportArtifactResponse);
+  // GetExportReceipt returns one push's receipt.
+  // permission: siem.read
+  rpc GetExportReceipt(GetExportReceiptRequest) returns (GetExportReceiptResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListExportReceipts lists receipts, newest first.
+  // permission: siem.read
+  rpc ListExportReceipts(ListExportReceiptsRequest) returns (ListExportReceiptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ExportDestination is one export destination. Its credential is never
@@ -60,7 +75,7 @@ message ExportDestination {
   bool path_style = 8;
   // Whether the target may be a private or loopback address.
   bool internal = 9;
-  // The artefacts this destination receives: evidence_packs,
+  // The artifacts this destination receives: evidence_packs,
   // payload_captures, proof_bundles, org_exports.
   repeated string data_classes = 10;
   // PENDING, ACTIVE, PAUSED or DISABLED.
@@ -142,7 +157,7 @@ message CreateExportDestinationRequest {
   bool path_style = 7;
   // Whether the target may be a private or loopback address.
   bool internal = 8;
-  // The artefacts this destination receives.
+  // The artifacts this destination receives.
   repeated string data_classes = 9 [(buf.validate.field).repeated = {
     min_items: 1
     max_items: 4
@@ -220,4 +235,125 @@ message ReplaceExportDestinationCredentialRequest {
 message ReplaceExportDestinationCredentialResponse {
   // The destination.
   ExportDestination destination = 1;
+}
+
+// ExportReceipt is the record of one push (HR-514). It outlives the copy
+// here; status never says the copy at the destination is gone (HR-515).
+message ExportReceipt {
+  // Receipt id.
+  string id = 1;
+  // The destination.
+  string destination_id = 2;
+  // The destination's name.
+  string destination_name = 3;
+  // evidence_packs, proof_bundles or org_exports.
+  string class = 4;
+  // The pack or the data request.
+  string artifact_id = 5;
+  // Whether the export streamed straight to the destination as it built.
+  bool streamed = 6;
+  // A proof bundle's first ledger sequence.
+  int64 from_seq = 7;
+  // A proof bundle's last ledger sequence.
+  int64 to_seq = 8;
+  // Who asked.
+  string requested_by = 9;
+  // The object's key at the destination.
+  string object_key = 10;
+  // QUEUED, PUSHING, DELIVERED or FAILED.
+  string state = 11;
+  // NONE, PENDING (an upload to abort) or ABORTED.
+  string abort_state = 12;
+  // Bytes delivered.
+  int64 size_bytes = 13;
+  // The SHA-256 of the bytes delivered, in hex.
+  string sha256 = 14;
+  // Upload parts.
+  int32 parts = 15;
+  // The destination's ETag.
+  string etag = 16;
+  // Attempts so far.
+  int32 attempts = 17;
+  // The destination's last HTTP status.
+  int32 last_status = 18;
+  // Why it failed.
+  string failure_code = 19;
+  // When it was asked for.
+  google.protobuf.Timestamp create_time = 20;
+  // When it was delivered.
+  google.protobuf.Timestamp deliver_time = 21;
+  // When the copy here was removed.
+  google.protobuf.Timestamp removed_here_time = 22;
+  // NONE, PENDING, SENT or UNDELIVERABLE.
+  string notice_state = 23;
+  // The signed removal notice's key at the destination.
+  string notice_key = 24;
+  // When the notice was delivered.
+  google.protobuf.Timestamp notice_send_time = 25;
+  // What may be said of the artifact, such as "removed here; a copy exists
+  // at vault".
+  string status = 26;
+}
+
+// PushExportArtifactRequest names what to push and where.
+message PushExportArtifactRequest {
+  // Destination id.
+  string destination_id = 1 [(buf.validate.field).string.uuid = true];
+  // evidence_packs, proof_bundles or org_exports.
+  string class = 2 [(buf.validate.field).string = {
+    in: [
+      "evidence_packs",
+      "proof_bundles",
+      "org_exports"
+    ]
+  }];
+  // The pack, or the ready data request.
+  string artifact_id = 3 [(buf.validate.field).string.max_len = 36];
+  // Waits an hour for the caller's next organization export and streams it
+  // straight to the destination, whatever its size. The export is started
+  // on its confirmation page as always.
+  bool stream = 4;
+  // A proof bundle's first ledger sequence.
+  int64 from_seq = 5 [(buf.validate.field).int64.gte = 0];
+  // A proof bundle's last ledger sequence.
+  int64 to_seq = 6 [(buf.validate.field).int64.gte = 0];
+}
+
+// PushExportArtifactResponse is the receipt.
+message PushExportArtifactResponse {
+  // The receipt.
+  ExportReceipt receipt = 1;
+}
+
+// GetExportReceiptRequest names a receipt.
+message GetExportReceiptRequest {
+  // Receipt id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetExportReceiptResponse is one receipt.
+message GetExportReceiptResponse {
+  // The receipt.
+  ExportReceipt receipt = 1;
+}
+
+// ListExportReceiptsRequest is one page.
+message ListExportReceiptsRequest {
+  // Only this destination's receipts.
+  string destination_id = 1 [(buf.validate.field).string.max_len = 36];
+  // Maximum results (default and at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 3 [(buf.validate.field).string.max_len = 256];
+}
+
+// ListExportReceiptsResponse is one page.
+message ListExportReceiptsResponse {
+  // Receipts.
+  repeated ExportReceipt receipts = 1;
+  // Next page token.
+  string next_page_token = 2;
 }

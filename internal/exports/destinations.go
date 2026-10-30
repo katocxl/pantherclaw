@@ -46,9 +46,12 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	"github.com/katocxl/pantherclaw/internal/platform/sigv4"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -152,6 +155,13 @@ type Service struct {
 	// public reaches ordinary destinations; internal also reaches the
 	// private and loopback ranges. Both are egress clients.
 	public, internal *http.Client
+	// partSize is the upload part size (UploadPartBytes).
+	partSize int
+	// Pushes (WithPushes).
+	jobs     *jobs.Client
+	bundles  BundleExporter
+	keys     *keys.Registry
+	failures reflexports.FailureSink
 	// editions gates the use cases (Business); nil is Community.
 	editions Editions
 }
@@ -173,7 +183,7 @@ func New(pool *db.Pool, envelope *pccrypto.Envelope, cfg Config, clk clock.Clock
 	ic.AllowedPrefixes = append(slices.Clone(cfg.AllowedPrivateRanges), internalPrefixes...)
 	return &Service{
 		pool: pool, envelope: envelope, cfg: cfg, ownHost: u.Hostname(), clock: clk, log: log,
-		public: httpx.NewEgressClient(ec), internal: httpx.NewEgressClient(ic),
+		public: httpx.NewEgressClient(ec), internal: httpx.NewEgressClient(ic), partSize: UploadPartBytes,
 	}, nil
 }
 

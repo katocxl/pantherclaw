@@ -13,7 +13,7 @@
 </dl>
 {{if .CanActivate}}
 <h2>Activate</h2>
-<p class="note">Once activated, PantherClaw can push the artefacts above to this target{{if .Internal}}, inside your network{{end}}. PantherClaw cannot delete a copy that has left it. Check the target before you go on. Activating needs your security key.</p>
+<p class="note">Once activated, PantherClaw can push the artifacts above to this target{{if .Internal}}, inside your network{{end}}. PantherClaw cannot delete a copy that has left it. Check the target before you go on. Activating needs your security key.</p>
 <p><button type="button" class="danger" id="activate" data-path="/integrations/export-destinations/{{.ID}}/confirm">Activate with your security key</button></p>
 {{else}}{{if eq .State "PENDING"}}
 <p class="note">You cannot activate this destination: that needs siem.manage and a security key.</p>

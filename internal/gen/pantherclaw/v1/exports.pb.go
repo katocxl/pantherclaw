@@ -48,7 +48,7 @@ type ExportDestination struct {
 	PathStyle bool `protobuf:"varint,8,opt,name=path_style,json=pathStyle,proto3" json:"path_style,omitempty"`
 	// Whether the target may be a private or loopback address.
 	Internal bool `protobuf:"varint,9,opt,name=internal,proto3" json:"internal,omitempty"`
-	// The artefacts this destination receives: evidence_packs,
+	// The artifacts this destination receives: evidence_packs,
 	// payload_captures, proof_bundles, org_exports.
 	DataClasses []string `protobuf:"bytes,10,rep,name=data_classes,json=dataClasses,proto3" json:"data_classes,omitempty"`
 	// PENDING, ACTIVE, PAUSED or DISABLED.
@@ -374,7 +374,7 @@ type CreateExportDestinationRequest struct {
 	PathStyle bool `protobuf:"varint,7,opt,name=path_style,json=pathStyle,proto3" json:"path_style,omitempty"`
 	// Whether the target may be a private or loopback address.
 	Internal bool `protobuf:"varint,8,opt,name=internal,proto3" json:"internal,omitempty"`
-	// The artefacts this destination receives.
+	// The artifacts this destination receives.
 	DataClasses []string `protobuf:"bytes,9,rep,name=data_classes,json=dataClasses,proto3" json:"data_classes,omitempty"`
 	// The credential, sealed at rest and never returned.
 	Credential    *ExportCredential `protobuf:"bytes,10,opt,name=credential,proto3" json:"credential,omitempty"`
@@ -932,6 +932,629 @@ func (x *ReplaceExportDestinationCredentialResponse) GetDestination() *ExportDes
 	return nil
 }
 
+// ExportReceipt is the record of one push (HR-514). It outlives the copy
+// here; status never says the copy at the destination is gone (HR-515).
+type ExportReceipt struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Receipt id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The destination.
+	DestinationId string `protobuf:"bytes,2,opt,name=destination_id,json=destinationId,proto3" json:"destination_id,omitempty"`
+	// The destination's name.
+	DestinationName string `protobuf:"bytes,3,opt,name=destination_name,json=destinationName,proto3" json:"destination_name,omitempty"`
+	// evidence_packs, proof_bundles or org_exports.
+	Class string `protobuf:"bytes,4,opt,name=class,proto3" json:"class,omitempty"`
+	// The pack or the data request.
+	ArtifactId string `protobuf:"bytes,5,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	// Whether the export streamed straight to the destination as it built.
+	Streamed bool `protobuf:"varint,6,opt,name=streamed,proto3" json:"streamed,omitempty"`
+	// A proof bundle's first ledger sequence.
+	FromSeq int64 `protobuf:"varint,7,opt,name=from_seq,json=fromSeq,proto3" json:"from_seq,omitempty"`
+	// A proof bundle's last ledger sequence.
+	ToSeq int64 `protobuf:"varint,8,opt,name=to_seq,json=toSeq,proto3" json:"to_seq,omitempty"`
+	// Who asked.
+	RequestedBy string `protobuf:"bytes,9,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	// The object's key at the destination.
+	ObjectKey string `protobuf:"bytes,10,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
+	// QUEUED, PUSHING, DELIVERED or FAILED.
+	State string `protobuf:"bytes,11,opt,name=state,proto3" json:"state,omitempty"`
+	// NONE, PENDING (an upload to abort) or ABORTED.
+	AbortState string `protobuf:"bytes,12,opt,name=abort_state,json=abortState,proto3" json:"abort_state,omitempty"`
+	// Bytes delivered.
+	SizeBytes int64 `protobuf:"varint,13,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// The SHA-256 of the bytes delivered, in hex.
+	Sha256 string `protobuf:"bytes,14,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// Upload parts.
+	Parts int32 `protobuf:"varint,15,opt,name=parts,proto3" json:"parts,omitempty"`
+	// The destination's ETag.
+	Etag string `protobuf:"bytes,16,opt,name=etag,proto3" json:"etag,omitempty"`
+	// Attempts so far.
+	Attempts int32 `protobuf:"varint,17,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	// The destination's last HTTP status.
+	LastStatus int32 `protobuf:"varint,18,opt,name=last_status,json=lastStatus,proto3" json:"last_status,omitempty"`
+	// Why it failed.
+	FailureCode string `protobuf:"bytes,19,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`
+	// When it was asked for.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// When it was delivered.
+	DeliverTime *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=deliver_time,json=deliverTime,proto3" json:"deliver_time,omitempty"`
+	// When the copy here was removed.
+	RemovedHereTime *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=removed_here_time,json=removedHereTime,proto3" json:"removed_here_time,omitempty"`
+	// NONE, PENDING, SENT or UNDELIVERABLE.
+	NoticeState string `protobuf:"bytes,23,opt,name=notice_state,json=noticeState,proto3" json:"notice_state,omitempty"`
+	// The signed removal notice's key at the destination.
+	NoticeKey string `protobuf:"bytes,24,opt,name=notice_key,json=noticeKey,proto3" json:"notice_key,omitempty"`
+	// When the notice was delivered.
+	NoticeSendTime *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=notice_send_time,json=noticeSendTime,proto3" json:"notice_send_time,omitempty"`
+	// What may be said of the artifact, such as "removed here; a copy exists
+	// at vault".
+	Status        string `protobuf:"bytes,26,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportReceipt) Reset() {
+	*x = ExportReceipt{}
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportReceipt) ProtoMessage() {}
+
+func (x *ExportReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportReceipt.ProtoReflect.Descriptor instead.
+func (*ExportReceipt) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exports_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ExportReceipt) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetDestinationId() string {
+	if x != nil {
+		return x.DestinationId
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetDestinationName() string {
+	if x != nil {
+		return x.DestinationName
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetClass() string {
+	if x != nil {
+		return x.Class
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetStreamed() bool {
+	if x != nil {
+		return x.Streamed
+	}
+	return false
+}
+
+func (x *ExportReceipt) GetFromSeq() int64 {
+	if x != nil {
+		return x.FromSeq
+	}
+	return 0
+}
+
+func (x *ExportReceipt) GetToSeq() int64 {
+	if x != nil {
+		return x.ToSeq
+	}
+	return 0
+}
+
+func (x *ExportReceipt) GetRequestedBy() string {
+	if x != nil {
+		return x.RequestedBy
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetObjectKey() string {
+	if x != nil {
+		return x.ObjectKey
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetAbortState() string {
+	if x != nil {
+		return x.AbortState
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *ExportReceipt) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetParts() int32 {
+	if x != nil {
+		return x.Parts
+	}
+	return 0
+}
+
+func (x *ExportReceipt) GetEtag() string {
+	if x != nil {
+		return x.Etag
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetAttempts() int32 {
+	if x != nil {
+		return x.Attempts
+	}
+	return 0
+}
+
+func (x *ExportReceipt) GetLastStatus() int32 {
+	if x != nil {
+		return x.LastStatus
+	}
+	return 0
+}
+
+func (x *ExportReceipt) GetFailureCode() string {
+	if x != nil {
+		return x.FailureCode
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *ExportReceipt) GetDeliverTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeliverTime
+	}
+	return nil
+}
+
+func (x *ExportReceipt) GetRemovedHereTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RemovedHereTime
+	}
+	return nil
+}
+
+func (x *ExportReceipt) GetNoticeState() string {
+	if x != nil {
+		return x.NoticeState
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetNoticeKey() string {
+	if x != nil {
+		return x.NoticeKey
+	}
+	return ""
+}
+
+func (x *ExportReceipt) GetNoticeSendTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NoticeSendTime
+	}
+	return nil
+}
+
+func (x *ExportReceipt) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+// PushExportArtifactRequest names what to push and where.
+type PushExportArtifactRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Destination id.
+	DestinationId string `protobuf:"bytes,1,opt,name=destination_id,json=destinationId,proto3" json:"destination_id,omitempty"`
+	// evidence_packs, proof_bundles or org_exports.
+	Class string `protobuf:"bytes,2,opt,name=class,proto3" json:"class,omitempty"`
+	// The pack, or the ready data request.
+	ArtifactId string `protobuf:"bytes,3,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	// Waits an hour for the caller's next organization export and streams it
+	// straight to the destination, whatever its size. The export is started
+	// on its confirmation page as always.
+	Stream bool `protobuf:"varint,4,opt,name=stream,proto3" json:"stream,omitempty"`
+	// A proof bundle's first ledger sequence.
+	FromSeq int64 `protobuf:"varint,5,opt,name=from_seq,json=fromSeq,proto3" json:"from_seq,omitempty"`
+	// A proof bundle's last ledger sequence.
+	ToSeq         int64 `protobuf:"varint,6,opt,name=to_seq,json=toSeq,proto3" json:"to_seq,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PushExportArtifactRequest) Reset() {
+	*x = PushExportArtifactRequest{}
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PushExportArtifactRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PushExportArtifactRequest) ProtoMessage() {}
+
+func (x *PushExportArtifactRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PushExportArtifactRequest.ProtoReflect.Descriptor instead.
+func (*PushExportArtifactRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exports_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *PushExportArtifactRequest) GetDestinationId() string {
+	if x != nil {
+		return x.DestinationId
+	}
+	return ""
+}
+
+func (x *PushExportArtifactRequest) GetClass() string {
+	if x != nil {
+		return x.Class
+	}
+	return ""
+}
+
+func (x *PushExportArtifactRequest) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *PushExportArtifactRequest) GetStream() bool {
+	if x != nil {
+		return x.Stream
+	}
+	return false
+}
+
+func (x *PushExportArtifactRequest) GetFromSeq() int64 {
+	if x != nil {
+		return x.FromSeq
+	}
+	return 0
+}
+
+func (x *PushExportArtifactRequest) GetToSeq() int64 {
+	if x != nil {
+		return x.ToSeq
+	}
+	return 0
+}
+
+// PushExportArtifactResponse is the receipt.
+type PushExportArtifactResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The receipt.
+	Receipt       *ExportReceipt `protobuf:"bytes,1,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PushExportArtifactResponse) Reset() {
+	*x = PushExportArtifactResponse{}
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PushExportArtifactResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PushExportArtifactResponse) ProtoMessage() {}
+
+func (x *PushExportArtifactResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PushExportArtifactResponse.ProtoReflect.Descriptor instead.
+func (*PushExportArtifactResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exports_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PushExportArtifactResponse) GetReceipt() *ExportReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+// GetExportReceiptRequest names a receipt.
+type GetExportReceiptRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Receipt id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetExportReceiptRequest) Reset() {
+	*x = GetExportReceiptRequest{}
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetExportReceiptRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetExportReceiptRequest) ProtoMessage() {}
+
+func (x *GetExportReceiptRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetExportReceiptRequest.ProtoReflect.Descriptor instead.
+func (*GetExportReceiptRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exports_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GetExportReceiptRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// GetExportReceiptResponse is one receipt.
+type GetExportReceiptResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The receipt.
+	Receipt       *ExportReceipt `protobuf:"bytes,1,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetExportReceiptResponse) Reset() {
+	*x = GetExportReceiptResponse{}
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetExportReceiptResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetExportReceiptResponse) ProtoMessage() {}
+
+func (x *GetExportReceiptResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetExportReceiptResponse.ProtoReflect.Descriptor instead.
+func (*GetExportReceiptResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exports_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GetExportReceiptResponse) GetReceipt() *ExportReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+// ListExportReceiptsRequest is one page.
+type ListExportReceiptsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Only this destination's receipts.
+	DestinationId string `protobuf:"bytes,1,opt,name=destination_id,json=destinationId,proto3" json:"destination_id,omitempty"`
+	// Maximum results (default and at most 200).
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token from a previous response.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExportReceiptsRequest) Reset() {
+	*x = ListExportReceiptsRequest{}
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExportReceiptsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExportReceiptsRequest) ProtoMessage() {}
+
+func (x *ListExportReceiptsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExportReceiptsRequest.ProtoReflect.Descriptor instead.
+func (*ListExportReceiptsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exports_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListExportReceiptsRequest) GetDestinationId() string {
+	if x != nil {
+		return x.DestinationId
+	}
+	return ""
+}
+
+func (x *ListExportReceiptsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListExportReceiptsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ListExportReceiptsResponse is one page.
+type ListExportReceiptsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Receipts.
+	Receipts []*ExportReceipt `protobuf:"bytes,1,rep,name=receipts,proto3" json:"receipts,omitempty"`
+	// Next page token.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExportReceiptsResponse) Reset() {
+	*x = ListExportReceiptsResponse{}
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExportReceiptsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExportReceiptsResponse) ProtoMessage() {}
+
+func (x *ListExportReceiptsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_exports_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExportReceiptsResponse.ProtoReflect.Descriptor instead.
+func (*ListExportReceiptsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exports_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListExportReceiptsResponse) GetReceipts() []*ExportReceipt {
+	if x != nil {
+		return x.Receipts
+	}
+	return nil
+}
+
+func (x *ListExportReceiptsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_exports_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_exports_proto_rawDesc = "" +
@@ -1016,13 +1639,74 @@ const file_pantherclaw_v1_exports_proto_rawDesc = "" +
 	"credential\x18\x02 \x01(\v2 .pantherclaw.v1.ExportCredentialB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"credential\"q\n" +
 	"*ReplaceExportDestinationCredentialResponse\x12C\n" +
-	"\vdestination\x18\x01 \x01(\v2!.pantherclaw.v1.ExportDestinationR\vdestination2\xad\x05\n" +
+	"\vdestination\x18\x01 \x01(\v2!.pantherclaw.v1.ExportDestinationR\vdestination\"\x94\a\n" +
+	"\rExportReceipt\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\x0edestination_id\x18\x02 \x01(\tR\rdestinationId\x12)\n" +
+	"\x10destination_name\x18\x03 \x01(\tR\x0fdestinationName\x12\x14\n" +
+	"\x05class\x18\x04 \x01(\tR\x05class\x12\x1f\n" +
+	"\vartifact_id\x18\x05 \x01(\tR\n" +
+	"artifactId\x12\x1a\n" +
+	"\bstreamed\x18\x06 \x01(\bR\bstreamed\x12\x19\n" +
+	"\bfrom_seq\x18\a \x01(\x03R\afromSeq\x12\x15\n" +
+	"\x06to_seq\x18\b \x01(\x03R\x05toSeq\x12!\n" +
+	"\frequested_by\x18\t \x01(\tR\vrequestedBy\x12\x1d\n" +
+	"\n" +
+	"object_key\x18\n" +
+	" \x01(\tR\tobjectKey\x12\x14\n" +
+	"\x05state\x18\v \x01(\tR\x05state\x12\x1f\n" +
+	"\vabort_state\x18\f \x01(\tR\n" +
+	"abortState\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\r \x01(\x03R\tsizeBytes\x12\x16\n" +
+	"\x06sha256\x18\x0e \x01(\tR\x06sha256\x12\x14\n" +
+	"\x05parts\x18\x0f \x01(\x05R\x05parts\x12\x12\n" +
+	"\x04etag\x18\x10 \x01(\tR\x04etag\x12\x1a\n" +
+	"\battempts\x18\x11 \x01(\x05R\battempts\x12\x1f\n" +
+	"\vlast_status\x18\x12 \x01(\x05R\n" +
+	"lastStatus\x12!\n" +
+	"\ffailure_code\x18\x13 \x01(\tR\vfailureCode\x12;\n" +
+	"\vcreate_time\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12=\n" +
+	"\fdeliver_time\x18\x15 \x01(\v2\x1a.google.protobuf.TimestampR\vdeliverTime\x12F\n" +
+	"\x11removed_here_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\x0fremovedHereTime\x12!\n" +
+	"\fnotice_state\x18\x17 \x01(\tR\vnoticeState\x12\x1d\n" +
+	"\n" +
+	"notice_key\x18\x18 \x01(\tR\tnoticeKey\x12D\n" +
+	"\x10notice_send_time\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\x0enoticeSendTime\x12\x16\n" +
+	"\x06status\x18\x1a \x01(\tR\x06status\"\x9b\x02\n" +
+	"\x19PushExportArtifactRequest\x12/\n" +
+	"\x0edestination_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\rdestinationId\x12G\n" +
+	"\x05class\x18\x02 \x01(\tB1\xbaH.r,R\x0eevidence_packsR\rproof_bundlesR\vorg_exportsR\x05class\x12(\n" +
+	"\vartifact_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x18$R\n" +
+	"artifactId\x12\x16\n" +
+	"\x06stream\x18\x04 \x01(\bR\x06stream\x12\"\n" +
+	"\bfrom_seq\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\afromSeq\x12\x1e\n" +
+	"\x06to_seq\x18\x06 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x05toSeq\"U\n" +
+	"\x1aPushExportArtifactResponse\x127\n" +
+	"\areceipt\x18\x01 \x01(\v2\x1d.pantherclaw.v1.ExportReceiptR\areceipt\"3\n" +
+	"\x17GetExportReceiptRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"S\n" +
+	"\x18GetExportReceiptResponse\x127\n" +
+	"\areceipt\x18\x01 \x01(\v2\x1d.pantherclaw.v1.ExportReceiptR\areceipt\"\x9d\x01\n" +
+	"\x19ListExportReceiptsRequest\x12.\n" +
+	"\x0edestination_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x18$R\rdestinationId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\tpageToken\"\x7f\n" +
+	"\x1aListExportReceiptsResponse\x129\n" +
+	"\breceipts\x18\x01 \x03(\v2\x1d.pantherclaw.v1.ExportReceiptR\breceipts\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xf8\a\n" +
 	"\x18ExportDestinationService\x12z\n" +
 	"\x17CreateExportDestination\x12..pantherclaw.v1.CreateExportDestinationRequest\x1a/.pantherclaw.v1.CreateExportDestinationResponse\x12v\n" +
 	"\x14GetExportDestination\x12+.pantherclaw.v1.GetExportDestinationRequest\x1a,.pantherclaw.v1.GetExportDestinationResponse\"\x03\x90\x02\x01\x12|\n" +
 	"\x16ListExportDestinations\x12-.pantherclaw.v1.ListExportDestinationsRequest\x1a..pantherclaw.v1.ListExportDestinationsResponse\"\x03\x90\x02\x01\x12\x80\x01\n" +
 	"\x19SetExportDestinationState\x120.pantherclaw.v1.SetExportDestinationStateRequest\x1a1.pantherclaw.v1.SetExportDestinationStateResponse\x12\x9b\x01\n" +
-	"\"ReplaceExportDestinationCredential\x129.pantherclaw.v1.ReplaceExportDestinationCredentialRequest\x1a:.pantherclaw.v1.ReplaceExportDestinationCredentialResponseB\xc5\x01\n" +
+	"\"ReplaceExportDestinationCredential\x129.pantherclaw.v1.ReplaceExportDestinationCredentialRequest\x1a:.pantherclaw.v1.ReplaceExportDestinationCredentialResponse\x12k\n" +
+	"\x12PushExportArtifact\x12).pantherclaw.v1.PushExportArtifactRequest\x1a*.pantherclaw.v1.PushExportArtifactResponse\x12j\n" +
+	"\x10GetExportReceipt\x12'.pantherclaw.v1.GetExportReceiptRequest\x1a(.pantherclaw.v1.GetExportReceiptResponse\"\x03\x90\x02\x01\x12p\n" +
+	"\x12ListExportReceipts\x12).pantherclaw.v1.ListExportReceiptsRequest\x1a*.pantherclaw.v1.ListExportReceiptsResponse\"\x03\x90\x02\x01B\xc5\x01\n" +
 	"\x12com.pantherclaw.v1B\fExportsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1037,7 +1721,7 @@ func file_pantherclaw_v1_exports_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_exports_proto_rawDescData
 }
 
-var file_pantherclaw_v1_exports_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_pantherclaw_v1_exports_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_pantherclaw_v1_exports_proto_goTypes = []any{
 	(*ExportDestination)(nil),                          // 0: pantherclaw.v1.ExportDestination
 	(*ExportCredential)(nil),                           // 1: pantherclaw.v1.ExportCredential
@@ -1051,15 +1735,22 @@ var file_pantherclaw_v1_exports_proto_goTypes = []any{
 	(*SetExportDestinationStateResponse)(nil),          // 9: pantherclaw.v1.SetExportDestinationStateResponse
 	(*ReplaceExportDestinationCredentialRequest)(nil),  // 10: pantherclaw.v1.ReplaceExportDestinationCredentialRequest
 	(*ReplaceExportDestinationCredentialResponse)(nil), // 11: pantherclaw.v1.ReplaceExportDestinationCredentialResponse
-	(*timestamppb.Timestamp)(nil),                      // 12: google.protobuf.Timestamp
+	(*ExportReceipt)(nil),                              // 12: pantherclaw.v1.ExportReceipt
+	(*PushExportArtifactRequest)(nil),                  // 13: pantherclaw.v1.PushExportArtifactRequest
+	(*PushExportArtifactResponse)(nil),                 // 14: pantherclaw.v1.PushExportArtifactResponse
+	(*GetExportReceiptRequest)(nil),                    // 15: pantherclaw.v1.GetExportReceiptRequest
+	(*GetExportReceiptResponse)(nil),                   // 16: pantherclaw.v1.GetExportReceiptResponse
+	(*ListExportReceiptsRequest)(nil),                  // 17: pantherclaw.v1.ListExportReceiptsRequest
+	(*ListExportReceiptsResponse)(nil),                 // 18: pantherclaw.v1.ListExportReceiptsResponse
+	(*timestamppb.Timestamp)(nil),                      // 19: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_exports_proto_depIdxs = []int32{
-	12, // 0: pantherclaw.v1.ExportDestination.create_time:type_name -> google.protobuf.Timestamp
-	12, // 1: pantherclaw.v1.ExportDestination.activate_time:type_name -> google.protobuf.Timestamp
-	12, // 2: pantherclaw.v1.ExportDestination.confirm_time:type_name -> google.protobuf.Timestamp
-	12, // 3: pantherclaw.v1.ExportDestination.last_delivered_time:type_name -> google.protobuf.Timestamp
-	12, // 4: pantherclaw.v1.ExportDestination.failing_since:type_name -> google.protobuf.Timestamp
-	12, // 5: pantherclaw.v1.ExportDestination.credential_replace_time:type_name -> google.protobuf.Timestamp
+	19, // 0: pantherclaw.v1.ExportDestination.create_time:type_name -> google.protobuf.Timestamp
+	19, // 1: pantherclaw.v1.ExportDestination.activate_time:type_name -> google.protobuf.Timestamp
+	19, // 2: pantherclaw.v1.ExportDestination.confirm_time:type_name -> google.protobuf.Timestamp
+	19, // 3: pantherclaw.v1.ExportDestination.last_delivered_time:type_name -> google.protobuf.Timestamp
+	19, // 4: pantherclaw.v1.ExportDestination.failing_since:type_name -> google.protobuf.Timestamp
+	19, // 5: pantherclaw.v1.ExportDestination.credential_replace_time:type_name -> google.protobuf.Timestamp
 	1,  // 6: pantherclaw.v1.CreateExportDestinationRequest.credential:type_name -> pantherclaw.v1.ExportCredential
 	0,  // 7: pantherclaw.v1.CreateExportDestinationResponse.destination:type_name -> pantherclaw.v1.ExportDestination
 	0,  // 8: pantherclaw.v1.GetExportDestinationResponse.destination:type_name -> pantherclaw.v1.ExportDestination
@@ -1067,21 +1758,34 @@ var file_pantherclaw_v1_exports_proto_depIdxs = []int32{
 	0,  // 10: pantherclaw.v1.SetExportDestinationStateResponse.destination:type_name -> pantherclaw.v1.ExportDestination
 	1,  // 11: pantherclaw.v1.ReplaceExportDestinationCredentialRequest.credential:type_name -> pantherclaw.v1.ExportCredential
 	0,  // 12: pantherclaw.v1.ReplaceExportDestinationCredentialResponse.destination:type_name -> pantherclaw.v1.ExportDestination
-	2,  // 13: pantherclaw.v1.ExportDestinationService.CreateExportDestination:input_type -> pantherclaw.v1.CreateExportDestinationRequest
-	4,  // 14: pantherclaw.v1.ExportDestinationService.GetExportDestination:input_type -> pantherclaw.v1.GetExportDestinationRequest
-	6,  // 15: pantherclaw.v1.ExportDestinationService.ListExportDestinations:input_type -> pantherclaw.v1.ListExportDestinationsRequest
-	8,  // 16: pantherclaw.v1.ExportDestinationService.SetExportDestinationState:input_type -> pantherclaw.v1.SetExportDestinationStateRequest
-	10, // 17: pantherclaw.v1.ExportDestinationService.ReplaceExportDestinationCredential:input_type -> pantherclaw.v1.ReplaceExportDestinationCredentialRequest
-	3,  // 18: pantherclaw.v1.ExportDestinationService.CreateExportDestination:output_type -> pantherclaw.v1.CreateExportDestinationResponse
-	5,  // 19: pantherclaw.v1.ExportDestinationService.GetExportDestination:output_type -> pantherclaw.v1.GetExportDestinationResponse
-	7,  // 20: pantherclaw.v1.ExportDestinationService.ListExportDestinations:output_type -> pantherclaw.v1.ListExportDestinationsResponse
-	9,  // 21: pantherclaw.v1.ExportDestinationService.SetExportDestinationState:output_type -> pantherclaw.v1.SetExportDestinationStateResponse
-	11, // 22: pantherclaw.v1.ExportDestinationService.ReplaceExportDestinationCredential:output_type -> pantherclaw.v1.ReplaceExportDestinationCredentialResponse
-	18, // [18:23] is the sub-list for method output_type
-	13, // [13:18] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	19, // 13: pantherclaw.v1.ExportReceipt.create_time:type_name -> google.protobuf.Timestamp
+	19, // 14: pantherclaw.v1.ExportReceipt.deliver_time:type_name -> google.protobuf.Timestamp
+	19, // 15: pantherclaw.v1.ExportReceipt.removed_here_time:type_name -> google.protobuf.Timestamp
+	19, // 16: pantherclaw.v1.ExportReceipt.notice_send_time:type_name -> google.protobuf.Timestamp
+	12, // 17: pantherclaw.v1.PushExportArtifactResponse.receipt:type_name -> pantherclaw.v1.ExportReceipt
+	12, // 18: pantherclaw.v1.GetExportReceiptResponse.receipt:type_name -> pantherclaw.v1.ExportReceipt
+	12, // 19: pantherclaw.v1.ListExportReceiptsResponse.receipts:type_name -> pantherclaw.v1.ExportReceipt
+	2,  // 20: pantherclaw.v1.ExportDestinationService.CreateExportDestination:input_type -> pantherclaw.v1.CreateExportDestinationRequest
+	4,  // 21: pantherclaw.v1.ExportDestinationService.GetExportDestination:input_type -> pantherclaw.v1.GetExportDestinationRequest
+	6,  // 22: pantherclaw.v1.ExportDestinationService.ListExportDestinations:input_type -> pantherclaw.v1.ListExportDestinationsRequest
+	8,  // 23: pantherclaw.v1.ExportDestinationService.SetExportDestinationState:input_type -> pantherclaw.v1.SetExportDestinationStateRequest
+	10, // 24: pantherclaw.v1.ExportDestinationService.ReplaceExportDestinationCredential:input_type -> pantherclaw.v1.ReplaceExportDestinationCredentialRequest
+	13, // 25: pantherclaw.v1.ExportDestinationService.PushExportArtifact:input_type -> pantherclaw.v1.PushExportArtifactRequest
+	15, // 26: pantherclaw.v1.ExportDestinationService.GetExportReceipt:input_type -> pantherclaw.v1.GetExportReceiptRequest
+	17, // 27: pantherclaw.v1.ExportDestinationService.ListExportReceipts:input_type -> pantherclaw.v1.ListExportReceiptsRequest
+	3,  // 28: pantherclaw.v1.ExportDestinationService.CreateExportDestination:output_type -> pantherclaw.v1.CreateExportDestinationResponse
+	5,  // 29: pantherclaw.v1.ExportDestinationService.GetExportDestination:output_type -> pantherclaw.v1.GetExportDestinationResponse
+	7,  // 30: pantherclaw.v1.ExportDestinationService.ListExportDestinations:output_type -> pantherclaw.v1.ListExportDestinationsResponse
+	9,  // 31: pantherclaw.v1.ExportDestinationService.SetExportDestinationState:output_type -> pantherclaw.v1.SetExportDestinationStateResponse
+	11, // 32: pantherclaw.v1.ExportDestinationService.ReplaceExportDestinationCredential:output_type -> pantherclaw.v1.ReplaceExportDestinationCredentialResponse
+	14, // 33: pantherclaw.v1.ExportDestinationService.PushExportArtifact:output_type -> pantherclaw.v1.PushExportArtifactResponse
+	16, // 34: pantherclaw.v1.ExportDestinationService.GetExportReceipt:output_type -> pantherclaw.v1.GetExportReceiptResponse
+	18, // 35: pantherclaw.v1.ExportDestinationService.ListExportReceipts:output_type -> pantherclaw.v1.ListExportReceiptsResponse
+	28, // [28:36] is the sub-list for method output_type
+	20, // [20:28] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_exports_proto_init() }
@@ -1095,7 +1799,7 @@ func file_pantherclaw_v1_exports_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_exports_proto_rawDesc), len(file_pantherclaw_v1_exports_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -73,7 +73,17 @@ type exportWorker struct {
 	s *Service
 }
 
-func (w *exportWorker) Timeout(*river.Job[ExportArgs]) time.Duration { return 9 * time.Minute }
+// StreamBuildTimeout bounds a build when pushes may stream: such an export
+// has no size cap, and its build waits for the destination.
+const StreamBuildTimeout = 6 * time.Hour
+
+func (w *exportWorker) Timeout(*river.Job[ExportArgs]) time.Duration {
+	if w.s.Stream != nil {
+		return StreamBuildTimeout
+	}
+	return 9 * time.Minute
+}
+
 func (w *exportWorker) Work(ctx context.Context, j *river.Job[ExportArgs]) error {
 	return w.s.Build(ctx, j.Args.Org, j.Args.Request.UUID())
 }

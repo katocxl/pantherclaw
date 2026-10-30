@@ -21,6 +21,9 @@ var exportProcedures = map[string]td.Permission{
 	pantherclawv1connect.ExportDestinationServiceListExportDestinationsProcedure:             td.PermSIEMRead,
 	pantherclawv1connect.ExportDestinationServiceSetExportDestinationStateProcedure:          td.PermSIEMManage,
 	pantherclawv1connect.ExportDestinationServiceReplaceExportDestinationCredentialProcedure: td.PermSIEMManage,
+	pantherclawv1connect.ExportDestinationServicePushExportArtifactProcedure:                 td.PermSIEMManage,
+	pantherclawv1connect.ExportDestinationServiceGetExportReceiptProcedure:                   td.PermSIEMRead,
+	pantherclawv1connect.ExportDestinationServiceListExportReceiptsProcedure:                 td.PermSIEMRead,
 }
 
 // exportClasses are their plan-gate classes (HR-356), as SIEM's.
@@ -30,6 +33,9 @@ var exportClasses = map[string]entitlements.Class{
 	pantherclawv1connect.ExportDestinationServiceListExportDestinationsProcedure:             entitlements.ClassRead,
 	pantherclawv1connect.ExportDestinationServiceSetExportDestinationStateProcedure:          entitlements.ClassChange,
 	pantherclawv1connect.ExportDestinationServiceReplaceExportDestinationCredentialProcedure: entitlements.ClassChange,
+	pantherclawv1connect.ExportDestinationServicePushExportArtifactProcedure:                 entitlements.ClassChange,
+	pantherclawv1connect.ExportDestinationServiceGetExportReceiptProcedure:                   entitlements.ClassRead,
+	pantherclawv1connect.ExportDestinationServiceListExportReceiptsProcedure:                 entitlements.ClassRead,
 }
 
 func init() {

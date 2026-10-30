@@ -11402,6 +11402,438 @@
         }
       }
     },
+    "/pantherclaw.v1.ExportDestinationService/CreateExportDestination": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "CreateExportDestination",
+        "description": "CreateExportDestination adds a PENDING destination (a person only). The\n credential is sealed and never returned.\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.ExportDestinationService.CreateExportDestination",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateExportDestinationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateExportDestinationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/GetExportDestination": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "GetExportDestination",
+        "description": "GetExportDestination returns one destination and its delivery health.\n permission: siem.read",
+        "operationId": "pantherclaw.v1.ExportDestinationService.GetExportDestination",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetExportDestinationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetExportDestinationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/ListExportDestinations": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "ListExportDestinations",
+        "description": "ListExportDestinations lists destinations that are not disabled.\n permission: siem.read",
+        "operationId": "pantherclaw.v1.ExportDestinationService.ListExportDestinations",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListExportDestinationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListExportDestinationsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/SetExportDestinationState": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "SetExportDestinationState",
+        "description": "SetExportDestinationState pauses, resumes or disables a destination (a\n person only). Disabling is final.\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.ExportDestinationService.SetExportDestinationState",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetExportDestinationStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetExportDestinationStateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/ReplaceExportDestinationCredential": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "ReplaceExportDestinationCredential",
+        "description": "ReplaceExportDestinationCredential replaces the sealed credential (a\n person only). The target never changes.\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.ExportDestinationService.ReplaceExportDestinationCredential",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReplaceExportDestinationCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReplaceExportDestinationCredentialResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/PushExportArtifact": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "PushExportArtifact",
+        "description": "PushExportArtifact queues one artifact's push (a person only, who also\n needs the artifact's own permission) and returns its receipt. An active\n legal hold never blocks a push.\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.ExportDestinationService.PushExportArtifact",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.PushExportArtifactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.PushExportArtifactResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/GetExportReceipt": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "GetExportReceipt",
+        "description": "GetExportReceipt returns one push's receipt.\n permission: siem.read",
+        "operationId": "pantherclaw.v1.ExportDestinationService.GetExportReceipt",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetExportReceiptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetExportReceiptResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/ListExportReceipts": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "ListExportReceipts",
+        "description": "ListExportReceipts lists receipts, newest first.\n permission: siem.read",
+        "operationId": "pantherclaw.v1.ExportDestinationService.ListExportReceipts",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListExportReceiptsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListExportReceiptsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ExposureService/GetExposure": {
       "post": {
         "tags": [
@@ -50190,6 +50622,775 @@
         "additionalProperties": false,
         "description": "SetRetentionPolicyResponse returns the category after the change."
       },
+      "pantherclaw.v1.CreateExportDestinationRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Lowercase letters, digits and dashes."
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "https_put",
+              "s3"
+            ],
+            "description": "https_put or s3."
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "maxLength": 2048,
+            "minLength": 9,
+            "description": "The https URL: the PUT base URL, or the S3 endpoint."
+          },
+          "bucket": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "bucket",
+            "maxLength": 63,
+            "description": "The S3 bucket."
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "region",
+            "maxLength": 32,
+            "description": "The S3 region."
+          },
+          "keyPrefix": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "key_prefix",
+            "maxLength": 256,
+            "description": "The prefix of every object key."
+          },
+          "pathStyle": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "path_style",
+            "description": "S3 path-style addressing."
+          },
+          "internal": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "internal",
+            "description": "Whether the target may be a private or loopback address."
+          },
+          "dataClasses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 4,
+              "minItems": 1
+            },
+            "title": "data_classes",
+            "maxItems": 4,
+            "minItems": 1,
+            "description": "The artifacts this destination receives."
+          },
+          "credential": {
+            "title": "credential",
+            "description": "The credential, sealed at rest and never returned.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportCredential"
+          }
+        },
+        "title": "CreateExportDestinationRequest",
+        "required": [
+          "credential",
+          "name",
+          "kind",
+          "url",
+          "dataClasses"
+        ],
+        "additionalProperties": false,
+        "description": "CreateExportDestinationRequest describes a destination."
+      },
+      "pantherclaw.v1.CreateExportDestinationResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+          }
+        },
+        "title": "CreateExportDestinationResponse",
+        "additionalProperties": false,
+        "description": "CreateExportDestinationResponse is the new destination."
+      },
+      "pantherclaw.v1.ExportCredential": {
+        "type": "object",
+        "properties": {
+          "bearerToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "bearer_token",
+            "maxLength": 4096,
+            "description": "The bearer token of an https_put destination."
+          },
+          "accessKeyId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "access_key_id",
+            "maxLength": 128,
+            "description": "The access key id of an s3 destination."
+          },
+          "secretAccessKey": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "secret_access_key",
+            "maxLength": 256,
+            "description": "The secret access key of an s3 destination."
+          }
+        },
+        "title": "ExportCredential",
+        "additionalProperties": false,
+        "description": "ExportCredential is what a destination authenticates with: a bearer token\n for https_put, an access key for s3."
+      },
+      "pantherclaw.v1.ExportDestination": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Destination id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name."
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "https_put or s3."
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "description": "The https URL: the PUT base URL, or the S3 endpoint."
+          },
+          "bucket": {
+            "type": "string",
+            "title": "bucket",
+            "description": "The S3 bucket."
+          },
+          "region": {
+            "type": "string",
+            "title": "region",
+            "description": "The S3 region."
+          },
+          "keyPrefix": {
+            "type": "string",
+            "title": "key_prefix",
+            "description": "The prefix of every object key."
+          },
+          "pathStyle": {
+            "type": "boolean",
+            "title": "path_style",
+            "description": "S3 path-style addressing (https://endpoint/bucket/key)."
+          },
+          "internal": {
+            "type": "boolean",
+            "title": "internal",
+            "description": "Whether the target may be a private or loopback address."
+          },
+          "dataClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "data_classes",
+            "description": "The artifacts this destination receives: evidence_packs,\n payload_captures, proof_bundles, org_exports."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE, PAUSED or DISABLED."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who created it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activatedBy": {
+            "type": "string",
+            "title": "activated_by",
+            "description": "Who activated it."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmUrl": {
+            "type": "string",
+            "title": "confirm_url",
+            "description": "The page where a person activates it with a security key."
+          },
+          "health": {
+            "type": "string",
+            "title": "health",
+            "description": "NOT_CONFIRMED, HEALTHY, DEGRADED or FAILING."
+          },
+          "confirmTime": {
+            "title": "confirm_time",
+            "description": "The first delivered push.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastDeliveredTime": {
+            "title": "last_delivered_time",
+            "description": "The latest delivered push.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "consecutiveFailures": {
+            "type": "integer",
+            "title": "consecutive_failures",
+            "format": "int32",
+            "description": "Failed pushes in a row."
+          },
+          "failingSince": {
+            "title": "failing_since",
+            "description": "When the current run of failures began.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastFailureCode": {
+            "type": "string",
+            "title": "last_failure_code",
+            "description": "The latest failure's code."
+          },
+          "deliveredPushes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "delivered_pushes",
+            "format": "int64",
+            "description": "Delivered pushes."
+          },
+          "failedPushes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "failed_pushes",
+            "format": "int64",
+            "description": "Failed pushes."
+          },
+          "credentialReplaceTime": {
+            "title": "credential_replace_time",
+            "description": "When the credential was last replaced.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ExportDestination",
+        "additionalProperties": false,
+        "description": "ExportDestination is one export destination. Its credential is never\n returned."
+      },
+      "pantherclaw.v1.ExportReceipt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Receipt id."
+          },
+          "destinationId": {
+            "type": "string",
+            "title": "destination_id",
+            "description": "The destination."
+          },
+          "destinationName": {
+            "type": "string",
+            "title": "destination_name",
+            "description": "The destination's name."
+          },
+          "class": {
+            "type": "string",
+            "title": "class",
+            "description": "evidence_packs, proof_bundles or org_exports."
+          },
+          "artifactId": {
+            "type": "string",
+            "title": "artifact_id",
+            "description": "The pack or the data request."
+          },
+          "streamed": {
+            "type": "boolean",
+            "title": "streamed",
+            "description": "Whether the export streamed straight to the destination as it built."
+          },
+          "fromSeq": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "from_seq",
+            "format": "int64",
+            "description": "A proof bundle's first ledger sequence."
+          },
+          "toSeq": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "to_seq",
+            "format": "int64",
+            "description": "A proof bundle's last ledger sequence."
+          },
+          "requestedBy": {
+            "type": "string",
+            "title": "requested_by",
+            "description": "Who asked."
+          },
+          "objectKey": {
+            "type": "string",
+            "title": "object_key",
+            "description": "The object's key at the destination."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "QUEUED, PUSHING, DELIVERED or FAILED."
+          },
+          "abortState": {
+            "type": "string",
+            "title": "abort_state",
+            "description": "NONE, PENDING (an upload to abort) or ABORTED."
+          },
+          "sizeBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "size_bytes",
+            "format": "int64",
+            "description": "Bytes delivered."
+          },
+          "sha256": {
+            "type": "string",
+            "title": "sha256",
+            "description": "The SHA-256 of the bytes delivered, in hex."
+          },
+          "parts": {
+            "type": "integer",
+            "title": "parts",
+            "format": "int32",
+            "description": "Upload parts."
+          },
+          "etag": {
+            "type": "string",
+            "title": "etag",
+            "description": "The destination's ETag."
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "attempts",
+            "format": "int32",
+            "description": "Attempts so far."
+          },
+          "lastStatus": {
+            "type": "integer",
+            "title": "last_status",
+            "format": "int32",
+            "description": "The destination's last HTTP status."
+          },
+          "failureCode": {
+            "type": "string",
+            "title": "failure_code",
+            "description": "Why it failed."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was asked for.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "deliverTime": {
+            "title": "deliver_time",
+            "description": "When it was delivered.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "removedHereTime": {
+            "title": "removed_here_time",
+            "description": "When the copy here was removed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "noticeState": {
+            "type": "string",
+            "title": "notice_state",
+            "description": "NONE, PENDING, SENT or UNDELIVERABLE."
+          },
+          "noticeKey": {
+            "type": "string",
+            "title": "notice_key",
+            "description": "The signed removal notice's key at the destination."
+          },
+          "noticeSendTime": {
+            "title": "notice_send_time",
+            "description": "When the notice was delivered.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "title": "status",
+            "description": "What may be said of the artifact, such as \"removed here; a copy exists\n at vault\"."
+          }
+        },
+        "title": "ExportReceipt",
+        "additionalProperties": false,
+        "description": "ExportReceipt is the record of one push (HR-514). It outlives the copy\n here; status never says the copy at the destination is gone (HR-515)."
+      },
+      "pantherclaw.v1.GetExportDestinationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          }
+        },
+        "title": "GetExportDestinationRequest",
+        "additionalProperties": false,
+        "description": "GetExportDestinationRequest names a destination.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetExportDestinationResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+          }
+        },
+        "title": "GetExportDestinationResponse",
+        "additionalProperties": false,
+        "description": "GetExportDestinationResponse is one destination."
+      },
+      "pantherclaw.v1.GetExportReceiptRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Receipt id."
+          }
+        },
+        "title": "GetExportReceiptRequest",
+        "additionalProperties": false,
+        "description": "GetExportReceiptRequest names a receipt.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetExportReceiptResponse": {
+        "type": "object",
+        "properties": {
+          "receipt": {
+            "title": "receipt",
+            "description": "The receipt.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportReceipt"
+          }
+        },
+        "title": "GetExportReceiptResponse",
+        "additionalProperties": false,
+        "description": "GetExportReceiptResponse is one receipt."
+      },
+      "pantherclaw.v1.ListExportDestinationsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "description": "Token from a previous response."
+          }
+        },
+        "title": "ListExportDestinationsRequest",
+        "additionalProperties": false,
+        "description": "ListExportDestinationsRequest is one page."
+      },
+      "pantherclaw.v1.ListExportDestinationsResponse": {
+        "type": "object",
+        "properties": {
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+            },
+            "title": "destinations",
+            "description": "Destinations."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Next page token."
+          }
+        },
+        "title": "ListExportDestinationsResponse",
+        "additionalProperties": false,
+        "description": "ListExportDestinationsResponse is one page."
+      },
+      "pantherclaw.v1.ListExportReceiptsRequest": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "destination_id",
+            "maxLength": 36,
+            "description": "Only this destination's receipts."
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "description": "Token from a previous response."
+          }
+        },
+        "title": "ListExportReceiptsRequest",
+        "additionalProperties": false,
+        "description": "ListExportReceiptsRequest is one page."
+      },
+      "pantherclaw.v1.ListExportReceiptsResponse": {
+        "type": "object",
+        "properties": {
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExportReceipt"
+            },
+            "title": "receipts",
+            "description": "Receipts."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Next page token."
+          }
+        },
+        "title": "ListExportReceiptsResponse",
+        "additionalProperties": false,
+        "description": "ListExportReceiptsResponse is one page."
+      },
+      "pantherclaw.v1.PushExportArtifactRequest": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "title": "destination_id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "class": {
+            "type": "string",
+            "title": "class",
+            "enum": [
+              "evidence_packs",
+              "proof_bundles",
+              "org_exports"
+            ],
+            "description": "evidence_packs, proof_bundles or org_exports."
+          },
+          "artifactId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "artifact_id",
+            "maxLength": 36,
+            "description": "The pack, or the ready data request."
+          },
+          "stream": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "stream",
+            "description": "Waits an hour for the caller's next organization export and streams it\n straight to the destination, whatever its size. The export is started\n on its confirmation page as always."
+          },
+          "fromSeq": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "from_seq",
+            "minimum": 0,
+            "format": "int64",
+            "description": "A proof bundle's first ledger sequence."
+          },
+          "toSeq": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "to_seq",
+            "minimum": 0,
+            "format": "int64",
+            "description": "A proof bundle's last ledger sequence."
+          }
+        },
+        "title": "PushExportArtifactRequest",
+        "additionalProperties": false,
+        "description": "PushExportArtifactRequest names what to push and where.",
+        "required": [
+          "destinationId",
+          "class"
+        ]
+      },
+      "pantherclaw.v1.PushExportArtifactResponse": {
+        "type": "object",
+        "properties": {
+          "receipt": {
+            "title": "receipt",
+            "description": "The receipt.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportReceipt"
+          }
+        },
+        "title": "PushExportArtifactResponse",
+        "additionalProperties": false,
+        "description": "PushExportArtifactResponse is the receipt."
+      },
+      "pantherclaw.v1.ReplaceExportDestinationCredentialRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "credential": {
+            "title": "credential",
+            "description": "The new credential.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportCredential"
+          }
+        },
+        "title": "ReplaceExportDestinationCredentialRequest",
+        "required": [
+          "credential",
+          "id"
+        ],
+        "additionalProperties": false,
+        "description": "ReplaceExportDestinationCredentialRequest replaces a credential."
+      },
+      "pantherclaw.v1.ReplaceExportDestinationCredentialResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+          }
+        },
+        "title": "ReplaceExportDestinationCredentialResponse",
+        "additionalProperties": false,
+        "description": "ReplaceExportDestinationCredentialResponse is the destination."
+      },
+      "pantherclaw.v1.SetExportDestinationStateRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "enum": [
+              "ACTIVE",
+              "PAUSED",
+              "DISABLED"
+            ],
+            "description": "ACTIVE (resume), PAUSED or DISABLED."
+          }
+        },
+        "title": "SetExportDestinationStateRequest",
+        "additionalProperties": false,
+        "description": "SetExportDestinationStateRequest changes a destination's state.",
+        "required": [
+          "id",
+          "state"
+        ]
+      },
+      "pantherclaw.v1.SetExportDestinationStateResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+          }
+        },
+        "title": "SetExportDestinationStateResponse",
+        "additionalProperties": false,
+        "description": "SetExportDestinationStateResponse is the destination."
+      },
       "pantherclaw.v1.ExposureLabel": {
         "type": "string",
         "title": "ExposureLabel",
@@ -79209,6 +80410,10 @@
     {
       "name": "pantherclaw.v1.EvidenceAdminService",
       "description": "EvidenceAdminService sets what evidence the caller's org keeps and\n captures (G0 M7 track B, design decisions 9 and 10; HR-198, HR-199,\n T-075, T-076): retention policies per category, legal holds, restricted\n payload capture profiles, and the audited read of a capture. Every call\n is human only. Retention and holds need evidence.retention.manage and\n capture profiles evidence.capture.manage, at org scope (the Records\n Manager role); reading a capture needs evidence.read_restricted where\n the transaction's agent lives (the Auditor role), so whoever configures\n capture is not the one who reads it.\n\n Retention removes only bodies: receipt and ledger entry bodies, observed\n values, replay inputs and approval notes. Chain hashes, Merkle leaves\n and checkpoints stay, so the chain and every checkpoint still verify and\n `pclaw verify` reports a removed body as not available. Lengthening a\n period applies at once; shortening one takes effect 7 days later, is\n audited and is notified to the org's admins and auditors, so a hold can\n still be placed. A hold applies at once and blocks every removal inside\n it until it is released; releasing one is audited and notified."
+    },
+    {
+      "name": "pantherclaw.v1.ExportDestinationService",
+      "description": "ExportDestinationService manages export destinations (G0 M20 D252; F517,\n HR-513; Business edition). A destination is an HTTPS PUT target or an\n S3-compatible bucket that receives evidence packs, proof bundles and\n organization exports. It is created PENDING and receives nothing until a\n person activates it on its page (confirm_url) with a security key; its\n target and data classes never change."
     },
     {
       "name": "pantherclaw.v1.ExposureService",

@@ -95,6 +95,59 @@ func TestHR513_ExportDestinationsKeepTargetsAndActivationsFixed(t *testing.T) {
 	refused("re-enabling a disabled destination", "UPDATE pc.export_destinations SET state = 'ACTIVE' WHERE id = $1", dest)
 }
 
+const m20Receipt = `INSERT INTO pc.export_receipts (org_id, id, destination_id, class, artifact_id, requested_by, object_key)
+	VALUES ($1, $2, $3, 'evidence_packs', $4, $5, 'evidence_packs/x')`
+
+// TestHR514_AReceiptOutlivesItsPush (00238): a receipt is inserted QUEUED
+// and never deleted; what it says about delivered bytes never changes; a
+// removal is recorded once and a sent notice stays sent.
+// Covers: F517
+func TestHR514_AReceiptOutlivesItsPush(t *testing.T) {
+	d := dbtest.New(t)
+	p := d.AppPool(t)
+	a := newM5Fixture(t, p)
+	user, dest, id := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	a.mustExec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'a')", a.org, user)
+	a.mustExec(t, m20Destination, a.org, dest, m5Secret(1))
+	a.want(t, "23514", "a receipt inserted DELIVERED", `INSERT INTO pc.export_receipts (org_id, id, destination_id, class, artifact_id, requested_by,
+		object_key, state, delivered_at, sha256) VALUES ($1, $2, $3, 'evidence_packs', $4, $5, 'k', 'DELIVERED', now(), $6)`,
+		a.org, id, dest, ids.NewV7(), user, bytes.Repeat([]byte{1}, 32))
+	a.mustExec(t, m20Receipt, a.org, id, dest, ids.NewV7(), user)
+	a.mustExec(t, "UPDATE pc.export_receipts SET state = 'PUSHING' WHERE id = $1", id)
+	a.want(t, "23514", "a delivery without a hash", "UPDATE pc.export_receipts SET state = 'DELIVERED', delivered_at = now() WHERE id = $1", id)
+	a.mustExec(t, "UPDATE pc.export_receipts SET state = 'DELIVERED', delivered_at = now(), sha256 = $2, size_bytes = 5 WHERE id = $1", id, bytes.Repeat([]byte{1}, 32))
+	a.want(t, "23514", "a delivered size change", "UPDATE pc.export_receipts SET size_bytes = 6 WHERE id = $1", id)
+	a.want(t, "23514", "a delivered hash change", "UPDATE pc.export_receipts SET sha256 = $2 WHERE id = $1", id, bytes.Repeat([]byte{2}, 32))
+	a.want(t, "23514", "an undelivered delivery", "UPDATE pc.export_receipts SET state = 'FAILED', failure_code = 'x', delivered_at = NULL WHERE id = $1", id)
+	a.want(t, "42501", "a changed object key", "UPDATE pc.export_receipts SET object_key = 'y' WHERE id = $1", id)
+	a.want(t, "42501", "a deletion", "DELETE FROM pc.export_receipts WHERE id = $1", id)
+	a.mustExec(t, "UPDATE pc.export_receipts SET removed_here_at = now(), notice_state = 'PENDING' WHERE id = $1", id)
+	a.want(t, "23514", "a second removal", "UPDATE pc.export_receipts SET removed_here_at = now() + interval '1 day' WHERE id = $1", id)
+	a.mustExec(t, "UPDATE pc.export_receipts SET notice_state = 'SENT', notice_sent_at = now() WHERE id = $1", id)
+	a.want(t, "23514", "a notice taken back", "UPDATE pc.export_receipts SET notice_state = 'PENDING', notice_sent_at = NULL WHERE id = $1", id)
+}
+
+// TestTenancy_export_receipts: another org sees no receipt of an org,
+// changes none, and cannot store one in its name or for its destination.
+func TestTenancy_export_receipts(t *testing.T) {
+	d := dbtest.New(t)
+	p := d.AppPool(t)
+	a, b := newM5Fixture(t, p), newM5Fixture(t, p)
+	user, dest, id := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	a.mustExec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'a')", a.org, user)
+	a.mustExec(t, m20Destination, a.org, dest, m5Secret(1))
+	a.mustExec(t, m20Receipt, a.org, id, dest, ids.NewV7(), user)
+	if n := m10Count(t, p, b.org, "SELECT count(*) FROM pc.export_receipts"); n != 0 {
+		t.Fatalf("another org sees %d receipts", n)
+	}
+	b.mustExec(t, "UPDATE pc.export_receipts SET state = 'PUSHING'")
+	if n := m10Count(t, p, a.org, "SELECT count(*) FROM pc.export_receipts WHERE state = 'QUEUED'"); n != 1 {
+		t.Fatalf("another org changed the receipt: %d left", n)
+	}
+	b.want(t, "23514", "a receipt in another org's name", m20Receipt, a.org, ids.NewV7(), dest, ids.NewV7(), user)
+	b.want(t, "23503", "a receipt for another org's destination", m20Receipt, b.org, ids.NewV7(), dest, ids.NewV7(), user)
+}
+
 // TestTenancy_export_destinations: another org sees no destination of an
 // org, changes none, and cannot store one in its name.
 func TestTenancy_export_destinations(t *testing.T) {
