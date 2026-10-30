@@ -255,6 +255,11 @@ const (
 	MCPStateKind_MCP_STATE_KIND_SESSION     MCPStateKind = 3
 	// An elicitation the gateway relayed to the agent (G0 M15 D39).
 	MCPStateKind_MCP_STATE_KIND_ELICITATION MCPStateKind = 4
+	// An A2A task a run created through a connection; its body is the
+	// sealed context id (G0 M19 D211).
+	MCPStateKind_MCP_STATE_KIND_A2A_TASK MCPStateKind = 5
+	// An A2A context a run created through a connection; no body (D211).
+	MCPStateKind_MCP_STATE_KIND_A2A_CONTEXT MCPStateKind = 6
 )
 
 // Enum value maps for MCPStateKind.
@@ -265,6 +270,8 @@ var (
 		2: "MCP_STATE_KIND_TASK",
 		3: "MCP_STATE_KIND_SESSION",
 		4: "MCP_STATE_KIND_ELICITATION",
+		5: "MCP_STATE_KIND_A2A_TASK",
+		6: "MCP_STATE_KIND_A2A_CONTEXT",
 	}
 	MCPStateKind_value = map[string]int32{
 		"MCP_STATE_KIND_UNSPECIFIED": 0,
@@ -272,6 +279,8 @@ var (
 		"MCP_STATE_KIND_TASK":        2,
 		"MCP_STATE_KIND_SESSION":     3,
 		"MCP_STATE_KIND_ELICITATION": 4,
+		"MCP_STATE_KIND_A2A_TASK":    5,
+		"MCP_STATE_KIND_A2A_CONTEXT": 6,
 	}
 )
 
@@ -5492,13 +5501,15 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	" CONNECTION_SERVING_STATE_SERVING\x10\x01\x12)\n" +
 	"%CONNECTION_SERVING_STATE_CIRCUIT_OPEN\x10\x02\x12.\n" +
 	"*CONNECTION_SERVING_STATE_DRIFT_QUARANTINED\x10\x03\x12'\n" +
-	"#CONNECTION_SERVING_STATE_NOT_LOADED\x10\x04*\x9c\x01\n" +
+	"#CONNECTION_SERVING_STATE_NOT_LOADED\x10\x04*\xd9\x01\n" +
 	"\fMCPStateKind\x12\x1e\n" +
 	"\x1aMCP_STATE_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13MCP_STATE_KIND_HOLD\x10\x01\x12\x17\n" +
 	"\x13MCP_STATE_KIND_TASK\x10\x02\x12\x1a\n" +
 	"\x16MCP_STATE_KIND_SESSION\x10\x03\x12\x1e\n" +
-	"\x1aMCP_STATE_KIND_ELICITATION\x10\x042\x82\x06\n" +
+	"\x1aMCP_STATE_KIND_ELICITATION\x10\x04\x12\x1b\n" +
+	"\x17MCP_STATE_KIND_A2A_TASK\x10\x05\x12\x1e\n" +
+	"\x1aMCP_STATE_KIND_A2A_CONTEXT\x10\x062\x82\x06\n" +
 	"\x13GatewayAdminService\x12\\\n" +
 	"\rCreateGateway\x12$.pantherclaw.v1.CreateGatewayRequest\x1a%.pantherclaw.v1.CreateGatewayResponse\x12\x89\x01\n" +
 	"\x1cCreateGatewayEnrollmentToken\x123.pantherclaw.v1.CreateGatewayEnrollmentTokenRequest\x1a4.pantherclaw.v1.CreateGatewayEnrollmentTokenResponse\x12^\n" +

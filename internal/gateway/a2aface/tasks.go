@@ -11,10 +11,16 @@ import "sync"
 const maxOwned = 100_000
 
 // owner is who may name a task or context: the run, through the
-// connection, that created it (D31).
+// connection, that created it (D31). instance is the agent instance that
+// asked; it is not part of ownership, and the server store counts its
+// bounds per instance (D211).
 type owner struct {
 	conn, run string
+	instance  string
 }
+
+// who is the ownership part of w.
+func (w owner) who() owner { return owner{conn: w.conn, run: w.run} }
 
 type ownedKey struct {
 	owner
@@ -58,10 +64,10 @@ func (o *owned) record(w owner, task, context string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if context != "" {
-		o.add(ownedKey{w, 'c', context}, "")
+		o.add(ownedKey{w.who(), 'c', context}, "")
 	}
 	if task != "" {
-		o.add(ownedKey{w, 't', task}, context)
+		o.add(ownedKey{w.who(), 't', task}, context)
 	}
 }
 
@@ -69,7 +75,7 @@ func (o *owned) record(w owner, task, context string) {
 func (o *owned) task(w owner, task string) (context string, ok bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	context, ok = o.set[ownedKey{w, 't', task}]
+	context, ok = o.set[ownedKey{w.who(), 't', task}]
 	return context, ok
 }
 
@@ -77,6 +83,6 @@ func (o *owned) task(w owner, task string) (context string, ok bool) {
 func (o *owned) context(w owner, context string) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	_, ok := o.set[ownedKey{w, 'c', context}]
+	_, ok := o.set[ownedKey{w.who(), 'c', context}]
 	return ok
 }

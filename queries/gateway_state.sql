@@ -70,3 +70,12 @@ ORDER BY update_time, key;
 
 -- name: PurgeGatewayMCPState :execrows
 DELETE FROM pc.gateway_mcp_state WHERE org_id = sqlc.arg(org_id) AND expire_time <= sqlc.arg(now);
+
+-- name: CountGatewayMCPStateOfKind :one
+-- The live entries of one A2A kind (G0 M19 D211): each kind has the TASK
+-- bounds of its own, in all and of one instance.
+SELECT count(*)::bigint AS entries,
+       count(*) FILTER (WHERE instance_id IS NOT DISTINCT FROM sqlc.narg(instance_id)::uuid)::bigint AS instance_entries
+FROM pc.gateway_mcp_state
+WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id) AND kind = sqlc.arg(kind)
+  AND expire_time > sqlc.arg(now);

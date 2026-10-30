@@ -975,6 +975,11 @@ enum MCPStateKind {
   MCP_STATE_KIND_SESSION = 3;
   // An elicitation the gateway relayed to the agent (G0 M15 D39).
   MCP_STATE_KIND_ELICITATION = 4;
+  // An A2A task a run created through a connection; its body is the
+  // sealed context id (G0 M19 D211).
+  MCP_STATE_KIND_A2A_TASK = 5;
+  // An A2A context a run created through a connection; no body (D211).
+  MCP_STATE_KIND_A2A_CONTEXT = 6;
 }
 
 // MCPStateEntry is one MCP hold, task or session of a gateway, bound to

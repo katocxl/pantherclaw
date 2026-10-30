@@ -100,7 +100,7 @@ type Handler struct {
 	publicURL string
 	origin    string
 	log       *slog.Logger
-	owned     *owned
+	owned     ownership
 	// send decides and sends one call (answer.go), relaying a stream to
 	// sink; tests replace it.
 	send func(c call, sink dispatch.A2ASink) dispatch.Result
@@ -157,7 +157,9 @@ type call struct {
 	mapParams []byte
 }
 
-func (c call) owner() owner { return owner{conn: c.conn.GetId(), run: c.in.Run} }
+func (c call) owner() owner {
+	return owner{conn: c.conn.GetId(), run: c.in.Run, instance: c.in.Instance}
+}
 
 // faceError is an answer that is an error, in either binding.
 type faceError struct {

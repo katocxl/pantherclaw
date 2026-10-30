@@ -57,6 +57,42 @@ func (q *Queries) CountGatewayMCPState(ctx context.Context, arg CountGatewayMCPS
 	return i, err
 }
 
+const countGatewayMCPStateOfKind = `-- name: CountGatewayMCPStateOfKind :one
+SELECT count(*)::bigint AS entries,
+       count(*) FILTER (WHERE instance_id IS NOT DISTINCT FROM $1::uuid)::bigint AS instance_entries
+FROM pc.gateway_mcp_state
+WHERE org_id = $2 AND gateway_id = $3 AND kind = $4
+  AND expire_time > $5
+`
+
+type CountGatewayMCPStateOfKindParams struct {
+	InstanceID *ids.UUID
+	OrgID      ids.OrgID
+	GatewayID  ids.UUID
+	Kind       string
+	Now        time.Time
+}
+
+type CountGatewayMCPStateOfKindRow struct {
+	Entries         int64
+	InstanceEntries int64
+}
+
+// The live entries of one A2A kind (G0 M19 D211): each kind has the TASK
+// bounds of its own, in all and of one instance.
+func (q *Queries) CountGatewayMCPStateOfKind(ctx context.Context, arg CountGatewayMCPStateOfKindParams) (CountGatewayMCPStateOfKindRow, error) {
+	row := q.db.QueryRow(ctx, countGatewayMCPStateOfKind,
+		arg.InstanceID,
+		arg.OrgID,
+		arg.GatewayID,
+		arg.Kind,
+		arg.Now,
+	)
+	var i CountGatewayMCPStateOfKindRow
+	err := row.Scan(&i.Entries, &i.InstanceEntries)
+	return i, err
+}
+
 const deleteGatewayMCPState = `-- name: DeleteGatewayMCPState :execrows
 DELETE FROM pc.gateway_mcp_state
 WHERE org_id = $1 AND gateway_id = $2 AND kind = $3 AND key = $4
