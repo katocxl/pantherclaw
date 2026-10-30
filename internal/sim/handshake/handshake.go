@@ -28,7 +28,7 @@ type Answer struct {
 }
 
 // Wrap answers the handshake for kind (payments, mcp, github, stripe, slack,
-// teams or a2a) and passes every other request to next.
+// teams, aws or a2a) and passes every other request to next.
 func Wrap(kind string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != Path {

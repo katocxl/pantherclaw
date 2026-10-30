@@ -95,3 +95,41 @@ func TestHR526_HeadersAndEncodingsAreFixedByThePackage(t *testing.T) {
 		t.Errorf("aws-query list: %v", err)
 	}
 }
+
+// TestHR525_AWSActionIsTheOneThePackageFixes: the action a session is
+// narrowed to comes from the template's literal X-Amz-Target or Action,
+// GET or POST, and a non-AWS template names none.
+// Covers: HR-525
+func TestHR525_AWSActionIsTheOneThePackageFixes(t *testing.T) {
+	d := awsDef()
+	if a, ok := d.AWSAction(); !ok || a != "DescribeThing" {
+		t.Fatalf("aws-json: %q %v", a, ok)
+	}
+	d.Dispatch.HTTP = &HTTPDispatch{Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
+		Body: map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08"}}
+	if a, ok := d.AWSAction(); !ok || a != "GetRole" {
+		t.Fatalf("aws-query: %q %v", a, ok)
+	}
+	d.Dispatch.HTTP = &HTTPDispatch{Method: "GET", Path: "/", Encoding: EncodingAWSQuery,
+		Query: map[string]string{"Action": "literal.GetAccountSummary", "Version": "literal.2010-05-08"}}
+	if err := d.validateHTTPDispatch("t", d.Dispatch.HTTP); err != nil {
+		t.Fatalf("aws-query GET: %v", err)
+	}
+	if a, ok := d.AWSAction(); !ok || a != "GetAccountSummary" {
+		t.Fatalf("aws-query GET: %q %v", a, ok)
+	}
+	d.Dispatch.HTTP.Body = map[string]string{"Action": "literal.DeleteRole"}
+	if a, _ := d.AWSAction(); a != "GetAccountSummary" {
+		t.Fatalf("a GET read its action from a body: %q", a)
+	}
+	d.Dispatch.HTTP = &HTTPDispatch{Method: "GET", Path: "/x", Encoding: EncodingJSON}
+	if _, ok := d.AWSAction(); ok {
+		t.Fatal("a JSON template named an AWS action")
+	}
+	post := &HTTPDispatch{Method: "POST", Path: "/", Encoding: EncodingAWSQuery,
+		Body:  map[string]string{"Action": "literal.GetRole", "Version": "literal.2010-05-08"},
+		Query: map[string]string{"Action": "literal.DeleteRole"}}
+	if err := d.validateHTTPDispatch("t", post); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a POST with a query Action: %v", err)
+	}
+}

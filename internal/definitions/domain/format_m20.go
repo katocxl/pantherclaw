@@ -49,8 +49,11 @@ func matchKey(h map[string]string) string {
 // literal Action and Version body fields, and sends only scalar values
 // (its flat form has no lists).
 func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
-	if h.Method != "POST" || h.Path != RootPath {
-		return invalid("%s: %s is a POST to %s", at, h.Encoding, RootPath)
+	// aws-query may also be a GET with its operation in the query (a
+	// connection test reads that way); aws-json is always a POST.
+	get := h.Encoding == EncodingAWSQuery && h.Method == "GET"
+	if (h.Method != "POST" && !get) || h.Path != RootPath {
+		return invalid("%s: %s is a POST to %s (aws-query also a GET)", at, h.Encoding, RootPath)
 	}
 	if h.IdempotencyHeader != "" {
 		return invalid("%s: %s carries an idempotency token in its body, never a header", at, h.Encoding)
@@ -61,10 +64,17 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 			return invalid("%s: aws-json names its operation in a literal %s header", at, AWSTargetHeader)
 		}
 	case EncodingAWSQuery:
+		named, where := h.Body, "body"
+		if get {
+			named, where = h.Query, "query"
+		}
 		for _, k := range []string{"Action", "Version"} {
-			if !strings.HasPrefix(h.Body[k], "literal.") {
-				return invalid("%s.body: aws-query names its operation in a literal %s", at, k)
+			if !strings.HasPrefix(named[k], "literal.") {
+				return invalid("%s.%s: aws-query names its operation in a literal %s", at, where, k)
 			}
+		}
+		if !get && (h.Query["Action"] != "" || h.Query["Version"] != "") {
+			return invalid("%s.query: a POST names its operation in its body only", at)
 		}
 		for _, k := range slices.Sorted(maps.Keys(h.Body)) {
 			name, isParam := strings.CutPrefix(h.Body[k], "params.")
@@ -74,4 +84,32 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 		}
 	}
 	return nil
+}
+
+// AWSAction is the one AWS action an aws-json or aws-query dispatch names,
+// fixed by the package (G0 M20 D254): the operation of its X-Amz-Target
+// ("Service_Version.Operation"), or its literal Action. A session for the
+// dispatch is narrowed to exactly this action (HR-525).
+func (d *Definition) AWSAction() (string, bool) {
+	if d.Dispatch == nil || d.Dispatch.HTTP == nil {
+		return "", false
+	}
+	h := d.Dispatch.HTTP
+	switch h.Encoding {
+	case EncodingAWSJSON:
+		for k, v := range h.Headers {
+			if strings.EqualFold(k, AWSTargetHeader) {
+				i := strings.LastIndexByte(v, '.')
+				return v[i+1:], i >= 0 && i < len(v)-1
+			}
+		}
+	case EncodingAWSQuery:
+		ref := h.Body["Action"]
+		if h.Method == "GET" {
+			ref = h.Query["Action"]
+		}
+		a, ok := strings.CutPrefix(ref, "literal.")
+		return a, ok && a != ""
+	}
+	return "", false
 }

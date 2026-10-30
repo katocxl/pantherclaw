@@ -871,7 +871,9 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 // what the action on target under def may use. A static credential is
 // placed as sealed. An OAuth client credential never is: the gateway mints
 // an access token for this dispatch at its token endpoint and places that
-// (G0 M20 D254, HR-524). Nor is a GitHub App credential: the gateway mints an
+// (G0 M20 D254, HR-524), and an AWS one signs only an AssumeRole narrowed to
+// the dispatch's one action, whose session signs the request (HR-525).
+// Nor is a GitHub App credential: the gateway mints an
 // installation token for exactly the target's repository and def's
 // declared permissions and places that (HR-203, HR-204). The caller keeps
 // secret, which it scrubs from what goes back to the agent, until it calls
@@ -906,6 +908,17 @@ func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *
 			return nil, nil, nil, err
 		}
 		return tok.Token(), tok.Clear, func() *pb.CredentialAccess { return nil }, nil
+	case credentials.KindAWSSigV4:
+		// Signed with a session assumed for this dispatch and narrowed to
+		// its one action, never with the base key (G0 M20 D254, HR-525).
+		if err := CheckCredentialPattern(def, kind, nil); err != nil {
+			return nil, nil, nil, err
+		}
+		s, err := e.signAWS(ctx, conn, def, target, req)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return s.Secret(), s.Clear, func() *pb.CredentialAccess { return nil }, nil
 	default:
 		plain, err := e.openStatic(ctx, conn)
 		if err != nil {
