@@ -9,14 +9,23 @@
 -- tree through the partial index. Transactions recorded before this
 -- migration have none: no read class was known then.
 -- +goose Up
+ALTER TABLE pc.transactions ADD COLUMN read_class text;
 ALTER TABLE pc.transactions
-    ADD COLUMN read_class text CHECK (read_class IS NULL OR read_class IN ('public', 'internal', 'pii', 'secret'));
+    ADD CONSTRAINT transactions_read_class
+        CHECK (read_class IS NULL OR read_class IN ('public', 'internal', 'pii', 'secret')) NOT VALID;
+-- The new column is NULL in every row: the scan finds nothing to refuse,
+-- and validating blocks neither reads nor writes.
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.transactions VALIDATE CONSTRAINT transactions_read_class;
 
 -- A read that is first held and then allowed is recorded by the evaluation
 -- that allows it (UpdateDecision).
 GRANT UPDATE (read_class) ON pc.transactions TO pc_app;
 
 -- The sensitive reads of a run tree (D73): a small subset of transactions.
+-- The new column is NULL in every row, so the partial index is empty and
+-- built at once.
+-- squawk-ignore require-concurrent-index-creation
 CREATE INDEX transactions_sensitive_reads ON pc.transactions (org_id, run_id)
     WHERE read_class IN ('pii', 'secret');
 

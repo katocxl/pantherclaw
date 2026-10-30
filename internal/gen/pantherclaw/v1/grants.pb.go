@@ -423,7 +423,7 @@ func (x *FlowAllowance) GetDestinations() []*FlowDestination {
 // FlowDestination is one ActionIR destination: its kind and id.
 type FlowDestination struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Destination kind.
+	// Destination kind: "internal" or "external", as in the ActionIR.
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Destination id.
 	Id            string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
@@ -1579,10 +1579,9 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"\rFlowAllowance\x127\n" +
 	"\aclasses\x18\x01 \x03(\tB\x1d\xbaH\x1a\x92\x01\x17\b\x01\x10\x02\x18\x01\"\x0fr\rR\x03piiR\x06secretR\aclasses\x12O\n" +
 	"\fdestinations\x18\x02 \x03(\v2\x1f.pantherclaw.v1.FlowDestinationB\n" +
-	"\xbaH\a\x92\x01\x04\b\x01\x10@R\fdestinations\"M\n" +
-	"\x0fFlowDestination\x12\x1e\n" +
-	"\x04kind\x18\x01 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\x04kind\x12\x1a\n" +
+	"\xbaH\a\x92\x01\x04\b\x01\x10@R\fdestinations\"\\\n" +
+	"\x0fFlowDestination\x12-\n" +
+	"\x04kind\x18\x01 \x01(\tB\x19\xbaH\x16r\x14R\binternalR\bexternalR\x04kind\x12\x1a\n" +
 	"\x02id\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\x02id\"\x85\x01\n" +
 	"\x10GuardrailVersion\x12\x1f\n" +

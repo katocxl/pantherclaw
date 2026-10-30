@@ -48,9 +48,9 @@ func validateFlows(flows []FlowAllowance) error {
 			}
 		}
 		for j, d := range f.Destinations {
-			if d.Kind == "" || d.ID == "" || len(d.Kind) > maxFlowField || len(d.ID) > maxFlowField ||
+			if (d.Kind != "internal" && d.Kind != "external") || d.ID == "" || len(d.ID) > maxFlowField ||
 				slices.Contains(f.Destinations[:j], d) {
-				return invalid("grant: %s destinations are distinct, each with a kind and an id", at)
+				return invalid("grant: %s destinations are distinct, each with a kind (internal or external) and an id", at)
 			}
 		}
 	}
@@ -115,4 +115,13 @@ func DecodeFlows(raw []byte) ([]FlowAllowance, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// FlowCovers reports whether every grant of the chain, from the root down
+// to the run's own, has a flow that covers every class and every
+// destination (D75, HR-432): a parent's narrowing revision stops a flow its
+// child still names, as bounds are checked at every level. A chain without
+// grants covers nothing.
+func (c Chain) FlowCovers(classes []string, dests []actionir.Destination) bool {
+	return len(c.Grants) > 0 && !slices.ContainsFunc(c.Grants, func(g Grant) bool { return !FlowCovers(g.Flows, classes, dests) })
 }

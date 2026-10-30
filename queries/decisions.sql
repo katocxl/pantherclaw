@@ -32,9 +32,10 @@ SET decision = sqlc.arg(decision), reason_code = sqlc.arg(reason_code), state = 
     read_class = sqlc.narg(read_class)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'OPEN' AND evaluations = sqlc.arg(prev_evaluations);
 
--- The sensitive reads of a run tree (G0 M16 D73, HR-431): the pii and
+-- The sensitive reads of a run tree (G0 M16 D73, D97, HR-431): the pii and
 -- secret reads of every run sharing the run's root (runs nest at most 8
--- deep), the 20 most recent. Classes and ids only, never content (HR-434).
+-- deep), the 20 most recent plus the most recent of each class, so every
+-- class read is there. Classes and ids only, never content (HR-434).
 -- name: SensitiveReads :many
 WITH RECURSIVE up (id, parent_run_id, hop) AS (
     SELECT r.id, r.parent_run_id, 0 FROM pc.runs r WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(run_id)
@@ -48,12 +49,17 @@ WITH RECURSIVE up (id, parent_run_id, hop) AS (
     UNION ALL
     SELECT c.id, tree.hop + 1 FROM tree JOIN pc.runs c ON c.org_id = sqlc.arg(org_id) AND c.parent_run_id = tree.id
     WHERE tree.hop < 8
+), reads AS (
+    SELECT t.id, t.run_id, t.operation, coalesce(t.read_class, '')::text AS read_class, t.created_at
+    FROM pc.transactions t
+    WHERE t.org_id = sqlc.arg(org_id) AND t.run_id IN (SELECT tree.id FROM tree) AND t.read_class IN ('pii', 'secret')
 )
-SELECT t.id, t.run_id, t.operation, coalesce(t.read_class, '')::text AS read_class, t.created_at
-FROM pc.transactions t
-WHERE t.org_id = sqlc.arg(org_id) AND t.run_id IN (SELECT tree.id FROM tree) AND t.read_class IN ('pii', 'secret')
-ORDER BY t.created_at DESC, t.id DESC
-LIMIT 20;
+SELECT n.id, n.run_id, n.operation, n.read_class, n.created_at FROM (
+    (SELECT * FROM reads ORDER BY reads.created_at DESC, reads.id DESC LIMIT 20)
+    UNION
+    (SELECT DISTINCT ON (reads.read_class) * FROM reads ORDER BY reads.read_class, reads.created_at DESC, reads.id DESC)
+) n
+ORDER BY n.created_at DESC, n.id DESC;
 
 -- name: InsertEvaluationReceipt :exec
 INSERT INTO pc.decision_receipts (org_id, transaction_id, evaluation, receipt_jws, ledger_entry_id, coverage_snapshot_id)

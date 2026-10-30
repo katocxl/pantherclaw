@@ -151,10 +151,12 @@ message FlowAllowance {
 
 // FlowDestination is one ActionIR destination: its kind and id.
 message FlowDestination {
-  // Destination kind.
+  // Destination kind: "internal" or "external", as in the ActionIR.
   string kind = 1 [(buf.validate.field).string = {
-    min_len: 1
-    max_len: 512
+    in: [
+      "internal",
+      "external"
+    ]
   }];
   // Destination id.
   string id = 2 [(buf.validate.field).string = {

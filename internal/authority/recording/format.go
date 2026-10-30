@@ -431,9 +431,9 @@ type HoldSettings struct {
 }
 
 // Sensitive is the read of the run tree's sensitive reads (G0 M16 D73):
-// classes and ids, never content (HR-434). Recordings made before it have
-// none and replay as they did (no read class was recorded then), so the
-// format and pipeline versions are unchanged.
+// classes and ids, never content (HR-434). Only pipeline version 5 reads
+// it (D95): a version 4 recording has none and replays without the
+// data-flow step, so the format version is unchanged.
 type Sensitive struct {
 	Run   string          `json:"run"`
 	Reads []SensitiveRead `json:"reads,omitzero"`

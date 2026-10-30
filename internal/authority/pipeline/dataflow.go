@@ -12,7 +12,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
-	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -39,7 +38,8 @@ func RaiseClass(class, by string) string {
 //     fields, capped by the decision's data_classes obligation when there
 //     is one;
 //   - for an operation that declares a data scope (Scoping) and has a
-//     data_classes obligation, the strictest class the obligation allows;
+//     data_classes obligation, the stricter of that and the strictest
+//     class the obligation allows (D97);
 //   - then raised, never lowered, by classified: the class a
 //     pc.classification fact gives the action's target (D80), or "".
 //
@@ -70,20 +70,22 @@ func ReadClass(d *defs.Definition, obligations []pdomain.Obligation, classified 
 		scoped = true
 	}
 	class := declared
-	switch {
-	case declared != "" && scoped && classRank[allowed] < classRank[declared]:
+	if scoped && classRank[allowed] < classRank[declared] {
 		class = allowed
-	case declared == "" && scoped && len(d.Scoping) > 0:
-		class = allowed
+	}
+	if scoped && len(d.Scoping) > 0 {
+		class = RaiseClass(class, allowed)
 	}
 	return RaiseClass(class, classified)
 }
 
-// RecordedReadClass is the read class the transaction records (D72): the
-// evaluation's ReadClass when its decision is ALLOW or
-// ALLOW_WITH_OBLIGATIONS, "" otherwise.
+// RecordedReadClass is the read class the transaction records (D72, D97):
+// the evaluation's ReadClass whenever the read is dispatched, that is on
+// ALLOW, ALLOW_WITH_OBLIGATIONS or a monitor-mode permit whatever its
+// would-decision, so a later disclosure sees data the agent received
+// (HR-431, HR-433); "" otherwise.
 func (e *Evaluation) RecordedReadClass() string {
-	if e.Decision != adomain.Allow && e.Decision != adomain.AllowWithObligations {
+	if e.Decision != adomain.Allow && e.Decision != adomain.AllowWithObligations && !e.MonitorPermit() {
 		return ""
 	}
 	return e.ReadClass
@@ -135,7 +137,8 @@ func (s *state) externalDisclosure() bool {
 // Approval binds the action as any requirement does; in monitor mode the
 // evaluation records the would-hold (Would, HR-433).
 func (p *Pipeline) dataFlow(ctx context.Context, s *state) {
-	if !s.externalDisclosure() {
+	// A version 4 recording neither read the history nor held (D95).
+	if !p.at(5) || !s.externalDisclosure() {
 		return
 	}
 	reads, err := p.Reader.SensitiveReads(ctx, s.req.Org, s.ev.RunID)
@@ -143,6 +146,8 @@ func (p *Pipeline) dataFlow(ctx context.Context, s *state) {
 		s.missing(StepBoundaries, err, "the run's read history")
 		return
 	}
+	// Every class read counts (D97); the detail names at most
+	// MaxSensitiveReads transactions, the newest.
 	var classes, txns []string
 	for _, r := range reads {
 		if r.Class != "pii" && r.Class != "secret" {
@@ -151,16 +156,17 @@ func (p *Pipeline) dataFlow(ctx context.Context, s *state) {
 		if !slices.Contains(classes, r.Class) {
 			classes = append(classes, r.Class)
 		}
-		txns = append(txns, r.TransactionID.String())
+		if len(txns) < MaxSensitiveReads {
+			txns = append(txns, r.TransactionID.String())
+		}
 	}
 	if len(classes) == 0 {
 		return
 	}
 	slices.Sort(classes)
-	leaf, _ := s.chain.Leaf()
 	what := "the run tree read " + strings.Join(classes, " and ") + " data (transactions " + strings.Join(txns, ", ") + ")"
-	if gdomain.FlowCovers(leaf.Flows, classes, s.a.Destinations) {
-		s.cl.add(StepBoundaries, adomain.Allow, ReasonDataFlowAllowed, what+"; a flow of grant "+leaf.ID.String()+" allows it here", "")
+	if s.chain.FlowCovers(classes, s.a.Destinations) {
+		s.cl.add(StepBoundaries, adomain.Allow, ReasonDataFlowAllowed, what+"; a flow of every grant in the chain allows it here", "")
 		return
 	}
 	a := pdomain.ApprovalRequirement{Role: string(td.RoleApprover), Count: 1}

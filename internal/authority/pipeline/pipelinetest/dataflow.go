@@ -42,7 +42,7 @@ func (w *World) AddSensitiveRead(r pipeline.SensitiveRead) {
 	w.flows().reads = append(w.flows().reads, r)
 }
 
-// recordRead keeps the class of an allowed pii or secret read (w.mu held),
+// recordRead keeps the class of a dispatched pii or secret read (w.mu held),
 // as the transaction's read_class column does.
 func (w *World) recordRead(wr finalize.Write) {
 	ev := wr.Eval
@@ -54,7 +54,8 @@ func (w *World) recordRead(wr finalize.Write) {
 }
 
 // SensitiveReads implements pipeline.Reader: the sensitive reads of every
-// run sharing run's root, newest first, at most pipeline.MaxSensitiveReads.
+// run sharing run's root, newest first: the pipeline.MaxSensitiveReads
+// newest plus the newest of each class not among them (D97).
 func (w *World) SensitiveReads(_ context.Context, _ ids.OrgID, run ids.UUID) ([]pipeline.SensitiveRead, error) {
 	if err := w.fail("SensitiveReads"); err != nil {
 		return nil, err
@@ -75,7 +76,10 @@ func (w *World) SensitiveReads(_ context.Context, _ ids.OrgID, run ids.UUID) ([]
 	top := root(run)
 	var out []pipeline.SensitiveRead
 	for _, r := range slices.Backward(fs.reads) {
-		if root(r.RunID) == top && len(out) < pipeline.MaxSensitiveReads {
+		if root(r.RunID) != top {
+			continue
+		}
+		if len(out) < pipeline.MaxSensitiveReads || !slices.ContainsFunc(out, func(o pipeline.SensitiveRead) bool { return o.Class == r.Class }) {
 			out = append(out, r)
 		}
 	}
