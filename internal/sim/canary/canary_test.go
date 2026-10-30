@@ -92,6 +92,21 @@ func TestHR121_TheCanaryRecordsMarkersOnEveryPort(t *testing.T) {
 	}
 }
 
+// TestHR121_AChosenDNSPortTakenOnUDPIsAnError: a free port is tried again
+// only when the system picks it; a configured port is what it says.
+func TestHR121_AChosenDNSPortTakenOnUDPIsAnError(t *testing.T) {
+	var lc net.ListenConfig
+	taken, err := lc.ListenPacket(t.Context(), "udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = taken.Close() }()
+	port := taken.LocalAddr().(*net.UDPAddr).Port
+	if _, err := New(pclog.Discard()).Listen(t.Context(), "127.0.0.1", Ports{DNS: port}); err == nil {
+		t.Fatal("a configured DNS port taken on UDP was accepted")
+	}
+}
+
 // TestHR215_TheCanaryReportIsSignedWithTheSessionKey: the canary's report
 // carries the hits of the session's markers only, signed with the probe
 // key.
