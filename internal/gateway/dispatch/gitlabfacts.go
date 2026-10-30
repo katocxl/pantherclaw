@@ -121,6 +121,9 @@ func (e *Engine) readGitLab(ctx context.Context, conn *control.Connection, def *
 			warn(err)
 			return 0, nil, "GitLab could not be reached"
 		}
+		if resp.Truncated {
+			return 0, nil, "GitLab's answer was too long"
+		}
 		return resp.Status, resp.Body, ""
 	}
 	mrURL := base + "/merge_requests/" + is
@@ -134,12 +137,9 @@ func (e *Engine) readGitLab(ctx context.Context, conn *control.Connection, def *
 		return unread(why)
 	}
 	out[gitlabfacts.MergeRequestApprovals] = gitlabfacts.Approvals(status, body, project, iid)
-	if status, body, why = get(base + "/environments?" + url.Values{
-		"states": {"available"}, "per_page": {strconv.Itoa(gitlabfacts.EnvironmentsPageSize)},
-	}.Encode()); why != "" {
+	if out[gitlabfacts.MergeRequestDeployment], why = e.readGitLabDeployment(get, base, mr); why != "" {
 		return unread(why)
 	}
-	out[gitlabfacts.MergeRequestDeployment] = gitlabfacts.Deployment(status, body, mr.Pipeline)
 	if mr.TargetBranch == "" {
 		return unread("the merge request's target branch was not read")
 	}

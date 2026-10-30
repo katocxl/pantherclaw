@@ -6,50 +6,79 @@ package gitlabfacts
 import (
 	"encoding/json/v2"
 	"regexp"
+	"strings"
 )
 
 // MergeRequestDeployment is the fact a merge's consequence rule reads
-// (G0 M20 D258, HR-521, T-229).
+// (G0 M20 D258, D287, HR-521, T-229).
 const MergeRequestDeployment = "gitlab.merge_request.deployment"
 
 // EnvironmentsPageSize is how many environments one read asks for. A full
 // page may hide more, so it is unread.
 const EnvironmentsPageSize = 100
 
+// CIConfigFile is the pipeline configuration a project without environments
+// is read for.
+const CIConfigFile = ".gitlab-ci.yml"
+
 var environmentRe = regexp.MustCompile(`^[A-Za-z0-9_.-][A-Za-z0-9 _./-]{0,254}$`)
 
-// Deployment parses GET /projects/:id/environments and the merge request's
-// pipeline fact into the value of MergeRequestDeployment. A project with no
-// environment deploys nothing (state none). With some, a merge may deploy
-// to each of them, and the state is verified only when the head pipeline
-// passed at the head. Anything else is unread: the consequence rule is then
-// unknown, at least a hold, so a deploy never starts from a pipeline that
-// was not verified.
-func Deployment(status int, body []byte, pipeline map[string]any) map[string]any {
+// Environments parses GET /projects/:id/environments, stopped ones included:
+// a job that deploys restarts a stopped environment. Its second result says
+// why the answer could not be read, "" when it could.
+func Environments(status int, body []byte) ([]any, string) {
 	if why := refused(status); why != "" {
-		return Unread(why)
+		return nil, why
 	}
 	var a []struct {
 		Name string `json:"name"`
 	}
 	if json.Unmarshal(body, &a) != nil {
-		return Unread("GitLab's answer could not be read")
+		return nil, "GitLab's answer could not be read"
 	}
 	if len(a) >= EnvironmentsPageSize {
-		return Unread("the project has too many environments to read")
+		return nil, "the project has too many environments to read"
 	}
 	envs := make([]any, 0, len(a))
 	for _, e := range a {
 		if !environmentRe.MatchString(e.Name) {
-			return Unread("GitLab's answer does not name an environment")
+			return nil, "GitLab's answer does not name an environment"
 		}
 		envs = append(envs, e.Name)
 	}
-	if len(envs) == 0 {
-		return map[string]any{"state": "none", "environments": envs}
-	}
+	return envs, ""
+}
+
+// Deployment is the value of MergeRequestDeployment for a project with
+// environments: a merge may deploy to each of them, so the state is verified
+// only when the head pipeline passed at the head. Anything else is unread:
+// the consequence rule is then unknown, at least a hold, so a deploy never
+// starts from a pipeline that was not verified.
+func Deployment(envs []any, pipeline map[string]any) map[string]any {
 	if pipeline["passed"] != true {
 		return Unread("the head pipeline did not pass at the head")
 	}
 	return map[string]any{"state": "verified", "environments": envs, "pipeline": pipeline["id"]}
+}
+
+// NoEnvironments is the value of MergeRequestDeployment for a project with
+// no environment yet, which its first deployment creates, from GET
+// /projects/:id/repository/files/.gitlab-ci.yml/raw at the head (D287). No
+// file deploys nothing (state none). A file that mentions environment or
+// include may deploy, and one that could not be read may too: both are
+// unread, so the merge is held. This is a text check, not a YAML parse: a
+// comment that mentions either word holds a merge too.
+func NoEnvironments(status int, body []byte) map[string]any {
+	none := map[string]any{"state": "none", "environments": []any{}}
+	if status == 404 {
+		return none
+	}
+	if why := refused(status); why != "" {
+		return Unread(why)
+	}
+	text := strings.ToLower(string(body))
+	if strings.Contains(text, "environment") || strings.Contains(text, "include") {
+		return Unread("the pipeline configuration may deploy to a new environment")
+	}
+	return none
 }

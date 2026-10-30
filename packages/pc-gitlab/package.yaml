@@ -152,15 +152,14 @@ definitions:
         confirmed: [merged]
         pending: [opened, locked]
       # The merge commit fills the sha of the deployments the merge starts,
-      # which their own verifier then finds (G0 M17 D102). A squash or
-      # fast-forward merge names no merge commit, so its deployments are
-      # not verifiable, and the merge says so.
+      # which their own verifier then finds (G0 M17 D102).
       capture:
         sha: /merge_commit_sha
       limits: >-
         Shows that GitLab reports this merge request merged with this head
-        commit and names its merge commit. It does not show that a pipeline
-        or deployment the merge starts ran or finished.
+        commit. It does not show that a pipeline or deployment the merge
+        starts ran or finished. A fast-forward merge names no merge commit,
+        so the deployments it starts stay not verifiable.
     approval:
       title: Merge GitLab merge request {target.id} at {params.sha}
       fields:
@@ -261,7 +260,7 @@ definitions:
       safe: false
       on_unknown: reconcile
     # The deployment's own effect: GitLab's deployment of the merge commit
-    # to the environment. A failure, matching deployments that disagree, or
+    # to the environment, the newest when there are several. A failure or
     # no deployment within the hour: a person decides (HR-192).
     verifier:
       operation: gitlab.deployment.read
@@ -283,15 +282,17 @@ definitions:
         field: /status
         confirmed: [success]
         pending: [created, running, blocked]
-        reconcile: [failed, canceled, skipped, disagreement]
+        reconcile: [failed, canceled, skipped]
       limits: >-
-        Shows the status GitLab reports for its deployment of this merge
-        commit to this environment. It does not show what the deployed job
-        did beyond that status, and it counts a deployment of this commit
-        made by anyone, because GitLab names no reserved deployer as GitHub
-        does. Environments are predicted from the project's available
-        environments, so an environment this branch never deploys to ends
-        with no deployment, which a person decides.
+        Shows the status GitLab reports for its newest deployment of this
+        merge commit to this environment. It does not show what the deployed
+        job did beyond that status, and it counts a deployment of this
+        commit made by anyone, because GitLab names no reserved deployer as
+        GitHub does. Environments are predicted from every environment of
+        the project, stopped ones included, so one this branch never deploys
+        to ends with no deployment, which a person decides. An environment
+        name that does not exist yet, in a project that already has others,
+        is not predicted.
     approval:
       title: Release a deployment from GitLab project {target.id}
       fields: [target.id]
@@ -400,10 +401,13 @@ definitions:
           membership: literal.true
           simple: literal.true
 
-# The gateway reads the project's environments and the head pipeline before
-# a merge. A project with environments is a deployment, and one whose head
-# pipeline did not pass at the head leaves the fact missing: the consequence
-# is unknown and the merge at least held (HR-521, T-229).
+# The gateway reads the project's environments, stopped ones included, and the
+# head pipeline before a merge. A project with environments is a deployment,
+# and one whose head pipeline did not pass at the head leaves the fact missing:
+# the consequence is unknown and the merge at least held (HR-521, T-229). A
+# project with none is read for .gitlab-ci.yml at the head: no file deploys
+# nothing, and one that mentions environment or include, or that could not be
+# read, leaves the fact missing too (D287).
 consequences:
   - id: merge-triggers-deployment
     operation: gitlab.merge_request.merge

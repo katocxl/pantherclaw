@@ -18,31 +18,82 @@ func mr(sha, pipeline string) []byte {
 		`"head_pipeline":{"id":900,"sha":"` + sha + `","status":"` + pipeline + `"}}`)
 }
 
-// TestT229_ADeploymentNeedsAPipelineThatPassedAtTheHead: a project with no
-// environment deploys nothing; with one, the fact has a state only when the
-// head pipeline passed at the head, and anything else is unread, so the
-// consequence is unknown and the merge at least held (HR-521, T-229).
+// TestT229_ADeploymentNeedsAPipelineThatPassedAtTheHead: the fact has a state
+// only when the head pipeline passed at the head, and anything else is
+// unread, so the consequence is unknown and the merge at least held (HR-521,
+// T-229).
 //
 // Covers: F756
 func TestT229_ADeploymentNeedsAPipelineThatPassedAtTheHead(t *testing.T) {
-	envs, passed, running := []byte(`[{"id":1,"name":"production"}]`), map[string]any{"id": "900", "passed": true}, map[string]any{"id": "901", "passed": false}
-	if v := Deployment(200, []byte(`[]`), running); v["state"] != "none" {
-		t.Fatalf("no environment: %v", v)
-	}
-	v := Deployment(200, envs, passed)
+	envs := []any{"production"}
+	v := Deployment(envs, map[string]any{"id": "900", "passed": true})
 	if e, _ := v["environments"].([]any); v["state"] != "verified" || len(e) != 1 || e[0] != "production" || v["pipeline"] != "900" {
 		t.Fatalf("verified: %v", v)
 	}
-	full := []byte(`[` + strings.Repeat(`{"name":"e"},`, EnvironmentsPageSize-1) + `{"name":"e"}]`)
-	for name, got := range map[string]map[string]any{
-		"running":         Deployment(200, envs, running),
-		"unread pipeline": Deployment(200, envs, Unread("no")),
-		"refused":         Deployment(403, envs, passed),
-		"not JSON":        Deployment(200, []byte(`{`), passed),
-		"bad name":        Deployment(200, []byte(`[{"name":"a\nb"}]`), passed),
-		"a full page":     Deployment(200, full, passed),
+	for name, pipeline := range map[string]map[string]any{
+		"running":         {"id": "901", "passed": false},
+		"unread pipeline": Unread("no"),
 	} {
-		if _, unread := got["unread"]; !unread {
+		if got := Deployment(envs, pipeline); got["unread"] == nil {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+}
+
+// TestT229_EnvironmentsNeverGuess: a stopped environment counts, because a
+// deploying job restarts it, and an answer that is not clearly a whole list
+// of environments is no list (HR-160, D287).
+//
+// Covers: F756
+func TestT229_EnvironmentsNeverGuess(t *testing.T) {
+	got, why := Environments(200, []byte(`[{"id":1,"name":"production","state":"stopped"}]`))
+	if why != "" || len(got) != 1 || got[0] != "production" {
+		t.Fatalf("stopped: %v %q", got, why)
+	}
+	if got, why = Environments(200, []byte(`[]`)); why != "" || len(got) != 0 {
+		t.Fatalf("none: %v %q", got, why)
+	}
+	full := []byte(`[` + strings.Repeat(`{"name":"e"},`, EnvironmentsPageSize-1) + `{"name":"e"}]`)
+	for name, c := range map[string]struct {
+		status int
+		body   []byte
+	}{
+		"refused":     {403, []byte(`[]`)},
+		"not JSON":    {200, []byte(`{`)},
+		"bad name":    {200, []byte(`[{"name":"a\nb"}]`)},
+		"a full page": {200, full},
+	} {
+		if _, why := Environments(c.status, c.body); why == "" {
+			t.Errorf("%s: read", name)
+		}
+	}
+}
+
+// TestT229_ANewProjectIsReadForItsPipelineConfiguration: no file deploys
+// nothing, and a file that mentions environment or include, in any case, or
+// one that could not be read, is unread (D287, T-229).
+//
+// Covers: F756
+func TestT229_ANewProjectIsReadForItsPipelineConfiguration(t *testing.T) {
+	if v := NoEnvironments(404, nil); v["state"] != "none" {
+		t.Fatalf("no file: %v", v)
+	}
+	if v := NoEnvironments(200, []byte("test:\n  script: go test\n")); v["state"] != "none" {
+		t.Fatalf("no deploy: %v", v)
+	}
+	for name, c := range map[string]struct {
+		status int
+		body   string
+	}{
+		"environment": {200, "deploy:\n  environment: production\n"},
+		"include":     {200, "include:\n  - project: acme/ci\n"},
+		"upper case":  {200, "ENVIRONMENT: x\n"},
+		"a comment":   {200, "# no environment here\n"},
+		"refused":     {403, ""},
+		"failed":      {500, ""},
+		"no answer":   {0, ""},
+	} {
+		if got := NoEnvironments(c.status, []byte(c.body)); got["unread"] == nil {
 			t.Errorf("%s: %v", name, got)
 		}
 	}

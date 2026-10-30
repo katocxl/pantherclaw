@@ -60,6 +60,13 @@ type Project struct {
 	// Environments are the project's available environments: a merge
 	// starts a deployment to each.
 	Environments []string `json:"environments,omitzero"`
+	// Stopped are the project's stopped environments: a merge restarts them.
+	Stopped []string `json:"stopped_environments,omitzero"`
+	// CIConfig is the file .gitlab-ci.yml at every commit, "" for none.
+	CIConfig string `json:"ci_config,omitzero"`
+	// FastForward merges without a merge commit: merge_commit_sha stays
+	// null.
+	FastForward bool `json:"fast_forward,omitzero"`
 }
 
 // Protection is one protected branch's rules.
@@ -112,6 +119,8 @@ type Faults struct {
 	// DropAnswer performs the next DropAnswer writes and then closes the
 	// connection without answering (a lost answer).
 	DropAnswer int `json:"drop_answer,omitzero"`
+	// CIConfigError answers the read of .gitlab-ci.yml with 500.
+	CIConfigError bool `json:"ci_config_error,omitzero"`
 }
 
 // Require is what a request must carry.
@@ -445,7 +454,9 @@ func (s *Server) merge(w http.ResponseWriter, r *http.Request, p *Project, m *Me
 		return
 	}
 	m.State, m.Merges = "merged", m.Merges+1
-	m.MergeCommit = fmt.Sprintf("%040x", 0xa000+m.Merges+m.IID*16)
+	if !p.FastForward {
+		m.MergeCommit = fmt.Sprintf("%040x", 0xa000+m.Merges+m.IID*16)
+	}
 	s.startDeployments(p, m)
 	s.log.Info("sim.gitlab_merged", slog.String("merge_request", mrKey(m.Project, m.IID)))
 	if s.faults.DropAnswer > 0 {

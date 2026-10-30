@@ -48,10 +48,47 @@ func (s *Server) SetDeployment(id int, status string) bool {
 // startDeployments starts a deployment of the merge commit to each of the
 // project's environments, as a pipeline on the target branch does.
 func (s *Server) startDeployments(p *Project, m *MergeRequest) {
-	for _, e := range p.Environments {
-		s.seq++
-		s.deploys[s.seq] = &Deployment{ID: s.seq, Project: p.ID, Environment: e, Ref: m.Target, SHA: m.MergeCommit, Status: "running"}
+	sha := m.MergeCommit
+	if sha == "" {
+		sha = m.SHA
 	}
+	for _, e := range slices.Concat(p.Environments, p.Stopped) {
+		s.seq++
+		s.deploys[s.seq] = &Deployment{ID: s.seq, Project: p.ID, Environment: e, Ref: m.Target, SHA: sha, Status: "running"}
+	}
+}
+
+// SetEnvironments replaces a project's environments.
+func (s *Server) SetEnvironments(project int, available, stopped []string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[project]
+	if ok {
+		p.Environments, p.Stopped = available, stopped
+	}
+	return ok
+}
+
+// SetCIConfig replaces a project's .gitlab-ci.yml, "" for none.
+func (s *Server) SetCIConfig(project int, text string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[project]
+	if ok {
+		p.CIConfig = text
+	}
+	return ok
+}
+
+// SetFastForward makes a project merge without a merge commit.
+func (s *Server) SetFastForward(project int, on bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[project]
+	if ok {
+		p.FastForward = on
+	}
+	return ok
 }
 
 // deployments answers the environments and deployments reads; it reports
@@ -63,7 +100,22 @@ func (s *Server) deployments(w http.ResponseWriter, r *http.Request, p *Project,
 		for i, e := range p.Environments {
 			out = append(out, map[string]any{"id": i + 1, "name": e, "state": "available"})
 		}
+		if r.URL.Query().Get("states") != "available" {
+			for i, e := range p.Stopped {
+				out = append(out, map[string]any{"id": len(p.Environments) + i + 1, "name": e, "state": "stopped"})
+			}
+		}
 		writeJSON(w, http.StatusOK, out)
+	case r.Method == http.MethodGet && len(rest) == 4 && rest[0] == "repository" && rest[1] == "files" && rest[2] == ".gitlab-ci.yml" && rest[3] == "raw":
+		switch {
+		case s.faults.CIConfigError:
+			writeJSON(w, http.StatusInternalServerError, msg("500 Internal Server Error"))
+		case p.CIConfig == "" || r.URL.Query().Get("ref") == "":
+			writeJSON(w, http.StatusNotFound, msg("404 File Not Found"))
+		default:
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(p.CIConfig))
+		}
 	case r.Method == http.MethodGet && len(rest) == 1 && rest[0] == "deployments":
 		out := []map[string]any{}
 		env := r.URL.Query().Get("environment")

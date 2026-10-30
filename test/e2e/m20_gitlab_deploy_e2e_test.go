@@ -12,6 +12,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
 	"github.com/katocxl/pantherclaw/internal/sim"
+	"github.com/katocxl/pantherclaw/internal/sim/gitlab"
 )
 
 // gitlabDeployRequirements has a release approver decide every deployment.
@@ -89,6 +90,70 @@ func TestT229_ADeployWithoutAVerifiedPipelineIsHeld(t *testing.T) {
 	if got := s.gitlab.sim.Deployments(sim.GitLabProject); len(got) != 0 {
 		t.Fatalf("deployments: %+v", got)
 	}
+}
+
+// TestT229_AProjectWithoutAvailableEnvironmentsStillDeploys: a stopped
+// environment is predicted, because a deploying job restarts it, and a new
+// project with no environment is held when its .gitlab-ci.yml at the head
+// mentions environment or include or cannot be read. Only a project with no
+// environment and no such file merges with no consequence (D287, T-229).
+//
+// Covers: F756
+func TestT229_AProjectWithoutAvailableEnvironmentsStillDeploys(t *testing.T) {
+	p := inProcessIdP(t)
+	s := start(t, options{budget: "1000.00", people: &p, gitlab: true})
+	d := newRangeDriver(t)
+	d.s, d.people = s, &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p}
+	d.sc = domain.Scenario{ID: "M20-STOPPED", Requires: []string{string(capGitLabMerge), string(capGitLabDeploy)}}
+	d.setupM20Connectors()
+	gl := s.gitlab.sim
+	held := func(name string) {
+		t.Helper()
+		obs := d.gitlabMerge(t, sim.GitLabUnverifiedMergeRequest, sim.GitLabUnverifiedHead)
+		if obs.Outcome != domain.OutcomeHold || !slices.Contains(obs.Reasons, "CONSEQUENCE_UNKNOWN") {
+			t.Fatalf("%s: %+v", name, obs)
+		}
+	}
+	gl.SetEnvironments(sim.GitLabProject, nil, []string{sim.GitLabEnvironment})
+	held("a stopped environment")
+	gl.SetEnvironments(sim.GitLabProject, nil, nil)
+	gl.SetCIConfig(sim.GitLabProject, "deploy:\n  script: ./deploy\n  environment: production\n")
+	held("a new project that deploys")
+	gl.SetCIConfig(sim.GitLabProject, "include:\n  - project: acme/ci\n")
+	held("a new project that includes")
+	gl.SetCIConfig(sim.GitLabProject, "test:\n  script: go test\n")
+	gl.SetFaults(gitlab.Faults{CIConfigError: true})
+	held("an unreadable configuration")
+	gl.SetFaults(gitlab.Faults{})
+	d.defaultRun = d.grantRun(gitlabMergeBounds(false), "")
+	if obs := d.gitlabMerge(t, sim.GitLabMergeRequest, sim.GitLabHead); obs.Outcome != domain.OutcomeAllow {
+		t.Fatalf("a project that deploys nothing: %+v", obs)
+	}
+	if got := gl.Deployments(sim.GitLabProject); len(got) != 0 {
+		t.Fatalf("deployments: %+v", got)
+	}
+}
+
+// TestT229_AFastForwardMergeIsNotVerifiable: GitLab names no merge commit for
+// a fast-forward merge, so the deployment has no commit to be found by and
+// the merge's downstream state says so, instead of counting as confirmed
+// (HR-451, D287).
+//
+// Covers: F756
+func TestT229_AFastForwardMergeIsNotVerifiable(t *testing.T) {
+	p := inProcessIdP(t)
+	s := start(t, options{budget: "1000.00", people: &p, gitlab: true})
+	d := newRangeDriver(t)
+	d.s, d.people = s, &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p}
+	d.sc = domain.Scenario{ID: "M20-FF", Requires: []string{string(capGitLabMerge)}}
+	d.setupM20Connectors()
+	s.gitlab.sim.SetFastForward(sim.GitLabProject, true)
+	obs := d.gitlabMerge(t, sim.GitLabMergeRequest, sim.GitLabHead)
+	if obs.Outcome != domain.OutcomeAllow {
+		t.Fatalf("merge: %+v", obs)
+	}
+	s.eventually(t, "CONFIRMED", "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", obs.TransactionID)
+	s.eventually(t, "NOT_VERIFIABLE", "SELECT coalesce(downstream_state, '') FROM pc.transactions WHERE id = $1", obs.TransactionID)
 }
 
 // TestT229_ADeploymentIsVerifiedFromGitLabsOwnRecord is the deploy's M17
