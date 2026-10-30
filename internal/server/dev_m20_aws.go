@@ -32,7 +32,7 @@ func seedAWSECSAgentConnection(ctx context.Context, cfg *Config, pool *db.Pool, 
 	if err != nil {
 		return capp.Connection{}, fmt.Errorf("dev: aws-ecs connection: %w", err)
 	}
-	if err := seedGatewayFactProvider(ctx, pool, org, gateway, c.ID, "aws-ecs.gateway"); err != nil {
+	if err := seedGatewayFactProvider(ctx, pool, org, gateway, c.ID, "awsecs.gateway"); err != nil {
 		return capp.Connection{}, fmt.Errorf("dev: aws-ecs facts: %w", err)
 	}
 	return c, nil

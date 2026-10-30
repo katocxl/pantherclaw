@@ -25,7 +25,8 @@ steps:
         service: "${fixture.aws_service}"
         task_definition: "${fixture.aws_task_definition}"
     expect:
-      outcome: BLOCKED
+      outcome: REFUSED
+      code: credential_unavailable
   # A service under another deployment controller reports no rollout, so the
   # deploy could never be verified: it is not authorized at all.
   - id: another-controller
