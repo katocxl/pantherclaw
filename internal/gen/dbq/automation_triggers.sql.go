@@ -692,7 +692,7 @@ func (q *Queries) GetAutomationDelivery(ctx context.Context, orgID ids.OrgID, iD
 
 const getAutomationDestination = `-- name: GetAutomationDestination :one
 SELECT d.org_id, d.id, d.name, d.url, d.internal, d.purposes, d.prev_until, d.state, d.created_by, d.created_at,
-       d.activated_by, d.activated_credential, d.activated_at, d.disabled_by, d.disabled_at, d.updated_at
+       d.activated_by, d.activated_credential, d.activated_at, d.disabled_by, d.disabled_at, d.updated_at, d.signature_scheme
 FROM pc.automation_destinations d
 WHERE d.org_id = $1 AND d.id = $2
 `
@@ -714,6 +714,7 @@ type GetAutomationDestinationRow struct {
 	DisabledBy          *ids.UUID
 	DisabledAt          *time.Time
 	UpdatedAt           time.Time
+	SignatureScheme     string
 }
 
 func (q *Queries) GetAutomationDestination(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetAutomationDestinationRow, error) {
@@ -736,6 +737,7 @@ func (q *Queries) GetAutomationDestination(ctx context.Context, orgID ids.OrgID,
 		&i.DisabledBy,
 		&i.DisabledAt,
 		&i.UpdatedAt,
+		&i.SignatureScheme,
 	)
 	return i, err
 }
@@ -1145,7 +1147,7 @@ func (q *Queries) LeaseAutomationDelivery(ctx context.Context, orgID ids.OrgID, 
 
 const listAutomationDestinations = `-- name: ListAutomationDestinations :many
 SELECT d.org_id, d.id, d.name, d.url, d.internal, d.purposes, d.prev_until, d.state, d.created_by, d.created_at,
-       d.activated_by, d.activated_credential, d.activated_at, d.disabled_by, d.disabled_at, d.updated_at
+       d.activated_by, d.activated_credential, d.activated_at, d.disabled_by, d.disabled_at, d.updated_at, d.signature_scheme
 FROM pc.automation_destinations d
 WHERE d.org_id = $1
 ORDER BY d.name, d.id
@@ -1169,6 +1171,7 @@ type ListAutomationDestinationsRow struct {
 	DisabledBy          *ids.UUID
 	DisabledAt          *time.Time
 	UpdatedAt           time.Time
+	SignatureScheme     string
 }
 
 func (q *Queries) ListAutomationDestinations(ctx context.Context, orgID ids.OrgID) ([]ListAutomationDestinationsRow, error) {
@@ -1197,6 +1200,7 @@ func (q *Queries) ListAutomationDestinations(ctx context.Context, orgID ids.OrgI
 			&i.DisabledBy,
 			&i.DisabledAt,
 			&i.UpdatedAt,
+			&i.SignatureScheme,
 		); err != nil {
 			return nil, err
 		}
@@ -1348,19 +1352,20 @@ func (q *Queries) ListEventSources(ctx context.Context, orgID ids.OrgID) ([]List
 }
 
 const loadAutomationDestinationSecrets = `-- name: LoadAutomationDestinationSecrets :one
-SELECT d.state, d.url, d.internal, d.purposes, d.secret, d.prev_secret, d.prev_until
+SELECT d.state, d.url, d.internal, d.purposes, d.secret, d.prev_secret, d.prev_until, d.signature_scheme
 FROM pc.automation_destinations d
 WHERE d.org_id = $1 AND d.id = $2
 `
 
 type LoadAutomationDestinationSecretsRow struct {
-	State      string
-	Url        string
-	Internal   bool
-	Purposes   []string
-	Secret     []byte
-	PrevSecret []byte
-	PrevUntil  *time.Time
+	State           string
+	Url             string
+	Internal        bool
+	Purposes        []string
+	Secret          []byte
+	PrevSecret      []byte
+	PrevUntil       *time.Time
+	SignatureScheme string
 }
 
 func (q *Queries) LoadAutomationDestinationSecrets(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (LoadAutomationDestinationSecretsRow, error) {
@@ -1374,6 +1379,7 @@ func (q *Queries) LoadAutomationDestinationSecrets(ctx context.Context, orgID id
 		&i.Secret,
 		&i.PrevSecret,
 		&i.PrevUntil,
+		&i.SignatureScheme,
 	)
 	return i, err
 }
@@ -2000,6 +2006,27 @@ func (q *Queries) ServiceAccountAutomations(ctx context.Context, orgID ids.OrgID
 		return nil, err
 	}
 	return items, nil
+}
+
+const setAutomationDestinationSignatureScheme = `-- name: SetAutomationDestinationSignatureScheme :one
+WITH old AS (
+    SELECT d.id, d.signature_scheme FROM pc.automation_destinations d
+    WHERE d.org_id = $2 AND d.id = $3 AND d.state <> 'DISABLED'
+    FOR UPDATE
+)
+UPDATE pc.automation_destinations d SET signature_scheme = $1, updated_at = now()
+FROM old
+WHERE d.org_id = $2 AND d.id = old.id
+RETURNING old.signature_scheme AS previous
+`
+
+// Opts a destination in to or out of Ed25519 signatures (G0 M20 D251,
+// HR-510); it returns the previous scheme for the audit entry.
+func (q *Queries) SetAutomationDestinationSignatureScheme(ctx context.Context, scheme string, orgID ids.OrgID, iD ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, setAutomationDestinationSignatureScheme, scheme, orgID, iD)
+	var previous string
+	err := row.Scan(&previous)
+	return previous, err
 }
 
 const setAutomationDestinationState = `-- name: SetAutomationDestinationState :execrows

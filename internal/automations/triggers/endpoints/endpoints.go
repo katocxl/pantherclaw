@@ -28,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -117,6 +118,9 @@ type Service struct {
 	clock            clock.Clock
 	log              *slog.Logger
 	public, internal *http.Client
+	// webhookKeys signs opted-in deliveries with the org's Ed25519 key (G0
+	// M20 D251); nil leaves every destination on HMAC only.
+	webhookKeys ndomain.WebhookKeys
 }
 
 // New returns the service.

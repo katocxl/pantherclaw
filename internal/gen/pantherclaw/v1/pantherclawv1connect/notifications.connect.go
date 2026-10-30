@@ -45,6 +45,9 @@ const (
 	// NotificationServiceRotateChannelSecretProcedure is the procedure name of the
 	// NotificationService's RotateChannelSecret RPC.
 	NotificationServiceRotateChannelSecretProcedure = "/pantherclaw.v1.NotificationService/RotateChannelSecret"
+	// NotificationServiceSetChannelSignatureSchemeProcedure is the procedure name of the
+	// NotificationService's SetChannelSignatureScheme RPC.
+	NotificationServiceSetChannelSignatureSchemeProcedure = "/pantherclaw.v1.NotificationService/SetChannelSignatureScheme"
 	// NotificationServiceTestChannelProcedure is the procedure name of the NotificationService's
 	// TestChannel RPC.
 	NotificationServiceTestChannelProcedure = "/pantherclaw.v1.NotificationService/TestChannel"
@@ -98,6 +101,13 @@ var (
 			Procedure:  NotificationServiceRotateChannelSecretProcedure,
 		}
 	})
+	notificationServiceSetChannelSignatureSchemeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("SetChannelSignatureScheme"),
+			Procedure:  NotificationServiceSetChannelSignatureSchemeProcedure,
+		}
+	})
 	notificationServiceTestChannelSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -138,6 +148,12 @@ type NotificationServiceClient interface {
 	// secret is returned once; the old one keeps signing for 24 hours.
 	// permission: notification.manage
 	RotateChannelSecret(context.Context, *v1.RotateChannelSecretRequest) (*v1.RotateChannelSecretResponse, error)
+	// SetChannelSignatureScheme opts a webhook channel in to Ed25519 signatures
+	// ("hmac+ed25519": a `v1a,` signature by the org's webhooks key next to the
+	// HMAC `v1,` ones) or back to HMAC only ("hmac", the default). HMAC is
+	// always sent. Audited.
+	// permission: notification.manage
+	SetChannelSignatureScheme(context.Context, *v1.SetChannelSignatureSchemeRequest) (*v1.SetChannelSignatureSchemeResponse, error)
 	// TestChannel sends a test notification to one channel.
 	// permission: notification.manage
 	TestChannel(context.Context, *v1.TestChannelRequest) (*v1.TestChannelResponse, error)
@@ -176,6 +192,12 @@ type NotificationServiceHandler interface {
 	// secret is returned once; the old one keeps signing for 24 hours.
 	// permission: notification.manage
 	RotateChannelSecret(context.Context, *v1.RotateChannelSecretRequest) (*v1.RotateChannelSecretResponse, error)
+	// SetChannelSignatureScheme opts a webhook channel in to Ed25519 signatures
+	// ("hmac+ed25519": a `v1a,` signature by the org's webhooks key next to the
+	// HMAC `v1,` ones) or back to HMAC only ("hmac", the default). HMAC is
+	// always sent. Audited.
+	// permission: notification.manage
+	SetChannelSignatureScheme(context.Context, *v1.SetChannelSignatureSchemeRequest) (*v1.SetChannelSignatureSchemeResponse, error)
 	// TestChannel sends a test notification to one channel.
 	// permission: notification.manage
 	TestChannel(context.Context, *v1.TestChannelRequest) (*v1.TestChannelResponse, error)
@@ -195,6 +217,7 @@ func RegisterNotificationServiceHandler(server *connect.Server, svc Notification
 		connect.Method{Spec: notificationServiceUpdateChannelSpec(), Handler: adapter.updateChannel},
 		connect.Method{Spec: notificationServiceDeleteChannelSpec(), Handler: adapter.deleteChannel},
 		connect.Method{Spec: notificationServiceRotateChannelSecretSpec(), Handler: adapter.rotateChannelSecret},
+		connect.Method{Spec: notificationServiceSetChannelSignatureSchemeSpec(), Handler: adapter.setChannelSignatureScheme},
 		connect.Method{Spec: notificationServiceTestChannelSpec(), Handler: adapter.testChannel},
 		connect.Method{Spec: notificationServiceListDeliveriesSpec(), Handler: adapter.listDeliveries},
 	)
@@ -225,6 +248,10 @@ func (UnimplementedNotificationServiceHandler) DeleteChannel(context.Context, *v
 
 func (UnimplementedNotificationServiceHandler) RotateChannelSecret(context.Context, *v1.RotateChannelSecretRequest) (*v1.RotateChannelSecretResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.RotateChannelSecret is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) SetChannelSignatureScheme(context.Context, *v1.SetChannelSignatureSchemeRequest) (*v1.SetChannelSignatureSchemeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.SetChannelSignatureScheme is not implemented")
 }
 
 func (UnimplementedNotificationServiceHandler) TestChannel(context.Context, *v1.TestChannelRequest) (*v1.TestChannelResponse, error) {
@@ -282,6 +309,14 @@ func (c *notificationServiceClient) DeleteChannel(ctx context.Context, req *v1.D
 func (c *notificationServiceClient) RotateChannelSecret(ctx context.Context, req *v1.RotateChannelSecretRequest) (*v1.RotateChannelSecretResponse, error) {
 	var res v1.RotateChannelSecretResponse
 	if err := c.client.CallUnary(ctx, notificationServiceRotateChannelSecretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) SetChannelSignatureScheme(ctx context.Context, req *v1.SetChannelSignatureSchemeRequest) (*v1.SetChannelSignatureSchemeResponse, error) {
+	var res v1.SetChannelSignatureSchemeResponse
+	if err := c.client.CallUnary(ctx, notificationServiceSetChannelSignatureSchemeSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -371,6 +406,18 @@ func (h notificationServiceHandler) rotateChannelSecret(ctx context.Context, _ c
 		return err
 	}
 	res, err := h.svc.RotateChannelSecret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) setChannelSignatureScheme(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetChannelSignatureSchemeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetChannelSignatureScheme(ctx, &req)
 	if err != nil {
 		return err
 	}

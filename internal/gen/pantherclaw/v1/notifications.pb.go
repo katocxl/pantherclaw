@@ -487,9 +487,11 @@ type Channel struct {
 	// Last change.
 	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
 	// slack_app channels: the configuration, without the bot token.
-	SlackApp      *SlackAppConfig `protobuf:"bytes,18,opt,name=slack_app,json=slackApp,proto3" json:"slack_app,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SlackApp *SlackAppConfig `protobuf:"bytes,18,opt,name=slack_app,json=slackApp,proto3" json:"slack_app,omitempty"`
+	// Webhook channels: "hmac" (the default) or "hmac+ed25519".
+	SignatureScheme string `protobuf:"bytes,19,opt,name=signature_scheme,json=signatureScheme,proto3" json:"signature_scheme,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Channel) Reset() {
@@ -646,6 +648,13 @@ func (x *Channel) GetSlackApp() *SlackAppConfig {
 		return x.SlackApp
 	}
 	return nil
+}
+
+func (x *Channel) GetSignatureScheme() string {
+	if x != nil {
+		return x.SignatureScheme
+	}
+	return ""
 }
 
 // Delivery is one delivery of a notification.
@@ -1713,6 +1722,117 @@ func (x *ListDeliveriesResponse) GetNextPageToken() string {
 	return ""
 }
 
+// SetChannelSignatureSchemeRequest names a webhook channel and its scheme.
+type SetChannelSignatureSchemeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Channel id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// "hmac" or "hmac+ed25519".
+	SignatureScheme string `protobuf:"bytes,2,opt,name=signature_scheme,json=signatureScheme,proto3" json:"signature_scheme,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SetChannelSignatureSchemeRequest) Reset() {
+	*x = SetChannelSignatureSchemeRequest{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetChannelSignatureSchemeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetChannelSignatureSchemeRequest) ProtoMessage() {}
+
+func (x *SetChannelSignatureSchemeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetChannelSignatureSchemeRequest.ProtoReflect.Descriptor instead.
+func (*SetChannelSignatureSchemeRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SetChannelSignatureSchemeRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SetChannelSignatureSchemeRequest) GetSignatureScheme() string {
+	if x != nil {
+		return x.SignatureScheme
+	}
+	return ""
+}
+
+// SetChannelSignatureSchemeResponse is the channel and where receivers fetch the
+// org's webhook keys.
+type SetChannelSignatureSchemeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The channel.
+	Channel *Channel `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	// The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys.
+	JwksUrl       string `protobuf:"bytes,2,opt,name=jwks_url,json=jwksUrl,proto3" json:"jwks_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetChannelSignatureSchemeResponse) Reset() {
+	*x = SetChannelSignatureSchemeResponse{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetChannelSignatureSchemeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetChannelSignatureSchemeResponse) ProtoMessage() {}
+
+func (x *SetChannelSignatureSchemeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetChannelSignatureSchemeResponse.ProtoReflect.Descriptor instead.
+func (*SetChannelSignatureSchemeResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *SetChannelSignatureSchemeResponse) GetChannel() *Channel {
+	if x != nil {
+		return x.Channel
+	}
+	return nil
+}
+
+func (x *SetChannelSignatureSchemeResponse) GetJwksUrl() string {
+	if x != nil {
+		return x.JwksUrl
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_notifications_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
@@ -1724,7 +1844,7 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\n" +
 	"data_level\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.SlackDataLevelB\b\xbaH\x05\x82\x01\x02\x10\x01R\tdataLevel\x126\n" +
 	"\ateam_id\x18\x03 \x01(\tB\x1d\xbaH\x1ar\x18\x18 2\x14^(T[A-Z0-9]{4,30})?$R\x06teamId\x12E\n" +
-	"\tbot_token\x18\x04 \x01(\tB(\xbaH%r#\x18\x80\x022\x1e^(xoxb-[A-Za-z0-9-]{20,250})?$R\bbotToken\"\x90\a\n" +
+	"\tbot_token\x18\x04 \x01(\tB(\xbaH%r#\x18\x80\x022\x1e^(xoxb-[A-Za-z0-9-]{20,250})?$R\bbotToken\"\xbb\a\n" +
 	"\aChannel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
@@ -1747,7 +1867,8 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\x12;\n" +
-	"\tslack_app\x18\x12 \x01(\v2\x1e.pantherclaw.v1.SlackAppConfigR\bslackApp\"\xbf\x04\n" +
+	"\tslack_app\x18\x12 \x01(\v2\x1e.pantherclaw.v1.SlackAppConfigR\bslackApp\x12)\n" +
+	"\x10signature_scheme\x18\x13 \x01(\tR\x0fsignatureScheme\"\xbf\x04\n" +
 	"\bDelivery\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fnotification_id\x18\x02 \x01(\tR\x0enotificationId\x12+\n" +
@@ -1833,7 +1954,13 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\n" +
 	"deliveries\x18\x01 \x03(\v2\x18.pantherclaw.v1.DeliveryR\n" +
 	"deliveries\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xa7\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x82\x01\n" +
+	" SetChannelSignatureSchemeRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12D\n" +
+	"\x10signature_scheme\x18\x02 \x01(\tB\x19\xbaH\x16r\x14R\x04hmacR\fhmac+ed25519R\x0fsignatureScheme\"q\n" +
+	"!SetChannelSignatureSchemeResponse\x121\n" +
+	"\achannel\x18\x01 \x01(\v2\x17.pantherclaw.v1.ChannelR\achannel\x12\x19\n" +
+	"\bjwks_url\x18\x02 \x01(\tR\ajwksUrl*\xa7\x01\n" +
 	"\vChannelKind\x12\x1c\n" +
 	"\x18CHANNEL_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10CHANNEL_KIND_LOG\x10\x01\x12\x16\n" +
@@ -1867,7 +1994,7 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\x16DELIVERY_STATE_EXPIRED\x10\x04\x12\x1a\n" +
 	"\x16DELIVERY_STATE_SKIPPED\x10\x05\x12\x1a\n" +
 	"\x16DELIVERY_STATE_DROPPED\x10\x06\x12\x1b\n" +
-	"\x17DELIVERY_STATE_CANCELED\x10\a2\x97\x06\n" +
+	"\x17DELIVERY_STATE_CANCELED\x10\a2\x9a\a\n" +
 	"\x13NotificationService\x12\\\n" +
 	"\rCreateChannel\x12$.pantherclaw.v1.CreateChannelRequest\x1a%.pantherclaw.v1.CreateChannelResponse\x12X\n" +
 	"\n" +
@@ -1875,7 +2002,8 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\fListChannels\x12#.pantherclaw.v1.ListChannelsRequest\x1a$.pantherclaw.v1.ListChannelsResponse\"\x03\x90\x02\x01\x12\\\n" +
 	"\rUpdateChannel\x12$.pantherclaw.v1.UpdateChannelRequest\x1a%.pantherclaw.v1.UpdateChannelResponse\x12\\\n" +
 	"\rDeleteChannel\x12$.pantherclaw.v1.DeleteChannelRequest\x1a%.pantherclaw.v1.DeleteChannelResponse\x12n\n" +
-	"\x13RotateChannelSecret\x12*.pantherclaw.v1.RotateChannelSecretRequest\x1a+.pantherclaw.v1.RotateChannelSecretResponse\x12V\n" +
+	"\x13RotateChannelSecret\x12*.pantherclaw.v1.RotateChannelSecretRequest\x1a+.pantherclaw.v1.RotateChannelSecretResponse\x12\x80\x01\n" +
+	"\x19SetChannelSignatureScheme\x120.pantherclaw.v1.SetChannelSignatureSchemeRequest\x1a1.pantherclaw.v1.SetChannelSignatureSchemeResponse\x12V\n" +
 	"\vTestChannel\x12\".pantherclaw.v1.TestChannelRequest\x1a#.pantherclaw.v1.TestChannelResponse\x12d\n" +
 	"\x0eListDeliveries\x12%.pantherclaw.v1.ListDeliveriesRequest\x1a&.pantherclaw.v1.ListDeliveriesResponse\"\x03\x90\x02\x01B\xcb\x01\n" +
 	"\x12com.pantherclaw.v1B\x12NotificationsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
@@ -1893,34 +2021,36 @@ func file_pantherclaw_v1_notifications_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_notifications_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_pantherclaw_v1_notifications_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_pantherclaw_v1_notifications_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_pantherclaw_v1_notifications_proto_goTypes = []any{
-	(ChannelKind)(0),                    // 0: pantherclaw.v1.ChannelKind
-	(SlackDataLevel)(0),                 // 1: pantherclaw.v1.SlackDataLevel
-	(NotificationSeverity)(0),           // 2: pantherclaw.v1.NotificationSeverity
-	(ChannelState)(0),                   // 3: pantherclaw.v1.ChannelState
-	(ChannelHealth)(0),                  // 4: pantherclaw.v1.ChannelHealth
-	(DeliveryState)(0),                  // 5: pantherclaw.v1.DeliveryState
-	(*SlackAppConfig)(nil),              // 6: pantherclaw.v1.SlackAppConfig
-	(*Channel)(nil),                     // 7: pantherclaw.v1.Channel
-	(*Delivery)(nil),                    // 8: pantherclaw.v1.Delivery
-	(*CreateChannelRequest)(nil),        // 9: pantherclaw.v1.CreateChannelRequest
-	(*CreateChannelResponse)(nil),       // 10: pantherclaw.v1.CreateChannelResponse
-	(*GetChannelRequest)(nil),           // 11: pantherclaw.v1.GetChannelRequest
-	(*GetChannelResponse)(nil),          // 12: pantherclaw.v1.GetChannelResponse
-	(*ListChannelsRequest)(nil),         // 13: pantherclaw.v1.ListChannelsRequest
-	(*ListChannelsResponse)(nil),        // 14: pantherclaw.v1.ListChannelsResponse
-	(*UpdateChannelRequest)(nil),        // 15: pantherclaw.v1.UpdateChannelRequest
-	(*UpdateChannelResponse)(nil),       // 16: pantherclaw.v1.UpdateChannelResponse
-	(*DeleteChannelRequest)(nil),        // 17: pantherclaw.v1.DeleteChannelRequest
-	(*DeleteChannelResponse)(nil),       // 18: pantherclaw.v1.DeleteChannelResponse
-	(*RotateChannelSecretRequest)(nil),  // 19: pantherclaw.v1.RotateChannelSecretRequest
-	(*RotateChannelSecretResponse)(nil), // 20: pantherclaw.v1.RotateChannelSecretResponse
-	(*TestChannelRequest)(nil),          // 21: pantherclaw.v1.TestChannelRequest
-	(*TestChannelResponse)(nil),         // 22: pantherclaw.v1.TestChannelResponse
-	(*ListDeliveriesRequest)(nil),       // 23: pantherclaw.v1.ListDeliveriesRequest
-	(*ListDeliveriesResponse)(nil),      // 24: pantherclaw.v1.ListDeliveriesResponse
-	(*timestamppb.Timestamp)(nil),       // 25: google.protobuf.Timestamp
+	(ChannelKind)(0),                          // 0: pantherclaw.v1.ChannelKind
+	(SlackDataLevel)(0),                       // 1: pantherclaw.v1.SlackDataLevel
+	(NotificationSeverity)(0),                 // 2: pantherclaw.v1.NotificationSeverity
+	(ChannelState)(0),                         // 3: pantherclaw.v1.ChannelState
+	(ChannelHealth)(0),                        // 4: pantherclaw.v1.ChannelHealth
+	(DeliveryState)(0),                        // 5: pantherclaw.v1.DeliveryState
+	(*SlackAppConfig)(nil),                    // 6: pantherclaw.v1.SlackAppConfig
+	(*Channel)(nil),                           // 7: pantherclaw.v1.Channel
+	(*Delivery)(nil),                          // 8: pantherclaw.v1.Delivery
+	(*CreateChannelRequest)(nil),              // 9: pantherclaw.v1.CreateChannelRequest
+	(*CreateChannelResponse)(nil),             // 10: pantherclaw.v1.CreateChannelResponse
+	(*GetChannelRequest)(nil),                 // 11: pantherclaw.v1.GetChannelRequest
+	(*GetChannelResponse)(nil),                // 12: pantherclaw.v1.GetChannelResponse
+	(*ListChannelsRequest)(nil),               // 13: pantherclaw.v1.ListChannelsRequest
+	(*ListChannelsResponse)(nil),              // 14: pantherclaw.v1.ListChannelsResponse
+	(*UpdateChannelRequest)(nil),              // 15: pantherclaw.v1.UpdateChannelRequest
+	(*UpdateChannelResponse)(nil),             // 16: pantherclaw.v1.UpdateChannelResponse
+	(*DeleteChannelRequest)(nil),              // 17: pantherclaw.v1.DeleteChannelRequest
+	(*DeleteChannelResponse)(nil),             // 18: pantherclaw.v1.DeleteChannelResponse
+	(*RotateChannelSecretRequest)(nil),        // 19: pantherclaw.v1.RotateChannelSecretRequest
+	(*RotateChannelSecretResponse)(nil),       // 20: pantherclaw.v1.RotateChannelSecretResponse
+	(*TestChannelRequest)(nil),                // 21: pantherclaw.v1.TestChannelRequest
+	(*TestChannelResponse)(nil),               // 22: pantherclaw.v1.TestChannelResponse
+	(*ListDeliveriesRequest)(nil),             // 23: pantherclaw.v1.ListDeliveriesRequest
+	(*ListDeliveriesResponse)(nil),            // 24: pantherclaw.v1.ListDeliveriesResponse
+	(*SetChannelSignatureSchemeRequest)(nil),  // 25: pantherclaw.v1.SetChannelSignatureSchemeRequest
+	(*SetChannelSignatureSchemeResponse)(nil), // 26: pantherclaw.v1.SetChannelSignatureSchemeResponse
+	(*timestamppb.Timestamp)(nil),             // 27: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_notifications_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.SlackAppConfig.data_level:type_name -> pantherclaw.v1.SlackDataLevel
@@ -1928,17 +2058,17 @@ var file_pantherclaw_v1_notifications_proto_depIdxs = []int32{
 	3,  // 2: pantherclaw.v1.Channel.state:type_name -> pantherclaw.v1.ChannelState
 	2,  // 3: pantherclaw.v1.Channel.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
 	4,  // 4: pantherclaw.v1.Channel.health:type_name -> pantherclaw.v1.ChannelHealth
-	25, // 5: pantherclaw.v1.Channel.last_success_time:type_name -> google.protobuf.Timestamp
-	25, // 6: pantherclaw.v1.Channel.last_failure_time:type_name -> google.protobuf.Timestamp
-	25, // 7: pantherclaw.v1.Channel.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
-	25, // 8: pantherclaw.v1.Channel.create_time:type_name -> google.protobuf.Timestamp
-	25, // 9: pantherclaw.v1.Channel.update_time:type_name -> google.protobuf.Timestamp
+	27, // 5: pantherclaw.v1.Channel.last_success_time:type_name -> google.protobuf.Timestamp
+	27, // 6: pantherclaw.v1.Channel.last_failure_time:type_name -> google.protobuf.Timestamp
+	27, // 7: pantherclaw.v1.Channel.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
+	27, // 8: pantherclaw.v1.Channel.create_time:type_name -> google.protobuf.Timestamp
+	27, // 9: pantherclaw.v1.Channel.update_time:type_name -> google.protobuf.Timestamp
 	6,  // 10: pantherclaw.v1.Channel.slack_app:type_name -> pantherclaw.v1.SlackAppConfig
 	0,  // 11: pantherclaw.v1.Delivery.kind:type_name -> pantherclaw.v1.ChannelKind
 	5,  // 12: pantherclaw.v1.Delivery.state:type_name -> pantherclaw.v1.DeliveryState
-	25, // 13: pantherclaw.v1.Delivery.create_time:type_name -> google.protobuf.Timestamp
-	25, // 14: pantherclaw.v1.Delivery.next_attempt_time:type_name -> google.protobuf.Timestamp
-	25, // 15: pantherclaw.v1.Delivery.finish_time:type_name -> google.protobuf.Timestamp
+	27, // 13: pantherclaw.v1.Delivery.create_time:type_name -> google.protobuf.Timestamp
+	27, // 14: pantherclaw.v1.Delivery.next_attempt_time:type_name -> google.protobuf.Timestamp
+	27, // 15: pantherclaw.v1.Delivery.finish_time:type_name -> google.protobuf.Timestamp
 	0,  // 16: pantherclaw.v1.CreateChannelRequest.kind:type_name -> pantherclaw.v1.ChannelKind
 	2,  // 17: pantherclaw.v1.CreateChannelRequest.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
 	6,  // 18: pantherclaw.v1.CreateChannelRequest.slack_app:type_name -> pantherclaw.v1.SlackAppConfig
@@ -1948,30 +2078,33 @@ var file_pantherclaw_v1_notifications_proto_depIdxs = []int32{
 	7,  // 22: pantherclaw.v1.ListChannelsResponse.channels:type_name -> pantherclaw.v1.Channel
 	2,  // 23: pantherclaw.v1.UpdateChannelRequest.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
 	7,  // 24: pantherclaw.v1.UpdateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
-	25, // 25: pantherclaw.v1.RotateChannelSecretResponse.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
+	27, // 25: pantherclaw.v1.RotateChannelSecretResponse.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
 	5,  // 26: pantherclaw.v1.ListDeliveriesRequest.state:type_name -> pantherclaw.v1.DeliveryState
 	8,  // 27: pantherclaw.v1.ListDeliveriesResponse.deliveries:type_name -> pantherclaw.v1.Delivery
-	9,  // 28: pantherclaw.v1.NotificationService.CreateChannel:input_type -> pantherclaw.v1.CreateChannelRequest
-	11, // 29: pantherclaw.v1.NotificationService.GetChannel:input_type -> pantherclaw.v1.GetChannelRequest
-	13, // 30: pantherclaw.v1.NotificationService.ListChannels:input_type -> pantherclaw.v1.ListChannelsRequest
-	15, // 31: pantherclaw.v1.NotificationService.UpdateChannel:input_type -> pantherclaw.v1.UpdateChannelRequest
-	17, // 32: pantherclaw.v1.NotificationService.DeleteChannel:input_type -> pantherclaw.v1.DeleteChannelRequest
-	19, // 33: pantherclaw.v1.NotificationService.RotateChannelSecret:input_type -> pantherclaw.v1.RotateChannelSecretRequest
-	21, // 34: pantherclaw.v1.NotificationService.TestChannel:input_type -> pantherclaw.v1.TestChannelRequest
-	23, // 35: pantherclaw.v1.NotificationService.ListDeliveries:input_type -> pantherclaw.v1.ListDeliveriesRequest
-	10, // 36: pantherclaw.v1.NotificationService.CreateChannel:output_type -> pantherclaw.v1.CreateChannelResponse
-	12, // 37: pantherclaw.v1.NotificationService.GetChannel:output_type -> pantherclaw.v1.GetChannelResponse
-	14, // 38: pantherclaw.v1.NotificationService.ListChannels:output_type -> pantherclaw.v1.ListChannelsResponse
-	16, // 39: pantherclaw.v1.NotificationService.UpdateChannel:output_type -> pantherclaw.v1.UpdateChannelResponse
-	18, // 40: pantherclaw.v1.NotificationService.DeleteChannel:output_type -> pantherclaw.v1.DeleteChannelResponse
-	20, // 41: pantherclaw.v1.NotificationService.RotateChannelSecret:output_type -> pantherclaw.v1.RotateChannelSecretResponse
-	22, // 42: pantherclaw.v1.NotificationService.TestChannel:output_type -> pantherclaw.v1.TestChannelResponse
-	24, // 43: pantherclaw.v1.NotificationService.ListDeliveries:output_type -> pantherclaw.v1.ListDeliveriesResponse
-	36, // [36:44] is the sub-list for method output_type
-	28, // [28:36] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	7,  // 28: pantherclaw.v1.SetChannelSignatureSchemeResponse.channel:type_name -> pantherclaw.v1.Channel
+	9,  // 29: pantherclaw.v1.NotificationService.CreateChannel:input_type -> pantherclaw.v1.CreateChannelRequest
+	11, // 30: pantherclaw.v1.NotificationService.GetChannel:input_type -> pantherclaw.v1.GetChannelRequest
+	13, // 31: pantherclaw.v1.NotificationService.ListChannels:input_type -> pantherclaw.v1.ListChannelsRequest
+	15, // 32: pantherclaw.v1.NotificationService.UpdateChannel:input_type -> pantherclaw.v1.UpdateChannelRequest
+	17, // 33: pantherclaw.v1.NotificationService.DeleteChannel:input_type -> pantherclaw.v1.DeleteChannelRequest
+	19, // 34: pantherclaw.v1.NotificationService.RotateChannelSecret:input_type -> pantherclaw.v1.RotateChannelSecretRequest
+	25, // 35: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:input_type -> pantherclaw.v1.SetChannelSignatureSchemeRequest
+	21, // 36: pantherclaw.v1.NotificationService.TestChannel:input_type -> pantherclaw.v1.TestChannelRequest
+	23, // 37: pantherclaw.v1.NotificationService.ListDeliveries:input_type -> pantherclaw.v1.ListDeliveriesRequest
+	10, // 38: pantherclaw.v1.NotificationService.CreateChannel:output_type -> pantherclaw.v1.CreateChannelResponse
+	12, // 39: pantherclaw.v1.NotificationService.GetChannel:output_type -> pantherclaw.v1.GetChannelResponse
+	14, // 40: pantherclaw.v1.NotificationService.ListChannels:output_type -> pantherclaw.v1.ListChannelsResponse
+	16, // 41: pantherclaw.v1.NotificationService.UpdateChannel:output_type -> pantherclaw.v1.UpdateChannelResponse
+	18, // 42: pantherclaw.v1.NotificationService.DeleteChannel:output_type -> pantherclaw.v1.DeleteChannelResponse
+	20, // 43: pantherclaw.v1.NotificationService.RotateChannelSecret:output_type -> pantherclaw.v1.RotateChannelSecretResponse
+	26, // 44: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:output_type -> pantherclaw.v1.SetChannelSignatureSchemeResponse
+	22, // 45: pantherclaw.v1.NotificationService.TestChannel:output_type -> pantherclaw.v1.TestChannelResponse
+	24, // 46: pantherclaw.v1.NotificationService.ListDeliveries:output_type -> pantherclaw.v1.ListDeliveriesResponse
+	38, // [38:47] is the sub-list for method output_type
+	29, // [29:38] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_notifications_proto_init() }
@@ -1986,7 +2119,7 @@ func file_pantherclaw_v1_notifications_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_notifications_proto_rawDesc), len(file_pantherclaw_v1_notifications_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

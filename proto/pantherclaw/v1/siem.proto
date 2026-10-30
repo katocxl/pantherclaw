@@ -39,6 +39,12 @@ service SIEMService {
   // new one once; the old one also signs for 24 hours (a person only).
   // permission: siem.manage
   rpc RotateSIEMDestinationSecret(RotateSIEMDestinationSecretRequest) returns (RotateSIEMDestinationSecretResponse);
+  // SetSIEMDestinationSignatureScheme opts a destination in to Ed25519
+  // signatures ("hmac+ed25519": a `v1a,` signature by the org's webhooks key
+  // next to the HMAC `v1,` ones) or back to HMAC only ("hmac", the default).
+  // HMAC is always sent. Audited (a person only).
+  // permission: siem.manage
+  rpc SetSIEMDestinationSignatureScheme(SetSIEMDestinationSignatureSchemeRequest) returns (SetSIEMDestinationSignatureSchemeResponse);
   // RetrySIEMDestination tries the destination's waiting batch again now,
   // with a fresh retry schedule (a person only).
   // permission: siem.manage
@@ -105,6 +111,8 @@ message SIEMDestination {
   // When the previous signing secret stops signing; unset without a
   // rotation in progress.
   google.protobuf.Timestamp rotation_end_time = 25;
+  // "hmac" (the default) or "hmac+ed25519".
+  string signature_scheme = 26;
 }
 
 // CreateSIEMDestinationRequest describes a destination.
@@ -270,4 +278,26 @@ message SIEMBatch {
 message ListSIEMBatchesResponse {
   // Batches.
   repeated SIEMBatch batches = 1;
+}
+
+// SetSIEMDestinationSignatureSchemeRequest names a destination and its scheme.
+message SetSIEMDestinationSignatureSchemeRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "hmac" or "hmac+ed25519".
+  string signature_scheme = 2 [(buf.validate.field).string = {
+    in: [
+      "hmac",
+      "hmac+ed25519"
+    ]
+  }];
+}
+
+// SetSIEMDestinationSignatureSchemeResponse is the destination and where receivers fetch the
+// org's webhook keys.
+message SetSIEMDestinationSignatureSchemeResponse {
+  // The destination.
+  SIEMDestination destination = 1;
+  // The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys.
+  string jwks_url = 2;
 }

@@ -700,6 +700,9 @@ type apiDeps struct {
 	// cel are the configured CEL limits (cel).
 	cel       celenv.Limits
 	reg       *keys.Registry
+	// webhookKeys serves the per-org webhook JWKS (G0 M20 D251); nil serves
+	// an empty set.
+	webhookKeys webhookJWKS
 	log       *slog.Logger
 	authority *authority.Service
 	billing   *billing.Service
@@ -891,6 +894,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		d.web.MountAccountDeletion(mux, d.ui.deletion)
 	}
 	mountM14Data(mux, d)
+	mountWebhookJWKS(mux, d.webhookKeys, log)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok\n")

@@ -100,6 +100,9 @@ type Service struct {
 	// M14 D22); a simulator only in dev and tests.
 	slackBase string
 	slackHTTP *http.Client
+	// webhookKeys signs opted-in webhooks with the org's Ed25519 key (G0
+	// M20 D251); nil leaves every destination on HMAC only.
+	webhookKeys domain.WebhookKeys
 }
 
 // New returns the service. jc may be an insert-only client (API role).
