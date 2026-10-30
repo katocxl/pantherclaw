@@ -89,6 +89,10 @@ enum ChannelKind {
   // place (G0 M14 D22, Team edition): minimal data and a link button only,
   // never a decision in Slack.
   CHANNEL_KIND_SLACK_APP = 5;
+  // A Teams bot posting link-only Adaptive Cards to one standard channel (G0
+  // M20 D256, Team edition), activated with a step-up; never a decision in
+  // Teams.
+  CHANNEL_KIND_TEAMS_APP = 6;
 }
 
 // SlackDataLevel is how much a Slack approval card shows (G0 M14 D23).
@@ -290,6 +294,9 @@ message CreateChannelRequest {
   // slack_app channels: the configuration, with the bot token. Required
   // for, and only for, a slack_app channel.
   SlackAppConfig slack_app = 7;
+  // teams_app channels: the configuration, with the bot's client secret
+  // (G0 M20 D256). Required for, and only for, a teams_app channel.
+  TeamsAppConfig teams_app = 8;
 }
 
 // CreateChannelResponse returns the channel and, for a webhook channel, the
@@ -517,4 +524,25 @@ message ListChatLinksRequest {}
 
 message ListChatLinksResponse {
   repeated ChatLink links = 1;
+}
+
+// TeamsAppConfig is a teams_app channel's configuration (G0 M20 D256).
+message TeamsAppConfig {
+  // The Entra tenant the bot is installed in.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  // The team's General channel id and the channel the cards go to.
+  string team_id = 2 [(buf.validate.field).string.pattern = "^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$"];
+  string channel_id = 3 [(buf.validate.field).string.pattern = "^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$"];
+  // The bot's Microsoft App ID.
+  string app_id = 4 [(buf.validate.field).string.uuid = true];
+  // The bot's client secret; input only, never returned.
+  string client_secret = 5 [(buf.validate.field).string = {
+    min_len: 16
+    max_len: 512
+  }];
+  // The Bot Framework service URL (https).
+  string service_url = 6 [(buf.validate.field).string = {
+    max_len: 512
+    prefix: "https://"
+  }];
 }

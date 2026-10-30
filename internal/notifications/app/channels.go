@@ -41,6 +41,9 @@ type NewChannel struct {
 	CreatedBy     string
 	// SlackApp is a slack_app channel's configuration, with its bot token.
 	SlackApp *domain.SlackAppConfig
+	// TeamsApp is a teams_app channel's configuration, with its client
+	// secret (G0 M20 D256).
+	TeamsApp *domain.TeamsAppConfig
 }
 
 // CreatedChannel is a new channel. Secret is the webhook signing secret,
@@ -64,7 +67,8 @@ func (s *Service) CreateChannelTx(ctx context.Context, tx db.TenantTx, in NewCha
 	}
 	// Fields that do not belong to the kind are refused, not ignored.
 	if (in.Kind != domain.KindEmail && in.RecipientRole != "") || (!in.Kind.HasSecret() && in.URL != "") ||
-		(in.Kind == domain.KindSlackApp) != (in.SlackApp != nil) || (in.Kind == domain.KindSlackApp && in.URL != "") {
+		(in.Kind == domain.KindSlackApp) != (in.SlackApp != nil) || (in.Kind == domain.KindSlackApp && in.URL != "") ||
+		(in.Kind == domain.KindTeamsApp) != (in.TeamsApp != nil) || (in.Kind == domain.KindTeamsApp && in.URL != "") {
 		return CreatedChannel{}, domain.ErrInvalid
 	}
 	out := CreatedChannel{ID: ids.NewV7()}
@@ -98,6 +102,11 @@ func (s *Service) CreateChannelTx(ctx context.Context, tx db.TenantTx, in NewCha
 			return CreatedChannel{}, err
 		}
 		plain = []byte(in.SlackApp.BotToken)
+	case domain.KindTeamsApp:
+		if err := in.TeamsApp.Check(); err != nil {
+			return CreatedChannel{}, err
+		}
+		plain = []byte(in.TeamsApp.ClientSecret)
 	case domain.KindLog:
 		// nothing to store beyond the subscription
 	}
@@ -117,6 +126,9 @@ func (s *Service) CreateChannelTx(ctx context.Context, tx db.TenantTx, in NewCha
 			OrgID: in.Org, ChannelRecordID: out.ID, SlackChannel: in.SlackApp.ChannelID, DataLevel: in.SlackApp.DataLevel,
 			DirectMessages: in.SlackApp.DirectMessages, AllowedEmailDomains: emptyIfNil(in.SlackApp.AllowedEmailDomains),
 		})
+	}
+	if err == nil && in.Kind == domain.KindTeamsApp {
+		err = s.insertTeamsApp(ctx, tx, in.Org, out.ID, *in.TeamsApp)
 	}
 	return out, err
 }

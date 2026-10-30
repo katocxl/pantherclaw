@@ -37,6 +37,7 @@ var (
 		pantherclawv1.ChannelKind_CHANNEL_KIND_LOG: domain.KindLog, pantherclawv1.ChannelKind_CHANNEL_KIND_EMAIL: domain.KindEmail,
 		pantherclawv1.ChannelKind_CHANNEL_KIND_SLACK: domain.KindSlack, pantherclawv1.ChannelKind_CHANNEL_KIND_WEBHOOK: domain.KindWebhook,
 		pantherclawv1.ChannelKind_CHANNEL_KIND_SLACK_APP: domain.KindSlackApp,
+		pantherclawv1.ChannelKind_CHANNEL_KIND_TEAMS_APP: domain.KindTeamsApp,
 	}
 	severities = map[pantherclawv1.NotificationSeverity]domain.Severity{
 		pantherclawv1.NotificationSeverity_NOTIFICATION_SEVERITY_INFO:     domain.Info,
@@ -155,6 +156,7 @@ func (h *Handler) CreateChannel(ctx context.Context, req *pantherclawv1.CreateCh
 		Name: req.GetName(), Kind: kinds[req.GetKind()], EventTypes: req.GetEventTypes(), MinSeverity: sev,
 		RecipientRole: req.GetRecipientRole(), URL: req.GetUrl(),
 		SlackApp: slackAppIn(req.GetSlackApp()),
+		TeamsApp: teamsAppIn(req.GetTeamsApp()),
 	})
 	if err != nil {
 		return nil, err

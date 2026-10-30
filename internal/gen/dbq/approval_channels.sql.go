@@ -15,6 +15,38 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const activateTeamsAppChannel = `-- name: ActivateTeamsAppChannel :execrows
+UPDATE pc.teams_app_channels
+SET state = 'ACTIVE', membership_type = 'standard', activated_by = $1,
+    activated_credential = $2, last_checked_at = now()
+WHERE org_id = $3 AND channel_record_id = $4 AND state = 'PENDING_ACTIVATION'
+  AND updated_at = $5
+`
+
+type ActivateTeamsAppChannelParams struct {
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	SeenUpdatedAt       time.Time
+}
+
+// The guard of 00244 sets the time and refuses a channel that is not
+// standard; a channel activated or changed meanwhile is not activated.
+func (q *Queries) ActivateTeamsAppChannel(ctx context.Context, arg ActivateTeamsAppChannelParams) (int64, error) {
+	result, err := q.db.Exec(ctx, activateTeamsAppChannel,
+		arg.ActivatedBy,
+		arg.ActivatedCredential,
+		arg.OrgID,
+		arg.ChannelRecordID,
+		arg.SeenUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimSlackDM = `-- name: ClaimSlackDM :execrows
 INSERT INTO pc.slack_direct_messages (org_id, id, request_id, user_id, channel_record_id)
 VALUES ($1, $2, $3, $4, $5)
@@ -36,6 +68,32 @@ func (q *Queries) ClaimSlackDM(ctx context.Context, arg ClaimSlackDMParams) (int
 		arg.ID,
 		arg.RequestID,
 		arg.UserID,
+		arg.ChannelRecordID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const claimTeamsCard = `-- name: ClaimTeamsCard :execrows
+INSERT INTO pc.teams_cards (org_id, card_id, request_id, channel_record_id)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (org_id, request_id, channel_record_id) DO NOTHING
+`
+
+type ClaimTeamsCardParams struct {
+	OrgID           ids.OrgID
+	CardID          ids.UUID
+	RequestID       ids.UUID
+	ChannelRecordID ids.UUID
+}
+
+func (q *Queries) ClaimTeamsCard(ctx context.Context, arg ClaimTeamsCardParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimTeamsCard,
+		arg.OrgID,
+		arg.CardID,
+		arg.RequestID,
 		arg.ChannelRecordID,
 	)
 	if err != nil {
@@ -131,6 +189,87 @@ func (q *Queries) GetSlackDM(ctx context.Context, orgID ids.OrgID, requestID ids
 	return i, err
 }
 
+const getTeamsAppChannel = `-- name: GetTeamsAppChannel :one
+SELECT a.org_id, a.channel_record_id, a.tenant_id, a.team_id, a.teams_channel, a.app_id, a.service_url, a.state, a.membership_type, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.secret_replaced_by, a.secret_replaced_at, a.shared_at, a.last_checked_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
+FROM pc.teams_app_channels a
+JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
+WHERE a.org_id = $1 AND a.channel_record_id = $2
+`
+
+type GetTeamsAppChannelRow struct {
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	TenantID            ids.UUID
+	TeamID              string
+	TeamsChannel        string
+	AppID               ids.UUID
+	ServiceUrl          string
+	State               string
+	MembershipType      *string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	SecretReplacedBy    *string
+	SecretReplacedAt    *time.Time
+	SharedAt            *time.Time
+	LastCheckedAt       *time.Time
+	UpdatedAt           time.Time
+	Secret              []byte
+	ChannelState        string
+	ChannelName         string
+}
+
+func (q *Queries) GetTeamsAppChannel(ctx context.Context, orgID ids.OrgID, channelRecordID ids.UUID) (GetTeamsAppChannelRow, error) {
+	row := q.db.QueryRow(ctx, getTeamsAppChannel, orgID, channelRecordID)
+	var i GetTeamsAppChannelRow
+	err := row.Scan(
+		&i.OrgID,
+		&i.ChannelRecordID,
+		&i.TenantID,
+		&i.TeamID,
+		&i.TeamsChannel,
+		&i.AppID,
+		&i.ServiceUrl,
+		&i.State,
+		&i.MembershipType,
+		&i.CreatedAt,
+		&i.ActivatedBy,
+		&i.ActivatedCredential,
+		&i.ActivatedAt,
+		&i.SecretReplacedBy,
+		&i.SecretReplacedAt,
+		&i.SharedAt,
+		&i.LastCheckedAt,
+		&i.UpdatedAt,
+		&i.Secret,
+		&i.ChannelState,
+		&i.ChannelName,
+	)
+	return i, err
+}
+
+const getTeamsCard = `-- name: GetTeamsCard :one
+SELECT org_id, card_id, request_id, channel_record_id, activity_id, state, created_at, updated_at FROM pc.teams_cards
+WHERE org_id = $1 AND request_id = $2 AND channel_record_id = $3
+`
+
+func (q *Queries) GetTeamsCard(ctx context.Context, orgID ids.OrgID, requestID ids.UUID, channelRecordID ids.UUID) (PcTeamsCard, error) {
+	row := q.db.QueryRow(ctx, getTeamsCard, orgID, requestID, channelRecordID)
+	var i PcTeamsCard
+	err := row.Scan(
+		&i.OrgID,
+		&i.CardID,
+		&i.RequestID,
+		&i.ChannelRecordID,
+		&i.ActivityID,
+		&i.State,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertChatIdentityLink = `-- name: InsertChatIdentityLink :one
 INSERT INTO pc.chat_identity_links (org_id, id, user_id, provider, team_id, external_user_id, email, proposed_by)
 VALUES ($1, $2, $3, $4, $5, $6,
@@ -180,6 +319,35 @@ func (q *Queries) InsertChatIdentityLink(ctx context.Context, arg InsertChatIden
 	return i, err
 }
 
+const insertTeamsAppChannel = `-- name: InsertTeamsAppChannel :exec
+INSERT INTO pc.teams_app_channels (org_id, channel_record_id, tenant_id, team_id, teams_channel, app_id, service_url)
+VALUES ($1, $2, $3, $4, $5,
+    $6, $7)
+`
+
+type InsertTeamsAppChannelParams struct {
+	OrgID           ids.OrgID
+	ChannelRecordID ids.UUID
+	TenantID        ids.UUID
+	TeamID          string
+	TeamsChannel    string
+	AppID           ids.UUID
+	ServiceUrl      string
+}
+
+func (q *Queries) InsertTeamsAppChannel(ctx context.Context, arg InsertTeamsAppChannelParams) error {
+	_, err := q.db.Exec(ctx, insertTeamsAppChannel,
+		arg.OrgID,
+		arg.ChannelRecordID,
+		arg.TenantID,
+		arg.TeamID,
+		arg.TeamsChannel,
+		arg.AppID,
+		arg.ServiceUrl,
+	)
+	return err
+}
+
 const markChatIdentityLinkStale = `-- name: MarkChatIdentityLinkStale :execrows
 UPDATE pc.chat_identity_links SET state = 'STALE'
 WHERE org_id = $1 AND id = $2 AND state = 'CONFIRMED'
@@ -207,12 +375,50 @@ func (q *Queries) MarkSlackDMUnknown(ctx context.Context, orgID ids.OrgID, iD id
 	return result.RowsAffected(), nil
 }
 
+const markTeamsAppChannelShared = `-- name: MarkTeamsAppChannelShared :execrows
+UPDATE pc.teams_app_channels SET membership_type = 'shared', shared_at = now(), last_checked_at = now()
+WHERE org_id = $1 AND channel_record_id = $2 AND state = 'PENDING_ACTIVATION'
+`
+
+func (q *Queries) MarkTeamsAppChannelShared(ctx context.Context, orgID ids.OrgID, channelRecordID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markTeamsAppChannelShared, orgID, channelRecordID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markTeamsCardUnknown = `-- name: MarkTeamsCardUnknown :execrows
+UPDATE pc.teams_cards SET state = 'UNKNOWN', updated_at = now()
+WHERE org_id = $1 AND card_id = $2 AND state = 'POSTING'
+`
+
+func (q *Queries) MarkTeamsCardUnknown(ctx context.Context, orgID ids.OrgID, cardID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markTeamsCardUnknown, orgID, cardID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const releaseSlackDM = `-- name: ReleaseSlackDM :execrows
 DELETE FROM pc.slack_direct_messages WHERE org_id = $1 AND id = $2 AND state = 'POSTING'
 `
 
 func (q *Queries) ReleaseSlackDM(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, releaseSlackDM, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseTeamsCard = `-- name: ReleaseTeamsCard :execrows
+DELETE FROM pc.teams_cards WHERE org_id = $1 AND card_id = $2 AND state = 'POSTING'
+`
+
+func (q *Queries) ReleaseTeamsCard(ctx context.Context, orgID ids.OrgID, cardID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseTeamsCard, orgID, cardID)
 	if err != nil {
 		return 0, err
 	}
@@ -283,6 +489,19 @@ func (q *Queries) SetSlackDMPosted(ctx context.Context, arg SetSlackDMPostedPara
 		arg.OrgID,
 		arg.ID,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setTeamsCardPosted = `-- name: SetTeamsCardPosted :execrows
+UPDATE pc.teams_cards SET activity_id = $1, state = 'POSTED', updated_at = now()
+WHERE org_id = $2 AND card_id = $3 AND state = 'POSTING'
+`
+
+func (q *Queries) SetTeamsCardPosted(ctx context.Context, activityID *string, orgID ids.OrgID, cardID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setTeamsCardPosted, activityID, orgID, cardID)
 	if err != nil {
 		return 0, err
 	}

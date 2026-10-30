@@ -8,6 +8,7 @@ import (
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/notifications/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -89,4 +90,15 @@ func (h *Handler) ListChatLinks(ctx context.Context, _ *pantherclawv1.ListChatLi
 		out.Links = append(out.Links, chatLinkProto(l))
 	}
 	return out, nil
+}
+
+// teamsAppIn is a teams_app configuration from the API (G0 M20 D256).
+func teamsAppIn(c *pantherclawv1.TeamsAppConfig) *domain.TeamsAppConfig {
+	if c == nil {
+		return nil
+	}
+	return &domain.TeamsAppConfig{
+		TenantID: c.GetTenantId(), TeamID: c.GetTeamId(), ChannelID: c.GetChannelId(), AppID: c.GetAppId(),
+		ClientSecret: c.GetClientSecret(), ServiceURL: c.GetServiceUrl(),
+	}
 }

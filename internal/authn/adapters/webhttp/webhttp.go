@@ -121,6 +121,7 @@ type Handler struct {
 	// slackChannels is the Slack approval channel page (G0 M14 D22); nil when
 	// not mounted.
 	slackChannels SlackChannels
+	teamsChannels TeamsChannels
 	// accounts is the hosted account pages (G0 UI D8); nil when not
 	// served.
 	accounts  AccountBrowser
@@ -169,6 +170,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountPromotions(mux)
 	h.mountProtect(mux)
 	h.mountSlackChannels(mux)
+	h.mountTeamsChannels(mux)
 	h.mountAccounts(mux)
 }
 

@@ -153,10 +153,10 @@ func TestTenancy_approval_channels(t *testing.T) {
 	a.want(t, "23514", "a teams_app channel inserted ACTIVE",
 		`INSERT INTO pc.teams_app_channels (org_id, channel_record_id, tenant_id, team_id, teams_channel, app_id, service_url, state,
 		 membership_type, activated_by, activated_credential, activated_at)
-		 VALUES ($1, $2, $3, $3, '19:abc@thread.tacv2', $3, 'https://smba.trafficmanager.net/teams/', 'ACTIVE', 'standard', $4, $5, now())`,
+		 VALUES ($1, $2, $3, '19:team@thread.tacv2', '19:abc@thread.tacv2', $3, 'https://smba.trafficmanager.net/teams/', 'ACTIVE', 'standard', $4, $5, now())`,
 		a.org, ch, m5ID(), a.user, a.cred)
 	a.mustExec(t, `INSERT INTO pc.teams_app_channels (org_id, channel_record_id, tenant_id, team_id, teams_channel, app_id, service_url)
-		VALUES ($1, $2, $3, $3, '19:abc@thread.tacv2', $3, 'https://smba.trafficmanager.net/teams/')`, a.org, ch, m5ID())
+		VALUES ($1, $2, $3, '19:team@thread.tacv2', '19:abc@thread.tacv2', $3, 'https://smba.trafficmanager.net/teams/')`, a.org, ch, m5ID())
 	a.want(t, "23514", "a shared Teams channel activated",
 		`UPDATE pc.teams_app_channels SET state = 'ACTIVE', membership_type = 'shared', activated_by = $2, activated_credential = $3
 		 WHERE channel_record_id = $1`, ch, a.user, a.cred)

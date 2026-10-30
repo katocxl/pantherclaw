@@ -155,10 +155,10 @@ CREATE UNIQUE INDEX slack_direct_messages_once ON pc.slack_direct_messages (org_
 CREATE TABLE pc.teams_app_channels (
     org_id               uuid        NOT NULL REFERENCES pc.orgs (id),
     channel_record_id    uuid        NOT NULL,
-    -- The Entra tenant, the team (its group id) and the channel; the bot's
-    -- Entra application id. None changes once stored.
+    -- The Entra tenant, the team (its General channel id), the channel and
+    -- the bot's Entra application id. None changes once stored.
     tenant_id            uuid        NOT NULL,
-    team_id              uuid        NOT NULL,
+    team_id              text        NOT NULL CHECK (team_id ~ '^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$'),
     teams_channel        text        NOT NULL CHECK (teams_channel ~ '^19:[A-Za-z0-9_-]{1,128}@thread\.(tacv2|skype)$'),
     app_id               uuid        NOT NULL,
     -- The Bot Framework service URL the bot posts to.
@@ -244,7 +244,7 @@ CREATE TABLE pc.teams_cards (
     card_id           uuid        NOT NULL,
     request_id        uuid        NOT NULL,
     channel_record_id uuid        NOT NULL,
-    activity_id       text        CHECK (activity_id IS NULL OR activity_id ~ '^[A-Za-z0-9:;@._|-]{1,256}$'),
+    activity_id       text        CHECK (activity_id IS NULL OR (char_length(activity_id) <= 256 AND activity_id ~ '^[A-Za-z0-9:;@._|-]+$')),
     state             text        NOT NULL DEFAULT 'POSTING' CHECK (state IN ('POSTING', 'POSTED', 'UNKNOWN')),
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),

@@ -61423,7 +61423,8 @@
           "CHANNEL_KIND_EMAIL",
           "CHANNEL_KIND_SLACK",
           "CHANNEL_KIND_WEBHOOK",
-          "CHANNEL_KIND_SLACK_APP"
+          "CHANNEL_KIND_SLACK_APP",
+          "CHANNEL_KIND_TEAMS_APP"
         ],
         "description": "ChannelKind is where a channel delivers."
       },
@@ -61740,6 +61741,18 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.SlackAppConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamsApp": {
+            "title": "teams_app",
+            "description": "teams_app channels: the configuration, with the bot's client secret\n (G0 M20 D256). Required for, and only for, a teams_app channel.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.TeamsAppConfig"
               },
               {
                 "type": "null"
@@ -62329,6 +62342,58 @@
         "x-pantherclaw-input-of": "pantherclaw.v1.SlackAppConfig",
         "required": [
           "channelId"
+        ]
+      },
+      "pantherclaw.v1.TeamsAppConfig": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "title": "tenant_id",
+            "format": "uuid",
+            "description": "The Entra tenant the bot is installed in."
+          },
+          "teamId": {
+            "type": "string",
+            "title": "team_id",
+            "pattern": "^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$",
+            "description": "The team's General channel id and the channel the cards go to."
+          },
+          "channelId": {
+            "type": "string",
+            "title": "channel_id",
+            "pattern": "^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$"
+          },
+          "appId": {
+            "type": "string",
+            "title": "app_id",
+            "format": "uuid",
+            "description": "The bot's Microsoft App ID."
+          },
+          "clientSecret": {
+            "type": "string",
+            "title": "client_secret",
+            "maxLength": 512,
+            "minLength": 16,
+            "description": "The bot's client secret; input only, never returned."
+          },
+          "serviceUrl": {
+            "type": "string",
+            "title": "service_url",
+            "maxLength": 512,
+            "description": "The Bot Framework service URL (https)."
+          }
+        },
+        "title": "TeamsAppConfig",
+        "additionalProperties": false,
+        "description": "TeamsAppConfig is a teams_app channel's configuration (G0 M20 D256).",
+        "required": [
+          "tenantId",
+          "teamId",
+          "channelId",
+          "appId",
+          "clientSecret",
+          "serviceUrl"
         ]
       },
       "pantherclaw.v1.TestChannelRequest": {

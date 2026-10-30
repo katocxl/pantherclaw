@@ -43,6 +43,10 @@ const (
 	// place (G0 M14 D22, Team edition): minimal data and a link button only,
 	// never a decision in Slack.
 	ChannelKind_CHANNEL_KIND_SLACK_APP ChannelKind = 5
+	// A Teams bot posting link-only Adaptive Cards to one standard channel (G0
+	// M20 D256, Team edition), activated with a step-up; never a decision in
+	// Teams.
+	ChannelKind_CHANNEL_KIND_TEAMS_APP ChannelKind = 6
 )
 
 // Enum value maps for ChannelKind.
@@ -54,6 +58,7 @@ var (
 		3: "CHANNEL_KIND_SLACK",
 		4: "CHANNEL_KIND_WEBHOOK",
 		5: "CHANNEL_KIND_SLACK_APP",
+		6: "CHANNEL_KIND_TEAMS_APP",
 	}
 	ChannelKind_value = map[string]int32{
 		"CHANNEL_KIND_UNSPECIFIED": 0,
@@ -62,6 +67,7 @@ var (
 		"CHANNEL_KIND_SLACK":       3,
 		"CHANNEL_KIND_WEBHOOK":     4,
 		"CHANNEL_KIND_SLACK_APP":   5,
+		"CHANNEL_KIND_TEAMS_APP":   6,
 	}
 )
 
@@ -911,7 +917,10 @@ type CreateChannelRequest struct {
 	Url string `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
 	// slack_app channels: the configuration, with the bot token. Required
 	// for, and only for, a slack_app channel.
-	SlackApp      *SlackAppConfig `protobuf:"bytes,7,opt,name=slack_app,json=slackApp,proto3" json:"slack_app,omitempty"`
+	SlackApp *SlackAppConfig `protobuf:"bytes,7,opt,name=slack_app,json=slackApp,proto3" json:"slack_app,omitempty"`
+	// teams_app channels: the configuration, with the bot's client secret
+	// (G0 M20 D256). Required for, and only for, a teams_app channel.
+	TeamsApp      *TeamsAppConfig `protobuf:"bytes,8,opt,name=teams_app,json=teamsApp,proto3" json:"teams_app,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -991,6 +1000,13 @@ func (x *CreateChannelRequest) GetUrl() string {
 func (x *CreateChannelRequest) GetSlackApp() *SlackAppConfig {
 	if x != nil {
 		return x.SlackApp
+	}
+	return nil
+}
+
+func (x *CreateChannelRequest) GetTeamsApp() *TeamsAppConfig {
+	if x != nil {
+		return x.TeamsApp
 	}
 	return nil
 }
@@ -2355,6 +2371,96 @@ func (x *ListChatLinksResponse) GetLinks() []*ChatLink {
 	return nil
 }
 
+// TeamsAppConfig is a teams_app channel's configuration (G0 M20 D256).
+type TeamsAppConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The Entra tenant the bot is installed in.
+	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// The team's General channel id and the channel the cards go to.
+	TeamId    string `protobuf:"bytes,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	ChannelId string `protobuf:"bytes,3,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	// The bot's Microsoft App ID.
+	AppId string `protobuf:"bytes,4,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	// The bot's client secret; input only, never returned.
+	ClientSecret string `protobuf:"bytes,5,opt,name=client_secret,json=clientSecret,proto3" json:"client_secret,omitempty"`
+	// The Bot Framework service URL (https).
+	ServiceUrl    string `protobuf:"bytes,6,opt,name=service_url,json=serviceUrl,proto3" json:"service_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TeamsAppConfig) Reset() {
+	*x = TeamsAppConfig{}
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TeamsAppConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TeamsAppConfig) ProtoMessage() {}
+
+func (x *TeamsAppConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_notifications_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TeamsAppConfig.ProtoReflect.Descriptor instead.
+func (*TeamsAppConfig) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_notifications_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *TeamsAppConfig) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *TeamsAppConfig) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *TeamsAppConfig) GetChannelId() string {
+	if x != nil {
+		return x.ChannelId
+	}
+	return ""
+}
+
+func (x *TeamsAppConfig) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+func (x *TeamsAppConfig) GetClientSecret() string {
+	if x != nil {
+		return x.ClientSecret
+	}
+	return ""
+}
+
+func (x *TeamsAppConfig) GetServiceUrl() string {
+	if x != nil {
+		return x.ServiceUrl
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_notifications_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
@@ -2412,7 +2518,7 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"createTime\x12F\n" +
 	"\x11next_attempt_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0fnextAttemptTime\x12;\n" +
 	"\vfinish_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishTime\"\xe4\x03\n" +
+	"finishTime\"\xa1\x04\n" +
 	"\x14CreateChannelRequest\x12C\n" +
 	"\x04name\x18\x01 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12;\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1b.pantherclaw.v1.ChannelKindB\n" +
@@ -2422,7 +2528,8 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\fmin_severity\x18\x04 \x01(\x0e2$.pantherclaw.v1.NotificationSeverityB\b\xbaH\x05\x82\x01\x02\x10\x01R\vminSeverity\x129\n" +
 	"\x0erecipient_role\x18\x05 \x01(\tB\x12\xbaH\x0fr\r\x18@2\t^[a-z_]*$R\rrecipientRole\x12\x1a\n" +
 	"\x03url\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x10R\x03url\x12;\n" +
-	"\tslack_app\x18\a \x01(\v2\x1e.pantherclaw.v1.SlackAppConfigR\bslackApp\"q\n" +
+	"\tslack_app\x18\a \x01(\v2\x1e.pantherclaw.v1.SlackAppConfigR\bslackApp\x12;\n" +
+	"\tteams_app\x18\b \x01(\v2\x1e.pantherclaw.v1.TeamsAppConfigR\bteamsApp\"q\n" +
 	"\x15CreateChannelResponse\x121\n" +
 	"\achannel\x18\x01 \x01(\v2\x17.pantherclaw.v1.ChannelR\achannel\x12%\n" +
 	"\x0esigning_secret\x18\x02 \x01(\tR\rsigningSecret\"-\n" +
@@ -2508,14 +2615,25 @@ const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\x04link\x18\x01 \x01(\v2\x18.pantherclaw.v1.ChatLinkR\x04link\"\x16\n" +
 	"\x14ListChatLinksRequest\"G\n" +
 	"\x15ListChatLinksResponse\x12.\n" +
-	"\x05links\x18\x01 \x03(\v2\x18.pantherclaw.v1.ChatLinkR\x05links*\xa7\x01\n" +
+	"\x05links\x18\x01 \x03(\v2\x18.pantherclaw.v1.ChatLinkR\x05links\"\xe8\x02\n" +
+	"\x0eTeamsAppConfig\x12%\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12P\n" +
+	"\ateam_id\x18\x02 \x01(\tB7\xbaH4r220^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$R\x06teamId\x12V\n" +
+	"\n" +
+	"channel_id\x18\x03 \x01(\tB7\xbaH4r220^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$R\tchannelId\x12\x1f\n" +
+	"\x06app_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05appId\x12/\n" +
+	"\rclient_secret\x18\x05 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x10\x18\x80\x04R\fclientSecret\x123\n" +
+	"\vservice_url\x18\x06 \x01(\tB\x12\xbaH\x0fr\r\x18\x80\x04:\bhttps://R\n" +
+	"serviceUrl*\xc3\x01\n" +
 	"\vChannelKind\x12\x1c\n" +
 	"\x18CHANNEL_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10CHANNEL_KIND_LOG\x10\x01\x12\x16\n" +
 	"\x12CHANNEL_KIND_EMAIL\x10\x02\x12\x16\n" +
 	"\x12CHANNEL_KIND_SLACK\x10\x03\x12\x18\n" +
 	"\x14CHANNEL_KIND_WEBHOOK\x10\x04\x12\x1a\n" +
-	"\x16CHANNEL_KIND_SLACK_APP\x10\x05*n\n" +
+	"\x16CHANNEL_KIND_SLACK_APP\x10\x05\x12\x1a\n" +
+	"\x16CHANNEL_KIND_TEAMS_APP\x10\x06*n\n" +
 	"\x0eSlackDataLevel\x12 \n" +
 	"\x1cSLACK_DATA_LEVEL_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SLACK_DATA_LEVEL_MINIMAL\x10\x01\x12\x1c\n" +
@@ -2580,7 +2698,7 @@ func file_pantherclaw_v1_notifications_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_notifications_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_pantherclaw_v1_notifications_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_pantherclaw_v1_notifications_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_pantherclaw_v1_notifications_proto_goTypes = []any{
 	(ChannelKind)(0),                          // 0: pantherclaw.v1.ChannelKind
 	(SlackDataLevel)(0),                       // 1: pantherclaw.v1.SlackDataLevel
@@ -2619,7 +2737,8 @@ var file_pantherclaw_v1_notifications_proto_goTypes = []any{
 	(*RevokeChatLinkResponse)(nil),            // 34: pantherclaw.v1.RevokeChatLinkResponse
 	(*ListChatLinksRequest)(nil),              // 35: pantherclaw.v1.ListChatLinksRequest
 	(*ListChatLinksResponse)(nil),             // 36: pantherclaw.v1.ListChatLinksResponse
-	(*timestamppb.Timestamp)(nil),             // 37: google.protobuf.Timestamp
+	(*TeamsAppConfig)(nil),                    // 37: pantherclaw.v1.TeamsAppConfig
+	(*timestamppb.Timestamp)(nil),             // 38: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_notifications_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.SlackAppConfig.data_level:type_name -> pantherclaw.v1.SlackDataLevel
@@ -2627,68 +2746,69 @@ var file_pantherclaw_v1_notifications_proto_depIdxs = []int32{
 	3,  // 2: pantherclaw.v1.Channel.state:type_name -> pantherclaw.v1.ChannelState
 	2,  // 3: pantherclaw.v1.Channel.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
 	4,  // 4: pantherclaw.v1.Channel.health:type_name -> pantherclaw.v1.ChannelHealth
-	37, // 5: pantherclaw.v1.Channel.last_success_time:type_name -> google.protobuf.Timestamp
-	37, // 6: pantherclaw.v1.Channel.last_failure_time:type_name -> google.protobuf.Timestamp
-	37, // 7: pantherclaw.v1.Channel.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
-	37, // 8: pantherclaw.v1.Channel.create_time:type_name -> google.protobuf.Timestamp
-	37, // 9: pantherclaw.v1.Channel.update_time:type_name -> google.protobuf.Timestamp
+	38, // 5: pantherclaw.v1.Channel.last_success_time:type_name -> google.protobuf.Timestamp
+	38, // 6: pantherclaw.v1.Channel.last_failure_time:type_name -> google.protobuf.Timestamp
+	38, // 7: pantherclaw.v1.Channel.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
+	38, // 8: pantherclaw.v1.Channel.create_time:type_name -> google.protobuf.Timestamp
+	38, // 9: pantherclaw.v1.Channel.update_time:type_name -> google.protobuf.Timestamp
 	7,  // 10: pantherclaw.v1.Channel.slack_app:type_name -> pantherclaw.v1.SlackAppConfig
 	0,  // 11: pantherclaw.v1.Delivery.kind:type_name -> pantherclaw.v1.ChannelKind
 	5,  // 12: pantherclaw.v1.Delivery.state:type_name -> pantherclaw.v1.DeliveryState
-	37, // 13: pantherclaw.v1.Delivery.create_time:type_name -> google.protobuf.Timestamp
-	37, // 14: pantherclaw.v1.Delivery.next_attempt_time:type_name -> google.protobuf.Timestamp
-	37, // 15: pantherclaw.v1.Delivery.finish_time:type_name -> google.protobuf.Timestamp
+	38, // 13: pantherclaw.v1.Delivery.create_time:type_name -> google.protobuf.Timestamp
+	38, // 14: pantherclaw.v1.Delivery.next_attempt_time:type_name -> google.protobuf.Timestamp
+	38, // 15: pantherclaw.v1.Delivery.finish_time:type_name -> google.protobuf.Timestamp
 	0,  // 16: pantherclaw.v1.CreateChannelRequest.kind:type_name -> pantherclaw.v1.ChannelKind
 	2,  // 17: pantherclaw.v1.CreateChannelRequest.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
 	7,  // 18: pantherclaw.v1.CreateChannelRequest.slack_app:type_name -> pantherclaw.v1.SlackAppConfig
-	8,  // 19: pantherclaw.v1.CreateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
-	8,  // 20: pantherclaw.v1.GetChannelResponse.channel:type_name -> pantherclaw.v1.Channel
-	9,  // 21: pantherclaw.v1.GetChannelResponse.recent_deliveries:type_name -> pantherclaw.v1.Delivery
-	8,  // 22: pantherclaw.v1.ListChannelsResponse.channels:type_name -> pantherclaw.v1.Channel
-	2,  // 23: pantherclaw.v1.UpdateChannelRequest.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
-	8,  // 24: pantherclaw.v1.UpdateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
-	37, // 25: pantherclaw.v1.RotateChannelSecretResponse.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
-	5,  // 26: pantherclaw.v1.ListDeliveriesRequest.state:type_name -> pantherclaw.v1.DeliveryState
-	9,  // 27: pantherclaw.v1.ListDeliveriesResponse.deliveries:type_name -> pantherclaw.v1.Delivery
-	8,  // 28: pantherclaw.v1.SetChannelSignatureSchemeResponse.channel:type_name -> pantherclaw.v1.Channel
-	6,  // 29: pantherclaw.v1.ChatLink.state:type_name -> pantherclaw.v1.ChatLinkState
-	37, // 30: pantherclaw.v1.ChatLink.create_time:type_name -> google.protobuf.Timestamp
-	37, // 31: pantherclaw.v1.ChatLink.confirm_time:type_name -> google.protobuf.Timestamp
-	28, // 32: pantherclaw.v1.ProposeSlackLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
-	28, // 33: pantherclaw.v1.ConfirmChatLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
-	28, // 34: pantherclaw.v1.RevokeChatLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
-	28, // 35: pantherclaw.v1.ListChatLinksResponse.links:type_name -> pantherclaw.v1.ChatLink
-	10, // 36: pantherclaw.v1.NotificationService.CreateChannel:input_type -> pantherclaw.v1.CreateChannelRequest
-	12, // 37: pantherclaw.v1.NotificationService.GetChannel:input_type -> pantherclaw.v1.GetChannelRequest
-	14, // 38: pantherclaw.v1.NotificationService.ListChannels:input_type -> pantherclaw.v1.ListChannelsRequest
-	16, // 39: pantherclaw.v1.NotificationService.UpdateChannel:input_type -> pantherclaw.v1.UpdateChannelRequest
-	18, // 40: pantherclaw.v1.NotificationService.DeleteChannel:input_type -> pantherclaw.v1.DeleteChannelRequest
-	20, // 41: pantherclaw.v1.NotificationService.RotateChannelSecret:input_type -> pantherclaw.v1.RotateChannelSecretRequest
-	26, // 42: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:input_type -> pantherclaw.v1.SetChannelSignatureSchemeRequest
-	22, // 43: pantherclaw.v1.NotificationService.TestChannel:input_type -> pantherclaw.v1.TestChannelRequest
-	24, // 44: pantherclaw.v1.NotificationService.ListDeliveries:input_type -> pantherclaw.v1.ListDeliveriesRequest
-	29, // 45: pantherclaw.v1.NotificationService.ProposeSlackLink:input_type -> pantherclaw.v1.ProposeSlackLinkRequest
-	31, // 46: pantherclaw.v1.NotificationService.ConfirmChatLink:input_type -> pantherclaw.v1.ConfirmChatLinkRequest
-	33, // 47: pantherclaw.v1.NotificationService.RevokeChatLink:input_type -> pantherclaw.v1.RevokeChatLinkRequest
-	35, // 48: pantherclaw.v1.NotificationService.ListChatLinks:input_type -> pantherclaw.v1.ListChatLinksRequest
-	11, // 49: pantherclaw.v1.NotificationService.CreateChannel:output_type -> pantherclaw.v1.CreateChannelResponse
-	13, // 50: pantherclaw.v1.NotificationService.GetChannel:output_type -> pantherclaw.v1.GetChannelResponse
-	15, // 51: pantherclaw.v1.NotificationService.ListChannels:output_type -> pantherclaw.v1.ListChannelsResponse
-	17, // 52: pantherclaw.v1.NotificationService.UpdateChannel:output_type -> pantherclaw.v1.UpdateChannelResponse
-	19, // 53: pantherclaw.v1.NotificationService.DeleteChannel:output_type -> pantherclaw.v1.DeleteChannelResponse
-	21, // 54: pantherclaw.v1.NotificationService.RotateChannelSecret:output_type -> pantherclaw.v1.RotateChannelSecretResponse
-	27, // 55: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:output_type -> pantherclaw.v1.SetChannelSignatureSchemeResponse
-	23, // 56: pantherclaw.v1.NotificationService.TestChannel:output_type -> pantherclaw.v1.TestChannelResponse
-	25, // 57: pantherclaw.v1.NotificationService.ListDeliveries:output_type -> pantherclaw.v1.ListDeliveriesResponse
-	30, // 58: pantherclaw.v1.NotificationService.ProposeSlackLink:output_type -> pantherclaw.v1.ProposeSlackLinkResponse
-	32, // 59: pantherclaw.v1.NotificationService.ConfirmChatLink:output_type -> pantherclaw.v1.ConfirmChatLinkResponse
-	34, // 60: pantherclaw.v1.NotificationService.RevokeChatLink:output_type -> pantherclaw.v1.RevokeChatLinkResponse
-	36, // 61: pantherclaw.v1.NotificationService.ListChatLinks:output_type -> pantherclaw.v1.ListChatLinksResponse
-	49, // [49:62] is the sub-list for method output_type
-	36, // [36:49] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	37, // 19: pantherclaw.v1.CreateChannelRequest.teams_app:type_name -> pantherclaw.v1.TeamsAppConfig
+	8,  // 20: pantherclaw.v1.CreateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
+	8,  // 21: pantherclaw.v1.GetChannelResponse.channel:type_name -> pantherclaw.v1.Channel
+	9,  // 22: pantherclaw.v1.GetChannelResponse.recent_deliveries:type_name -> pantherclaw.v1.Delivery
+	8,  // 23: pantherclaw.v1.ListChannelsResponse.channels:type_name -> pantherclaw.v1.Channel
+	2,  // 24: pantherclaw.v1.UpdateChannelRequest.min_severity:type_name -> pantherclaw.v1.NotificationSeverity
+	8,  // 25: pantherclaw.v1.UpdateChannelResponse.channel:type_name -> pantherclaw.v1.Channel
+	38, // 26: pantherclaw.v1.RotateChannelSecretResponse.previous_secret_expire_time:type_name -> google.protobuf.Timestamp
+	5,  // 27: pantherclaw.v1.ListDeliveriesRequest.state:type_name -> pantherclaw.v1.DeliveryState
+	9,  // 28: pantherclaw.v1.ListDeliveriesResponse.deliveries:type_name -> pantherclaw.v1.Delivery
+	8,  // 29: pantherclaw.v1.SetChannelSignatureSchemeResponse.channel:type_name -> pantherclaw.v1.Channel
+	6,  // 30: pantherclaw.v1.ChatLink.state:type_name -> pantherclaw.v1.ChatLinkState
+	38, // 31: pantherclaw.v1.ChatLink.create_time:type_name -> google.protobuf.Timestamp
+	38, // 32: pantherclaw.v1.ChatLink.confirm_time:type_name -> google.protobuf.Timestamp
+	28, // 33: pantherclaw.v1.ProposeSlackLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
+	28, // 34: pantherclaw.v1.ConfirmChatLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
+	28, // 35: pantherclaw.v1.RevokeChatLinkResponse.link:type_name -> pantherclaw.v1.ChatLink
+	28, // 36: pantherclaw.v1.ListChatLinksResponse.links:type_name -> pantherclaw.v1.ChatLink
+	10, // 37: pantherclaw.v1.NotificationService.CreateChannel:input_type -> pantherclaw.v1.CreateChannelRequest
+	12, // 38: pantherclaw.v1.NotificationService.GetChannel:input_type -> pantherclaw.v1.GetChannelRequest
+	14, // 39: pantherclaw.v1.NotificationService.ListChannels:input_type -> pantherclaw.v1.ListChannelsRequest
+	16, // 40: pantherclaw.v1.NotificationService.UpdateChannel:input_type -> pantherclaw.v1.UpdateChannelRequest
+	18, // 41: pantherclaw.v1.NotificationService.DeleteChannel:input_type -> pantherclaw.v1.DeleteChannelRequest
+	20, // 42: pantherclaw.v1.NotificationService.RotateChannelSecret:input_type -> pantherclaw.v1.RotateChannelSecretRequest
+	26, // 43: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:input_type -> pantherclaw.v1.SetChannelSignatureSchemeRequest
+	22, // 44: pantherclaw.v1.NotificationService.TestChannel:input_type -> pantherclaw.v1.TestChannelRequest
+	24, // 45: pantherclaw.v1.NotificationService.ListDeliveries:input_type -> pantherclaw.v1.ListDeliveriesRequest
+	29, // 46: pantherclaw.v1.NotificationService.ProposeSlackLink:input_type -> pantherclaw.v1.ProposeSlackLinkRequest
+	31, // 47: pantherclaw.v1.NotificationService.ConfirmChatLink:input_type -> pantherclaw.v1.ConfirmChatLinkRequest
+	33, // 48: pantherclaw.v1.NotificationService.RevokeChatLink:input_type -> pantherclaw.v1.RevokeChatLinkRequest
+	35, // 49: pantherclaw.v1.NotificationService.ListChatLinks:input_type -> pantherclaw.v1.ListChatLinksRequest
+	11, // 50: pantherclaw.v1.NotificationService.CreateChannel:output_type -> pantherclaw.v1.CreateChannelResponse
+	13, // 51: pantherclaw.v1.NotificationService.GetChannel:output_type -> pantherclaw.v1.GetChannelResponse
+	15, // 52: pantherclaw.v1.NotificationService.ListChannels:output_type -> pantherclaw.v1.ListChannelsResponse
+	17, // 53: pantherclaw.v1.NotificationService.UpdateChannel:output_type -> pantherclaw.v1.UpdateChannelResponse
+	19, // 54: pantherclaw.v1.NotificationService.DeleteChannel:output_type -> pantherclaw.v1.DeleteChannelResponse
+	21, // 55: pantherclaw.v1.NotificationService.RotateChannelSecret:output_type -> pantherclaw.v1.RotateChannelSecretResponse
+	27, // 56: pantherclaw.v1.NotificationService.SetChannelSignatureScheme:output_type -> pantherclaw.v1.SetChannelSignatureSchemeResponse
+	23, // 57: pantherclaw.v1.NotificationService.TestChannel:output_type -> pantherclaw.v1.TestChannelResponse
+	25, // 58: pantherclaw.v1.NotificationService.ListDeliveries:output_type -> pantherclaw.v1.ListDeliveriesResponse
+	30, // 59: pantherclaw.v1.NotificationService.ProposeSlackLink:output_type -> pantherclaw.v1.ProposeSlackLinkResponse
+	32, // 60: pantherclaw.v1.NotificationService.ConfirmChatLink:output_type -> pantherclaw.v1.ConfirmChatLinkResponse
+	34, // 61: pantherclaw.v1.NotificationService.RevokeChatLink:output_type -> pantherclaw.v1.RevokeChatLinkResponse
+	36, // 62: pantherclaw.v1.NotificationService.ListChatLinks:output_type -> pantherclaw.v1.ListChatLinksResponse
+	50, // [50:63] is the sub-list for method output_type
+	37, // [37:50] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_notifications_proto_init() }
@@ -2703,7 +2823,7 @@ func file_pantherclaw_v1_notifications_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_notifications_proto_rawDesc), len(file_pantherclaw_v1_notifications_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   30,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

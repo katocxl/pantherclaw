@@ -3532,7 +3532,7 @@ type PcTeamsAppChannel struct {
 	OrgID               ids.OrgID
 	ChannelRecordID     ids.UUID
 	TenantID            ids.UUID
-	TeamID              ids.UUID
+	TeamID              string
 	TeamsChannel        string
 	AppID               ids.UUID
 	ServiceUrl          string

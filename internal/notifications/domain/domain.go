@@ -27,13 +27,15 @@ const (
 
 // Valid reports whether k is a known kind.
 func (k Kind) Valid() bool {
-	return slices.Contains([]Kind{KindLog, KindEmail, KindSlack, KindWebhook, KindSlackApp}, k)
+	return slices.Contains([]Kind{KindLog, KindEmail, KindSlack, KindWebhook, KindSlackApp, KindTeamsApp}, k)
 }
 
 // HasSecret reports whether channels of kind k hold an encrypted secret
 // (the Slack webhook URL, the webhook signing secret, the Slack bot
 // token).
-func (k Kind) HasSecret() bool { return k == KindSlack || k == KindWebhook || k == KindSlackApp }
+func (k Kind) HasSecret() bool {
+	return k == KindSlack || k == KindWebhook || k == KindSlackApp || k == KindTeamsApp
+}
 
 // Severity orders notifications.
 type Severity string

@@ -71,3 +71,47 @@ SELECT email FROM pc.users WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)
 -- name: MarkChatIdentityLinkStale :execrows
 UPDATE pc.chat_identity_links SET state = 'STALE'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'CONFIRMED';
+
+-- name: InsertTeamsAppChannel :exec
+INSERT INTO pc.teams_app_channels (org_id, channel_record_id, tenant_id, team_id, teams_channel, app_id, service_url)
+VALUES (sqlc.arg(org_id), sqlc.arg(channel_record_id), sqlc.arg(tenant_id), sqlc.arg(team_id), sqlc.arg(teams_channel),
+    sqlc.arg(app_id), sqlc.arg(service_url));
+
+-- name: GetTeamsAppChannel :one
+SELECT a.*, c.secret, c.state AS channel_state, c.name AS channel_name
+FROM pc.teams_app_channels a
+JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
+WHERE a.org_id = sqlc.arg(org_id) AND a.channel_record_id = sqlc.arg(channel_record_id);
+
+-- The guard of 00244 sets the time and refuses a channel that is not
+-- standard; a channel activated or changed meanwhile is not activated.
+-- name: ActivateTeamsAppChannel :execrows
+UPDATE pc.teams_app_channels
+SET state = 'ACTIVE', membership_type = 'standard', activated_by = sqlc.arg(activated_by),
+    activated_credential = sqlc.arg(activated_credential), last_checked_at = now()
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'PENDING_ACTIVATION'
+  AND updated_at = sqlc.arg(seen_updated_at);
+
+-- name: MarkTeamsAppChannelShared :execrows
+UPDATE pc.teams_app_channels SET membership_type = 'shared', shared_at = now(), last_checked_at = now()
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'PENDING_ACTIVATION';
+
+-- name: ClaimTeamsCard :execrows
+INSERT INTO pc.teams_cards (org_id, card_id, request_id, channel_record_id)
+VALUES (sqlc.arg(org_id), sqlc.arg(card_id), sqlc.arg(request_id), sqlc.arg(channel_record_id))
+ON CONFLICT (org_id, request_id, channel_record_id) DO NOTHING;
+
+-- name: GetTeamsCard :one
+SELECT * FROM pc.teams_cards
+WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id) AND channel_record_id = sqlc.arg(channel_record_id);
+
+-- name: SetTeamsCardPosted :execrows
+UPDATE pc.teams_cards SET activity_id = sqlc.arg(activity_id), state = 'POSTED', updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'POSTING';
+
+-- name: MarkTeamsCardUnknown :execrows
+UPDATE pc.teams_cards SET state = 'UNKNOWN', updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'POSTING';
+
+-- name: ReleaseTeamsCard :execrows
+DELETE FROM pc.teams_cards WHERE org_id = sqlc.arg(org_id) AND card_id = sqlc.arg(card_id) AND state = 'POSTING';

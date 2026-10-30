@@ -100,6 +100,12 @@ type Service struct {
 	// M14 D22); a simulator only in dev and tests.
 	slackBase string
 	slackHTTP *http.Client
+	// teamsLogin and teamsHTTP reach Microsoft Entra and the Bot Framework
+	// for teams_app channels (G0 M20 D256); teamsService replaces every
+	// channel's service URL with a simulator, in dev and tests only.
+	teamsLogin   string
+	teamsHTTP    *http.Client
+	teamsService string
 	// webhookKeys signs opted-in webhooks with the org's Ed25519 key (G0
 	// M20 D251); nil leaves every destination on HMAC only.
 	webhookKeys domain.WebhookKeys

@@ -67,3 +67,11 @@ func mountTicketWebhooks(mux *http.ServeMux, d apiDeps) {
 	}
 	ticketsyncrpc.Webhooks{Svc: d.tickets}.Mount(mux)
 }
+
+// registerTeamsChannels adds the teams_app activation endpoint (D256),
+// with security keys like the Slack page.
+func registerTeamsChannels(d apiDeps) {
+	if d.web != nil && d.m5 != nil && d.m5.notifications != nil && d.m5.webauthn != nil {
+		d.web.WithTeamsChannels(d.m5.notifications)
+	}
+}
