@@ -22,9 +22,10 @@ import (
 // pc.jira connection; the task is leased once (a write is never retried),
 // and only the answer's status, digest and the new issue's key and id come
 // back. Nothing a ticket says reaches an authorization decision (HR-527).
-// A sync write has no decision, so the gateway itself reads
-// jira.project.external first: a customer-visible project, or one it could
-// not read, gets nothing (HR-522, D277), and the report says so.
+// A sync write has no decision, so the gateway itself reads the fact of its
+// target (D275: jira.project.external, jira.issue.external) first: a
+// customer-visible project, or one it could not read, gets nothing (HR-522,
+// D277), and the report says so.
 
 // ticketPackage is the one package ticket sync tasks go through.
 const ticketPackage = "pc.jira"
@@ -79,7 +80,7 @@ func (e *Engine) ticketSync(ctx context.Context, conn *control.Connection, l Lea
 	return out, nil
 }
 
-// ticketProjectInternal reads jira.project.external for the write's
+// ticketProjectInternal reads the external fact of the write's
 // project or issue, within the fact timeout; true only when it was read
 // and is not external.
 func (e *Engine) ticketProjectInternal(ctx context.Context, conn *control.Connection, target actionir.Target) bool {

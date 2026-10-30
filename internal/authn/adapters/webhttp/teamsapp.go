@@ -64,7 +64,7 @@ func (h *Handler) teamsChannelPage(w http.ResponseWriter, r *http.Request, s aut
 	id, err := ids.ParseUUID(r.PathValue("id"))
 	var c napp.ChannelView
 	if err == nil {
-		c, _, err = h.teamsChannels.GetChannel(callerContext(r, s), id) //nolint:contextcheck // callerContext derives from r.Context()
+		c, _, err = h.teamsChannels.GetChannel(callerContext(r, s), id)
 	} else {
 		err = napp.ErrChannelNotFound
 	}

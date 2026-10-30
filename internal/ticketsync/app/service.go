@@ -45,8 +45,8 @@ const SecretPurpose = "ticket_sync_secrets" //nolint:gosec // G101: a DEK purpos
 
 const (
 	configsTable     = "ticket_sync_configs"
-	secretColumn     = "webhook_secret" //nolint:gosec // G101: a column name, not a credential
-	prevSecretColumn = "prev_webhook_secret"
+	secretColumn     = "webhook_secret"
+	prevSecretColumn = "prev_webhook_secret" //nolint:gosec // G101: a column name, not a credential
 )
 
 // Config states.
