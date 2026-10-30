@@ -234,3 +234,59 @@ func TestHR010_StreamsArePerCertificateCapped(t *testing.T) {
 		t.Fatalf("the hub kept %d orgs and %d certificates after every stream closed", len(h.orgs), len(h.streams))
 	}
 }
+
+// TestHR010_ANotificationMissedWhileDownIsActedOnAtReconnect: a change
+// committed while LISTEN is down notifies nobody; the reconnect wakes the
+// poller, so it arrives then. The poll is an hour here, so nothing else can
+// bring it (G0 M19 D224).
+// Covers: PN-010.7
+func TestHR010_ANotificationMissedWhileDownIsActedOnAtReconnect(t *testing.T) {
+	e := newWatchEnv(t)
+	h := NewHub(e.pool, pclog.Discard())
+	h.pollEvery = time.Hour
+	missed := make(chan error, 1)
+	var once sync.Once
+	h.listenDown = func() {
+		once.Do(func() {
+			missed <- e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+				_, err := tx.Exec(ctx, "UPDATE pc.org_containment SET epoch = epoch + 1 WHERE org_id = $1", e.org)
+				return err
+			})
+		})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = h.Run(ctx) }()
+	s, err := h.Subscribe(Identity{Org: e.org, Gateway: e.gw, Cert: ids.NewV7()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	waitFor(t, s, 5*time.Second, func(c Containment) bool { return c.Epoch == 1 })
+
+	// Drop the LISTEN connection once it is up.
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		var n int
+		if err := e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity
+				WHERE datname = current_database() AND query = 'LISTEN pc_containment'`).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d LISTEN connections", n)
+		}
+	}
+	select {
+	case err := <-missed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the hub did not see LISTEN go down")
+	}
+	waitFor(t, s, 2*time.Second, func(c Containment) bool { return c.Epoch == 2 })
+}
