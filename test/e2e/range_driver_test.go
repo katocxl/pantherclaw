@@ -114,6 +114,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	maps.Copy(caps, a2aCapabilities())
 	maps.Copy(caps, pgCapabilities())
 	maps.Copy(caps, m20ConnectorCapabilities())
+	caps[capAWSECS] = true
 	return caps
 }
 
@@ -144,13 +145,14 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	var p idp
 	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) || needsBrowser(sc) ||
-		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) {
+		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) {
 		p = inProcessIdP(t)
 		o.people = &p
 	}
 	o.github = requires(sc, "github") || requires(sc, "sandbox")
 	o.slack = slackScenario(sc)
 	o.jira, o.gitlab = requires(sc, string(capJiraComment)), requires(sc, string(capGitLabMerge))
+	o.awsECS = requires(sc, string(capAWSECS))
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
@@ -190,6 +192,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.setupSlack()
 	}
 	d.setupM20Connectors()
+	d.setupAWSECS()
 	if requires(sc, "mcp") {
 		d.setupMCPUpstream()
 	}
@@ -685,6 +688,9 @@ func (d *rangeDriver) wait(ctx context.Context, st domain.Step) (domain.Observat
 	}
 	if rec.txn == "" {
 		return domain.Observation{}, fmt.Errorf("step %s has no transaction to wait for", w.Of)
+	}
+	if w.For == "downstream_read" {
+		return d.waitDownstreamRead(ctx, rec.txn, w.MaxSeconds)
 	}
 	want := map[string]string{"effect_confirmed": "CONFIRMED", "effect_unknown": "UNKNOWN"}[w.For]
 	deadline := time.Now().Add(time.Duration(w.MaxSeconds) * time.Second)

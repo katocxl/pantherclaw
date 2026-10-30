@@ -250,5 +250,9 @@
   "RT-121": {
     "digest": "3e37933cf52e03158ebe7f20091f27dfcd8e59a75944e76d73410e2231c7b467",
     "tier": "business"
+  },
+  "RT-122": {
+    "digest": "adbfd007617040d1f62d66037d740bcd0d62da57a05187bd6e7a35eb54864647",
+    "tier": "business"
   }
 }

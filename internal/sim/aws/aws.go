@@ -10,7 +10,7 @@
 //     policy, for the base access key only;
 //   - IAM GetRole, ListAttachedRolePolicies, GetRolePolicy and
 //     GetAccountSummary (aws-query, answered in XML as IAM does);
-//   - ECS UpdateService and DescribeServices (aws-json) for one service,
+//   - ECS UpdateService and DescribeServices (aws-json) for three services,
 //     whose rollout state a test sets.
 //
 // Every request must be signed with SigV4 by a key the simulator knows, and
@@ -114,7 +114,7 @@ type Server struct {
 	sessions map[string]*session
 	calls    []Call
 	now      func() time.Time
-	ecs      *ecsService
+	ecs      map[string]*ecsService
 }
 
 // New returns a simulator whose base key has baseSecret and whose role
@@ -123,7 +123,7 @@ type Server struct {
 func New(baseSecret, externalID string, roleActions []string, f Faults, log *slog.Logger) *Server {
 	return &Server{
 		baseSecret: baseSecret, externalID: externalID, log: log, faults: f, role: slices.Clone(roleActions),
-		sessions: map[string]*session{}, now: time.Now, ecs: newECSService(),
+		sessions: map[string]*session{}, now: time.Now, ecs: newECSServices(),
 	}
 }
 

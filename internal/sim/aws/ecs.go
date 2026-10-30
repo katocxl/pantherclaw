@@ -16,6 +16,11 @@ import (
 const (
 	Cluster = "prod"
 	Service = "web"
+	// ClassicService is a service for which ECS reports no rollout state,
+	// like one behind a Classic Load Balancer.
+	ClassicService = "classic"
+	// CodeDeployService is a service under another deployment controller.
+	CodeDeployService = "canary"
 	// ServiceTarget is the service as a pc.aws.ecs target id.
 	ServiceTarget = Cluster + "/" + Service
 
@@ -59,13 +64,24 @@ type ecsService struct {
 	TaskDefinition       string       `json:"taskDefinition"`
 	DeploymentController *controller  `json:"deploymentController,omitzero"`
 	Deployments          []Deployment `json:"deployments"`
+	// noRollout: ECS reports no rollout state for this service.
+	noRollout bool
 }
 
-func newECSService() *ecsService {
-	return &ecsService{
-		ServiceArn: serviceARN(Cluster, Service), ServiceName: Service, Status: "ACTIVE", TaskDefinition: TaskDefinition(1),
-		DeploymentController: &controller{Type: "ECS"},
-		Deployments:          []Deployment{{ID: "ecs-svc/1", Status: "PRIMARY", TaskDefinition: TaskDefinition(1), RolloutState: RolloutCompleted}},
+func newECSServices() map[string]*ecsService {
+	service := func(name, kind string, noRollout bool) *ecsService {
+		first := Deployment{ID: "ecs-svc/1", Status: "PRIMARY", TaskDefinition: TaskDefinition(1), RolloutState: RolloutCompleted}
+		if noRollout {
+			first.RolloutState = ""
+		}
+		return &ecsService{
+			ServiceArn: serviceARN(Cluster, name), ServiceName: name, Status: "ACTIVE", TaskDefinition: TaskDefinition(1),
+			DeploymentController: &controller{Type: kind}, Deployments: []Deployment{first}, noRollout: noRollout,
+		}
+	}
+	return map[string]*ecsService{
+		Service: service(Service, "ECS", false), ClassicService: service(ClassicService, "ECS", true),
+		CodeDeployService: service(CodeDeployService, "CODE_DEPLOY", false),
 	}
 }
 
@@ -75,7 +91,7 @@ func newECSService() *ecsService {
 func (s *Server) SetRollout(state string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ecs.Deployments[0].RolloutState = state
+	s.ecs[Service].Deployments[0].RolloutState = state
 }
 
 // SetController sets the service's deployment controller: "ECS",
@@ -83,9 +99,9 @@ func (s *Server) SetRollout(state string) {
 func (s *Server) SetController(kind string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ecs.DeploymentController = nil
+	s.ecs[Service].DeploymentController = nil
 	if kind != "" {
-		s.ecs.DeploymentController = &controller{Type: kind}
+		s.ecs[Service].DeploymentController = &controller{Type: kind}
 	}
 }
 
@@ -93,15 +109,16 @@ func (s *Server) SetController(kind string) {
 func (s *Server) AddDeployment(taskDefinition, state string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	id := fmt.Sprintf("ecs-svc/%d", len(s.ecs.Deployments)+1)
-	s.ecs.Deployments = append(s.ecs.Deployments, Deployment{ID: id, Status: "ACTIVE", TaskDefinition: taskDefinition, RolloutState: state})
+	svc := s.ecs[Service]
+	id := fmt.Sprintf("ecs-svc/%d", len(svc.Deployments)+1)
+	svc.Deployments = append(svc.Deployments, Deployment{ID: id, Status: "ACTIVE", TaskDefinition: taskDefinition, RolloutState: state})
 }
 
 // ServiceTaskDefinition is the task definition the service names now.
 func (s *Server) ServiceTaskDefinition() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.ecs.TaskDefinition
+	return s.ecs[Service].TaskDefinition
 }
 
 // serveECS answers an aws-json request, by its X-Amz-Target. Its caller holds
@@ -132,21 +149,22 @@ func (s *Server) serveECS(w http.ResponseWriter, body []byte, target, service, k
 		writeECSError(w, "AccessDeniedException", fmt.Sprintf("not authorized to perform %s:%s", service, action))
 		return
 	}
-	found := in.Cluster == Cluster && name == Service
+	svc := s.ecs[name]
+	found := in.Cluster == Cluster && svc != nil
 	switch service + ":" + action {
 	case "ecs:UpdateService":
 		if !found {
 			writeECSError(w, "ServiceNotFoundException", "Service not found.")
 			return
 		}
-		s.update(in.TaskDefinition)
-		writeECS(w, map[string]any{"service": s.ecs})
+		svc.update(in.TaskDefinition)
+		writeECS(w, map[string]any{"service": svc})
 	case "ecs:DescribeServices":
 		if !found || len(in.Services) != 1 {
 			writeECS(w, map[string]any{"services": []any{}, "failures": []map[string]string{{"arn": call.Resource, "reason": "MISSING"}}})
 			return
 		}
-		writeECS(w, map[string]any{"services": []*ecsService{s.ecs}, "failures": []any{}})
+		writeECS(w, map[string]any{"services": []*ecsService{svc}, "failures": []any{}})
 	default:
 		writeECSError(w, "InvalidAction", "unknown action "+action)
 	}
@@ -154,18 +172,21 @@ func (s *Server) serveECS(w http.ResponseWriter, body []byte, target, service, k
 
 // update starts a rollout of taskDefinition, the newest deployment first.
 // The same task definition again starts nothing, as ECS does not.
-func (s *Server) update(taskDefinition string) {
-	if taskDefinition == s.ecs.TaskDefinition {
+func (e *ecsService) update(taskDefinition string) {
+	if taskDefinition == e.TaskDefinition {
 		return
 	}
-	s.ecs.TaskDefinition = taskDefinition
-	for i := range s.ecs.Deployments {
-		s.ecs.Deployments[i].Status = "ACTIVE"
+	e.TaskDefinition = taskDefinition
+	for i := range e.Deployments {
+		e.Deployments[i].Status = "ACTIVE"
 	}
-	id := fmt.Sprintf("ecs-svc/%d", len(s.ecs.Deployments)+1)
-	s.ecs.Deployments = slices.Insert(s.ecs.Deployments, 0, Deployment{
-		ID: id, Status: "PRIMARY", TaskDefinition: taskDefinition, RolloutState: RolloutInProgress,
-	})
+	d := Deployment{
+		ID: fmt.Sprintf("ecs-svc/%d", len(e.Deployments)+1), Status: "PRIMARY", TaskDefinition: taskDefinition, RolloutState: RolloutInProgress,
+	}
+	if e.noRollout {
+		d.RolloutState = ""
+	}
+	e.Deployments = slices.Insert(e.Deployments, 0, d)
 }
 
 func writeECS(w http.ResponseWriter, v any) {

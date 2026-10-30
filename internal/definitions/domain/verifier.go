@@ -470,17 +470,17 @@ func readOperation(at string, ops map[string]*Definition, op string, listing boo
 	case x != nil && x.HTTP != nil && r.VerificationRead(): // GET, or the D283 exception (HR-190)
 	case x != nil && x.MCP != nil && !listing:
 	case listing:
-		return nil, invalid("%s: %s needs an HTTP GET dispatch template", at, op)
+		return nil, invalid("%s: %s needs an HTTP GET dispatch template, or an aws-json read of exactly %s (HR-190)", at, op, ECSDescribeServicesTarget)
 	default:
-		return nil, invalid("%s: %s needs an HTTP GET or MCP dispatch template", at, op)
+		return nil, invalid("%s: %s needs an HTTP GET or MCP dispatch template, or an aws-json read of exactly %s (HR-190)", at, op, ECSDescribeServicesTarget)
 	}
 	return r, nil
 }
 
-// HTTPReads returns the package's read operations with an HTTP GET
-// dispatch template, sorted: the reads a gateway can make for a verifier
-// through a connection to this package (in M7 the verifier runner reads
-// over HTTP only, HR-190).
+// HTTPReads returns the package's verification reads over HTTP, sorted: an
+// HTTP GET dispatch template, or the one POST HR-190 allows (D283). They are
+// the reads a gateway can make for a verifier through a connection to this
+// package (in M7 the verifier runner reads over HTTP only, HR-190).
 func (p *Package) HTTPReads() []string {
 	var out []string
 	for i := range p.Definitions {

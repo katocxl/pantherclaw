@@ -4,7 +4,7 @@ One YAML file per attack, `RT-###-<slug>.yaml`. The format is fixed by HR-223 (s
 
 ## What a driver provides
 
-**Connection roles** bound to simulated connections: `github`, `payments`, `mcp`; `jira` and `gitlab` (G0 M20, capabilities `jira.comment`, `gitlab.merge` and `gitlab.deploy`); `unlisted` (a payments connection to an address the gateway's egress guard does not allow, RT-031); `real` (a connection that is not simulated, RT-022).
+**Connection roles** bound to simulated connections: `github`, `payments`, `mcp`; `jira` and `gitlab` (G0 M20, capabilities `jira.comment`, `gitlab.merge` and `gitlab.deploy`); `aws-ecs` (capability `aws.ecs.deploy`, harness only); `unlisted` (a payments connection to an address the gateway's egress guard does not allow, RT-031); `real` (a connection that is not simulated, RT-022).
 
 **Fixtures** (`${fixture.<name>}`). The operator supplies read-only context about the simulators; the driver generates the rest for every range run (D38, D39). A scenario creates every object it acts on (branch, file, pull request, charge ids), because a transaction backs the steps of one scenario per range.
 
@@ -19,6 +19,7 @@ One YAML file per attack, `RT-###-<slug>.yaml`. The format is fixed by HR-223 (s
 | `planted_private_key`, `planted_private_key_file_b64` | a fresh throwaway private key (PEM), and base64 of a file that holds it |
 | `jira_internal_issue`, `jira_customer_issue` | with `jira.comment`: an issue in an internal project and a ticket in a service desk (customer-visible) project |
 | `gitlab_project`, `gitlab_merge_request`, `gitlab_head`, `gitlab_unverified_merge_request`, `gitlab_unverified_head` | with `gitlab.merge`: the project (with one environment), a merge request whose pipeline passed at its head, and one whose pipeline is still running, both approved; `gitlab.deploy` also makes a release approver decide deployments |
+| `aws_account`, `aws_other_account`, `aws_cluster`, `aws_service`, `aws_classic_service`, `aws_codedeploy_service`, `aws_task_definition` | with `aws.ecs.deploy`: the role's account, an account that isn't, the cluster, a service with rollout states, one with none, one under another deployment controller, and a revision to deploy |
 
 Charges a scenario refunds are `ch_${fixture.nonce}rtNNN`, with a letter (`b`…) or `n${n}` after them for more than one; the driver reports them refundable.
 
@@ -36,4 +37,5 @@ Values saved with `save:` (for example `pr` and `head` from the pull request a s
 - `agent.steal` mode `stale_nonce` signs the call's proof with a nonce older than the server accepts.
 - `sim.mutate` `fault` args: `redirect_to`, `lose_response_rate`.
 - `target.replay`: the first delivery of an action token's request is accepted, a later one is refused.
+- `wait` `for: downstream_read` passes only after the gateway has read the step's consequence: it observes `CONFIRMED` if that read confirmed it and `UNKNOWN` if not. No read in time is an error, never `UNKNOWN`. The live driver doesn't support it.
 - Steps with no action to judge (`sim.mutate`, `operator.*`, a successful `person.*`) carry no `expect`.

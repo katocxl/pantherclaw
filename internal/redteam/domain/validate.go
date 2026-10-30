@@ -37,6 +37,9 @@ var (
 		// G0 M20 D254: an agent commenting through pc.jira and merging through
 		// pc.gitlab.
 		"jira.comment", "gitlab.merge", "gitlab.deploy",
+		// G0 M20 D286: an agent deploying through pc.aws.ecs. Harness only: on
+		// a live range it would be a real deploy.
+		"aws.ecs.deploy",
 	}
 	faces       = []string{"mcp", "http", "sdk", "hook", "a2a", "authzen"}
 	methods     = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
@@ -51,7 +54,7 @@ var (
 	slackChanges   = []string{"reaction", "reply", "interaction_post"}
 	personRoles    = []string{"approver", "launcher", "developer"}
 	readObjects    = []string{"transaction", "approval", "run"}
-	waitFor        = []string{"effect_confirmed", "effect_unknown"}
+	waitFor        = []string{"effect_confirmed", "effect_unknown", "downstream_read"}
 	receiptHas     = []string{"grant", "policy_version", "package_version", "facts", "simulated"}
 	kindsNeedingEx = map[string]bool{
 		"agent.call": true, "agent.direct": true, "agent.child": true, "agent.steal": true,
