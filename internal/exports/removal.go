@@ -10,17 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"time"
-
-	"github.com/riverqueue/river"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
@@ -220,55 +216,4 @@ func (s *Service) notice(org ids.OrgID, id ids.UUID, r dbq.LoadExportNoticeRow) 
 		return nil, err
 	}
 	return []byte(signed), nil
-}
-
-// SweepArgs asks for every org's sweep.
-type SweepArgs struct{}
-
-// Kind implements river.JobArgs.
-func (SweepArgs) Kind() string { return "exports.sweep" }
-
-// maxOrgsPerSweep is one lister page.
-const maxOrgsPerSweep = 10_000
-
-type sweepWorker struct {
-	river.WorkerDefaults[SweepArgs]
-	svc *Service
-}
-
-// Work sweeps every active org through the audited lister (HR-054); one
-// org's failure leaves the others' sweeps to run, and the next run tries it
-// again.
-func (w *sweepWorker) Work(ctx context.Context, _ *river.Job[SweepArgs]) error {
-	failed := 0
-	err := w.svc.pool.CrossOrgPages(ctx, db.ListActiveOrgs, maxOrgsPerSweep, func(page []db.OrgRef) error {
-		for _, r := range page {
-			if err := w.svc.Sweep(ctx, r.Org); err != nil {
-				failed++
-				w.svc.log.WarnContext(ctx, "exports.sweep_failed", slog.String("org", r.Org.String()), pclog.Err(err))
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if failed > 0 {
-		return errors.New("exports: " + strconv.Itoa(failed) + " orgs failed their sweep")
-	}
-	return nil
-}
-
-// Register adds the workers to reg and returns the sweep's schedule.
-func Register(reg *jobs.Registry, svc *Service) ([]*river.PeriodicJob, error) {
-	if err := jobs.Register[PushArgs](reg, &pushWorker{svc: svc}); err != nil {
-		return nil, err
-	}
-	if err := jobs.Register[SweepArgs](reg, &sweepWorker{svc: svc}); err != nil {
-		return nil, err
-	}
-	return []*river.PeriodicJob{
-		river.NewPeriodicJob(river.PeriodicInterval(SweepInterval),
-			func() (river.JobArgs, *river.InsertOpts) { return SweepArgs{}, nil }, nil),
-	}, nil
 }

@@ -34,6 +34,7 @@ LIMIT sqlc.arg(max_rows)::int;
 -- What one push needs: the receipt, its destination and the sealed
 -- credential.
 SELECT r.class, r.artifact_id, r.streamed, r.from_seq, r.to_seq, r.requested_by, r.object_key, r.state AS receipt_state, r.upload_id,
+       r.parts,
        r.abort_state, r.destination_id, d.name, d.kind, d.url, d.bucket, d.region, d.key_prefix, d.path_style, d.internal,
        d.data_classes, d.state AS destination_state, d.secret
 FROM pc.export_receipts r
@@ -46,7 +47,13 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'QUEUED';
 
 -- name: SetExportUpload :execrows
 -- Stored before the first part, so a crash cannot lose the upload.
-UPDATE pc.export_receipts SET upload_id = sqlc.arg(upload_id), abort_state = 'PENDING'
+UPDATE pc.export_receipts SET upload_id = sqlc.arg(upload_id), abort_state = 'PENDING', parts = 0
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PUSHING';
+
+-- name: SetExportPartBegun :execrows
+-- The highest part begun, stored before it is sent: an abort must reach
+-- every part, whatever an earlier abort already deleted.
+UPDATE pc.export_receipts SET parts = sqlc.arg(parts)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PUSHING';
 
 -- name: SetExportAborted :execrows
@@ -72,9 +79,11 @@ SET state = 'FAILED', failure_code = sqlc.arg(failure_code), last_status = sqlc.
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('QUEUED', 'PUSHING');
 
 -- name: ClaimStreamedExportReceipt :one
--- The oldest waiting streamed push of the person whose export is building.
+-- The oldest waiting streamed push of the person whose export is building,
+-- claimed and started at once: no failure can leave it QUEUED with an
+-- artifact, which nothing would ever pick up.
 UPDATE pc.export_receipts AS r
-SET artifact_id = sqlc.arg(request_id)
+SET artifact_id = sqlc.arg(request_id), state = 'PUSHING', attempts = attempts + 1, started_at = now()
 WHERE r.org_id = sqlc.arg(org_id) AND r.id = (
     SELECT w.id FROM pc.export_receipts w
     WHERE w.org_id = sqlc.arg(org_id) AND w.requested_by = sqlc.arg(requested_by) AND w.streamed AND w.artifact_id IS NULL
@@ -104,12 +113,13 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)
 RETURNING consecutive_failures, failing_since;
 
 -- name: GetPackForPush :one
-SELECT state, coalesce((include ->> 'captures')::boolean, false)::boolean AS captures, content, content_sha256, expires_at
+SELECT state, coalesce((include ->> 'captures')::boolean, false)::boolean AS captures, content, content_sha256,
+       coalesce(expires_at > now(), false)::boolean AS live
 FROM pc.evidence_packs
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
 -- name: GetExportForPush :one
-SELECT state, parts, manifest, expires_at
+SELECT state, parts, manifest, coalesce(expires_at > now(), false)::boolean AS live
 FROM pc.data_requests
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND kind = 'EXPORT';
 
@@ -137,10 +147,11 @@ UPDATE pc.export_receipts SET removed_here_at = now(), notice_state = 'PENDING'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND removed_here_at IS NULL;
 
 -- name: ListExportNotices :many
+-- The least tried first: a failing destination cannot fill every run.
 SELECT r.id, r.notice_attempts
 FROM pc.export_receipts r
 WHERE r.org_id = sqlc.arg(org_id) AND r.notice_state = 'PENDING'
-ORDER BY r.id
+ORDER BY r.notice_attempts, r.id
 LIMIT sqlc.arg(max_rows)::int;
 
 -- name: LoadExportNotice :one

@@ -62,9 +62,11 @@ const (
 	abortTimeout   = 30 * time.Second
 	abortAttempts  = 3
 	// pushTimeout bounds one attempt of a stored artifact's push.
-	pushTimeout   = time.Hour
-	pushAttempts  = 3
-	maxSweepItems = 200
+	pushTimeout  = time.Hour
+	pushAttempts = 3
+	// maxSweepItems bounds what one org's sweep does on the network; the next
+	// hour continues.
+	maxSweepItems = 20
 	// FailureKind is the owned failure kind of failing delivery.
 	FailureKind = "export.delivery_failing"
 )
@@ -229,7 +231,7 @@ func (s *Service) Push(ctx context.Context, in PushRequest) (Receipt, error) {
 		switch in.Class {
 		case ClassEvidencePacks:
 			p, err := q.GetPackForPush(ctx, c.Org, in.Artifact)
-			if db.IsNoRows(err) || (err == nil && p.State != "READY") {
+			if db.IsNoRows(err) || (err == nil && (p.State != "READY" || !p.Live)) {
 				return ErrArtifact
 			} else if err != nil {
 				return err
@@ -238,7 +240,7 @@ func (s *Service) Push(ctx context.Context, in PushRequest) (Receipt, error) {
 		case ClassOrgExports:
 			if !in.Stream {
 				r, err := q.GetExportForPush(ctx, c.Org, in.Artifact)
-				if db.IsNoRows(err) || (err == nil && (r.State != "READY" || r.Parts == 0)) {
+				if db.IsNoRows(err) || (err == nil && (r.State != "READY" || r.Parts == 0 || !r.Live)) {
 					return ErrArtifact
 				} else if err != nil {
 					return err
@@ -407,17 +409,19 @@ type upload struct {
 	key      string
 	partSize int
 	// begun stores the upload's id before the first part (HR-516).
-	begun  func(ctx context.Context, id string) error
-	buf    []byte
-	id     string
-	parts  []sent
-	number int
-	sum    hash.Hash
-	total  int64
+	begun func(ctx context.Context, id string) error
+	// partBegun stores the highest part number before that part is sent.
+	partBegun func(ctx context.Context, number int) error
+	buf       []byte
+	id        string
+	parts     []sent
+	number    int
+	sum       hash.Hash
+	total     int64
 }
 
-func newUpload(t transport, key string, partSize int, begun func(context.Context, string) error) *upload {
-	return &upload{t: t, key: key, partSize: partSize, begun: begun, sum: sha256.New()}
+func newUpload(t transport, key string, partSize int, begun func(context.Context, string) error, partBegun func(context.Context, int) error) *upload {
+	return &upload{t: t, key: key, partSize: partSize, begun: begun, partBegun: partBegun, sum: sha256.New()}
 }
 
 func (u *upload) write(ctx context.Context, data []byte) error {
@@ -445,6 +449,9 @@ func (u *upload) part(ctx context.Context, body []byte) error {
 		}
 	}
 	u.number++
+	if err := u.partBegun(ctx, u.number); err != nil {
+		return err
+	}
 	s, err := u.t.Part(ctx, u.key, u.id, u.number, body)
 	if err != nil {
 		return err
@@ -483,6 +490,7 @@ type push struct {
 	key         string
 	receipt     string
 	uploadID    string
+	parts       int
 	abort       string
 	t           transport
 }
@@ -543,6 +551,7 @@ func (s *Service) load(ctx context.Context, org ids.OrgID, id ids.UUID) (*push, 
 		p.from, p.to = r.FromSeq.Int64, r.ToSeq.Int64
 		if r.UploadID != nil && r.AbortState == "PENDING" {
 			p.uploadID = *r.UploadID
+			p.parts = int(r.Parts)
 		}
 		p.t, err = s.transportOf(ctx, org, r.DestinationID, tg, r.Secret)
 		return err
@@ -599,14 +608,22 @@ func (s *Service) gate(ctx context.Context, p *push) (tenancy.Caller, error) {
 }
 
 func (s *Service) newUploadFor(p *push) *upload {
-	return newUpload(p.t, p.key, s.partSize, func(ctx context.Context, id string) error {
-		p.uploadID = id
+	update := func(ctx context.Context, f func(q *dbq.Queries) (int64, error)) error {
 		return s.pool.InTenantTx(ctx, p.org, func(ctx context.Context, tx db.TenantTx) error {
-			n, err := dbq.New(tx).SetExportUpload(ctx, &id, p.org, p.id)
+			n, err := f(dbq.New(tx))
 			if err == nil && n == 0 {
 				return db.ErrLostRace
 			}
 			return err
+		})
+	}
+	return newUpload(p.t, p.key, s.partSize, func(ctx context.Context, id string) error {
+		p.uploadID, p.parts = id, 0
+		return update(ctx, func(q *dbq.Queries) (int64, error) { return q.SetExportUpload(ctx, &id, p.org, p.id) })
+	}, func(ctx context.Context, number int) error {
+		p.parts = number
+		return update(ctx, func(q *dbq.Queries) (int64, error) {
+			return q.SetExportPartBegun(ctx, int32(number), p.org, p.id) //nolint:gosec // G115: at most 10000 parts
 		})
 	})
 }
@@ -621,7 +638,7 @@ func (s *Service) abortUpload(ctx context.Context, p *push) bool {
 	var err error
 	for range abortAttempts {
 		actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abortTimeout)
-		err = p.t.Abort(actx, p.key, p.uploadID)
+		err = p.t.Abort(actx, p.key, p.uploadID, p.parts)
 		cancel()
 		if err == nil {
 			break
@@ -725,7 +742,7 @@ func (s *Service) sendPack(ctx context.Context, p *push, u *upload) (sent, error
 	} else if err != nil {
 		return sent{}, err
 	}
-	if pack.State != "READY" {
+	if pack.State != "READY" || !pack.Live {
 		return sent{}, final("artifact_gone")
 	}
 	if !classAllowed(p.classes, p.class, pack.Captures) {
@@ -755,7 +772,7 @@ func (s *Service) sendExport(ctx context.Context, p *push, u *upload) (sent, err
 	} else if err != nil {
 		return sent{}, err
 	}
-	if r.State != "READY" || r.Parts == 0 || r.Manifest == nil {
+	if r.State != "READY" || r.Parts == 0 || !r.Live || r.Manifest == nil {
 		return sent{}, final("artifact_gone")
 	}
 	for n := int32(1); n <= r.Parts; n++ {
@@ -774,14 +791,12 @@ func (s *Service) sendExport(ctx context.Context, p *push, u *upload) (sent, err
 			return sent{}, err
 		}
 	}
-	res, err := u.finish(ctx)
-	if err != nil {
-		return sent{}, err
-	}
+	// The manifest goes first: a failure then leaves nothing whole at the
+	// destination, and a whole object always has its manifest.
 	if _, err := p.t.Put(ctx, p.key+ManifestSuffix, []byte(*r.Manifest)); err != nil {
 		return sent{}, err
 	}
-	return res, nil
+	return u.finish(ctx)
 }
 
 // settle records a delivery.
@@ -932,12 +947,6 @@ func (s *Service) Open(ctx context.Context, org ids.OrgID, request, requestedBy 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := dbq.New(tx).StartExportPush(ctx, org, id)
-		return err
-	}); err != nil {
-		return nil, err
-	}
 	if _, err := s.gate(ctx, p); err != nil {
 		if serr := s.settleFailure(ctx, p, err, true); serr != nil {
 			return nil, errors.Join(err, serr)
@@ -970,10 +979,10 @@ loop:
 				}
 				continue
 			}
-			if res, err = st.u.finish(ctx); err != nil {
+			if _, err = st.p.t.Put(ctx, st.p.key+ManifestSuffix, op.manifest); err != nil {
 				break loop
 			}
-			if _, err = st.p.t.Put(ctx, st.p.key+ManifestSuffix, op.manifest); err != nil {
+			if res, err = st.u.finish(ctx); err != nil {
 				break loop
 			}
 			finished = true

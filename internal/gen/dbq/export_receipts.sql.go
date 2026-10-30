@@ -18,7 +18,7 @@ import (
 
 const claimStreamedExportReceipt = `-- name: ClaimStreamedExportReceipt :one
 UPDATE pc.export_receipts AS r
-SET artifact_id = $1
+SET artifact_id = $1, state = 'PUSHING', attempts = attempts + 1, started_at = now()
 WHERE r.org_id = $2 AND r.id = (
     SELECT w.id FROM pc.export_receipts w
     WHERE w.org_id = $2 AND w.requested_by = $3 AND w.streamed AND w.artifact_id IS NULL
@@ -36,7 +36,9 @@ type ClaimStreamedExportReceiptParams struct {
 	WaitSeconds int32
 }
 
-// The oldest waiting streamed push of the person whose export is building.
+// The oldest waiting streamed push of the person whose export is building,
+// claimed and started at once: no failure can leave it QUEUED with an
+// artifact, which nothing would ever pick up.
 func (q *Queries) ClaimStreamedExportReceipt(ctx context.Context, arg ClaimStreamedExportReceiptParams) (ids.UUID, error) {
 	row := q.db.QueryRow(ctx, claimStreamedExportReceipt,
 		arg.RequestID,
@@ -140,16 +142,16 @@ func (q *Queries) FailUnclaimedExportReceipts(ctx context.Context, orgID ids.Org
 }
 
 const getExportForPush = `-- name: GetExportForPush :one
-SELECT state, parts, manifest, expires_at
+SELECT state, parts, manifest, coalesce(expires_at > now(), false)::boolean AS live
 FROM pc.data_requests
 WHERE org_id = $1 AND id = $2 AND kind = 'EXPORT'
 `
 
 type GetExportForPushRow struct {
-	State     string
-	Parts     int32
-	Manifest  *string
-	ExpiresAt *time.Time
+	State    string
+	Parts    int32
+	Manifest *string
+	Live     bool
 }
 
 func (q *Queries) GetExportForPush(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetExportForPushRow, error) {
@@ -159,7 +161,7 @@ func (q *Queries) GetExportForPush(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.State,
 		&i.Parts,
 		&i.Manifest,
-		&i.ExpiresAt,
+		&i.Live,
 	)
 	return i, err
 }
@@ -239,7 +241,8 @@ func (q *Queries) GetExportReceipt(ctx context.Context, orgID ids.OrgID, iD ids.
 }
 
 const getPackForPush = `-- name: GetPackForPush :one
-SELECT state, coalesce((include ->> 'captures')::boolean, false)::boolean AS captures, content, content_sha256, expires_at
+SELECT state, coalesce((include ->> 'captures')::boolean, false)::boolean AS captures, content, content_sha256,
+       coalesce(expires_at > now(), false)::boolean AS live
 FROM pc.evidence_packs
 WHERE org_id = $1 AND id = $2
 `
@@ -249,7 +252,7 @@ type GetPackForPushRow struct {
 	Captures      bool
 	Content       []byte
 	ContentSha256 []byte
-	ExpiresAt     *time.Time
+	Live          bool
 }
 
 func (q *Queries) GetPackForPush(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetPackForPushRow, error) {
@@ -260,7 +263,7 @@ func (q *Queries) GetPackForPush(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.Captures,
 		&i.Content,
 		&i.ContentSha256,
-		&i.ExpiresAt,
+		&i.Live,
 	)
 	return i, err
 }
@@ -343,7 +346,7 @@ const listExportNotices = `-- name: ListExportNotices :many
 SELECT r.id, r.notice_attempts
 FROM pc.export_receipts r
 WHERE r.org_id = $1 AND r.notice_state = 'PENDING'
-ORDER BY r.id
+ORDER BY r.notice_attempts, r.id
 LIMIT $2::int
 `
 
@@ -352,6 +355,7 @@ type ListExportNoticesRow struct {
 	NoticeAttempts int32
 }
 
+// The least tried first: a failing destination cannot fill every run.
 func (q *Queries) ListExportNotices(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ListExportNoticesRow, error) {
 	rows, err := q.db.Query(ctx, listExportNotices, orgID, maxRows)
 	if err != nil {
@@ -580,6 +584,7 @@ func (q *Queries) LoadExportNotice(ctx context.Context, orgID ids.OrgID, iD ids.
 
 const loadExportPush = `-- name: LoadExportPush :one
 SELECT r.class, r.artifact_id, r.streamed, r.from_seq, r.to_seq, r.requested_by, r.object_key, r.state AS receipt_state, r.upload_id,
+       r.parts,
        r.abort_state, r.destination_id, d.name, d.kind, d.url, d.bucket, d.region, d.key_prefix, d.path_style, d.internal,
        d.data_classes, d.state AS destination_state, d.secret
 FROM pc.export_receipts r
@@ -597,6 +602,7 @@ type LoadExportPushRow struct {
 	ObjectKey        string
 	ReceiptState     string
 	UploadID         *string
+	Parts            int32
 	AbortState       string
 	DestinationID    ids.UUID
 	Name             string
@@ -627,6 +633,7 @@ func (q *Queries) LoadExportPush(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.ObjectKey,
 		&i.ReceiptState,
 		&i.UploadID,
+		&i.Parts,
 		&i.AbortState,
 		&i.DestinationID,
 		&i.Name,
@@ -783,8 +790,23 @@ func (q *Queries) SetExportNoticeUndeliverable(ctx context.Context, orgID ids.Or
 	return result.RowsAffected(), nil
 }
 
+const setExportPartBegun = `-- name: SetExportPartBegun :execrows
+UPDATE pc.export_receipts SET parts = $1
+WHERE org_id = $2 AND id = $3 AND state = 'PUSHING'
+`
+
+// The highest part begun, stored before it is sent: an abort must reach
+// every part, whatever an earlier abort already deleted.
+func (q *Queries) SetExportPartBegun(ctx context.Context, parts int32, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setExportPartBegun, parts, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setExportUpload = `-- name: SetExportUpload :execrows
-UPDATE pc.export_receipts SET upload_id = $1, abort_state = 'PENDING'
+UPDATE pc.export_receipts SET upload_id = $1, abort_state = 'PENDING', parts = 0
 WHERE org_id = $2 AND id = $3 AND state = 'PUSHING'
 `
 

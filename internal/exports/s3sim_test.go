@@ -38,6 +38,12 @@ type s3Sim struct {
 	completeError bool
 	// badEcho echoes a wrong checksum.
 	badEcho bool
+	// failSuffix answers 500 to a whole-object PUT of a key ending so.
+	failSuffix string
+	// hangBucket does not answer requests for this bucket until release
+	// closes or the client leaves.
+	hangBucket string
+	release    chan struct{}
 }
 
 type simUpload struct {
@@ -69,6 +75,17 @@ func (s *s3Sim) keys() []string {
 
 func (s *s3Sim) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
+	if b := s.hangBucket; b != "" && strings.HasPrefix(r.URL.Path, "/"+b+"/") {
+		release := s.release
+		s.mu.Unlock()
+		// Go's server notices a client that left only once the body is read.
+		_, _ = io.Copy(io.Discard, r.Body)
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+		return
+	}
 	defer s.mu.Unlock()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -101,7 +118,7 @@ func (s *s3Sim) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, uploads := q["uploads"]
 	switch {
 	case r.Method == http.MethodPut && id == "":
-		if s.failPut {
+		if s.failPut || (s.failSuffix != "" && strings.HasSuffix(key, s.failSuffix)) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

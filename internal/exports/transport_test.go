@@ -37,13 +37,15 @@ func newS3Transport(t *testing.T, sim *s3Sim) *s3Transport {
 
 func noBegin(context.Context, string) error { return nil }
 
+func noPart(context.Context, int) error { return nil }
+
 // TestUploadSmallObjectIsOnePut: an object below the part size never starts
 // an upload, so nothing can be left behind.
 // Covers: F517
 func TestUploadSmallObjectIsOnePut(t *testing.T) {
 	sim := newS3Sim()
 	tr := newS3Transport(t, sim)
-	u := newUpload(tr, "k/small", 1024, noBegin)
+	u := newUpload(tr, "k/small", 1024, noBegin, noPart)
 	ctx := context.Background()
 	if err := u.write(ctx, []byte("hello")); err != nil {
 		t.Fatal(err)
@@ -70,7 +72,7 @@ func TestUploadCutsPartsFromTheStream(t *testing.T) {
 	u := newUpload(tr, "k/big", 10, func(_ context.Context, id string) error {
 		begun = id
 		return nil
-	})
+	}, noPart)
 	ctx := context.Background()
 	var want bytes.Buffer
 	for _, n := range []int{3, 4, 25, 1, 7} {
@@ -110,7 +112,7 @@ func TestUploadRefusesWhatTheDestinationGotWrong(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			sim := newS3Sim()
 			c.set(sim)
-			u := newUpload(newS3Transport(t, sim), "k/big", 4, noBegin)
+			u := newUpload(newS3Transport(t, sim), "k/big", 4, noBegin, noPart)
 			err := u.write(ctx, []byte("abcdefghij"))
 			if err == nil {
 				_, err = u.finish(ctx)
@@ -127,7 +129,7 @@ func TestUploadRefusesWhatTheDestinationGotWrong(t *testing.T) {
 
 func TestAbortOfAGoneUploadSucceeds(t *testing.T) {
 	sim := newS3Sim()
-	if err := newS3Transport(t, sim).Abort(context.Background(), "k", "no-such-upload"); err != nil {
+	if err := newS3Transport(t, sim).Abort(context.Background(), "k", "no-such-upload", 0); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -158,6 +160,8 @@ type putSim struct {
 	// failAfter answers 500 from this many requests on; 0 never.
 	failAfter int
 	requests  int
+	// failDeletesFrom answers 503 to DELETEs from this request on; 0 never.
+	failDeletesFrom int
 }
 
 func (s *putSim) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -181,6 +185,10 @@ func (s *putSim) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.objects[key] = body
 		w.WriteHeader(http.StatusCreated)
 	case http.MethodDelete:
+		if s.failDeletesFrom != 0 && s.requests >= s.failDeletesFrom {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		if _, ok := s.objects[key]; !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -209,7 +217,7 @@ func TestChunkedPutsWriteTheIndexLast(t *testing.T) {
 	sim := &putSim{objects: map[string][]byte{}}
 	tr := newPutTransport(t, sim)
 	ctx := context.Background()
-	u := newUpload(tr, "k/big", 4, noBegin)
+	u := newUpload(tr, "k/big", 4, noBegin, noPart)
 	if err := u.write(ctx, []byte("abcdefghij")); err != nil {
 		t.Fatal(err)
 	}
@@ -236,15 +244,55 @@ func TestChunkedPutAbortDeletesTheChunks(t *testing.T) {
 	sim := &putSim{objects: map[string][]byte{}, failAfter: 3}
 	tr := newPutTransport(t, sim)
 	ctx := context.Background()
-	u := newUpload(tr, "k/big", 4, noBegin)
+	u := newUpload(tr, "k/big", 4, noBegin, noPart)
 	if err := u.write(ctx, []byte("abcdefghijklmnop")); err == nil {
 		t.Fatal("no failure")
 	}
-	if err := tr.Abort(ctx, u.key, u.id); err != nil {
+	if err := tr.Abort(ctx, u.key, u.id, u.number); err != nil {
 		t.Fatal(err)
 	}
 	if len(sim.objects) != 0 || len(sim.deleted) != 2 {
 		t.Fatalf("left %v, deleted %v", sim.objects, sim.deleted)
+	}
+}
+
+// TestHR516_AResumedChunkAbortReachesEveryChunk: a target that fails part
+// way through an abort leaves chunks; the next abort deletes them all, past
+// the 404s of the chunks already gone.
+// Covers: F517
+func TestHR516_AResumedChunkAbortReachesEveryChunk(t *testing.T) {
+	sim := &putSim{objects: map[string][]byte{}}
+	tr := newPutTransport(t, sim)
+	ctx := context.Background()
+	const chunks = 6
+	for n := 1; n <= chunks; n++ {
+		if _, err := tr.Part(ctx, "k/big", "chunks", n, []byte("chunk")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sim.failDeletesFrom = sim.requests + 3
+	if err := tr.Abort(ctx, "k/big", "chunks", chunks); err == nil {
+		t.Fatal("a failed abort reported success")
+	}
+	if len(sim.objects) != chunks-2 {
+		t.Fatalf("after the first abort: %d left", len(sim.objects))
+	}
+	sim.failDeletesFrom = 0
+	if err := tr.Abort(ctx, "k/big", "chunks", chunks); err != nil {
+		t.Fatal(err)
+	}
+	if len(sim.objects) != 0 {
+		t.Fatalf("chunks left behind: %v", sim.objects)
+	}
+}
+
+func TestSweepJobsFit(t *testing.T) {
+	opts := SweepOrgArgs{}.InsertOpts()
+	if opts.Queue == "" || len(opts.UniqueOpts.ByState) == 0 || !opts.UniqueOpts.ByArgs {
+		t.Fatalf("opts = %+v", opts)
+	}
+	if want := maxSweepItems * RequestTimeout; (&sweepOrgWorker{}).Timeout(nil) < want {
+		t.Fatalf("timeout %v under %v", (&sweepOrgWorker{}).Timeout(nil), want)
 	}
 }
 

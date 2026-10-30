@@ -334,6 +334,153 @@ func TestHR516_ARetryEndsTheOldUploadFirst(t *testing.T) {
 	}
 }
 
+// TestHR516_AHangingDestinationStopsOnlyItsOrg: each org sweeps in its own
+// job, so a destination that never answers uses up its own org's job and
+// nothing else; the dispatcher still gives every org a job.
+// Covers: F517
+func TestHR516_AHangingDestinationStopsOnlyItsOrg(t *testing.T) {
+	f := newPushFixture(t)
+	dest := f.destination(t, "vault", ClassEvidencePacks)
+	pack := f.pack(t, []byte("a short evidence pack, one part"), false)
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassEvidencePacks, Artifact: pack})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := f.svc.Run(ctx, f.org, r.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	f.d.AdminExec(t, "UPDATE pc.evidence_packs SET state = 'EXPIRED', content = NULL WHERE org_id = $1 AND id = $2", f.org, pack)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	f.sim.mu.Lock()
+	f.sim.hangBucket, f.sim.release = "bkt", release
+	f.sim.mu.Unlock()
+
+	other := ids.New[ids.Org]()
+	f.d.AdminExec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'other')", other)
+	short, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := f.svc.Sweep(short, f.org); err == nil {
+		t.Fatal("a hanging destination reported success")
+	}
+	if err := f.svc.Sweep(ctx, other); err != nil {
+		t.Fatalf("the second org: %v", err)
+	}
+	jobs, err := sweepJobs(ctx, f.p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[ids.OrgID]bool{}
+	for _, j := range jobs {
+		seen[j.Args.(SweepOrgArgs).Org] = true
+	}
+	if !seen[f.org] || !seen[other] {
+		t.Fatalf("jobs for %v", seen)
+	}
+	if got := f.receipt(t, r.ID); got.NoticeState != "PENDING" {
+		t.Fatalf("hung notice: %+v", got)
+	}
+}
+
+// TestF517_AnExpiredArtifactNeverLeaves: past its expiry by the database
+// clock an artifact is gone, whether or not the expiry job has run yet, at
+// the request and again when the push starts.
+// Covers: F517
+func TestF517_AnExpiredArtifactNeverLeaves(t *testing.T) {
+	f := newPushFixture(t)
+	dest := f.destination(t, "vault", ClassEvidencePacks)
+	lapse := func(pack ids.UUID) {
+		f.d.AdminExec(t, `UPDATE pc.evidence_packs SET ready_at = now() - interval '8 days', expires_at = now() - interval '1 day'
+			WHERE org_id = $1 AND id = $2`, f.org, pack)
+	}
+	expired := f.pack(t, packBody, false)
+	lapse(expired)
+	if _, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassEvidencePacks, Artifact: expired}); !errors.Is(err, ErrArtifact) {
+		t.Fatalf("expired: %v", err)
+	}
+	queued := f.pack(t, packBody, false)
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassEvidencePacks, Artifact: queued})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lapse(queued)
+	if err := f.svc.Run(context.Background(), f.org, r.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.receipt(t, r.ID); got.State != ReceiptFailed || got.FailureCode != "artifact_gone" || len(f.sim.keys()) != 0 {
+		t.Fatalf("receipt %+v, objects %v", got, f.sim.keys())
+	}
+}
+
+// TestHR514_AClaimedStreamNeverStaysQueued: a claimed streamed receipt is
+// PUSHING from that moment, so a crash right after the claim still ends in
+// a failed receipt.
+// Covers: F517
+func TestHR514_AClaimedStreamNeverStaysQueued(t *testing.T) {
+	f := newPushFixture(t)
+	dest := f.destination(t, "vault", ClassOrgExports)
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassOrgExports, Stream: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	request := ids.NewV7()
+	f.d.AdminExec(t, `INSERT INTO pc.data_requests (org_id, id, kind, state, created_by) VALUES ($1, $2, 'EXPORT', 'BUILDING', $3)`, f.org, request, f.user)
+	if err := f.p.InTenantTx(ctx, f.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := dbq.New(tx).ClaimStreamedExportReceipt(ctx, dbq.ClaimStreamedExportReceiptParams{
+			RequestID: &request, OrgID: f.org, RequestedBy: f.user, WaitSeconds: int32(StreamWait / time.Second),
+		})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.receipt(t, r.ID); got.State != ReceiptPushing || got.Attempts != 1 {
+		t.Fatalf("claimed = %+v", got)
+	}
+	f.d.AdminExec(t, "UPDATE pc.export_receipts SET started_at = now() - interval '9 hours' WHERE org_id = $1 AND id = $2", f.org, r.ID)
+	if err := f.svc.Sweep(ctx, f.org); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.receipt(t, r.ID); got.State != ReceiptFailed || got.FailureCode != "push_stopped" {
+		t.Fatalf("after the sweep: %+v", got)
+	}
+}
+
+// TestHR516_AFailedManifestLeavesNothingWhole: the manifest goes first, so
+// when it fails no whole object sits behind a failed receipt.
+// Covers: F517
+func TestHR516_AFailedManifestLeavesNothingWhole(t *testing.T) {
+	f := newPushFixture(t)
+	dest := f.destination(t, "vault", ClassOrgExports)
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassOrgExports, Stream: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	request := ids.NewV7()
+	f.d.AdminExec(t, `INSERT INTO pc.data_requests (org_id, id, kind, state, created_by) VALUES ($1, $2, 'EXPORT', 'BUILDING', $3)`, f.org, request, f.user)
+	st, err := f.svc.Open(ctx, f.org, request, f.user)
+	if err != nil || st == nil {
+		t.Fatalf("open: %v %v", st, err)
+	}
+	keep := func(context.Context) error { return nil }
+	if err := st.Write(ctx, bytes.Repeat([]byte("x"), 90), keep); err != nil {
+		t.Fatal(err)
+	}
+	f.sim.mu.Lock()
+	f.sim.failSuffix = ManifestSuffix
+	f.sim.mu.Unlock()
+	if err := st.Finish(ctx, "signed-manifest", keep); err == nil {
+		t.Fatal("a failed manifest reported success")
+	}
+	st.Abort()
+	got := f.receipt(t, r.ID)
+	if got.State != ReceiptFailed || got.AbortState != "ABORTED" || len(f.sim.keys()) != 0 || f.sim.openUploads() != 0 {
+		t.Fatalf("receipt %+v, objects %v, %d open", got, f.sim.keys(), f.sim.openUploads())
+	}
+}
+
 // TestHR515_ARemovalSendsASignedNotice: when a pushed pack is removed here
 // the destination gets a signed notice next to the object, the object
 // stays, nothing is deleted there, and the receipt says only that a copy

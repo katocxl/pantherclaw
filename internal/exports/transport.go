@@ -45,7 +45,7 @@ type transport interface {
 	Begin(ctx context.Context, key string) (string, error)
 	Part(ctx context.Context, key, upload string, number int, body []byte) (sent, error)
 	Complete(ctx context.Context, key, upload string, parts []sent) (sent, error)
-	Abort(ctx context.Context, key, upload string) error
+	Abort(ctx context.Context, key, upload string, parts int) error
 }
 
 // pushError is a refused or failed request. Only its code and status are
@@ -269,7 +269,7 @@ func (t *s3Transport) Complete(ctx context.Context, key, upload string, parts []
 }
 
 // Abort ends the upload; one that is already gone needs nothing more.
-func (t *s3Transport) Abort(ctx context.Context, key, upload string) error {
+func (t *s3Transport) Abort(ctx context.Context, key, upload string, _ int) error {
 	res, err := t.request(ctx, http.MethodDelete, key, uploadQuery(upload), nil, nil, nil)
 	if err != nil {
 		return err
@@ -353,19 +353,18 @@ func (t *putTransport) Complete(ctx context.Context, key, _ string, parts []sent
 	return t.Put(ctx, key, body)
 }
 
-// Abort deletes the chunks in order until the target has no more. A target
-// that refuses DELETE keeps them, and the abort stays pending.
-func (t *putTransport) Abort(ctx context.Context, key, _ string) error {
-	for n := 1; ; n++ {
+// Abort deletes every chunk begun. An earlier abort may have deleted some,
+// so a 404 says only that this chunk is gone, never that the rest are. A
+// target that refuses DELETE keeps them, and the abort stays pending.
+func (t *putTransport) Abort(ctx context.Context, key, _ string, parts int) error {
+	for n := 1; n <= parts; n++ {
 		res, err := t.send(ctx, http.MethodDelete, chunkKey(key, n), nil, nil)
 		if err != nil {
 			return err
 		}
-		if res.Status == http.StatusNotFound {
-			return nil
-		}
-		if res.Status/100 != 2 {
+		if res.Status/100 != 2 && res.Status != http.StatusNotFound {
 			return statusError(res.Status)
 		}
 	}
+	return nil
 }
