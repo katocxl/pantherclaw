@@ -2,9 +2,9 @@
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 -- Calls to an organization's model provider (G0 M21 D304, D309; HR-545) and
 -- the drafts they produced. A call holds who asked, for what and how much,
--- never the text sent or returned. Its row is written before the provider is
--- called, so a call that never finished still counts against the caps. A
--- model_drafts row marks a policy or automation version as origin=model; the
+-- never the text sent or returned. Its row, holding the tokens the call may
+-- spend, is written before the provider is called, so a call in flight or one
+-- that never finished still counts against the caps (D312). A model_drafts row marks a policy or automation version as origin=model; the
 -- version tables themselves are unchanged.
 -- +goose Up
 CREATE TABLE pc.model_calls (
@@ -17,7 +17,10 @@ CREATE TABLE pc.model_calls (
     outcome       text        NOT NULL DEFAULT 'PENDING' CHECK (outcome ~ '^[A-Z][A-Z_]{1,63}$'),
     input_tokens  integer     NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
     output_tokens integer     NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
-    created_at    timestamptz NOT NULL DEFAULT now(),
+    -- Tokens held for the call: 0 once its real usage is known or nothing was
+    -- spent; kept when it ended without an answer.
+    reserved_tokens integer   NOT NULL DEFAULT 0 CHECK (reserved_tokens >= 0),
+    created_at   timestamptz NOT NULL DEFAULT now(),
     finished_at   timestamptz,
     PRIMARY KEY (org_id, id),
     CHECK ((outcome = 'PENDING') = (finished_at IS NULL))
@@ -33,7 +36,7 @@ CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.model_calls
     FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT ON pc.model_calls TO pc_app;
-GRANT UPDATE (outcome, input_tokens, output_tokens, finished_at) ON pc.model_calls TO pc_app;
+GRANT UPDATE (outcome, input_tokens, output_tokens, reserved_tokens, finished_at) ON pc.model_calls TO pc_app;
 GRANT SELECT ON pc.model_calls TO pc_audit_ro;
 
 CREATE TABLE pc.model_drafts (

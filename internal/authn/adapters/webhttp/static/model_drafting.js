@@ -3,7 +3,8 @@
 //
 // Model drafting settings page (G0 M21 D309). Turning drafting on or saving
 // the key first steps up with a security key (WebAuthn, user verification),
-// then sends a same-origin JSON request with the PC-CSRF header (HR-151). The
+// then sends a same-origin JSON request with the PC-CSRF header (HR-151);
+// turning it off and clearing the key send the request alone (D312). The
 // page runs under Trusted Types: text is written with textContent only, and
 // the action's path comes from the server-rendered button, never the URL.
 // The key leaves the input once, in the request body, and the input is
@@ -101,6 +102,21 @@ async function change(path, body) {
   } catch (e) {
     say(e instanceof APIError ? explain(e) : "The security key did not answer (" + e.message + ").");
   }
+}
+
+async function leave(path) {
+  try {
+    await post(path);
+    say("Saved.");
+    window.location.reload();
+  } catch (e) {
+    say(explain(e));
+  }
+}
+
+for (const id of ["disable", "clear-key"]) {
+  const button = document.getElementById(id);
+  if (button) { button.addEventListener("click", () => leave(button.dataset.path)); }
 }
 
 const enableButton = document.getElementById("enable");

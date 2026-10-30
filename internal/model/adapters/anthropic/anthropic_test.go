@@ -48,7 +48,7 @@ func draftRequest() ports.DraftRequest {
 	return ports.DraftRequest{
 		Key: pclog.NewSecret("sk-test-key"), Model: DefaultModel, Task: ports.TaskSearchQuery,
 		Text: "denied actions in production", Schema: jsontext.Value(testSchema),
-		Catalogue: ports.Catalogue{Entities: []string{"transactions"}},
+		Catalog: ports.Catalog{Entities: []string{"transactions"}},
 	}
 }
 
@@ -170,7 +170,7 @@ func TestEndpointIsFixedAndUsesTheEgressClient(t *testing.T) {
 	}
 	// The real client refuses loopback at dial time (HR-071).
 	a.endpoint = httptest.NewTLSServer(answer(http.StatusOK, okAnswer)).URL
-	if _, err := a.Draft(context.Background(), draftRequest()); !errors.Is(err, ports.ErrProviderFailed) {
+	if _, err := a.Draft(context.Background(), draftRequest()); !errors.Is(err, ports.ErrProviderTimeout) {
 		t.Fatalf("err = %v", err)
 	}
 }

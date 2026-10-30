@@ -2338,16 +2338,17 @@ type PcMetricSample struct {
 }
 
 type PcModelCall struct {
-	OrgID        ids.OrgID
-	ID           ids.UUID
-	Actor        string
-	Task         string
-	Model        string
-	Outcome      string
-	InputTokens  int32
-	OutputTokens int32
-	CreatedAt    time.Time
-	FinishedAt   *time.Time
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	Actor          string
+	Task           string
+	Model          string
+	Outcome        string
+	InputTokens    int32
+	OutputTokens   int32
+	ReservedTokens int32
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
 }
 
 type PcModelDraft struct {

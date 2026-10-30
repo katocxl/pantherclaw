@@ -57,11 +57,17 @@ type provider struct {
 	last  ports.DraftRequest
 	resp  ports.DraftResponse
 	err   error
+	// during runs while the call is in flight.
+	during func()
 }
 
 func (p *provider) Draft(_ context.Context, r ports.DraftRequest) (ports.DraftResponse, error) {
 	p.calls.Add(1)
 	p.last = r
+	if during := p.during; during != nil {
+		p.during = nil
+		during()
+	}
 	return p.resp, p.err
 }
 
@@ -166,8 +172,8 @@ func (f *fixture) on() {
 func (f *fixture) draft() (app.Result, error) {
 	return f.svc.Draft(f.admin(), app.Call{
 		Task: ports.TaskSearchQuery, Text: secretText, Schema: []byte(schema),
-		Catalogue: ports.Catalogue{Entities: []string{"transactions"}},
-		Parse:     func([]byte) error { return nil },
+		Catalog: ports.Catalog{Entities: []string{"transactions"}},
+		Parse:   func(ids.UUID, []byte) error { return nil },
 	})
 }
 
@@ -323,7 +329,11 @@ func TestHR545_EveryCallIsAuditedWithoutItsText(t *testing.T) {
 	if n := f.count("SELECT (input_tokens + output_tokens)::int FROM pc.model_calls"); n != 150 {
 		t.Fatalf("tokens: %d", n)
 	}
-	if s := f.text("SELECT string_agg(body::text, ' ') FROM pc.ledger_entries WHERE kind = 'audit.model.call'"); strings.Contains(s, secretText) || strings.Contains(s, testKey) {
+	s := f.text("SELECT string_agg(convert_from(body, 'UTF8'), ' ') FROM pc.ledger_entries WHERE kind LIKE 'audit.model.call%'")
+	if !strings.Contains(s, "SEARCH_QUERY") {
+		t.Fatalf("the read body is not the audit event: %s", s)
+	}
+	if strings.Contains(s, secretText) || strings.Contains(s, testKey) {
 		t.Fatalf("audit body holds text or the key: %s", s)
 	}
 	if s := f.text("SELECT row_to_json(c)::text FROM pc.model_calls c"); strings.Contains(s, secretText) {
@@ -337,7 +347,7 @@ func TestHR545_EveryCallIsAuditedWithoutItsText(t *testing.T) {
 	f.provider.err = nil
 	parseErr := ports.ErrInvalidOutput
 	if _, err := f.svc.Draft(f.admin(), app.Call{
-		Task: ports.TaskSearchQuery, Text: "x", Schema: []byte(schema), Parse: func([]byte) error { return parseErr },
+		Task: ports.TaskSearchQuery, Text: "x", Schema: []byte(schema), Parse: func(ids.UUID, []byte) error { return parseErr },
 	}); !errors.Is(err, ports.ErrInvalidOutput) {
 		t.Fatalf("unparsable output: %v", err)
 	}
@@ -398,17 +408,88 @@ func TestT234_CapsRefuseBeforeTheProviderAndAreAudited(t *testing.T) {
 	if f.provider.calls.Load() != before {
 		t.Fatal("a refused call reached the provider")
 	}
-	if n := f.count("SELECT count(*)::int FROM pc.ledger_entries WHERE kind = 'audit.model.call' AND body::text LIKE '%MODEL_RATE_CAP%'"); n != 1 {
+	if n := f.count("SELECT count(*)::int FROM pc.ledger_entries WHERE kind = 'audit.model.call' AND convert_from(body, 'UTF8') LIKE '%MODEL_RATE_CAP%'"); n != 1 {
 		t.Fatalf("refusal audits: %d", n)
 	}
-	// Move the calls out of the minute: the day's tokens still count.
-	f.exec("UPDATE pc.model_calls SET created_at = now() - interval '2 minutes'")
+	// With the rate cap out of the way, the day's tokens still count.
+	f.svc.Config.CallsPerMinute = 100
 	f.svc.Config.TokensPerDay = 450
 	if _, err := f.draft(); !errors.Is(err, app.ErrBudgetCap) {
 		t.Fatalf("budget cap: %v", err)
 	}
 	if f.provider.calls.Load() != before {
 		t.Fatal("an over-budget call reached the provider")
+	}
+}
+
+// A call is on the ledger and against the budget before it leaves, so a crash
+// in flight loses neither.
+//
+// Covers: F181
+func TestHR545_ACallIsOnTheLedgerBeforeItLeaves(t *testing.T) {
+	f := newFixture(t)
+	f.on()
+	f.svc.Config.TokensPerDay = 1_000_000
+	f.provider.during = func() {
+		if n := f.count("SELECT count(*)::int FROM pc.ledger_entries WHERE kind = 'audit.model.call.started'"); n != 1 {
+			t.Errorf("started entries in flight: %d", n)
+		}
+		if n := f.count("SELECT count(*)::int FROM pc.ledger_entries WHERE kind = 'audit.model.call'"); n != 0 {
+			t.Errorf("finished entries in flight: %d", n)
+		}
+		if n := f.count("SELECT count(*)::int FROM pc.model_calls WHERE outcome = 'PENDING' AND reserved_tokens > 4096"); n != 1 {
+			t.Errorf("reserved calls in flight: %d", n)
+		}
+	}
+	if _, err := f.draft(); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.count("SELECT count(*)::int FROM pc.model_calls WHERE outcome = 'OK' AND reserved_tokens = 0"); n != 1 {
+		t.Fatal("the reservation was not settled")
+	}
+}
+
+// Covers: F181
+func TestT234_TokensInFlightCountAndATimeoutStaysDebited(t *testing.T) {
+	f := newFixture(t)
+	f.on()
+	f.svc.Config.CallsPerMinute, f.svc.Config.TokensPerDay = 10, 4096
+	f.provider.during = func() {
+		if _, err := f.draft(); !errors.Is(err, app.ErrBudgetCap) {
+			t.Errorf("second call in flight: %v", err)
+		}
+	}
+	if _, err := f.draft(); err != nil {
+		t.Fatal(err)
+	}
+	if f.provider.calls.Load() != 1 {
+		t.Fatalf("provider calls: %d", f.provider.calls.Load())
+	}
+
+	// A provider's no spends nothing and hands the reservation back.
+	f.exec("UPDATE pc.model_calls SET input_tokens = 0, output_tokens = 0")
+	f.provider.resp, f.provider.err = ports.DraftResponse{}, ports.ErrProviderFailed
+	if _, err := f.draft(); !errors.Is(err, ports.ErrProviderFailed) {
+		t.Fatalf("failed call: %v", err)
+	}
+	if n := f.count("SELECT COALESCE(sum(reserved_tokens), 0)::int FROM pc.model_calls"); n != 0 {
+		t.Fatalf("a refused call stayed debited: %d", n)
+	}
+
+	// A timeout may have been spent: it stays debited, and the next is refused.
+	f.provider.err = ports.ErrProviderTimeout
+	if _, err := f.draft(); !errors.Is(err, ports.ErrProviderTimeout) {
+		t.Fatalf("timeout: %v", err)
+	}
+	if n := f.count("SELECT COALESCE(sum(reserved_tokens), 0)::int FROM pc.model_calls"); n <= 4096 {
+		t.Fatalf("a timeout was not debited: %d", n)
+	}
+	before := f.provider.calls.Load()
+	if _, err := f.draft(); !errors.Is(err, app.ErrBudgetCap) {
+		t.Fatalf("after a timeout: %v", err)
+	}
+	if f.provider.calls.Load() != before {
+		t.Fatal("a repeated timeout reached the provider")
 	}
 }
 

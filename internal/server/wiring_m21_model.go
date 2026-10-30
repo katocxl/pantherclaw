@@ -6,12 +6,17 @@ package server
 import (
 	"connectrpc.com/connect/v2"
 
+	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
+	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/model/adapters/anthropic"
 	"github.com/katocxl/pantherclaw/internal/model/adapters/modelrpc"
 	modelapp "github.com/katocxl/pantherclaw/internal/model/app"
+	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
+	"github.com/katocxl/pantherclaw/internal/search"
 )
 
 // newModel builds model drafting's service (G0 M21 D304, D309). Without the
@@ -34,7 +39,15 @@ func newModel(d apiDeps) *modelapp.Service {
 // registerM21Model registers ModelService.
 func registerM21Model(rs *connect.Server, d apiDeps) {
 	svc := newModel(d)
-	pantherclawv1connect.RegisterModelServiceHandler(rs, modelrpc.New(svc))
+	defs := &defspg.Store{Pool: d.pool}
+	queries := &search.Service{Pool: d.pool, Defs: defs, Clock: clock.System{}}
+	if d.billing != nil {
+		queries.Editions = d.billing
+	}
+	drafter := &search.Drafter{Search: queries, Model: svc}
+	svc.Operations = drafter
+	svc.Policies = securitysteps.NewPolicyDrafts(&factspg.Store{Pool: d.pool}, defs, d.cel)
+	pantherclawv1connect.RegisterModelServiceHandler(rs, modelrpc.New(svc, drafter))
 	if d.web != nil {
 		d.web.WithModelDrafting(svc)
 	}

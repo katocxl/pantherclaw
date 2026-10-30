@@ -5,7 +5,7 @@
 // provider (G0 M21 D304; F181, F304; TB13, T-234, T-235).
 //
 // A request carries a fixed task kind, the person's own text, the JSON schema
-// of the structured form and a permission-scoped catalogue of names. It has
+// of the structured form and a permission-scoped catalog of names. It has
 // no field for records, payloads, evidence or text an agent or target wrote
 // (HR-542), and none for tools. What a provider returns is untrusted: it is
 // only ever parsed strictly into a draft or a shown query (HR-543, HR-544).
@@ -14,6 +14,8 @@ package ports
 import (
 	"context"
 	"encoding/json/jsontext"
+	"strings"
+	"unicode/utf8"
 
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -34,12 +36,17 @@ func (k TaskKind) Valid() bool {
 	return k == TaskSearchQuery || k == TaskPolicyDraft || k == TaskAutomationDraft
 }
 
-// MaxUserText bounds the person's text, in characters.
-const MaxUserText = 2000
+const (
+	// MaxUserText bounds the person's text, in characters.
+	MaxUserText = 2000
+	// MaxOutputTokens bounds an answer. Drafts are small, and a call has 30
+	// seconds to finish without streaming (D312).
+	MaxOutputTokens = 4096
+)
 
-// Catalogue is the names a draft may use, reduced to what the person may
+// Catalog is the names a draft may use, reduced to what the person may
 // read. It holds names only, never a record or a value.
-type Catalogue struct {
+type Catalog struct {
 	Entities        []string `json:"entities,omitzero"`
 	OperationGroups []string `json:"operation_groups,omitzero"`
 	StepKinds       []string `json:"step_kinds,omitzero"`
@@ -56,8 +63,8 @@ type DraftRequest struct {
 	Text string
 	// Schema is the closed JSON schema the output must follow.
 	Schema jsontext.Value
-	// Catalogue is the permission-scoped names.
-	Catalogue Catalogue
+	// Catalog is the permission-scoped names.
+	Catalog Catalog
 }
 
 // DraftResponse is what a provider returned. Output is unparsed and
@@ -83,6 +90,10 @@ var (
 		"the model provider is limiting requests; try again later")
 	ErrProviderFailed = pcerr.New(pcerr.Unavailable, "MODEL_PROVIDER_FAILED",
 		"the model provider did not answer; nothing was drafted")
+	// ErrProviderTimeout is a call that left and got no whole answer: the
+	// provider may have spent the tokens, so their reservation stays (D312).
+	ErrProviderTimeout = pcerr.New(pcerr.Unavailable, "MODEL_PROVIDER_TIMEOUT",
+		"the model provider did not answer in time; nothing was drafted")
 	ErrRefused = pcerr.New(pcerr.FailedPrecondition, "MODEL_REFUSED",
 		"the model declined to draft this; nothing was drafted")
 	ErrInvalidOutput = pcerr.New(pcerr.FailedPrecondition, "MODEL_OUTPUT_INVALID",
@@ -90,3 +101,9 @@ var (
 	ErrInvalidRequest = pcerr.New(pcerr.InvalidArgument, "MODEL_REQUEST_INVALID",
 		"the drafting request is not valid")
 )
+
+// ValidText reports whether text can be sent: something to draft from, within
+// MaxUserText.
+func ValidText(text string) bool {
+	return strings.TrimSpace(text) != "" && utf8.ValidString(text) && utf8.RuneCountInString(text) <= MaxUserText
+}

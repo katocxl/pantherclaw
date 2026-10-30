@@ -41,7 +41,7 @@ import (
 
 const (
 	// SecretPurpose is the DEK purpose of model provider keys.
-	SecretPurpose = "model_secrets" //nolint:gosec // a DEK purpose name, not a credential
+	SecretPurpose = "model_secrets"
 	settingsTable = "model_settings"
 	keyColumn     = "key_ciphertext"
 	// maxKey bounds a provider key, in bytes.
@@ -100,7 +100,10 @@ type Service struct {
 	Editions Editions
 	Notify   Notifier
 	Provider ports.Provider
-	Config   Config
+	// Policies and Operations serve policy drafts.
+	Policies   PolicyDrafts
+	Operations Operations
+	Config     Config
 }
 
 // Settings is an organization's settings, without its key.

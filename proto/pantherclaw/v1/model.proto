@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/search.proto";
 
 // ModelService is an organization's optional model drafting (G0 M21 D304,
 // D309; G16, F181, F304, HR-541, HR-545). It is off by default, Business
@@ -30,6 +31,16 @@ service ModelService {
   // step-up.
   // permission: org.update
   rpc ClearModelKey(ClearModelKeyRequest) returns (ClearModelKeyResponse);
+  // DraftQuery turns text into a search query that is shown and never run.
+  // Only the task, the text, the output schema and names the caller may read
+  // are sent (HR-542). A person only.
+  // permission: search.read
+  rpc DraftQuery(DraftQueryRequest) returns (DraftQueryResponse);
+  // DraftPolicy turns text into a DRAFT policy version, origin=model, with its
+  // rules added to the published policy. It never publishes; the M11.1 gate
+  // does, for a person (HR-544). A person only.
+  // permission: policy.author
+  rpc DraftPolicy(DraftPolicyRequest) returns (DraftPolicyResponse);
 }
 
 // ModelSettings is an organization's settings, without its key.
@@ -98,4 +109,57 @@ message ClearModelKeyRequest {}
 message ClearModelKeyResponse {
   // The settings.
   ModelSettings settings = 1;
+}
+
+// DraftAmbiguity is a vague term and the threshold the model proposes for it.
+// The reviewer confirms it; it changes nothing by itself.
+message DraftAmbiguity {
+  // The vague words, as the person wrote them.
+  string phrase = 1;
+  // A concrete value to confirm.
+  string proposed_threshold = 2;
+}
+
+// DraftQueryRequest is the text to draft from.
+message DraftQueryRequest {
+  // The person's own text.
+  string text = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+  // An IANA time zone; empty means UTC.
+  string timezone = 2 [(buf.validate.field).string.max_len = 64];
+}
+
+// DraftQueryResponse is a query to show. Nothing ran.
+message DraftQueryResponse {
+  // How the draft was read, under the caller's permissions.
+  Interpretation interpretation = 1;
+  // The thresholds to confirm.
+  repeated DraftAmbiguity ambiguities = 2;
+  // The audited call.
+  string call_id = 3;
+}
+
+// DraftPolicyRequest is the text to draft from.
+message DraftPolicyRequest {
+  // The person's own text.
+  string text = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+}
+
+// DraftPolicyResponse is a stored DRAFT version. Nothing is in force.
+message DraftPolicyResponse {
+  // The DRAFT policy version.
+  string version_id = 1;
+  // Its number.
+  int32 version = 2;
+  // The added rules, in words.
+  repeated string summaries = 3;
+  // The thresholds to confirm.
+  repeated DraftAmbiguity ambiguities = 4;
+  // The audited call.
+  string call_id = 5;
 }

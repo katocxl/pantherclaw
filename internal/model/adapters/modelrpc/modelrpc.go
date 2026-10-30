@@ -13,17 +13,22 @@ import (
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/model/app"
+	"github.com/katocxl/pantherclaw/internal/search"
+	"github.com/katocxl/pantherclaw/internal/search/adapters/searchrpc"
 )
 
 // Handler implements ModelServiceHandler.
 type Handler struct {
-	svc *app.Service
+	svc     *app.Service
+	drafter *search.Drafter
 }
 
 var _ pantherclawv1connect.ModelServiceHandler = (*Handler)(nil)
 
 // New returns the handler.
-func New(svc *app.Service) *Handler { return &Handler{svc: svc} }
+func New(svc *app.Service, drafter *search.Drafter) *Handler {
+	return &Handler{svc: svc, drafter: drafter}
+}
 
 func (h *Handler) settings(s app.Settings) *pantherclawv1.ModelSettings {
 	out := &pantherclawv1.ModelSettings{
@@ -81,4 +86,36 @@ func (h *Handler) ClearModelKey(ctx context.Context, _ *pantherclawv1.ClearModel
 		return nil, err
 	}
 	return &pantherclawv1.ClearModelKeyResponse{Settings: h.settings(s)}, nil
+}
+
+func ambiguities(in []app.Ambiguity) []*pantherclawv1.DraftAmbiguity {
+	out := make([]*pantherclawv1.DraftAmbiguity, 0, len(in))
+	for _, a := range in {
+		out = append(out, &pantherclawv1.DraftAmbiguity{Phrase: a.Phrase, ProposedThreshold: a.ProposedThreshold})
+	}
+	return out
+}
+
+// DraftQuery implements ModelServiceHandler. Nothing here runs a query.
+func (h *Handler) DraftQuery(ctx context.Context, r *pantherclawv1.DraftQueryRequest) (*pantherclawv1.DraftQueryResponse, error) {
+	d, err := h.drafter.DraftQuery(ctx, r.GetText(), r.GetTimezone())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.DraftQueryResponse{
+		Interpretation: searchrpc.InterpretationProto(d.Interpretation), Ambiguities: ambiguities(d.Thresholds), CallId: d.Call.String(),
+	}, nil
+}
+
+// DraftPolicy implements ModelServiceHandler. It stores a DRAFT and publishes
+// nothing.
+func (h *Handler) DraftPolicy(ctx context.Context, r *pantherclawv1.DraftPolicyRequest) (*pantherclawv1.DraftPolicyResponse, error) {
+	d, err := h.svc.DraftPolicy(ctx, r.GetText())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.DraftPolicyResponse{
+		VersionId: d.Version.String(), Version: int32(d.Number), Summaries: d.Summaries, //nolint:gosec // a policy's version number
+		Ambiguities: ambiguities(d.Ambiguities), CallId: d.Call.String(),
+	}, nil
 }

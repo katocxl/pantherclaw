@@ -503,11 +503,314 @@ func (x *ClearModelKeyResponse) GetSettings() *ModelSettings {
 	return nil
 }
 
+// DraftAmbiguity is a vague term and the threshold the model proposes for it.
+// The reviewer confirms it; it changes nothing by itself.
+type DraftAmbiguity struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The vague words, as the person wrote them.
+	Phrase string `protobuf:"bytes,1,opt,name=phrase,proto3" json:"phrase,omitempty"`
+	// A concrete value to confirm.
+	ProposedThreshold string `protobuf:"bytes,2,opt,name=proposed_threshold,json=proposedThreshold,proto3" json:"proposed_threshold,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *DraftAmbiguity) Reset() {
+	*x = DraftAmbiguity{}
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftAmbiguity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftAmbiguity) ProtoMessage() {}
+
+func (x *DraftAmbiguity) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftAmbiguity.ProtoReflect.Descriptor instead.
+func (*DraftAmbiguity) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_model_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DraftAmbiguity) GetPhrase() string {
+	if x != nil {
+		return x.Phrase
+	}
+	return ""
+}
+
+func (x *DraftAmbiguity) GetProposedThreshold() string {
+	if x != nil {
+		return x.ProposedThreshold
+	}
+	return ""
+}
+
+// DraftQueryRequest is the text to draft from.
+type DraftQueryRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The person's own text.
+	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// An IANA time zone; empty means UTC.
+	Timezone      string `protobuf:"bytes,2,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftQueryRequest) Reset() {
+	*x = DraftQueryRequest{}
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftQueryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftQueryRequest) ProtoMessage() {}
+
+func (x *DraftQueryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftQueryRequest.ProtoReflect.Descriptor instead.
+func (*DraftQueryRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_model_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DraftQueryRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *DraftQueryRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+// DraftQueryResponse is a query to show. Nothing ran.
+type DraftQueryResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How the draft was read, under the caller's permissions.
+	Interpretation *Interpretation `protobuf:"bytes,1,opt,name=interpretation,proto3" json:"interpretation,omitempty"`
+	// The thresholds to confirm.
+	Ambiguities []*DraftAmbiguity `protobuf:"bytes,2,rep,name=ambiguities,proto3" json:"ambiguities,omitempty"`
+	// The audited call.
+	CallId        string `protobuf:"bytes,3,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftQueryResponse) Reset() {
+	*x = DraftQueryResponse{}
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftQueryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftQueryResponse) ProtoMessage() {}
+
+func (x *DraftQueryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftQueryResponse.ProtoReflect.Descriptor instead.
+func (*DraftQueryResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_model_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DraftQueryResponse) GetInterpretation() *Interpretation {
+	if x != nil {
+		return x.Interpretation
+	}
+	return nil
+}
+
+func (x *DraftQueryResponse) GetAmbiguities() []*DraftAmbiguity {
+	if x != nil {
+		return x.Ambiguities
+	}
+	return nil
+}
+
+func (x *DraftQueryResponse) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+// DraftPolicyRequest is the text to draft from.
+type DraftPolicyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The person's own text.
+	Text          string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftPolicyRequest) Reset() {
+	*x = DraftPolicyRequest{}
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftPolicyRequest) ProtoMessage() {}
+
+func (x *DraftPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftPolicyRequest.ProtoReflect.Descriptor instead.
+func (*DraftPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_model_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *DraftPolicyRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+// DraftPolicyResponse is a stored DRAFT version. Nothing is in force.
+type DraftPolicyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The DRAFT policy version.
+	VersionId string `protobuf:"bytes,1,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
+	// Its number.
+	Version int32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// The added rules, in words.
+	Summaries []string `protobuf:"bytes,3,rep,name=summaries,proto3" json:"summaries,omitempty"`
+	// The thresholds to confirm.
+	Ambiguities []*DraftAmbiguity `protobuf:"bytes,4,rep,name=ambiguities,proto3" json:"ambiguities,omitempty"`
+	// The audited call.
+	CallId        string `protobuf:"bytes,5,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftPolicyResponse) Reset() {
+	*x = DraftPolicyResponse{}
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftPolicyResponse) ProtoMessage() {}
+
+func (x *DraftPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_model_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftPolicyResponse.ProtoReflect.Descriptor instead.
+func (*DraftPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_model_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *DraftPolicyResponse) GetVersionId() string {
+	if x != nil {
+		return x.VersionId
+	}
+	return ""
+}
+
+func (x *DraftPolicyResponse) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *DraftPolicyResponse) GetSummaries() []string {
+	if x != nil {
+		return x.Summaries
+	}
+	return nil
+}
+
+func (x *DraftPolicyResponse) GetAmbiguities() []*DraftAmbiguity {
+	if x != nil {
+		return x.Ambiguities
+	}
+	return nil
+}
+
+func (x *DraftPolicyResponse) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_model_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_model_proto_rawDesc = "" +
 	"\n" +
-	"\x1apantherclaw/v1/model.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xde\x02\n" +
+	"\x1apantherclaw/v1/model.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bpantherclaw/v1/search.proto\"\xde\x02\n" +
 	"\rModelSettings\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1c\n" +
 	"\tavailable\x18\x02 \x01(\bR\tavailable\x12\x17\n" +
@@ -533,12 +836,36 @@ const file_pantherclaw_v1_model_proto_rawDesc = "" +
 	"\bsettings\x18\x01 \x01(\v2\x1d.pantherclaw.v1.ModelSettingsR\bsettings\"\x16\n" +
 	"\x14ClearModelKeyRequest\"R\n" +
 	"\x15ClearModelKeyResponse\x129\n" +
-	"\bsettings\x18\x01 \x01(\v2\x1d.pantherclaw.v1.ModelSettingsR\bsettings2\xbb\x03\n" +
+	"\bsettings\x18\x01 \x01(\v2\x1d.pantherclaw.v1.ModelSettingsR\bsettings\"W\n" +
+	"\x0eDraftAmbiguity\x12\x16\n" +
+	"\x06phrase\x18\x01 \x01(\tR\x06phrase\x12-\n" +
+	"\x12proposed_threshold\x18\x02 \x01(\tR\x11proposedThreshold\"X\n" +
+	"\x11DraftQueryRequest\x12\x1e\n" +
+	"\x04text\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xd0\x0fR\x04text\x12#\n" +
+	"\btimezone\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18@R\btimezone\"\xb7\x01\n" +
+	"\x12DraftQueryResponse\x12F\n" +
+	"\x0einterpretation\x18\x01 \x01(\v2\x1e.pantherclaw.v1.InterpretationR\x0einterpretation\x12@\n" +
+	"\vambiguities\x18\x02 \x03(\v2\x1e.pantherclaw.v1.DraftAmbiguityR\vambiguities\x12\x17\n" +
+	"\acall_id\x18\x03 \x01(\tR\x06callId\"4\n" +
+	"\x12DraftPolicyRequest\x12\x1e\n" +
+	"\x04text\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xd0\x0fR\x04text\"\xc7\x01\n" +
+	"\x13DraftPolicyResponse\x12\x1d\n" +
+	"\n" +
+	"version_id\x18\x01 \x01(\tR\tversionId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x1c\n" +
+	"\tsummaries\x18\x03 \x03(\tR\tsummaries\x12@\n" +
+	"\vambiguities\x18\x04 \x03(\v2\x1e.pantherclaw.v1.DraftAmbiguityR\vambiguities\x12\x17\n" +
+	"\acall_id\x18\x05 \x01(\tR\x06callId2\xe8\x04\n" +
 	"\fModelService\x12j\n" +
 	"\x10GetModelSettings\x12'.pantherclaw.v1.GetModelSettingsRequest\x1a(.pantherclaw.v1.GetModelSettingsResponse\"\x03\x90\x02\x01\x12n\n" +
 	"\x13UpdateModelSettings\x12*.pantherclaw.v1.UpdateModelSettingsRequest\x1a+.pantherclaw.v1.UpdateModelSettingsResponse\x12q\n" +
 	"\x14DisableModelDrafting\x12+.pantherclaw.v1.DisableModelDraftingRequest\x1a,.pantherclaw.v1.DisableModelDraftingResponse\x12\\\n" +
-	"\rClearModelKey\x12$.pantherclaw.v1.ClearModelKeyRequest\x1a%.pantherclaw.v1.ClearModelKeyResponseB\xc3\x01\n" +
+	"\rClearModelKey\x12$.pantherclaw.v1.ClearModelKeyRequest\x1a%.pantherclaw.v1.ClearModelKeyResponse\x12S\n" +
+	"\n" +
+	"DraftQuery\x12!.pantherclaw.v1.DraftQueryRequest\x1a\".pantherclaw.v1.DraftQueryResponse\x12V\n" +
+	"\vDraftPolicy\x12\".pantherclaw.v1.DraftPolicyRequest\x1a#.pantherclaw.v1.DraftPolicyResponseB\xc3\x01\n" +
 	"\x12com.pantherclaw.v1B\n" +
 	"ModelProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
@@ -554,7 +881,7 @@ func file_pantherclaw_v1_model_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_model_proto_rawDescData
 }
 
-var file_pantherclaw_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pantherclaw_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_pantherclaw_v1_model_proto_goTypes = []any{
 	(*ModelSettings)(nil),                // 0: pantherclaw.v1.ModelSettings
 	(*GetModelSettingsRequest)(nil),      // 1: pantherclaw.v1.GetModelSettingsRequest
@@ -565,27 +892,40 @@ var file_pantherclaw_v1_model_proto_goTypes = []any{
 	(*DisableModelDraftingResponse)(nil), // 6: pantherclaw.v1.DisableModelDraftingResponse
 	(*ClearModelKeyRequest)(nil),         // 7: pantherclaw.v1.ClearModelKeyRequest
 	(*ClearModelKeyResponse)(nil),        // 8: pantherclaw.v1.ClearModelKeyResponse
-	(*timestamppb.Timestamp)(nil),        // 9: google.protobuf.Timestamp
+	(*DraftAmbiguity)(nil),               // 9: pantherclaw.v1.DraftAmbiguity
+	(*DraftQueryRequest)(nil),            // 10: pantherclaw.v1.DraftQueryRequest
+	(*DraftQueryResponse)(nil),           // 11: pantherclaw.v1.DraftQueryResponse
+	(*DraftPolicyRequest)(nil),           // 12: pantherclaw.v1.DraftPolicyRequest
+	(*DraftPolicyResponse)(nil),          // 13: pantherclaw.v1.DraftPolicyResponse
+	(*timestamppb.Timestamp)(nil),        // 14: google.protobuf.Timestamp
+	(*Interpretation)(nil),               // 15: pantherclaw.v1.Interpretation
 }
 var file_pantherclaw_v1_model_proto_depIdxs = []int32{
-	9, // 0: pantherclaw.v1.ModelSettings.key_set_at:type_name -> google.protobuf.Timestamp
-	0, // 1: pantherclaw.v1.GetModelSettingsResponse.settings:type_name -> pantherclaw.v1.ModelSettings
-	0, // 2: pantherclaw.v1.UpdateModelSettingsResponse.settings:type_name -> pantherclaw.v1.ModelSettings
-	0, // 3: pantherclaw.v1.DisableModelDraftingResponse.settings:type_name -> pantherclaw.v1.ModelSettings
-	0, // 4: pantherclaw.v1.ClearModelKeyResponse.settings:type_name -> pantherclaw.v1.ModelSettings
-	1, // 5: pantherclaw.v1.ModelService.GetModelSettings:input_type -> pantherclaw.v1.GetModelSettingsRequest
-	3, // 6: pantherclaw.v1.ModelService.UpdateModelSettings:input_type -> pantherclaw.v1.UpdateModelSettingsRequest
-	5, // 7: pantherclaw.v1.ModelService.DisableModelDrafting:input_type -> pantherclaw.v1.DisableModelDraftingRequest
-	7, // 8: pantherclaw.v1.ModelService.ClearModelKey:input_type -> pantherclaw.v1.ClearModelKeyRequest
-	2, // 9: pantherclaw.v1.ModelService.GetModelSettings:output_type -> pantherclaw.v1.GetModelSettingsResponse
-	4, // 10: pantherclaw.v1.ModelService.UpdateModelSettings:output_type -> pantherclaw.v1.UpdateModelSettingsResponse
-	6, // 11: pantherclaw.v1.ModelService.DisableModelDrafting:output_type -> pantherclaw.v1.DisableModelDraftingResponse
-	8, // 12: pantherclaw.v1.ModelService.ClearModelKey:output_type -> pantherclaw.v1.ClearModelKeyResponse
-	9, // [9:13] is the sub-list for method output_type
-	5, // [5:9] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	14, // 0: pantherclaw.v1.ModelSettings.key_set_at:type_name -> google.protobuf.Timestamp
+	0,  // 1: pantherclaw.v1.GetModelSettingsResponse.settings:type_name -> pantherclaw.v1.ModelSettings
+	0,  // 2: pantherclaw.v1.UpdateModelSettingsResponse.settings:type_name -> pantherclaw.v1.ModelSettings
+	0,  // 3: pantherclaw.v1.DisableModelDraftingResponse.settings:type_name -> pantherclaw.v1.ModelSettings
+	0,  // 4: pantherclaw.v1.ClearModelKeyResponse.settings:type_name -> pantherclaw.v1.ModelSettings
+	15, // 5: pantherclaw.v1.DraftQueryResponse.interpretation:type_name -> pantherclaw.v1.Interpretation
+	9,  // 6: pantherclaw.v1.DraftQueryResponse.ambiguities:type_name -> pantherclaw.v1.DraftAmbiguity
+	9,  // 7: pantherclaw.v1.DraftPolicyResponse.ambiguities:type_name -> pantherclaw.v1.DraftAmbiguity
+	1,  // 8: pantherclaw.v1.ModelService.GetModelSettings:input_type -> pantherclaw.v1.GetModelSettingsRequest
+	3,  // 9: pantherclaw.v1.ModelService.UpdateModelSettings:input_type -> pantherclaw.v1.UpdateModelSettingsRequest
+	5,  // 10: pantherclaw.v1.ModelService.DisableModelDrafting:input_type -> pantherclaw.v1.DisableModelDraftingRequest
+	7,  // 11: pantherclaw.v1.ModelService.ClearModelKey:input_type -> pantherclaw.v1.ClearModelKeyRequest
+	10, // 12: pantherclaw.v1.ModelService.DraftQuery:input_type -> pantherclaw.v1.DraftQueryRequest
+	12, // 13: pantherclaw.v1.ModelService.DraftPolicy:input_type -> pantherclaw.v1.DraftPolicyRequest
+	2,  // 14: pantherclaw.v1.ModelService.GetModelSettings:output_type -> pantherclaw.v1.GetModelSettingsResponse
+	4,  // 15: pantherclaw.v1.ModelService.UpdateModelSettings:output_type -> pantherclaw.v1.UpdateModelSettingsResponse
+	6,  // 16: pantherclaw.v1.ModelService.DisableModelDrafting:output_type -> pantherclaw.v1.DisableModelDraftingResponse
+	8,  // 17: pantherclaw.v1.ModelService.ClearModelKey:output_type -> pantherclaw.v1.ClearModelKeyResponse
+	11, // 18: pantherclaw.v1.ModelService.DraftQuery:output_type -> pantherclaw.v1.DraftQueryResponse
+	13, // 19: pantherclaw.v1.ModelService.DraftPolicy:output_type -> pantherclaw.v1.DraftPolicyResponse
+	14, // [14:20] is the sub-list for method output_type
+	8,  // [8:14] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_model_proto_init() }
@@ -593,13 +933,14 @@ func file_pantherclaw_v1_model_proto_init() {
 	if File_pantherclaw_v1_model_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_search_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_model_proto_rawDesc), len(file_pantherclaw_v1_model_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

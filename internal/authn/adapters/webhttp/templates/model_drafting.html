@@ -16,6 +16,12 @@
 <p><button type="button" class="danger" id="enable" data-path="/settings/model-drafting/enable">Turn on with your security key</button></p>
 {{end}}
 {{end}}
+{{if and .CanLeave (or .Enabled .KeySet)}}
+<h2>Turn off</h2>
+<p class="note">Neither of these needs your security key.</p>
+{{if .Enabled}}<p><button type="button" id="disable" data-path="/settings/model-drafting/disable">Turn off</button></p>{{end}}
+{{if .KeySet}}<p><button type="button" id="clear-key" data-path="/settings/model-drafting/key/clear">Clear the key and turn off</button></p>{{end}}
+{{end}}
 <p id="status" role="status"></p>
 <script src="/static/model_drafting.js"></script>
 {{template "foot" .}}

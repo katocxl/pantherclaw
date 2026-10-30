@@ -84,16 +84,17 @@ func (q *Queries) EnsureModelSettings(ctx context.Context, orgID ids.OrgID) erro
 const finishModelCall = `-- name: FinishModelCall :execrows
 UPDATE pc.model_calls
 SET outcome = $1, input_tokens = $2, output_tokens = $3,
-    finished_at = now()
-WHERE org_id = $4 AND id = $5 AND outcome = 'PENDING'
+    reserved_tokens = $4, finished_at = now()
+WHERE org_id = $5 AND id = $6 AND outcome = 'PENDING'
 `
 
 type FinishModelCallParams struct {
-	Outcome      string
-	InputTokens  int32
-	OutputTokens int32
-	OrgID        ids.OrgID
-	ID           ids.UUID
+	Outcome        string
+	InputTokens    int32
+	OutputTokens   int32
+	ReservedTokens int32
+	OrgID          ids.OrgID
+	ID             ids.UUID
 }
 
 func (q *Queries) FinishModelCall(ctx context.Context, arg FinishModelCallParams) (int64, error) {
@@ -101,6 +102,7 @@ func (q *Queries) FinishModelCall(ctx context.Context, arg FinishModelCallParams
 		arg.Outcome,
 		arg.InputTokens,
 		arg.OutputTokens,
+		arg.ReservedTokens,
 		arg.OrgID,
 		arg.ID,
 	)
@@ -135,16 +137,17 @@ func (q *Queries) GetModelSettings(ctx context.Context, orgID ids.OrgID) (PcMode
 }
 
 const insertModelCall = `-- name: InsertModelCall :exec
-INSERT INTO pc.model_calls (org_id, id, actor, task, model)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO pc.model_calls (org_id, id, actor, task, model, reserved_tokens)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type InsertModelCallParams struct {
-	OrgID ids.OrgID
-	ID    ids.UUID
-	Actor string
-	Task  string
-	Model string
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	Actor          string
+	Task           string
+	Model          string
+	ReservedTokens int32
 }
 
 func (q *Queries) InsertModelCall(ctx context.Context, arg InsertModelCallParams) error {
@@ -154,6 +157,7 @@ func (q *Queries) InsertModelCall(ctx context.Context, arg InsertModelCallParams
 		arg.Actor,
 		arg.Task,
 		arg.Model,
+		arg.ReservedTokens,
 	)
 	return err
 }
@@ -240,7 +244,7 @@ func (q *Queries) SetModelLimits(ctx context.Context, arg SetModelLimitsParams) 
 }
 
 const sumModelTokensSince = `-- name: SumModelTokensSince :one
-SELECT COALESCE(sum(input_tokens + output_tokens), 0)::bigint
+SELECT COALESCE(sum(input_tokens + output_tokens + reserved_tokens), 0)::bigint
 FROM pc.model_calls
 WHERE org_id = $1 AND created_at >= $2
 `

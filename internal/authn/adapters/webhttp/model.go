@@ -23,8 +23,9 @@ import (
 // key. A person holding org.update turns drafting on or sets the key with a
 // POST right after a security-key step-up on this browser session. Nothing
 // else does either: no API call, key or link. Turning it off and clearing
-// the key are API calls and need no step-up. Every POST carries the CSRF
-// proof (HR-151), and a key in a request body is never logged.
+// the key need no step-up and stay on offer when the plan has lapsed, here
+// and as API calls. Every POST carries the CSRF proof (HR-151), and a key in
+// a request body is never logged.
 
 // ModelDraftingPath is the settings page.
 const ModelDraftingPath = "/settings/model-drafting"
@@ -34,6 +35,8 @@ type ModelDrafting interface {
 	Get(ctx context.Context) (modelapp.Settings, error)
 	Enable(ctx context.Context, su stepup.StepUp) (modelapp.Settings, error)
 	SetKey(ctx context.Context, key string, su stepup.StepUp) (modelapp.Settings, error)
+	Disable(ctx context.Context) (modelapp.Settings, error)
+	ClearKey(ctx context.Context) (modelapp.Settings, error)
 }
 
 // WithModelDrafting adds the settings page; call it before Mount.
@@ -49,6 +52,8 @@ func (h *Handler) mountModelDrafting(m *http.ServeMux) {
 	h.withSession(m, http.MethodGet, ModelDraftingPath, h.modelDraftingPage)
 	h.withSession(m, http.MethodPost, ModelDraftingPath+"/enable", h.enableModelDrafting)
 	h.withSession(m, http.MethodPost, ModelDraftingPath+"/key", h.setModelKey)
+	h.withSession(m, http.MethodPost, ModelDraftingPath+"/disable", h.disableModelDrafting)
+	h.withSession(m, http.MethodPost, ModelDraftingPath+"/key/clear", h.clearModelKey)
 }
 
 // modelDraftingView is the data of model_drafting.html.
@@ -56,6 +61,9 @@ type modelDraftingView struct {
 	page
 	modelapp.Settings
 	CanChange bool
+	// CanLeave offers turning it off and clearing the key, even when the
+	// server or the plan no longer offers drafting.
+	CanLeave bool
 }
 
 func (h *Handler) modelDraftingPage(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
@@ -74,9 +82,10 @@ func (h *Handler) modelDraftingPage(w http.ResponseWriter, r *http.Request, s au
 		h.fail(w, r, err)
 		return
 	}
+	canLeave := s.Human() && s.Can(td.PermOrgUpdate, td.OrgPath(s.Org))
 	h.renderAny(w, http.StatusOK, "model_drafting.html", modelDraftingView{
 		page: page{Title: title, Session: s}, Settings: set,
-		CanChange: set.Available && s.Human() && s.Can(td.PermOrgUpdate, td.OrgPath(s.Org)),
+		CanChange: set.Available && canLeave, CanLeave: canLeave,
 	})
 }
 
@@ -115,6 +124,22 @@ func (h *Handler) enableModelDrafting(w http.ResponseWriter, r *http.Request, s 
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]string{"state": "ENABLED"})
+}
+
+func (h *Handler) disableModelDrafting(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
+	if _, err := h.modelDrafting.Disable(callerContext(r, s)); err != nil {
+		h.modelError(w, r, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"state": "DISABLED"})
+}
+
+func (h *Handler) clearModelKey(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
+	if _, err := h.modelDrafting.ClearKey(callerContext(r, s)); err != nil {
+		h.modelError(w, r, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"state": "KEY_CLEARED"})
 }
 
 // modelKeyRequest is the body of a key change. Its Key is never logged.

@@ -40,18 +40,18 @@ WHERE org_id = sqlc.arg(org_id);
 SELECT count(*) FROM pc.model_calls WHERE org_id = sqlc.arg(org_id) AND created_at >= sqlc.arg(since);
 
 -- name: SumModelTokensSince :one
-SELECT COALESCE(sum(input_tokens + output_tokens), 0)::bigint
+SELECT COALESCE(sum(input_tokens + output_tokens + reserved_tokens), 0)::bigint
 FROM pc.model_calls
 WHERE org_id = sqlc.arg(org_id) AND created_at >= sqlc.arg(since);
 
 -- name: InsertModelCall :exec
-INSERT INTO pc.model_calls (org_id, id, actor, task, model)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(actor), sqlc.arg(task), sqlc.arg(model));
+INSERT INTO pc.model_calls (org_id, id, actor, task, model, reserved_tokens)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(actor), sqlc.arg(task), sqlc.arg(model), sqlc.arg(reserved_tokens));
 
 -- name: FinishModelCall :execrows
 UPDATE pc.model_calls
 SET outcome = sqlc.arg(outcome), input_tokens = sqlc.arg(input_tokens), output_tokens = sqlc.arg(output_tokens),
-    finished_at = now()
+    reserved_tokens = sqlc.arg(reserved_tokens), finished_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND outcome = 'PENDING';
 
 -- name: InsertModelDraft :exec

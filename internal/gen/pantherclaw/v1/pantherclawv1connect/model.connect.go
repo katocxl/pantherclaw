@@ -38,6 +38,10 @@ const (
 	ModelServiceDisableModelDraftingProcedure = "/pantherclaw.v1.ModelService/DisableModelDrafting"
 	// ModelServiceClearModelKeyProcedure is the procedure name of the ModelService's ClearModelKey RPC.
 	ModelServiceClearModelKeyProcedure = "/pantherclaw.v1.ModelService/ClearModelKey"
+	// ModelServiceDraftQueryProcedure is the procedure name of the ModelService's DraftQuery RPC.
+	ModelServiceDraftQueryProcedure = "/pantherclaw.v1.ModelService/DraftQuery"
+	// ModelServiceDraftPolicyProcedure is the procedure name of the ModelService's DraftPolicy RPC.
+	ModelServiceDraftPolicyProcedure = "/pantherclaw.v1.ModelService/DraftPolicy"
 )
 
 var (
@@ -70,6 +74,20 @@ var (
 			Procedure:  ModelServiceClearModelKeyProcedure,
 		}
 	})
+	modelServiceDraftQuerySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_model_proto.Services().ByName("ModelService").Methods().ByName("DraftQuery"),
+			Procedure:  ModelServiceDraftQueryProcedure,
+		}
+	})
+	modelServiceDraftPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_model_proto.Services().ByName("ModelService").Methods().ByName("DraftPolicy"),
+			Procedure:  ModelServiceDraftPolicyProcedure,
+		}
+	})
 )
 
 // ModelServiceClient is a client for the pantherclaw.v1.ModelService service.
@@ -88,6 +106,16 @@ type ModelServiceClient interface {
 	// step-up.
 	// permission: org.update
 	ClearModelKey(context.Context, *v1.ClearModelKeyRequest) (*v1.ClearModelKeyResponse, error)
+	// DraftQuery turns text into a search query that is shown and never run.
+	// Only the task, the text, the output schema and names the caller may read
+	// are sent (HR-542). A person only.
+	// permission: search.read
+	DraftQuery(context.Context, *v1.DraftQueryRequest) (*v1.DraftQueryResponse, error)
+	// DraftPolicy turns text into a DRAFT policy version, origin=model, with its
+	// rules added to the published policy. It never publishes; the M11.1 gate
+	// does, for a person (HR-544). A person only.
+	// permission: policy.author
+	DraftPolicy(context.Context, *v1.DraftPolicyRequest) (*v1.DraftPolicyResponse, error)
 }
 
 // NewModelServiceClient constructs a client for the pantherclaw.v1.ModelService service. Multiple
@@ -112,6 +140,16 @@ type ModelServiceHandler interface {
 	// step-up.
 	// permission: org.update
 	ClearModelKey(context.Context, *v1.ClearModelKeyRequest) (*v1.ClearModelKeyResponse, error)
+	// DraftQuery turns text into a search query that is shown and never run.
+	// Only the task, the text, the output schema and names the caller may read
+	// are sent (HR-542). A person only.
+	// permission: search.read
+	DraftQuery(context.Context, *v1.DraftQueryRequest) (*v1.DraftQueryResponse, error)
+	// DraftPolicy turns text into a DRAFT policy version, origin=model, with its
+	// rules added to the published policy. It never publishes; the M11.1 gate
+	// does, for a person (HR-544). A person only.
+	// permission: policy.author
+	DraftPolicy(context.Context, *v1.DraftPolicyRequest) (*v1.DraftPolicyResponse, error)
 }
 
 // RegisterModelServiceHandler registers svc as the pantherclaw.v1.ModelService implementation on
@@ -123,6 +161,8 @@ func RegisterModelServiceHandler(server *connect.Server, svc ModelServiceHandler
 		connect.Method{Spec: modelServiceUpdateModelSettingsSpec(), Handler: adapter.updateModelSettings},
 		connect.Method{Spec: modelServiceDisableModelDraftingSpec(), Handler: adapter.disableModelDrafting},
 		connect.Method{Spec: modelServiceClearModelKeySpec(), Handler: adapter.clearModelKey},
+		connect.Method{Spec: modelServiceDraftQuerySpec(), Handler: adapter.draftQuery},
+		connect.Method{Spec: modelServiceDraftPolicySpec(), Handler: adapter.draftPolicy},
 	)
 }
 
@@ -143,6 +183,14 @@ func (UnimplementedModelServiceHandler) DisableModelDrafting(context.Context, *v
 
 func (UnimplementedModelServiceHandler) ClearModelKey(context.Context, *v1.ClearModelKeyRequest) (*v1.ClearModelKeyResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.ClearModelKey is not implemented")
+}
+
+func (UnimplementedModelServiceHandler) DraftQuery(context.Context, *v1.DraftQueryRequest) (*v1.DraftQueryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.DraftQuery is not implemented")
+}
+
+func (UnimplementedModelServiceHandler) DraftPolicy(context.Context, *v1.DraftPolicyRequest) (*v1.DraftPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.DraftPolicy is not implemented")
 }
 
 type modelServiceClient struct {
@@ -176,6 +224,22 @@ func (c *modelServiceClient) DisableModelDrafting(ctx context.Context, req *v1.D
 func (c *modelServiceClient) ClearModelKey(ctx context.Context, req *v1.ClearModelKeyRequest) (*v1.ClearModelKeyResponse, error) {
 	var res v1.ClearModelKeyResponse
 	if err := c.client.CallUnary(ctx, modelServiceClearModelKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *modelServiceClient) DraftQuery(ctx context.Context, req *v1.DraftQueryRequest) (*v1.DraftQueryResponse, error) {
+	var res v1.DraftQueryResponse
+	if err := c.client.CallUnary(ctx, modelServiceDraftQuerySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *modelServiceClient) DraftPolicy(ctx context.Context, req *v1.DraftPolicyRequest) (*v1.DraftPolicyResponse, error) {
+	var res v1.DraftPolicyResponse
+	if err := c.client.CallUnary(ctx, modelServiceDraftPolicySpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -225,6 +289,30 @@ func (h modelServiceHandler) clearModelKey(ctx context.Context, _ connect.Spec, 
 		return err
 	}
 	res, err := h.svc.ClearModelKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h modelServiceHandler) draftQuery(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DraftQueryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DraftQuery(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h modelServiceHandler) draftPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DraftPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DraftPolicy(ctx, &req)
 	if err != nil {
 		return err
 	}
