@@ -172,14 +172,20 @@ type Input struct {
 // CONSEQUENCE_FANOUT, and nothing after it is derived in that pass.
 const MaxConsequences = 16
 
-// Source is where a consequence rule comes from (G0 M17 D106).
+// Source is where a consequence rule comes from (G0 M17 D106) and, for a
+// consequence, its chain's provenance (D145): a consequence is a customer
+// one when a customer rule gave it or it is below one a customer rule
+// gave, even when a package rule gave it there. A customer consequence is
+// never waived (D108).
 type Source string
 
 // Sources (00208's decision_consequences.source).
 const (
-	// SourcePackage: a rule of the action's signed package version.
+	// SourcePackage: a rule of the action's signed package version, on a
+	// chain of package consequences only.
 	SourcePackage Source = "package"
-	// SourceCustomer: one of the org's reviewed customer rules.
+	// SourceCustomer: one of the org's reviewed customer rules, or any rule
+	// below a consequence one gave.
 	SourceCustomer Source = "customer"
 )
 
@@ -191,7 +197,7 @@ const MaxDepth = defs.MaxConsequenceDepth
 type Consequence struct {
 	Rule                           string
 	Operation, Effect, Description string
-	// Source is where the rule comes from; empty is SourcePackage.
+	// Source is the consequence's provenance (D145); empty is SourcePackage.
 	Source Source
 	// Depth is the consequence's place in its chain, 1 (or 0) for a
 	// consequence of the action itself; Parent is, for a deeper one, the
@@ -263,6 +269,9 @@ type hop struct {
 	err error
 	// rules are the rules evaluated at the hop.
 	rules []Rule
+	// source is the hop's provenance: SourceCustomer below a customer
+	// consequence, so everything derived there is customer too (D145).
+	source Source
 }
 
 // Evaluate evaluates the consequence rules in two passes (G0 M17 D109,
@@ -343,7 +352,7 @@ func (e *Evaluator) walk(ctx context.Context, in Input, out []Consequence, reach
 				case c.State == Predicted && !reached[[2]string{c.Operation, c.Target.ID}]:
 					reached[[2]string{c.Operation, c.Target.ID}] = true
 					nh := e.more(ctx, in, c, names, h.depth+1, at)
-					nh.rules = all
+					nh.rules, nh.source = all, c.Source
 					queue = append(queue, nh)
 				}
 			}
@@ -409,9 +418,14 @@ func fanout(r Rule, h hop) Consequence {
 	return c
 }
 
-// base is rule r's consequence at hop h before it is evaluated.
+// base is rule r's consequence at hop h before it is evaluated. It is a
+// customer consequence when r is a customer rule or h is below one, even
+// when r is a package rule: provenance is inherited (G0 M17 D145).
 func base(r Rule, h hop) Consequence {
 	source := r.Source
+	if h.source == SourceCustomer {
+		source = SourceCustomer
+	}
 	if source == "" {
 		source = SourcePackage
 	}

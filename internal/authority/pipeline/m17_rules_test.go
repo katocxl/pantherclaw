@@ -249,3 +249,78 @@ func TestT200_AConsequenceChainCannotExplodeOrLoop(t *testing.T) {
 		t.Fatalf("loop: %q", got)
 	}
 }
+
+// disputedInstant is the payout package with an instant payout that a
+// payout on a disputed charge starts, down to depth 2.
+func disputedInstant(raw []byte) []byte {
+	s := pipelinetest.PayoutConsequence(string(raw))
+	const anchor = "# What the simulated API created"
+	payout := s[strings.Index(s, "  - operation: payments.payout.trigger"):strings.Index(s, anchor)]
+	s = strings.Replace(s, anchor, strings.Replace(payout, "payments.payout.trigger", "payments.payout.instant", 1)+anchor, 1)
+	return []byte(s + `  - id: disputed-payout-goes-instant
+    operation: payments.payout.trigger
+    when: facts.payments_charge_disputed
+    requires_facts: [payments.charge.disputed]
+    max_depth: 2
+    consequence:
+      operation: payments.payout.instant
+      effect: funds.transfer
+      description: A payout on a disputed charge goes instant.
+    valid_until: 2027-10-08
+`)
+}
+
+// TestHR454_ProvenanceIsInheritedDownAChain (G0 M17 D145): a package
+// rule's consequence below a customer one is a customer consequence, so
+// an exception that waives the package rule's operation does not waive
+// it there: the refund is denied, not waived. The same exception still
+// waives it when only package rules reach it.
+//
+// Covers: F405, F408, F411
+func TestHR454_ProvenanceIsInheritedDownAChain(t *testing.T) {
+	noInstant := pdomain.Rule{
+		ID: "no-instant", Kind: pdomain.Forbid, Summary: "no instant payouts", Operations: []string{"payments.payout.instant"},
+		When: "true", Reason: "NO_INSTANT_PAYOUTS", Exceptable: true,
+	}
+	d := pdomain.RuleDigest(noInstant)
+	setup := func(payouts map[string]any) *fx {
+		f := newFxWith(t, disputedInstant, "")
+		g := f.newGrant(chainedBounds)
+		f.w.Grants.Put(g)
+		f.run = f.newRun(g.ID)
+		if err := f.w.SetPolicy([]pdomain.Rule{noInstant}, nil); err != nil {
+			t.Fatal(err)
+		}
+		f.w.SetExceptions([]pdomain.Exception{{
+			ID: exceptionID, Bundle: "org-policy", Rule: noInstant.ID, RuleDigest: hex.EncodeToString(d[:]),
+			Operations: []string{"payments.payout.instant"}, ExpiresAt: now.Add(time.Hour),
+		}})
+		f.payouts("ch_1", payouts, time.Second)
+		f.disputed("ch_1", true)
+		return f
+	}
+
+	// Customer refund → payout, then the package's payout → instant.
+	f := setup(map[string]any{"state": "none", "environments": []any{}})
+	f.w.SetCustomerRules(disputePays("cx.dispute-pays", 0))
+	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	expect(t, ev, adomain.Deny, "NO_INSTANT_PAYOUTS")
+	if got := states(ev); !slices.Equal(got, []string{
+		"refund-triggers-payout:NOT_TRIGGERED:package", "cx.dispute-pays:PREDICTED:customer", "disputed-payout-goes-instant:PREDICTED:customer",
+	}) {
+		t.Fatalf("consequences %q", got)
+	}
+	if c := ev.Consequences[2]; c.Rule != "disputed-payout-goes-instant" || c.Depth != 2 || c.Parent != 1 {
+		t.Fatalf("the inherited consequence: %+v", c)
+	}
+
+	// The package's refund → payout → instant: waived.
+	f = setup(scheduled)
+	ev = f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	if ev.Decision != adomain.Allow || !slices.ContainsFunc(ev.Checklist, func(it pipeline.Item) bool { return it.Code == pdomain.ReasonExceptionApplied }) {
+		t.Fatalf("a package chain: %s %+v", ev.Decision, ev.Checklist)
+	}
+	if got := states(ev); !slices.Equal(got, []string{"refund-triggers-payout:PREDICTED:package", "disputed-payout-goes-instant:PREDICTED:package"}) {
+		t.Fatalf("consequences %q", got)
+	}
+}
