@@ -20,6 +20,11 @@ type ExternalChecksConfig struct {
 
 func (c *Config) validateExternalChecks() []error {
 	var errs []error
+	if c.Dev.ExternalChecksLoopback {
+		if err := c.localOnly(); err != nil {
+			errs = append(errs, fmt.Errorf("dev.external_checks_loopback is development-only: %w", err))
+		}
+	}
 	for _, p := range c.ExternalChecks.AllowedPrefixes {
 		u, err := url.Parse(p)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||

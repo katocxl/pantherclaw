@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/netip"
 
 	"connectrpc.com/connect/v2"
 
@@ -54,9 +55,19 @@ func newExternalChecks(pool *db.Pool, cfg *Config, bill *billing.Service, log *s
 	if bill != nil {
 		editions = bill
 	}
-	return externalchecks.New(pool, externalchecks.Config{
-		AllowedPrefixes: cfg.ExternalChecks.AllowedPrefixes, PublicURL: cfg.Auth.PublicURL,
-	}, editions, log)
+	return externalchecks.New(pool, externalChecksConfig(cfg), editions, log)
+}
+
+// externalChecksConfig is the external check service's configuration:
+// with dev.external_checks_loopback, which only a local-only development
+// server accepts (validateExternalChecks), checks may also reach loopback
+// and no other denied range (D93b).
+func externalChecksConfig(cfg *Config) externalchecks.Config {
+	ec := externalchecks.Config{AllowedPrefixes: cfg.ExternalChecks.AllowedPrefixes, PublicURL: cfg.Auth.PublicURL}
+	if cfg.Dev.ExternalChecksLoopback {
+		ec.AllowedAddrs = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32"), netip.MustParsePrefix("::1/128")}
+	}
+	return ec
 }
 
 // wireM16External gives the decision pipeline the org's external policy
