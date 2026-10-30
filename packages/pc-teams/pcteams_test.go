@@ -93,6 +93,9 @@ func TestHR524_TheTeamsPostIsBuiltFromTheActionAndPostedWithAMintedToken(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(string(built.Body), `"isGroup":true`) {
+		t.Fatalf("isGroup is not the JSON boolean true (D272): %s", built.Body)
+	}
 	var body any
 	if err := json.Unmarshal(built.Body, &body); err != nil {
 		t.Fatal(err)

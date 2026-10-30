@@ -22,16 +22,31 @@ const maxTokenAnswer = 64 << 10
 // the seal must bind. The client secret is cleared as soon as the token
 // request is sent; the caller clears the token when the dispatch ends.
 func (e *Engine) clientToken(ctx context.Context, conn *control.Connection) (*broker.ClientToken, error) {
-	plain, err := e.openCredential(conn)
-	if err != nil {
-		return nil, err
-	}
-	oc, err := credentials.DecodeOAuthClient(plain)
-	clear(plain)
+	oc, err := e.openOAuthClient(conn)
 	if err != nil {
 		return nil, err
 	}
 	defer oc.Clear()
+	return e.mintClientToken(ctx, conn, oc)
+}
+
+// openOAuthClient opens the connection's OAuth client credential; the
+// caller clears it.
+func (e *Engine) openOAuthClient(conn *control.Connection) (credentials.OAuthClient, error) {
+	if conn.Credential.GetKind() != credentials.KindOAuthClient {
+		return credentials.OAuthClient{}, errKind
+	}
+	plain, err := e.openCredential(conn)
+	if err != nil {
+		return credentials.OAuthClient{}, err
+	}
+	oc, err := credentials.DecodeOAuthClient(plain)
+	clear(plain)
+	return oc, err
+}
+
+// mintClientToken mints one token with an opened credential.
+func (e *Engine) mintClientToken(ctx context.Context, conn *control.Connection, oc credentials.OAuthClient) (*broker.ClientToken, error) {
 	c, err := e.tokenClient(conn, oc.TokenURL)
 	if err != nil {
 		return nil, err

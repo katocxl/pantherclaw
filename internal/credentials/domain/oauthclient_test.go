@@ -68,3 +68,22 @@ func TestOAuthClientBindsItsKind(t *testing.T) {
 		t.Fatalf("info %q", got)
 	}
 }
+
+// TestHR524_TheHomeTenantIsPinnedByTheTokenEndpoint: the home tenant is the
+// tenant of a single-tenant token endpoint, and none for the multi-tenant
+// one or any other path (D273).
+// Covers: HR-524
+func TestHR524_TheHomeTenantIsPinnedByTheTokenEndpoint(t *testing.T) {
+	for url, want := range map[string]string{
+		"https://login.microsoftonline.com/5a1e0000-0000-4000-8000-000000000001/oauth2/v2.0/token": "5a1e0000-0000-4000-8000-000000000001",
+		"https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token":                     "",
+		"https://login.microsoftonline.com/5A1E0000-0000-4000-8000-000000000001/oauth2/v2.0/token": "",
+		"https://login.microsoftonline.com/token":                                                  "",
+	} {
+		o := validOAuthClient()
+		o.TokenURL = url
+		if got := o.Tenant(); got != want {
+			t.Errorf("%s: %q", url, got)
+		}
+	}
+}

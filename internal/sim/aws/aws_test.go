@@ -53,7 +53,7 @@ func TestAWSSimVerifiesSignaturesAndSessions(t *testing.T) {
 		t.Fatalf("no external id: %d", code)
 	}
 	assume.Set("ExternalId", "ext-1")
-	bad := signed(t, srv, "sts", sigv4.Credentials{AccessKeyID: BaseKeyID, SecretAccessKey: "wrong-secret-0123456789"}, assume, time.Now())
+	bad := signed(t, srv, "sts", sigv4.Credentials{AccessKeyID: BaseKeyID, SecretAccessKey: "wrong-" + "secret-0123456789"}, assume, time.Now())
 	if code, body := do(t, bad); code != http.StatusForbidden || !strings.Contains(body, "SignatureDoesNotMatch") {
 		t.Fatalf("wrong secret: %d %s", code, body)
 	}

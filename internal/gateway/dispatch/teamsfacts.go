@@ -81,8 +81,11 @@ func (e *Engine) reportTeamsFacts(ctx context.Context, conn *control.Connection,
 // under def targets; any failure is an unread value. It is the gateway's own
 // channel read (D266): no package template carries a Teams id in a path
 // (HR-073), so it escapes the id itself, after checking it against def's
-// anchored target pattern, and a token is minted for each page as for any
-// dispatch (HR-524).
+// anchored target pattern. One token, minted for this read, serves all its
+// pages (HR-524). External is judged against the home tenant the sealed
+// token endpoint pins, never the tenant the agent names (D273): a channel
+// of any other tenant is external without a read, and a credential that
+// pins no tenant reads nothing.
 func (e *Engine) readTeamsChannel(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target) map[string]any {
 	warn := func(err error) {
 		e.log.WarnContext(ctx, "gateway.facts_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
@@ -90,6 +93,27 @@ func (e *Engine) readTeamsChannel(ctx context.Context, conn *control.Connection,
 	if !def.Target.MatchID(target.ID) || !def.Target.MatchAccount(target.Account) || target.Account == "" {
 		return teamsfacts.Unread("not a Teams channel of a tenant")
 	}
+	oc, err := e.openOAuthClient(conn)
+	if err != nil {
+		warn(err)
+		return teamsfacts.Unread("the bot's credential could not be opened")
+	}
+	pin := oc.Tenant()
+	switch {
+	case pin == "":
+		oc.Clear()
+		return teamsfacts.Unread("the bot's token endpoint pins no home tenant")
+	case target.Account != pin:
+		oc.Clear()
+		return teamsfacts.OtherTenant()
+	}
+	tok, err := e.mintClientToken(ctx, conn, oc)
+	oc.Clear()
+	if err != nil {
+		warn(err)
+		return teamsfacts.Unread("the bot's token could not be minted")
+	}
+	defer tok.Clear()
 	c, err := e.client(conn)
 	if err != nil {
 		warn(err)
@@ -113,19 +137,17 @@ func (e *Engine) readTeamsChannel(ctx context.Context, conn *control.Connection,
 			warn(err)
 			return teamsfacts.Unread("no Teams request")
 		}
-		_, release, _, err := e.credential(ctx, conn, def, target, req, c, "facts")
-		if err != nil {
+		if err := tok.Place(req); err != nil {
 			warn(err)
-			return teamsfacts.Unread("the bot's token could not be minted")
+			return teamsfacts.Unread("the bot's token could not be placed")
 		}
 		resp, err := c.Do(req)
-		release()
 		if err != nil {
 			warn(err)
 			return teamsfacts.Unread("Teams could not be reached")
 		}
 		var why string
-		if next, why = tally.Page(resp.Status, resp.Body, target.Account); why != "" {
+		if next, why = tally.Page(resp.Status, resp.Body, pin); why != "" {
 			return teamsfacts.Unread(why)
 		}
 		if next == "" {
