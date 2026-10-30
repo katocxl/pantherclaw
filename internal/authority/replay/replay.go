@@ -299,7 +299,7 @@ func (e *Engine) open(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluati
 	case !pipeline.Replays(row.Pipeline):
 		return nil, &Limitation{
 			Code:   IncompletePipelineVersion,
-			Detail: fmt.Sprintf("the evaluation ran pipeline version %d; this server replays versions 4 and %d", row.Pipeline, pipeline.Version),
+			Detail: fmt.Sprintf("the evaluation ran pipeline version %d; this server replays versions 4, 5 and %d", row.Pipeline, pipeline.Version),
 		}
 	}
 	rec, err := e.Inputs.Open(ctx, org, txn, evaluation, row)

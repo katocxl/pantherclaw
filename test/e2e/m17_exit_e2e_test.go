@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -332,7 +333,10 @@ func TestE2E_M17_ASPIFFEWorkloadEnrolls(t *testing.T) {
 // TestE2E_M17_ACustomerScenarioIsLabeled is M17's custom-range exit path
 // (PN-009.6, HR-466): a CX- scenario's range and results are stored as
 // customer-authored, whatever the runner sends, and the range has no
-// assurance report.
+// assurance report. The runner claims library origin: the server derives
+// the origin from the id, so the claim is dropped rather than refused, and
+// the refusal comes at the export. The export is wired and the caller
+// may export, so only HR-466 can stop it.
 //
 // Covers: PN-009.6
 func TestE2E_M17_ACustomerScenarioIsLabeled(t *testing.T) {
@@ -344,9 +348,10 @@ func TestE2E_M17_ACustomerScenarioIsLabeled(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := strings.Repeat("a", 64)
-	svc := &rapp.Service{Store: pgranges.Store{Pool: s.pool}, Editions: unlimited{}}
+	svc := &rapp.Service{Store: pgranges.Store{Pool: s.pool}, Editions: unlimited{}, Exporter: unreachedExporter{}}
 	r, err := svc.StartRange(ctx, rapp.StartInput{Agent: agent.ID, RunnerVersion: "e2e", Scenarios: []rdomain.Scenario{{
 		ID: "CX-00042", Digest: digest, Tier: rdomain.TierBusiness, Category: "boundary", Suite: "coding-agent", Title: "our tool", StepCount: 1,
+		Origin: rdomain.OriginLibrary,
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -361,9 +366,17 @@ func TestE2E_M17_ACustomerScenarioIsLabeled(t *testing.T) {
 	if got.Range.Origin != rdomain.OriginCustomer || len(got.Results) != 1 || got.Results[0].Scenario.Origin != rdomain.OriginCustomer {
 		t.Fatalf("stored range %q, results %+v", got.Range.Origin, got.Results)
 	}
-	if _, err := svc.ExportAssuranceReport(ctx, r.ID); err == nil {
-		t.Fatal("a customer range exported an assurance report")
+	exporter := s.person(t, "range-exporter", td.RoleSecurityAdmin).ctx
+	if _, err := svc.ExportAssuranceReport(exporter, r.ID); !errors.Is(err, rapp.ErrNotAttested) {
+		t.Fatalf("a customer range's assurance report: %v, want RANGE_CUSTOMER_NOT_ATTESTED", err)
 	}
+}
+
+// unreachedExporter fails if a customer range ever gets as far as a pack.
+type unreachedExporter struct{}
+
+func (unreachedExporter) ExportRange(context.Context, ids.UUID) (ids.UUID, error) {
+	return ids.UUID{}, errors.New("a customer range reached the exporter")
 }
 
 // enterprise is the edition the identity presets need (HR-461..464).
