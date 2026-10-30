@@ -82,6 +82,28 @@ func TestHR522_JiraRoutesAreOneActionOnEveryRoute(t *testing.T) {
 	if err != nil || hr.Action.Target != cr.Action.Target || hr.Action.Route != cr.Action.Route || hr.Action.Operation != "jira.issue.read" {
 		t.Fatalf("read: %v %s %s", err, hr.Canonical, cr.Canonical)
 	}
+	for tool, c := range map[string]struct {
+		method, path, body, args, op, target string
+	}{
+		"jira_create_issue": {"POST", "/rest/api/2/issue",
+			`{"fields":{"project":{"key":"HELP"},"summary":"Refund","description":"Sent","issuetype":{"name":"Task"}}}`,
+			`{"project_key":"HELP","summary":"Refund","description":"Sent","issue_type":"Task"}`, "jira.issue.create", "HELP"},
+		"jira_transition_issue": {"POST", "/rest/api/2/issue/HELP-1/transitions", `{"transition":{"id":"31"}}`,
+			`{"issue_key":"HELP-1","transition_id":"31"}`, "jira.issue.transition", "HELP-1"},
+	} {
+		h, err := m.HTTPRequest(ctx, tc, c.method, c.path, "", "application/json", []byte(c.body))
+		if err != nil {
+			t.Fatalf("%s http: %v", tool, err)
+		}
+		g, err := m.MCP(ctx, tc, tool, []byte(c.args))
+		if err != nil {
+			t.Fatalf("%s mcp: %v", tool, err)
+		}
+		if h.Action.DedupeKey != g.Action.DedupeKey || string(h.Action.Params) != string(g.Action.Params) || h.Action.Target != g.Action.Target ||
+			h.Action.Operation != c.op || h.Action.Target.ID != c.target {
+			t.Fatalf("%s routes differ:\n%s\n%s", tool, h.Canonical, g.Canonical)
+		}
+	}
 	for name, args := range map[string]string{
 		"lowercase key": `{"issue_key":"help-1","body":"x"}`,
 		"project only":  `{"issue_key":"HELP","body":"x"}`,
@@ -120,15 +142,23 @@ func TestHR522_JiraWritesAreDisclosedContentAndCustomerProjectsAConsequence(t *t
 		for _, c := range d.Constraints {
 			required = required || (c.Kind == domain.ConstraintDestinationSet && c.Required)
 		}
-		if !required {
-			t.Fatalf("%s: no required destination set", d.Operation)
-		}
-		var disclosed bool
+		var disclosed, content bool
 		for _, ps := range d.Params {
+			content = content || ps.Type == domain.TypeContent
 			disclosed = disclosed || (ps.Type == domain.TypeContent && ps.Disclosure)
 		}
-		if !disclosed {
-			t.Fatalf("%s: no disclosure param", d.Operation)
+		// What carries the agent's words is disclosed content bound to a
+		// destination; a transition sends only an id.
+		if content && (!required || !disclosed) {
+			t.Fatalf("%s: content without a required destination set or disclosure", d.Operation)
+		}
+		if !content && d.Operation != "jira.issue.transition" {
+			t.Fatalf("%s: a write without content", d.Operation)
+		}
+		for _, ps := range d.Params {
+			if ps.Type == domain.TypeContent && !ps.Disclosure {
+				t.Fatalf("%s: undisclosed content", d.Operation)
+			}
 		}
 		var found bool
 		for _, c := range p.Consequences {
@@ -235,14 +265,14 @@ func TestHR522_TheJiraCredentialGoesOnlyToItsBoundSite(t *testing.T) {
 }
 
 // TestHR523_PCJiraDeclaresItsCoverage: pc.jira declares no environment,
-// records scoped by issue, recipients classified by the project's customer
+// records scoped by issue and project, recipients classified by the project's customer
 // visibility, and its two channels (F756).
 //
 // Covers: F756
 func TestHR523_PCJiraDeclaresItsCoverage(t *testing.T) {
 	c := decode(t).Coverage
 	if c == nil || c.Environment.Source != domain.EnvironmentNone || c.RecipientFact != "jira.project.external" ||
-		len(c.RecordScope) != 1 || c.RecordScope[0] != "jira_issue" || len(c.Channels) != 2 {
+		len(c.RecordScope) != 2 || c.RecordScope[0] != "jira_issue" || c.RecordScope[1] != "jira_project" || len(c.Channels) != 2 {
 		t.Fatalf("coverage: %+v", c)
 	}
 }

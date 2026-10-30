@@ -5,10 +5,12 @@ package manifest
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
+	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 )
 
@@ -98,5 +100,66 @@ func TestHR523_ACoverageDeclarationWidensNothing(t *testing.T) {
 		if plain.Consequences[i].ID != declared.Consequences[i].ID || plain.Consequences[i].When != declared.Consequences[i].When {
 			t.Fatalf("consequence %d differs", i)
 		}
+	}
+}
+
+// TestHR526_JSONBodyKeysFollowTheBracketGrammar: a JSON body's bracket keys
+// nest objects only: a [] list, a digit-only name, more than three levels,
+// an unpaired bracket or a key that is both a value and a parent refuses
+// the package; MCP arguments stay flat (G0 M20 D260).
+//
+// Covers: F756
+func TestHR526_JSONBodyKeysFollowTheBracketGrammar(t *testing.T) {
+	const at = "          fields[issuetype][name]: params.issue_type\n"
+	raw := string(pcjira.Package)
+	if !strings.Contains(raw, at) {
+		t.Fatal("fixture moved")
+	}
+	if _, err := Decode(pcjira.Package); err != nil {
+		t.Fatal(err)
+	}
+	for name, extra := range map[string]string{
+		"list":             "          fields[labels][]: params.issue_type\n",
+		"digits":           "          fields[0]: params.issue_type\n",
+		"too deep":         "          fields[a][b][c]: params.issue_type\n",
+		"unpaired":         "          fields[a: params.issue_type\n",
+		"value and parent": "          fields: params.issue_type\n",
+		"bad name":         "          fields[a b]: params.issue_type\n",
+	} {
+		_, err := Decode([]byte(strings.Replace(raw, at, at+extra, 1)))
+		if !errors.Is(err, domain.ErrInvalid) && !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// TestHR526_AValidatorWithoutNestingRefusesBracketKeys: a JSON body key
+// that nests is never a flat field name, so a validator that predates
+// nesting refuses the package instead of sending "fields[project][key]"
+// as one key: it fails closed (G0 M20 D260).
+//
+// Covers: F756
+func TestHR526_AValidatorWithoutNestingRefusesBracketKeys(t *testing.T) {
+	flat := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`) // the field rule before D260
+	p, err := Decode(pcjira.Package)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var nested int
+	for _, d := range p.Definitions {
+		if d.Dispatch == nil || d.Dispatch.HTTP == nil {
+			continue
+		}
+		for k := range d.Dispatch.HTTP.Body {
+			if strings.Contains(k, "[") {
+				nested++
+				if flat.MatchString(k) {
+					t.Fatalf("%s: %q passes the old rule", d.Operation, k)
+				}
+			}
+		}
+	}
+	if nested == 0 {
+		t.Fatal("no nested keys")
 	}
 }
