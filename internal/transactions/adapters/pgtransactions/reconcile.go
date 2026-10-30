@@ -119,17 +119,26 @@ func (s *Store) ResolveOccurred(ctx context.Context, c tenancy.Caller, r app.Res
 			if err := auditUnknownConsequences(ctx, tx, q, c.Org, k.TransactionID, actor); err != nil {
 				return err
 			}
+			// A verifier that captures nothing still audits each predicted
+			// consequence as not verifiable (HR-450).
 			if te.DefinitionDigest != nil {
-				if d, err := definition(ctx, q, c.Org, *te.DefinitionDigest); err == nil && d.Verifier != nil && len(d.Verifier.Capture) > 0 {
-					fields, err := capturedOf(ctx, q, c.Org, k.TransactionID, d.Verifier)
-					if err != nil {
-						return err
+				if d, err := definition(ctx, q, c.Org, *te.DefinitionDigest); err == nil {
+					var fields map[string]string
+					if d.Verifier != nil && len(d.Verifier.Capture) > 0 {
+						if fields, err = capturedOf(ctx, q, c.Org, k.TransactionID, d.Verifier); err != nil {
+							return err
+						}
 					}
 					if err := openConsequences(ctx, tx, q, c.Org, k.TransactionID, *te.DefinitionDigest, d.Verifier, fields, actor); err != nil {
 						return err
 					}
 				}
 			}
+		}
+		// A person's answer about a consequence changes the downstream
+		// state of the action it was opened for (G0 M17 D102).
+		if err := rollUp(ctx, tx, q, c.Org, k.TransactionID, sign, actor, now); err != nil {
+			return err
 		}
 		sum := sha256.Sum256([]byte(basis))
 		if _, err := audit.Record(ctx, tx, audit.Event{

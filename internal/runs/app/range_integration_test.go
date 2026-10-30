@@ -127,7 +127,7 @@ func TestHR220_TransactionsTakeSimulatedFromTheirRun(t *testing.T) {
 				return err
 			}
 			_, err := q.InsertConsequenceTransaction(ctx, dbq.InsertConsequenceTransactionParams{
-				OrgID: w.org, ID: conseq, ActionID: ids.NewV7(), ActionHash: make([]byte, 32), Operation: "deploy.verify", Parent: txn,
+				OrgID: w.org, ID: conseq, ActionID: ids.NewV7(), ActionHash: make([]byte, 32), Operation: "deploy.verify", Parent: txn, Root: txn,
 			})
 			return err
 		}); err != nil {

@@ -52,17 +52,24 @@ type Definition struct {
 	WorkKind   WorkKind `json:"work_kind"`
 	// ReviewBy is a date (YYYY-MM-DD, UTC); required when the version has a
 	// ceiling or an effectful platform scope.
-	ReviewBy  Date           `json:"review_by,omitzero"`
-	When      When           `json:"when"`
-	If        []string       `json:"if,omitzero"`
-	Authority Authority      `json:"authority"`
-	Do        []StepSpec     `json:"do"`
-	IfFails   *IfFails       `json:"if_fails,omitzero"`
-	Finish    []Finish       `json:"finish_when"`
-	Limits    Limits         `json:"limits,omitzero"`
-	Paused    PausedTriggers `json:"paused_triggers,omitzero"`
-	QueueMax  int            `json:"queue_max,omitzero"`
-	QueueTTL  Duration       `json:"queue_ttl,omitzero"`
+	ReviewBy  Date      `json:"review_by,omitzero"`
+	When      When      `json:"when"`
+	If        []string  `json:"if,omitzero"`
+	Authority Authority `json:"authority"`
+	// Do is a v1 definition's steps. A v2 definition stores none: Parse
+	// fills Do with its step nodes in execution order, so whole-definition
+	// readers see every step; Canonical leaves them out (D301).
+	Do []StepSpec `json:"do"`
+	// Nodes is a v2 definition's graph; the first node is the entry.
+	Nodes    []NodeSpec     `json:"nodes,omitzero"`
+	IfFails  *IfFails       `json:"if_fails,omitzero"`
+	Finish   []Finish       `json:"finish_when"`
+	Limits   Limits         `json:"limits,omitzero"`
+	Paused   PausedTriggers `json:"paused_triggers,omitzero"`
+	QueueMax int            `json:"queue_max,omitzero"`
+	QueueTTL Duration       `json:"queue_ttl,omitzero"`
+	// flow is the graph Parse built; a parsed definition never changes.
+	flow *Flow
 }
 
 // When is the trigger section: exactly one kind, plus optional dedupe and
@@ -368,6 +375,9 @@ type StepSpec struct {
 	Timeout   Duration       `json:"timeout,omitzero"`
 	Retry     *Retry         `json:"retry,omitzero"`
 	OnFailure OnFailure      `json:"on_failure,omitzero"`
+	// Compensates is the step node a v2 compensation entry answers: it
+	// runs only if that node ran on the taken path (D307). v1 refuses it.
+	Compensates string `json:"compensates,omitzero"`
 }
 
 // Retry declares attempts and backoff for a retry-safe kind.
@@ -455,11 +465,20 @@ func Parse(raw []byte) (*Definition, error) {
 	if err := json.Unmarshal(doc, &d, json.RejectUnknownMembers(true)); err != nil {
 		return nil, invalid("%v", err)
 	}
-	if d.APIVersion != APIVersion || d.Kind != DocKind {
-		return nil, invalid("apiVersion must be %q and kind %q", APIVersion, DocKind)
+	if d.APIVersion != APIVersion && d.APIVersion != APIVersionV2 || d.Kind != DocKind {
+		return nil, invalid("apiVersion must be %q or %q and kind %q", APIVersion, APIVersionV2, DocKind)
+	}
+	if err := d.checkFormat(); err != nil {
+		return nil, err
 	}
 	if err := d.canonicalizeWith(); err != nil {
 		return nil, err
+	}
+	if d.IsV2() {
+		d.flow = newFlow(d.Nodes)
+		d.Do = stepsInOrder(d.flow)
+	} else {
+		d.flow = d.lift()
 	}
 	c, err := d.Canonical()
 	if err != nil {
@@ -469,6 +488,35 @@ func Parse(raw []byte) (*Definition, error) {
 		return nil, invalid("the definition is %d bytes; at most %d", len(c), MaxDefinitionBytes)
 	}
 	return &d, nil
+}
+
+// checkFormat keeps the two formats apart: v1 accepts exactly what it
+// accepted before v2 existed (HR-530), and a v2 node is exactly one kind.
+func (d *Definition) checkFormat() error {
+	var compensate []StepSpec
+	if d.IfFails != nil {
+		compensate = d.IfFails.Compensate
+	}
+	if !d.IsV2() {
+		if d.Nodes != nil {
+			return invalid("nodes needs apiVersion %q", APIVersionV2)
+		}
+		for i := range compensate {
+			if compensate[i].Compensates != "" {
+				return invalid("if_fails.compensate[%d].compensates needs apiVersion %q", i, APIVersionV2)
+			}
+		}
+		return nil
+	}
+	if len(d.Do) > 0 || len(d.Finish) > 0 {
+		return invalid("a v2 definition declares nodes, with finish_when on its terminal nodes; not do or a top-level finish_when")
+	}
+	for i := range d.Nodes {
+		if !d.Nodes[i].wellFormed() {
+			return invalid("nodes[%d] (%s) is exactly one of a step, branch, switch, join or terminal", i, d.Nodes[i].ID)
+		}
+	}
+	return nil
 }
 
 // canonicalizeWith decodes every step's `with` into its kind's schema
@@ -500,6 +548,17 @@ func (d *Definition) canonicalizeWith() error {
 	if err := fix(d.Do, "do"); err != nil {
 		return err
 	}
+	for i := range d.Nodes {
+		n := &d.Nodes[i]
+		if n.Kind() != NodeKindStep {
+			continue
+		}
+		one := []StepSpec{n.Spec()}
+		if err := fix(one, "nodes"); err != nil {
+			return err
+		}
+		n.With = one[0].With
+	}
 	if d.IfFails != nil {
 		return fix(d.IfFails.Compensate, "if_fails.compensate")
 	}
@@ -508,7 +567,13 @@ func (d *Definition) canonicalizeWith() error {
 
 // Canonical is the stored form: deterministic JSON of the Go struct.
 func (d *Definition) Canonical() ([]byte, error) {
-	b, err := json.Marshal(d, json.Deterministic(true))
+	stored := d
+	if d.IsV2() {
+		c := *d
+		c.Do = nil
+		stored = &c
+	}
+	b, err := json.Marshal(stored, json.Deterministic(true))
 	if err != nil {
 		return nil, invalid("%v", err)
 	}

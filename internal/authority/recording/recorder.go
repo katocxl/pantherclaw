@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -245,10 +246,23 @@ func (r *Recorder) HoldSettings(ctx context.Context, org ids.OrgID) (pipeline.Ho
 	return s, err
 }
 
+// RunConsequences implements pipeline.Reader.
+func (r *Recorder) RunConsequences(ctx context.Context, org ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	c, err := r.r.RunConsequences(ctx, org, run)
+	r.keep(func(x *Reads) error {
+		x.RunConsequences = append(x.RunConsequences, RunConsequences{
+			Run: run.String(), Pending: c.Pending, Unconfirmed: c.Unconfirmed, Err: errKind(err),
+		})
+		return nil
+	})
+	return c, err
+}
+
 // any reports whether any read is recorded.
 func (r *Reads) any() bool {
-	return r.Containment != nil || r.Controls != nil || r.Policy != nil || r.HoldSettings != nil || len(r.Definitions)+len(r.Runs)+len(r.Agents)+
-		len(r.Chains)+len(r.Envelopes)+len(r.Facts)+len(r.Usage)+len(r.Claims)+len(r.Connections)+len(r.Holds)+len(r.Variants) > 0
+	return r.Containment != nil || r.Controls != nil || r.Policy != nil || r.HoldSettings != nil || r.CustomerRules != nil || len(r.Definitions)+len(r.Runs)+len(r.Agents)+
+		len(r.Chains)+len(r.Envelopes)+len(r.Facts)+len(r.Usage)+len(r.Claims)+len(r.Connections)+len(r.Holds)+len(r.Variants)+
+		len(r.RunConsequences) > 0
 }
 
 // Controls implements pipeline.Reader.
@@ -256,4 +270,25 @@ func (r *Recorder) Controls(ctx context.Context, org ids.OrgID, k pipeline.Contr
 	cs, err := r.r.Controls(ctx, org, k)
 	r.keep(func(x *Reads) error { x.Controls = fromControls(k, cs, err); return nil })
 	return cs, err
+}
+
+// CustomerRules implements pipeline.Reader.
+func (r *Recorder) CustomerRules(ctx context.Context, org ids.OrgID) ([]consequences.Rule, error) {
+	rules, err := r.r.CustomerRules(ctx, org)
+	r.keep(func(x *Reads) error {
+		cr := &CustomerRules{Err: errKind(err)}
+		for _, rule := range rules {
+			if rule.Customer == nil {
+				return fmt.Errorf("recording: customer rule %s has no stored version", rule.ID)
+			}
+			c := CustomerRule{ID: rule.ID, Version: rule.Customer.Version, Digest: hex.EncodeToString(rule.Customer.Digest[:])}
+			if pin := rule.Customer.Pin; pin != (actionir.Definition{}) {
+				c.Pin = &pin
+			}
+			cr.Rules = append(cr.Rules, c)
+		}
+		x.CustomerRules = cr
+		return nil
+	})
+	return rules, err
 }

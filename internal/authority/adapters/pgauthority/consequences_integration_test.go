@@ -84,7 +84,8 @@ func TestHR206_ConsequencesAreRecordedWithTheDecision(t *testing.T) {
 	rows := stored(r)
 	if r.Decision != adomain.Deny || len(r.Consequences) != 1 || r.Consequences[0].State != consequences.Predicted ||
 		len(rows) != 1 || rows[0].State != "PREDICTED" || rows[0].RuleID != "refund-triggers-payout" || rows[0].TargetID != "ch_1" ||
-		!slices.Equal(rows[0].Environments, []string{"payroll"}) || rows[0].FactsDigest != r.Consequences[0].FactsDigest {
+		!slices.Equal(rows[0].Environments, []string{"payroll"}) || rows[0].FactsDigest != r.Consequences[0].FactsDigest ||
+		rows[0].Depth != 1 || rows[0].ParentPosition.Valid || rows[0].Source != "package" {
 		t.Fatalf("predicted: %s %+v %+v", r.Decision, r.Consequences, rows)
 	}
 	if rc := receiptConsequences(t, r.Receipt); len(rc) != 1 || rc[0].State != "PREDICTED" || rc[0].Target != "payments.charge:ch_1" ||

@@ -127,7 +127,13 @@ func (c *Compiled) forDefinition(d *defs.Definition) map[string]compiledRule {
 			rules[r.ID] = compiledRule{err: err}
 			continue
 		}
-		p, cerr := env.Compile(r.When, cel.BoolType)
+		exprs := celExpressions(r)
+		p, cerr := env.Compile(exprs[0], cel.BoolType)
+		for _, x := range exprs[1:] {
+			if _, err := env.Compile(x, cel.BoolType); cerr == nil {
+				cerr = err
+			}
+		}
 		rules[r.ID] = compiledRule{prog: p, err: cerr, needs: needs}
 	}
 	c.byDef[d.Digest] = rules

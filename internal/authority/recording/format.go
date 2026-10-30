@@ -100,6 +100,10 @@ type Reads struct {
 	Holds        []Hold        `json:"holds,omitzero"`
 	Variants     []Variants    `json:"variants,omitzero"`
 	HoldSettings *HoldSettings `json:"hold_settings,omitzero"`
+	// CustomerRules is the read of the org's customer consequence rules
+	// (pipeline 6, G0 M17 D106); earlier recordings have none.
+	CustomerRules   *CustomerRules    `json:"customer_rules,omitzero"`
+	RunConsequences []RunConsequences `json:"run_consequences,omitzero"`
 }
 
 // Containment is the org's containment state and the database time: the
@@ -421,6 +425,14 @@ type HoldSettings struct {
 	Err            string `json:"err,omitzero"`
 }
 
+// RunConsequences is the read of a run's consequence counts (G0 M17 D103).
+type RunConsequences struct {
+	Run         string `json:"run"`
+	Pending     int    `json:"pending,omitzero"`
+	Unconfirmed int    `json:"unconfirmed,omitzero"`
+	Err         string `json:"err,omitzero"`
+}
+
 // Encode returns the recording's deterministic JSON: members in a fixed
 // order and maps sorted by key, so the same reads give the same bytes.
 func Encode(r *Recording) ([]byte, error) {
@@ -466,4 +478,24 @@ func (r *Recording) check() error {
 		return err
 	}
 	return r.Reads.check()
+}
+
+// CustomerRules is the read of the org's ACTIVE customer consequence
+// rules: each by id, version and digest, with the pin of its consequence
+// operation's definition, so that a replay evaluates exactly those
+// versions.
+type CustomerRules struct {
+	Rules []CustomerRule `json:"rules,omitzero"`
+	Err   string         `json:"err,omitzero"`
+}
+
+// CustomerRule is one recorded customer rule version.
+type CustomerRule struct {
+	ID      string `json:"id"`
+	Version int    `json:"version"`
+	// Digest is the SHA-256 of the rule's canonical JSON, hex.
+	Digest string `json:"digest"`
+	// Pin is the definition of its consequence operation, when the org had
+	// an ACTIVE one.
+	Pin *actionir.Definition `json:"pin,omitzero"`
 }

@@ -713,6 +713,10 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		if x.Min < 0 || x.Min > 100 {
 			v.err(CodeLimitRange, at+"/min", "min is 1 to 100 (absent means 1)")
 		}
+		if x.Consequences && len(x.States) > 0 && !slices.Equal(x.States, []string{"CONFIRMED"}) {
+			// Only a confirmed action has a downstream state (D103).
+			v.err(CodeLimitRange, at+"/states", "a wait on consequences counts confirmed actions only: leave states out")
+		}
 	case *GateWith:
 		if !dur(x.Deadline, time.Minute, MaxGateDeadline) {
 			v.err(CodeDeadlineMissing, at+"/deadline", "a gate's deadline is 1m to 72h")

@@ -653,8 +653,19 @@ func (r Reads) check() error {
 		add(parseHash(v.Key))
 		ok(v.Err)
 	}
+	for _, c := range r.RunConsequences {
+		add(ids.ParseUUID(c.Run))
+		ok(c.Err)
+	}
 	if h := r.HoldSettings; h != nil {
 		ok(h.Err)
+	}
+	if c := r.CustomerRules; c != nil && ok(c.Err) {
+		for _, x := range c.Rules {
+			if d, err := hex.DecodeString(x.Digest); err != nil || len(d) != 32 || x.ID == "" || x.Version < 1 {
+				errs = append(errs, fmt.Errorf("customer rule %q", x.ID))
+			}
+		}
 	}
 	return errors.Join(errs...)
 }

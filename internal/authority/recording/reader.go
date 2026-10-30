@@ -60,6 +60,17 @@ type Served struct {
 	// none are served instead of a gap. They feed only a hold's display and
 	// binding, never the decision (D36); reproduction replays never set it.
 	NoVariants bool
+	// RunConsequences, when set, are the current consequence counts of the
+	// recorded runs, by run id, served when the evaluation did not read
+	// them: a replay under a proposed policy that reads them (G0 M17 D103).
+	// Reproduction replays never set it.
+	RunConsequences map[string]pipeline.RunConsequenceCounts
+	// CustomerRules are the recorded customer rule versions, loaded again by
+	// id and version (their digests checked) with their definitions by pin.
+	CustomerRules []consequences.Rule
+	// MissingCustomerRules name the recorded versions that could not be
+	// loaded as they were ("cx.rule v2"), for the gap (D144).
+	MissingCustomerRules []string
 }
 
 // Reader serves a recording to the pipeline. It reads nothing else and
@@ -457,4 +468,49 @@ func (r *Reader) Controls(_ context.Context, org ids.OrgID, k pipeline.ControlKe
 func sameKeys(a ControlKeys, b pipeline.ControlKeys) bool {
 	return a.Run == b.Run && a.Agent == b.Agent && a.Connection == b.Connection && a.TargetType == b.TargetType &&
 		slices.Equal(a.Grants, b.Grants) && slices.Equal(a.Principals, b.Principals)
+}
+
+// RunConsequences implements pipeline.Reader.
+func (r *Reader) RunConsequences(_ context.Context, org ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	const what = "run_consequences"
+	if err := r.otherOrg(org, what, pipeline.StepBoundaries); err != nil {
+		return pipeline.RunConsequenceCounts{}, r.gap(what, pipeline.StepBoundaries, "the run's consequences were not recorded")
+	}
+	i := slices.IndexFunc(r.rec.Reads.RunConsequences, func(x RunConsequences) bool { return x.Run == run.String() })
+	if i < 0 {
+		if c, ok := r.served.RunConsequences[run.String()]; ok {
+			return c, nil // read at replay time for a proposed policy (Served)
+		}
+		return pipeline.RunConsequenceCounts{}, r.gap(what, pipeline.StepBoundaries, "the run's consequences were not recorded")
+	}
+	c := r.rec.Reads.RunConsequences[i]
+	if err := errOf(c.Err); err != nil {
+		return pipeline.RunConsequenceCounts{}, err
+	}
+	return pipeline.RunConsequenceCounts{Pending: c.Pending, Unconfirmed: c.Unconfirmed}, nil
+}
+
+// CustomerRules implements pipeline.Reader: the recorded versions, served
+// again, or a gap when one could not be loaded as it was.
+func (r *Reader) CustomerRules(_ context.Context, org ids.OrgID) ([]consequences.Rule, error) {
+	c := r.rec.Reads.CustomerRules
+	if err := r.otherOrg(org, "customer_rules", pipeline.StepFacts); err != nil || c == nil {
+		return nil, r.gap("customer_rules", pipeline.StepFacts, "the org's customer consequence rules were not recorded")
+	}
+	if err := errOf(c.Err); err != nil {
+		return nil, err
+	}
+	same := len(c.Rules) == len(r.served.CustomerRules)
+	for i := 0; same && i < len(c.Rules); i++ {
+		s, w := r.served.CustomerRules[i], c.Rules[i]
+		same = s.Customer != nil && s.ID == w.ID && s.Customer.Version == w.Version && hex.EncodeToString(s.Customer.Digest[:]) == w.Digest
+	}
+	if !same {
+		detail := "the customer consequence rules are not the ones recorded"
+		if m := r.served.MissingCustomerRules; len(m) > 0 {
+			detail += ": " + strings.Join(m, ", ") + " could not be loaded as recorded"
+		}
+		return nil, r.gap("customer_rules", pipeline.StepFacts, detail)
+	}
+	return slices.Clone(r.served.CustomerRules), nil
 }
