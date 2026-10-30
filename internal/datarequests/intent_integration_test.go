@@ -13,6 +13,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -113,6 +114,41 @@ func TestT176_RemovalHoldsNoTransactionOpen(t *testing.T) {
 	d.AdminQueryRow(t, "SELECT count(*) FROM pc.deletion_records WHERE deleted_org_id=$1", []any{org}, &completions)
 	if completions != 1 {
 		t.Fatalf("completions=%d", completions)
+	}
+}
+
+// TestT176_RacingErasureWorkersLeaveOneRecord: four workers erase one org at
+// once. Each finishes or fails with the lock timeout the job retries, and a
+// retry leaves the erasure complete with exactly one deletion record.
+func TestT176_RacingErasureWorkersLeaveOneRecord(t *testing.T) {
+	d, s, org := setup(t)
+	id := deletionRequest(t, s, org, time.Now().Add(-time.Hour))
+	if err := s.DeleteOrg(t.Context(), org, id); !errors.Is(err, ErrAwaitingSecurityCopy) {
+		t.Fatalf("unacknowledged: %v", err)
+	}
+	acknowledgeIntents(t, s)
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			<-start
+			if err := s.DeleteOrg(context.Background(), org, id); err != nil && !db.IsLockTimeout(err) {
+				t.Errorf("a racing worker: %v", err)
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+	if err := s.DeleteOrg(t.Context(), org, id); err != nil {
+		t.Fatal("retry:", err)
+	}
+	var complete bool
+	var completions int
+	d.AdminQueryRow(t, "SELECT complete FROM pc.org_deletion_journal WHERE deleted_org_id=$1", []any{org}, &complete)
+	d.AdminQueryRow(t, "SELECT count(*) FROM pc.deletion_records WHERE deleted_org_id=$1", []any{org}, &completions)
+	if !complete || completions != 1 {
+		t.Fatalf("complete=%v completions=%d", complete, completions)
 	}
 }
 

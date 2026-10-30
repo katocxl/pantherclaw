@@ -138,8 +138,11 @@ func (s *Service) DeleteOrg(ctx context.Context, org ids.OrgID, id ids.UUID) err
 	}
 	// Removal commits on the Deleter's own connection, and a transaction
 	// open around it would sit idle until the idle-in-transaction timeout
-	// ended it. So no transaction is held here: two workers serialize on
-	// the write barrier and the later one finds no rows. Failure rolls back
+	// ended it. So no transaction is held here. Two workers serialize on
+	// the write barrier: the later one waits there under the lock timeout,
+	// then finds no rows, or fails with 55P03 while the first is still
+	// removing. The job retries that failure, so an extra worker costs a
+	// pass over the tables and never a second record. Failure rolls back
 	// only this phase; the already committed journal and fail-closed org
 	// tombstone remain.
 	if err := s.removeOrgRows(ctx, org); err != nil {
