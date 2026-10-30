@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/fanout"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -76,9 +78,9 @@ func (b *Bus) listen(ctx context.Context, channel string, handle func(string)) e
 		_, _ = conn.Exec(context.WithoutCancel(ctx), "UNLISTEN *")
 		conn.Release()
 	}()
-	// The channel name is validated (fanout.Validate), so it is a safe
-	// identifier; LISTEN takes no parameters.
-	if _, err := conn.Exec(ctx, "LISTEN "+channel); err != nil {
+	// LISTEN takes no parameters: the validated name is quoted as an
+	// identifier (lower case, so it still matches pg_notify's channel).
+	if _, err := conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize()); err != nil { // nosemgrep: pc-sql-built-with-sprintf -- channel validated by fanout.Validate, quoted by pgx.Identifier; LISTEN takes no parameters
 		return err
 	}
 	for {
