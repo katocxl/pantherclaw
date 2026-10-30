@@ -2757,6 +2757,31 @@ type PcPolicySimulationSample struct {
 	Limitation       string
 }
 
+type PcPolicySuggestion struct {
+	OrgID                ids.OrgID
+	ID                   ids.UUID
+	Kind                 string
+	PostureFindingID     ids.UUID
+	GrantID              ids.UUID
+	AgentID              ids.UUID
+	Owners               []ids.UUID
+	WindowFrom           time.Time
+	WindowTo             time.Time
+	Observed             []byte
+	CoverageLimits       []byte
+	Proposed             []byte
+	ExpectedEffect       []byte
+	Uncertainty          string
+	UncertaintyReasons   []string
+	State                string
+	DraftPolicyVersionID *ids.UUID
+	DismissedBy          *string
+	DismissReason        *string
+	FindingRemediatedAt  *time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
 type PcPolicyTestRun struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID

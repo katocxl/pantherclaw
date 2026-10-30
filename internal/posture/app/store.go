@@ -67,9 +67,22 @@ func Inputs(rec exapp.Recomputed) domain.Inputs {
 // Summary counts what a reconciliation did.
 type Summary map[domain.ActionKind]int
 
+// FindingHook is told, in the reconciliation's transaction, of every
+// finding a reconciliation opened, saw, moved or remediated (G0 M16 D91:
+// suggestions follow unused-authority findings).
+type FindingHook interface {
+	FindingChanged(ctx context.Context, tx db.TenantTx, finding ids.UUID, kind domain.Kind, act domain.ActionKind) error
+}
+
 // Reconcile brings the org's findings in line with a recomputation, in the
 // same transaction.
 func Reconcile(ctx context.Context, tx db.TenantTx, rec exapp.Recomputed) (Summary, error) {
+	return ReconcileWith(ctx, tx, rec, nil)
+}
+
+// ReconcileWith is Reconcile that also tells hook (nil: nobody) of each
+// finding it touched.
+func ReconcileWith(ctx context.Context, tx db.TenantTx, rec exapp.Recomputed, hook FindingHook) (Summary, error) {
 	q, org := dbq.New(tx), tx.OrgID()
 	rows, err := q.PostureFindingsForReconcile(ctx, org)
 	if err != nil {
@@ -91,6 +104,12 @@ func Reconcile(ctx context.Context, tx db.TenantTx, rec exapp.Recomputed) (Summa
 	at := rec.Snapshot.ComputedAt
 	for _, a := range acts {
 		var id ids.UUID
+		var kind domain.Kind
+		if a.Finding != nil {
+			id, kind = a.Finding.ID, a.Finding.Kind
+		} else if a.Candidate != nil {
+			kind = a.Candidate.Kind
+		}
 		switch a.Kind {
 		case domain.ActOpen:
 			f, err := insert(ctx, q, org, *a.Candidate, snap, at)
@@ -126,6 +145,11 @@ func Reconcile(ctx context.Context, tx db.TenantTx, rec exapp.Recomputed) (Summa
 		case domain.ActIncomplete:
 			if err := move(ctx, tx, a.Finding.ID, a.Finding.State, domain.EvidenceIncomplete, moveOpts{}, "EVIDENCE_INCOMPLETE",
 				System, "the recomputation could not read every path", &snap); err != nil {
+				return nil, err
+			}
+		}
+		if hook != nil {
+			if err := hook.FindingChanged(ctx, tx, id, kind, a.Kind); err != nil {
 				return nil, err
 			}
 		}
