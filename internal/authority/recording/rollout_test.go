@@ -24,15 +24,17 @@ import (
 // at 8fc4434a: format 1, pipeline 4) still decodes and encodes to the same
 // bytes, and replays to the same decision, checklist and decision basis.
 // The rollout fields are new and omitted when empty, so neither the format
-// nor the pipeline version changed (G0 M11.1, D12).
+// nor the pipeline version changed (G0 M11.1, D12). M16 raised the pipeline
+// to version 5 (D95): the fixture stays labeled 4, the version it was
+// recorded under, and replays in version 4 mode (Pipeline.ReplayOf).
 func TestHR234_RecordingFromBeforeRolloutsReplaysIdentically(t *testing.T) {
 	raw := readFixture(t, "recording_v1_hold.json")
 	rec, err := recording.Decode(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Format != recording.FormatVersion || rec.Pipeline != pipeline.Version {
-		t.Fatalf("the fixture is format %d pipeline %d; this code is format %d pipeline %d: a version changed",
+	if rec.Format != recording.FormatVersion || rec.Pipeline != 4 || !pipeline.Replays(rec.Pipeline) {
+		t.Fatalf("the fixture is format %d pipeline %d; this code is format %d and replays pipeline 4 and %d",
 			rec.Format, rec.Pipeline, recording.FormatVersion, pipeline.Version)
 	}
 	if again, err := recording.Encode(rec); err != nil || !bytes.Equal(again, bytes.TrimSpace(raw)) {
@@ -62,7 +64,7 @@ func TestHR234_RecordingFromBeforeRolloutsReplaysIdentically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev, err := (&pipeline.Pipeline{}).EvaluateWith(t.Context(), rd, req)
+	ev, err := (&pipeline.Pipeline{ReplayOf: rec.Pipeline}).EvaluateWith(t.Context(), rd, req)
 	if err != nil || len(rd.Gaps()) > 0 {
 		t.Fatalf("replay: %v, gaps %v", err, rd.Gaps())
 	}

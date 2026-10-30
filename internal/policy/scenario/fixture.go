@@ -538,3 +538,9 @@ func wireType(raw jsontext.Value) fdomain.Type {
 	}
 	return out
 }
+
+// SensitiveReads implements pipeline.Reader: a policy test case has no
+// read history.
+func (f *fixture) SensitiveReads(context.Context, ids.OrgID, ids.UUID) ([]pipeline.SensitiveRead, error) {
+	return nil, nil
+}

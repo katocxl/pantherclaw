@@ -71,14 +71,18 @@ func parseID(s string) (ids.UUID, error) {
 // ProviderProto renders a provider.
 func ProviderProto(p domain.Provider) *pantherclawv1.FactProvider {
 	out := &pantherclawv1.FactProvider{Id: p.ID.String(), Name: p.Name, State: states[p.State]}
-	if p.GatewayID.IsZero() {
+	switch {
+	case p.Builtin:
+		out.Builtin = true
+	case p.GatewayID.IsZero():
 		out.ServiceAccountId = p.ServiceAccountID.String()
-	} else {
+	default:
 		out.GatewayId, out.ConnectionId = p.GatewayID.String(), p.ConnectionID.String()
 	}
 	for _, d := range p.Facts {
 		out.Facts = append(out.Facts, &pantherclawv1.FactDeclaration{
 			Name: d.Name, Type: typeProtos[d.Type], SubjectType: d.SubjectType, MaxLag: durationpb.New(d.MaxLag),
+			Kind: kindProtos[d.Kind.Of()],
 		})
 	}
 	return out
@@ -90,6 +94,7 @@ func (s *Facts) RegisterProvider(ctx context.Context, req *pantherclawv1.Registe
 	for _, d := range req.GetFacts() {
 		decls = append(decls, domain.Declaration{
 			Name: d.GetName(), Type: types[d.GetType()], SubjectType: d.GetSubjectType(), MaxLag: d.GetMaxLag().AsDuration(),
+			Kind: kinds[d.GetKind()],
 		})
 	}
 	var p domain.Provider
@@ -180,6 +185,7 @@ func ObservationsOf(list []*pantherclawv1.FactObservation) []domain.Observation 
 		obs = append(obs, domain.Observation{
 			Name: o.GetName(), SubjectType: o.GetSubjectType(), SubjectID: o.GetSubjectId(),
 			Value: jsontext.Value(o.GetValue()), ObservedAt: o.GetObserveTime().AsTime(),
+			Source: o.GetSource(), Method: o.GetMethod(),
 		})
 	}
 	return obs
@@ -216,7 +222,22 @@ func (s *Facts) ListFacts(ctx context.Context, req *pantherclawv1.ListFactsReque
 		out.Facts = append(out.Facts, &pantherclawv1.Fact{
 			Name: f.Name, SubjectType: f.SubjectType, SubjectId: f.SubjectID, Value: f.Value,
 			ObserveTime: ts(f.ObservedAt), RecordTime: ts(f.RecordedAt), ProviderId: f.ProviderID.String(),
+			Source: f.Source, Method: f.Method,
 		})
 	}
 	return out, nil
 }
+
+// kinds and kindProtos map declaration kinds (G0 M16 D80); unspecified is
+// a value.
+var (
+	kinds = map[pantherclawv1.FactKind]domain.Kind{
+		pantherclawv1.FactKind_FACT_KIND_UNSPECIFIED:    domain.KindValue,
+		pantherclawv1.FactKind_FACT_KIND_VALUE:          domain.KindValue,
+		pantherclawv1.FactKind_FACT_KIND_CLASSIFICATION: domain.KindClassification,
+	}
+	kindProtos = map[domain.Kind]pantherclawv1.FactKind{
+		domain.KindValue:          pantherclawv1.FactKind_FACT_KIND_VALUE,
+		domain.KindClassification: pantherclawv1.FactKind_FACT_KIND_CLASSIFICATION,
+	}
+)

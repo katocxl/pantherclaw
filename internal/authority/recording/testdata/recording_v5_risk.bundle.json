@@ -1,0 +1,1 @@
+{"id":"org-policy","version":1,"rules":[{"id":"risk","kind":"REQUIRE_APPROVAL","summary":"refunds at risk need approval","operations":["payments.refund.create"],"when":"principal.risk.open","reason":"IDENTITY_RISK","approval":{"role":"approver","count":1}}]}

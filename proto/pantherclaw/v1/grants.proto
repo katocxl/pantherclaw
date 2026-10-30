@@ -118,6 +118,51 @@ message Grant {
   string basis = 19;
   // When this revision was created.
   google.protobuf.Timestamp create_time = 20;
+  // Data flows allowed after a pii or secret read in the run tree (G0 M16
+  // D75); none allows no flow.
+  repeated FlowAllowance flows = 21;
+}
+
+// FlowAllowance lets data of its classes, read anywhere in the run tree, go
+// to its destinations without a DATA_FLOW_HOLD (G0 M16 D75, HR-431). Under
+// delegation each child allowance must be covered by one of the parent's
+// (HR-432).
+message FlowAllowance {
+  // A subset of "pii" and "secret".
+  repeated string classes = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 2
+    unique: true
+    items: {
+      string: {
+        in: [
+          "pii",
+          "secret"
+        ]
+      }
+    }
+  }];
+  // Exact ActionIR destinations, at least one.
+  repeated FlowDestination destinations = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 64
+  }];
+}
+
+// FlowDestination is one ActionIR destination: its kind and id.
+message FlowDestination {
+  // Destination kind: "internal" or "external", as in the ActionIR.
+  string kind = 1 [(buf.validate.field).string = {
+    in: [
+      "internal",
+      "external"
+    ]
+  }];
+  // Destination id.
+  string id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
 }
 
 // GuardrailVersion names one guardrail revision that applies to a grant.
@@ -160,6 +205,9 @@ message IssueGrantRequest {
     gte: 0
     lte: 2
   }];
+  // Data flows allowed after a sensitive read (G0 M16 D75); none allows no
+  // flow.
+  repeated FlowAllowance flows = 12 [(buf.validate.field).repeated.max_items = 16];
 }
 
 // IssueGrantResponse returns the grant.
@@ -198,6 +246,9 @@ message ReviseGrantRequest {
   // revision closes it as approved. The entry must be open and about this
   // grant.
   optional string access_request_id = 10 [(buf.validate.field).string.uuid = true];
+  // Data flows allowed after a sensitive read (G0 M16 D75, D94); none allows
+  // no flow. Adding or widening one widens the grant.
+  repeated FlowAllowance flows = 11 [(buf.validate.field).repeated.max_items = 16];
 }
 
 // ReviseGrantResponse returns the new revision.

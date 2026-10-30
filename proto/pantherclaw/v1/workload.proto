@@ -200,6 +200,9 @@ message DelegateGrantRequest {
     gte: 0
     lte: 2
   }];
+  // Data flows allowed after a sensitive read (G0 M16 D75, D94); each must
+  // be covered by one of the parent grant's, and none allows no flow.
+  repeated FlowAllowance flows = 10 [(buf.validate.field).repeated.max_items = 16];
 }
 
 // DelegateGrantResponse returns the delegated grant.

@@ -694,6 +694,13 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **The elicitation gate** (PN-015.2, F4): on 2026-07-28 upstreams, `input_required` reaches the agent only in form mode, for fields the reviewed mapping declares, after an injection scan; the answer is decided as a new action. URL mode, sampling, roots and mid-stream 2025-11-25 elicitation stay declined.
 - Migrations `00186`–`00188` (`00189` only if needed, `00190`–`00195` spare); no new permissions.
 
+### M16 — Data-flow holds, external policy checks and suggestions
+**HR:** HR-430..445 · **F:** F123, F185, F366 · **ADR:** 0037 · **G0:** [g0/M16.md](g0/M16.md).
+- **Read history and the data-flow hold** (F123, founder decisions F5 and F6, [ADR-0037](adr/0037-data-flow-holds-external-policy-checks-and-suggestions.md)): every allowed read records its data class; an external disclosure after a `pii` or `secret` read anywhere in the same run tree is held (`DATA_FLOW_HOLD`) unless a flow allowance on the grant covers it. Flows only narrow under delegation; monitor mode records the would-hold.
+- **Outside signals that only restrict** (F366, F7, F8): classification facts with provenance that can only raise a class; an external Open Policy Agent check (Business) over allow-listed HTTPS endpoints, activated with a step-up, that can deny or hold and gives CANNOT_AUTHORIZE when it fails or is slow; identity-risk facts from the Shared Signals receiver, visible to policy as `principal.risk`.
+- **Evidence-backed suggestions** (F185, Business): unused-authority findings become suggestions with an evidence window, coverage limits, expected effect, owners and uncertainty; a person dismisses one or drafts a policy from it, and the draft goes through the M11.1 publication gate (`pclaw suggestions`).
+- Migrations `00196`–`00200` (`00197` only if needed, `00201`–`00205` spare); one new permission, `policy.external_check.manage` (Security Admin).
+
 ---
 
 ## 9. CI/CD summary

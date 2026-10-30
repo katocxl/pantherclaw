@@ -74,6 +74,9 @@ type Service struct {
 	Pool     *db.Pool
 	Ents     exapp.Entitlements
 	Failures FailureSink
+	// Findings is told of each posture finding a reconciliation touched
+	// (the M16 suggestions' queue); nil: nobody.
+	Findings poapp.FindingHook
 	Log      *slog.Logger
 }
 
@@ -179,7 +182,7 @@ func (s *Service) Run(ctx context.Context, org ids.OrgID) (Result, error) {
 		}
 		res.Recomputed = true
 		if posture {
-			if res.Posture, err = poapp.Reconcile(ctx, tx, rec); err != nil {
+			if res.Posture, err = poapp.ReconcileWith(ctx, tx, rec, s.Findings); err != nil {
 				return err
 			}
 		}

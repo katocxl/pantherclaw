@@ -11780,6 +11780,276 @@
         }
       }
     },
+    "/pantherclaw.v1.ExternalCheckService/CreateExternalCheck": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "CreateExternalCheck",
+        "description": "CreateExternalCheck adds a PENDING check (a person only).\n permission: policy.external_check.manage",
+        "operationId": "pantherclaw.v1.ExternalCheckService.CreateExternalCheck",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateExternalCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateExternalCheckResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExternalCheckService/ActivateExternalCheck": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "ActivateExternalCheck",
+        "description": "ActivateExternalCheck is refused over the API (STEP_UP_REQUIRED): a\n person activates a check on its page with a security key.\n permission: policy.external_check.manage",
+        "operationId": "pantherclaw.v1.ExternalCheckService.ActivateExternalCheck",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ActivateExternalCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ActivateExternalCheckResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExternalCheckService/DisableExternalCheck": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "DisableExternalCheck",
+        "description": "DisableExternalCheck disables a check (a person only). Disabling is\n final and takes effect at the next decision.\n permission: policy.external_check.manage",
+        "operationId": "pantherclaw.v1.ExternalCheckService.DisableExternalCheck",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableExternalCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableExternalCheckResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExternalCheckService/ListExternalChecks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "ListExternalChecks",
+        "description": "ListExternalChecks lists the org's checks.\n permission: policy.read",
+        "operationId": "pantherclaw.v1.ExternalCheckService.ListExternalChecks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListExternalChecksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListExternalChecksResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExternalCheckService/TestExternalCheck": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExternalCheckService"
+        ],
+        "summary": "TestExternalCheck",
+        "description": "TestExternalCheck asks a check about a synthetic action and returns its\n answer; no decision uses it (a person only).\n permission: policy.external_check.manage",
+        "operationId": "pantherclaw.v1.ExternalCheckService.TestExternalCheck",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.TestExternalCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.TestExternalCheckResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.FactService/RegisterProvider": {
       "post": {
         "tags": [
@@ -23975,6 +24245,222 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.ListSIEMBatchesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SuggestionService/ListSuggestions": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SuggestionService"
+        ],
+        "summary": "ListSuggestions",
+        "description": "ListSuggestions lists suggestions, newest first.\n permission: posture.read",
+        "operationId": "pantherclaw.v1.SuggestionService.ListSuggestions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListSuggestionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListSuggestionsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SuggestionService/GetSuggestion": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SuggestionService"
+        ],
+        "summary": "GetSuggestion",
+        "description": "GetSuggestion returns a suggestion.\n permission: posture.read",
+        "operationId": "pantherclaw.v1.SuggestionService.GetSuggestion",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetSuggestionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SuggestionService/DismissSuggestion": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SuggestionService"
+        ],
+        "summary": "DismissSuggestion",
+        "description": "DismissSuggestion dismisses an open suggestion with a reason.\n permission: posture.manage",
+        "operationId": "pantherclaw.v1.SuggestionService.DismissSuggestion",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DismissSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DismissSuggestionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SuggestionService/DraftFromSuggestion": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SuggestionService"
+        ],
+        "summary": "DraftFromSuggestion",
+        "description": "DraftFromSuggestion creates a policy DRAFT from an open suggestion and\n never publishes it.\n permission: policy.author",
+        "operationId": "pantherclaw.v1.SuggestionService.DraftFromSuggestion",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DraftFromSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DraftFromSuggestionResponse"
                 }
               }
             }
@@ -51489,6 +51975,324 @@
           "id"
         ]
       },
+      "pantherclaw.v1.ActivateExternalCheckRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Check id."
+          }
+        },
+        "title": "ActivateExternalCheckRequest",
+        "additionalProperties": false,
+        "description": "ActivateExternalCheckRequest names a check.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ActivateExternalCheckResponse": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "title": "check",
+            "description": "The check.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExternalCheck"
+          }
+        },
+        "title": "ActivateExternalCheckResponse",
+        "additionalProperties": false,
+        "description": "ActivateExternalCheckResponse is never returned over the API."
+      },
+      "pantherclaw.v1.CreateExternalCheckRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Name: lowercase letters, digits and dashes."
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "endpoint",
+            "maxLength": 2048,
+            "minLength": 9,
+            "description": "The https endpoint, for example https://opa.example.com/v1/data/pc/decision."
+          },
+          "caPem": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "A PEM CA bundle the endpoint's certificate chains to; empty for the\n system roots."
+          },
+          "timeoutMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "timeout_ms",
+            "maximum": 1000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Milliseconds a decision waits (50-1000); 0 for 250."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1,
+              "maxItems": 32,
+              "minItems": 1
+            },
+            "title": "operations",
+            "maxItems": 32,
+            "minItems": 1,
+            "description": "Operations: exact names or a prefix ending in * (1-32)."
+          }
+        },
+        "title": "CreateExternalCheckRequest",
+        "additionalProperties": false,
+        "description": "CreateExternalCheckRequest describes a check.",
+        "required": [
+          "name",
+          "endpoint",
+          "operations"
+        ]
+      },
+      "pantherclaw.v1.CreateExternalCheckResponse": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "title": "check",
+            "description": "The PENDING check.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExternalCheck"
+          }
+        },
+        "title": "CreateExternalCheckResponse",
+        "additionalProperties": false,
+        "description": "CreateExternalCheckResponse returns the check."
+      },
+      "pantherclaw.v1.DisableExternalCheckRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Check id."
+          }
+        },
+        "title": "DisableExternalCheckRequest",
+        "additionalProperties": false,
+        "description": "DisableExternalCheckRequest names a check.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DisableExternalCheckResponse": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "title": "check",
+            "description": "The DISABLED check.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExternalCheck"
+          }
+        },
+        "title": "DisableExternalCheckResponse",
+        "additionalProperties": false,
+        "description": "DisableExternalCheckResponse returns the check."
+      },
+      "pantherclaw.v1.ExternalCheck": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Check id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name."
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "endpoint",
+            "description": "The https endpoint the input is posted to."
+          },
+          "customCa": {
+            "type": "boolean",
+            "title": "custom_ca",
+            "description": "Whether the check trusts its own CA bundle instead of the system roots."
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "title": "timeout_ms",
+            "format": "int32",
+            "description": "How long a decision waits for its answer, in milliseconds (50-1000)."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "operations",
+            "description": "The operations it is asked about: exact names or a prefix ending in *."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"ACTIVE\" or \"DISABLED\"."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who created it."
+          },
+          "activatedBy": {
+            "type": "string",
+            "title": "activated_by",
+            "description": "Who activated it with a security key; empty while PENDING."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "When its state last changed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmUrl": {
+            "type": "string",
+            "title": "confirm_url",
+            "description": "The page where a person activates it."
+          }
+        },
+        "title": "ExternalCheck",
+        "additionalProperties": false,
+        "description": "ExternalCheck is one external policy check."
+      },
+      "pantherclaw.v1.ListExternalChecksRequest": {
+        "type": "object",
+        "properties": {
+          "includeDisabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "include_disabled",
+            "description": "Also disabled checks."
+          }
+        },
+        "title": "ListExternalChecksRequest",
+        "additionalProperties": false,
+        "description": "ListExternalChecksRequest lists checks."
+      },
+      "pantherclaw.v1.ListExternalChecksResponse": {
+        "type": "object",
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExternalCheck"
+            },
+            "title": "checks",
+            "description": "Checks, by name."
+          }
+        },
+        "title": "ListExternalChecksResponse",
+        "additionalProperties": false,
+        "description": "ListExternalChecksResponse returns them."
+      },
+      "pantherclaw.v1.TestExternalCheckRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Check id (PENDING or ACTIVE)."
+          },
+          "operation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "operation",
+            "maxLength": 128,
+            "description": "The operation of the synthetic action; empty for the check's first\n exact operation, or \"test.operation\"."
+          }
+        },
+        "title": "TestExternalCheckRequest",
+        "additionalProperties": false,
+        "description": "TestExternalCheckRequest asks a check about a synthetic action.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.TestExternalCheckResponse": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "title": "decision",
+            "description": "\"allow\", \"deny\" or \"hold\"; empty when the check did not answer."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "reasons",
+            "description": "Its reasons, UNTRUSTED text from the endpoint (at most 5 of 200\n characters)."
+          },
+          "errorCode": {
+            "type": "string",
+            "title": "error_code",
+            "description": "Why there is no answer: TIMEOUT, HTTP_STATUS, BAD_ANSWER or\n UNREACHABLE; empty with an answer."
+          },
+          "latencyMs": {
+            "type": "integer",
+            "title": "latency_ms",
+            "format": "int32",
+            "description": "How long the call took, in milliseconds."
+          },
+          "input": {
+            "type": "string",
+            "title": "input",
+            "format": "byte",
+            "description": "The input that was sent."
+          }
+        },
+        "title": "TestExternalCheckResponse",
+        "additionalProperties": false,
+        "description": "TestExternalCheckResponse is the check's answer."
+      },
+      "pantherclaw.v1.FactKind": {
+        "type": "string",
+        "title": "FactKind",
+        "enum": [
+          "FACT_KIND_UNSPECIFIED",
+          "FACT_KIND_VALUE",
+          "FACT_KIND_CLASSIFICATION"
+        ],
+        "description": "FactKind is what a declared fact says (G0 M16 D80)."
+      },
       "pantherclaw.v1.FactType": {
         "type": "string",
         "title": "FactType",
@@ -51575,6 +52379,16 @@
             "type": "string",
             "title": "provider_id",
             "description": "Provider."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "Provenance: source and method, when the provider sent them."
+          },
+          "method": {
+            "type": "string",
+            "title": "method",
+            "description": "\"manual\", \"rule\" or \"model\"."
           }
         },
         "title": "Fact",
@@ -51612,6 +52426,11 @@
             "title": "max_lag",
             "description": "How old an observation may be when it is recorded.",
             "$ref": "#/components/schemas/google.protobuf.Duration"
+          },
+          "kind": {
+            "title": "kind",
+            "description": "What the fact says; unspecified is a value. A classification is an\n identifier fact.",
+            "$ref": "#/components/schemas/pantherclaw.v1.FactKind"
           }
         },
         "title": "FactDeclaration",
@@ -51652,6 +52471,18 @@
             "title": "max_lag",
             "description": "How old an observation may be when it is recorded.",
             "$ref": "#/components/schemas/google.protobuf.Duration"
+          },
+          "kind": {
+            "title": "kind",
+            "description": "What the fact says; unspecified is a value. A classification is an\n identifier fact.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.FactKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "FactDeclaration",
@@ -51701,6 +52532,30 @@
             "title": "observe_time",
             "description": "When the provider observed it; neither later than the server's clock\n nor older than the declaration's maximum lag.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "source",
+            "maxLength": 128,
+            "description": "Provenance (G0 M16 D80): the source that classified or observed it, for\n example a data catalog's name. Required, with method, for a\n classification fact (HR-435)."
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "method",
+            "enum": [
+              "",
+              "manual",
+              "rule",
+              "model",
+              null
+            ],
+            "description": "How it was established: \"manual\", \"rule\" or \"model\"; empty with no\n source."
           }
         },
         "title": "FactObservation",
@@ -51754,6 +52609,11 @@
             "type": "string",
             "title": "connection_id",
             "description": "The connection."
+          },
+          "builtin": {
+            "type": "boolean",
+            "title": "builtin",
+            "description": "A built-in provider (G0 M16 D82): PantherClaw itself writes its facts,\n such as pc.signals's pc.identity.risk; no RPC creates one."
           }
         },
         "title": "FactProvider",
@@ -55811,6 +56671,136 @@
         "additionalProperties": false,
         "description": "BudgetAccount is the state of one budget account. Amounts are decimal\n strings in the account's currency."
       },
+      "pantherclaw.v1.FlowAllowance": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 2,
+              "minItems": 1,
+              "uniqueItems": true,
+              "enum": [
+                "pii",
+                "secret"
+              ]
+            },
+            "title": "classes",
+            "maxItems": 2,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "A subset of \"pii\" and \"secret\"."
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowDestination"
+            },
+            "title": "destinations",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Exact ActionIR destinations, at least one."
+          }
+        },
+        "title": "FlowAllowance",
+        "additionalProperties": false,
+        "description": "FlowAllowance lets data of its classes, read anywhere in the run tree, go\n to its destinations without a DATA_FLOW_HOLD (G0 M16 D75, HR-431). Under\n delegation each child allowance must be covered by one of the parent's\n (HR-432)."
+      },
+      "pantherclaw.v1.FlowAllowanceInput": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 2,
+              "minItems": 1,
+              "uniqueItems": true,
+              "enum": [
+                "pii",
+                "secret"
+              ]
+            },
+            "title": "classes",
+            "maxItems": 2,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "A subset of \"pii\" and \"secret\"."
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowDestinationInput"
+            },
+            "title": "destinations",
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Exact ActionIR destinations, at least one."
+          }
+        },
+        "title": "FlowAllowance",
+        "additionalProperties": false,
+        "description": "FlowAllowance lets data of its classes, read anywhere in the run tree, go\n to its destinations without a DATA_FLOW_HOLD (G0 M16 D75, HR-431). Under\n delegation each child allowance must be covered by one of the parent's\n (HR-432).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.FlowAllowance",
+        "required": [
+          "classes",
+          "destinations"
+        ]
+      },
+      "pantherclaw.v1.FlowDestination": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "description": "Destination kind: \"internal\" or \"external\", as in the ActionIR."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Destination id."
+          }
+        },
+        "title": "FlowDestination",
+        "additionalProperties": false,
+        "description": "FlowDestination is one ActionIR destination: its kind and id."
+      },
+      "pantherclaw.v1.FlowDestinationInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "description": "Destination kind: \"internal\" or \"external\", as in the ActionIR."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Destination id."
+          }
+        },
+        "title": "FlowDestination",
+        "additionalProperties": false,
+        "description": "FlowDestination is one ActionIR destination: its kind and id.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.FlowDestination",
+        "required": [
+          "kind",
+          "id"
+        ]
+      },
       "pantherclaw.v1.GetBudgetStateRequest": {
         "type": "object",
         "properties": {
@@ -56004,6 +56994,14 @@
             "title": "create_time",
             "description": "When this revision was created.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "flows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowance"
+            },
+            "title": "flows",
+            "description": "Data flows allowed after a pii or secret read in the run tree (G0 M16\n D75); none allows no flow."
           }
         },
         "title": "Grant",
@@ -56189,6 +57187,18 @@
             "minimum": 0,
             "format": "int32",
             "description": "Lowest attestation level (0-2)."
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75); none allows no\n flow."
           }
         },
         "title": "IssueGrantRequest",
@@ -56400,6 +57410,18 @@
             "format": "uuid",
             "description": "The ACCESS_REQUEST waitlist entry this revision answers (F051); the\n revision closes it as approved. The entry must be open and about this\n grant.",
             "nullable": true
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75, D94); none allows\n no flow. Adding or widening one widens the grant."
           }
         },
         "title": "ReviseGrantRequest",
@@ -73869,6 +74891,444 @@
         "additionalProperties": false,
         "description": "SetSIEMDestinationStateResponse returns the destination."
       },
+      "pantherclaw.v1.SuggestionKind": {
+        "type": "string",
+        "title": "SuggestionKind",
+        "enum": [
+          "SUGGESTION_KIND_UNSPECIFIED",
+          "SUGGESTION_KIND_UNUSED_AUTHORITY"
+        ]
+      },
+      "pantherclaw.v1.SuggestionState": {
+        "type": "string",
+        "title": "SuggestionState",
+        "enum": [
+          "SUGGESTION_STATE_UNSPECIFIED",
+          "SUGGESTION_STATE_OPEN",
+          "SUGGESTION_STATE_DRAFTED",
+          "SUGGESTION_STATE_DISMISSED",
+          "SUGGESTION_STATE_STALE"
+        ]
+      },
+      "pantherclaw.v1.SuggestionUncertainty": {
+        "type": "string",
+        "title": "SuggestionUncertainty",
+        "enum": [
+          "SUGGESTION_UNCERTAINTY_UNSPECIFIED",
+          "SUGGESTION_UNCERTAINTY_LOW",
+          "SUGGESTION_UNCERTAINTY_MEDIUM",
+          "SUGGESTION_UNCERTAINTY_HIGH"
+        ]
+      },
+      "pantherclaw.v1.DismissSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 1000,
+            "minLength": 10
+          }
+        },
+        "title": "DismissSuggestionRequest",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.DismissSuggestionResponse": {
+        "type": "object",
+        "properties": {
+          "suggestion": {
+            "title": "suggestion",
+            "$ref": "#/components/schemas/pantherclaw.v1.Suggestion"
+          }
+        },
+        "title": "DismissSuggestionResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.DraftFromSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "DraftFromSuggestionRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DraftFromSuggestionResponse": {
+        "type": "object",
+        "properties": {
+          "suggestion": {
+            "title": "suggestion",
+            "$ref": "#/components/schemas/pantherclaw.v1.Suggestion"
+          },
+          "policyVersionId": {
+            "type": "string",
+            "title": "policy_version_id",
+            "description": "policy_version_id is the DRAFT version created; it is not published."
+          },
+          "policyVersion": {
+            "type": "integer",
+            "title": "policy_version",
+            "format": "int32"
+          }
+        },
+        "title": "DraftFromSuggestionResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "GetSuggestionRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetSuggestionResponse": {
+        "type": "object",
+        "properties": {
+          "suggestion": {
+            "title": "suggestion",
+            "$ref": "#/components/schemas/pantherclaw.v1.Suggestion"
+          }
+        },
+        "title": "GetSuggestionResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListSuggestionsRequest": {
+        "type": "object",
+        "properties": {
+          "states": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SuggestionState",
+              "not": {
+                "enum": [
+                  "SUGGESTION_STATE_UNSPECIFIED"
+                ]
+              }
+            },
+            "title": "states",
+            "maxItems": 4
+          },
+          "kind": {
+            "title": "kind",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.SuggestionKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListSuggestionsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListSuggestionsResponse": {
+        "type": "object",
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Suggestion"
+            },
+            "title": "suggestions"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListSuggestionsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.Suggestion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.SuggestionKind"
+          },
+          "postureFindingId": {
+            "type": "string",
+            "title": "posture_finding_id"
+          },
+          "grantId": {
+            "type": "string",
+            "title": "grant_id"
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id"
+          },
+          "ownerUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "owner_user_ids"
+          },
+          "windowStartTime": {
+            "title": "window_start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "windowEndTime": {
+            "title": "window_end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "observed": {
+            "type": "object",
+            "title": "observed",
+            "additionalProperties": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "title": "value",
+              "format": "int64"
+            },
+            "description": "observed: operation -\u003e recorded actions of the grant in the window."
+          },
+          "coverageLimits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SuggestionCoverageLimit"
+            },
+            "title": "coverage_limits"
+          },
+          "proposed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SuggestionRule"
+            },
+            "title": "proposed"
+          },
+          "expectedEffect": {
+            "title": "expected_effect",
+            "$ref": "#/components/schemas/pantherclaw.v1.SuggestionEffect"
+          },
+          "uncertainty": {
+            "title": "uncertainty",
+            "$ref": "#/components/schemas/pantherclaw.v1.SuggestionUncertainty"
+          },
+          "uncertaintyReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "uncertainty_reasons"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.SuggestionState"
+          },
+          "draftPolicyVersionId": {
+            "type": "string",
+            "title": "draft_policy_version_id"
+          },
+          "dismissedBy": {
+            "type": "string",
+            "title": "dismissed_by",
+            "description": "dismissed_by: UNTRUSTED, the dismissing person's actor reference."
+          },
+          "dismissReason": {
+            "type": "string",
+            "title": "dismiss_reason",
+            "description": "dismiss_reason: UNTRUSTED person-written text (10-1000 characters,\n without control, format or bidi characters); show it as text only."
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "Suggestion",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.Suggestion.ObservedEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "value",
+            "format": "int64"
+          }
+        },
+        "title": "ObservedEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SuggestionCoverageLimit": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id"
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id"
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "state: OBSERVE_ONLY, PARTIAL or UNKNOWN."
+          }
+        },
+        "title": "SuggestionCoverageLimit",
+        "additionalProperties": false,
+        "description": "SuggestionCoverageLimit is a route that was not ENFORCED for the whole\n window, and its worst coverage state in it."
+      },
+      "pantherclaw.v1.SuggestionEffect": {
+        "type": "object",
+        "properties": {
+          "collected": {
+            "type": "boolean",
+            "title": "collected"
+          },
+          "matchingActions": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "matching_actions",
+            "format": "int64",
+            "nullable": true
+          },
+          "newlyDenied": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "newly_denied",
+            "format": "int64",
+            "nullable": true
+          },
+          "newlyHeld": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "newly_held",
+            "format": "int64",
+            "nullable": true
+          },
+          "notCollected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "not_collected"
+          }
+        },
+        "title": "SuggestionEffect",
+        "additionalProperties": false,
+        "description": "SuggestionEffect is the expected effect over the window's recorded\n transactions. The counts are set only when recorded data was collected;\n not_collected lists what was not (RETENTION_SHORTER_THAN_WINDOW,\n NO_ROUTES, ROUTE_NOT_ENFORCED:\u003cagent\u003e|\u003cconnection\u003e|\u003coperation\u003e, MORE),\n and that is never a zero."
+      },
+      "pantherclaw.v1.SuggestionRule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "kind: FORBID."
+          },
+          "summary": {
+            "type": "string",
+            "title": "summary"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "operations"
+          },
+          "when": {
+            "type": "string",
+            "title": "when"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          }
+        },
+        "title": "SuggestionRule",
+        "additionalProperties": false,
+        "description": "SuggestionRule is a proposed policy rule."
+      },
       "pantherclaw.v1.SupportGrantState": {
         "type": "string",
         "title": "SupportGrantState",
@@ -78689,6 +80149,18 @@
             "minimum": 0,
             "format": "int32",
             "description": "Lowest attestation level (0-2); at least the parent's."
+          },
+          "flows": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FlowAllowanceInput"
+            },
+            "title": "flows",
+            "maxItems": 16,
+            "description": "Data flows allowed after a sensitive read (G0 M16 D75, D94); each must\n be covered by one of the parent grant's, and none allows no flow."
           }
         },
         "title": "DelegateGrantRequest",
@@ -79219,6 +80691,10 @@
       "description": "GraphService reads activity, causal, authority, exposure and change\n graphs (F272, F274, F289, F293, F298; HR-254). Graphs need the Team\n edition; the activity edge table (ListGraphEdges in activity mode, F298)\n is Community. Every graph\n shares one edge vocabulary. Edges the caller may not see are dropped\n before expansion, collapsing, capping and counting; historical and\n expired edges are kept but never counted as current authority; a revoked\n grant's reach shows as HISTORICAL. Filters match an edge's ends and the\n agent, run and principal it belongs to. Graphs\n are capped at 2000 nodes and 5000 edges and say when they were cut.\n Every graph has a tabular twin with the same filters."
     },
     {
+      "name": "pantherclaw.v1.ExternalCheckService",
+      "description": "ExternalCheckService manages an org's external policy checks (G0 M16\n D81, founder decision F7; HR-436..440; Business edition). A check is an\n Open Policy Agent endpoint the Authority asks, after the policy rules,\n about the actions whose operation matches one of its patterns. It can\n only restrict: \"deny\" is DENY EXTERNAL_POLICY_DENY, \"hold\" is\n REQUIRE_APPROVAL EXTERNAL_POLICY_HOLD, \"allow\" only passes a checklist\n item, and a timeout, an error or a bad answer is CANNOT_AUTHORIZE\n EXTERNAL_CHECK_UNAVAILABLE. A check is created PENDING and asks nothing\n until a person activates it on its page (confirm_url) with a security\n key; its endpoint must be https and start with a prefix the server's\n external_checks.allowed_prefixes allows. At most three are active per\n org. The input never carries the content of disclosure-capable\n parameters, only their length, and the check's reasons are shown to\n people only, never to agents."
+    },
+    {
       "name": "pantherclaw.v1.FactService",
       "description": "FactService registers fact providers and records the facts they report\n (HR-160, T-055; G0 M4 part 2). A decision trusts a fact only when it came\n from the provider registered for that fact name, authenticated as that\n provider's service account, and only while it is fresh. Values a\n workload sends are never facts."
     },
@@ -79333,6 +80809,10 @@
     {
       "name": "pantherclaw.v1.SIEMService",
       "description": "SIEMService manages SIEM export destinations (G0 M10 D35, D36; PN-018,\n F537, HR-259, HR-260; Business edition). A destination is an https URL\n that receives OCSF 1.9 events in batches signed with Standard Webhooks.\n It is created PENDING and sends nothing until a person activates it on\n its page (confirm_url) with a security key; its URL, internal flag and\n data classes never change. Export follows a cursor over the evidence\n feed and never skips an event: a failing destination holds its cursor\n and is retried."
+    },
+    {
+      "name": "pantherclaw.v1.SuggestionService",
+      "description": "SuggestionService serves evidence-backed policy suggestions (G0 M16\n D90–D92; F185; HR-442..445; Business edition).\n\n Each unused-authority posture finding gets a suggestion: a FORBID rule\n for the grant's agent over the operations it has not used, with the\n evidence behind it. A suggestion states its 30-day window, the\n operations the grant was used for, the routes that were not ENFORCED for\n the whole window (coverage limits) and how uncertain it is: LOW only when\n every route was ENFORCED or OBSERVE_ONLY throughout, MEDIUM when any was\n PARTIAL, HIGH when any was UNKNOWN or the window has gaps (HR-443). Its\n expected effect counts recorded transactions only; what was not collected\n is listed, never counted as zero (HR-445). A suggestion never changes\n policy: a person dismisses it, or drafts it into a policy DRAFT that only\n the publication gate can publish (HR-442). A suggestion is visible only to\n a caller who holds posture.read and grant.read where its agent lives\n (HR-444); one the caller cannot see is not found."
     },
     {
       "name": "pantherclaw.v1.SupportAccessService",

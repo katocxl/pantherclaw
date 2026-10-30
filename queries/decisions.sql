@@ -15,11 +15,12 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.action_i
 -- name: InsertDecision :exec
 INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id,
                              state, evaluations, grant_id, grant_revision, basis_digest, effective_hash, dedupe_key, mode,
-                             connection_id, channel, target_type, target_id, simulated)
+                             connection_id, channel, target_type, target_id, read_class, simulated)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(run_id), sqlc.arg(action_id), sqlc.arg(action_hash), sqlc.arg(operation),
         sqlc.arg(decision), sqlc.arg(reason_code), sqlc.arg(gateway_id), sqlc.arg(state), 1, sqlc.narg(grant_id),
         sqlc.narg(grant_revision), sqlc.narg(basis_digest), sqlc.narg(effective_hash), sqlc.narg(dedupe_key), sqlc.arg(mode),
         sqlc.narg(connection_id), sqlc.narg(channel), sqlc.narg(target_type), sqlc.narg(target_id),
+        sqlc.narg(read_class),
         -- HR-220: a transaction is simulated exactly when its run is.
         coalesce((SELECT r.simulated FROM pc.runs r WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(run_id)), false));
 
@@ -27,8 +28,38 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(run_id), sqlc.arg(action_id), s
 UPDATE pc.transactions
 SET decision = sqlc.arg(decision), reason_code = sqlc.arg(reason_code), state = sqlc.arg(state),
     evaluations = sqlc.arg(evaluations), grant_id = sqlc.narg(grant_id), grant_revision = sqlc.narg(grant_revision),
-    basis_digest = sqlc.narg(basis_digest), effective_hash = sqlc.narg(effective_hash), mode = sqlc.arg(mode)
+    basis_digest = sqlc.narg(basis_digest), effective_hash = sqlc.narg(effective_hash), mode = sqlc.arg(mode),
+    read_class = sqlc.narg(read_class)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'OPEN' AND evaluations = sqlc.arg(prev_evaluations);
+
+-- The sensitive reads of a run tree (G0 M16 D73, D97, HR-431): the pii and
+-- secret reads of every run sharing the run's root (runs nest at most 8
+-- deep), the 20 most recent plus the most recent of each class, so every
+-- class read is there. Classes and ids only, never content (HR-434).
+-- name: SensitiveReads :many
+WITH RECURSIVE up (id, parent_run_id, hop) AS (
+    SELECT r.id, r.parent_run_id, 0 FROM pc.runs r WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(run_id)
+    UNION ALL
+    SELECT p.id, p.parent_run_id, up.hop + 1 FROM up JOIN pc.runs p ON p.org_id = sqlc.arg(org_id) AND p.id = up.parent_run_id
+    WHERE up.hop < 8
+), root AS (
+    SELECT up.id FROM up ORDER BY up.hop DESC LIMIT 1
+), tree (id, hop) AS (
+    SELECT root.id, 0 FROM root
+    UNION ALL
+    SELECT c.id, tree.hop + 1 FROM tree JOIN pc.runs c ON c.org_id = sqlc.arg(org_id) AND c.parent_run_id = tree.id
+    WHERE tree.hop < 8
+), reads AS (
+    SELECT t.id, t.run_id, t.operation, coalesce(t.read_class, '')::text AS read_class, t.created_at
+    FROM pc.transactions t
+    WHERE t.org_id = sqlc.arg(org_id) AND t.run_id IN (SELECT tree.id FROM tree) AND t.read_class IN ('pii', 'secret')
+)
+SELECT n.id, n.run_id, n.operation, n.read_class, n.created_at FROM (
+    (SELECT * FROM reads ORDER BY reads.created_at DESC, reads.id DESC LIMIT 20)
+    UNION
+    (SELECT DISTINCT ON (reads.read_class) * FROM reads ORDER BY reads.read_class, reads.created_at DESC, reads.id DESC)
+) n
+ORDER BY n.created_at DESC, n.id DESC;
 
 -- name: InsertEvaluationReceipt :exec
 INSERT INTO pc.decision_receipts (org_id, transaction_id, evaluation, receipt_jws, ledger_entry_id, coverage_snapshot_id)
