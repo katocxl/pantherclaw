@@ -113,8 +113,10 @@ func (s *Service) DeleteOrg(ctx context.Context, org ids.OrgID, id ids.UUID) err
 	// resurrection. Wait for the exact linked intent to be explicitly
 	// acknowledged after the operator verifies its external durable copy.
 	var signedIntent string
+	var raw []byte
+	var done bool
 	err = s.Pool.InTenantTx(ctx, ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
-		return tx.QueryRow(ctx, "SELECT signed_intent FROM pc.org_deletion_journal WHERE org_id=$1 AND id=$2 AND deleted_org_id=$3", ids.PlatformOrg, id, org).Scan(&signedIntent)
+		return tx.QueryRow(ctx, "SELECT signed_intent,snapshot,complete FROM pc.org_deletion_journal WHERE org_id=$1 AND id=$2 AND deleted_org_id=$3", ids.PlatformOrg, id, org).Scan(&signedIntent, &raw, &done)
 	}, db.ReadOnly())
 	if err != nil {
 		return err
@@ -127,24 +129,30 @@ func (s *Service) DeleteOrg(ctx context.Context, org ids.OrgID, id ids.UUID) err
 	if !acked {
 		return ErrAwaitingSecurityCopy
 	}
-	// Hold the one journal row while removing data, preventing two workers
-	// from racing completion. Failure rolls back only this phase; the
-	// already committed journal and fail-closed org tombstone remain.
+	if done {
+		return nil
+	}
+	var snap deletionSnapshot
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		return err
+	}
+	// Removal commits on the Deleter's own connection, and a transaction
+	// open around it would sit idle until the idle-in-transaction timeout
+	// ended it. So no transaction is held here: two workers serialize on
+	// the write barrier and the later one finds no rows. Failure rolls back
+	// only this phase; the already committed journal and fail-closed org
+	// tombstone remain.
+	if err := s.removeOrgRows(ctx, org); err != nil {
+		return err
+	}
+	// Hold the one journal row to record completion, preventing two workers
+	// from racing it.
 	return s.Pool.InTenantTx(ctx, ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
-		var raw []byte
-		var done bool
-		if err := tx.QueryRow(ctx, "SELECT snapshot,complete FROM pc.org_deletion_journal WHERE org_id=$1 AND id=$2 AND deleted_org_id=$3 FOR UPDATE", ids.PlatformOrg, id, org).Scan(&raw, &done); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT complete FROM pc.org_deletion_journal WHERE org_id=$1 AND id=$2 AND deleted_org_id=$3 FOR UPDATE", ids.PlatformOrg, id, org).Scan(&done); err != nil {
 			return err
 		}
 		if done {
 			return nil
-		}
-		var snap deletionSnapshot
-		if err := json.Unmarshal(raw, &snap); err != nil {
-			return err
-		}
-		if err := s.removeOrgRows(ctx, org); err != nil {
-			return err
 		}
 		now, err := dbq.New(tx).TenantDatabaseTime(ctx)
 		if err != nil {

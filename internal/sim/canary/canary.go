@@ -33,6 +33,9 @@ import (
 // maxHits bounds the hits kept; the oldest go first.
 const maxHits = 10000
 
+// dnsAttempts bounds the free ports tried for the DNS port.
+const dnsAttempts = 32
+
 // markerRE finds markers in what arrives: "pc" and 32 hex digits, short
 // enough for a DNS label.
 var markerRE = regexp.MustCompile(`pc[0-9a-f]{32}`)
@@ -85,31 +88,52 @@ func (c *Canary) Hits(markers ...string) []report.Hit {
 // It serves until ctx ends and returns the ports it got.
 func (c *Canary) Listen(ctx context.Context, host string, p Ports) (Ports, error) {
 	var lc net.ListenConfig
-	var ls []net.Listener
-	var got [3]int
-	for i, port := range [3]int{p.DNS, p.HTTPS, p.SSH} {
+	dns, pc, err := listenDNS(ctx, &lc, host, p.DNS)
+	if err != nil {
+		return Ports{}, err
+	}
+	ls := []net.Listener{dns}
+	got := [3]int{dns.Addr().(*net.TCPAddr).Port}
+	for i, port := range [2]int{p.HTTPS, p.SSH} {
 		l, err := lc.Listen(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 		if err != nil {
 			for _, l := range ls {
 				_ = l.Close()
 			}
+			_ = pc.Close()
 			return Ports{}, err
 		}
 		ls = append(ls, l)
-		got[i] = l.Addr().(*net.TCPAddr).Port
-	}
-	pc, err := lc.ListenPacket(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(got[0])))
-	if err != nil {
-		for _, l := range ls {
-			_ = l.Close()
-		}
-		return Ports{}, err
+		got[i+1] = l.Addr().(*net.TCPAddr).Port
 	}
 	for i, l := range ls {
 		go c.serveTCP(ctx, l, got[i])
 	}
 	go c.serveUDP(ctx, pc, got[0])
 	return Ports{DNS: got[0], HTTPS: got[1], SSH: got[2]}, nil
+}
+
+// listenDNS opens the DNS port on TCP and UDP. Port zero asks the system for
+// a free TCP port, and the same number may be taken or reserved on UDP, so
+// it tries again with another one.
+func listenDNS(ctx context.Context, lc *net.ListenConfig, host string, port int) (net.Listener, net.PacketConn, error) {
+	var last error
+	for range dnsAttempts {
+		l, err := lc.Listen(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+		if err != nil {
+			return nil, nil, err
+		}
+		pc, err := lc.ListenPacket(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(l.Addr().(*net.TCPAddr).Port)))
+		if err == nil {
+			return l, pc, nil
+		}
+		_ = l.Close()
+		last = err
+		if port != 0 {
+			break
+		}
+	}
+	return nil, nil, last
 }
 
 // serveTCP records what each connection sends first (4 KiB, 2 s) and
