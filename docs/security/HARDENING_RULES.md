@@ -469,7 +469,7 @@
 |---|---|---|---|
 | HR-530 | v1 definitions and running v1 executions are unchanged. | T-231 | M21 |
 | HR-531 | No cycles, and every node is reachable. | T-230 | M21 |
-| HR-532 | Authority and irreversible-wait checks hold per path. | T-230 | M21 |
+| HR-532 | Authority and irreversible-wait checks hold per path; a path outside the ceiling is refused (`PATH_OUTSIDE_CEILING`). | T-230 | M21 |
 | HR-533 | A running execution's pinned version and state are never re-pointed. | T-231 | M21 |
 | HR-534 | Only the taken path's nodes are compensated. | T-231 | M21 |
 | HR-535 | A recommendation never acts and always states what stays unsupported. | T-232 | M21 |
