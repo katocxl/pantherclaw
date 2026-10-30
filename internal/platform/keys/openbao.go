@@ -167,7 +167,7 @@ func NewTransitClient(c OpenBaoConfig) (*TransitClient, error) {
 	base, _ := baoBaseURL(c.Address)
 	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
 	if c.CAFile != "" {
-		pem, err := os.ReadFile(c.CAFile) //nolint:gosec // G304: operator-configured CA bundle
+		pem, err := os.ReadFile(c.CAFile)
 		if err != nil {
 			return nil, fmt.Errorf("keys: openbao ca_file: %w", err)
 		}
@@ -252,10 +252,10 @@ func (c *TransitClient) Rewrap(ctx context.Context, ciphertext string) (string, 
 	return out.Data.Ciphertext, nil
 }
 
-// errStatus is a non-2xx Transit response.
-type errStatus struct{ code int }
+// statusError is a non-2xx Transit response.
+type statusError struct{ code int }
 
-func (e errStatus) Error() string { return fmt.Sprintf("openbao returned HTTP %d", e.code) }
+func (e statusError) Error() string { return fmt.Sprintf("openbao returned HTTP %d", e.code) }
 
 // call posts to {mount}/{op}/{key}, logging in again once when the token
 // was refused.
@@ -267,7 +267,7 @@ func (c *TransitClient) call(ctx context.Context, op string, in, out any) error 
 			return err
 		}
 		err = c.post(ctx, path, tok, in, out)
-		var st errStatus
+		var st statusError
 		if attempt == 0 && errors.As(err, &st) && st.code == http.StatusForbidden {
 			c.dropToken()
 			continue
@@ -304,7 +304,7 @@ func (c *TransitClient) post(ctx context.Context, path, token string, in, out an
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		// The body may echo request data; it is never logged or returned.
-		return fmt.Errorf("%w: %w", ErrKeyServiceUnavailable, errStatus{resp.StatusCode})
+		return fmt.Errorf("%w: %w", ErrKeyServiceUnavailable, statusError{resp.StatusCode})
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
 		return fmt.Errorf("%w: malformed response", ErrKeyServiceUnavailable)
@@ -418,7 +418,7 @@ func (p *OpenBaoProvider) Wrap(ctx context.Context, plaintext, aad []byte) ([]by
 	if err != nil {
 		return nil, err
 	}
-	in := append(digest, plaintext...)
+	in := append(append(make([]byte, 0, len(digest)+len(plaintext)), digest...), plaintext...)
 	defer clear(in)
 	ct, err := p.c.Encrypt(ctx, in)
 	if err != nil {

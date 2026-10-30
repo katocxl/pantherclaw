@@ -9,7 +9,7 @@
 //
 // Only the port and an in-memory adapter for tests (blobtest) exist. The
 // real adapter comes with the first caller that moves off its bytea
-// column; until then nothing uses this package and no behaviour changes.
+// column; until then nothing uses this package and no behavior changes.
 package blob
 
 import (

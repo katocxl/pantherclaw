@@ -10,7 +10,7 @@
 // The Postgres adapter (pgfanout) is LISTEN/NOTIFY, which is what the
 // approvals waits, gateway watch and containment already use directly.
 // Moving those callers onto the port is later work: this package changes
-// no behaviour.
+// no behavior.
 package fanout
 
 import (
