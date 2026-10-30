@@ -415,7 +415,8 @@ func TestHR034_MixedScriptEnvironmentNamesAreFlagged(t *testing.T) {
 
 // TestF159_ADisplaySaysWhenTheTargetCannotConfirmItsConditions: an
 // operation without a verifier gets exactly one condition limit, and one
-// with a verifier none; both are version 3 displays.
+// with a verifier none. Only the one with a limit is a version 3 display;
+// the other stays version 2 (tracker D33a).
 //
 // Covers: F159
 func TestF159_ADisplaySaysWhenTheTargetCannotConfirmItsConditions(t *testing.T) {

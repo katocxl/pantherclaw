@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -145,5 +146,38 @@ func TestIntAccessDetailLinksTheAccountGrantsAndTransactions(t *testing.T) {
 	f.d.AdminExec(t, "DELETE FROM pc.connection_github WHERE connection_id = $1", f.conn)
 	if d, err := f.svc.GetAccessDetail(f.as(td.RoleAuditor), f.conn, nil); err != nil || d.TargetAccount != "" {
 		t.Fatalf("without an installation: %q (%v)", d.TargetAccount, err)
+	}
+}
+
+// TestIntActiveGrantsAreFilteredByOperationInTheQuery: the grants query
+// keeps only grants whose bounds allow one of the operations, matching
+// exact names and "x.*" prefixes, and bounds without operations, before its
+// limit, so a grant that matches is never cut by ones that do not.
+//
+// Covers: F423
+func TestIntActiveGrantsAreFilteredByOperationInTheQuery(t *testing.T) {
+	f := newFixture(t)
+	f.grant(t, "payments.refund.create")
+	f.grant(t, "payments.*")
+	f.grant(t, "github.pull.merge")
+	f.grant(t, "pay.*")            // "pay." is not a prefix of "payments."
+	f.grantBounds(t, []byte(`{}`)) // no operations: allows every operation
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := dbq.New(tx).CoverageActiveGrantsOfAgents(ctx, f.org, []ids.UUID{f.agent}, []string{"payments.refund.create"})
+		if err != nil {
+			return err
+		}
+		var got []string
+		for _, r := range rows {
+			got = append(got, string(r.Bounds))
+		}
+		slices.Sort(got)
+		want := []string{`{"operations":["payments.*"]}`, `{"operations":["payments.refund.create"]}`, `{}`}
+		if !slices.Equal(got, want) {
+			t.Errorf("grants %v, want %v", got, want)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
