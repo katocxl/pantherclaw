@@ -84,7 +84,7 @@ func (l *Leased) Take(ctx context.Context, scope, key string, window time.Durati
 				return Decision{}, ctx.Err()
 			case <-r.done:
 			}
-			if r.err != nil && !(isCtxErr(r.err) && ctx.Err() == nil) {
+			if r.err != nil && (!isCtxErr(r.err) || ctx.Err() != nil) {
 				return Decision{}, r.err
 			}
 			continue

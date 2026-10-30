@@ -189,7 +189,7 @@ func (w *Waits) acquire(ctx context.Context, org ids.OrgID, instance ids.UUID) (
 		}
 		return nil, nil, err
 	}
-	return func() {
+	return func() { //nolint:contextcheck // the release must run after the wait's context has ended
 		l.Release()
 		free()
 	}, l.Lost(), nil

@@ -39,13 +39,13 @@ func leaseReplicas(t *testing.T) (a, b *Leases, org ids.OrgID, exec func(sql str
 }
 
 // TestHR491_CapsHoldAcrossReplicas: two replicas taking leases of one key
-// concurrently hold at most max between them; a released lease frees its
+// concurrently hold at most limit between them; a released lease frees its
 // slot on the other replica; other keys and kinds are separate.
 // Covers: HR-491, T-214
 func TestHR491_CapsHoldAcrossReplicas(t *testing.T) {
 	a, b, org, _ := leaseReplicas(t)
 	ctx := context.Background()
-	const max = 4
+	const limit = 4
 	replicas := []*Leases{a, b}
 	var (
 		mu   sync.Mutex
@@ -55,7 +55,7 @@ func TestHR491_CapsHoldAcrossReplicas(t *testing.T) {
 	)
 	for i := range 20 {
 		wg.Go(func() {
-			l, err := replicas[i%2].Acquire(ctx, org, LeaseOpsStream, "principal-1", max)
+			l, err := replicas[i%2].Acquire(ctx, org, LeaseOpsStream, "principal-1", limit)
 			switch {
 			case errors.Is(err, ErrLeaseLimit):
 				refd.Add(1)
@@ -69,22 +69,22 @@ func TestHR491_CapsHoldAcrossReplicas(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	if len(held) != max || refd.Load() != 20-max {
-		t.Fatalf("%d leases held across two replicas (%d refused), want %d", len(held), refd.Load(), max)
+	if len(held) != limit || refd.Load() != 20-limit {
+		t.Fatalf("%d leases held across two replicas (%d refused), want %d", len(held), refd.Load(), limit)
 	}
-	if _, err := a.Acquire(ctx, org, LeaseOpsStream, "principal-2", max); err != nil {
+	if _, err := a.Acquire(ctx, org, LeaseOpsStream, "principal-2", limit); err != nil {
 		t.Fatalf("another key: %v", err)
 	}
-	if _, err := a.Acquire(ctx, org, LeaseWait, "principal-1", max); err != nil {
+	if _, err := a.Acquire(ctx, org, LeaseWait, "principal-1", limit); err != nil {
 		t.Fatalf("another kind: %v", err)
 	}
 	held[0].Release()
 	held[0].Release() // twice is safe
-	l, err := b.Acquire(ctx, org, LeaseOpsStream, "principal-1", max)
+	l, err := b.Acquire(ctx, org, LeaseOpsStream, "principal-1", limit)
 	if err != nil {
 		t.Fatalf("after a release on the other replica: %v", err)
 	}
-	if _, err := a.Acquire(ctx, org, LeaseOpsStream, "principal-1", max); !errors.Is(err, ErrLeaseLimit) {
+	if _, err := a.Acquire(ctx, org, LeaseOpsStream, "principal-1", limit); !errors.Is(err, ErrLeaseLimit) {
 		t.Fatalf("the freed slot was taken again: %v", err)
 	}
 	l.Release()

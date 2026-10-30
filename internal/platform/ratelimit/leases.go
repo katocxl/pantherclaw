@@ -63,15 +63,17 @@ func NewLeases(pool *db.Pool, log *slog.Logger) *Leases {
 	return &Leases{pool: pool, log: log, holder: ids.NewV7().String(), heartbeat: LeaseHeartbeat}
 }
 
-// Acquire takes one of key's max leases of kind in org. It returns
-// ErrLeaseLimit when the key has max live leases already; any other error
+// Acquire takes one of key's limit leases of kind in org. It returns
+// ErrLeaseLimit when the key has limit live leases already; any other error
 // means nothing is known, and the caller refuses (fail closed).
-func (l *Leases) Acquire(ctx context.Context, org ids.OrgID, kind LeaseKind, key string, max int) (*Lease, error) {
-	if key == "" || len(key) > 256 || max < 1 {
+func (l *Leases) Acquire(ctx context.Context, org ids.OrgID, kind LeaseKind, key string, limit int) (*Lease, error) {
+	if key == "" || len(key) > 256 || limit < 1 {
 		return nil, ErrKey
 	}
-	x := &Lease{l: l, org: org, kind: kind, key: key, id: ids.NewV7(), stop: make(chan struct{}), done: make(chan struct{}),
-		lost: make(chan struct{})}
+	x := &Lease{
+		l: l, org: org, kind: kind, key: key, id: ids.NewV7(), stop: make(chan struct{}), done: make(chan struct{}),
+		lost: make(chan struct{}),
+	}
 	err := l.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := q.LockStreamLeaseKey(ctx, org.UUID(), string(kind), key); err != nil {
@@ -84,7 +86,7 @@ func (l *Leases) Acquire(ctx context.Context, org ids.OrgID, kind LeaseKind, key
 		if err != nil {
 			return err
 		}
-		if int(n) >= max {
+		if int(n) >= limit {
 			return ErrLeaseLimit
 		}
 		return q.InsertStreamLease(ctx, dbq.InsertStreamLeaseParams{
@@ -96,7 +98,7 @@ func (l *Leases) Acquire(ctx context.Context, org ids.OrgID, kind LeaseKind, key
 	} else if err != nil {
 		return nil, fmt.Errorf("ratelimit: lease: %w", err)
 	}
-	go x.renew()
+	go x.renew() //nolint:gosec,contextcheck // G118: the lease outlives the request that took it; Release stops the goroutine
 	return x, nil
 }
 
