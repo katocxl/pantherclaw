@@ -134,19 +134,23 @@ func (d draftRule) rule(id, when string) pdomain.Rule {
 	return r
 }
 
-// limit reports whether c reads an offered parameter and any limit it sets is
-// a value of that parameter's type, which must have an order. Rule.Validate
-// checks only that a limit is there.
+// limit reports whether c is a kind a model may write, on an offered parameter,
+// with values of that parameter's type. A limit also needs a type with an
+// order. Rule.Validate takes other kinds, and only checks that a limit is
+// there, so this is what closes them (HR-543).
 func (f policyFields) limit(c *draftConstraint) bool {
-	if !f.hasParam(c.Param) {
+	p, ok := f[paramPrefix+c.Param]
+	if !ok {
 		return false
 	}
-	if c.Max == "" && c.Currency == "" {
-		return true
+	if c.Kind == pdomain.AllowedValues {
+		return !slices.ContainsFunc(c.Values, func(v string) bool {
+			_, ok := p.literal(v, "")
+			return !ok
+		})
 	}
-	p := f[paramPrefix+c.Param]
-	_, ok := p.literal(c.Max, c.Currency)
-	return ok && ordered(p.Type)
+	_, ok = p.literal(c.Max, c.Currency)
+	return ok && ordered(p.Type) && (c.Kind == pdomain.AmountMax || c.Kind == pdomain.CountMax)
 }
 
 // covered reports whether op, exact or a prefix, reaches an operation the
@@ -178,7 +182,7 @@ func parsePolicy(text string, output []byte, call ids.UUID, visible []string, fi
 			return nil, nil, ports.ErrInvalidOutput
 		}
 		r := d.rule("model-"+call.String()+"-"+strconv.Itoa(i), when)
-		if r.Validate() != nil {
+		if r.Validate() != nil || strings.ContainsFunc(r.Summary, unreadable) {
 			return nil, nil, ports.ErrInvalidOutput
 		}
 		for _, op := range r.Operations {
@@ -227,6 +231,9 @@ func (s *Service) DraftPolicy(ctx context.Context, text string) (PolicyDraft, er
 	}
 	if s.Policies == nil || s.Operations == nil {
 		return PolicyDraft{}, ErrPlatformOff
+	}
+	if err := CheckEnvironment(text); err != nil {
+		return PolicyDraft{}, err
 	}
 	visible, err := s.Operations.VisibleOperations(ctx)
 	if err != nil {

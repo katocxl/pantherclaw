@@ -73,6 +73,8 @@ var (
 		"the organization's model calls a minute are used up; try again shortly")
 	ErrBudgetCap = pcerr.New(pcerr.ResourceExhausted, "MODEL_BUDGET_CAP",
 		"the organization's model budget for today is used up")
+	ErrEnvironmentCondition = pcerr.New(pcerr.InvalidArgument, "MODEL_ENVIRONMENT_UNSUPPORTED",
+		"a draft cannot hold an environment condition: draft without it, and add the environment in the editor")
 	ErrDraftNotFound = pcerr.New(pcerr.NotFound, "MODEL_DRAFT_NOT_FOUND",
 		"that version was not drafted by a model")
 )

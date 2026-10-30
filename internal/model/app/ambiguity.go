@@ -40,6 +40,20 @@ func AmbiguitySchema() ports.Schema {
 // is refused.
 var vagueTerm = regexp.MustCompile(`(?i)\b(a lot|lots of|too many|too much|large|big|recently|frequently|often|excessive|unusual|suspicious|significant|soon)\b`)
 
+// environmentTerm finds a request about an environment. A draft cannot hold
+// one: environments are ids, which a model is never sent (HR-542), so a name in
+// a condition would never match and the condition would silently not apply
+// (D321). The prompt asks a model to refuse what this does not catch.
+var environmentTerm = regexp.MustCompile(`(?i)\b(prod|production|prd|staging|development|dev|qa|uat|environments?|envs?)\b`)
+
+// CheckEnvironment refuses a request about an environment, before any call.
+func CheckEnvironment(text string) error {
+	if environmentTerm.MatchString(text) {
+		return ErrEnvironmentCondition
+	}
+	return nil
+}
+
 // CheckAmbiguities refuses malformed ambiguities and a draft that leaves a
 // vague term of text unsettled (D304).
 func CheckAmbiguities(text string, as []Ambiguity) error {
@@ -65,8 +79,7 @@ func CheckAmbiguities(text string, as []Ambiguity) error {
 
 // shownLine reports whether s is one line fit to show a reviewer.
 func shownLine(s string) bool {
-	return s != "" && len(s) <= maxAmbiguity && utf8.ValidString(s) &&
-		!strings.ContainsFunc(s, func(c rune) bool { return c < 0x20 || c == 0x7f })
+	return s != "" && len(s) <= maxAmbiguity && utf8.ValidString(s) && !strings.ContainsFunc(s, unreadable)
 }
 
 // OperationGroups reduces operations to the names a call sends: an operation

@@ -23,7 +23,9 @@ import (
 // organization's own model, and what comes back is read strictly and then
 // rebuilt with the same parser as Interpret, under the viewer's permissions.
 // The model sees no record, so it cannot name one by id: it returns the
-// phrases of the person's own text, and those are resolved here. A record
+// phrases of the person's own text, and those are resolved here. It is told
+// only of built-in operations: an organization's own tool name is a record, so
+// a name of one reads as a record that does not exist (D321). A record
 // the viewer may not read reads exactly like one that does not exist. The
 // result is shown with its generated query, for the person to run or not.
 
@@ -37,6 +39,13 @@ type ModelCaller interface {
 type Drafter struct {
 	Search *Service
 	Model  ModelCaller
+	// Builtin are the operations of the packages PantherClaw ships.
+	Builtin []string
+}
+
+// builtin narrows ops to the built-in operations.
+func (d *Drafter) builtin(ops []string) []string {
+	return slices.DeleteFunc(slices.Clone(ops), func(op string) bool { return !slices.Contains(d.Builtin, op) })
 }
 
 // QueryDraft is a drafted query, shown and never run. Interpretation says how
@@ -119,7 +128,7 @@ func viewable(c tenancy.Caller) []string {
 	return out
 }
 
-// VisibleOperations returns the operations the caller may read.
+// VisibleOperations returns the built-in operations the caller may read.
 func (d *Drafter) VisibleOperations(ctx context.Context) ([]string, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -131,7 +140,7 @@ func (d *Drafter) VisibleOperations(ctx context.Context) ([]string, error) {
 		out, err = d.Search.visibleOperations(ctx, c, tx)
 		return err
 	}, db.ReadOnly())
-	return out, err
+	return d.builtin(out), err
 }
 
 // DraftQuery turns text into a query that is shown and never run (HR-544).
@@ -192,6 +201,7 @@ func (d *Drafter) reinterpret(ctx context.Context, c tenancy.Caller, text, timez
 		if err != nil {
 			return err
 		}
+		ops = d.builtin(ops)
 		toks, err := tokenize(o.Time)
 		if err != nil {
 			return ports.ErrInvalidOutput

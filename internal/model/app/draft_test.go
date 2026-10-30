@@ -115,6 +115,7 @@ func TestHR543_AConstraintLimitIsCheckedAgainstItsParamsType(t *testing.T) {
 		`{"kind":"amount_max","param":"amount","max":"100.00","currency":"USD","values":[]}`,
 		`{"kind":"count_max","param":"count","max":"5","currency":"","values":[]}`,
 		`{"kind":"allowed_values","param":"tier","max":"","currency":"","values":["gold"]}`,
+		`{"kind":"allowed_values","param":"count","max":"","currency":"","values":["1","5"]}`,
 	}
 	for _, c := range accepted {
 		if _, _, err := parsePolicy("limit refunds", answer(c), ids.NewV7(), visibleOps, testFields); err != nil {
@@ -129,6 +130,13 @@ func TestHR543_AConstraintLimitIsCheckedAgainstItsParamsType(t *testing.T) {
 		"no order":         `{"kind":"count_max","param":"reference","max":"5","currency":"","values":[]}`,
 		"unoffered param":  `{"kind":"count_max","param":"none","max":"5","currency":"","values":[]}`,
 		"a stray currency": `{"kind":"allowed_values","param":"tier","max":"","currency":"USD","values":["gold"]}`,
+		"record_scope":     `{"kind":"record_scope","param":"reference","max":"","currency":"","values":["cus_123","internal"]}`,
+		"target_set":       `{"kind":"target_set","param":"reference","max":"","currency":"","values":["a"]}`,
+		"data_classes":     `{"kind":"data_classes","param":"reference","max":"","currency":"","values":["internal"]}`,
+		"verify":           `{"kind":"verify","param":"reference","max":"","currency":"","values":[]}`,
+		"off the enum":     `{"kind":"allowed_values","param":"tier","max":"","currency":"","values":["gold","bronze"]}`,
+		"a word as count":  `{"kind":"allowed_values","param":"count","max":"","currency":"","values":["five"]}`,
+		"not a boolean":    `{"kind":"allowed_values","param":"live","max":"","currency":"","values":["yes"]}`,
 	}
 	for name, c := range refused {
 		if _, _, err := parsePolicy("limit refunds", answer(c), ids.NewV7(), visibleOps, testFields); !errors.Is(err, ports.ErrInvalidOutput) {

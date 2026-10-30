@@ -15,6 +15,7 @@ import (
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
+	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/model/ports"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
@@ -32,7 +33,7 @@ const (
 	doneNode = `{"id":"done","type":"terminal","next":"","gate":null,"notify":null,"wait":null,"open_case":null,"branch":null,"switch":null,` +
 		`"terminal":{"outcome":"SUCCEEDED","finish_when":[{"step":"file","condition":"CASE_OPENED"}]}}`
 	routeNode = `{"id":"route","type":"branch","next":"","gate":null,"notify":null,"wait":null,"open_case":null,"switch":null,"terminal":null,` +
-		`"branch":{"conditions":[{"field":"environment","op":"eq","value":"prod"}],"then":"tell","else":"file"}}`
+		`"branch":{"conditions":[{"field":"outcome","op":"eq","value":"OPEN"}],"then":"tell","else":"file"}}`
 	askNode = `{"id":"ask","type":"gate","next":"tell","notify":null,"wait":null,"open_case":null,"branch":null,"switch":null,"terminal":null,` +
 		`"gate":{"roles":["automation_publisher"],"min_approvals":1,"deadline_hours":24,"summary":"Go ahead?"}}`
 )
@@ -96,11 +97,11 @@ func TestHR543_ADraftedAutomationIsAV2DefinitionWithDerivedAuthority(t *testing.
 	if got := d.ReviewBy.Time(); !got.Equal(now.Add(reviewAfter)) {
 		t.Fatalf("review by %v", got)
 	}
-	p, ok := d.When.Event.Params["environment"]
-	if !ok || p.From != "environment" || p.Pattern == "" {
+	p, ok := d.When.Event.Params["outcome"]
+	if !ok || p.From != "outcome" || p.Pattern == "" {
 		t.Fatalf("the guard's field is not declared: %+v", d.When.Event)
 	}
-	if got := d.Flow().Node("route").Branch.When; got != `trigger.params.environment == 'prod'` {
+	if got := d.Flow().Node("route").Branch.When; got != `trigger.params.outcome == 'OPEN'` {
 		t.Fatalf("guard: %s", got)
 	}
 	if err := engine.CompileGuard(d.Flow().Node("route").Branch.When); err != nil {
@@ -152,10 +153,12 @@ func TestHR543_AnythingOutsideTheAutomationSubsetIsRefused(t *testing.T) {
 		"a finish on a gate":   swap(`"step":"file"`, `"step":"ask"`),
 		"another finish":       swap("CASE_OPENED", "RUN_ENDED"),
 		"an unknown outcome":   swap("SUCCEEDED", "WON"),
-		"an unknown field":     swap(`"field":"environment"`, `"field":"params.env"`),
+		"an unknown field":     swap(`"field":"outcome"`, `"field":"params.env"`),
+		"the environment":      swap(`"field":"outcome"`, `"field":"environment"`),
+		"a field it lacks":     swap(`"field":"outcome"`, `"field":"decision"`),
 		"an unknown op":        swap(`"op":"eq"`, `"op":"gt"`),
-		"quotes in a value":    swap(`"value":"prod"`, `"value":"prod' || true || 'x"`),
-		"no conditions":        swap(`{"field":"environment","op":"eq","value":"prod"}`, ""),
+		"quotes in a value":    swap(`"value":"OPEN"`, `"value":"prod' || true || 'x"`),
+		"no conditions":        swap(`{"field":"outcome","op":"eq","value":"OPEN"}`, ""),
 		"a guard, no event":    strings.Replace(good, `"event":{"on":"incident.opened"}`, `"event":null`, 1),
 		"two parts":            swap(`"id":"tell","type":"notify","next":"file","gate":null`, `"id":"tell","type":"notify","next":"file","gate":{"roles":["automation_publisher"],"min_approvals":1,"deadline_hours":1,"summary":""}`),
 		"the wrong part":       swap(`"id":"file","type":"open_case"`, `"id":"file","type":"wait"`),
@@ -170,6 +173,122 @@ func TestHR543_AnythingOutsideTheAutomationSubsetIsRefused(t *testing.T) {
 	}
 	if _, _, err := parseAutomation("open a case for large incidents", []byte(good), time.Now()); !errors.Is(err, ports.ErrInvalidOutput) {
 		t.Errorf("a vague term settled silently: %v", err)
+	}
+}
+
+// An environment's value is an id, so a name in a condition would never match
+// and a path gated on production would be skipped (D321).
+//
+// Covers: F181, F304
+func TestHR543_NoConditionCanNameAnEnvironment(t *testing.T) {
+	for _, s := range []ports.Schema{automationSchema(), policySchema(testFields)} {
+		raw, err := s.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, field := range []string{`"environment"`, `"action.env"`} {
+			if strings.Contains(string(raw), field) {
+				t.Errorf("the schema offers %s", field)
+			}
+		}
+	}
+	if _, ok := testFields["action.env"]; ok {
+		t.Error("the environment is a policy field")
+	}
+	refused := []string{
+		"forbid refunds in production", "if prod, wait for approval", "only on Staging", "any environment", "when env is dev", "not in QA",
+	}
+	for _, text := range refused {
+		if err := CheckEnvironment(text); !errors.Is(err, ErrEnvironmentCondition) {
+			t.Errorf("%q: %v", text, err)
+		}
+	}
+	for _, text := range []string{"forbid refunds", automationText, "products over 100", "developers may approve", "the devil"} {
+		if err := CheckEnvironment(text); err != nil {
+			t.Errorf("%q: %v", text, err)
+		}
+	}
+}
+
+// A trigger param is required, so a guard on a field its event lacks would
+// refuse every event, and the automation would never start.
+//
+// Covers: F181
+func TestHR543_AGuardReadsOnlyWhatItsEventFills(t *testing.T) {
+	for _, on := range slices.Concat(autodomain.Events, triggers.Vocabulary()) {
+		fields, ok := eventFields[on]
+		if !ok {
+			t.Errorf("%s is not in the table", on)
+		}
+		for _, f := range fields {
+			if !slices.Contains(guardFields, f) {
+				t.Errorf("%s fills %s, which is no guard field", on, f)
+			}
+		}
+	}
+	answerOn := func(on, field, value string) string {
+		route := strings.Replace(strings.Replace(routeNode, `"field":"outcome"`, `"field":"`+field+`"`, 1), `"value":"OPEN"`, `"value":"`+value+`"`, 1)
+		return strings.Replace(automationAnswer(route, tellNode, fileNode, doneNode), `"on":"incident.opened"`, `"on":"`+on+`"`, 1)
+	}
+	for _, c := range [][3]string{
+		{"incident.opened", "outcome", "OPEN"},
+		{"action.held", "decision", "HOLD"},
+		{"action.denied", "operation", "payments.refund.create"},
+		{"effect.recorded", "outcome", "CONFIRMED"},
+		{"coverage.lost", "actor_type", "SYSTEM"},
+	} {
+		if _, _, err := parseAutomation(automationText, []byte(answerOn(c[0], c[1], c[2])), time.Now()); err != nil {
+			t.Errorf("%v: %v", c, err)
+		}
+	}
+	for _, c := range [][3]string{
+		{"incident.opened", "decision", "HOLD"},
+		{"incident.opened", "operation", "payments.refund.create"},
+		{"alert.raised", "mode", "MONITOR"},
+		{"action.held", "outcome", "OPEN"},
+		{"case.closed", "outcome", "CLOSED"},
+		{"coverage.lost", "outcome", "PARTIAL"},
+	} {
+		if _, _, err := parseAutomation(automationText, []byte(answerOn(c[0], c[1], c[2])), time.Now()); !errors.Is(err, ports.ErrInvalidOutput) {
+			t.Errorf("%v: %v", c, err)
+		}
+	}
+}
+
+// Text a person reviews shows what it holds. Each of these hides something
+// from the person approving it.
+//
+// Covers: F181, F304
+func TestHR543_TextThatDoesNotShowAsWrittenIsRefused(t *testing.T) {
+	for _, c := range []rune{0x202e, 0x2066, 0x200b, 0x200d, 0xfeff, 0xad, 0x85, 0x2028, 0x2029} {
+		s := "pay" + string(c) + "ment"
+		if literalText(s, maxPurpose) || shownLine(s) || plainText(s) {
+			t.Errorf("U+%04X passes", c)
+		}
+		good := automationAnswer(tellNode, fileNode, doneNode)
+		if _, _, err := parseAutomation(automationText, []byte(strings.Replace(good, "Look into it", s, 1)), time.Now()); !errors.Is(err, ports.ErrInvalidOutput) {
+			t.Errorf("U+%04X in a case title: %v", c, err)
+		}
+		rule := strings.Replace(goodRule, "Forbid refunds", s, 1)
+		if _, _, err := parsePolicy("forbid refunds", policyAnswer(rule), ids.NewV7(), visibleOps, testFields); !errors.Is(err, ports.ErrInvalidOutput) {
+			t.Errorf("U+%04X in a summary: %v", c, err)
+		}
+		ambiguous := `{"rules":[` + goodRule + `],"ambiguities":[{"term":"refunds","proposed_threshold":"` + s + `"}]}`
+		if _, _, err := parsePolicy("forbid refunds", []byte(ambiguous), ids.NewV7(), visibleOps, testFields); !errors.Is(err, ports.ErrInvalidOutput) {
+			t.Errorf("U+%04X in a threshold: %v", c, err)
+		}
+	}
+	if !literalText("two\nlines", maxPurpose) || !literalText("Überweisung über 100 €", maxPurpose) {
+		t.Error("plain text was refused")
+	}
+}
+
+// Covers: F304
+func TestHR542_OnlyBuiltInOperationsAreListed(t *testing.T) {
+	a := &defs.Package{Definitions: []defs.Definition{{Operation: "tickets.close"}, {Operation: "payments.refund.create"}}}
+	b := &defs.Package{Definitions: []defs.Definition{{Operation: "tickets.close"}}}
+	if got := BuiltinOperations(a, b); !slices.Equal(got, []string{"payments.refund.create", "tickets.close"}) {
+		t.Fatalf("operations: %v", got)
 	}
 }
 
@@ -207,7 +326,7 @@ func TestT235_AHostileValueStaysAPlainLiteral(t *testing.T) {
 				}
 			}
 		}
-		guard, ok := renderGuard([]guardCondition{{Field: "environment", Op: "eq", Value: value}})
+		guard, ok := renderGuard([]guardCondition{{Field: "operation", Op: "eq", Value: value}})
 		if !ok {
 			t.Fatalf("%q was refused", value)
 		}
@@ -216,7 +335,7 @@ func TestT235_AHostileValueStaysAPlainLiteral(t *testing.T) {
 			t.Fatalf("%s: %v", guard, err)
 		}
 		for param, want := range map[string]bool{value: true, "prod": false} {
-			vars := map[string]any{"trigger": map[string]any{"params": map[string]any{"environment": param}}, "steps": map[string]any{}}
+			vars := map[string]any{"trigger": map[string]any{"params": map[string]any{"operation": param}}, "steps": map[string]any{}}
 			if got, _, err := p.EvalBool(context.Background(), vars); err != nil || got != want {
 				t.Errorf("%s with %q = %v, %v", guard, param, got, err)
 			}
@@ -232,7 +351,6 @@ func TestHR543_APolicyConditionIsCheckedAgainstItsFieldsType(t *testing.T) {
 		`has(action.params.count) && action.params.count <= 5`:                       {Field: "action.params.count", Op: "le", Value: "5"},
 		`has(action.params.live) && action.params.live == true`:                      {Field: "action.params.live", Op: "eq", Value: "true"},
 		`has(action.params.tier) && action.params.tier != 'gold'`:                    {Field: "action.params.tier", Op: "ne", Value: "gold"},
-		`action.env == 'production'`:                                                 {Field: "action.env", Op: "eq", Value: "production"},
 	}
 	for want, c := range good {
 		cs := []policyCondition{c}
@@ -245,6 +363,7 @@ func TestHR543_APolicyConditionIsCheckedAgainstItsFieldsType(t *testing.T) {
 	}
 	bad := map[string]policyCondition{
 		"unknown field":       {Field: "action.params.secret", Op: "eq", Value: "x"},
+		"the environment":     {Field: "action.env", Op: "eq", Value: "production"},
 		"a free expression":   {Field: "true || action.env", Op: "eq", Value: "x"},
 		"not an integer":      {Field: "action.params.count", Op: "eq", Value: "five"},
 		"not money":           {Field: "action.params.amount", Op: "gt", Value: "lots", Currency: "USD"},
@@ -263,7 +382,7 @@ func TestHR543_APolicyConditionIsCheckedAgainstItsFieldsType(t *testing.T) {
 			t.Errorf("%s rendered %s", name, got)
 		}
 	}
-	if _, ok := testFields.renderPolicy(slices.Repeat([]policyCondition{{Field: "action.env", Op: "eq", Value: "x"}}, maxConditions+1)); ok {
+	if _, ok := testFields.renderPolicy(slices.Repeat([]policyCondition{{Field: "action.params.reference", Op: "eq", Value: "x"}}, maxConditions+1)); ok {
 		t.Error("conditions are unbounded")
 	}
 	rule := strings.Replace(goodRule, `"conditions":[]`, `"conditions":[{"field":"action.params.count","op":"gt","value":"many","currency":""}]`, 1)

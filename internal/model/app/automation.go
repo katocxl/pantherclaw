@@ -168,9 +168,27 @@ const eventParamPattern = `^[A-Za-z0-9._:/-]{1,64}$`
 
 var eventValue = regexp.MustCompile(eventParamPattern)
 
-// guardFields are the event fields a guard may read: fixed fields of every
-// platform event, none of them an organization's record.
-var guardFields = []string{"actor_type", "decision", "environment", "mode", "operation", "outcome", "reason"}
+// guardFields are the event fields a guard may read, none of them an
+// organization's record. The environment is not one: it holds an environment's
+// id, so a name a model wrote would never match and a production path would
+// never be taken (D321).
+var guardFields = []string{"actor_type", "decision", "mode", "operation", "outcome"}
+
+// eventFields are the guard fields each event always fills (reflex/feed). A
+// trigger param is required, so a guard on any other field would refuse every
+// event, and the automation would never start (D321).
+var eventFields = func() map[string][]string {
+	action := []string{"actor_type", "decision", "mode", "operation"}
+	transaction := []string{"actor_type", "mode", "operation", "outcome"}
+	audit := []string{"actor_type", "outcome"}
+	return map[string][]string{
+		"action.decided": action, "action.held": action, "action.denied": action, "effect.recorded": transaction,
+		"run.ended": audit, "grant.issued": audit, "grant.revoked": audit, "agent.discovered": audit,
+		"approval.expired": audit, "automation.finished": audit, "alert.raised": audit, "incident.opened": audit,
+		// coverage.lost's entries fill different fields, and case.closed's none.
+		"coverage.lost": {"actor_type"}, "case.closed": {"actor_type"},
+	}
+}()
 
 var (
 	nodeID   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,40}$`)
@@ -263,11 +281,11 @@ func automationSchema() ports.Schema {
 }
 
 // literalText reports whether s is text a person reads as written: bounded,
-// without control characters, and without template syntax. A reviewer adds
+// every character showing as written, and without template syntax. A reviewer adds
 // templates in the editor (D315).
 func literalText(s string, limit int) bool {
 	return utf8.ValidString(s) && utf8.RuneCountInString(s) <= limit && !strings.Contains(s, "{{") && !strings.Contains(s, "}}") &&
-		!strings.ContainsFunc(s, func(c rune) bool { return (c < 0x20 && c != '\n') || c == 0x7f })
+		!strings.ContainsFunc(s, func(c rune) bool { return c != '\n' && unreadable(c) })
 }
 
 // wanted is literal text that must say something.
@@ -295,17 +313,19 @@ func renderGuard(cs []guardCondition) (string, bool) {
 type builder struct {
 	// fields are the event fields the guards read.
 	fields map[string]bool
-	event  bool
+	// on is the triggering event, empty when there is none.
+	on string
 }
 
-// guard renders a path's guard, which only an event trigger can give fields to.
+// guard renders a path's guard, which only the fields its event fills can
+// reach.
 func (b *builder) guard(cs []guardCondition) (string, bool) {
 	src, ok := renderGuard(cs)
-	if !ok || !b.event {
+	if !ok {
 		return "", false
 	}
 	for _, c := range cs {
-		if !eventValue.MatchString(c.Value) {
+		if !eventValue.MatchString(c.Value) || !slices.Contains(eventFields[b.on], c.Field) {
 			return "", false
 		}
 		b.fields[c.Field] = true
@@ -493,7 +513,10 @@ func (d *draftAutomation) build(now time.Time) ([]byte, bool) {
 		len(d.Nodes) < 2 || len(d.Nodes) > maxDraftNodes {
 		return nil, false
 	}
-	b := &builder{fields: map[string]bool{}, event: d.Event != nil}
+	b := &builder{fields: map[string]bool{}}
+	if d.Event != nil {
+		b.on = d.Event.On
+	}
 	platform := map[string][]string{}
 	nodes := make([]autodomain.NodeSpec, 0, len(d.Nodes))
 	for _, n := range d.Nodes {
@@ -559,6 +582,9 @@ func (s *Service) DraftAutomation(ctx context.Context, text string) (AutomationD
 	}
 	if s.Automations == nil {
 		return AutomationDraft{}, ErrPlatformOff
+	}
+	if err := CheckEnvironment(text); err != nil {
+		return AutomationDraft{}, err
 	}
 	schema, err := automationSchema().Encode()
 	if err != nil {

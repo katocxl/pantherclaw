@@ -41,9 +41,9 @@ func answer(entity, name string) string {
 // Covers: F304
 func TestHR542_ADraftSendsTheTextAndNamesItMayReadAndNoRecord(t *testing.T) {
 	f := newM11Fx(t)
-	f.s.Defs = catalog{"payments.refund.create"}
+	f.s.Defs = catalog{"payments.refund.create", "acme.ledger.sweep"}
 	m := &fakeModel{out: answer("transactions", "alpha")}
-	d := &Drafter{Search: f.s, Model: m}
+	d := &Drafter{Search: f.s, Model: m, Builtin: []string{"payments.refund.create"}}
 	const text = "denied actions by alpha"
 	if _, err := d.DraftQuery(as(f.auditor), text, "UTC"); err != nil {
 		t.Fatal(err)
@@ -58,10 +58,35 @@ func TestHR542_ADraftSendsTheTextAndNamesItMayReadAndNoRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, record := range []string{"alpha", "bravo", "charlie", f.agentA.String(), f.runA.String(), "Exfil"} {
+	for _, record := range []string{"alpha", "bravo", "charlie", f.agentA.String(), f.runA.String(), "Exfil", "acme"} {
 		if strings.Contains(string(sent), record) || strings.Contains(string(m.last.Schema), record) {
 			t.Errorf("the request holds the record %s", record)
 		}
+	}
+}
+
+// An organization's own tool name is a record: it is not sent, and naming one
+// reads as a record that does not exist.
+//
+// Covers: F304
+func TestHR542_AnOrganizationsOwnToolIsNotOffered(t *testing.T) {
+	f := newM11Fx(t)
+	f.s.Defs = catalog{"payments.refund.create", "acme.ledger.sweep"}
+	const text = "denied calls to acme.ledger.sweep"
+	m := &fakeModel{out: `{"entity":"transactions","builtin":"","environment":"","outcomes":["denied"],"time":"",` +
+		`"names":[{"phrase":"acme.ledger.sweep","kind":"operation"}],"ambiguities":[]}`}
+	d := &Drafter{Search: f.s, Model: m, Builtin: []string{"payments.refund.create"}}
+	got, err := d.DraftQuery(as(f.auditor), text, "UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := got.Interpretation
+	if in.Query != nil || !slices.Equal(in.UnknownWords, []string{"acme.ledger.sweep"}) || len(in.Clarifications) == 0 {
+		t.Fatalf("interpretation: %+v", in)
+	}
+	ops, err := d.VisibleOperations(as(f.auditor))
+	if err != nil || !slices.Equal(ops, []string{"payments.refund.create"}) {
+		t.Fatalf("operations: %v, %v", ops, err)
 	}
 }
 

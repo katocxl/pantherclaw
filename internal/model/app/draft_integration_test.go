@@ -225,6 +225,22 @@ func TestHR542_TextOutOfBoundsNeverLeaves(t *testing.T) {
 	}
 }
 
+// A request about an environment stops with its reason, before any call.
+//
+// Covers: F181, F304
+func TestHR543_AnEnvironmentConditionIsRefusedBeforeACall(t *testing.T) {
+	f, _ := drafting(t)
+	if _, err := f.svc.DraftPolicy(f.author(), "forbid refunds in production"); !errors.Is(err, app.ErrEnvironmentCondition) {
+		t.Errorf("policy: %v", err)
+	}
+	if _, err := f.svc.DraftAutomation(f.automationAuthor(), "if production, wait for approval"); !errors.Is(err, app.ErrEnvironmentCondition) {
+		t.Errorf("automation: %v", err)
+	}
+	if f.provider.calls.Load() != 0 {
+		t.Fatal("the request reached the provider")
+	}
+}
+
 // withoutPolicyRead is a built-in role that cannot read policies.
 func withoutPolicyRead(t *testing.T) td.RoleName {
 	t.Helper()

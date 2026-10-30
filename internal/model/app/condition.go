@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -24,8 +25,6 @@ const (
 	maxValue = 256
 	// maxParams bounds the names a schema offers.
 	maxParams = 128
-	// envField is the one policy field that is not a parameter.
-	envField = "action.env"
 	// paramPrefix leads a parameter's policy field.
 	paramPrefix = "action.params."
 	// noParam stands in a schema's enum when no parameter is offered: an empty
@@ -79,6 +78,20 @@ func BuiltinParams(pkgs ...*defs.Package) []Param {
 	return out
 }
 
+// BuiltinOperations lists the operations of pkgs. An operation of an
+// organization's own package is a record, and is never offered to a model
+// (HR-542, D321).
+func BuiltinOperations(pkgs ...*defs.Package) []string {
+	var out []string
+	for _, p := range pkgs {
+		for i := range p.Definitions {
+			out = append(out, p.Definitions[i].Operation)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 func canCompare(t defs.ParamType) bool {
 	return slices.Contains([]defs.ParamType{
 		defs.TypeMoney, defs.TypeDecimal, defs.TypeInteger, defs.TypeBoolean, defs.TypeEnum, defs.TypeIdentifier,
@@ -106,10 +119,14 @@ func opNames(sets ...map[string]string) []string {
 	return out
 }
 
+// unreadable reports a character that does not show as written: a control, a
+// format character (bidi overrides, zero-width marks) or a line or paragraph
+// separator (D321).
+func unreadable(c rune) bool { return unicode.In(c, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp) }
+
 // plainText reports whether s is one bounded line to compare with.
 func plainText(s string) bool {
-	return s != "" && len(s) <= maxValue && utf8.ValidString(s) &&
-		!strings.ContainsFunc(s, func(c rune) bool { return c < 0x20 || c == 0x7f })
+	return s != "" && len(s) <= maxValue && utf8.ValidString(s) && !strings.ContainsFunc(s, unreadable)
 }
 
 // policyCondition is a condition of a policy rule. A rule's conditions all
@@ -122,11 +139,13 @@ type policyCondition struct {
 	Currency string `json:"currency"`
 }
 
-// policyFields are the fields a policy condition may read, by field name.
+// policyFields are the fields a policy condition may read, by field name. The
+// environment is not one: action.env holds an environment's id, which is a
+// record, so a name a model wrote would never match it (D321).
 type policyFields map[string]Param
 
 func fieldsOf(params []Param) policyFields {
-	out := policyFields{envField: {Type: defs.TypeIdentifier}}
+	out := make(policyFields, len(params))
 	for _, p := range params {
 		out[paramPrefix+p.Name] = p
 	}
@@ -134,7 +153,12 @@ func fieldsOf(params []Param) policyFields {
 }
 
 // names lists the fields, sorted, for a schema.
-func (f policyFields) names() []string { return slices.Sorted(maps.Keys(f)) }
+func (f policyFields) names() []string {
+	if len(f) == 0 {
+		return []string{noParam}
+	}
+	return slices.Sorted(maps.Keys(f))
+}
 
 // paramNames lists the parameters, sorted, for a schema.
 func (f policyFields) paramNames() []string {
@@ -223,10 +247,7 @@ func (f policyFields) renderPolicy(cs []policyCondition) (string, bool) {
 		if !ok {
 			return "", false
 		}
-		if field.Name != "" {
-			parts = append(parts, "has("+c.Field+")")
-		}
-		parts = append(parts, c.Field+" "+op+" "+lit)
+		parts = append(parts, "has("+c.Field+")", c.Field+" "+op+" "+lit)
 	}
 	return strings.Join(parts, " && "), true
 }

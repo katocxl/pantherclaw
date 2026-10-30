@@ -50,10 +50,13 @@ func ValidModel(id string) bool { return modelRe.MatchString(id) }
 var systemPrompt = map[ports.TaskKind]string{
 	ports.TaskSearchQuery: "You turn one person's question into one structured search query for PantherClaw. " + rules,
 	ports.TaskPolicyDraft: "You turn one person's request into one DRAFT authorization policy for PantherClaw. " +
-		"A person reviews every draft; nothing you write takes effect. " + rules,
+		"A person reviews every draft; nothing you write takes effect. " +
+		"If the schema cannot express the request, such as a condition on an environment, do not approximate it: " +
+		"answer with an empty rules list. " + rules,
 	ports.TaskAutomationDraft: "You turn one person's request into one DRAFT automation definition for PantherClaw. " +
 		"A person reviews every draft; nothing you write runs. " +
-		"Write text literally, with no template syntax. If the schema cannot express the request, do not approximate it: " +
+		"Write text literally, with no template syntax. " +
+		"If the schema cannot express the request, such as a condition on an environment, do not approximate it: " +
 		"answer with an empty nodes list. " + rules,
 }
 

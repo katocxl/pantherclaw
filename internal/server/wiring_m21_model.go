@@ -47,9 +47,9 @@ func newModel(d apiDeps) *modelapp.Service {
 	return svc
 }
 
-// builtinParams are the parameters of the packages PantherClaw ships, the only
-// ones a model is told of (D316).
-func builtinParams() ([]modelapp.Param, error) {
+// builtinPackages are the packages PantherClaw ships, the only ones a model is
+// told of (D316, D321).
+func builtinPackages() ([]*defsdomain.Package, error) {
 	raws := [][]byte{
 		mockpayments.Package, pca2a.Package, pcgithub.Package, pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package,
 	}
@@ -61,18 +61,18 @@ func builtinParams() ([]modelapp.Param, error) {
 		}
 		pkgs = append(pkgs, p)
 	}
-	return modelapp.BuiltinParams(pkgs...), nil
+	return pkgs, nil
 }
 
 // registerM21Model registers ModelService. A built-in package that does not
 // load is an error that reaches cmdServe.
 func registerM21Model(rs *connect.Server, d apiDeps, core *automationsCore) error {
-	params, err := builtinParams()
+	pkgs, err := builtinPackages()
 	if err != nil {
 		return err
 	}
 	svc := newModel(d)
-	svc.Params, svc.Clock = params, clock.System{}
+	svc.Params, svc.Clock = modelapp.BuiltinParams(pkgs...), clock.System{}
 	if core != nil && core.svc != nil {
 		svc.Automations = core.svc
 	}
@@ -81,7 +81,7 @@ func registerM21Model(rs *connect.Server, d apiDeps, core *automationsCore) erro
 	if d.billing != nil {
 		queries.Editions = d.billing
 	}
-	drafter := &search.Drafter{Search: queries, Model: svc}
+	drafter := &search.Drafter{Search: queries, Model: svc, Builtin: modelapp.BuiltinOperations(pkgs...)}
 	svc.Operations = drafter
 	svc.Policies = securitysteps.NewPolicyDrafts(&factspg.Store{Pool: d.pool}, defs, d.cel)
 	pantherclawv1connect.RegisterModelServiceHandler(rs, modelrpc.New(svc, drafter))
