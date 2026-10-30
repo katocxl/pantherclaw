@@ -29,6 +29,8 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [gitlab.md](gitlab.md) | M20 | What a GitLab merge's deployment means with `pc.gitlab`, and what is not predicted or verified |
 | [teams.md](teams.md) | M20 | Agent posts to Microsoft Teams with `pc.teams`: the bot, its pinned home tenant, external-channel checks |
 | [aws-ecs.md](aws-ecs.md) | M20 | Agent deploys to Amazon ECS with `pc.aws.ecs`: the role, sealing the key, how a rollout is confirmed |
+| [gitlab-connect.md](gitlab-connect.md) | M20 | Connect `pc.gitlab`: the access token, the connection, the fact provider and the first test |
+| [jira.md](jira.md) | M20 | Connect `pc.jira`: the API token, the connection, the fact provider and the first test; what counts as external |
 | [authzen.md](authzen.md) | M14 | Register an AuthZEN enforcement point, wire your proxy, read decisions (`PARTIAL` routes) |
 | [a2a.md](a2a.md) | M14 | Connect peer agents over A2A: pinned cards, drift quarantine, enrolled peers with delegated runs, the receiver helper |
 | [frameworks.md](frameworks.md) | M14 | Wrap LangChain/LangGraph, OpenAI Agents SDK, CrewAI, Vercel AI SDK and MCP TypeScript tools; refusal codes and holds |
