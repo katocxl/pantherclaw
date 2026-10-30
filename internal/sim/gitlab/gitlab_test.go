@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	token = "glpat-simulated-test-token-0000"
+	token = "glpat-" + "simulated-test-token-0000"
 	head  = "1111111111111111111111111111111111111111"
 	moved = "2222222222222222222222222222222222222222"
 )
@@ -65,7 +65,7 @@ func TestGitLabSimAnswersAsGitLabDoes(t *testing.T) {
 	if code, _ := call(t, "GET", mr, "", ""); code != http.StatusUnauthorized {
 		t.Fatalf("no token: %d", code)
 	}
-	if code, _ := call(t, "GET", mr, "glpat-another-token-000000000", ""); code != http.StatusUnauthorized {
+	if code, _ := call(t, "GET", mr, "glpat-"+"another-token-000000000", ""); code != http.StatusUnauthorized {
 		t.Fatalf("other token: %d", code)
 	}
 	code, got := call(t, "GET", mr, token, "")

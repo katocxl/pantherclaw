@@ -344,3 +344,37 @@ func TestM14_RequiredSets(t *testing.T) {
 		}
 	}
 }
+
+// TestHR526_MCPArgumentsStayFlat: an MCP arguments template never nests,
+// so a bracket key there refuses the definition; bool.true and bool.false
+// are JSON body values only (G0 M20 D260, D263, D272).
+//
+// Covers: F756
+func TestHR526_MCPArgumentsStayFlat(t *testing.T) {
+	mcp := func(args map[string]string) *domain.Definition {
+		d := formWrite(nil)
+		d.Dispatch = &domain.Dispatch{MCP: &domain.MCPDispatch{
+			Tool: "create_refund", UpstreamDigest: "sha256:" + strings.Repeat("0f", 32), Arguments: args,
+		}}
+		return d
+	}
+	if err := mcp(map[string]string{"charge": "target.id"}).Validate(); err != nil {
+		t.Fatalf("a flat argument: %v", err)
+	}
+	for name, args := range map[string]map[string]string{
+		"bracket key":  {"metadata[charge]": "target.id"},
+		"nested key":   {"a[b][c]": "target.id"},
+		"list key":     {"a[]": "params.kinds"},
+		"bool.true":    {"confirm": "bool.true"},
+		"bool in path": nil,
+	} {
+		d := mcp(args)
+		if name == "bool in path" {
+			d = formWrite(nil)
+			d.Dispatch.HTTP.Encoding, d.Dispatch.HTTP.Path = domain.EncodingJSON, "/v1/{bool.true}"
+		}
+		if err := d.Validate(); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

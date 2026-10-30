@@ -146,6 +146,14 @@ var literalRe = regexp.MustCompile(`^[\x20-\x7a\x7c\x7e]{1,64}$`)
 // "pc-<transaction>" (G0 M14 D50).
 const TransactionKey = "transaction.key"
 
+// BoolTrue and BoolFalse are JSON boolean body values (G0 M20 D263, D272):
+// a namespace of their own, so literal.true stays the text "true" in every
+// package already signed.
+const (
+	BoolTrue  = "bool.true"
+	BoolFalse = "bool.false"
+)
+
 // reference checks one template reference against the definition: the
 // target id, a named group of its pattern (target.id.<group>), the account
 // or a param; in an HTTP body also the transaction key and literals. A
@@ -163,6 +171,13 @@ func (d *Definition) reference(at, ref string, where place) error {
 	case TransactionKey:
 		if where != inBody {
 			return invalid("%s: %s is sent only as a body value", at, ref)
+		}
+		return nil
+	case BoolTrue, BoolFalse:
+		// A JSON boolean, from the package only (G0 M20 D263, D272); the
+		// caller refuses it in a form body.
+		if where != inBody {
+			return invalid("%s: %s is sent only as a JSON body value", at, ref)
 		}
 		return nil
 	}
@@ -233,6 +248,9 @@ func (d *Definition) fields(at string, f map[string]string, where place, enc Enc
 			}
 		} else if enc != EncodingForm && !fieldRe.MatchString(k) {
 			return invalid("%s: field name %q", at, k)
+		}
+		if (f[k] == BoolTrue || f[k] == BoolFalse) && enc == EncodingForm {
+			return invalid("%s.%s: a boolean is a JSON body value; a form sends literal.true or literal.false", at, k)
 		}
 		if err := d.reference(at+"."+k, f[k], where); err != nil {
 			return err

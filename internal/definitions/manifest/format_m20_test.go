@@ -163,3 +163,19 @@ func TestHR526_AValidatorWithoutNestingRefusesBracketKeys(t *testing.T) {
 		t.Fatal("no nested keys")
 	}
 }
+
+// TestHR526_AValidatorWithoutBooleansRefusesThem: bool.true and bool.false
+// are none of the references a validator before D263 accepts (target.id,
+// target.account, params.*, transaction.key, literal.*), so an older server
+// refuses a package that uses them instead of sending something else
+// (G0 M20 D272).
+//
+// Covers: F756
+func TestHR526_AValidatorWithoutBooleansRefusesThem(t *testing.T) {
+	old := regexp.MustCompile(`^(target\.id(\.[a-z_]+)?|target\.account|params\..+|transaction\.key|literal\..+)$`)
+	for _, ref := range []string{domain.BoolTrue, domain.BoolFalse} {
+		if old.MatchString(ref) {
+			t.Fatalf("%s passes the old reference rule", ref)
+		}
+	}
+}
