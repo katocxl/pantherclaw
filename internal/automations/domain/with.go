@@ -73,6 +73,10 @@ type WaitEffectWith struct {
 	Operation string   `json:"operation"`
 	States    []string `json:"states,omitzero"` // default [CONFIRMED]
 	Min       int      `json:"min,omitzero"`    // 1..100; absent (0) means 1
+	// Consequences counts the matched actions by their downstream state
+	// instead (G0 M17 D103): only an action whose predicted consequences
+	// were all confirmed by their own evidence counts (HR-452).
+	Consequences bool `json:"consequences,omitzero"`
 }
 
 // Effects is how many confirmed effects the step waits for: absent or 0

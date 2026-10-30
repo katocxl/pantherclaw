@@ -33,7 +33,7 @@ Usage:
                            [--short-rate 0] [--settle-after 0s] [--redirect-to URL]
                            [--token-file FILE] [--require-action-tokens --jwks-url URL --audience CONNECTION]
   pantherclaw-sim mcp [--addr 127.0.0.1:9091] [--legacy] [--stream] [--ask LIST] [--input-required] [--tool-error] [--description TEXT] [--token-file FILE]
-                      [--stdio] [--upstream URL] [--misbehave]
+                      [--stdio] [--upstream URL] [--misbehave] [--tools FILE]
   pantherclaw-sim github --app-key FILE [--addr 127.0.0.1:9092] [--app-id 1] [--client-id ID] [--installation 1] [--account acme]
                          [--repos payments] [--mcp-addr ADDR --mcp-token-file FILE]
   pantherclaw-sim stripe [--addr 127.0.0.1:9093] [--latency 0s] [--decline-rate 0] [--lose-response-rate 0] [--settle-after 0s]
@@ -157,6 +157,7 @@ func runMCP(ctx context.Context, args []string, stderr io.Writer) error {
 	stdio := fs.Bool("stdio", false, "speak MCP 2025-11-25 over standard input and output instead of HTTP, as a connector does (G0 M9)")
 	upstream := fs.String("upstream", "", "post each create_refund to this payments API (through the environment's proxy) and answer with its answer, as a connector does (G0 M9)")
 	misbehave := fs.Bool("misbehave", false, "with --upstream, misbehave by the refund's charge (ch_inflate, ch_twice, ch_other, ch_late): test-only (G0 M9)")
+	tools := fs.String("tools", "", "a tools file declaring your own tools and their canned results as data (G0 M17): every answer is SIMULATED")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -173,6 +174,13 @@ func runMCP(ctx context.Context, args []string, stderr io.Writer) error {
 			return err
 		}
 		f.Token = strings.TrimSpace(string(b))
+	}
+	if *tools != "" {
+		declared, err := mcpsim.LoadToolsFile(*tools)
+		if err != nil {
+			return err
+		}
+		f.Tools = declared
 	}
 	if *stdio {
 		return mcpsim.New(f).ServeStdio(ctx, os.Stdin, os.Stdout)

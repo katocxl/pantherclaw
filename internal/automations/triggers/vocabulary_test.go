@@ -24,6 +24,10 @@ func TestVocabularyMeansItsFeedKinds(t *testing.T) {
 		{VocabActionDecided, feed.Event{Kind: "receipt.decision", Decision: "ALLOW"}, Facts{}, true},
 		{VocabAgentDiscovered, feed.Event{Kind: "audit.agent.discovered"}, Facts{}, true},
 		{VocabAgentDiscovered, feed.Event{Kind: "audit.agent.claimed"}, Facts{}, false},
+		// Continuous discovery (G0 M17 D116). Covers: PN-001.3
+		{VocabDiscoveryChanged, feed.Event{Kind: "audit.agent.discovery_changed"}, Facts{}, true},
+		{VocabDiscoveryVanished, feed.Event{Kind: "audit.agent.discovery_vanished"}, Facts{}, true},
+		{VocabDiscoveryVanished, feed.Event{Kind: "audit.agent.discovery_reappeared"}, Facts{}, false},
 		{VocabAutomationFinished, feed.Event{Kind: "audit.automation.execution_finished"}, Facts{}, true},
 		{VocabAutomationFinished, feed.Event{Kind: "audit.automation.finished"}, Facts{}, false},
 		{VocabCoverageLost, feed.Event{Kind: "coverage.snapshot", Attrs: map[string]string{"previous_state": "ENFORCED", "state": "PARTIAL"}}, Facts{}, true},
@@ -39,7 +43,7 @@ func TestVocabularyMeansItsFeedKinds(t *testing.T) {
 			t.Errorf("%s on %s: %v, want %v", tc.name, tc.e.Kind, got, tc.want)
 		}
 	}
-	if len(Vocabulary()) != 14 || !KnownEvent(VocabAgentDiscovered) || KnownEvent("agent.change") {
+	if len(Vocabulary()) != 16 || !KnownEvent(VocabAgentDiscovered) || KnownEvent("agent.change") {
 		t.Fatal("vocabulary")
 	}
 }

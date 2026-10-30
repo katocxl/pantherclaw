@@ -122,12 +122,19 @@ func (c *Compiled) forDefinition(d *defs.Definition) map[string]compiledRule {
 		maps.Copy(schema, FactsSchema(needs, c.facts))
 		maps.Copy(schema, ConsequenceSchema)
 		maps.Copy(schema, RunSchema)
-		env, err := celenv.New(c.limits, schema, ActionVariable, FactsVariable, NowVariable, ConsequenceVariable, RunVariable)
+		maps.Copy(schema, PrincipalSchema)
+		env, err := celenv.New(c.limits, schema, ActionVariable, FactsVariable, NowVariable, ConsequenceVariable, RunVariable, PrincipalVariable)
 		if err != nil {
 			rules[r.ID] = compiledRule{err: err}
 			continue
 		}
-		p, cerr := env.Compile(r.When, cel.BoolType)
+		exprs := celExpressions(r)
+		p, cerr := env.Compile(exprs[0], cel.BoolType)
+		for _, x := range exprs[1:] {
+			if _, err := env.Compile(x, cel.BoolType); cerr == nil {
+				cerr = err
+			}
+		}
 		rules[r.ID] = compiledRule{prog: p, err: cerr, needs: needs}
 	}
 	c.byDef[d.Digest] = rules
@@ -155,6 +162,7 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 	action := ActionRecord(d, a, vals, in.DestinationClass)
 	consequence := ConsequenceRecord(in.Consequence)
 	run := RunRecord(in.Run)
+	principal := PrincipalRecord(in.Risk)
 	now := in.Now.Unix()
 	compiled := c.forDefinition(d)
 	rules := make([]*domain.Rule, 0, len(c.Bundle.Rules))
@@ -190,7 +198,7 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 		case missingFact(cr.needs, in.Facts) != "":
 			res.Effect, res.Detail = domain.FactsMissing, "fact "+missingFact(cr.needs, in.Facts)+" is missing or stale"
 		default:
-			vars := map[string]any{"action": action, "facts": FactsRecord(cr.needs, in.Facts), "now": now, "consequence": consequence, "run": run}
+			vars := map[string]any{"action": action, "facts": FactsRecord(cr.needs, in.Facts), "now": now, "consequence": consequence, "run": run, "principal": principal}
 			matched, cost, err := cr.prog.EvalBool(ctx, vars)
 			spent += cost
 			switch {
@@ -357,6 +365,10 @@ type Input struct {
 	// to a requirement on an unknown consequence, nor to a rule whose facts
 	// are missing or stale or that cannot be evaluated.
 	Waivers map[string]string
+	// Risk is the open identity-risk signal about the people behind the run
+	// (`principal.risk`, G0 M16 D82), from the Authority's own facts; nil is
+	// none.
+	Risk *Risk
 }
 
 func missingFact(needs []string, have map[string]fdomain.Value) string {

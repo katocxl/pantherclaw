@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -124,11 +125,12 @@ func (q *Queries) GetDedupeClaim(ctx context.Context, orgID ids.OrgID, dedupeKey
 const insertDecision = `-- name: InsertDecision :exec
 INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id,
                              state, evaluations, grant_id, grant_revision, basis_digest, effective_hash, dedupe_key, mode,
-                             connection_id, channel, target_type, target_id, simulated)
+                             connection_id, channel, target_type, target_id, read_class, simulated)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, 1, $11,
         $12, $13, $14, $15, $16,
         $17, $18, $19, $20,
+        $21,
         -- HR-220: a transaction is simulated exactly when its run is.
         coalesce((SELECT r.simulated FROM pc.runs r WHERE r.org_id = $1 AND r.id = $3), false))
 `
@@ -154,6 +156,7 @@ type InsertDecisionParams struct {
 	Channel       *string
 	TargetType    *string
 	TargetID      *string
+	ReadClass     *string
 }
 
 func (q *Queries) InsertDecision(ctx context.Context, arg InsertDecisionParams) error {
@@ -178,33 +181,39 @@ func (q *Queries) InsertDecision(ctx context.Context, arg InsertDecisionParams) 
 		arg.Channel,
 		arg.TargetType,
 		arg.TargetID,
+		arg.ReadClass,
 	)
 	return err
 }
 
 const insertDecisionConsequence = `-- name: InsertDecisionConsequence :exec
 INSERT INTO pc.decision_consequences (org_id, transaction_id, evaluation, position, rule_id, operation, target_type, target_id,
-    environments, state, unknown, facts_digest)
+    environments, state, unknown, facts_digest, depth, parent_position, source)
 VALUES ($1, $2, $3, $4, $5, $6,
-    $7, $8, $9::text[], $10, $11, $12)
+    $7, $8, $9::text[], $10, $11, $12,
+    $13, $14, $15)
 `
 
 type InsertDecisionConsequenceParams struct {
-	OrgID         ids.OrgID
-	TransactionID ids.UUID
-	Evaluation    int32
-	Position      int32
-	RuleID        string
-	Operation     string
-	TargetType    string
-	TargetID      string
-	Environments  []string
-	State         string
-	Unknown       []byte
-	FactsDigest   string
+	OrgID          ids.OrgID
+	TransactionID  ids.UUID
+	Evaluation     int32
+	Position       int32
+	RuleID         string
+	Operation      string
+	TargetType     string
+	TargetID       string
+	Environments   []string
+	State          string
+	Unknown        []byte
+	FactsDigest    string
+	Depth          int16
+	ParentPosition pgtype.Int2
+	Source         string
 }
 
-// What one consequence rule said in an evaluation (G0 M8, HR-206).
+// What one consequence rule said in an evaluation (G0 M8, HR-206), and
+// where it sits in a chain (G0 M17 D109).
 func (q *Queries) InsertDecisionConsequence(ctx context.Context, arg InsertDecisionConsequenceParams) error {
 	_, err := q.db.Exec(ctx, insertDecisionConsequence,
 		arg.OrgID,
@@ -219,6 +228,9 @@ func (q *Queries) InsertDecisionConsequence(ctx context.Context, arg InsertDecis
 		arg.State,
 		arg.Unknown,
 		arg.FactsDigest,
+		arg.Depth,
+		arg.ParentPosition,
+		arg.Source,
 	)
 	return err
 }
@@ -298,25 +310,30 @@ func (q *Queries) InsertPermitForTransaction(ctx context.Context, arg InsertPerm
 }
 
 const listDecisionConsequences = `-- name: ListDecisionConsequences :many
-SELECT position, rule_id, operation, target_type, target_id, environments, state, unknown, facts_digest
+SELECT position, rule_id, operation, target_type, target_id, environments, state, unknown, facts_digest, depth, parent_position,
+    source
 FROM pc.decision_consequences
 WHERE org_id = $1 AND transaction_id = $2 AND evaluation = $3
 ORDER BY position
 `
 
 type ListDecisionConsequencesRow struct {
-	Position     int32
-	RuleID       string
-	Operation    string
-	TargetType   string
-	TargetID     string
-	Environments []string
-	State        string
-	Unknown      []byte
-	FactsDigest  string
+	Position       int32
+	RuleID         string
+	Operation      string
+	TargetType     string
+	TargetID       string
+	Environments   []string
+	State          string
+	Unknown        []byte
+	FactsDigest    string
+	Depth          int16
+	ParentPosition pgtype.Int2
+	Source         string
 }
 
-// The consequences of an evaluation, in rule order.
+// The consequences of an evaluation, in rule order: a consequence of a
+// consequence comes after the one it follows from (parent_position).
 func (q *Queries) ListDecisionConsequences(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID, evaluation int32) ([]ListDecisionConsequencesRow, error) {
 	rows, err := q.db.Query(ctx, listDecisionConsequences, orgID, transactionID, evaluation)
 	if err != nil {
@@ -336,6 +353,9 @@ func (q *Queries) ListDecisionConsequences(ctx context.Context, orgID ids.OrgID,
 			&i.State,
 			&i.Unknown,
 			&i.FactsDigest,
+			&i.Depth,
+			&i.ParentPosition,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -433,6 +453,70 @@ func (q *Queries) ReleaseExpiredIssued(ctx context.Context, orgID ids.OrgID) ([]
 	return items, nil
 }
 
+const sensitiveReads = `-- name: SensitiveReads :many
+WITH RECURSIVE up (id, parent_run_id, hop) AS (
+    SELECT r.id, r.parent_run_id, 0 FROM pc.runs r WHERE r.org_id = $1 AND r.id = $2
+    UNION ALL
+    SELECT p.id, p.parent_run_id, up.hop + 1 FROM up JOIN pc.runs p ON p.org_id = $1 AND p.id = up.parent_run_id
+    WHERE up.hop < 8
+), root AS (
+    SELECT up.id FROM up ORDER BY up.hop DESC LIMIT 1
+), tree (id, hop) AS (
+    SELECT root.id, 0 FROM root
+    UNION ALL
+    SELECT c.id, tree.hop + 1 FROM tree JOIN pc.runs c ON c.org_id = $1 AND c.parent_run_id = tree.id
+    WHERE tree.hop < 8
+), reads AS (
+    SELECT t.id, t.run_id, t.operation, coalesce(t.read_class, '')::text AS read_class, t.created_at
+    FROM pc.transactions t
+    WHERE t.org_id = $1 AND t.run_id IN (SELECT tree.id FROM tree) AND t.read_class IN ('pii', 'secret')
+)
+SELECT n.id, n.run_id, n.operation, n.read_class, n.created_at FROM (
+    (SELECT id, run_id, operation, read_class, created_at FROM reads ORDER BY reads.created_at DESC, reads.id DESC LIMIT 20)
+    UNION
+    (SELECT DISTINCT ON (reads.read_class) id, run_id, operation, read_class, created_at FROM reads ORDER BY reads.read_class, reads.created_at DESC, reads.id DESC)
+) n
+ORDER BY n.created_at DESC, n.id DESC
+`
+
+type SensitiveReadsRow struct {
+	ID        ids.UUID
+	RunID     ids.UUID
+	Operation string
+	ReadClass string
+	CreatedAt time.Time
+}
+
+// The sensitive reads of a run tree (G0 M16 D73, D97, HR-431): the pii and
+// secret reads of every run sharing the run's root (runs nest at most 8
+// deep), the 20 most recent plus the most recent of each class, so every
+// class read is there. Classes and ids only, never content (HR-434).
+func (q *Queries) SensitiveReads(ctx context.Context, orgID ids.OrgID, runID ids.UUID) ([]SensitiveReadsRow, error) {
+	rows, err := q.db.Query(ctx, sensitiveReads, orgID, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SensitiveReadsRow{}
+	for rows.Next() {
+		var i SensitiveReadsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.Operation,
+			&i.ReadClass,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const settleDedupeClaim = `-- name: SettleDedupeClaim :exec
 UPDATE pc.dedupe_claims c SET state = $1, changed_at = now()
 FROM pc.transactions t
@@ -460,8 +544,9 @@ const updateDecision = `-- name: UpdateDecision :execresult
 UPDATE pc.transactions
 SET decision = $1, reason_code = $2, state = $3,
     evaluations = $4, grant_id = $5, grant_revision = $6,
-    basis_digest = $7, effective_hash = $8, mode = $9
-WHERE org_id = $10 AND id = $11 AND state = 'OPEN' AND evaluations = $12
+    basis_digest = $7, effective_hash = $8, mode = $9,
+    read_class = $10
+WHERE org_id = $11 AND id = $12 AND state = 'OPEN' AND evaluations = $13
 `
 
 type UpdateDecisionParams struct {
@@ -474,6 +559,7 @@ type UpdateDecisionParams struct {
 	BasisDigest     *string
 	EffectiveHash   []byte
 	Mode            string
+	ReadClass       *string
 	OrgID           ids.OrgID
 	ID              ids.UUID
 	PrevEvaluations int32
@@ -490,6 +576,7 @@ func (q *Queries) UpdateDecision(ctx context.Context, arg UpdateDecisionParams) 
 		arg.BasisDigest,
 		arg.EffectiveHash,
 		arg.Mode,
+		arg.ReadClass,
 		arg.OrgID,
 		arg.ID,
 		arg.PrevEvaluations,

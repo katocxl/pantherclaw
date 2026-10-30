@@ -69,7 +69,7 @@ func TestHR224_AReEvaluatedTransactionDerivesFromItsLatestEvaluation(t *testing.
 	// from the first (held) evaluation instead, it would not match.
 	want := domain.Expect{Outcome: domain.OutcomeAllow, Reason: "APPROVED_BY_PERSON"}
 	res, err := w.svc.RecordResult(ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-008", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-008", Digest: dig("RT-008"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "approved", Kind: "agent.call", Expect: want, Observed: want, Transaction: &id}},
 	})
 	if err != nil {

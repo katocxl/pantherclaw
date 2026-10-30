@@ -71,6 +71,22 @@ enum AttestationKind {
   ATTESTATION_KIND_GITHUB_ACTIONS = 1;
   // A Kubernetes projected service-account token.
   ATTESTATION_KIND_KUBERNETES = 2;
+  // A GitLab CI ID token (id_tokens with aud pantherclaw:<org>).
+  ATTESTATION_KIND_GITLAB_CI = 3;
+  // A SPIFFE JWT-SVID (aud pantherclaw:<org>).
+  ATTESTATION_KIND_SPIFFE_JWT = 4;
+  // A Google-signed ID token from the GCP metadata server (audience
+  // pantherclaw:<org>, format=full).
+  ATTESTATION_KIND_GCP_WORKLOAD = 5;
+  // A SigV4-signed sts:GetCallerIdentity request that PantherClaw sends to
+  // STS (signed X-Pantherclaw-Audience: pantherclaw:<org>).
+  ATTESTATION_KIND_AWS_IAM = 6;
+  // An Azure managed identity access token for the operator-pinned Entra
+  // app (identity.entra_apps).
+  ATTESTATION_KIND_AZURE_MI = 7;
+  // A Microsoft Entra Agent ID access token for the operator-pinned Entra
+  // app (identity.entra_apps).
+  ATTESTATION_KIND_ENTRA_AGENT_ID = 8;
 }
 
 // Attestation is a platform token offered as L2 evidence. It is verified,
@@ -200,6 +216,9 @@ message DelegateGrantRequest {
     gte: 0
     lte: 2
   }];
+  // Data flows allowed after a sensitive read (G0 M16 D75, D94); each must
+  // be covered by one of the parent grant's, and none allows no flow.
+  repeated FlowAllowance flows = 10 [(buf.validate.field).repeated.max_items = 16];
 }
 
 // DelegateGrantResponse returns the delegated grant.

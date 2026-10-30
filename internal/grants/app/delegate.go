@@ -36,6 +36,8 @@ type DelegateRequest struct {
 	Limits         domain.Limits
 	Delegation     domain.Delegation
 	MinAttestation int
+	// Flows are the data flows allowed after a sensitive read (G0 M16 D75).
+	Flows []domain.FlowAllowance
 }
 
 // Delegate creates a delegated grant for a child run. Creating the child
@@ -81,7 +83,7 @@ func (s *Service) delegateWith(ctx context.Context, d delegation, w Workload, re
 		ID: domain.NewGrantID(), Org: w.Org, Revision: 1, State: domain.StateActive,
 		AgentID: childRun.AgentID, Principal: parent.Principal, EnvironmentID: parent.EnvironmentID,
 		TaskRef: req.TaskRef, NotBefore: maxTime(now.Add(-domain.IssueSkew), parent.NotBefore), ExpiresAt: expires,
-		Bounds: req.Bounds.Inherit(parent.Bounds), Requirements: req.Requirements, Limits: req.Limits,
+		Bounds: req.Bounds.Inherit(parent.Bounds), Requirements: req.Requirements, Limits: req.Limits, Flows: req.Flows,
 		Delegation: req.Delegation, MinAttestation: max(req.MinAttestation, parent.MinAttestation),
 		Parent: parent.ID, Depth: parent.Depth + 1,
 		Grantor: domain.Principal{Kind: domain.PrincipalInstance, ID: w.InstanceID},

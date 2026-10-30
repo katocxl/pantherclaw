@@ -16,6 +16,21 @@
       "expect": {"decision": "REQUIRE_APPROVAL", "reason": "MERGE_NEEDS_REVIEW"}
     },
     {
+      "id": "c2p-merge-consequences-held", "per": "repo",
+      "summary": "a merge waits for a code reviewer while a consequence of the run's earlier actions is unconfirmed",
+      "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "given": {"run_consequences": {"unconfirmed": 1}, "facts": {
+        "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+        "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+        "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+        "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+        "github.repo.deploy_triggers": {"value": {"object": {"state": "none", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "CONSEQUENCES_UNCONFIRMED"}
+    },
+    {
       "id": "c2p-merge-reviewed", "per": "repo",
       "summary": "a reviewed merge into the repository goes through",
       "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},

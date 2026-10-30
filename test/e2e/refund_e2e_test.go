@@ -186,6 +186,10 @@ type options struct {
 	// limits.api.per_credential_per_minute (default 1200), so a test
 	// reaches the API rate limit with a few calls (G0 M13 D8).
 	apiPerCredential int
+	// externalChecks is external_checks.allowed_prefixes, with
+	// dev.external_checks_loopback so a check on this machine answers (G0
+	// M16 D93b).
+	externalChecks []string
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -268,6 +272,10 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.apiPerCredential > 0 {
 		cfg["limits"] = map[string]any{"api": map[string]any{"per_credential_per_minute": o.apiPerCredential}}
+	}
+	if o.externalChecks != nil {
+		cfg["external_checks"] = map[string]any{"allowed_prefixes": o.externalChecks}
+		cfg["dev"] = map[string]any{"external_checks_loopback": true}
 	}
 	write := func(name string) string {
 		b, err := json.Marshal(cfg)

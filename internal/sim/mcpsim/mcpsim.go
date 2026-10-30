@@ -105,6 +105,9 @@ type Faults struct {
 	Extra     []ExtraTool
 	Resources []Resource
 	Templates []ResourceTemplate
+	// Tools are a customer's own tools declared as data (LoadToolsFile,
+	// G0 M17 D126): listed after the built-in tools, answered from the file.
+	Tools map[string]*DeclaredTool
 }
 
 // Server is the simulated MCP server.
@@ -228,6 +231,7 @@ func (s *Server) tools() []jsontext.Value {
 	if s.f.GitHub != nil {
 		out = append(out, github.MCPTools...)
 	}
+	out = append(out, s.fileTools()...)
 	return append(out, s.extraTools()...)
 }
 
@@ -501,6 +505,9 @@ func (s *Server) call(ctx context.Context, params jsontext.Value) (map[string]an
 	}
 	if json.Unmarshal(params, &raw) != nil {
 		return nil, rpcError(-32602, "Invalid params")
+	}
+	if res, ok := s.fileCall(raw.Name, raw.Arguments); ok {
+		return res, nil
 	}
 	token := s.f.GitHubToken
 	if b, ok := ctx.Value(bearerKey{}).(string); ok {

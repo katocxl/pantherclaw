@@ -33,7 +33,7 @@ func TestD34_OnlyDecisionStepsAreDerivedFromTheirTransaction(t *testing.T) {
 	// RT-008: the person approves the held action: expected ALLOW, observed
 	// by the runner, citing the transaction that was HELD.
 	res, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-008", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-008", Digest: dig("RT-008"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "approve", Kind: "person.approve", Expect: allow, Observed: allow, Transaction: uid(held)}},
 	})
 	if err != nil || res.Verdict != domain.Pass || res.Steps[0].ObservedBy != domain.Client || res.Steps[0].Mismatch {
@@ -42,7 +42,7 @@ func TestD34_OnlyDecisionStepsAreDerivedFromTheirTransaction(t *testing.T) {
 	// RT-036: TARGET_REFUSED with a code, citing the original transaction.
 	refused := domain.Expect{Outcome: domain.OutcomeTargetRefused, Code: "replayed"}
 	res, err = w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-036", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-036", Digest: dig("RT-036"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "replay", Kind: "target.replay", Expect: refused, Observed: refused, Transaction: uid(original)}},
 	})
 	if err != nil || res.Verdict != domain.Pass || res.Steps[0].ObservedBy != domain.Client || res.Steps[0].Mismatch {
@@ -52,7 +52,7 @@ func TestD34_OnlyDecisionStepsAreDerivedFromTheirTransaction(t *testing.T) {
 	// reason, and a code that the server ignores.
 	want := domain.Expect{Outcome: domain.OutcomeDeny, Reason: "X2", Code: "ignored"}
 	res, err = w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-020", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-020", Digest: dig("RT-020"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "call", Kind: "agent.call", Expect: want, Observed: domain.Expect{Outcome: domain.OutcomeDeny, Reason: "X2"}, Transaction: uid(two)}},
 	})
 	if err != nil || res.Verdict != domain.Pass || res.Steps[0].ObservedBy != domain.Server || res.Steps[0].Mismatch {
@@ -67,13 +67,13 @@ func TestD34_ATransactionBacksOneScenarioPerRange(t *testing.T) {
 	tx := w.txn(t, true, "DENY", "DESTINATION_NOT_GRANTED")
 	two := domain.StepInput{ID: "retry", Kind: "agent.call", Expect: deny, Observed: deny, Transaction: uid(tx)}
 	if _, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Fail,
+		Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Fail,
 		Steps: []domain.StepInput{step("call", deny, deny, uid(tx)), two},
 	}); err != nil {
 		t.Fatalf("two steps of one scenario citing it: %v", err)
 	}
 	_, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-002", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-002", Digest: dig("RT-002"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{step("call", deny, deny, uid(tx))},
 	})
 	if !errors.Is(err, app.ErrRecord) {
@@ -89,12 +89,12 @@ func TestD34_ATransactionBacksOneScenarioPerRange(t *testing.T) {
 		}
 	}
 	in := person()
-	in.Scenario = "RT-001"
+	in.Scenario, in.Digest = "RT-001", dig("RT-001")
 	if _, err := w.svc.RecordResult(w.ctx, in); err != nil {
 		t.Fatal(err)
 	}
 	in = person()
-	in.Scenario = "RT-002"
+	in.Scenario, in.Digest = "RT-002", dig("RT-002")
 	if _, err := w.svc.RecordResult(w.ctx, in); !errors.Is(err, app.ErrRecord) {
 		t.Fatalf("a reference reused: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestD34_AProbeStepNeedsTheNamedResultOfItsReport(t *testing.T) {
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
 	rec := func(scenario, kind string) error {
 		_, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-			Range: r.ID, Scenario: scenario, Digest: hexA, Verdict: domain.Pass,
+			Range: r.ID, Scenario: scenario, Digest: dig(scenario), Verdict: domain.Pass,
 			Steps: []domain.StepInput{{ID: "p", Kind: "sandbox.probe", ProbeKind: kind, Expect: blocked, Observed: blocked, Probe: uid(report)}},
 		})
 		return err
@@ -140,19 +140,19 @@ func TestD34_APassRecordsEveryStep(t *testing.T) {
 	r := w.start(t, one, other)
 	a, b := step("a", allow, allow, nil), step("b", allow, allow, nil)
 	if _, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{a},
 	}); !errors.Is(err, app.ErrSteps) {
 		t.Fatalf("a PASS with 1 of 2 steps: %v", err)
 	}
 	if res, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Fail,
+		Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Fail,
 		Steps: []domain.StepInput{a},
 	}); err != nil || res.Verdict != domain.Fail {
 		t.Fatalf("a FAIL with 1 of 2 steps that all matched: %+v, %v, want FAIL", res, err)
 	}
 	if res, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-002", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-002", Digest: dig("RT-002"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{a, b},
 	}); err != nil || res.Verdict != domain.Pass {
 		t.Fatalf("a PASS with 2 of 2 steps: %+v, %v", res, err)
@@ -164,7 +164,7 @@ func TestD34_AStepNeedsItsKind(t *testing.T) {
 	w := newWorld(t, billing.Team, td.RoleAgentOwner)
 	r := w.start(t, decl("RT-001", domain.TierCommunity, "boundary"))
 	_, err := w.svc.RecordResult(w.ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "a", Expect: allow, Observed: allow}},
 	})
 	if !errors.Is(err, app.ErrSteps) {

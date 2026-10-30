@@ -69,6 +69,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 			by: "gateway:" + gateway.String(), actor: domain.System, source: "github_scan",
 			ledger:  evdomain.Actor{Type: "gateway", ID: gateway.String()},
 			trusted: map[string]string{"gateway": gateway.String(), "scan": scan.String()},
+			run:     &scan, notify: inv.notify,
 		}
 		for _, f := range findings {
 			observed := maps.Clone(f.Attributes)
@@ -92,7 +93,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 			case prior.State == "DISMISSED" && riskChanged(f.Kind, prior.Observed, observed):
 				reopen = prior.ID // dismissed for what it could do then: people judge it again
 			default:
-				if _, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{Observed: obs, OrgID: org, ScanKey: f.Key[:], Source: "github_scan"}); err != nil {
+				if err := touch(ctx, tx, q, org, w, f, obs, observed, prior); err != nil {
 					return err
 				}
 				res.Counted++

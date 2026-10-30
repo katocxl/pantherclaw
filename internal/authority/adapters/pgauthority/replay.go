@@ -134,6 +134,18 @@ func (s *ReplaySource) HoldSettings(ctx context.Context, org ids.OrgID) (pipelin
 	return out, err
 }
 
+// RunConsequences implements replay.Source: how the run's actions stand
+// downstream now, read as the Authority reads them (G0 M17 D103).
+func (s *ReplaySource) RunConsequences(ctx context.Context, org ids.OrgID, run ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	var out pipeline.RunConsequenceCounts
+	err := s.read(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, err = runConsequences(ctx, tx, org, run)
+		return err
+	})
+	return out, err
+}
+
 // storedBundle decodes a stored bundle as the policy store does.
 func storedBundle(raw []byte) (*pdomain.Bundle, error) {
 	var b pdomain.Bundle

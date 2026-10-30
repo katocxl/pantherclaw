@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/ranges/adapters/pgranges"
 	"github.com/katocxl/pantherclaw/internal/ranges/app"
 	"github.com/katocxl/pantherclaw/internal/ranges/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/library"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -123,7 +124,7 @@ func (w *world) txn(t *testing.T, run ids.UUID, simulated bool, decision, reason
 }
 
 func decl(id string) domain.Scenario {
-	return domain.Scenario{ID: id, Digest: hexA, Tier: domain.TierCommunity, Category: "boundary", Suite: "coding-agent", Title: id, StepCount: 1}
+	return domain.Scenario{ID: id, Digest: dig(id), Tier: domain.TierCommunity, Category: "boundary", Suite: "coding-agent", Title: id, StepCount: 1}
 }
 
 func (w *world) start(t *testing.T, ids ...string) domain.Range {
@@ -157,7 +158,7 @@ func TestHR224_ServerRecordsWinOverClientClaims(t *testing.T) {
 	}
 	saw := w.txn(t, w.run, true, "ALLOW", "GRANT_ALLOWS")
 	res, err := w.svc.RecordResult(ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-009", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-009", Digest: dig("RT-009"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "exfil", Kind: "agent.call", Expect: deny, Observed: deny, Transaction: uid(saw)}},
 	})
 	if err != nil {
@@ -172,7 +173,7 @@ func TestHR224_ServerRecordsWinOverClientClaims(t *testing.T) {
 		"one from before the range":                     before, "an unknown one": ids.NewV7(),
 	} {
 		_, err := w.svc.RecordResult(ctx, app.RecordInput{
-			Range: r.ID, Scenario: "RT-010", Digest: hexA, Verdict: domain.Pass,
+			Range: r.ID, Scenario: "RT-010", Digest: dig("RT-010"), Verdict: domain.Pass,
 			Steps: []domain.StepInput{{ID: "s", Kind: "agent.call", Expect: deny, Observed: deny, Transaction: uid(id)}},
 		})
 		if !errors.Is(err, app.ErrRecord) {
@@ -207,13 +208,13 @@ func TestHR224_ResultsAreAppendOnlyAndRangesChangeOnce(t *testing.T) {
 	r := w.start(t, "RT-001")
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
 	if _, err := w.svc.RecordResult(ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "s", Kind: "agent.call", Expect: blocked, Observed: blocked}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.svc.RecordResult(ctx, app.RecordInput{
-		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Fail,
+		Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Fail,
 		Steps: []domain.StepInput{{ID: "s", Kind: "agent.call", Expect: blocked, Observed: domain.Expect{Outcome: domain.OutcomeAllow}}},
 	}); !errors.Is(err, app.ErrRecorded) {
 		t.Fatalf("a second result: %v", err)
@@ -245,7 +246,7 @@ func TestHR224_ResultsAreAppendOnlyAndRangesChangeOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := tx.Exec(ctx, insert, w.org, r.ID, "RT-001", hexA)
+		_, err := tx.Exec(ctx, insert, w.org, r.ID, "RT-001", dig("RT-001"))
 		return err
 	}); err == nil {
 		t.Error("a result recorded after the finish")
@@ -314,7 +315,7 @@ func TestHR224_StaleRangesAreAbandonedAfter24Hours(t *testing.T) {
 	}
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
 	if _, err := w.svc.RecordResult(ctx, app.RecordInput{
-		Range: old.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
+		Range: old.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "s", Kind: "agent.call", Expect: blocked, Observed: blocked}},
 	}); !errors.Is(err, app.ErrNotRunning) {
 		t.Fatalf("a result in an abandoned range: %v", err)
@@ -337,7 +338,7 @@ func TestTenancy_redteam_runs(t *testing.T) {
 	if _, err := them.svc.FinishRange(other, r.ID); !errors.Is(err, app.ErrNotFound) {
 		t.Errorf("finish: %v", err)
 	}
-	if _, err := them.svc.RecordResult(other, app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Skipped}); !errors.Is(err, app.ErrNotFound) {
+	if _, err := them.svc.RecordResult(other, app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Skipped}); !errors.Is(err, app.ErrNotFound) {
 		t.Errorf("record: %v", err)
 	}
 	if _, err := them.svc.ExportAssuranceReport(other, r.ID); err == nil {
@@ -374,7 +375,7 @@ func TestTenancy_redteam_results(t *testing.T) {
 	r := w.start(t, "RT-001")
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
 	if _, err := w.svc.RecordResult(w.as(td.RoleAgentOwner), app.RecordInput{
-		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
+		Range: r.ID, Scenario: "RT-001", Digest: dig("RT-001"), Verdict: domain.Pass,
 		Steps: []domain.StepInput{{ID: "s", Kind: "agent.call", Expect: blocked, Observed: blocked}},
 	}); err != nil {
 		t.Fatal(err)
@@ -384,7 +385,7 @@ func TestTenancy_redteam_results(t *testing.T) {
 	}
 	err := them.pool.InTenantTx(context.Background(), them.org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := tx.Exec(ctx, `INSERT INTO pc.redteam_results (org_id, range_id, scenario_id, scenario_digest, suite, category, tier, verdict, observed_by)
-			VALUES ($1, $2, 'RT-002', $3, 'platform', 'boundary', 'community', 'SKIPPED', 'NONE')`, w.org, r.ID, hexA)
+			VALUES ($1, $2, 'RT-002', $3, 'platform', 'boundary', 'community', 'SKIPPED', 'NONE')`, w.org, r.ID, dig("RT-002"))
 		return err
 	})
 	if err == nil {
@@ -410,4 +411,13 @@ func TestRangePermissionsOnTheRealStore(t *testing.T) {
 	if _, err := w.svc.GetRange(viewer, r.ID); !errors.Is(err, app.ErrNotFound) {
 		t.Fatalf("viewer get: %v", err)
 	}
+}
+
+// dig is a library scenario's digest: a range accepts an RT id only with
+// it (D125).
+func dig(id string) string {
+	if e, ok := library.Lookup(id); ok {
+		return e.Digest
+	}
+	return hexA
 }

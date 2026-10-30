@@ -19,6 +19,8 @@ type Recorded struct {
 	Value                        []byte // typed JSON (domain.DecodeValue)
 	ObservedAt, RecordedAt       time.Time
 	ProviderID                   ids.UUID
+	// Source and Method are its provenance (G0 M16 D80), when sent.
+	Source, Method string
 }
 
 // Reads lists providers and facts for the API. It is separate from Store

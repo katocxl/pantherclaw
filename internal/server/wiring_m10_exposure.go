@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/posture/adapters/posturerpc"
 	poapp "github.com/katocxl/pantherclaw/internal/posture/app"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
+	sgapp "github.com/katocxl/pantherclaw/internal/suggestions/app"
 )
 
 // exposureEnts is the licence as the exposure services read it; without
@@ -47,6 +48,8 @@ func registerExposureJobs(jobsSoFar []*river.PeriodicJob, reg *jobs.Registry, po
 ) ([]*river.PeriodicJob, error) {
 	periodic, err := recompute.Register(reg, &recompute.Service{
 		Pool: pool, Ents: exposureEnts(b), Failures: &failures.Sink{}, Log: log,
+		// Unused-authority findings queue their suggestions (G0 M16 D91).
+		Findings: &sgapp.Queue{},
 	})
 	if err != nil {
 		return nil, err
