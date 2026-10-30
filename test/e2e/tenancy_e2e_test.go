@@ -166,7 +166,9 @@ func (s *m2Stack) user(t *testing.T, subject, email string) *user {
 }
 
 func (u *user) env(extra ...string) pclaw.Env {
-	m := map[string]string{"PANTHERCLAW_CONFIG_DIR": u.dir}
+	// The file store: these tests read credentials.json and must not
+	// touch the machine's real OS keychain.
+	m := map[string]string{"PANTHERCLAW_CONFIG_DIR": u.dir, "PANTHERCLAW_CREDENTIAL_STORE": "file"}
 	for i := 0; i+1 < len(extra); i += 2 {
 		m[extra[i]] = extra[i+1]
 	}
