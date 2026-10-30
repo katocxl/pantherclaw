@@ -236,7 +236,7 @@ SELECT (NOT EXISTS (
 -- (UNKNOWN, CONFLICTING, UNVERIFIABLE, PROPAGATION_PENDING or not yet
 -- recorded) on an operation that counts as irreversible (D84 E1, E6).
 SELECT count(*)::int FROM pc.transactions t
-WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id) AND t.consequence_root IS NULL
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
     AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
     AND (t.effect_state IS NULL OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))
     AND NOT EXISTS (

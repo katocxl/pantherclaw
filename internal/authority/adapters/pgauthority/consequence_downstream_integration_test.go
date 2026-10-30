@@ -105,6 +105,12 @@ func chainedPayouts(pkg string) string {
 		"      establishes: payout.paid\n      within_seconds: 3600\n      capture:\n        refund: /refund\n", 1)
 }
 
+// irreversiblePayouts is verifiedPayouts whose payout cannot be undone.
+func irreversiblePayouts(pkg string) string {
+	return strings.Replace(verifiedPayouts(pkg), "    reversibility: compensatable\n    retry:\n      safe: false\n      on_unknown: reconcile\n    verifier:\n      operation: payments.payout.statuses\n",
+		"    reversibility: irreversible\n    dedupe_key: [target.id]\n    retry:\n      safe: false\n      on_unknown: reconcile\n    verifier:\n      operation: payments.payout.statuses\n", 1)
+}
+
 func (d *downstream) state(txn ids.UUID) string {
 	return d.str("SELECT coalesce(downstream_state, '') FROM pc.transactions WHERE id = $1", txn)
 }
@@ -318,6 +324,52 @@ func TestHR451_ADownstreamStateComesFromTheConsequencesOwnEvidence(t *testing.T)
 	}
 	if got, confirmed := c.counts(payout); got != (dbq.RunDownstreamCountsRow{}) || len(confirmed) != 0 {
 		t.Fatalf("the payouts counted as the run's actions: %+v %v", got, confirmed)
+	}
+}
+
+// TestAConsequenceWithNoKnownEffectHoldsTheIrreversibleGate (G0 M17 D146,
+// HR-280): a consequence transaction counts toward the run's unknown
+// irreversible outcomes like any other of its transactions. A confirmed
+// refund whose predicted payout has no known effect yet leaves the run
+// with one, so its next wait step is UNKNOWN and a person decides; once
+// the payout is paid there is none.
+//
+// Covers: F414
+func TestAConsequenceWithNoKnownEffectHoldsTheIrreversibleGate(t *testing.T) {
+	d := newDownstream(t, irreversiblePayouts)
+	unknown := func() int32 {
+		t.Helper()
+		var n int32
+		if err := d.pool.InTenantTx(context.Background(), d.org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			n, err = dbq.New(tx).RunUnknownIrreversible(ctx, d.org, d.runID)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	effect := func(txn ids.UUID) string {
+		return d.str("SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", txn)
+	}
+	txn := d.confirm("ch_1", nil)
+	cons := d.consequences(txn)
+	if len(cons) != 1 {
+		t.Fatalf("after the refund's confirmation: %d opened", len(cons))
+	}
+	if e := effect(cons[0]); e != "" {
+		t.Fatalf("the payout's effect before its lookup: %q", e)
+	}
+	if n := unknown(); n != 1 {
+		t.Fatalf("with the payout's effect missing: %d unknown irreversible, want 1", n)
+	}
+	d.report(cons[0], "in_transit")
+	if n := unknown(); n != 1 {
+		t.Fatalf("with the payout in transit (effect %q): %d unknown irreversible, want 1", effect(cons[0]), n)
+	}
+	d.report(cons[0], "paid")
+	if n := unknown(); n != 0 {
+		t.Fatalf("with the payout paid (effect %q): %d unknown irreversible, want 0", effect(cons[0]), n)
 	}
 }
 

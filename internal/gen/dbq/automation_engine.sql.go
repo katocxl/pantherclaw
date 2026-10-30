@@ -1594,7 +1594,7 @@ func (q *Queries) RunTransactionCounts(ctx context.Context, orgID ids.OrgID, run
 
 const runUnknownIrreversible = `-- name: RunUnknownIrreversible :one
 SELECT count(*)::int FROM pc.transactions t
-WHERE t.org_id = $1 AND t.run_id = $2 AND t.consequence_root IS NULL
+WHERE t.org_id = $1 AND t.run_id = $2
     AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
     AND (t.effect_state IS NULL OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))
     AND NOT EXISTS (
