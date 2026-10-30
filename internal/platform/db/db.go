@@ -32,8 +32,16 @@ const Schema = "pc"
 
 // Config describes one connection pool. Passwords come from secret files.
 type Config struct {
-	Host     string
-	Port     int
+	// Host is one host, or a comma-separated list of hosts for a primary
+	// and its standbys, each optionally with its own ":port" (G0 M19 D202).
+	// Every connection targets the read-write primary
+	// (target_session_attrs=read-write) and verifies TLS against the host
+	// it reaches (HR-497). A stable endpoint (a managed service or a proxy)
+	// is the alternative: one host that always names the primary.
+	Host string
+	Port int
+	// Hosts, when set, replaces Host and Port.
+	Hosts    []Endpoint
 	Database string
 	User     string
 	Password pclog.Secret[[]byte]
@@ -58,6 +66,34 @@ type Config struct {
 	Tracer pgx.QueryTracer
 }
 
+// Endpoint is one database host and port.
+type Endpoint struct {
+	Host string
+	Port int
+}
+
+// endpoints lists the hosts to try, in order: Hosts, or else Host split at
+// commas, each with Port unless it names its own.
+func (c Config) endpoints() ([]Endpoint, error) {
+	if len(c.Hosts) > 0 {
+		return c.Hosts, nil
+	}
+	var out []Endpoint
+	for _, h := range strings.Split(c.Host, ",") {
+		h = strings.TrimSpace(h)
+		e := Endpoint{Host: h, Port: c.Port}
+		if host, port, err := net.SplitHostPort(h); err == nil {
+			p, err := strconv.Atoi(port)
+			if err != nil {
+				return nil, fmt.Errorf("db: host %q has a bad port", h)
+			}
+			e = Endpoint{Host: host, Port: p}
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
 // Defaults returns a Config with PantherClaw's default limits.
 func Defaults() Config {
 	return Config{
@@ -70,19 +106,36 @@ func Defaults() Config {
 // Validate checks the configuration.
 func (c Config) Validate() error {
 	var errs []error
-	if c.Host == "" || c.Database == "" || c.User == "" {
+	if (c.Host == "" && len(c.Hosts) == 0) || c.Database == "" || c.User == "" {
 		errs = append(errs, errors.New("db: host, database and user are required"))
 	}
-	if c.Port < 1 || c.Port > 65535 {
-		errs = append(errs, errors.New("db: port out of range"))
+	eps, err := c.endpoints()
+	if err != nil {
+		errs = append(errs, err)
+	}
+	loopback := true
+	for _, e := range eps {
+		if e.Host == "" || strings.ContainsAny(e.Host, ", '\\") {
+			errs = append(errs, fmt.Errorf("db: host %q not allowed", e.Host))
+		}
+		if e.Port < 1 || e.Port > 65535 {
+			errs = append(errs, errors.New("db: port out of range"))
+		}
+		loopback = loopback && isLoopback(e.Host)
 	}
 	if !c.Password.IsSet() {
 		errs = append(errs, errors.New("db: password file is required"))
 	}
 	switch c.SSLMode {
-	case "verify-full", "verify-ca":
+	case "verify-full":
+	case "verify-ca":
+		// verify-ca does not check the host name, so with several hosts
+		// any one's certificate would pass for another's (HR-497).
+		if len(eps) > 1 {
+			errs = append(errs, errors.New("db: several hosts need sslmode=verify-full (HR-497)"))
+		}
 	case "disable":
-		if !isLoopback(c.Host) {
+		if !loopback {
 			errs = append(errs, errors.New("db: sslmode=disable is only allowed for loopback hosts"))
 		}
 	default:
@@ -136,11 +189,22 @@ func (c Config) poolConfig() (*pgxpool.Config, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	eps, err := c.endpoints()
+	if err != nil {
+		return nil, err
+	}
+	hosts, ports := make([]string, len(eps)), make([]string, len(eps))
+	for i, e := range eps {
+		hosts[i], ports[i] = e.Host, strconv.Itoa(e.Port)
+	}
 	// Keyword/value form without the password; the password is set on the
-	// parsed config so it never appears in a connection string.
+	// parsed config so it never appears in a connection string. Each host
+	// gets its own TLS configuration naming that host (verify-full,
+	// HR-497), and only a read-write primary is accepted (HR-495).
 	kv := []string{
-		"host=" + quoteKV(c.Host), "port=" + strconv.Itoa(c.Port), "dbname=" + quoteKV(c.Database),
-		"user=" + quoteKV(c.User), "sslmode=" + c.SSLMode, "connect_timeout=5",
+		"host=" + quoteKV(strings.Join(hosts, ",")), "port=" + quoteKV(strings.Join(ports, ",")),
+		"dbname=" + quoteKV(c.Database), "user=" + quoteKV(c.User), "sslmode=" + c.SSLMode,
+		"connect_timeout=5", "target_session_attrs=read-write",
 	}
 	if c.SSLRootCert != "" {
 		kv = append(kv, "sslrootcert="+quoteKV(c.SSLRootCert))
@@ -150,6 +214,14 @@ func (c Config) poolConfig() (*pgxpool.Config, error) {
 		return nil, fmt.Errorf("db: parse config: %w", err)
 	}
 	pc.ConnConfig.Password = string(c.Password.Reveal())
+	// A primary that vanishes without closing its connections (a host or
+	// network failure) is noticed within about 11 s, so pooled
+	// and LISTEN connections fail and reconnect to the promoted primary
+	// instead of waiting on a dead socket (G0 M19 D202).
+	dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAliveConfig: net.KeepAliveConfig{
+		Enable: true, Idle: 5 * time.Second, Interval: 2 * time.Second, Count: 3,
+	}}
+	pc.ConnConfig.DialFunc = dialer.DialContext
 	pc.MaxConns = c.MaxConns
 	pc.MaxConnLifetime = 30 * time.Minute
 	pc.MaxConnIdleTime = 5 * time.Minute
@@ -183,20 +255,29 @@ func quoteKV(s string) string {
 // ErrSessionMisconfigured reports a connection that does not meet HR-055/057.
 var ErrSessionMisconfigured = errors.New("db: session misconfigured")
 
-// verifySession runs on every new connection (HR-057, HR-055).
+// ErrNotPrimary reports a connection that reached a standby. No pool ever
+// uses one, not even for reads: while no read-write primary answers, every
+// transaction fails and nothing is decided (G0 M19 D202, G11, HR-495).
+var ErrNotPrimary = errors.New("db: host is a standby, not the read-write primary")
+
+// verifySession runs on every new connection (HR-057, HR-055, HR-495).
 func verifySession(ctx context.Context, conn *pgx.Conn, c Config) error {
-	var timeoutsOK, pathOK, super, bypass bool
+	var recovery, timeoutsOK, pathOK, super, bypass bool
 	err := conn.QueryRow(ctx, `
-		SELECT current_setting('statement_timeout')::interval = make_interval(secs => $1::float8 / 1000)
+		SELECT pg_is_in_recovery(),
+		       current_setting('statement_timeout')::interval = make_interval(secs => $1::float8 / 1000)
 		   AND current_setting('lock_timeout')::interval = make_interval(secs => $2::float8 / 1000)
 		   AND current_setting('idle_in_transaction_session_timeout')::interval = make_interval(secs => $3::float8 / 1000),
 		       current_setting('search_path') = $4,
 		       r.rolsuper, r.rolbypassrls
 		FROM pg_roles r WHERE r.rolname = current_user`,
 		c.StatementTimeout.Milliseconds(), c.LockTimeout.Milliseconds(), c.IdleInTxTimeout.Milliseconds(), Schema,
-	).Scan(&timeoutsOK, &pathOK, &super, &bypass)
+	).Scan(&recovery, &timeoutsOK, &pathOK, &super, &bypass)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrSessionMisconfigured, err)
+	}
+	if recovery {
+		return ErrNotPrimary
 	}
 	if !timeoutsOK || !pathOK {
 		return fmt.Errorf("%w: timeouts or search_path not applied (HR-057)", ErrSessionMisconfigured)

@@ -141,3 +141,74 @@ func TestSchemaFingerprintIsStable(t *testing.T) {
 		t.Fatal("fingerprint unstable or wrong length")
 	}
 }
+
+// Covers: PN-010.7
+func TestHR497_MultiHostVerifiesTLSPerHost(t *testing.T) {
+	c := validConfig()
+	c.Host, c.Port = "pg-a.internal, pg-b.internal:5433", 5432
+	pc, err := c.poolConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cc := pc.ConnConfig
+	got := []string{cc.Host + "/" + cc.TLSConfig.ServerName}
+	for _, f := range cc.Fallbacks {
+		if f.TLSConfig == nil {
+			t.Fatalf("host %s has a plaintext fallback", f.Host)
+		}
+		got = append(got, f.Host+"/"+f.TLSConfig.ServerName)
+	}
+	if strings.Join(got, " ") != "pg-a.internal/pg-a.internal pg-b.internal/pg-b.internal" {
+		t.Fatalf("hosts/server names = %v", got)
+	}
+	if cc.Port != 5432 || cc.Fallbacks[len(cc.Fallbacks)-1].Port != 5433 {
+		t.Fatalf("ports = %d, %d", cc.Port, cc.Fallbacks[len(cc.Fallbacks)-1].Port)
+	}
+	for _, f := range append([]*pgconn.FallbackConfig{{TLSConfig: cc.TLSConfig}}, cc.Fallbacks...) {
+		if f.TLSConfig.InsecureSkipVerify && f.TLSConfig.VerifyPeerCertificate == nil {
+			t.Fatal("TLS configuration does not verify the peer")
+		}
+	}
+
+	for name, mutate := range map[string]func(*Config){
+		"verify-ca with two hosts": func(c *Config) { c.SSLMode = "verify-ca" },
+		"disable with a remote":    func(c *Config) { c.Host, c.SSLMode = "127.0.0.1,pg-b.internal", "disable" },
+		"empty host in the list":   func(c *Config) { c.Host = "pg-a.internal,," },
+		"bad port in the list":     func(c *Config) { c.Host = "pg-a.internal:99999" },
+		"quote in a host":          func(c *Config) { c.Hosts = []Endpoint{{Host: "a'b", Port: 5432}} },
+	} {
+		c := c
+		mutate(&c)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	local := validConfig()
+	local.Host, local.SSLMode = "127.0.0.1:5434,127.0.0.1:5435", "disable"
+	if err := local.Validate(); err != nil {
+		t.Fatalf("loopback primary and standby without TLS: %v", err)
+	}
+}
+
+// Covers: PN-010.7
+func TestHR495_OnlyAReadWritePrimaryIsAccepted(t *testing.T) {
+	c := validConfig()
+	c.Hosts = []Endpoint{{Host: "pg-a.internal", Port: 5432}, {Host: "pg-b.internal", Port: 5432}}
+	pc, err := c.poolConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// target_session_attrs=read-write installs pgx's read-write check, so a
+	// host answering read-only is skipped for the next one.
+	if pc.ConnConfig.ValidateConnect == nil {
+		t.Fatal("no target_session_attrs check: a standby would be accepted")
+	}
+	if !strings.Contains(pc.ConnString(), "target_session_attrs=read-write") {
+		t.Fatalf("connection string %q lacks target_session_attrs=read-write", pc.ConnString())
+	}
+	single := validConfig()
+	pc, err = single.poolConfig()
+	if err != nil || pc.ConnConfig.ValidateConnect == nil {
+		t.Fatalf("single host: err=%v, no read-write check", err)
+	}
+}
