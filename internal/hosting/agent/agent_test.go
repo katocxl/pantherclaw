@@ -77,6 +77,7 @@ type engine struct {
 func (e *engine) CreateNetwork(_ context.Context, n docker.Network) (docker.NetworkInfo, error) {
 	return docker.NetworkInfo{Name: n.Name}, nil
 }
+
 func (e *engine) RemoveNetwork(_ context.Context, name string) error {
 	if err := e.networkErr; err != nil {
 		e.networkErr = nil
