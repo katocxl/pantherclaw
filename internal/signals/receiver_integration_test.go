@@ -415,3 +415,34 @@ func withinOneWindow() {
 		time.Sleep(time.Until(end.Add(300 * time.Millisecond)))
 	}
 }
+
+// TestHR494_AnUnknownTransmitterWritesNoCounter: a well-formed token posted
+// to made-up ids, or to a transmitter that is not ACTIVE, is answered 404
+// without a counter row: only an ACTIVE transmitter's tokens are counted in
+// the shared store, so unauthenticated POSTs cannot fill it.
+// Covers: HR-494
+func TestHR494_AnUnknownTransmitterWritesNoCounter(t *testing.T) {
+	f := newRxFixture(t)
+	tok := f.token(t, f.key, f.tx, nil)
+	rows := func() int {
+		return f.count(t, "SELECT count(*) FROM pc.rate_counters WHERE scope = $1", scopeTransmitter)
+	}
+	for name, tx := range map[string]ids.UUID{
+		"unknown":  ids.NewV7(),
+		"inactive": f.transmitter(t, "paused", false),
+	} {
+		if a := f.post(t, f.org, tx, ContentType, tok); a.status != http.StatusNotFound {
+			t.Fatalf("%s transmitter: %+v", name, a)
+		}
+	}
+	if a := f.post(t, ids.New[ids.Org](), ids.NewV7(), ContentType, tok); a.status != http.StatusNotFound {
+		t.Fatalf("another org: %+v", a)
+	}
+	if n := rows(); n != 0 {
+		t.Fatalf("%d counter rows for transmitters that do not take tokens", n)
+	}
+	f.post(t, f.org, f.tx, ContentType, tok)
+	if rows() != 1 {
+		t.Fatal("an active transmitter's token was not counted")
+	}
+}

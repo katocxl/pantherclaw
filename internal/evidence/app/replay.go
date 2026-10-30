@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
@@ -16,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -57,10 +59,11 @@ type Replayer interface {
 
 // replayLimiter counts each caller's replays: in the shared store, so the
 // limit holds across replicas (G0 M19 D201), or in memory on clk without a
-// database. A counter error refuses the replay (HR-376).
+// database. A counter error is logged and refuses the replay (HR-376).
 type replayLimiter struct {
 	limiter ratelimit.Limiter
 	window  time.Duration
+	log     *slog.Logger
 }
 
 // scopeReplay is the shared counter's scope of a caller's replays.
@@ -74,7 +77,7 @@ func (s *Service) WithReplay(r Replayer, clk clock.Clock) *Service {
 	if s.pool != nil {
 		l = ratelimit.NewStore(s.pool)
 	}
-	s.replay, s.replayLimit = r, &replayLimiter{limiter: l, window: time.Minute}
+	s.replay, s.replayLimit = r, &replayLimiter{limiter: l, window: time.Minute, log: slog.Default()}
 	return s
 }
 
@@ -91,7 +94,11 @@ func (s *Service) WithReplayWindow(d time.Duration) *Service {
 // allow counts one replay of c.
 func (l *replayLimiter) allow(ctx context.Context, c tenancy.Caller) bool {
 	d, err := l.limiter.Take(ctx, scopeReplay, callerKey(c), l.window, 1, ReplaysPerMinute)
-	return err == nil && d.Allowed
+	if err != nil {
+		l.log.ErrorContext(ctx, "evidence.replay_rate_unavailable", pclog.Err(err))
+		return false
+	}
+	return d.Allowed
 }
 
 // ReplayResult is a replay, with the recorded inputs for a caller allowed
