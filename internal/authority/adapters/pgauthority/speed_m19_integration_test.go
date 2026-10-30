@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
@@ -41,9 +43,45 @@ func TestHR504_DecisionSnapshotsStayRepeatableReadReadOnly(t *testing.T) {
 	}
 }
 
+// busyCounting counts the finalizations that found a budget row busy.
+type busyCounting struct {
+	finalize.Store
+	busy atomic.Int32
+}
+
+func (s *busyCounting) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) error {
+	err := s.Store.Finalize(ctx, org, w)
+	if errors.Is(err, finalize.ErrBusy) {
+		s.busy.Add(1)
+	}
+	return err
+}
+
+// waitBudgetLock returns once a statement on pc.budget_accounts is waiting
+// for a lock, the moment its lock timeout starts.
+func (w *world) waitBudgetLock() error {
+	w.t.Helper()
+	var err error
+	w.db.AdminDo(w.t, func(conn *pgx.Conn) error {
+		ctx := context.Background()
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
+			var waiting int
+			if err = conn.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()
+				AND wait_event_type = 'Lock' AND query LIKE '%budget_accounts%'`).Scan(&waiting); err != nil || waiting > 0 {
+				return nil
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+		err = errors.New("no statement waited for a budget row")
+		return nil
+	})
+	return err
+}
+
 // TestT219_RacingFirstOfPeriodRefundsNeverOverspend: a refund whose budget
-// row is held for 150 ms, past the 100 ms lock timeout, is busy once and
-// allowed by its one retry, reserving once. Then refunds racing on budgets
+// row is still held 110 ms after it started waiting, past the 100 ms lock
+// timeout, is busy exactly once and allowed by its one retry, reserving
+// once. Then refunds racing on budgets
 // none of them has reserved on yet (each first of its period, so each
 // prepares the row) never reserve past the limit, and every budget gets
 // exactly one row.
@@ -58,6 +96,8 @@ func TestT219_RacingFirstOfPeriodRefundsNeverOverspend(t *testing.T) {
 	if r := w.authorize(w.request(held, ids.NewV7(), "ch_held1", "5.00")); r.Permit == "" {
 		t.Fatalf("the first refund prepares the row: %s %s", r.Decision, decisive(r))
 	}
+	counted := &busyCounting{Store: w.auth.Store}
+	w.auth.Store = counted
 	release := w.holdBudgetRows()
 	type answer struct {
 		res  finalize.Result
@@ -70,11 +110,19 @@ func TestT219_RacingFirstOfPeriodRefundsNeverOverspend(t *testing.T) {
 		res, err := w.auth.Authorize(ctx, w.gw, w.request(held, ids.NewV7(), "ch_held2", "5.00"))
 		done <- answer{res, err, time.Since(start)}
 	}()
-	time.Sleep(150 * time.Millisecond)
+	waited := w.waitBudgetLock()
+	time.Sleep(110 * time.Millisecond)
 	release()
 	a := <-done
+	w.auth.Store = counted.Store
+	if waited != nil {
+		t.Fatal(waited)
+	}
 	if a.err != nil || a.res.Decision != adomain.Allow || a.res.Permit == "" {
-		t.Fatalf("held 150 ms: %s %s %v; want an ALLOW from the one retry", a.res.Decision, decisive(a.res), a.err)
+		t.Fatalf("held 110 ms past the wait: %s %s %v; want an ALLOW from the one retry", a.res.Decision, decisive(a.res), a.err)
+	}
+	if n := counted.busy.Load(); n != 1 {
+		t.Fatalf("%d finalizations found the row busy; want exactly 1", n)
 	}
 	if a.took < 100*time.Millisecond {
 		t.Fatalf("allowed after %v, before the first attempt's lock timeout: no busy retry happened", a.took)
