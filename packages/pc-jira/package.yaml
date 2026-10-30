@@ -12,7 +12,8 @@
 #
 # What an agent writes into Jira is a disclosure param (HR-079), and type
 # content: never dispatched as text (HR-023). Before every write the gateway
-# reads the project the write lands in and reports jira.project.external:
+# reads the project the write lands in and reports jira.issue.external, or
+# jira.project.external for a new issue (one fact is about one target type):
 # whether it is a service desk, whose customers read what is written there.
 # A write into such a project predicts the consequence jira.issue.disclose
 # (external_disclosure), which a policy must allow (HR-522, T-226); a
@@ -109,7 +110,7 @@ definitions:
     reversibility: compensatable
     dedupe_key: [target.id, params.body]
     prerequisites:
-      - fact: jira.project.external
+      - fact: jira.issue.external
         max_age_seconds: 300
     retry:
       safe: false
@@ -118,7 +119,7 @@ definitions:
       title: Comment on Jira issue {target.id}
       fields:
         - target.id
-        - facts.jira.project.external
+        - facts.jira.issue.external
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]
@@ -308,7 +309,7 @@ definitions:
     reversibility: compensatable
     dedupe_key: [target.id, params.transition_id]
     prerequisites:
-      - fact: jira.project.external
+      - fact: jira.issue.external
         max_age_seconds: 300
     retry:
       safe: false
@@ -318,7 +319,7 @@ definitions:
       fields:
         - target.id
         - params.transition_id
-        - facts.jira.project.external
+        - facts.jira.issue.external
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]
@@ -460,8 +461,8 @@ consequences:
     valid_until: 2027-10-30
   - id: customer-visible-transition
     operation: jira.issue.transition
-    when: facts.jira_project_external.external == true
-    requires_facts: [jira.project.external]
+    when: facts.jira_issue_external.external == true
+    requires_facts: [jira.issue.external]
     consequence:
       operation: jira.issue.disclose
       effect: external_disclosure
@@ -471,8 +472,8 @@ consequences:
     valid_until: 2027-10-30
   - id: customer-visible-comment
     operation: jira.issue.comment
-    when: facts.jira_project_external.external == true
-    requires_facts: [jira.project.external]
+    when: facts.jira_issue_external.external == true
+    requires_facts: [jira.issue.external]
     consequence:
       operation: jira.issue.disclose
       effect: external_disclosure
@@ -487,5 +488,5 @@ coverage:
   environment:
     source: none
   record_scope: [jira_issue, jira_project]
-  recipient_fact: jira.project.external
+  recipient_fact: jira.issue.external
   channels: [http, mcp]

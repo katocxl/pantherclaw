@@ -204,6 +204,9 @@ func m20ConnectorCapabilities() map[app.Capability]bool {
 // and jira_customer_issue name the internal issue and the help desk ticket.
 func (d *rangeDriver) setupM20Connectors() {
 	if requires(d.sc, string(capJiraComment)) {
+		if d.fix == nil {
+			d.fix = app.Fixture{}
+		}
 		d.fix["jira_internal_issue"], d.fix["jira_customer_issue"] = sim.JiraIssue, sim.JiraTicket
 		d.ownGrant(`{"operations": ["jira.issue.comment", "jira.issue.read"],
 			"targets": {"jira_issue": {"ids": ["`+sim.JiraIssue+`", "`+sim.JiraTicket+`"]}},

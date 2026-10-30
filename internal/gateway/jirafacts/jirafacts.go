@@ -16,9 +16,19 @@ import (
 	"strings"
 )
 
-// ProjectExternal is the fact a write's prerequisite and its consequence
-// rule name.
-const ProjectExternal = "jira.project.external"
+// Target types the facts are about, each with its own fact: the fact store
+// keeps one subject type per fact name and connection (G0 M20 D275).
+const (
+	IssueTarget   = "jira_issue"
+	ProjectTarget = "jira_project"
+)
+
+// IssueExternal and ProjectExternal are the facts a write's prerequisite and
+// its consequence rule name: the same value, about an issue or a project.
+const (
+	IssueExternal   = "jira.issue.external"
+	ProjectExternal = "jira.project.external"
+)
 
 // ServiceDesk is the project type whose customers read the project.
 const ServiceDesk = "service_desk"
@@ -109,3 +119,14 @@ func refused(status int) string {
 
 // Unread is the value of a fact that was not read, with why.
 func Unread(why string) map[string]any { return map[string]any{"unread": why} }
+
+// Fact is the fact about a target of targetType, "" for any other type.
+func Fact(targetType string) string {
+	switch targetType {
+	case IssueTarget:
+		return IssueExternal
+	case ProjectTarget:
+		return ProjectExternal
+	}
+	return ""
+}

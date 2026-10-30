@@ -27,24 +27,18 @@ import (
 // fact read goes by: the package's connection test.
 const jiraProjectRead = "jira.project.read"
 
-// Jira target types a fact read knows how to read.
-const (
-	jiraIssue   = "jira_issue"
-	jiraProject = "jira_project"
-)
-
 // needsJiraFacts reports whether def's prerequisites or its package's
-// consequence rules name jira.project.external.
-func needsJiraFacts(conn *control.Connection, def *defs.Definition) bool {
+// consequence rules name fact.
+func needsJiraFacts(conn *control.Connection, def *defs.Definition, fact string) bool {
 	for _, p := range def.Prerequisites {
-		if p.Fact == jirafacts.ProjectExternal {
+		if p.Fact == fact {
 			return true
 		}
 	}
 	for _, c := range conn.Package.Consequences {
 		if c.Operation == def.Operation {
 			for _, f := range c.RequiresFacts {
-				if f == jirafacts.ProjectExternal {
+				if f == fact {
 					return true
 				}
 			}
@@ -53,7 +47,7 @@ func needsJiraFacts(conn *control.Connection, def *defs.Definition) bool {
 	return false
 }
 
-// reportJiraFacts reads jira.project.external for an action's issue or
+// reportJiraFacts reads the external fact of an action's issue or
 // project with the connection's credential, within the fact timeout, and
 // reports it before the decision (G0 M20 D254, HR-160, HR-522). What it
 // could not read is reported unread, so the server counts the fact missing:
@@ -64,7 +58,8 @@ func (e *Engine) reportJiraFacts(ctx context.Context, conn *control.Connection, 
 		return false, nil
 	}
 	def, ok := conn.Package.Definition(a.Operation)
-	if !ok || !needsJiraFacts(conn, def) {
+	fact := jirafacts.Fact(a.Target.Type)
+	if !ok || fact == "" || !needsJiraFacts(conn, def, fact) {
 		return false, nil
 	}
 	read, cancel := context.WithTimeout(ctx, e.factTimeout)
@@ -75,7 +70,7 @@ func (e *Engine) reportJiraFacts(ctx context.Context, conn *control.Connection, 
 		return true, nil
 	}
 	obs := []*pb.FactObservation{{
-		Name: jirafacts.ProjectExternal, SubjectType: a.Target.Type, SubjectId: a.Target.ID, Value: raw, ObserveTime: timestamppb.New(time.Now()),
+		Name: fact, SubjectType: a.Target.Type, SubjectId: a.Target.ID, Value: raw, ObserveTime: timestamppb.New(time.Now()),
 	}}
 	if err := e.reportFacts(ctx, conn.GetId(), obs); err != nil {
 		e.log.WarnContext(ctx, "gateway.facts_not_reported", slog.String("connection_id", conn.GetId()), slog.String("operation", a.Operation),
@@ -98,9 +93,9 @@ func (e *Engine) readJira(ctx context.Context, conn *control.Connection, target 
 	base := strings.TrimSuffix(conn.GetBaseUrl(), "/")
 	var raw string
 	switch target.Type {
-	case jiraIssue:
+	case jirafacts.IssueTarget:
 		raw = base + "/rest/api/2/issue/" + url.PathEscape(target.ID) + "?" + url.Values{"fields": {"project,security"}}.Encode()
-	case jiraProject:
+	case jirafacts.ProjectTarget:
 		raw = base + "/rest/api/2/project/" + url.PathEscape(target.ID)
 	default:
 		return jirafacts.Unread("the target is neither an issue nor a project")
@@ -130,7 +125,7 @@ func (e *Engine) readJira(ctx context.Context, conn *control.Connection, target 
 		warn(err)
 		return jirafacts.Unread("Jira could not be reached")
 	}
-	if target.Type == jiraProject {
+	if target.Type == jirafacts.ProjectTarget {
 		return jirafacts.Project(resp.Status, resp.Body, target.ID)
 	}
 	return jirafacts.Issue(resp.Status, resp.Body, target.ID)

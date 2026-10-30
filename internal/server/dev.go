@@ -270,14 +270,14 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			}
 			_, _ = fmt.Fprintf(stdout, "seeded jira connection %s (%s) to %s, its project facts read by the gateway; seal base64 of email:api-token with "+
 				"pclaw seal --connection %s --from-file SECRET\n", c.ID, c.Name, *jiraURL, c.ID)
-			if *gitlabURL != "" {
-				c, err := seedGitLabAgentConnection(ctx, cfg, pool, org, gw, *gitlabURL)
-				if err != nil {
-					return err
-				}
-				_, _ = fmt.Fprintf(stdout, "seeded gitlab connection %s (%s) to %s, its merge request facts read by the gateway; seal an access token with "+
-					"pclaw seal --connection %s --from-file TOKEN\n", c.ID, c.Name, *gitlabURL, c.ID)
+		}
+		if *gitlabURL != "" {
+			c, err := seedGitLabAgentConnection(ctx, cfg, pool, org, gw, *gitlabURL)
+			if err != nil {
+				return err
 			}
+			_, _ = fmt.Fprintf(stdout, "seeded gitlab connection %s (%s) to %s, its merge request facts read by the gateway; seal an access token with "+
+				"pclaw seal --connection %s --from-file TOKEN\n", c.ID, c.Name, *gitlabURL, c.ID)
 		}
 		if *a2aURL != "" {
 			if err := seedA2A(ctx, cfg, pool, org, gw, w, *a2aURL, *a2aPeerOut, stdout); err != nil {

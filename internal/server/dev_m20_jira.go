@@ -30,8 +30,8 @@ const devJiraConnectionName = "jira"
 // (pantherclaw-sim jira), its host the only one the credential is bound to,
 // the Basic credential is held by the gateway (a person seals base64 of
 // email:api-token with pclaw seal), and the gateway is the provider of
-// jira.project.external, which it reads before each write. DEVELOPMENT
-// ONLY.
+// jira.issue.external and jira.project.external, which it reads before each
+// write. DEVELOPMENT ONLY.
 func seedJiraAgentConnection(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID, gateway ids.UUID, targetURL string) (capp.Connection, error) {
 	c, err := capp.New(pool, nil, cfg.Auth.PublicURL, cfg.GatewayAPI.URL).Seed(ctx, org, "dev-seed", capp.CreateInput{
 		Name: devJiraConnectionName, Kind: capp.KindHTTP, Package: pcjira.Name, BaseURL: targetURL, Gateway: gateway,

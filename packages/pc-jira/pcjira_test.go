@@ -139,7 +139,8 @@ func TestHR522_JiraWritesAreDisclosedContentAndCustomerProjectsAConsequence(t *t
 			continue
 		}
 		writes++
-		if len(d.Prerequisites) != 1 || d.Prerequisites[0].Fact != "jira.project.external" || d.Prerequisites[0].MaxAgeSeconds != 300 {
+		want := map[string]string{"jira_issue": "jira.issue.external", "jira_project": "jira.project.external"}[d.Target.Type]
+		if len(d.Prerequisites) != 1 || d.Prerequisites[0].Fact != want || d.Prerequisites[0].MaxAgeSeconds != 300 {
 			t.Fatalf("%s prerequisites: %+v", d.Operation, d.Prerequisites)
 		}
 		var required bool
@@ -167,7 +168,7 @@ func TestHR522_JiraWritesAreDisclosedContentAndCustomerProjectsAConsequence(t *t
 		var found bool
 		for _, c := range p.Consequences {
 			found = found || (c.Operation == d.Operation && c.Consequence.Effect == "external_disclosure" &&
-				len(c.RequiresFacts) == 1 && c.RequiresFacts[0] == "jira.project.external")
+				len(c.RequiresFacts) == 1 && c.RequiresFacts[0] == want)
 		}
 		if !found {
 			t.Fatalf("%s: no external_disclosure consequence", d.Operation)
@@ -209,8 +210,8 @@ func TestT226_ACustomerVisibleProjectPredictsExternalDisclosure(t *testing.T) {
 	}
 	now := time.Now()
 	fact := func(members map[string]any) map[string]fdomain.Fact {
-		return map[string]fdomain.Fact{"jira.project.external": {
-			Name: "jira.project.external", SubjectType: "jira_issue", SubjectID: "HELP-1",
+		return map[string]fdomain.Fact{"jira.issue.external": {
+			Name: "jira.issue.external", SubjectType: "jira_issue", SubjectID: "HELP-1",
 			Value: fdomain.Value{Type: fdomain.TypeObject, Object: members}, ObservedAt: now.Add(-time.Second),
 		}}
 	}
@@ -275,8 +276,41 @@ func TestHR522_TheJiraCredentialGoesOnlyToItsBoundSite(t *testing.T) {
 // Covers: F756
 func TestHR523_PCJiraDeclaresItsCoverage(t *testing.T) {
 	c := decode(t).Coverage
-	if c == nil || c.Environment.Source != domain.EnvironmentNone || c.RecipientFact != "jira.project.external" ||
+	if c == nil || c.Environment.Source != domain.EnvironmentNone || c.RecipientFact != "jira.issue.external" ||
 		len(c.RecordScope) != 2 || c.RecordScope[0] != "jira_issue" || c.RecordScope[1] != "jira_project" || len(c.Channels) != 2 {
 		t.Fatalf("coverage: %+v", c)
+	}
+}
+
+// TestT226_OneFactIsAboutOneTargetType: the fact store keeps one subject type
+// per fact name and connection (HR-222), so a fact pc.jira names on an issue
+// is never also named on a project (G0 M20 D275).
+//
+// Covers: F756
+func TestT226_OneFactIsAboutOneTargetType(t *testing.T) {
+	p := decode(t)
+	about := map[string]string{}
+	name := func(fact, typ, where string) {
+		if was, ok := about[fact]; ok && was != typ {
+			t.Fatalf("%s: %s is about %s and %s", where, fact, was, typ)
+		}
+		about[fact] = typ
+	}
+	for _, d := range p.Definitions {
+		for _, pr := range d.Prerequisites {
+			name(pr.Fact, d.Target.Type, d.Operation)
+		}
+	}
+	for _, c := range p.Consequences {
+		d, ok := p.Definition(c.Operation)
+		if !ok {
+			t.Fatalf("%s: no definition", c.ID)
+		}
+		for _, f := range c.RequiresFacts {
+			name(f, d.Target.Type, c.ID)
+		}
+	}
+	if about["jira.issue.external"] != "jira_issue" || about["jira.project.external"] != "jira_project" {
+		t.Fatalf("facts: %v", about)
 	}
 }
