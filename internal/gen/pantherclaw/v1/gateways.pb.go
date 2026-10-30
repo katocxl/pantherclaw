@@ -302,6 +302,66 @@ func (MCPStateKind) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{4}
 }
 
+// VersionCompliance is how a reported version meets the minimum.
+type VersionCompliance int32
+
+const (
+	VersionCompliance_VERSION_COMPLIANCE_UNSPECIFIED VersionCompliance = 0
+	// The org set no minimum version.
+	VersionCompliance_VERSION_COMPLIANCE_NO_MINIMUM VersionCompliance = 1
+	// At or above the minimum.
+	VersionCompliance_VERSION_COMPLIANCE_COMPLIANT VersionCompliance = 2
+	// Below the minimum.
+	VersionCompliance_VERSION_COMPLIANCE_BELOW_MINIMUM VersionCompliance = 3
+	// The version does not parse; it never counts as compliant.
+	VersionCompliance_VERSION_COMPLIANCE_UNKNOWN VersionCompliance = 4
+)
+
+// Enum value maps for VersionCompliance.
+var (
+	VersionCompliance_name = map[int32]string{
+		0: "VERSION_COMPLIANCE_UNSPECIFIED",
+		1: "VERSION_COMPLIANCE_NO_MINIMUM",
+		2: "VERSION_COMPLIANCE_COMPLIANT",
+		3: "VERSION_COMPLIANCE_BELOW_MINIMUM",
+		4: "VERSION_COMPLIANCE_UNKNOWN",
+	}
+	VersionCompliance_value = map[string]int32{
+		"VERSION_COMPLIANCE_UNSPECIFIED":   0,
+		"VERSION_COMPLIANCE_NO_MINIMUM":    1,
+		"VERSION_COMPLIANCE_COMPLIANT":     2,
+		"VERSION_COMPLIANCE_BELOW_MINIMUM": 3,
+		"VERSION_COMPLIANCE_UNKNOWN":       4,
+	}
+)
+
+func (x VersionCompliance) Enum() *VersionCompliance {
+	p := new(VersionCompliance)
+	*p = x
+	return p
+}
+
+func (x VersionCompliance) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (VersionCompliance) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_gateways_proto_enumTypes[5].Descriptor()
+}
+
+func (VersionCompliance) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_gateways_proto_enumTypes[5]
+}
+
+func (x VersionCompliance) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use VersionCompliance.Descriptor instead.
+func (VersionCompliance) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{5}
+}
+
 // Gateway is one gateway record (one deployment; its replicas enroll
 // separately and share the record).
 type Gateway struct {
@@ -5079,6 +5139,556 @@ func (x *ReportInventoryResponse) GetNewItems() int32 {
 	return 0
 }
 
+// FleetPolicy is an org's gateway fleet policy (G0 M18 D151).
+type FleetPolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The advisory minimum version, vMAJOR.MINOR.PATCH[-pre]; empty for none.
+	MinimumVersion string `protobuf:"bytes,1,opt,name=minimum_version,json=minimumVersion,proto3" json:"minimum_version,omitempty"`
+	// How long a gateway may go without a status report before it is
+	// alerted as silent.
+	SilenceAfterSeconds int32 `protobuf:"varint,2,opt,name=silence_after_seconds,json=silenceAfterSeconds,proto3" json:"silence_after_seconds,omitempty"`
+	// Who last set it; empty for the default policy.
+	UpdatedBy string `protobuf:"bytes,3,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
+	// When.
+	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FleetPolicy) Reset() {
+	*x = FleetPolicy{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FleetPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FleetPolicy) ProtoMessage() {}
+
+func (x *FleetPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FleetPolicy.ProtoReflect.Descriptor instead.
+func (*FleetPolicy) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *FleetPolicy) GetMinimumVersion() string {
+	if x != nil {
+		return x.MinimumVersion
+	}
+	return ""
+}
+
+func (x *FleetPolicy) GetSilenceAfterSeconds() int32 {
+	if x != nil {
+		return x.SilenceAfterSeconds
+	}
+	return 0
+}
+
+func (x *FleetPolicy) GetUpdatedBy() string {
+	if x != nil {
+		return x.UpdatedBy
+	}
+	return ""
+}
+
+func (x *FleetPolicy) GetUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdateTime
+	}
+	return nil
+}
+
+// GetFleetPolicyRequest reads the caller's org's fleet policy.
+type GetFleetPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFleetPolicyRequest) Reset() {
+	*x = GetFleetPolicyRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFleetPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFleetPolicyRequest) ProtoMessage() {}
+
+func (x *GetFleetPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFleetPolicyRequest.ProtoReflect.Descriptor instead.
+func (*GetFleetPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{67}
+}
+
+// GetFleetPolicyResponse is the policy.
+type GetFleetPolicyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The policy, or the default when the org set none.
+	Policy        *FleetPolicy `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFleetPolicyResponse) Reset() {
+	*x = GetFleetPolicyResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFleetPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFleetPolicyResponse) ProtoMessage() {}
+
+func (x *GetFleetPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFleetPolicyResponse.ProtoReflect.Descriptor instead.
+func (*GetFleetPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *GetFleetPolicyResponse) GetPolicy() *FleetPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+// SetFleetPolicyRequest replaces the caller's org's fleet policy.
+type SetFleetPolicyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The advisory minimum version; empty clears it.
+	MinimumVersion string `protobuf:"bytes,1,opt,name=minimum_version,json=minimumVersion,proto3" json:"minimum_version,omitempty"`
+	// The silence threshold; 0 for the default 300.
+	SilenceAfterSeconds int32 `protobuf:"varint,2,opt,name=silence_after_seconds,json=silenceAfterSeconds,proto3" json:"silence_after_seconds,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *SetFleetPolicyRequest) Reset() {
+	*x = SetFleetPolicyRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetFleetPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetFleetPolicyRequest) ProtoMessage() {}
+
+func (x *SetFleetPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetFleetPolicyRequest.ProtoReflect.Descriptor instead.
+func (*SetFleetPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *SetFleetPolicyRequest) GetMinimumVersion() string {
+	if x != nil {
+		return x.MinimumVersion
+	}
+	return ""
+}
+
+func (x *SetFleetPolicyRequest) GetSilenceAfterSeconds() int32 {
+	if x != nil {
+		return x.SilenceAfterSeconds
+	}
+	return 0
+}
+
+// SetFleetPolicyResponse is the policy as stored.
+type SetFleetPolicyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The policy.
+	Policy        *FleetPolicy `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetFleetPolicyResponse) Reset() {
+	*x = SetFleetPolicyResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetFleetPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetFleetPolicyResponse) ProtoMessage() {}
+
+func (x *SetFleetPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetFleetPolicyResponse.ProtoReflect.Descriptor instead.
+func (*SetFleetPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *SetFleetPolicyResponse) GetPolicy() *FleetPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+// FleetReplica is one replica in the fleet view.
+type FleetReplica struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What it reported.
+	Replica *GatewayReplica `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
+	// Its parsed version, vMAJOR.MINOR.PATCH[-pre], or "unknown".
+	ParsedVersion string `protobuf:"bytes,2,opt,name=parsed_version,json=parsedVersion,proto3" json:"parsed_version,omitempty"`
+	// How it meets the minimum.
+	Compliance VersionCompliance `protobuf:"varint,3,opt,name=compliance,proto3,enum=pantherclaw.v1.VersionCompliance" json:"compliance,omitempty"`
+	// How many config versions it serves behind the gateway's current one.
+	ConfigLag     int64 `protobuf:"varint,4,opt,name=config_lag,json=configLag,proto3" json:"config_lag,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FleetReplica) Reset() {
+	*x = FleetReplica{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FleetReplica) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FleetReplica) ProtoMessage() {}
+
+func (x *FleetReplica) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FleetReplica.ProtoReflect.Descriptor instead.
+func (*FleetReplica) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *FleetReplica) GetReplica() *GatewayReplica {
+	if x != nil {
+		return x.Replica
+	}
+	return nil
+}
+
+func (x *FleetReplica) GetParsedVersion() string {
+	if x != nil {
+		return x.ParsedVersion
+	}
+	return ""
+}
+
+func (x *FleetReplica) GetCompliance() VersionCompliance {
+	if x != nil {
+		return x.Compliance
+	}
+	return VersionCompliance_VERSION_COMPLIANCE_UNSPECIFIED
+}
+
+func (x *FleetReplica) GetConfigLag() int64 {
+	if x != nil {
+		return x.ConfigLag
+	}
+	return 0
+}
+
+// FleetGateway is one gateway in the fleet view.
+type FleetGateway struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Gateway id.
+	GatewayId string `protobuf:"bytes,1,opt,name=gateway_id,json=gatewayId,proto3" json:"gateway_id,omitempty"`
+	// Its name.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// The config version it should serve.
+	ConfigVersion int64 `protobuf:"varint,3,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
+	// Whether some replica reported in the last 90 seconds.
+	Connected bool `protobuf:"varint,4,opt,name=connected,proto3" json:"connected,omitempty"`
+	// Set while it is alerted as silent: its last report before the silence.
+	SilentSinceTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=silent_since_time,json=silentSinceTime,proto3" json:"silent_since_time,omitempty"`
+	// Whether some replica's version misses the minimum (or is unknown).
+	BelowMinimum bool `protobuf:"varint,6,opt,name=below_minimum,json=belowMinimum,proto3" json:"below_minimum,omitempty"`
+	// The replicas that reported in the last 24 hours.
+	Replicas      []*FleetReplica `protobuf:"bytes,7,rep,name=replicas,proto3" json:"replicas,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FleetGateway) Reset() {
+	*x = FleetGateway{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FleetGateway) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FleetGateway) ProtoMessage() {}
+
+func (x *FleetGateway) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FleetGateway.ProtoReflect.Descriptor instead.
+func (*FleetGateway) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *FleetGateway) GetGatewayId() string {
+	if x != nil {
+		return x.GatewayId
+	}
+	return ""
+}
+
+func (x *FleetGateway) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FleetGateway) GetConfigVersion() int64 {
+	if x != nil {
+		return x.ConfigVersion
+	}
+	return 0
+}
+
+func (x *FleetGateway) GetConnected() bool {
+	if x != nil {
+		return x.Connected
+	}
+	return false
+}
+
+func (x *FleetGateway) GetSilentSinceTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SilentSinceTime
+	}
+	return nil
+}
+
+func (x *FleetGateway) GetBelowMinimum() bool {
+	if x != nil {
+		return x.BelowMinimum
+	}
+	return false
+}
+
+func (x *FleetGateway) GetReplicas() []*FleetReplica {
+	if x != nil {
+		return x.Replicas
+	}
+	return nil
+}
+
+// ListFleetRequest pages through the fleet view.
+type ListFleetRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Maximum results (default 50, at most 200).
+	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token from a previous response.
+	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFleetRequest) Reset() {
+	*x = ListFleetRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFleetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFleetRequest) ProtoMessage() {}
+
+func (x *ListFleetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[73]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFleetRequest.ProtoReflect.Descriptor instead.
+func (*ListFleetRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{73}
+}
+
+func (x *ListFleetRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListFleetRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ListFleetResponse is one page.
+type ListFleetResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org's fleet policy.
+	Policy *FleetPolicy `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	// Active gateways.
+	Gateways []*FleetGateway `protobuf:"bytes,2,rep,name=gateways,proto3" json:"gateways,omitempty"`
+	// Token for the next page; empty at the end.
+	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFleetResponse) Reset() {
+	*x = ListFleetResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFleetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFleetResponse) ProtoMessage() {}
+
+func (x *ListFleetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFleetResponse.ProtoReflect.Descriptor instead.
+func (*ListFleetResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{74}
+}
+
+func (x *ListFleetResponse) GetPolicy() *FleetPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+func (x *ListFleetResponse) GetGateways() []*FleetGateway {
+	if x != nil {
+		return x.Gateways
+	}
+	return nil
+}
+
+func (x *ListFleetResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_gateways_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
@@ -5472,7 +6082,48 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x0ename_truncated\x18\a \x01(\bR\rnameTruncated\x12.\n" +
 	"\x13mime_type_truncated\x18\b \x01(\bR\x11mimeTypeTruncated\"6\n" +
 	"\x17ReportInventoryResponse\x12\x1b\n" +
-	"\tnew_items\x18\x01 \x01(\x05R\bnewItems*b\n" +
+	"\tnew_items\x18\x01 \x01(\x05R\bnewItems\"\xc6\x01\n" +
+	"\vFleetPolicy\x12'\n" +
+	"\x0fminimum_version\x18\x01 \x01(\tR\x0eminimumVersion\x122\n" +
+	"\x15silence_after_seconds\x18\x02 \x01(\x05R\x13silenceAfterSeconds\x12\x1d\n" +
+	"\n" +
+	"updated_by\x18\x03 \x01(\tR\tupdatedBy\x12;\n" +
+	"\vupdate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"updateTime\"\x17\n" +
+	"\x15GetFleetPolicyRequest\"M\n" +
+	"\x16GetFleetPolicyResponse\x123\n" +
+	"\x06policy\x18\x01 \x01(\v2\x1b.pantherclaw.v1.FleetPolicyR\x06policy\"\xeb\x01\n" +
+	"\x15SetFleetPolicyRequest\x12\x90\x01\n" +
+	"\x0fminimum_version\x18\x01 \x01(\tBg\xbaHdrb\x18@2^^(v?(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?)?$R\x0eminimumVersion\x12?\n" +
+	"\x15silence_after_seconds\x18\x02 \x01(\x05B\v\xbaH\b\x1a\x06\x18\x80\xa3\x05(\x00R\x13silenceAfterSeconds\"M\n" +
+	"\x16SetFleetPolicyResponse\x123\n" +
+	"\x06policy\x18\x01 \x01(\v2\x1b.pantherclaw.v1.FleetPolicyR\x06policy\"\xd1\x01\n" +
+	"\fFleetReplica\x128\n" +
+	"\areplica\x18\x01 \x01(\v2\x1e.pantherclaw.v1.GatewayReplicaR\areplica\x12%\n" +
+	"\x0eparsed_version\x18\x02 \x01(\tR\rparsedVersion\x12A\n" +
+	"\n" +
+	"compliance\x18\x03 \x01(\x0e2!.pantherclaw.v1.VersionComplianceR\n" +
+	"compliance\x12\x1d\n" +
+	"\n" +
+	"config_lag\x18\x04 \x01(\x03R\tconfigLag\"\xad\x02\n" +
+	"\fFleetGateway\x12\x1d\n" +
+	"\n" +
+	"gateway_id\x18\x01 \x01(\tR\tgatewayId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
+	"\x0econfig_version\x18\x03 \x01(\x03R\rconfigVersion\x12\x1c\n" +
+	"\tconnected\x18\x04 \x01(\bR\tconnected\x12F\n" +
+	"\x11silent_since_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0fsilentSinceTime\x12#\n" +
+	"\rbelow_minimum\x18\x06 \x01(\bR\fbelowMinimum\x128\n" +
+	"\breplicas\x18\a \x03(\v2\x1c.pantherclaw.v1.FleetReplicaR\breplicas\"u\n" +
+	"\x10ListFleetRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
+	"\n" +
+	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"\xaa\x01\n" +
+	"\x11ListFleetResponse\x123\n" +
+	"\x06policy\x18\x01 \x01(\v2\x1b.pantherclaw.v1.FleetPolicyR\x06policy\x128\n" +
+	"\bgateways\x18\x02 \x03(\v2\x1c.pantherclaw.v1.FleetGatewayR\bgateways\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken*b\n" +
 	"\fGatewayState\x12\x1d\n" +
 	"\x19GATEWAY_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14GATEWAY_STATE_ACTIVE\x10\x01\x12\x19\n" +
@@ -5498,7 +6149,13 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x13MCP_STATE_KIND_HOLD\x10\x01\x12\x17\n" +
 	"\x13MCP_STATE_KIND_TASK\x10\x02\x12\x1a\n" +
 	"\x16MCP_STATE_KIND_SESSION\x10\x03\x12\x1e\n" +
-	"\x1aMCP_STATE_KIND_ELICITATION\x10\x042\x82\x06\n" +
+	"\x1aMCP_STATE_KIND_ELICITATION\x10\x04*\xc2\x01\n" +
+	"\x11VersionCompliance\x12\"\n" +
+	"\x1eVERSION_COMPLIANCE_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dVERSION_COMPLIANCE_NO_MINIMUM\x10\x01\x12 \n" +
+	"\x1cVERSION_COMPLIANCE_COMPLIANT\x10\x02\x12$\n" +
+	" VERSION_COMPLIANCE_BELOW_MINIMUM\x10\x03\x12\x1e\n" +
+	"\x1aVERSION_COMPLIANCE_UNKNOWN\x10\x042\xa0\b\n" +
 	"\x13GatewayAdminService\x12\\\n" +
 	"\rCreateGateway\x12$.pantherclaw.v1.CreateGatewayRequest\x1a%.pantherclaw.v1.CreateGatewayResponse\x12\x89\x01\n" +
 	"\x1cCreateGatewayEnrollmentToken\x123.pantherclaw.v1.CreateGatewayEnrollmentTokenRequest\x1a4.pantherclaw.v1.CreateGatewayEnrollmentTokenResponse\x12^\n" +
@@ -5507,7 +6164,10 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"GetGateway\x12!.pantherclaw.v1.GetGatewayRequest\x1a\".pantherclaw.v1.GetGatewayResponse\"\x03\x90\x02\x01\x12\\\n" +
 	"\rRevokeGateway\x12$.pantherclaw.v1.RevokeGatewayRequest\x1a%.pantherclaw.v1.RevokeGatewayResponse\x12}\n" +
 	"\x18RevokeGatewayCertificate\x12/.pantherclaw.v1.RevokeGatewayCertificateRequest\x1a0.pantherclaw.v1.RevokeGatewayCertificateResponse\x12j\n" +
-	"\x10ListApproverKeys\x12'.pantherclaw.v1.ListApproverKeysRequest\x1a(.pantherclaw.v1.ListApproverKeysResponse\"\x03\x90\x02\x012\xa4\x0f\n" +
+	"\x10ListApproverKeys\x12'.pantherclaw.v1.ListApproverKeysRequest\x1a(.pantherclaw.v1.ListApproverKeysResponse\"\x03\x90\x02\x01\x12d\n" +
+	"\x0eGetFleetPolicy\x12%.pantherclaw.v1.GetFleetPolicyRequest\x1a&.pantherclaw.v1.GetFleetPolicyResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x0eSetFleetPolicy\x12%.pantherclaw.v1.SetFleetPolicyRequest\x1a&.pantherclaw.v1.SetFleetPolicyResponse\x12U\n" +
+	"\tListFleet\x12 .pantherclaw.v1.ListFleetRequest\x1a!.pantherclaw.v1.ListFleetResponse\"\x03\x90\x02\x012\xa4\x0f\n" +
 	"\x0eGatewayService\x12c\n" +
 	"\x06Enroll\x12+.pantherclaw.v1.GatewayServiceEnrollRequest\x1a,.pantherclaw.v1.GatewayServiceEnrollResponse\x12e\n" +
 	"\x10RenewCertificate\x12'.pantherclaw.v1.RenewCertificateRequest\x1a(.pantherclaw.v1.RenewCertificateResponse\x12h\n" +
@@ -5542,204 +6202,229 @@ func file_pantherclaw_v1_gateways_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_gateways_proto_rawDescData
 }
 
-var file_pantherclaw_v1_gateways_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_pantherclaw_v1_gateways_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
+var file_pantherclaw_v1_gateways_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_pantherclaw_v1_gateways_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
 var file_pantherclaw_v1_gateways_proto_goTypes = []any{
 	(GatewayState)(0),                            // 0: pantherclaw.v1.GatewayState
 	(GatewayCertificateState)(0),                 // 1: pantherclaw.v1.GatewayCertificateState
 	(ContainmentStateKind)(0),                    // 2: pantherclaw.v1.ContainmentStateKind
 	(ConnectionServingState)(0),                  // 3: pantherclaw.v1.ConnectionServingState
 	(MCPStateKind)(0),                            // 4: pantherclaw.v1.MCPStateKind
-	(*Gateway)(nil),                              // 5: pantherclaw.v1.Gateway
-	(*GatewayReplica)(nil),                       // 6: pantherclaw.v1.GatewayReplica
-	(*GatewayCertificate)(nil),                   // 7: pantherclaw.v1.GatewayCertificate
-	(*BrokerKey)(nil),                            // 8: pantherclaw.v1.BrokerKey
-	(*CreateGatewayRequest)(nil),                 // 9: pantherclaw.v1.CreateGatewayRequest
-	(*CreateGatewayResponse)(nil),                // 10: pantherclaw.v1.CreateGatewayResponse
-	(*CreateGatewayEnrollmentTokenRequest)(nil),  // 11: pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
-	(*CreateGatewayEnrollmentTokenResponse)(nil), // 12: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
-	(*ListGatewaysRequest)(nil),                  // 13: pantherclaw.v1.ListGatewaysRequest
-	(*ListGatewaysResponse)(nil),                 // 14: pantherclaw.v1.ListGatewaysResponse
-	(*ListApproverKeysRequest)(nil),              // 15: pantherclaw.v1.ListApproverKeysRequest
-	(*ListApproverKeysResponse)(nil),             // 16: pantherclaw.v1.ListApproverKeysResponse
-	(*ApproverKey)(nil),                          // 17: pantherclaw.v1.ApproverKey
-	(*GetGatewayRequest)(nil),                    // 18: pantherclaw.v1.GetGatewayRequest
-	(*GetGatewayResponse)(nil),                   // 19: pantherclaw.v1.GetGatewayResponse
-	(*RevokeGatewayRequest)(nil),                 // 20: pantherclaw.v1.RevokeGatewayRequest
-	(*RevokeGatewayResponse)(nil),                // 21: pantherclaw.v1.RevokeGatewayResponse
-	(*RevokeGatewayCertificateRequest)(nil),      // 22: pantherclaw.v1.RevokeGatewayCertificateRequest
-	(*RevokeGatewayCertificateResponse)(nil),     // 23: pantherclaw.v1.RevokeGatewayCertificateResponse
-	(*GatewayServiceEnrollRequest)(nil),          // 24: pantherclaw.v1.GatewayServiceEnrollRequest
-	(*GatewayServiceEnrollResponse)(nil),         // 25: pantherclaw.v1.GatewayServiceEnrollResponse
-	(*RenewCertificateRequest)(nil),              // 26: pantherclaw.v1.RenewCertificateRequest
-	(*RenewCertificateResponse)(nil),             // 27: pantherclaw.v1.RenewCertificateResponse
-	(*RegisterBrokerKeyRequest)(nil),             // 28: pantherclaw.v1.RegisterBrokerKeyRequest
-	(*RegisterBrokerKeyResponse)(nil),            // 29: pantherclaw.v1.RegisterBrokerKeyResponse
-	(*GetConfigurationRequest)(nil),              // 30: pantherclaw.v1.GetConfigurationRequest
-	(*GetConfigurationResponse)(nil),             // 31: pantherclaw.v1.GetConfigurationResponse
-	(*GatewayCaptureProfile)(nil),                // 32: pantherclaw.v1.GatewayCaptureProfile
-	(*GatewayConnection)(nil),                    // 33: pantherclaw.v1.GatewayConnection
-	(*RouteModeSetting)(nil),                     // 34: pantherclaw.v1.RouteModeSetting
-	(*GatewayPackage)(nil),                       // 35: pantherclaw.v1.GatewayPackage
-	(*SealedCredential)(nil),                     // 36: pantherclaw.v1.SealedCredential
-	(*WatchContainmentRequest)(nil),              // 37: pantherclaw.v1.WatchContainmentRequest
-	(*WatchContainmentResponse)(nil),             // 38: pantherclaw.v1.WatchContainmentResponse
-	(*ConnectionStateEntry)(nil),                 // 39: pantherclaw.v1.ConnectionStateEntry
-	(*ReportCircuitRequest)(nil),                 // 40: pantherclaw.v1.ReportCircuitRequest
-	(*ReportCircuitResponse)(nil),                // 41: pantherclaw.v1.ReportCircuitResponse
-	(*ReportDriftRequest)(nil),                   // 42: pantherclaw.v1.ReportDriftRequest
-	(*ReportDriftResponse)(nil),                  // 43: pantherclaw.v1.ReportDriftResponse
-	(*ReportRevocationFailureRequest)(nil),       // 44: pantherclaw.v1.ReportRevocationFailureRequest
-	(*ReportRevocationFailureResponse)(nil),      // 45: pantherclaw.v1.ReportRevocationFailureResponse
-	(*ReportLocalRefusalRequest)(nil),            // 46: pantherclaw.v1.ReportLocalRefusalRequest
-	(*ReportLocalRefusalResponse)(nil),           // 47: pantherclaw.v1.ReportLocalRefusalResponse
-	(*ClaimVerificationsRequest)(nil),            // 48: pantherclaw.v1.ClaimVerificationsRequest
-	(*VerificationLease)(nil),                    // 49: pantherclaw.v1.VerificationLease
-	(*ClaimVerificationsResponse)(nil),           // 50: pantherclaw.v1.ClaimVerificationsResponse
-	(*MintTestActionTokensRequest)(nil),          // 51: pantherclaw.v1.MintTestActionTokensRequest
-	(*MintTestActionTokensResponse)(nil),         // 52: pantherclaw.v1.MintTestActionTokensResponse
-	(*ReportObservationRequest)(nil),             // 53: pantherclaw.v1.ReportObservationRequest
-	(*TargetLogItem)(nil),                        // 54: pantherclaw.v1.TargetLogItem
-	(*ReportObservationResponse)(nil),            // 55: pantherclaw.v1.ReportObservationResponse
-	(*ReportStatusRequest)(nil),                  // 56: pantherclaw.v1.ReportStatusRequest
-	(*ConnectionStatus)(nil),                     // 57: pantherclaw.v1.ConnectionStatus
-	(*ReportStatusResponse)(nil),                 // 58: pantherclaw.v1.ReportStatusResponse
-	(*MCPStateEntry)(nil),                        // 59: pantherclaw.v1.MCPStateEntry
-	(*PutMCPStateRequest)(nil),                   // 60: pantherclaw.v1.PutMCPStateRequest
-	(*PutMCPStateResponse)(nil),                  // 61: pantherclaw.v1.PutMCPStateResponse
-	(*GetMCPStateRequest)(nil),                   // 62: pantherclaw.v1.GetMCPStateRequest
-	(*GetMCPStateResponse)(nil),                  // 63: pantherclaw.v1.GetMCPStateResponse
-	(*DeleteMCPStateRequest)(nil),                // 64: pantherclaw.v1.DeleteMCPStateRequest
-	(*DeleteMCPStateResponse)(nil),               // 65: pantherclaw.v1.DeleteMCPStateResponse
-	(*ReportInventoryRequest)(nil),               // 66: pantherclaw.v1.ReportInventoryRequest
-	(*InventoryTool)(nil),                        // 67: pantherclaw.v1.InventoryTool
-	(*InventoryResource)(nil),                    // 68: pantherclaw.v1.InventoryResource
-	(*InventoryResourceTemplate)(nil),            // 69: pantherclaw.v1.InventoryResourceTemplate
-	(*ReportInventoryResponse)(nil),              // 70: pantherclaw.v1.ReportInventoryResponse
-	nil,                                          // 71: pantherclaw.v1.ReportObservationRequest.FieldsEntry
-	nil,                                          // 72: pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
-	(*timestamppb.Timestamp)(nil),                // 73: google.protobuf.Timestamp
-	(GatewayHosting)(0),                          // 74: pantherclaw.v1.GatewayHosting
-	(*ConnectorSpec)(nil),                        // 75: pantherclaw.v1.ConnectorSpec
-	(*GitHubInstallation)(nil),                   // 76: pantherclaw.v1.GitHubInstallation
-	(*PostgresConfig)(nil),                       // 77: pantherclaw.v1.PostgresConfig
-	(*A2AConfig)(nil),                            // 78: pantherclaw.v1.A2AConfig
-	(*ReportConnectorStateRequest)(nil),          // 79: pantherclaw.v1.ReportConnectorStateRequest
-	(*ReportFactsRequest)(nil),                   // 80: pantherclaw.v1.ReportFactsRequest
-	(*ReportConnectorStateResponse)(nil),         // 81: pantherclaw.v1.ReportConnectorStateResponse
-	(*ReportFactsResponse)(nil),                  // 82: pantherclaw.v1.ReportFactsResponse
+	(VersionCompliance)(0),                       // 5: pantherclaw.v1.VersionCompliance
+	(*Gateway)(nil),                              // 6: pantherclaw.v1.Gateway
+	(*GatewayReplica)(nil),                       // 7: pantherclaw.v1.GatewayReplica
+	(*GatewayCertificate)(nil),                   // 8: pantherclaw.v1.GatewayCertificate
+	(*BrokerKey)(nil),                            // 9: pantherclaw.v1.BrokerKey
+	(*CreateGatewayRequest)(nil),                 // 10: pantherclaw.v1.CreateGatewayRequest
+	(*CreateGatewayResponse)(nil),                // 11: pantherclaw.v1.CreateGatewayResponse
+	(*CreateGatewayEnrollmentTokenRequest)(nil),  // 12: pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
+	(*CreateGatewayEnrollmentTokenResponse)(nil), // 13: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
+	(*ListGatewaysRequest)(nil),                  // 14: pantherclaw.v1.ListGatewaysRequest
+	(*ListGatewaysResponse)(nil),                 // 15: pantherclaw.v1.ListGatewaysResponse
+	(*ListApproverKeysRequest)(nil),              // 16: pantherclaw.v1.ListApproverKeysRequest
+	(*ListApproverKeysResponse)(nil),             // 17: pantherclaw.v1.ListApproverKeysResponse
+	(*ApproverKey)(nil),                          // 18: pantherclaw.v1.ApproverKey
+	(*GetGatewayRequest)(nil),                    // 19: pantherclaw.v1.GetGatewayRequest
+	(*GetGatewayResponse)(nil),                   // 20: pantherclaw.v1.GetGatewayResponse
+	(*RevokeGatewayRequest)(nil),                 // 21: pantherclaw.v1.RevokeGatewayRequest
+	(*RevokeGatewayResponse)(nil),                // 22: pantherclaw.v1.RevokeGatewayResponse
+	(*RevokeGatewayCertificateRequest)(nil),      // 23: pantherclaw.v1.RevokeGatewayCertificateRequest
+	(*RevokeGatewayCertificateResponse)(nil),     // 24: pantherclaw.v1.RevokeGatewayCertificateResponse
+	(*GatewayServiceEnrollRequest)(nil),          // 25: pantherclaw.v1.GatewayServiceEnrollRequest
+	(*GatewayServiceEnrollResponse)(nil),         // 26: pantherclaw.v1.GatewayServiceEnrollResponse
+	(*RenewCertificateRequest)(nil),              // 27: pantherclaw.v1.RenewCertificateRequest
+	(*RenewCertificateResponse)(nil),             // 28: pantherclaw.v1.RenewCertificateResponse
+	(*RegisterBrokerKeyRequest)(nil),             // 29: pantherclaw.v1.RegisterBrokerKeyRequest
+	(*RegisterBrokerKeyResponse)(nil),            // 30: pantherclaw.v1.RegisterBrokerKeyResponse
+	(*GetConfigurationRequest)(nil),              // 31: pantherclaw.v1.GetConfigurationRequest
+	(*GetConfigurationResponse)(nil),             // 32: pantherclaw.v1.GetConfigurationResponse
+	(*GatewayCaptureProfile)(nil),                // 33: pantherclaw.v1.GatewayCaptureProfile
+	(*GatewayConnection)(nil),                    // 34: pantherclaw.v1.GatewayConnection
+	(*RouteModeSetting)(nil),                     // 35: pantherclaw.v1.RouteModeSetting
+	(*GatewayPackage)(nil),                       // 36: pantherclaw.v1.GatewayPackage
+	(*SealedCredential)(nil),                     // 37: pantherclaw.v1.SealedCredential
+	(*WatchContainmentRequest)(nil),              // 38: pantherclaw.v1.WatchContainmentRequest
+	(*WatchContainmentResponse)(nil),             // 39: pantherclaw.v1.WatchContainmentResponse
+	(*ConnectionStateEntry)(nil),                 // 40: pantherclaw.v1.ConnectionStateEntry
+	(*ReportCircuitRequest)(nil),                 // 41: pantherclaw.v1.ReportCircuitRequest
+	(*ReportCircuitResponse)(nil),                // 42: pantherclaw.v1.ReportCircuitResponse
+	(*ReportDriftRequest)(nil),                   // 43: pantherclaw.v1.ReportDriftRequest
+	(*ReportDriftResponse)(nil),                  // 44: pantherclaw.v1.ReportDriftResponse
+	(*ReportRevocationFailureRequest)(nil),       // 45: pantherclaw.v1.ReportRevocationFailureRequest
+	(*ReportRevocationFailureResponse)(nil),      // 46: pantherclaw.v1.ReportRevocationFailureResponse
+	(*ReportLocalRefusalRequest)(nil),            // 47: pantherclaw.v1.ReportLocalRefusalRequest
+	(*ReportLocalRefusalResponse)(nil),           // 48: pantherclaw.v1.ReportLocalRefusalResponse
+	(*ClaimVerificationsRequest)(nil),            // 49: pantherclaw.v1.ClaimVerificationsRequest
+	(*VerificationLease)(nil),                    // 50: pantherclaw.v1.VerificationLease
+	(*ClaimVerificationsResponse)(nil),           // 51: pantherclaw.v1.ClaimVerificationsResponse
+	(*MintTestActionTokensRequest)(nil),          // 52: pantherclaw.v1.MintTestActionTokensRequest
+	(*MintTestActionTokensResponse)(nil),         // 53: pantherclaw.v1.MintTestActionTokensResponse
+	(*ReportObservationRequest)(nil),             // 54: pantherclaw.v1.ReportObservationRequest
+	(*TargetLogItem)(nil),                        // 55: pantherclaw.v1.TargetLogItem
+	(*ReportObservationResponse)(nil),            // 56: pantherclaw.v1.ReportObservationResponse
+	(*ReportStatusRequest)(nil),                  // 57: pantherclaw.v1.ReportStatusRequest
+	(*ConnectionStatus)(nil),                     // 58: pantherclaw.v1.ConnectionStatus
+	(*ReportStatusResponse)(nil),                 // 59: pantherclaw.v1.ReportStatusResponse
+	(*MCPStateEntry)(nil),                        // 60: pantherclaw.v1.MCPStateEntry
+	(*PutMCPStateRequest)(nil),                   // 61: pantherclaw.v1.PutMCPStateRequest
+	(*PutMCPStateResponse)(nil),                  // 62: pantherclaw.v1.PutMCPStateResponse
+	(*GetMCPStateRequest)(nil),                   // 63: pantherclaw.v1.GetMCPStateRequest
+	(*GetMCPStateResponse)(nil),                  // 64: pantherclaw.v1.GetMCPStateResponse
+	(*DeleteMCPStateRequest)(nil),                // 65: pantherclaw.v1.DeleteMCPStateRequest
+	(*DeleteMCPStateResponse)(nil),               // 66: pantherclaw.v1.DeleteMCPStateResponse
+	(*ReportInventoryRequest)(nil),               // 67: pantherclaw.v1.ReportInventoryRequest
+	(*InventoryTool)(nil),                        // 68: pantherclaw.v1.InventoryTool
+	(*InventoryResource)(nil),                    // 69: pantherclaw.v1.InventoryResource
+	(*InventoryResourceTemplate)(nil),            // 70: pantherclaw.v1.InventoryResourceTemplate
+	(*ReportInventoryResponse)(nil),              // 71: pantherclaw.v1.ReportInventoryResponse
+	(*FleetPolicy)(nil),                          // 72: pantherclaw.v1.FleetPolicy
+	(*GetFleetPolicyRequest)(nil),                // 73: pantherclaw.v1.GetFleetPolicyRequest
+	(*GetFleetPolicyResponse)(nil),               // 74: pantherclaw.v1.GetFleetPolicyResponse
+	(*SetFleetPolicyRequest)(nil),                // 75: pantherclaw.v1.SetFleetPolicyRequest
+	(*SetFleetPolicyResponse)(nil),               // 76: pantherclaw.v1.SetFleetPolicyResponse
+	(*FleetReplica)(nil),                         // 77: pantherclaw.v1.FleetReplica
+	(*FleetGateway)(nil),                         // 78: pantherclaw.v1.FleetGateway
+	(*ListFleetRequest)(nil),                     // 79: pantherclaw.v1.ListFleetRequest
+	(*ListFleetResponse)(nil),                    // 80: pantherclaw.v1.ListFleetResponse
+	nil,                                          // 81: pantherclaw.v1.ReportObservationRequest.FieldsEntry
+	nil,                                          // 82: pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
+	(*timestamppb.Timestamp)(nil),                // 83: google.protobuf.Timestamp
+	(GatewayHosting)(0),                          // 84: pantherclaw.v1.GatewayHosting
+	(*ConnectorSpec)(nil),                        // 85: pantherclaw.v1.ConnectorSpec
+	(*GitHubInstallation)(nil),                   // 86: pantherclaw.v1.GitHubInstallation
+	(*PostgresConfig)(nil),                       // 87: pantherclaw.v1.PostgresConfig
+	(*A2AConfig)(nil),                            // 88: pantherclaw.v1.A2AConfig
+	(*ReportConnectorStateRequest)(nil),          // 89: pantherclaw.v1.ReportConnectorStateRequest
+	(*ReportFactsRequest)(nil),                   // 90: pantherclaw.v1.ReportFactsRequest
+	(*ReportConnectorStateResponse)(nil),         // 91: pantherclaw.v1.ReportConnectorStateResponse
+	(*ReportFactsResponse)(nil),                  // 92: pantherclaw.v1.ReportFactsResponse
 }
 var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Gateway.state:type_name -> pantherclaw.v1.GatewayState
-	73, // 1: pantherclaw.v1.Gateway.create_time:type_name -> google.protobuf.Timestamp
-	73, // 2: pantherclaw.v1.Gateway.revoke_time:type_name -> google.protobuf.Timestamp
-	74, // 3: pantherclaw.v1.Gateway.hosting:type_name -> pantherclaw.v1.GatewayHosting
-	6,  // 4: pantherclaw.v1.Gateway.replicas:type_name -> pantherclaw.v1.GatewayReplica
-	73, // 5: pantherclaw.v1.GatewayReplica.start_time:type_name -> google.protobuf.Timestamp
-	73, // 6: pantherclaw.v1.GatewayReplica.last_seen_time:type_name -> google.protobuf.Timestamp
+	83, // 1: pantherclaw.v1.Gateway.create_time:type_name -> google.protobuf.Timestamp
+	83, // 2: pantherclaw.v1.Gateway.revoke_time:type_name -> google.protobuf.Timestamp
+	84, // 3: pantherclaw.v1.Gateway.hosting:type_name -> pantherclaw.v1.GatewayHosting
+	7,  // 4: pantherclaw.v1.Gateway.replicas:type_name -> pantherclaw.v1.GatewayReplica
+	83, // 5: pantherclaw.v1.GatewayReplica.start_time:type_name -> google.protobuf.Timestamp
+	83, // 6: pantherclaw.v1.GatewayReplica.last_seen_time:type_name -> google.protobuf.Timestamp
 	1,  // 7: pantherclaw.v1.GatewayCertificate.state:type_name -> pantherclaw.v1.GatewayCertificateState
-	73, // 8: pantherclaw.v1.GatewayCertificate.not_before:type_name -> google.protobuf.Timestamp
-	73, // 9: pantherclaw.v1.GatewayCertificate.not_after:type_name -> google.protobuf.Timestamp
-	73, // 10: pantherclaw.v1.BrokerKey.register_time:type_name -> google.protobuf.Timestamp
-	5,  // 11: pantherclaw.v1.CreateGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
-	73, // 12: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
-	5,  // 13: pantherclaw.v1.ListGatewaysResponse.gateways:type_name -> pantherclaw.v1.Gateway
-	17, // 14: pantherclaw.v1.ListApproverKeysResponse.keys:type_name -> pantherclaw.v1.ApproverKey
-	73, // 15: pantherclaw.v1.ApproverKey.create_time:type_name -> google.protobuf.Timestamp
-	5,  // 16: pantherclaw.v1.GetGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
-	7,  // 17: pantherclaw.v1.GetGatewayResponse.certificates:type_name -> pantherclaw.v1.GatewayCertificate
-	8,  // 18: pantherclaw.v1.GetGatewayResponse.broker_keys:type_name -> pantherclaw.v1.BrokerKey
-	5,  // 19: pantherclaw.v1.RevokeGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
-	8,  // 20: pantherclaw.v1.RegisterBrokerKeyResponse.broker_key:type_name -> pantherclaw.v1.BrokerKey
-	33, // 21: pantherclaw.v1.GetConfigurationResponse.connections:type_name -> pantherclaw.v1.GatewayConnection
-	35, // 22: pantherclaw.v1.GetConfigurationResponse.packages:type_name -> pantherclaw.v1.GatewayPackage
-	36, // 23: pantherclaw.v1.GetConfigurationResponse.credentials:type_name -> pantherclaw.v1.SealedCredential
-	32, // 24: pantherclaw.v1.GetConfigurationResponse.capture_profiles:type_name -> pantherclaw.v1.GatewayCaptureProfile
-	73, // 25: pantherclaw.v1.GatewayCaptureProfile.expire_time:type_name -> google.protobuf.Timestamp
-	34, // 26: pantherclaw.v1.GatewayConnection.routes:type_name -> pantherclaw.v1.RouteModeSetting
-	75, // 27: pantherclaw.v1.GatewayConnection.connector:type_name -> pantherclaw.v1.ConnectorSpec
-	76, // 28: pantherclaw.v1.GatewayConnection.github:type_name -> pantherclaw.v1.GitHubInstallation
-	77, // 29: pantherclaw.v1.GatewayConnection.postgres:type_name -> pantherclaw.v1.PostgresConfig
-	78, // 30: pantherclaw.v1.GatewayConnection.a2a:type_name -> pantherclaw.v1.A2AConfig
+	83, // 8: pantherclaw.v1.GatewayCertificate.not_before:type_name -> google.protobuf.Timestamp
+	83, // 9: pantherclaw.v1.GatewayCertificate.not_after:type_name -> google.protobuf.Timestamp
+	83, // 10: pantherclaw.v1.BrokerKey.register_time:type_name -> google.protobuf.Timestamp
+	6,  // 11: pantherclaw.v1.CreateGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
+	83, // 12: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
+	6,  // 13: pantherclaw.v1.ListGatewaysResponse.gateways:type_name -> pantherclaw.v1.Gateway
+	18, // 14: pantherclaw.v1.ListApproverKeysResponse.keys:type_name -> pantherclaw.v1.ApproverKey
+	83, // 15: pantherclaw.v1.ApproverKey.create_time:type_name -> google.protobuf.Timestamp
+	6,  // 16: pantherclaw.v1.GetGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
+	8,  // 17: pantherclaw.v1.GetGatewayResponse.certificates:type_name -> pantherclaw.v1.GatewayCertificate
+	9,  // 18: pantherclaw.v1.GetGatewayResponse.broker_keys:type_name -> pantherclaw.v1.BrokerKey
+	6,  // 19: pantherclaw.v1.RevokeGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
+	9,  // 20: pantherclaw.v1.RegisterBrokerKeyResponse.broker_key:type_name -> pantherclaw.v1.BrokerKey
+	34, // 21: pantherclaw.v1.GetConfigurationResponse.connections:type_name -> pantherclaw.v1.GatewayConnection
+	36, // 22: pantherclaw.v1.GetConfigurationResponse.packages:type_name -> pantherclaw.v1.GatewayPackage
+	37, // 23: pantherclaw.v1.GetConfigurationResponse.credentials:type_name -> pantherclaw.v1.SealedCredential
+	33, // 24: pantherclaw.v1.GetConfigurationResponse.capture_profiles:type_name -> pantherclaw.v1.GatewayCaptureProfile
+	83, // 25: pantherclaw.v1.GatewayCaptureProfile.expire_time:type_name -> google.protobuf.Timestamp
+	35, // 26: pantherclaw.v1.GatewayConnection.routes:type_name -> pantherclaw.v1.RouteModeSetting
+	85, // 27: pantherclaw.v1.GatewayConnection.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	86, // 28: pantherclaw.v1.GatewayConnection.github:type_name -> pantherclaw.v1.GitHubInstallation
+	87, // 29: pantherclaw.v1.GatewayConnection.postgres:type_name -> pantherclaw.v1.PostgresConfig
+	88, // 30: pantherclaw.v1.GatewayConnection.a2a:type_name -> pantherclaw.v1.A2AConfig
 	2,  // 31: pantherclaw.v1.WatchContainmentResponse.kind:type_name -> pantherclaw.v1.ContainmentStateKind
-	39, // 32: pantherclaw.v1.WatchContainmentResponse.connections:type_name -> pantherclaw.v1.ConnectionStateEntry
-	73, // 33: pantherclaw.v1.WatchContainmentResponse.as_of:type_name -> google.protobuf.Timestamp
-	73, // 34: pantherclaw.v1.ReportRevocationFailureRequest.expire_time:type_name -> google.protobuf.Timestamp
-	49, // 35: pantherclaw.v1.ClaimVerificationsResponse.leases:type_name -> pantherclaw.v1.VerificationLease
-	71, // 36: pantherclaw.v1.ReportObservationRequest.fields:type_name -> pantherclaw.v1.ReportObservationRequest.FieldsEntry
-	54, // 37: pantherclaw.v1.ReportObservationRequest.items:type_name -> pantherclaw.v1.TargetLogItem
-	72, // 38: pantherclaw.v1.ReportObservationRequest.installation_permissions:type_name -> pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
-	73, // 39: pantherclaw.v1.ReportStatusRequest.start_time:type_name -> google.protobuf.Timestamp
-	57, // 40: pantherclaw.v1.ReportStatusRequest.connections:type_name -> pantherclaw.v1.ConnectionStatus
+	40, // 32: pantherclaw.v1.WatchContainmentResponse.connections:type_name -> pantherclaw.v1.ConnectionStateEntry
+	83, // 33: pantherclaw.v1.WatchContainmentResponse.as_of:type_name -> google.protobuf.Timestamp
+	83, // 34: pantherclaw.v1.ReportRevocationFailureRequest.expire_time:type_name -> google.protobuf.Timestamp
+	50, // 35: pantherclaw.v1.ClaimVerificationsResponse.leases:type_name -> pantherclaw.v1.VerificationLease
+	81, // 36: pantherclaw.v1.ReportObservationRequest.fields:type_name -> pantherclaw.v1.ReportObservationRequest.FieldsEntry
+	55, // 37: pantherclaw.v1.ReportObservationRequest.items:type_name -> pantherclaw.v1.TargetLogItem
+	82, // 38: pantherclaw.v1.ReportObservationRequest.installation_permissions:type_name -> pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntry
+	83, // 39: pantherclaw.v1.ReportStatusRequest.start_time:type_name -> google.protobuf.Timestamp
+	58, // 40: pantherclaw.v1.ReportStatusRequest.connections:type_name -> pantherclaw.v1.ConnectionStatus
 	3,  // 41: pantherclaw.v1.ConnectionStatus.state:type_name -> pantherclaw.v1.ConnectionServingState
-	73, // 42: pantherclaw.v1.ConnectionStatus.last_drift_check_time:type_name -> google.protobuf.Timestamp
+	83, // 42: pantherclaw.v1.ConnectionStatus.last_drift_check_time:type_name -> google.protobuf.Timestamp
 	4,  // 43: pantherclaw.v1.MCPStateEntry.kind:type_name -> pantherclaw.v1.MCPStateKind
-	73, // 44: pantherclaw.v1.MCPStateEntry.expire_time:type_name -> google.protobuf.Timestamp
-	73, // 45: pantherclaw.v1.MCPStateEntry.update_time:type_name -> google.protobuf.Timestamp
-	59, // 46: pantherclaw.v1.PutMCPStateRequest.entry:type_name -> pantherclaw.v1.MCPStateEntry
+	83, // 44: pantherclaw.v1.MCPStateEntry.expire_time:type_name -> google.protobuf.Timestamp
+	83, // 45: pantherclaw.v1.MCPStateEntry.update_time:type_name -> google.protobuf.Timestamp
+	60, // 46: pantherclaw.v1.PutMCPStateRequest.entry:type_name -> pantherclaw.v1.MCPStateEntry
 	4,  // 47: pantherclaw.v1.GetMCPStateRequest.kind:type_name -> pantherclaw.v1.MCPStateKind
-	59, // 48: pantherclaw.v1.GetMCPStateResponse.entry:type_name -> pantherclaw.v1.MCPStateEntry
+	60, // 48: pantherclaw.v1.GetMCPStateResponse.entry:type_name -> pantherclaw.v1.MCPStateEntry
 	4,  // 49: pantherclaw.v1.DeleteMCPStateRequest.kind:type_name -> pantherclaw.v1.MCPStateKind
-	67, // 50: pantherclaw.v1.ReportInventoryRequest.tools:type_name -> pantherclaw.v1.InventoryTool
-	68, // 51: pantherclaw.v1.ReportInventoryRequest.resources:type_name -> pantherclaw.v1.InventoryResource
-	69, // 52: pantherclaw.v1.ReportInventoryRequest.resource_templates:type_name -> pantherclaw.v1.InventoryResourceTemplate
-	9,  // 53: pantherclaw.v1.GatewayAdminService.CreateGateway:input_type -> pantherclaw.v1.CreateGatewayRequest
-	11, // 54: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:input_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
-	13, // 55: pantherclaw.v1.GatewayAdminService.ListGateways:input_type -> pantherclaw.v1.ListGatewaysRequest
-	18, // 56: pantherclaw.v1.GatewayAdminService.GetGateway:input_type -> pantherclaw.v1.GetGatewayRequest
-	20, // 57: pantherclaw.v1.GatewayAdminService.RevokeGateway:input_type -> pantherclaw.v1.RevokeGatewayRequest
-	22, // 58: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:input_type -> pantherclaw.v1.RevokeGatewayCertificateRequest
-	15, // 59: pantherclaw.v1.GatewayAdminService.ListApproverKeys:input_type -> pantherclaw.v1.ListApproverKeysRequest
-	24, // 60: pantherclaw.v1.GatewayService.Enroll:input_type -> pantherclaw.v1.GatewayServiceEnrollRequest
-	26, // 61: pantherclaw.v1.GatewayService.RenewCertificate:input_type -> pantherclaw.v1.RenewCertificateRequest
-	28, // 62: pantherclaw.v1.GatewayService.RegisterBrokerKey:input_type -> pantherclaw.v1.RegisterBrokerKeyRequest
-	30, // 63: pantherclaw.v1.GatewayService.GetConfiguration:input_type -> pantherclaw.v1.GetConfigurationRequest
-	37, // 64: pantherclaw.v1.GatewayService.WatchContainment:input_type -> pantherclaw.v1.WatchContainmentRequest
-	79, // 65: pantherclaw.v1.GatewayService.ReportConnectorState:input_type -> pantherclaw.v1.ReportConnectorStateRequest
-	40, // 66: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
-	42, // 67: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
-	48, // 68: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
-	51, // 69: pantherclaw.v1.GatewayService.MintTestActionTokens:input_type -> pantherclaw.v1.MintTestActionTokensRequest
-	53, // 70: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
-	80, // 71: pantherclaw.v1.GatewayService.ReportFacts:input_type -> pantherclaw.v1.ReportFactsRequest
-	44, // 72: pantherclaw.v1.GatewayService.ReportRevocationFailure:input_type -> pantherclaw.v1.ReportRevocationFailureRequest
-	46, // 73: pantherclaw.v1.GatewayService.ReportLocalRefusal:input_type -> pantherclaw.v1.ReportLocalRefusalRequest
-	56, // 74: pantherclaw.v1.GatewayService.ReportStatus:input_type -> pantherclaw.v1.ReportStatusRequest
-	60, // 75: pantherclaw.v1.GatewayService.PutMCPState:input_type -> pantherclaw.v1.PutMCPStateRequest
-	62, // 76: pantherclaw.v1.GatewayService.GetMCPState:input_type -> pantherclaw.v1.GetMCPStateRequest
-	64, // 77: pantherclaw.v1.GatewayService.DeleteMCPState:input_type -> pantherclaw.v1.DeleteMCPStateRequest
-	66, // 78: pantherclaw.v1.GatewayService.ReportInventory:input_type -> pantherclaw.v1.ReportInventoryRequest
-	10, // 79: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
-	12, // 80: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
-	14, // 81: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
-	19, // 82: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
-	21, // 83: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
-	23, // 84: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
-	16, // 85: pantherclaw.v1.GatewayAdminService.ListApproverKeys:output_type -> pantherclaw.v1.ListApproverKeysResponse
-	25, // 86: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
-	27, // 87: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
-	29, // 88: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
-	31, // 89: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
-	38, // 90: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
-	81, // 91: pantherclaw.v1.GatewayService.ReportConnectorState:output_type -> pantherclaw.v1.ReportConnectorStateResponse
-	41, // 92: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
-	43, // 93: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
-	50, // 94: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
-	52, // 95: pantherclaw.v1.GatewayService.MintTestActionTokens:output_type -> pantherclaw.v1.MintTestActionTokensResponse
-	55, // 96: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
-	82, // 97: pantherclaw.v1.GatewayService.ReportFacts:output_type -> pantherclaw.v1.ReportFactsResponse
-	45, // 98: pantherclaw.v1.GatewayService.ReportRevocationFailure:output_type -> pantherclaw.v1.ReportRevocationFailureResponse
-	47, // 99: pantherclaw.v1.GatewayService.ReportLocalRefusal:output_type -> pantherclaw.v1.ReportLocalRefusalResponse
-	58, // 100: pantherclaw.v1.GatewayService.ReportStatus:output_type -> pantherclaw.v1.ReportStatusResponse
-	61, // 101: pantherclaw.v1.GatewayService.PutMCPState:output_type -> pantherclaw.v1.PutMCPStateResponse
-	63, // 102: pantherclaw.v1.GatewayService.GetMCPState:output_type -> pantherclaw.v1.GetMCPStateResponse
-	65, // 103: pantherclaw.v1.GatewayService.DeleteMCPState:output_type -> pantherclaw.v1.DeleteMCPStateResponse
-	70, // 104: pantherclaw.v1.GatewayService.ReportInventory:output_type -> pantherclaw.v1.ReportInventoryResponse
-	79, // [79:105] is the sub-list for method output_type
-	53, // [53:79] is the sub-list for method input_type
-	53, // [53:53] is the sub-list for extension type_name
-	53, // [53:53] is the sub-list for extension extendee
-	0,  // [0:53] is the sub-list for field type_name
+	68, // 50: pantherclaw.v1.ReportInventoryRequest.tools:type_name -> pantherclaw.v1.InventoryTool
+	69, // 51: pantherclaw.v1.ReportInventoryRequest.resources:type_name -> pantherclaw.v1.InventoryResource
+	70, // 52: pantherclaw.v1.ReportInventoryRequest.resource_templates:type_name -> pantherclaw.v1.InventoryResourceTemplate
+	83, // 53: pantherclaw.v1.FleetPolicy.update_time:type_name -> google.protobuf.Timestamp
+	72, // 54: pantherclaw.v1.GetFleetPolicyResponse.policy:type_name -> pantherclaw.v1.FleetPolicy
+	72, // 55: pantherclaw.v1.SetFleetPolicyResponse.policy:type_name -> pantherclaw.v1.FleetPolicy
+	7,  // 56: pantherclaw.v1.FleetReplica.replica:type_name -> pantherclaw.v1.GatewayReplica
+	5,  // 57: pantherclaw.v1.FleetReplica.compliance:type_name -> pantherclaw.v1.VersionCompliance
+	83, // 58: pantherclaw.v1.FleetGateway.silent_since_time:type_name -> google.protobuf.Timestamp
+	77, // 59: pantherclaw.v1.FleetGateway.replicas:type_name -> pantherclaw.v1.FleetReplica
+	72, // 60: pantherclaw.v1.ListFleetResponse.policy:type_name -> pantherclaw.v1.FleetPolicy
+	78, // 61: pantherclaw.v1.ListFleetResponse.gateways:type_name -> pantherclaw.v1.FleetGateway
+	10, // 62: pantherclaw.v1.GatewayAdminService.CreateGateway:input_type -> pantherclaw.v1.CreateGatewayRequest
+	12, // 63: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:input_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
+	14, // 64: pantherclaw.v1.GatewayAdminService.ListGateways:input_type -> pantherclaw.v1.ListGatewaysRequest
+	19, // 65: pantherclaw.v1.GatewayAdminService.GetGateway:input_type -> pantherclaw.v1.GetGatewayRequest
+	21, // 66: pantherclaw.v1.GatewayAdminService.RevokeGateway:input_type -> pantherclaw.v1.RevokeGatewayRequest
+	23, // 67: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:input_type -> pantherclaw.v1.RevokeGatewayCertificateRequest
+	16, // 68: pantherclaw.v1.GatewayAdminService.ListApproverKeys:input_type -> pantherclaw.v1.ListApproverKeysRequest
+	73, // 69: pantherclaw.v1.GatewayAdminService.GetFleetPolicy:input_type -> pantherclaw.v1.GetFleetPolicyRequest
+	75, // 70: pantherclaw.v1.GatewayAdminService.SetFleetPolicy:input_type -> pantherclaw.v1.SetFleetPolicyRequest
+	79, // 71: pantherclaw.v1.GatewayAdminService.ListFleet:input_type -> pantherclaw.v1.ListFleetRequest
+	25, // 72: pantherclaw.v1.GatewayService.Enroll:input_type -> pantherclaw.v1.GatewayServiceEnrollRequest
+	27, // 73: pantherclaw.v1.GatewayService.RenewCertificate:input_type -> pantherclaw.v1.RenewCertificateRequest
+	29, // 74: pantherclaw.v1.GatewayService.RegisterBrokerKey:input_type -> pantherclaw.v1.RegisterBrokerKeyRequest
+	31, // 75: pantherclaw.v1.GatewayService.GetConfiguration:input_type -> pantherclaw.v1.GetConfigurationRequest
+	38, // 76: pantherclaw.v1.GatewayService.WatchContainment:input_type -> pantherclaw.v1.WatchContainmentRequest
+	89, // 77: pantherclaw.v1.GatewayService.ReportConnectorState:input_type -> pantherclaw.v1.ReportConnectorStateRequest
+	41, // 78: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
+	43, // 79: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
+	49, // 80: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
+	52, // 81: pantherclaw.v1.GatewayService.MintTestActionTokens:input_type -> pantherclaw.v1.MintTestActionTokensRequest
+	54, // 82: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
+	90, // 83: pantherclaw.v1.GatewayService.ReportFacts:input_type -> pantherclaw.v1.ReportFactsRequest
+	45, // 84: pantherclaw.v1.GatewayService.ReportRevocationFailure:input_type -> pantherclaw.v1.ReportRevocationFailureRequest
+	47, // 85: pantherclaw.v1.GatewayService.ReportLocalRefusal:input_type -> pantherclaw.v1.ReportLocalRefusalRequest
+	57, // 86: pantherclaw.v1.GatewayService.ReportStatus:input_type -> pantherclaw.v1.ReportStatusRequest
+	61, // 87: pantherclaw.v1.GatewayService.PutMCPState:input_type -> pantherclaw.v1.PutMCPStateRequest
+	63, // 88: pantherclaw.v1.GatewayService.GetMCPState:input_type -> pantherclaw.v1.GetMCPStateRequest
+	65, // 89: pantherclaw.v1.GatewayService.DeleteMCPState:input_type -> pantherclaw.v1.DeleteMCPStateRequest
+	67, // 90: pantherclaw.v1.GatewayService.ReportInventory:input_type -> pantherclaw.v1.ReportInventoryRequest
+	11, // 91: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
+	13, // 92: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
+	15, // 93: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
+	20, // 94: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
+	22, // 95: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
+	24, // 96: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
+	17, // 97: pantherclaw.v1.GatewayAdminService.ListApproverKeys:output_type -> pantherclaw.v1.ListApproverKeysResponse
+	74, // 98: pantherclaw.v1.GatewayAdminService.GetFleetPolicy:output_type -> pantherclaw.v1.GetFleetPolicyResponse
+	76, // 99: pantherclaw.v1.GatewayAdminService.SetFleetPolicy:output_type -> pantherclaw.v1.SetFleetPolicyResponse
+	80, // 100: pantherclaw.v1.GatewayAdminService.ListFleet:output_type -> pantherclaw.v1.ListFleetResponse
+	26, // 101: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
+	28, // 102: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
+	30, // 103: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
+	32, // 104: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
+	39, // 105: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
+	91, // 106: pantherclaw.v1.GatewayService.ReportConnectorState:output_type -> pantherclaw.v1.ReportConnectorStateResponse
+	42, // 107: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
+	44, // 108: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
+	51, // 109: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
+	53, // 110: pantherclaw.v1.GatewayService.MintTestActionTokens:output_type -> pantherclaw.v1.MintTestActionTokensResponse
+	56, // 111: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
+	92, // 112: pantherclaw.v1.GatewayService.ReportFacts:output_type -> pantherclaw.v1.ReportFactsResponse
+	46, // 113: pantherclaw.v1.GatewayService.ReportRevocationFailure:output_type -> pantherclaw.v1.ReportRevocationFailureResponse
+	48, // 114: pantherclaw.v1.GatewayService.ReportLocalRefusal:output_type -> pantherclaw.v1.ReportLocalRefusalResponse
+	59, // 115: pantherclaw.v1.GatewayService.ReportStatus:output_type -> pantherclaw.v1.ReportStatusResponse
+	62, // 116: pantherclaw.v1.GatewayService.PutMCPState:output_type -> pantherclaw.v1.PutMCPStateResponse
+	64, // 117: pantherclaw.v1.GatewayService.GetMCPState:output_type -> pantherclaw.v1.GetMCPStateResponse
+	66, // 118: pantherclaw.v1.GatewayService.DeleteMCPState:output_type -> pantherclaw.v1.DeleteMCPStateResponse
+	71, // 119: pantherclaw.v1.GatewayService.ReportInventory:output_type -> pantherclaw.v1.ReportInventoryResponse
+	91, // [91:120] is the sub-list for method output_type
+	62, // [62:91] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_gateways_proto_init() }
@@ -5758,8 +6443,8 @@ func file_pantherclaw_v1_gateways_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_gateways_proto_rawDesc), len(file_pantherclaw_v1_gateways_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   68,
+			NumEnums:      6,
+			NumMessages:   77,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

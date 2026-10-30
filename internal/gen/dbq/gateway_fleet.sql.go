@@ -37,6 +37,107 @@ func (q *Queries) GetGatewayFleetPolicy(ctx context.Context, orgID ids.OrgID) (P
 	return i, err
 }
 
+const listActiveGatewayIDs = `-- name: ListActiveGatewayIDs :many
+SELECT id FROM pc.gateways
+WHERE org_id = $1 AND state = 'ACTIVE'
+  AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
+ORDER BY id
+LIMIT $3
+`
+
+func (q *Queries) ListActiveGatewayIDs(ctx context.Context, orgID ids.OrgID, afterID ids.UUID, maxRows int32) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, listActiveGatewayIDs, orgID, afterID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewayAlertStates = `-- name: ListGatewayAlertStates :many
+
+SELECT org_id, gateway_id, silent_since, silent_notified_at, below_minimum_version, below_minimum_notified_at FROM pc.gateway_alert_state
+WHERE org_id = $1 AND gateway_id = ANY($2::uuid[])
+`
+
+// Gateway alert state (00217).
+func (q *Queries) ListGatewayAlertStates(ctx context.Context, orgID ids.OrgID, gatewayIds []ids.UUID) ([]PcGatewayAlertState, error) {
+	rows, err := q.db.Query(ctx, listGatewayAlertStates, orgID, gatewayIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcGatewayAlertState{}
+	for rows.Next() {
+		var i PcGatewayAlertState
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.GatewayID,
+			&i.SilentSince,
+			&i.SilentNotifiedAt,
+			&i.BelowMinimumVersion,
+			&i.BelowMinimumNotifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockGatewayAlertState = `-- name: LockGatewayAlertState :exec
+SELECT pg_advisory_xact_lock(hashtextextended('pc.gateway_alert_state:' || $1::uuid::text, 0))
+`
+
+func (q *Queries) LockGatewayAlertState(ctx context.Context, orgID ids.UUID) error {
+	_, err := q.db.Exec(ctx, lockGatewayAlertState, orgID)
+	return err
+}
+
+const upsertGatewayAlertState = `-- name: UpsertGatewayAlertState :exec
+INSERT INTO pc.gateway_alert_state (org_id, gateway_id, silent_since, silent_notified_at, below_minimum_version, below_minimum_notified_at)
+VALUES ($1, $2, $3, $4,
+        $5, $6)
+ON CONFLICT (org_id, gateway_id) DO UPDATE
+SET silent_since = EXCLUDED.silent_since, silent_notified_at = EXCLUDED.silent_notified_at,
+    below_minimum_version = EXCLUDED.below_minimum_version, below_minimum_notified_at = EXCLUDED.below_minimum_notified_at
+`
+
+type UpsertGatewayAlertStateParams struct {
+	OrgID                  ids.OrgID
+	GatewayID              ids.UUID
+	SilentSince            *time.Time
+	SilentNotifiedAt       *time.Time
+	BelowMinimumVersion    *string
+	BelowMinimumNotifiedAt *time.Time
+}
+
+func (q *Queries) UpsertGatewayAlertState(ctx context.Context, arg UpsertGatewayAlertStateParams) error {
+	_, err := q.db.Exec(ctx, upsertGatewayAlertState,
+		arg.OrgID,
+		arg.GatewayID,
+		arg.SilentSince,
+		arg.SilentNotifiedAt,
+		arg.BelowMinimumVersion,
+		arg.BelowMinimumNotifiedAt,
+	)
+	return err
+}
+
 const upsertGatewayFleetPolicy = `-- name: UpsertGatewayFleetPolicy :one
 INSERT INTO pc.gateway_fleet_policy (org_id, minimum_version, silence_after_seconds, updated_by, updated_at)
 VALUES ($1, $2, $3, $4, $5)

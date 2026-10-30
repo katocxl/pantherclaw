@@ -41,3 +41,31 @@ func TestTenancy_gateway_fleet_policy(t *testing.T) {
 	b.want(t, "23514", "a threshold above a day", `INSERT INTO pc.gateway_fleet_policy (org_id, silence_after_seconds, updated_by)
 		VALUES ($1, 86401, 'test')`, b.org)
 }
+
+const m18Alert = `INSERT INTO pc.gateway_alert_state (org_id, gateway_id, silent_since, silent_notified_at)
+	VALUES ($1, $2, now() - interval '10 minutes', now())`
+
+// TestTenancy_gateway_alert_state: another org sees no alert state of an
+// org's gateway, changes none, and cannot write any for it; a silence and
+// its notice are set together.
+// Covers: PN-010.6
+func TestTenancy_gateway_alert_state(t *testing.T) {
+	d := dbtest.New(t)
+	p := d.AppPool(t)
+	a, b := newM5Fixture(t, p), newM5Fixture(t, p)
+	gw := m15Gateway(t, a)
+	a.mustExec(t, m18Alert, a.org, gw)
+	if n := m10Count(t, p, b.org, "SELECT count(*) FROM pc.gateway_alert_state"); n != 0 {
+		t.Fatalf("another org sees %d alert states", n)
+	}
+	b.mustExec(t, "UPDATE pc.gateway_alert_state SET silent_since = NULL, silent_notified_at = NULL")
+	if n := m10Count(t, p, a.org, "SELECT count(*) FROM pc.gateway_alert_state WHERE silent_since IS NOT NULL"); n != 1 {
+		t.Fatalf("another org changed the alert state: %d left", n)
+	}
+	// The org write guard (00181) refuses it before row security would.
+	b.want(t, "23514", "an alert state in another org's name", m18Alert, a.org, gw)
+	b.want(t, "23503", "an alert state of another org's gateway", m18Alert, b.org, gw)
+	other := m15Gateway(t, b)
+	b.want(t, "23514", "a silence without its notice", `INSERT INTO pc.gateway_alert_state (org_id, gateway_id, silent_since)
+		VALUES ($1, $2, now())`, b.org, other)
+}

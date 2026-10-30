@@ -1959,6 +1959,15 @@ type PcGateway struct {
 	RevokeReason  *string
 }
 
+type PcGatewayAlertState struct {
+	OrgID                  ids.OrgID
+	GatewayID              ids.UUID
+	SilentSince            *time.Time
+	SilentNotifiedAt       *time.Time
+	BelowMinimumVersion    *string
+	BelowMinimumNotifiedAt *time.Time
+}
+
 type PcGatewayCert struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID
