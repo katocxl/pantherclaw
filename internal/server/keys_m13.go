@@ -99,7 +99,7 @@ func cmdRotateSigning(ctx context.Context, r rotation, args []string, stdout, st
 		return err
 	}
 	defer pool.Close()
-	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	kp, err := newKeyProvider(cfg)
 	if err != nil {
 		return err
 	}

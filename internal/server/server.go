@@ -278,7 +278,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	workers := newWorkerHeartbeat(cfg.Role)
 
-	kp, err := newKeyProvider(cfg)
+	kp, err := newCheckedKeyProvider(ctx, cfg, pool)
 	if err != nil {
 		return err
 	}

@@ -15,14 +15,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -132,12 +134,12 @@ func baoBaseURL(addr string) (*url.URL, error) {
 	return u, nil
 }
 
+// loopbackHost accepts only a literal loopback IP (127.0.0.0/8, ::1). A
+// name such as localhost is resolved by DNS or a hosts file, so it needs
+// TLS like any other host.
 func loopbackHost(h string) bool {
-	if h == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(h)
-	return ip != nil && ip.IsLoopback()
+	ip, err := netip.ParseAddr(h)
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 // TransitClient calls one OpenBao Transit key.
@@ -152,6 +154,9 @@ type TransitClient struct {
 	mu      sync.Mutex
 	token   pclog.Secret[string]
 	expires time.Time // zero: no expiry known (token file)
+	// login shares one token read or AppRole login among concurrent
+	// callers; c.mu is never held across it.
+	login singleflight.Group
 }
 
 // NewTransitClient builds a client. It reads no secret until the first call.
@@ -318,21 +323,43 @@ func (c *TransitClient) dropToken() {
 // in with AppRole when there is none or it is about to expire.
 func (c *TransitClient) currentToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if t := c.token.Reveal(); t != "" && (c.expires.IsZero() || time.Until(c.expires) > 30*time.Second) {
+		c.mu.Unlock()
 		return t, nil
 	}
+	c.mu.Unlock()
+	// One login for every concurrent caller, detached from the first
+	// caller's cancellation; post still bounds it by the call timeout.
+	v, err, _ := c.login.Do("token", func() (any, error) {
+		tok, expires, err := c.fetchToken(context.WithoutCancel(ctx))
+		if err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		c.token, c.expires = tok, expires
+		c.mu.Unlock()
+		return tok, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return v.(pclog.Secret[string]).Reveal(), nil //nolint:forcetypeassert // the only value Do returns
+}
+
+// fetchToken reads the token file or logs in with AppRole.
+func (c *TransitClient) fetchToken(ctx context.Context) (pclog.Secret[string], time.Time, error) {
+	var none pclog.Secret[string]
 	switch c.auth.Kind {
 	case AuthToken:
 		s, err := config.ReadSecretFile(c.auth.TokenFile)
 		if err != nil {
-			return "", fmt.Errorf("keys: openbao token_file: %w", err)
+			return none, time.Time{}, fmt.Errorf("keys: openbao token_file: %w", err)
 		}
-		c.token, c.expires = pclog.NewSecret(string(bytes.TrimSpace(s.Reveal()))), time.Time{}
+		return pclog.NewSecret(string(bytes.TrimSpace(s.Reveal()))), time.Time{}, nil
 	case AuthAppRole:
 		s, err := config.ReadSecretFile(c.auth.SecretIDFile)
 		if err != nil {
-			return "", fmt.Errorf("keys: openbao secret_id_file: %w", err)
+			return none, time.Time{}, fmt.Errorf("keys: openbao secret_id_file: %w", err)
 		}
 		var out struct {
 			Auth struct {
@@ -342,18 +369,18 @@ func (c *TransitClient) currentToken(ctx context.Context) (string, error) {
 		}
 		in := map[string]string{"role_id": c.auth.RoleID, "secret_id": string(bytes.TrimSpace(s.Reveal()))}
 		if err := c.post(ctx, "/v1/auth/"+c.auth.Mount+"/login", "", in, &out); err != nil {
-			return "", err
+			return none, time.Time{}, err
 		}
 		if out.Auth.ClientToken == "" {
-			return "", fmt.Errorf("%w: AppRole login returned no token", ErrKeyServiceUnavailable)
+			return none, time.Time{}, fmt.Errorf("%w: AppRole login returned no token", ErrKeyServiceUnavailable)
 		}
-		c.token = pclog.NewSecret(out.Auth.ClientToken)
-		c.expires = time.Time{}
+		var expires time.Time
 		if out.Auth.LeaseDuration > 0 {
-			c.expires = time.Now().Add(time.Duration(out.Auth.LeaseDuration) * time.Second)
+			expires = time.Now().Add(time.Duration(out.Auth.LeaseDuration) * time.Second)
 		}
+		return pclog.NewSecret(out.Auth.ClientToken), expires, nil
 	}
-	return c.token.Reveal(), nil
+	return none, time.Time{}, fmt.Errorf("keys: unknown openbao auth kind %q", c.auth.Kind)
 }
 
 // OpenBaoProvider is a KeyProvider over one Transit key. Its wrapped values
