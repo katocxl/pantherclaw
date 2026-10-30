@@ -677,7 +677,15 @@ func TestD91_ARemediationDuringAGenerationLeavesTheSuggestionStale(t *testing.T)
 // Covers: F185
 func TestD91_TheGenerationJobCommitsAndRollsBackWithTheReconciliation(t *testing.T) {
 	ctx := context.Background()
-	o := world(t)
+	// Fresh orgs with no snapshot yet: the first run is due and opens the
+	// findings.
+	fresh := func() *exposuretest.Org {
+		o := exposuretest.New(t)
+		o.Grant(t, o.Agent, 0, "40 days", "payments.*")
+		o.Grant(t, o.Other, 0, "40 days", "payments.*")
+		return o
+	}
+	o := fresh()
 	svc := &recompute.Service{Pool: o.P, Ents: edition(billing.Business), Findings: &app.Queue{Jobs: insertClient(t, o)}}
 	res, err := svc.Run(ctx, o.Org)
 	if err != nil || !res.Recomputed || res.Posture == nil {
@@ -689,18 +697,31 @@ func TestD91_TheGenerationJobCommitsAndRollsBackWithTheReconciliation(t *testing
 		}
 	}
 
-	rolled := world(t)
+	rolled := fresh()
 	svc = &recompute.Service{
 		Pool: rolled.P, Ents: edition(billing.Business), Findings: failAfter{&app.Queue{Jobs: insertClient(t, rolled)}},
 	}
 	if _, err := svc.Run(ctx, rolled.Org); !errors.Is(err, errHook) {
 		t.Fatalf("run: %v", err)
 	}
-	for agent, f := range unused(t, rolled) {
-		if n := jobsFor(t, rolled, f.ID); n != 0 {
-			t.Fatalf("agent %s: %d generation jobs after a rollback", agent, n)
-		}
+	if c := count(t, rolled, `SELECT count(*) FROM pc.posture_findings`); c != 0 {
+		t.Fatalf("%d findings after a rollback", c)
 	}
+	if n := orgJobs(t, o); n != 2 {
+		t.Fatalf("committed org's generation jobs: %d", n)
+	}
+	if n := orgJobs(t, rolled); n != 0 {
+		t.Fatalf("%d generation jobs after a rollback", n)
+	}
+}
+
+// orgJobs counts the committed generation jobs of an org.
+func orgJobs(t *testing.T, o *exposuretest.Org) int {
+	t.Helper()
+	var n int
+	o.D.AdminQueryRow(t, `SELECT count(*) FROM pc.river_job WHERE kind = 'suggestions.generate' AND args->>'org' = $1`,
+		[]any{o.Org.String()}, &n)
+	return n
 }
 
 var errHook = errors.New("hook failed after enqueueing")
