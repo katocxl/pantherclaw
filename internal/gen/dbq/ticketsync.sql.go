@@ -142,6 +142,37 @@ func (q *Queries) ExternalRefsOfIncident(ctx context.Context, orgID ids.OrgID, i
 	return items, nil
 }
 
+const failEndedTicketOutbound = `-- name: FailEndedTicketOutbound :many
+UPDATE pc.ticket_outbound o
+SET state = 'FAILED', result_code = 'not_reported', finished_at = now()
+FROM pc.verifications v
+WHERE o.org_id = $1 AND v.org_id = o.org_id AND v.id = o.verification_id AND o.state = 'PENDING' AND v.state = 'EXPIRED'
+RETURNING o.id
+`
+
+// FailEndedTicketOutbound ends the rows whose task expired with no report:
+// never leased, or leased by a gateway that did not answer. The write may
+// have happened; a person looks at the ticket system.
+func (q *Queries) FailEndedTicketOutbound(ctx context.Context, orgID ids.OrgID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, failEndedTicketOutbound, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const finishTicketOutbound = `-- name: FinishTicketOutbound :execrows
 UPDATE pc.ticket_outbound SET state = $1, result_code = $2, finished_at = now()
 WHERE org_id = $3 AND id = $4 AND state = 'PENDING'
@@ -630,4 +661,19 @@ func (q *Queries) TicketOutboundOf(ctx context.Context, orgID ids.OrgID, caseID 
 		return nil, err
 	}
 	return items, nil
+}
+
+const waitingTicketOpen = `-- name: WaitingTicketOpen :one
+SELECT id FROM pc.ticket_outbound
+WHERE org_id = $1 AND action = 'CREATE' AND state = 'PENDING'
+  AND (case_id = $2 OR incident_id = $3)
+LIMIT 1
+`
+
+// The open still waiting for the case's or incident's ticket.
+func (q *Queries) WaitingTicketOpen(ctx context.Context, orgID ids.OrgID, caseID *ids.UUID, incidentID *ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, waitingTicketOpen, orgID, caseID, incidentID)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
 }

@@ -172,9 +172,11 @@ CREATE TABLE pc.teams_app_channels (
     -- The Bot Framework service URL the bot posts to.
     service_url          text        NOT NULL CHECK (char_length(service_url) BETWEEN 9 AND 512 AND service_url LIKE 'https://%'),
     state                text        NOT NULL DEFAULT 'PENDING_ACTIVATION' CHECK (state IN ('PENDING_ACTIVATION', 'ACTIVE')),
-    -- What Teams reported when the channel was checked: standard, private
-    -- or shared. Only a standard channel is ever ACTIVE.
-    membership_type      text        CHECK (membership_type IS NULL OR membership_type IN ('standard', 'private', 'shared')),
+    -- What the channel's members showed when they were last read: internal
+    -- (all of the tenant, none a guest) or shared. Teams' own channel type
+    -- is not read: Microsoft advises against relying on it. Only an
+    -- internal channel is ever ACTIVE.
+    membership_type      text        CHECK (membership_type IS NULL OR membership_type IN ('internal', 'shared')),
     created_at           timestamptz NOT NULL DEFAULT now(),
     activated_by         uuid,
     activated_credential uuid,
@@ -191,7 +193,7 @@ CREATE TABLE pc.teams_app_channels (
     CHECK ((activated_at IS NULL) = (activated_by IS NULL) AND (activated_by IS NULL) = (activated_credential IS NULL)),
     CHECK ((secret_replaced_at IS NULL) = (secret_replaced_by IS NULL)),
     CHECK ((state = 'ACTIVE') = (activated_at IS NOT NULL)),
-    CHECK (state = 'PENDING_ACTIVATION' OR membership_type = 'standard')
+    CHECK (state = 'PENDING_ACTIVATION' OR membership_type = 'internal')
 );
 
 -- The Teams channel, tenant, team, bot and creation never change. A

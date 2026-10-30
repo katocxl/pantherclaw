@@ -135,3 +135,73 @@ func TestHR529_TeamsCardsAreLinkOnlyToStandardChannels(t *testing.T) {
 		t.Fatalf("card state %s; deliveries %s", got, e.str(t, "SELECT string_agg(state || ':' || coalesce(last_error, ''), ',') FROM pc.deliveries WHERE kind = 'teams_app'"))
 	}
 }
+
+// TestHR529_AChannelThatChangedGetsNoCard: the members are read again before
+// each card. A guest or a member of another tenant who joined after
+// activation stops the card and returns the channel to PENDING_ACTIVATION,
+// audited, with the org's admins told; it takes a new activation (D277).
+//
+// Covers: F161, PN-017.3
+func TestHR529_AChannelThatChangedGetsNoCard(t *testing.T) {
+	for name, joined := range map[string]teams.Member{
+		"a guest":          {ID: "29:g", Name: "G", TenantID: teams.TenantID, UserRole: "guest"},
+		"a partner tenant": {ID: "29:b", Name: "B", TenantID: teams.OtherTenantID, UserRole: "user"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newTeamsEnv(t)
+			c := e.channel(t, "teams-approvals", teamsInternal)
+			if _, err := e.svc.ActivateTeamsApp(e.admin(), c.ID, e.fresh()); err != nil {
+				t.Fatal(err)
+			}
+			home := teams.Member{ID: "29:a", Name: "A", TenantID: teams.TenantID, UserRole: "user"}
+			e.sim.SetChannel(teams.Channel{ID: teamsInternal, Name: "approvals", Installed: true, Members: []teams.Member{home, joined}})
+			e.hold(t, 3600e9)
+			e.deliverTeams(t)
+			if msgs := e.sim.Messages(); len(msgs) != 0 {
+				t.Fatalf("messages %+v", msgs)
+			}
+			if got := e.str(t, "SELECT state || '/' || membership_type || '/' || (activated_at IS NULL) || '/' || (shared_at IS NOT NULL) FROM pc.teams_app_channels WHERE channel_record_id = $1", c.ID); got != "PENDING_ACTIVATION/shared/true/true" {
+				t.Fatalf("the channel is %s", got)
+			}
+			if got := e.str(t, "SELECT count(*)::text FROM pc.ledger_entries WHERE kind = 'audit.notification.teams_channel_shared'"); got != "1" {
+				t.Fatalf("%s audits", got)
+			}
+			if got := e.str(t, "SELECT count(*)::text FROM pc.notifications WHERE type = 'notification.teams_channel_shared'"); got != "1" {
+				t.Fatalf("%s notices", got)
+			}
+			// Back to internal, it takes an Org Admin again; then cards go.
+			e.sim.SetChannel(teams.Channel{ID: teamsInternal, Name: "approvals", Installed: true, Members: []teams.Member{home}})
+			if _, err := e.svc.ActivateTeamsApp(e.admin(), c.ID, e.fresh()); err != nil {
+				t.Fatal(err)
+			}
+			e.hold(t, 3600e9)
+			e.deliverTeams(t)
+			if msgs := e.sim.Messages(); len(msgs) != 1 {
+				t.Fatalf("after activating again: %+v", msgs)
+			}
+		})
+	}
+}
+
+// TestHR529_AChannelNotReadIsNotInternal: a member with no role, and a
+// channel that lists no one, were not read: neither is activated (D277).
+//
+// Covers: F161
+func TestHR529_AChannelNotReadIsNotInternal(t *testing.T) {
+	for name, members := range map[string][]teams.Member{
+		"a member with no role": {{ID: "29:a", Name: "A", TenantID: teams.TenantID}},
+		"no members":            {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newTeamsEnv(t)
+			e.sim.SetChannel(teams.Channel{ID: teamsInternal, Name: "approvals", Installed: true, Members: members})
+			c := e.channel(t, "teams-approvals", teamsInternal)
+			if _, err := e.svc.ActivateTeamsApp(e.admin(), c.ID, e.fresh()); !errors.Is(err, napp.ErrTeamsUnread) {
+				t.Fatalf("activate: %v", err)
+			}
+			if got := e.str(t, "SELECT state FROM pc.teams_app_channels WHERE channel_record_id = $1", c.ID); got != "PENDING_ACTIVATION" {
+				t.Fatalf("the channel is %s", got)
+			}
+		})
+	}
+}

@@ -82,16 +82,26 @@ CREATE TABLE pc.ticket_outbound (
     CHECK ((state = 'PENDING') = (finished_at IS NULL))
 );
 CREATE UNIQUE INDEX ticket_outbound_verification ON pc.ticket_outbound (org_id, verification_id);
+-- One open at a time: a second open of a waiting ticket is the same open
+-- (D277), so it never makes a second ticket.
+CREATE UNIQUE INDEX ticket_outbound_case_waiting ON pc.ticket_outbound (org_id, case_id)
+    WHERE action = 'CREATE' AND state = 'PENDING' AND case_id IS NOT NULL;
+CREATE UNIQUE INDEX ticket_outbound_incident_waiting ON pc.ticket_outbound (org_id, incident_id)
+    WHERE action = 'CREATE' AND state = 'PENDING' AND incident_id IS NOT NULL;
 CREATE INDEX ticket_outbound_case ON pc.ticket_outbound (org_id, case_id) WHERE case_id IS NOT NULL;
 CREATE INDEX ticket_outbound_incident ON pc.ticket_outbound (org_id, incident_id) WHERE incident_id IS NOT NULL;
 
--- The inbound log is append-only for everyone.
+-- The inbound log is append-only, but for pc_deleter, which empties a
+-- deleted organization (HR-390..392, 00177's exception).
 -- +goose StatementBegin
 CREATE FUNCTION pc.ticket_inbound_immutable() RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pc, pg_temp
 AS $$
 BEGIN
+    IF TG_OP = 'DELETE' AND current_user = 'pc_deleter' THEN
+        RETURN OLD;
+    END IF;
     RAISE EXCEPTION 'the ticket inbound log is append-only' USING ERRCODE = 'insufficient_privilege';
 END
 $$;
@@ -120,7 +130,10 @@ $$;
 GRANT SELECT, INSERT ON pc.ticket_sync_configs, pc.ticket_inbound_events, pc.ticket_outbound TO pc_app;
 GRANT UPDATE (state, webhook_secret, prev_webhook_secret, prev_secret_expires_at, updated_at) ON pc.ticket_sync_configs TO pc_app;
 GRANT UPDATE (state, result_code, finished_at) ON pc.ticket_outbound TO pc_app;
-GRANT SELECT ON pc.ticket_sync_configs, pc.ticket_inbound_events, pc.ticket_outbound TO pc_audit_ro;
+GRANT SELECT ON pc.ticket_inbound_events, pc.ticket_outbound TO pc_audit_ro;
+-- The webhook secrets stay out of the audit role's reach (HR-062).
+GRANT SELECT (org_id, id, system, connection_id, project_key, state, prev_secret_expires_at, created_by, created_at, updated_at)
+    ON pc.ticket_sync_configs TO pc_audit_ro;
 
 -- Ticket sync calls reach the ticket system as verification tasks of their
 -- own purpose, which belong to no transaction. The two checks that list

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	tsapp "github.com/katocxl/pantherclaw/internal/ticketsync/app"
@@ -25,10 +26,16 @@ func orgOf(ctx context.Context) (ids.OrgID, error) {
 // Webhooks receives inbound ticket webhooks (D255): POST
 // /webhooks/tickets/<org>/<config>. It is public; the configuration's
 // signature is the credential, checked before the body is read further.
-// Every refusal looks the same to the sender but a bad signature.
+// Every refusal looks the same to the sender but a bad signature. Limiter
+// bounds what a sender can make the route do (D277); nil allows all.
 type Webhooks struct {
-	Svc *tsapp.Service
+	Svc     *tsapp.Service
+	Limiter *httpx.Limiter
 }
+
+// WebhooksPerMinute bounds the deliveries of one client address: well above
+// a busy Jira site, which sends from a few addresses.
+const WebhooksPerMinute = 1200
 
 // Mount adds the route to mux.
 func (w Webhooks) Mount(mux *http.ServeMux) {
@@ -36,6 +43,11 @@ func (w Webhooks) Mount(mux *http.ServeMux) {
 }
 
 func (w Webhooks) serve(rw http.ResponseWriter, r *http.Request) {
+	if w.Limiter != nil && !w.Limiter.AllowRequest(r) {
+		rw.Header().Set("Retry-After", "60")
+		http.Error(rw, "too many requests", http.StatusTooManyRequests)
+		return
+	}
 	org, err := ids.Parse[ids.Org](r.PathValue("org"))
 	if err != nil {
 		http.NotFound(rw, r)

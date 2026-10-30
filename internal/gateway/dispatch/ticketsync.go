@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 )
 
@@ -21,9 +22,19 @@ import (
 // pc.jira connection; the task is leased once (a write is never retried),
 // and only the answer's status, digest and the new issue's key and id come
 // back. Nothing a ticket says reaches an authorization decision (HR-527).
+// A sync write has no decision, so the gateway itself reads
+// jira.project.external first: a customer-visible project, or one it could
+// not read, gets nothing (HR-522, D277), and the report says so.
 
 // ticketPackage is the one package ticket sync tasks go through.
 const ticketPackage = "pc.jira"
+
+// The field and value a report refuses a write with: the server's
+// ticketsync.Refused and RefusedExternal.
+const (
+	ticketRefused         = "refused"
+	ticketRefusedExternal = "external_project"
+)
 
 // ticketOperations are the writes a ticket sync task may make, with the
 // answer fields it reports.
@@ -47,6 +58,9 @@ func (e *Engine) ticketSync(ctx context.Context, conn *control.Connection, l Lea
 		req.Target.Type != def.Target.Type || !targetMatches(def.Target.IDPattern, req.Target.ID) {
 		return Observation{}, fmt.Errorf("%w: ticket sync request", ErrNotReviewedRead)
 	}
+	if !e.ticketProjectInternal(ctx, conn, req.Target) {
+		return Observation{Fields: map[string]string{ticketRefused: ticketRefusedExternal}}, nil
+	}
 	res, ok := e.readWith(ctx, conn, def, req.Target, req.Params, "")
 	if !ok {
 		// The write may have reached the ticket system: the server records
@@ -63,6 +77,16 @@ func (e *Engine) ticketSync(ctx context.Context, conn *control.Connection, l Lea
 		out.Found, out.Fields = true, fields(res.Body, declared)
 	}
 	return out, nil
+}
+
+// ticketProjectInternal reads jira.project.external for the write's
+// project or issue, within the fact timeout; true only when it was read
+// and is not external.
+func (e *Engine) ticketProjectInternal(ctx context.Context, conn *control.Connection, target actionir.Target) bool {
+	read, cancel := context.WithTimeout(ctx, e.factTimeout)
+	defer cancel()
+	external, ok := e.readJira(read, conn, target)["external"].(bool)
+	return ok && !external
 }
 
 // targetMatches reports whether id matches the definition's anchored

@@ -21,6 +21,7 @@ import (
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -292,5 +293,23 @@ func TestTicketSync_LinkChecks(t *testing.T) {
 	}})
 	if _, err := f.svc.LinkCase(viewer, kase, f.config, "SEC-10"); err == nil {
 		t.Fatal("a viewer linked a case")
+	}
+}
+
+// TestT227_RefusedWebhooksAreAuditedOnceAMinute: a flood of forged webhooks
+// on one configuration writes one audit entry a minute, not one each
+// (D277); every one is still refused.
+//
+// Covers: F545
+func TestT227_RefusedWebhooksAreAuditedOnceAMinute(t *testing.T) {
+	f := newFixture(t)
+	f.svc.Refusals = httpx.NewLimiter(1, time.Minute, nil)
+	for i := range 3 {
+		if _, err := f.deliver(fmt.Sprintf("forged-%d", i), statusEvent(1793361600000, "Done", "done"), []byte("not-the-secret-of-this-config")); !errors.Is(err, tsapp.ErrSignature) {
+			t.Fatalf("a forged webhook: %v", err)
+		}
+	}
+	if n := f.count("SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.ticket.webhook_refused'", f.org); n != 1 {
+		t.Fatalf("%d refusals audited", n)
 	}
 }

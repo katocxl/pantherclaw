@@ -40,8 +40,9 @@ func (f *fixture) owner(field domain.Field) domain.Owner {
 
 // TestHR527_FieldOwnersNeverGiveAwayContainment: containment and
 // restoration are refused for the ticket system; giving state to it is a
-// protected change while COVERAGE_EXCLUSION is on, and taking a field back
-// applies at once (D264). Even a ticket-owned state moves nothing.
+// protected change while COVERAGE_EXCLUSION is on, a second person's
+// confirmation runs it as its author, and taking a field back applies at
+// once (D264). Even a ticket-owned state moves nothing.
 //
 // Covers: F545
 func TestHR527_FieldOwnersNeverGiveAwayContainment(t *testing.T) {
@@ -52,7 +53,8 @@ func TestHR527_FieldOwnersNeverGiveAwayContainment(t *testing.T) {
 		}
 	}
 	reqs := &requests{}
-	f.svc.RegisterProtected(&protect.Gate{Requests: reqs})
+	gate := &protect.Gate{Requests: reqs}
+	f.svc.RegisterProtected(gate)
 	f.exec(`INSERT INTO pc.protected_change_settings (org_id, category, mode, updated_by) VALUES ($1, 'COVERAGE_EXCLUSION', 'DISTINCT_PUBLISHER', $2)`,
 		f.org, f.alice)
 	if err := f.svc.SetFieldOwner(f.as(), domain.FieldState, domain.OwnerTicket); !errors.Is(err, protect.ErrPending) {
@@ -61,11 +63,28 @@ func TestHR527_FieldOwnersNeverGiveAwayContainment(t *testing.T) {
 	if f.owner(domain.FieldState) != domain.OwnerPantherClaw || reqs.opened != 1 {
 		t.Fatalf("a held change applied: %s, %d requests", f.owner(domain.FieldState), reqs.opened)
 	}
+	// The second person's confirmation applies a held change.
+	err := f.svc.SetFieldOwner(f.as(), domain.FieldSeverity, domain.OwnerTicket)
+	var held *protect.PendingError
+	if !errors.As(err, &held) {
+		t.Fatalf("giving severity away: %v", err)
+	}
+	f.exec(`INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by) VALUES ($1, $2, 'gateway_admin', $3, 'ORG', 'test')`, f.org, ids.NewV7(), f.alice)
+	second := ids.NewV7()
+	f.exec("INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'second')", f.org, second)
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return gate.Apply(ctx, tx, held.Request, []ids.UUID{second})
+	}); err != nil {
+		t.Fatalf("the confirmation: %v", err)
+	}
+	if f.owner(domain.FieldSeverity) != domain.OwnerTicket {
+		t.Fatal("the confirmed change did not apply")
+	}
 	// Taking a field back applies directly, the category notwithstanding.
 	if err := f.svc.SetFieldOwner(f.as(), domain.FieldLabels, domain.OwnerPantherClaw); err != nil || f.owner(domain.FieldLabels) != domain.OwnerPantherClaw {
 		t.Fatalf("taking labels back: %v", err)
 	}
-	if n := f.count("SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.ticket.field_owner_changed'", f.org); n != 1 {
+	if n := f.count("SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.ticket.field_owner_changed'", f.org); n != 2 {
 		t.Fatalf("%d owner changes audited", n)
 	}
 

@@ -64,8 +64,10 @@ LIMIT 20;
 UPDATE pc.chat_identity_links SET state = sqlc.arg(state)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND user_id = sqlc.arg(user_id) AND state = sqlc.arg(from_state);
 
+-- The person's email and their account, whose email_verified says whether
+-- the sign-in asserted it (D265).
 -- name: UserEmail :one
-SELECT email FROM pc.users WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE';
+SELECT email, account_id FROM pc.users WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE';
 
 -- Slack no longer confirms a confirmed link (D265); the guard sets the time.
 -- name: MarkChatIdentityLinkStale :execrows
@@ -84,10 +86,10 @@ JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_reco
 WHERE a.org_id = sqlc.arg(org_id) AND a.channel_record_id = sqlc.arg(channel_record_id);
 
 -- The guard of 00244 sets the time and refuses a channel that is not
--- standard; a channel activated or changed meanwhile is not activated.
+-- internal; a channel activated or changed meanwhile is not activated.
 -- name: ActivateTeamsAppChannel :execrows
 UPDATE pc.teams_app_channels
-SET state = 'ACTIVE', membership_type = 'standard', activated_by = sqlc.arg(activated_by),
+SET state = 'ACTIVE', membership_type = 'internal', activated_by = sqlc.arg(activated_by),
     activated_credential = sqlc.arg(activated_credential), last_checked_at = now()
 WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'PENDING_ACTIVATION'
   AND updated_at = sqlc.arg(seen_updated_at);
@@ -95,6 +97,13 @@ WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_
 -- name: MarkTeamsAppChannelShared :execrows
 UPDATE pc.teams_app_channels SET membership_type = 'shared', shared_at = now(), last_checked_at = now()
 WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'PENDING_ACTIVATION';
+
+-- An active channel whose members are no longer all internal returns to
+-- PENDING_ACTIVATION (D277); the guard clears its activation.
+-- name: PauseSharedTeamsAppChannel :execrows
+UPDATE pc.teams_app_channels
+SET state = 'PENDING_ACTIVATION', membership_type = 'shared', shared_at = now(), last_checked_at = now()
+WHERE org_id = sqlc.arg(org_id) AND channel_record_id = sqlc.arg(channel_record_id) AND state = 'ACTIVE';
 
 -- name: ClaimTeamsCard :execrows
 INSERT INTO pc.teams_cards (org_id, card_id, request_id, channel_record_id)

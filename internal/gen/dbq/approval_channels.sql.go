@@ -17,7 +17,7 @@ import (
 
 const activateTeamsAppChannel = `-- name: ActivateTeamsAppChannel :execrows
 UPDATE pc.teams_app_channels
-SET state = 'ACTIVE', membership_type = 'standard', activated_by = $1,
+SET state = 'ACTIVE', membership_type = 'internal', activated_by = $1,
     activated_credential = $2, last_checked_at = now()
 WHERE org_id = $3 AND channel_record_id = $4 AND state = 'PENDING_ACTIVATION'
   AND updated_at = $5
@@ -32,7 +32,7 @@ type ActivateTeamsAppChannelParams struct {
 }
 
 // The guard of 00244 sets the time and refuses a channel that is not
-// standard; a channel activated or changed meanwhile is not activated.
+// internal; a channel activated or changed meanwhile is not activated.
 func (q *Queries) ActivateTeamsAppChannel(ctx context.Context, arg ActivateTeamsAppChannelParams) (int64, error) {
 	result, err := q.db.Exec(ctx, activateTeamsAppChannel,
 		arg.ActivatedBy,
@@ -401,6 +401,22 @@ func (q *Queries) MarkTeamsCardUnknown(ctx context.Context, orgID ids.OrgID, car
 	return result.RowsAffected(), nil
 }
 
+const pauseSharedTeamsAppChannel = `-- name: PauseSharedTeamsAppChannel :execrows
+UPDATE pc.teams_app_channels
+SET state = 'PENDING_ACTIVATION', membership_type = 'shared', shared_at = now(), last_checked_at = now()
+WHERE org_id = $1 AND channel_record_id = $2 AND state = 'ACTIVE'
+`
+
+// An active channel whose members are no longer all internal returns to
+// PENDING_ACTIVATION (D277); the guard clears its activation.
+func (q *Queries) PauseSharedTeamsAppChannel(ctx context.Context, orgID ids.OrgID, channelRecordID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, pauseSharedTeamsAppChannel, orgID, channelRecordID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const releaseSlackDM = `-- name: ReleaseSlackDM :execrows
 DELETE FROM pc.slack_direct_messages WHERE org_id = $1 AND id = $2 AND state = 'POSTING'
 `
@@ -584,12 +600,19 @@ func (q *Queries) UserChatIdentityLinks(ctx context.Context, orgID ids.OrgID, us
 }
 
 const userEmail = `-- name: UserEmail :one
-SELECT email FROM pc.users WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE'
+SELECT email, account_id FROM pc.users WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE'
 `
 
-func (q *Queries) UserEmail(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (string, error) {
+type UserEmailRow struct {
+	Email     string
+	AccountID *ids.UUID
+}
+
+// The person's email and their account, whose email_verified says whether
+// the sign-in asserted it (D265).
+func (q *Queries) UserEmail(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (UserEmailRow, error) {
 	row := q.db.QueryRow(ctx, userEmail, orgID, iD)
-	var email string
-	err := row.Scan(&email)
-	return email, err
+	var i UserEmailRow
+	err := row.Scan(&i.Email, &i.AccountID)
+	return i, err
 }

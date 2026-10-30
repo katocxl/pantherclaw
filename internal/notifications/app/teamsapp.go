@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -16,7 +17,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -37,7 +41,10 @@ import (
 // Org Admin's fresh step-up, after the bot's token is minted and the
 // channel's members are read: a member of another tenant, or a guest,
 // makes it shared and it is refused. An ACTIVE channel posts one
-// link-only Adaptive Card per waiting request; nothing comes back.
+// link-only Adaptive Card per waiting request; nothing comes back. The
+// members are read again before each card: a channel found shared returns
+// to PENDING_ACTIVATION, audited, the org's admins are told, and no card
+// goes (D277).
 
 // TeamsLogin is Microsoft Entra's token endpoint base.
 const TeamsLogin = "https://login.microsoftonline.com"
@@ -58,6 +65,8 @@ var (
 		"the Teams channel does not exist or the bot is not in it")
 	ErrTeamsShared = pcerr.New(pcerr.FailedPrecondition, "TEAMS_CHANNEL_SHARED",
 		"the Teams channel has members of another tenant or guests; approval cards go only to internal channels")
+	ErrTeamsUnread = pcerr.New(pcerr.FailedPrecondition, "TEAMS_CHANNEL_UNREAD",
+		"Teams did not list the channel's members with their tenants and roles, so it cannot be shown internal")
 	ErrTeamsUnavailable = pcerr.New(pcerr.Unavailable, "TEAMS_UNAVAILABLE", "Teams could not be reached; try again")
 	ErrNotTeamsApp      = pcerr.New(pcerr.FailedPrecondition, "NOT_A_TEAMS_APP", "only Teams app channels are activated here")
 	ErrTeamsState       = pcerr.New(pcerr.FailedPrecondition, "TEAMS_CHANNEL_STATE", "the Teams app channel is not pending activation")
@@ -209,9 +218,7 @@ type teamsMember struct {
 	UserRole string `json:"userRole"`
 }
 
-// checkTeams mints the bot's token and reads every member of the channel
-// (at most 20 pages of 500): the channel must exist with the bot in it,
-// and every member must be of the channel's tenant and not a guest.
+// checkTeams mints the bot's token and checks the channel's members.
 func (s *Service) checkTeams(ctx context.Context, cfg dbq.GetTeamsAppChannelRow, secret []byte) error {
 	token, out := s.teamsToken(ctx, cfg.TenantID.String(), cfg.AppID.String(), secret)
 	switch {
@@ -221,7 +228,15 @@ func (s *Service) checkTeams(ctx context.Context, cfg dbq.GetTeamsAppChannelRow,
 	default:
 		return ErrTeamsUnavailable
 	}
-	cont := ""
+	return s.teamsMembers(ctx, cfg, token)
+}
+
+// teamsMembers reads every member of the channel (at most 20 pages of
+// 500): the channel must exist with the bot in it, and every member must be
+// of the channel's tenant and a user, never a guest. A channel that lists
+// no one, or a member with no role, was not read (as teamsfacts).
+func (s *Service) teamsMembers(ctx context.Context, cfg dbq.GetTeamsAppChannelRow, token string) error {
+	cont, seen := "", 0
 	for range 20 {
 		q := url.Values{"pageSize": {"500"}}
 		if cont != "" {
@@ -244,11 +259,18 @@ func (s *Service) checkTeams(ctx context.Context, cfg dbq.GetTeamsAppChannelRow,
 			return ErrTeamsUnavailable
 		}
 		for _, m := range page.Members {
-			if !strings.EqualFold(m.TenantID, cfg.TenantID.String()) || (m.UserRole != "" && m.UserRole != "user") {
+			switch {
+			case m.UserRole == "" || m.TenantID == "":
+				return ErrTeamsUnread
+			case !strings.EqualFold(m.TenantID, cfg.TenantID.String()) || m.UserRole != "user":
 				return ErrTeamsShared
 			}
 		}
+		seen += len(page.Members)
 		if page.ContinuationToken == "" {
+			if seen == 0 {
+				return ErrTeamsUnread
+			}
 			return nil
 		}
 		cont = page.ContinuationToken
@@ -374,7 +396,7 @@ func (s *Service) sendTeamsApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 		return outcome{skip: true, code: "no_card_subject"}
 	case err != nil:
 		return outcome{code: "load_failed"}
-	case cfg.State != SlackActive || cfg.MembershipType == nil || *cfg.MembershipType != "standard":
+	case cfg.State != SlackActive || cfg.MembershipType == nil || *cfg.MembershipType != "internal":
 		return outcome{skip: true, code: "channel_pending"}
 	case domain.CardIsClosed(facts.State):
 		return outcome{skip: true, code: "request_final"}
@@ -396,6 +418,22 @@ func (s *Service) sendTeamsApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 	token, out := s.teamsToken(ctx, cfg.TenantID.String(), cfg.AppID.String(), secret)
 	if !out.ok {
 		return out
+	}
+	// The channel may have changed since activation: read it before each
+	// card, and send nothing unless it is still internal (D277).
+	switch err := s.teamsMembers(ctx, cfg, token); {
+	case err == nil:
+	case errors.Is(err, ErrTeamsShared):
+		if err := s.pauseSharedTeams(ctx, org, cfg); err != nil {
+			return outcome{code: "store_failed"}
+		}
+		return outcome{skip: true, code: "channel_shared"}
+	case errors.Is(err, ErrTeamsChannel):
+		return outcome{code: "teams_channel_refused", permanent: true}
+	case errors.Is(err, ErrTeamsUnread):
+		return outcome{code: "teams_channel_unread"}
+	default:
+		return outcome{code: "teams_unavailable"}
 	}
 	cardID := ids.NewV7()
 	var claimed int64
@@ -448,6 +486,65 @@ func (s *Service) sendTeamsApp(ctx context.Context, org ids.OrgID, d dbq.LoadDel
 		return outcome{code: "store_failed"}
 	}
 	return out
+}
+
+// pauseSharedTeams returns an active channel found shared to
+// PENDING_ACTIVATION, audited, and tells the org's admins.
+func (s *Service) pauseSharedTeams(ctx context.Context, org ids.OrgID, cfg dbq.GetTeamsAppChannelRow) error {
+	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		n, err := q.PauseSharedTeamsAppChannel(ctx, org, cfg.ChannelRecordID)
+		if err != nil || n == 0 {
+			return err
+		}
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "notification.teams_channel_shared", Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
+			Outcome: audit.Success, ReasonCode: "TEAMS_CHANNEL_SHARED",
+			Object:  &audit.Object{Type: "notification_channel", ID: cfg.ChannelRecordID.String()},
+			Details: map[string]string{"teams_channel": cfg.TeamsChannel},
+		}); err != nil {
+			return err
+		}
+		admins, err := q.OrgUsersWithRoles(ctx, org, []string{string(td.RoleOrgAdmin)})
+		if err != nil {
+			return err
+		}
+		_, err = s.Enqueue(ctx, tx, Message{
+			Org: org, Type: "notification.teams_channel_shared", Params: map[string]string{"channel": cfg.ChannelName},
+			Personal: admins, Subject: &Subject{Type: "notification_channel", ID: cfg.ChannelRecordID},
+			DedupeKey: "teams-shared:" + cfg.ChannelRecordID.String() + ":" + fmt.Sprint(s.clock.Now().Unix()),
+		})
+		return err
+	})
+}
+
+// TeamsAppView is a teams_app channel's configuration, without its secret.
+type TeamsAppView struct {
+	TenantID, TeamID, ChannelID, AppID, ServiceURL, State string
+	ActivatedAt, SharedAt                                 *time.Time
+}
+
+// TeamsConfirmPath is a teams_app channel's activation page.
+func TeamsConfirmPath(id ids.UUID) string {
+	return "/notifications/channels/" + id.String() + "/confirm-teams"
+}
+
+// withTeamsApp adds a teams_app channel's configuration to its view.
+func (s *Service) withTeamsApp(ctx context.Context, q *dbq.Queries, org ids.OrgID, v ChannelView) (ChannelView, error) {
+	if v.Kind != domain.KindTeamsApp {
+		return v, nil
+	}
+	a, err := q.GetTeamsAppChannel(ctx, org, v.ID)
+	if db.IsNoRows(err) {
+		return v, nil
+	} else if err != nil {
+		return v, err
+	}
+	v.TeamsApp = &TeamsAppView{
+		TenantID: a.TenantID.String(), TeamID: a.TeamID, ChannelID: a.TeamsChannel, AppID: a.AppID.String(), ServiceURL: a.ServiceUrl,
+		State: a.State, ActivatedAt: a.ActivatedAt, SharedAt: a.SharedAt,
+	}
+	return v, nil
 }
 
 // insertTeamsApp stores a new teams_app channel's configuration,

@@ -54,6 +54,11 @@ func newDMEnv(t *testing.T) *dmEnv {
 	s.exec(t, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by) VALUES ($1, $2, 'viewer', $3, 'ORG', 'test')`,
 		s.org, ids.NewV7(), e.erin)
 	s.exec(t, "UPDATE pc.users SET email = 'dave@example.test' WHERE org_id = $1 AND id = $2", s.org, s.dave.id)
+	s.d.AdminExec(t, `INSERT INTO pc.accounts (id, issuer, subject, email, email_verified, display_name)
+		SELECT gen_random_uuid(), issuer, subject, email, true, 'person' FROM pc.users WHERE org_id = $1 AND id = ANY ($2)`,
+		s.org, []ids.UUID{s.dave.id, e.erin})
+	s.d.AdminExec(t, `UPDATE pc.users u SET account_id = a.id FROM pc.accounts a
+		WHERE u.org_id = $1 AND a.issuer = u.issuer AND a.subject = u.subject`, s.org)
 	s.sim.SetUser(slack.User{ID: daveSlack, Email: "dave@example.test", EmailConfirmed: true})
 	s.sim.SetUser(slack.User{ID: erinSlack, Email: "erin@example.test", EmailConfirmed: true})
 	return e
@@ -260,6 +265,7 @@ func TestHR529_SlackLinkNeedsAFullMemberWithTheSameEmail(t *testing.T) {
 func TestHR529_SlackLinkNeedsAnAllowedDomain(t *testing.T) {
 	e := newDMEnv(t)
 	e.exec(t, "UPDATE pc.users SET email = 'erin@elsewhere.test' WHERE org_id = $1 AND id = $2", e.org, e.erin)
+	e.d.AdminExec(t, "UPDATE pc.accounts SET email = 'erin@elsewhere.test' WHERE email = 'erin@example.test'")
 	e.sim.SetUser(slack.User{ID: erinSlack, Email: "erin@elsewhere.test", EmailConfirmed: true})
 	if _, err := e.svc.ProposeSlackLink(e.person(e.erin, td.RoleViewer)); !errors.Is(err, napp.ErrSlackLinkRefused) {
 		t.Fatalf("another domain: %v", err)
@@ -331,6 +337,67 @@ func TestHR529_AChangedSlackMemberMakesTheLinkStale(t *testing.T) {
 			e.hold(t, 3600e9)
 			if n := len(e.dmDeliveries(t, e.dave.id)); n != 1 {
 				t.Fatalf("a stale link got %d DM deliveries", n)
+			}
+		})
+	}
+}
+
+// TestT228_AnUnverifiedEmailGetsNoLink: Slack's own flag is not PantherClaw's:
+// a link needs an account holding the email as verified (D265). pc.users.email
+// is what the last sign-in claimed, so someone whose provider passes an
+// unverified colleague's address, or who has no account, gets no link.
+//
+// Covers: F161
+func TestT228_AnUnverifiedEmailGetsNoLink(t *testing.T) {
+	e := newDMEnv(t)
+	e.d.AdminExec(t, "UPDATE pc.accounts SET email_verified = false WHERE email = 'erin@example.test'")
+	if _, err := e.svc.ProposeSlackLink(e.person(e.erin, td.RoleViewer)); !errors.Is(err, napp.ErrChatEmailUnverified) {
+		t.Fatalf("an unverified email: %v", err)
+	}
+	frank := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject, email) VALUES ($1, $2, 'https://idp.test', 'frank', 'erin@example.test')", e.org, frank)
+	if _, err := e.svc.ProposeSlackLink(e.person(frank, td.RoleViewer)); !errors.Is(err, napp.ErrChatEmailUnverified) {
+		t.Fatalf("no account: %v", err)
+	}
+	if got := e.str(t, "SELECT count(*)::text FROM pc.chat_identity_links"); got != "0" {
+		t.Fatalf("%s links", got)
+	}
+}
+
+// TestT228_AnEmailNoLongerVerifiedStopsTheDM: the email is checked again at
+// each DM. Once the account no longer holds it as verified, or a sign-in
+// wrote another address, the link is stale and no DM goes (D265).
+//
+// Covers: F161
+func TestT228_AnEmailNoLongerVerifiedStopsTheDM(t *testing.T) {
+	for name, change := range map[string]func(*dmEnv){
+		"no longer verified": func(e *dmEnv) {
+			e.d.AdminExec(t, "UPDATE pc.accounts SET email_verified = false WHERE email = 'dave@example.test'")
+		},
+		"another address at sign-in": func(e *dmEnv) {
+			e.exec(t, "UPDATE pc.users SET email = 'dave.new@example.test' WHERE org_id = $1 AND id = $2", e.org, e.dave.id)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newDMEnv(t)
+			l := e.link(t, e.dave.id, td.RoleApprover)
+			e.hold(t, 3600e9)
+			change(e)
+			ds := e.dmDeliveries(t, e.dave.id)
+			if len(ds) != 1 {
+				t.Fatalf("%d DM deliveries", len(ds))
+			}
+			if err := e.svc.Deliver(context.Background(), e.org, ds[0]); err != nil {
+				t.Fatal(err)
+			}
+			if n := len(e.sim.Messages()); n != 0 {
+				t.Fatalf("%d messages posted: %+v", n, e.sim.Messages())
+			}
+			if got := e.str(t, "SELECT state FROM pc.chat_identity_links WHERE id = $1", l.ID); got != napp.LinkStale {
+				t.Fatalf("link state %s", got)
+			}
+			if got := e.str(t, "SELECT count(*)::text FROM pc.ledger_entries WHERE kind = 'audit.notification.chat_link_stale'"); got != "1" {
+				t.Fatalf("%s stale audits", got)
 			}
 		})
 	}

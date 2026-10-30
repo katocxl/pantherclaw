@@ -6,6 +6,7 @@ package server
 import (
 	"maps"
 	"net/http"
+	"time"
 
 	"connectrpc.com/connect/v2"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/ticketsync/adapters/ticketsyncrpc"
@@ -46,7 +48,10 @@ func init() { maps.Copy(procedurePermissions, m20TicketProcedures) }
 // verification store hands it the gateway's ticket sync reports, and the
 // API serves it and its inbound webhooks.
 func newTicketSync(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service) *tsapp.Service {
-	return &tsapp.Service{Pool: pool, Envelope: pccrypto.NewEnvelope(keystore.NewDEKStore(pool, kp)), Editions: bill}
+	return &tsapp.Service{
+		Pool: pool, Envelope: pccrypto.NewEnvelope(keystore.NewDEKStore(pool, kp)), Editions: bill,
+		Refusals: httpx.NewLimiter(1, time.Minute, nil),
+	}
 }
 
 // registerM20Tickets serves TicketSyncService and registers the field
@@ -65,7 +70,8 @@ func mountTicketWebhooks(mux *http.ServeMux, d apiDeps) {
 	if d.tickets == nil {
 		return
 	}
-	ticketsyncrpc.Webhooks{Svc: d.tickets}.Mount(mux)
+	limiter := httpx.NewLimiter(ticketsyncrpc.WebhooksPerMinute, time.Minute, nil).WithClientIP(d.clientIP)
+	ticketsyncrpc.Webhooks{Svc: d.tickets, Limiter: limiter}.Mount(mux)
 }
 
 // registerTeamsChannels adds the teams_app activation endpoint (D256),

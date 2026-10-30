@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"strconv"
 
 	casesdomain "github.com/katocxl/pantherclaw/internal/cases/domain"
@@ -23,11 +24,22 @@ import (
 // jira.issue.create with its sealed credential (HR-060, no exception) and
 // reports the status and the new issue's key, which links the ticket. The
 // ticket carries the title, the PantherClaw id and the link only.
+// The gateway first reads whether the project is customer-visible and
+// sends nothing there (D277, HR-522). One open waits at a time: a second
+// returns the first, and a task that expires with no report ends its row.
 
 // Outbound actions (migration 00243).
 const (
 	ActionCreate  = "CREATE"
 	ActionComment = "COMMENT"
+)
+
+// Refused is the field a gateway reports a write it would not send with;
+// RefusedExternal is its value for a customer-visible or unread project,
+// and the result code it becomes.
+const (
+	Refused         = "refused"
+	RefusedExternal = "external_project"
 )
 
 // issueType is the Jira issue type of a ticket the sync opens.
@@ -60,7 +72,8 @@ func (s *Service) OpenIncidentTicket(ctx context.Context, i, config ids.UUID) (i
 	return s.open(ctx, td.PermIncidentManage, nil, &i, config)
 }
 
-// open stores the task and its outbound row; it returns the outbound id.
+// open stores the task and its outbound row; it returns the outbound id:
+// the waiting one when an open is already waiting.
 func (s *Service) open(ctx context.Context, perm td.Permission, kase, incident *ids.UUID, config ids.UUID) (ids.UUID, error) {
 	c, err := person(ctx, perm)
 	if err != nil {
@@ -109,6 +122,13 @@ func (s *Service) open(ctx context.Context, perm td.Permission, kase, incident *
 		if len(refs) > 0 {
 			return ErrLinked
 		}
+		waiting, err := q.WaitingTicketOpen(ctx, c.Org, kase, incident)
+		if err == nil {
+			out = waiting
+			return errWaiting
+		} else if !db.IsNoRows(err) {
+			return err
+		}
 		body, err := json.Marshal(ticketRequest{
 			Mode: "ticket_sync", Target: ticketTarget{Type: "jira_project", ID: cfg.ProjectKey},
 			Params: map[string]string{
@@ -133,7 +153,35 @@ func (s *Service) open(ctx context.Context, perm td.Permission, kase, incident *
 		}
 		return s.audit(ctx, tx, c.Actor(), "ticket.open_requested", "ticket_outbound", out, map[string]string{"project": cfg.ProjectKey})
 	})
+	switch {
+	case errors.Is(err, errWaiting):
+		return out, nil
+	case db.IsUniqueViolation(err): // a concurrent open won: this one rolled back
+		err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			out, err = dbq.New(tx).WaitingTicketOpen(ctx, c.Org, kase, incident)
+			return err
+		}, db.ReadOnly())
+	}
 	return out, err
+}
+
+// errWaiting ends open's transaction when an open is already waiting.
+var errWaiting = errors.New("ticketsync: an open is waiting")
+
+// EndUnreported ends the rows whose task expired with no report, in the
+// sweep's transaction.
+func (s *Service) EndUnreported(ctx context.Context, tx db.TenantTx, org ids.OrgID) error {
+	ended, err := dbq.New(tx).FailEndedTicketOutbound(ctx, org)
+	if err != nil {
+		return err
+	}
+	for _, id := range ended {
+		if err := s.audit(ctx, tx, domain.Actor, "ticket.sync_failed", "ticket_outbound", id, map[string]string{"code": "not_reported"}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ReportTicketSync takes the gateway's report of a ticket sync task under
@@ -154,6 +202,8 @@ func (s *Service) ReportTicketSync(ctx context.Context, tx db.TenantTx, org ids.
 	state, code := "DONE", ""
 	key := fields["/key"]
 	switch {
+	case fields[Refused] == RefusedExternal:
+		state, code = "FAILED", RefusedExternal // nothing was sent
 	case status < 200 || status > 299:
 		state, code = "FAILED", "http_"+strconv.Itoa(status)
 		if status == 0 {

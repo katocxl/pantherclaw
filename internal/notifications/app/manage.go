@@ -77,6 +77,8 @@ type ChannelView struct {
 	CreatedAt, UpdatedAt time.Time
 	// SlackApp is a slack_app channel's configuration (nil for other kinds).
 	SlackApp *SlackAppView
+	// TeamsApp is a teams_app channel's configuration, on GetChannel only.
+	TeamsApp *TeamsAppView
 }
 
 func channelView(c dbq.PcNotificationChannel) ChannelView {
@@ -234,6 +236,9 @@ func (s *Service) GetChannel(ctx context.Context, id ids.UUID) (ChannelView, []D
 			return notFoundAs(err, ErrChannelNotFound)
 		}
 		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
+			return err
+		}
+		if out, err = s.withTeamsApp(ctx, q, c.Org, out); err != nil {
 			return err
 		}
 		rows, err := q.ListDeliveries(ctx, dbq.ListDeliveriesParams{OrgID: c.Org, ChannelID: &id, PageLimit: recentDeliveries})

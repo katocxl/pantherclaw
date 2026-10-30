@@ -32,6 +32,7 @@ import (
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -72,7 +73,7 @@ var (
 		"a ticket sync names a connection, a project key, and issue keys of that project")
 	ErrLinked      = pcerr.New(pcerr.AlreadyExists, "TICKET_ALREADY_LINKED", "the case, incident or ticket is already linked")
 	ErrLockedField = pcerr.New(pcerr.FailedPrecondition, "TICKET_FIELD_LOCKED",
-		"PantherClaw always owns state, severity, containment and restoration")
+		"PantherClaw always owns containment and restoration")
 	ErrSignature = pcerr.New(pcerr.Unauthenticated, "TICKET_WEBHOOK_SIGNATURE", "the ticket webhook signature does not verify")
 	ErrWebhook   = pcerr.New(pcerr.InvalidArgument, "TICKET_WEBHOOK_INVALID", "the ticket webhook is not an issue or comment event")
 )
@@ -90,6 +91,9 @@ type Service struct {
 	// Gate holds giving a field to the ticket system (D264); nil applies
 	// every change directly.
 	Gate *protect.Gate
+	// Refusals bounds the audit entries of refused webhooks, per
+	// configuration; nil audits each one.
+	Refusals *httpx.Limiter
 	// Now is the clock (nil: time.Now).
 	Now func() time.Time
 }
@@ -484,8 +488,11 @@ func (s *Service) Inbound(ctx context.Context, org ids.OrgID, config ids.UUID, d
 var errReplayRace = pcerr.New(pcerr.Aborted, "TICKET_WEBHOOK_REPLAY", "the delivery was already recorded")
 
 // refused audits a webhook whose signature did not verify, in its own
-// transaction (the delivery's rolled back).
+// transaction (the delivery's rolled back), at most Refusals allows.
 func (s *Service) refused(ctx context.Context, org ids.OrgID, config ids.UUID) {
+	if s.Refusals != nil && !s.Refusals.Allow(config.String()) {
+		return
+	}
 	_ = s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
 			Name: "ticket.webhook_refused", Actor: domain.Actor, Outcome: audit.Denied, ReasonCode: "BAD_SIGNATURE",

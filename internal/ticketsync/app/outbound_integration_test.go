@@ -15,6 +15,7 @@ import (
 	casesstore "github.com/katocxl/pantherclaw/internal/cases/store"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	tsapp "github.com/katocxl/pantherclaw/internal/ticketsync/app"
 )
 
 // openCase opens a case without a ticket.
@@ -132,4 +133,90 @@ func TestTicketSync_OpenThroughTheGateway(t *testing.T) {
 			t.Fatal("the failed write is due again")
 		}
 	}
+}
+
+// TestT226_ACustomerProjectGetsNoTicket: the gateway refuses a sync write to
+// a customer-visible or unread project without sending it, and its report
+// ends the row FAILED external_project with no ref: the task is finished,
+// and the refusal is audited (D277, HR-522).
+//
+// Covers: F545
+func TestT226_ACustomerProjectGetsNoTicket(t *testing.T) {
+	f := newFixture(t)
+	gw := f.gateway()
+	k := f.openCase("title a customer must not read")
+	out, err := f.svc.OpenCaseTicket(f.as(), k, f.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, hash := f.lease(out, gw)
+	if !f.report(gw, task, hash, 0, map[string]string{tsapp.Refused: tsapp.RefusedExternal}) {
+		t.Fatal("the report was not taken")
+	}
+	if n := f.count("SELECT count(*) FROM pc.ticket_outbound WHERE id = $1 AND state = 'FAILED' AND result_code = 'external_project'", out); n != 1 {
+		t.Fatal("the outbound is not FAILED external_project")
+	}
+	if n := f.count("SELECT count(*) FROM pc.external_refs WHERE case_id = $1", k); n != 0 {
+		t.Fatal("a refused write made a ref")
+	}
+	if n := f.count("SELECT count(*) FROM pc.verifications WHERE id = $1 AND state = 'DONE'", task); n != 1 {
+		t.Fatal("the task is not done")
+	}
+	if n := f.count("SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.ticket.sync_failed'", f.org); n != 1 {
+		t.Fatalf("%d refusals audited", n)
+	}
+}
+
+// TestTicketSync_ASecondOpenIsTheFirst: while an open waits, a second open
+// of the case or incident returns it and stores nothing, so one person
+// clicking twice, or two people, make one ticket. A task that expires with
+// no report ends its row, and the next open is a new one (D277).
+//
+// Covers: F545
+func TestTicketSync_ASecondOpenIsTheFirst(t *testing.T) {
+	f := newFixture(t)
+	k := f.openCase("clicked twice")
+	first, err := f.svc.OpenCaseTicket(f.as(), k, f.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := f.svc.OpenCaseTicket(f.as(), k, f.config)
+	if err != nil || second != first {
+		t.Fatalf("second open: %v %v, first %v", second, err, first)
+	}
+	if n := f.count("SELECT count(*) FROM pc.ticket_outbound WHERE case_id = $1", k); n != 1 {
+		t.Fatalf("%d outbound rows", n)
+	}
+	if n := f.count("SELECT count(*) FROM pc.verifications WHERE purpose = 'ticket_sync'"); n != 1 {
+		t.Fatalf("%d tasks", n)
+	}
+
+	f.exec(`UPDATE pc.verifications SET state = 'EXPIRED', finished_at = now()
+		WHERE id = (SELECT verification_id FROM pc.ticket_outbound WHERE id = $1)`, first)
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return f.svc.EndUnreported(ctx, tx, f.org)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.count("SELECT count(*) FROM pc.ticket_outbound WHERE id = $1 AND state = 'FAILED' AND result_code = 'not_reported'", first); n != 1 {
+		t.Fatal("the expired open still waits")
+	}
+	if n := f.count("SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.ticket.sync_failed'", f.org); n != 1 {
+		t.Fatalf("%d ends audited", n)
+	}
+	third, err := f.svc.OpenCaseTicket(f.as(), k, f.config)
+	if err != nil || third == first {
+		t.Fatalf("an open after the end: %v %v", third, err)
+	}
+}
+
+func (f *fixture) gateway() ids.UUID {
+	f.t.Helper()
+	var gw ids.UUID
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT gateway_id FROM pc.connections WHERE id = $1", f.conn).Scan(&gw)
+	}); err != nil {
+		f.t.Fatal(err)
+	}
+	return gw
 }

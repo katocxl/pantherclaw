@@ -153,7 +153,7 @@ func TestTenancy_approval_channels(t *testing.T) {
 	a.want(t, "23514", "a teams_app channel inserted ACTIVE",
 		`INSERT INTO pc.teams_app_channels (org_id, channel_record_id, tenant_id, team_id, teams_channel, app_id, service_url, state,
 		 membership_type, activated_by, activated_credential, activated_at)
-		 VALUES ($1, $2, $3, '19:team@thread.tacv2', '19:abc@thread.tacv2', $3, 'https://smba.trafficmanager.net/teams/', 'ACTIVE', 'standard', $4, $5, now())`,
+		 VALUES ($1, $2, $3, '19:team@thread.tacv2', '19:abc@thread.tacv2', $3, 'https://smba.trafficmanager.net/teams/', 'ACTIVE', 'internal', $4, $5, now())`,
 		a.org, ch, m5ID(), a.user, a.cred)
 	a.mustExec(t, `INSERT INTO pc.teams_app_channels (org_id, channel_record_id, tenant_id, team_id, teams_channel, app_id, service_url)
 		VALUES ($1, $2, $3, '19:team@thread.tacv2', '19:abc@thread.tacv2', $3, 'https://smba.trafficmanager.net/teams/')`, a.org, ch, m5ID())
@@ -197,4 +197,17 @@ func TestM20_DMChannelEmailDomains(t *testing.T) {
 	a.want(t, "42501", "the domains changed", "UPDATE pc.slack_app_channels SET allowed_email_domains = '{evil.test}' WHERE channel_record_id = $1", id)
 	a.want(t, "42501", "DMs turned off", "UPDATE pc.slack_app_channels SET direct_messages = false WHERE channel_record_id = $1", id)
 	a.want(t, "23505", "a second DM channel", insert, a.org, channel(), true, []string{"example.test"})
+}
+
+// TestM20_AuditRoleReadsNoWebhookSecret: pc_audit_ro reads a ticket sync
+// configuration but neither of its secrets (D277, HR-062).
+func TestM20_AuditRoleReadsNoWebhookSecret(t *testing.T) {
+	d := dbtest.New(t)
+	for column, want := range map[string]bool{"project_key": true, "state": true, "webhook_secret": false, "prev_webhook_secret": false} {
+		var got bool
+		d.AdminQueryRow(t, "SELECT has_column_privilege('pc_audit_ro', 'pc.ticket_sync_configs', $1, 'SELECT')", []any{column}, &got)
+		if got != want {
+			t.Errorf("pc_audit_ro on %s: %v", column, got)
+		}
+	}
 }

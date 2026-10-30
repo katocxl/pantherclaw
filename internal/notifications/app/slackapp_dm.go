@@ -33,8 +33,10 @@ import (
 // request and person.
 //
 // A person's link comes from Slack's users.lookupByEmail with the bot
-// token, for the email PantherClaw has for them, and is used only once
-// they confirm it in the console; either side may revoke it.
+// token, for the email PantherClaw has for them, which their account must
+// hold as verified (D265), and is used only once they confirm it in the
+// console; either side may revoke it. pc.users.email is whatever the last
+// sign-in claimed, so the account's email_verified is read again at each DM.
 
 // Chat identity link states (migration 00244).
 const (
@@ -63,6 +65,8 @@ var (
 	ErrSlackLinkNotFound = pcerr.New(pcerr.NotFound, "CHAT_LINK_NOT_FOUND", "chat identity link not found")
 	ErrSlackLinkRefused  = pcerr.New(pcerr.FailedPrecondition, "CHAT_LINK_REFUSED",
 		"Slack has no full member of the workspace with this person's confirmed email")
+	ErrChatEmailUnverified = pcerr.New(pcerr.FailedPrecondition, "CHAT_LINK_EMAIL_UNVERIFIED",
+		"your account has no verified email: sign in with an identity whose provider verifies it")
 	ErrSlackLinkState = pcerr.New(pcerr.FailedPrecondition, "CHAT_LINK_STATE", "the chat identity link is not in a state that allows this")
 	ErrLinkHumanOnly  = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person links their own chat identity")
 )
@@ -126,7 +130,7 @@ func (s *Service) ProposeSlackLink(ctx context.Context) (ChatLink, error) {
 		return ChatLink{}, err
 	}
 	var ch dbq.SlackDMChannelRow
-	var email string
+	var user dbq.UserEmailRow
 	if err := s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		var err error
@@ -135,14 +139,19 @@ func (s *Service) ProposeSlackLink(ctx context.Context) (ChatLink, error) {
 		} else if err != nil {
 			return err
 		}
-		email, err = q.UserEmail(ctx, c.Org, c.Principal.ID)
+		user, err = q.UserEmail(ctx, c.Org, c.Principal.ID)
 		return err
 	}, db.ReadOnly()); err != nil {
 		return ChatLink{}, err
 	}
-	email = strings.TrimSpace(email)
+	email := strings.TrimSpace(user.Email)
 	if email == "" || ch.TeamID == nil || len(email) > 320 {
 		return ChatLink{}, ErrSlackLinkRefused
+	}
+	if ok, err := s.emailVerified(ctx, user.AccountID, email); err != nil {
+		return ChatLink{}, err
+	} else if !ok {
+		return ChatLink{}, ErrChatEmailUnverified
 	}
 	token, err := s.envelope.Decrypt(ctx, s.field(c.Org, ch.ChannelRecordID, secretColumn), SecretPurpose, ch.Secret)
 	if err != nil {
@@ -167,6 +176,27 @@ func (s *Service) ProposeSlackLink(ctx context.Context) (ChatLink, error) {
 		return s.linkAudit(ctx, tx, c, "notification.chat_link_proposed", row)
 	})
 	return link, err
+}
+
+// emailVerified reports whether account holds email as verified. A person
+// with no account has no verified email; the account tables are read in
+// their own restricted purpose (a tenant transaction sees none of them).
+func (s *Service) emailVerified(ctx context.Context, account *ids.UUID, email string) (bool, error) {
+	if account == nil {
+		return false, nil
+	}
+	var a dbq.PcAccount
+	err := s.pool.InGlobalTx(ctx, db.GlobalAccounts, func(ctx context.Context, tx db.GlobalTx) error {
+		var err error
+		a, err = dbq.New(tx).GetAccount(ctx, *account)
+		return err
+	})
+	if db.IsNoRows(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return a.EmailVerified && a.DeletedAt == nil && strings.EqualFold(strings.TrimSpace(a.Email), email), nil
 }
 
 // ConfirmChatLink confirms the caller's own PROPOSED link: from now on
@@ -290,6 +320,7 @@ func (s *Service) sendSlackDM(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 	var ch dbq.SlackDMChannelRow
 	var target string
 	var chat dbq.ConfirmedSlackLinksRow
+	var person dbq.UserEmailRow
 	var facts dbq.SlackCardFactsRow
 	var stored *dbq.PcSlackDirectMessage
 	skip := ""
@@ -322,6 +353,12 @@ func (s *Service) sendSlackDM(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 			return nil
 		}
 		chat, target = links[0], links[0].ExternalUserID
+		if person, err = q.UserEmail(ctx, org, user); db.IsNoRows(err) {
+			skip = "not_a_decider"
+			return nil
+		} else if err != nil {
+			return err
+		}
 		if facts, err = q.SlackCardFacts(ctx, org, request); db.IsNoRows(err) {
 			skip = "no_card_subject"
 			return nil
@@ -359,6 +396,16 @@ func (s *Service) sendSlackDM(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 		}
 		return outcome{skip: true, code: "dm_sent"}
 	}
+	// The email must still be the link's, and verified (D265).
+	switch ok, err := s.emailVerified(ctx, person.AccountID, strings.TrimSpace(person.Email)); {
+	case err != nil:
+		return outcome{code: "load_failed"}
+	case !ok || !strings.EqualFold(strings.TrimSpace(person.Email), chat.Email):
+		if err := s.staleLink(ctx, org, chat, "EMAIL_NOT_VERIFIED"); err != nil {
+			return outcome{code: "store_failed"}
+		}
+		return outcome{skip: true, code: "link_stale"}
+	}
 	token, err := s.envelope.Decrypt(ctx, s.field(org, ch.ChannelRecordID, secretColumn), SecretPurpose, ch.Secret)
 	if err != nil {
 		return outcome{code: "secret_unavailable"}
@@ -369,7 +416,7 @@ func (s *Service) sendSlackDM(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 	case errors.Is(err, ErrSlackUnavailable):
 		return outcome{code: "slack_unavailable"}
 	case err != nil || now != target:
-		if err := s.staleLink(ctx, org, chat); err != nil {
+		if err := s.staleLink(ctx, org, chat, "SLACK_MEMBER_CHANGED"); err != nil {
 			return outcome{code: "store_failed"}
 		}
 		return outcome{skip: true, code: "link_stale"}
@@ -537,7 +584,7 @@ func (s *Service) slackMember(ctx context.Context, token, team, email string, do
 }
 
 // staleLink marks a confirmed link STALE and audits it (D265).
-func (s *Service) staleLink(ctx context.Context, org ids.OrgID, l dbq.ConfirmedSlackLinksRow) error {
+func (s *Service) staleLink(ctx context.Context, org ids.OrgID, l dbq.ConfirmedSlackLinksRow, reason string) error {
 	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		n, err := dbq.New(tx).MarkChatIdentityLinkStale(ctx, org, l.ID)
 		if err != nil || n == 0 {
@@ -545,7 +592,7 @@ func (s *Service) staleLink(ctx context.Context, org ids.OrgID, l dbq.ConfirmedS
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: "notification.chat_link_stale", Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
-			Outcome: audit.Success, ReasonCode: "SLACK_MEMBER_CHANGED", Object: &audit.Object{Type: "chat_identity_link", ID: l.ID.String()},
+			Outcome: audit.Success, ReasonCode: reason, Object: &audit.Object{Type: "chat_identity_link", ID: l.ID.String()},
 			Details: map[string]string{"provider": "slack", "slack_user": l.ExternalUserID, "user": l.UserID.String()},
 		})
 		return err

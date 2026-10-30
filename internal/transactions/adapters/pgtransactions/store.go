@@ -308,6 +308,12 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 		if _, err := q.FailExpiredOrgScans(ctx, org); err != nil {
 			return err
 		}
+		// A ticket sync task that expired has no report coming.
+		if s.Tickets != nil {
+			if err := s.Tickets.EndUnreported(ctx, tx, org); err != nil {
+				return err
+			}
+		}
 		slices.SortFunc(closed, compareUUID)
 		for _, txn := range slices.Compact(closed) {
 			if err := deadline(ctx, tx, q, org, txn, sign, now); err != nil {
@@ -488,6 +494,7 @@ func compareUUID(a, b ids.UUID) int {
 // ticketsync/app.Service): false when the task is not one under the
 // gateway's live lease.
 type TicketReporter interface {
+	EndUnreported(ctx context.Context, tx db.TenantTx, org ids.OrgID) error
 	ReportTicketSync(ctx context.Context, tx db.TenantTx, org ids.OrgID, gateway, task ids.UUID, leaseHash []byte,
 		status int, fields map[string]string) (bool, error)
 }

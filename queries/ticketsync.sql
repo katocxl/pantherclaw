@@ -99,6 +99,23 @@ FOR UPDATE OF v, o;
 UPDATE pc.ticket_outbound SET state = sqlc.arg(state), result_code = sqlc.narg(result_code), finished_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
+-- The open still waiting for the case's or incident's ticket.
+-- name: WaitingTicketOpen :one
+SELECT id FROM pc.ticket_outbound
+WHERE org_id = sqlc.arg(org_id) AND action = 'CREATE' AND state = 'PENDING'
+  AND (case_id = sqlc.narg(case_id) OR incident_id = sqlc.narg(incident_id))
+LIMIT 1;
+
+-- FailEndedTicketOutbound ends the rows whose task expired with no report:
+-- never leased, or leased by a gateway that did not answer. The write may
+-- have happened; a person looks at the ticket system.
+-- name: FailEndedTicketOutbound :many
+UPDATE pc.ticket_outbound o
+SET state = 'FAILED', result_code = 'not_reported', finished_at = now()
+FROM pc.verifications v
+WHERE o.org_id = sqlc.arg(org_id) AND v.org_id = o.org_id AND v.id = o.verification_id AND o.state = 'PENDING' AND v.state = 'EXPIRED'
+RETURNING o.id;
+
 -- name: TicketOutboundOf :many
 SELECT * FROM pc.ticket_outbound
 WHERE org_id = sqlc.arg(org_id) AND (case_id = sqlc.narg(case_id) OR incident_id = sqlc.narg(incident_id))
