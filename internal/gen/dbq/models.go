@@ -1649,18 +1649,23 @@ type PcDeviceCode struct {
 }
 
 type PcDiscovery struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	AgentID     ids.UUID
-	Source      string
-	KeyJkt      *string
-	PublicJwk   []byte
-	ScanKey     []byte
-	State       string
-	Observed    []byte
-	SeenCount   int64
-	FirstSeenAt time.Time
-	LastSeenAt  time.Time
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	AgentID          ids.UUID
+	Source           string
+	KeyJkt           *string
+	PublicJwk        []byte
+	ScanKey          []byte
+	State            string
+	Observed         []byte
+	SeenCount        int64
+	FirstSeenAt      time.Time
+	LastSeenAt       time.Time
+	MissedScans      int32
+	LastScanRun      *ids.UUID
+	ScanScope        *string
+	VanishNotifiedAt *time.Time
+	ScanPrincipal    *string
 }
 
 type PcDpopJti struct {

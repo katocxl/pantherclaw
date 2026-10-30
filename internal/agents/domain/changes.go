@@ -37,6 +37,19 @@ const (
 	ChangeInstanceNetwork      ChangeKind = "instance.network_changed"
 )
 
+// Continuous discovery's change kinds (PN-001.3, D114, D116). A discovery
+// that vanished or changed is only recorded and announced: neither changes
+// the agent's state or authority (HR-458, G3).
+const (
+	ChangeDiscoveryVanished   ChangeKind = "agent.discovery_vanished"
+	ChangeDiscoveryReappeared ChangeKind = "agent.discovery_reappeared"
+	ChangeDiscoveryChanged    ChangeKind = "agent.discovery_changed"
+)
+
+// VanishAfterMisses is how many complete scans in a row must miss a
+// discovery before people are told it vanished (G3, HR-458).
+const VanishAfterMisses = 3
+
 // kindPattern matches the agent_changes.kind CHECK.
 var kindPattern = regexp.MustCompile(`^[a-z][a-z_]{1,39}(\.[a-z][a-z_]{1,39}){0,2}$`)
 

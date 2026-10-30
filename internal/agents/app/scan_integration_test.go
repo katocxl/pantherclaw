@@ -24,9 +24,9 @@ func finding(kind, name string) app.ScanFinding {
 func TestF015_ScanFindingsBecomeDiscoveredAgents(t *testing.T) {
 	w := newWorld(t)
 	fs := []app.ScanFinding{finding("mcp_server", "github"), finding("agent_project", "/src/bot")}
-	_, err := w.inv.SubmitScan(as(w.org, td.KindUser, bind(td.RoleViewer, td.ScopeOrg, w.org.UUID())), "laptop", fs)
+	_, err := w.inv.SubmitScan(as(w.org, td.KindUser, bind(td.RoleViewer, td.ScopeOrg, w.org.UUID())), "laptop", fs, app.ScanMode{})
 	wantCode(t, "without agent.manage", err, pcerr.PermissionDenied, "")
-	r, err := w.inv.SubmitScan(w.teamOwner(), "laptop", fs)
+	r, err := w.inv.SubmitScan(w.teamOwner(), "laptop", fs, app.ScanMode{})
 	if err != nil || r.Created != 2 || r.Counted != 0 {
 		t.Fatalf("first submission: %+v, %v", r, err)
 	}
@@ -42,7 +42,7 @@ func TestF015_ScanFindingsBecomeDiscoveredAgents(t *testing.T) {
 		AND convert_from(body, 'UTF8')::jsonb #>> '{details,source}' = 'scan'`, w.org); n != 2 {
 		t.Fatalf("agent.discovered audit records: %d", n)
 	}
-	r, err = w.inv.SubmitScan(w.teamOwner(), "laptop", fs)
+	r, err = w.inv.SubmitScan(w.teamOwner(), "laptop", fs, app.ScanMode{})
 	if err != nil || r.Created != 0 || r.Counted != 2 || w.count(t, "SELECT max(seen_count) FROM pc.discoveries WHERE org_id = $1", w.org) != 2 {
 		t.Fatalf("resubmission: %+v, %v", r, err)
 	}
@@ -50,7 +50,7 @@ func TestF015_ScanFindingsBecomeDiscoveredAgents(t *testing.T) {
 		SELECT $1, gen_random_uuid(), 'd' || g, 'DISCOVERED', 'test' FROM generate_series(1, $2::int) g RETURNING id)
 		INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key)
 		SELECT $1, gen_random_uuid(), id, 'scan', sha256(id::text::bytea) FROM a`, w.org, app.MaxOpenScanDiscoveries)
-	r, err = w.inv.SubmitScan(w.teamOwner(), "laptop", []app.ScanFinding{finding("mcp_server", "new")})
+	r, err = w.inv.SubmitScan(w.teamOwner(), "laptop", []app.ScanFinding{finding("mcp_server", "new")}, app.ScanMode{})
 	if err != nil || r.Dropped != 1 || r.Created != 0 {
 		t.Fatalf("over the cap: %+v, %v", r, err)
 	}

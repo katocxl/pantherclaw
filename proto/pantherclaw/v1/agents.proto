@@ -521,6 +521,14 @@ message SubmitScanFindingsRequest {
   // scan_id: the server compares its hash, so only the holder of the lease
   // submits, not any holder of the gateway's certificate.
   bytes lease = 4 [(buf.validate.field).bytes.max_len = 64];
+  // UNTRUSTED scope of a CI-mode scan (G0 M17 D115): the repository or
+  // host it scanned. Its findings are discoveries of source ci_scan, kept
+  // apart per scope.
+  string scope = 5 [(buf.validate.field).string.max_len = 256];
+  // The scan read the whole scope, and this request carries every finding
+  // of it (at most 200, D130): a ci_scan discovery of the scope it lacks
+  // counts a miss (HR-459). Needs scope.
+  bool complete = 6;
 }
 
 // SubmitScanFindingsResponse counts what was recorded.
@@ -531,6 +539,10 @@ message SubmitScanFindingsResponse {
   int32 counted = 2;
   // Findings dropped because the org already has 200 open discoveries.
   int32 dropped = 3;
+  // Discoveries of the scope a complete scan did not see, each counted a
+  // miss. A discovery missed by 3 complete scans in a row is announced as
+  // vanished; nothing changes the agent (HR-458).
+  int32 missed = 4;
 }
 
 // RequestAgentRestorationRequest asks to restore a suspended agent.

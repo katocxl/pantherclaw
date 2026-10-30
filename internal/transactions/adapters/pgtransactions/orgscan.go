@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	agentsapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -37,8 +38,8 @@ var scanSources = []string{"mcp_configs", "org_installations", "repositories", "
 // it could not submit or the server dropped.
 var scanNotes = []string{"contents", "findings", "organization"}
 
-func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, gateway ids.UUID, task dbq.LeasedOrgScanRow,
-	r app.Report,
+func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify agentsapp.Notifier, org ids.OrgID, gateway ids.UUID,
+	task dbq.LeasedOrgScanRow, r app.Report,
 ) (app.Applied, error) {
 	counts, notScanned, scanned := map[string]int64{}, map[string]string{}, []string{}
 	for k, v := range r.Fields {
@@ -93,6 +94,10 @@ func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID,
 	if err := q.FinishGitHubScanRun(ctx, dbq.FinishGitHubScanRunParams{
 		State: state, Counts: c, Scanned: scanned, NotScanned: n, OrgID: org, ID: task.RunID,
 	}); err != nil {
+		return app.Applied{}, err
+	}
+	// Continuous discovery counts what this run missed (PN-001.3, D114).
+	if err := agentsapp.OrgScanFinished(ctx, tx, q, notify, gateway, task.ConnectionID, task.RunID, state, scanned, notScanned); err != nil {
 		return app.Applied{}, err
 	}
 	read, err := recordInstallation(ctx, q, org, gateway, task, r.Installation)

@@ -252,7 +252,7 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	}
 	// A person's local scan submits no GitHub kind.
 	person := e.caller(td.KindUser, td.RoleOrgAdmin)
-	if _, err := inv.SubmitScan(person, "laptop", findings); !errors.Is(err, aapp.ErrScanKind) {
+	if _, err := inv.SubmitScan(person, "laptop", findings, aapp.ScanMode{}); !errors.Is(err, aapp.ErrScanKind) {
 		t.Fatalf("a GitHub kind from a local scan: %v", err)
 	}
 }
@@ -282,14 +282,14 @@ func TestHR209_APersonsScanNeverTouchesTheGatewaysFindings(t *testing.T) {
 	person := e.caller(td.KindUser, td.RoleAgentOwner)
 	seeded := [32]byte{7}
 	pre := []aapp.ScanFinding{{Kind: "mcp_server", Key: seeded, Attributes: map[string]string{"name": "decoy"}}}
-	if r, err := inv.SubmitScan(person, "laptop", pre); err != nil || r.Created != 1 {
+	if r, err := inv.SubmitScan(person, "laptop", pre, aapp.ScanMode{}); err != nil || r.Created != 1 {
 		t.Fatalf("a person's finding: %+v %v", r, err)
 	}
 	workflow := []aapp.ScanFinding{{Kind: "github_workflow", Key: seeded, Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml"}}}
 	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, workflow); err != nil || r.Created != 1 || r.Counted != 0 {
 		t.Fatalf("the gateway's finding under a key a person submitted first: %+v %v", r, err)
 	}
-	if r, err := inv.SubmitScan(person, "laptop", pre); err != nil || r.Counted != 1 {
+	if r, err := inv.SubmitScan(person, "laptop", pre, aapp.ScanMode{}); err != nil || r.Counted != 1 {
 		t.Fatalf("the person's finding again: %+v %v", r, err)
 	}
 	listed, _, err := scans.Findings(admin, scan.ID, 0, "")
@@ -462,7 +462,7 @@ func TestHR209_ADismissedLocalFindingReopensToo(t *testing.T) {
 	person := e.caller(td.KindUser, td.RoleAgentOwner)
 	submit := func(attrs map[string]string) aapp.ScanResult {
 		t.Helper()
-		r, err := inv.SubmitScan(person, "laptop", []aapp.ScanFinding{{Kind: "mcp_server", Key: [32]byte{7}, Attributes: attrs}})
+		r, err := inv.SubmitScan(person, "laptop", []aapp.ScanFinding{{Kind: "mcp_server", Key: [32]byte{7}, Attributes: attrs}}, aapp.ScanMode{})
 		if err != nil {
 			t.Fatal(err)
 		}

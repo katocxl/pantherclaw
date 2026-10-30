@@ -353,7 +353,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 	m6.verifications = verification
 	m6.facts = gatewayFacts(pool)
-	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
+	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill).WithNotify(m5.notifications))
 
 	g, ctx := errgroup.WithContext(ctx)
 	// The private admin listener, in every role (HR-382).
@@ -790,7 +790,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
 	var autos *automationsCore
-	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing)).
+	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing).WithNotify(d.m5.notifications)).
 		WithAutomations(func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error) {
 			return autos.identities(ctx)
 		})))

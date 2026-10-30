@@ -52,11 +52,20 @@ type Entitlements interface {
 type Inventory struct {
 	pool *db.Pool
 	ents Entitlements
+	// notify announces discoveries that vanished or changed (PN-001.3); nil
+	// records them without a notice.
+	notify Notifier
 }
 
 // NewInventory returns the inventory use cases.
 func NewInventory(pool *db.Pool, ents Entitlements) *Inventory {
 	return &Inventory{pool: pool, ents: ents}
+}
+
+// WithNotify sets who announces discoveries that vanished or changed.
+func (inv *Inventory) WithNotify(n Notifier) *Inventory {
+	inv.notify = n
+	return inv
 }
 
 // inOrg runs fn in a tenant transaction of the caller's org.

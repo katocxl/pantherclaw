@@ -570,6 +570,75 @@ func (q *Queries) OpsDetectionCursor(ctx context.Context, orgID ids.OrgID) (OpsD
 	return i, err
 }
 
+const opsDiscoveryChanges = `-- name: OpsDiscoveryChanges :many
+SELECT x.id, x.agent_id, x.change, x.kind, x.since FROM (
+    SELECT d.id, d.agent_id, 'VANISHED'::text AS change, coalesce(d.observed ->> 'kind', '')::text AS kind,
+           d.vanish_notified_at AS since
+    FROM pc.discoveries d
+    WHERE d.org_id = $1 AND d.vanish_notified_at IS NOT NULL
+      AND ($2::boolean OR d.agent_id::text = ANY ($3::text[]))
+    UNION ALL
+    SELECT c.id, c.agent_id, 'CHANGED'::text, coalesce(c.details ->> 'kind', '')::text, c.created_at
+    FROM pc.agent_changes c
+    WHERE c.org_id = $1 AND c.kind = 'agent.discovery_changed' AND c.created_at >= $4::timestamptz
+      AND ($2::boolean OR c.agent_id::text = ANY ($3::text[]))
+) x
+ORDER BY x.since DESC, x.id DESC
+LIMIT $5
+`
+
+type OpsDiscoveryChangesParams struct {
+	OrgID     ids.OrgID
+	AllAgents bool
+	Agents    []string
+	Since     time.Time
+	MaxRows   int32
+}
+
+type OpsDiscoveryChangesRow struct {
+	ID      ids.UUID
+	AgentID ids.UUID
+	Change  string
+	Kind    string
+	Since   *time.Time
+}
+
+// Continuous discovery's work items (PN-001.3, D114, D116): the scan
+// discoveries people were told vanished and not seen since, and the
+// material changes recorded on open or claimed discoveries since a time,
+// newest first.
+func (q *Queries) OpsDiscoveryChanges(ctx context.Context, arg OpsDiscoveryChangesParams) ([]OpsDiscoveryChangesRow, error) {
+	rows, err := q.db.Query(ctx, opsDiscoveryChanges,
+		arg.OrgID,
+		arg.AllAgents,
+		arg.Agents,
+		arg.Since,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OpsDiscoveryChangesRow{}
+	for rows.Next() {
+		var i OpsDiscoveryChangesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Change,
+			&i.Kind,
+			&i.Since,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const opsGatewaysLastSeen = `-- name: OpsGatewaysLastSeen :many
 SELECT g.id, g.name, g.created_at,
        coalesce(greatest((SELECT max(t.created_at) FROM pc.transactions t WHERE t.org_id = g.org_id AND t.gateway_id = g.id::text),

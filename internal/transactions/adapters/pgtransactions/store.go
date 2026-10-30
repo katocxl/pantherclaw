@@ -128,7 +128,7 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 				} else if err != nil {
 					return err
 				}
-				out, err = orgScan(ctx, tx, q, org, gateway, scan, r)
+				out, err = orgScan(ctx, tx, q, s.Notify, org, gateway, scan, r)
 				return err
 			} else if err != nil {
 				return err
