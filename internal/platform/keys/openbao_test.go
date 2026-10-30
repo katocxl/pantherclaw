@@ -131,8 +131,10 @@ func TestHR488_OpenBaoAddressAndTLS(t *testing.T) {
 			t.Errorf("%s refused: %v", a, err)
 		}
 	}
-	bad := []string{"http://bao.example:8200", "http://10.0.0.5:8200", "ftp://bao.example", "https://u:p@bao.example",
-		"https://bao.example/v1/transit", "https://bao.example?x=1", "bao.example:8200", ""}
+	bad := []string{
+		"http://bao.example:8200", "http://10.0.0.5:8200", "ftp://bao.example", "https://u:p@bao.example",
+		"https://bao.example/v1/transit", "https://bao.example?x=1", "bao.example:8200", "",
+	}
 	for _, a := range bad {
 		if _, err := baoBaseURL(a); err == nil {
 			t.Errorf("%s accepted", a)

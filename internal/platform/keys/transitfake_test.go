@@ -124,8 +124,15 @@ func (f *transitFake) gcm(v int) cipher.AEAD {
 	if v < 1 || v > len(f.versions) {
 		return nil
 	}
-	b, _ := aes.NewCipher(f.versions[v-1])
-	g, _ := cipher.NewGCM(b)
+	b, err := aes.NewCipher(f.versions[v-1])
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	// The random-nonce GCM is the one FIPS 140-only mode allows.
+	g, err := cipher.NewGCMWithRandomNonce(b)
+	if err != nil {
+		f.t.Fatal(err)
+	}
 	return g
 }
 
@@ -133,10 +140,7 @@ func (f *transitFake) seal(pt []byte) string {
 	f.mu.Lock()
 	v := len(f.versions)
 	f.mu.Unlock()
-	g := f.gcm(v)
-	nonce := make([]byte, g.NonceSize())
-	_, _ = rand.Read(nonce)
-	return "vault:v" + strconv.Itoa(v) + ":" + base64.StdEncoding.EncodeToString(g.Seal(nonce, nonce, pt, nil))
+	return "vault:v" + strconv.Itoa(v) + ":" + base64.StdEncoding.EncodeToString(f.gcm(v).Seal(nil, nil, pt, nil))
 }
 
 func (f *transitFake) open(ct string) ([]byte, bool) {
@@ -151,10 +155,10 @@ func (f *transitFake) open(ct string) ([]byte, bool) {
 	}
 	g := f.gcm(v)
 	raw, err := base64.StdEncoding.DecodeString(b64)
-	if g == nil || err != nil || len(raw) < g.NonceSize() {
+	if g == nil || err != nil {
 		return nil, false
 	}
-	pt, err := g.Open(nil, raw[:g.NonceSize()], raw[g.NonceSize():], nil)
+	pt, err := g.Open(nil, nil, raw, nil)
 	return pt, err == nil
 }
 
