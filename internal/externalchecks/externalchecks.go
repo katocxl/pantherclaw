@@ -172,6 +172,8 @@ type Service struct {
 	log      *slog.Logger
 	asker    *asker
 	cache    *activeCache
+	// lookup reads an org's ACTIVE checks (active; tests replace it).
+	lookup func(ctx context.Context, org ids.OrgID) ([]Check, error)
 	// raiser alerts on a check whose endpoint left the allowed prefixes
 	// (nil: audited only).
 	raiser reflexports.Raiser
@@ -182,7 +184,9 @@ func New(pool *db.Pool, cfg Config, editions Editions, log *slog.Logger) *Servic
 	if log == nil {
 		log = pclog.Discard()
 	}
-	return &Service{pool: pool, cfg: cfg, editions: editions, log: log, asker: newAsker(cfg), cache: newActiveCache()}
+	s := &Service{pool: pool, cfg: cfg, editions: editions, log: log, asker: newAsker(cfg), cache: newActiveCache()}
+	s.lookup = s.active
+	return s
 }
 
 // CheckEndpoint applies the endpoint rules (HR-438).
@@ -530,10 +534,11 @@ func boolString(b bool) string {
 // exact one.
 const TestOperation = "test.operation"
 
-// Test asks a PENDING or ACTIVE check about a synthetic action and returns
+// Test asks a PENDING or ACTIVE check about a synthetic action, in every
+// edition (only Create and Activate need Business, D96a), and returns
 // its answer and the input sent; no decision uses it.
 func (s *Service) Test(ctx context.Context, id ids.UUID, operation string) (Answer, []byte, error) {
-	c, err := s.manager(ctx, true)
+	c, err := s.manager(ctx, false)
 	if err != nil {
 		return Answer{}, nil, err
 	}

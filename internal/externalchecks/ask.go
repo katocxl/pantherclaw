@@ -134,8 +134,10 @@ type preloadKey struct{}
 
 // Preload implements pipeline.ExternalCheck: the org's ACTIVE checks from
 // the cache, read in a short transaction of its own before the decision's
-// snapshot holds a connection, and only on a miss. Without the external
-// checks entitlement nothing is read. A read error is kept and Matching
+// snapshot holds a connection, and only on a miss; the empty list is cached
+// too. ACTIVE checks are asked in every edition, so a downgrade never drops
+// a restriction (D96a): the edition gates only Create and Activate. A read
+// error is never cached; it is kept and Matching
 // returns it (CANNOT_AUTHORIZE).
 func (s *Service) Preload(ctx context.Context, org ids.OrgID) context.Context {
 	checks, err := s.preload(ctx, org)
@@ -143,14 +145,11 @@ func (s *Service) Preload(ctx context.Context, org ids.OrgID) context.Context {
 }
 
 func (s *Service) preload(ctx context.Context, org ids.OrgID) ([]Check, error) {
-	if !s.entitled(ctx) {
-		return nil, nil
-	}
 	now := time.Now()
 	if checks, ok := s.cache.get(org, now); ok {
 		return checks, nil
 	}
-	checks, err := s.active(ctx, org)
+	checks, err := s.lookup(ctx, org)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +463,3 @@ func (a *asker) evict(id ids.UUID) {
 	defer a.mu.Unlock()
 	delete(a.clients, id)
 }
-
-// entitled reports whether the licence includes external checks; without
-// it, no check is read for a decision.
-func (s *Service) entitled(ctx context.Context) bool { return s.business(ctx) == nil }

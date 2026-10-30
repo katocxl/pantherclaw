@@ -5,6 +5,7 @@ package externalchecks
 
 import (
 	"context"
+	"errors"
 	"crypto/x509"
 	"net/http"
 	"net/http/httptest"
@@ -229,8 +230,7 @@ func (business) Current(context.Context) (billing.Entitlements, error) {
 
 // TestHR438_CallTimeAllowList: an ACTIVE check whose endpoint left the
 // allowed prefixes is not called (ENDPOINT_NOT_ALLOWED); without the
-// preload, Matching refuses rather than read inside a snapshot; without the
-// entitlement no check is read.
+// preload, Matching refuses rather than read inside a snapshot.
 // Covers: F366
 func TestHR438_CallTimeAllowList(t *testing.T) {
 	org := ids.New[ids.Org]()
@@ -255,11 +255,6 @@ func TestHR438_CallTimeAllowList(t *testing.T) {
 	}
 	if _, err := s.Matching(context.Background(), org, "stripe.refund.create"); err == nil {
 		t.Fatal("Matching without a preload read nothing and passed")
-	}
-	community := New(nil, Config{}, nil, nil)
-	community.cache.put(org, []Check{check}, time.Now())
-	if targets, err := community.Matching(community.Preload(context.Background(), org), org, "stripe.refund.create"); err != nil || len(targets) != 0 {
-		t.Fatalf("without the entitlement: %v %v", targets, err)
 	}
 }
 
@@ -292,4 +287,56 @@ func TestHR440_ReasonsAreOneCleanLineEach(t *testing.T) {
 	if a.Decision != "deny" || len(a.Reasons) != 1 || a.Reasons[0] != "over limit" {
 		t.Fatalf("%+v", a)
 	}
+}
+
+// TestHR437_ALookupErrorIsCannotAuthorize: a failed lookup of the org's
+// active checks is kept and returned by Matching, which the pipeline turns
+// into CANNOT_AUTHORIZE; it is never cached, so the next decision reads
+// again (D96a).
+// Covers: F366
+func TestHR437_ALookupErrorIsCannotAuthorize(t *testing.T) {
+	org := ids.New[ids.Org]()
+	s := New(nil, Config{}, business{}, nil)
+	reads := 0
+	s.lookup = func(context.Context, ids.OrgID) ([]Check, error) {
+		reads++
+		return nil, errors.New("database down")
+	}
+	if _, err := s.Matching(s.Preload(context.Background(), org), org, "stripe.refund.create"); err == nil {
+		t.Fatal("a failed lookup matched nothing and passed")
+	}
+	if _, err := s.Matching(s.Preload(context.Background(), org), org, "stripe.refund.create"); err == nil || reads != 2 {
+		t.Fatalf("the error was cached: %d reads, %v", reads, err)
+	}
+}
+
+// TestHR436_ADowngradeNeverDropsARestriction: an org whose licence no
+// longer includes external checks still has its ACTIVE checks asked; the
+// empty list is cached like any other (D96a).
+// Covers: F366
+func TestHR436_ADowngradeNeverDropsARestriction(t *testing.T) {
+	org := ids.New[ids.Org]()
+	check := Check{ID: ids.NewV7(), Name: "opa", Endpoint: "https://opa.example.com/v1", TimeoutMs: MaxTimeoutMs, Operations: []string{"stripe.*"}}
+	for name, ed := range map[string]Editions{"community": nil, "lapsed": lapsed{}} {
+		s := New(nil, Config{AllowedPrefixes: []string{"https://opa.example.com/"}}, ed, nil)
+		s.lookup = func(context.Context, ids.OrgID) ([]Check, error) { return []Check{check}, nil }
+		targets, err := s.Matching(s.Preload(context.Background(), org), org, "stripe.refund.create")
+		if err != nil || len(targets) != 1 || targets[0].ID != check.ID {
+			t.Errorf("%s: %v %v", name, targets, err)
+		}
+	}
+	s := New(nil, Config{}, nil, nil)
+	reads := 0
+	s.lookup = func(context.Context, ids.OrgID) ([]Check, error) { reads++; return nil, nil }
+	s.Preload(context.Background(), org)
+	s.Preload(context.Background(), org)
+	if reads != 1 {
+		t.Fatalf("the empty list was read %d times", reads)
+	}
+}
+
+type lapsed struct{}
+
+func (lapsed) Current(context.Context) (billing.Entitlements, error) {
+	return billing.Entitlements{}, errors.New("licence unreadable")
 }
