@@ -185,21 +185,16 @@ func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, wit
 		tl.Events = append(tl.Events, Event{At: c.At, Kind: EventAuthority, Grant: &g, Detail: authorityDetail(c)})
 	}
 
-	kids, err := q.InvRunChildren(ctx, tx.OrgID(), &run, MaxChildren)
+	// Lanes are the first MaxChildren children the caller may read, so
+	// hidden children never push visible ones out (HR-401).
+	lanes, _, err := children(ctx, q, tx.OrgID(), s, run)
 	if err != nil {
 		return Timeline{}, err
 	}
-	for _, k := range kids {
-		ok, err := s.Visible(ctx, k.AgentID)
-		if err != nil {
-			return Timeline{}, err
-		}
-		if !ok {
-			continue
-		}
-		tl.Lanes = append(tl.Lanes, Lane{Run: k.ID, Agent: k.AgentID, State: k.State, Created: k.CreatedAt, Ended: k.EndedAt})
-		id := k.ID
-		tl.Events = append(tl.Events, Event{At: k.CreatedAt, Kind: EventLane, Run: &id, Detail: k.State})
+	tl.Lanes = lanes
+	for _, l := range lanes {
+		id := l.Run
+		tl.Events = append(tl.Events, Event{At: l.Created, Kind: EventLane, Run: &id, Detail: l.State})
 	}
 	if r.EndedAt != nil {
 		tl.Events = append(tl.Events, Event{At: *r.EndedAt, Kind: EventRunEnd, Detail: str(r.EndReason)})

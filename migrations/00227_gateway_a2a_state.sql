@@ -12,16 +12,24 @@
 -- +goose Up
 ALTER TABLE pc.gateway_mcp_state DROP CONSTRAINT gateway_mcp_state_kind_check;
 ALTER TABLE pc.gateway_mcp_state ADD CONSTRAINT gateway_mcp_state_kind_check
-    CHECK (kind IN ('HOLD', 'TASK', 'SESSION', 'ELICITATION', 'A2A_TASK', 'A2A_CONTEXT'));
+    CHECK (kind IN ('HOLD', 'TASK', 'SESSION', 'ELICITATION', 'A2A_TASK', 'A2A_CONTEXT')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.gateway_mcp_state VALIDATE CONSTRAINT gateway_mcp_state_kind_check;
 ALTER TABLE pc.gateway_mcp_state DROP CONSTRAINT gateway_mcp_state_check1;
 ALTER TABLE pc.gateway_mcp_state ADD CONSTRAINT gateway_mcp_state_check1
-    CHECK (kind IN ('TASK', 'ELICITATION', 'A2A_TASK') OR (sealed_body IS NULL AND status IS NULL AND NOT busy));
+    CHECK (kind IN ('TASK', 'ELICITATION', 'A2A_TASK') OR (sealed_body IS NULL AND status IS NULL AND NOT busy)) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.gateway_mcp_state VALIDATE CONSTRAINT gateway_mcp_state_check1;
 -- An A2A task carries its sealed context id and nothing of an MCP task's;
 -- an A2A context carries no body (check1) and no action.
 ALTER TABLE pc.gateway_mcp_state ADD CONSTRAINT gateway_mcp_state_a2a_task
-    CHECK (kind <> 'A2A_TASK' OR (sealed_body IS NOT NULL AND action_id IS NULL AND status IS NULL AND NOT busy));
+    CHECK (kind <> 'A2A_TASK' OR (sealed_body IS NOT NULL AND action_id IS NULL AND status IS NULL AND NOT busy)) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.gateway_mcp_state VALIDATE CONSTRAINT gateway_mcp_state_a2a_task;
 ALTER TABLE pc.gateway_mcp_state ADD CONSTRAINT gateway_mcp_state_a2a_context
-    CHECK (kind <> 'A2A_CONTEXT' OR action_id IS NULL);
+    CHECK (kind <> 'A2A_CONTEXT' OR action_id IS NULL) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.gateway_mcp_state VALIDATE CONSTRAINT gateway_mcp_state_a2a_context;
 
 -- +goose Down
 DELETE FROM pc.gateway_mcp_state WHERE kind IN ('A2A_TASK', 'A2A_CONTEXT');

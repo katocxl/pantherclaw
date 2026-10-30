@@ -222,3 +222,40 @@ func TestRunInspectionNeverCountsHiddenChildren(t *testing.T) {
 		return nil
 	})
 }
+
+// TestRunTimelineLanesSkipHiddenChildren: a visible child after more than
+// a page of children the caller cannot see still gets a lane and a lane
+// event, and no hidden child does (HR-401).
+// Covers: F065
+func TestRunTimelineLanesSkipHiddenChildren(t *testing.T) {
+	f := newFixture(t)
+	s := scope{f.agent: true}
+	start := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+
+	run := f.run(t, f.agent)
+	f.children(t, run, f.other, investigations.MaxChildren+50, start)
+	f.children(t, run, f.agent, 1, start.Add(time.Minute))
+
+	f.read(t, func(ctx context.Context, tx db.TenantTx) error {
+		tl, err := investigations.RunTimeline(ctx, tx, s, run, false)
+		if err != nil {
+			return err
+		}
+		if len(tl.Lanes) != 1 || tl.Lanes[0].Agent != f.agent {
+			t.Fatalf("lanes = %+v, want the one visible child", tl.Lanes)
+		}
+		lanes := 0
+		for _, e := range tl.Events {
+			if e.Kind == investigations.EventLane {
+				lanes++
+				if e.Run == nil || *e.Run != tl.Lanes[0].Run {
+					t.Errorf("lane event for %v, want %v", e.Run, tl.Lanes[0].Run)
+				}
+			}
+		}
+		if lanes != 1 {
+			t.Errorf("%d lane events, want 1", lanes)
+		}
+		return nil
+	})
+}

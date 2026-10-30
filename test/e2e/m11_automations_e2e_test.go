@@ -650,12 +650,16 @@ func (a *autoStack) reciprocalLoop(t *testing.T) {
 			if rewinds == 3 {
 				t.Fatalf("%s (ledger seq %s) was passed without a trigger after %d rewinds (cursor %s)", name, seq, rewinds, from)
 			}
-			if to := s.row(t, `UPDATE pc.automation_feed_cursors SET seq = $2::bigint - 1
-				WHERE org_id = $1 AND seq >= $2::bigint RETURNING seq::text`, s.org, seq); to != "" {
-				rewinds++
-				t.Logf("%s (ledger seq %s): the server's feed job moved the cursor to %s without firing; rewound to %s (rewind %d)",
-					name, seq, from, to, rewinds)
-			}
+			// Only the test goes back: the app can never move a cursor
+			// backwards (automation_feed_cursors_forward).
+			var to string
+			s.db.AdminExec(t, "ALTER TABLE pc.automation_feed_cursors DISABLE TRIGGER automation_feed_cursors_forward")
+			s.db.AdminQueryRow(t, `UPDATE pc.automation_feed_cursors SET seq = $2::bigint - 1
+				WHERE org_id = $1 AND seq >= $2::bigint RETURNING seq::text`, []any{s.org, seq}, &to)
+			s.db.AdminExec(t, "ALTER TABLE pc.automation_feed_cursors ENABLE TRIGGER automation_feed_cursors_forward")
+			rewinds++
+			t.Logf("%s (ledger seq %s): the server's feed job moved the cursor to %s without firing; rewound to %s (rewind %d)",
+				name, seq, from, to, rewinds)
 			return false, nil
 		})
 	}
