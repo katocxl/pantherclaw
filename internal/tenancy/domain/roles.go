@@ -42,6 +42,8 @@ const (
 	RoleFleetManager        RoleName = "fleet_manager"
 	// G0 M14 AuthZEN enforcement points (D5).
 	RoleEnforcementPoint RoleName = "enforcement_point"
+	// G0 M18 delegated administration (D152, F584).
+	RoleScopeAdmin RoleName = "scope_admin"
 )
 
 // Role is a named set of permissions and the scope types it may be bound at.
@@ -73,6 +75,9 @@ var (
 	// agent always has a team and an environment, so its requests can
 	// always reach them.
 	teamScope = []ScopeType{ScopeTeam, ScopeEnvironment}
+	// belowOrgScope is any scope inside the organization but the org
+	// itself: a Scope Admin administers a part of the org (G0 M18 D152).
+	belowOrgScope = []ScopeType{ScopeBusinessUnit, ScopeTeam, ScopeEnvironment}
 	// basicReads lets a principal see the hierarchy it works in.
 	basicReads = []Permission{PermOrgRead, PermBusinessUnitRead, PermTeamRead, PermEnvironmentRead}
 	// authorityReads lets a principal see what agents may do (M4): grants,
@@ -101,7 +106,7 @@ func with(ps ...[]Permission) []Permission {
 var roles = []Role{
 	{
 		Name: RoleOrgAdmin, Title: "Org Admin", Scopes: orgScope,
-		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, automations, detections, incidents, cases, exposure, posture, operations, search and integrations, and simulates policy versions over recorded decisions. Registers AuthZEN enforcement points (human only) and reads the runs peer agents made for requesters. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
+		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, automations, detections, incidents, cases, exposure, posture, operations, search and integrations, and simulates policy versions over recorded decisions. Registers AuthZEN enforcement points (human only) and reads the runs peer agents made for requesters. Proposes changes to the org's own identity providers, each confirmed by a second person (human only), and reads them. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
 		Permissions: with(basicReads, []Permission{
 			PermOrgUpdate, PermBusinessUnitManage, PermTeamManage, PermTeamMembersManage, PermEnvironmentManage,
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
@@ -110,12 +115,12 @@ var roles = []Role{
 			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
 			PermPolicyExceptionRequest,
 			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun, PermPolicySimulate, PermAutomationRead,
-			PermEnforcementPointManage, PermA2APeerRunRead,
+			PermEnforcementPointManage, PermA2APeerRunRead, PermIdentityProviderRead, PermIdentityProviderManage,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only) and AuthZEN enforcement points (human only); reads automations and the runs peer agents made for requesters.",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only) and AuthZEN enforcement points (human only); reads automations, the runs peer agents made for requesters and the org's identity providers.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
@@ -124,6 +129,7 @@ var roles = []Role{
 			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun, PermCoverageRead, PermCoverageManage, PermCoverageReassess, PermRedteamRead,
 		}, authorityReads, boundaryReads, reflexReads, reflexManage, []Permission{
 			PermAutomationRead, PermProtectedChangeManage, PermPublisherCompromise, PermEnforcementPointManage, PermA2APeerRunRead,
+			PermIdentityProviderRead,
 		}),
 	},
 	{
@@ -162,12 +168,12 @@ var roles = []Role{
 	},
 	{
 		Name: RoleAuditor, Title: "Auditor", Scopes: orgScope,
-		Description: "Reads configuration, audit and evidence, restricted evidence included, and the runs peer agents made for requesters, and exports evidence packs (human only); changes nothing.",
+		Description: "Reads configuration, audit and evidence, restricted evidence included, the runs peer agents made for requesters and the org's identity providers, and exports evidence packs (human only); changes nothing.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
 			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead, PermAutomationRead,
-			PermA2APeerRunRead,
+			PermA2APeerRunRead, PermIdentityProviderRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
@@ -273,6 +279,11 @@ var roles = []Role{
 		Name: RoleEnforcementPoint, Title: "Enforcement Point", Scopes: orgScope, ServiceOnly: true,
 		Description: "For the service account of an enforcement point in front of an API or MCP server: asks the AuthZEN decision endpoint whether an agent's request may go through. Holding the role alone decides nothing: the service account must be the subject of an active enforcement point bound to the connection. Bound only to service accounts.",
 		Permissions: with(basicReads, []Permission{PermAuthZENEvaluate}),
+	},
+	{
+		Name: RoleScopeAdmin, Title: "Scope Admin", Scopes: belowOrgScope,
+		Description: "Administers a business unit, team or environment: reads its users and role bindings, and binds or unbinds roles there or below, but only roles it holds itself at that scope or above, Scope Admin included. Never binds an organization-scope role, invites people or manages service accounts.",
+		Permissions: with(basicReads, []Permission{PermRoleBind, PermRoleRead, PermUserRead}),
 	},
 }
 
