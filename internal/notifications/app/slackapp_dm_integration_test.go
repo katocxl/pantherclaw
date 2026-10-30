@@ -268,8 +268,10 @@ func TestHR529_SlackLinkNeedsAnAllowedDomain(t *testing.T) {
 		"none":     nil,
 		"wildcard": {"*.example.test"},
 		"upper":    {"Example.test"},
-		"too many": {"a.test", "b.test", "c.test", "d.test", "e.test", "f.test", "g.test", "h.test", "i.test", "j.test", "k.test",
-			"l.test", "m.test", "n.test", "o.test", "p.test", "q.test", "r.test", "s.test", "t.test", "u.test"},
+		"too many": {
+			"a.test", "b.test", "c.test", "d.test", "e.test", "f.test", "g.test", "h.test", "i.test", "j.test", "k.test",
+			"l.test", "m.test", "n.test", "o.test", "p.test", "q.test", "r.test", "s.test", "t.test", "u.test",
+		},
 	} {
 		if _, _, err := e.svc.CreateChannel(e.admin(), napp.ChannelInput{
 			Name: "dm-" + strings.ReplaceAll(name, " ", "-"), Kind: domain.KindSlackApp, EventTypes: []string{"channel.test"},

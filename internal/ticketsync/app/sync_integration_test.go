@@ -137,7 +137,7 @@ func (f *fixture) epoch() int {
 	return f.count("SELECT coalesce((SELECT epoch FROM pc.org_containment WHERE org_id = $1), 0)::int", f.org)
 }
 
-func (f *fixture) deliver(delivery string, body []byte, secret []byte) (string, error) {
+func (f *fixture) deliver(delivery string, body, secret []byte) (string, error) {
 	return f.svc.Inbound(context.Background(), f.org, f.config, delivery, domain.SignJira(secret, body), body)
 }
 

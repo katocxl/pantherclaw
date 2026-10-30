@@ -97,8 +97,10 @@ func TeamsOpenCard(f CardFacts) TeamsCard {
 	for _, x := range f.fields(true) {
 		body = append(body, AdaptiveText{Type: "TextBlock", Text: teamsText(x.Text), Wrap: true})
 	}
-	body = append(body, AdaptiveText{Type: "TextBlock", Wrap: true,
-		Text: "Decisions are made only on the PantherClaw approval page. Reactions and replies here never count."})
+	body = append(body, AdaptiveText{
+		Type: "TextBlock", Wrap: true,
+		Text: "Decisions are made only on the PantherClaw approval page. Reactions and replies here never count.",
+	})
 	return TeamsCard{
 		Type: "message", Text: teamsText(h + " (reference " + short(f.RequestID) + ")"),
 		Attachments: []TeamsAttachment{{

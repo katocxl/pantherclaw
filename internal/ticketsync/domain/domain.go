@@ -174,13 +174,17 @@ func Decide(owners Owners, key string, changes []Change, comment *Comment) []Ver
 			}
 			out = append(out, Verdict{Field: c.Field, Action: ActionMirror, Text: text})
 		case c.Field == FieldState && c.Done:
-			out = append(out, Verdict{Field: c.Field, Action: ActionNote,
+			out = append(out, Verdict{
+				Field: c.Field, Action: ActionNote,
 				Text: string(SystemJira) + " " + key + ": status moved to " + quote(val) +
-					"; a ticket status never restores authority or lifts containment, so nothing changed here"})
+					"; a ticket status never restores authority or lifts containment, so nothing changed here",
+			})
 		default:
-			out = append(out, Verdict{Field: c.Field, Action: ActionIgnore,
+			out = append(out, Verdict{
+				Field: c.Field, Action: ActionIgnore,
 				Text: string(SystemJira) + " " + key + ": " + string(c.Field) + " changed to " + quote(val) +
-					"; PantherClaw owns " + string(c.Field) + ", so the change was ignored"})
+					"; PantherClaw owns " + string(c.Field) + ", so the change was ignored",
+			})
 		}
 	}
 	if comment != nil && strings.TrimSpace(comment.Body) != "" {
@@ -190,11 +194,15 @@ func Decide(owners Owners, key string, changes []Change, comment *Comment) []Ver
 		}
 		body := Clean(comment.Body, MaxComment)
 		if owners.Of(FieldComments) == OwnerTicket {
-			out = append(out, Verdict{Field: FieldComments, Action: ActionMirror,
-				Text: string(SystemJira) + " " + key + ": comment by " + who + ": " + body})
+			out = append(out, Verdict{
+				Field: FieldComments, Action: ActionMirror,
+				Text: string(SystemJira) + " " + key + ": comment by " + who + ": " + body,
+			})
 		} else {
-			out = append(out, Verdict{Field: FieldComments, Action: ActionIgnore,
-				Text: string(SystemJira) + " " + key + ": comment by " + who + " not mirrored; PantherClaw owns comments"})
+			out = append(out, Verdict{
+				Field: FieldComments, Action: ActionIgnore,
+				Text: string(SystemJira) + " " + key + ": comment by " + who + " not mirrored; PantherClaw owns comments",
+			})
 		}
 	}
 	return out

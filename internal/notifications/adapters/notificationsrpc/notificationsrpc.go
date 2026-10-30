@@ -295,7 +295,8 @@ func slackAppIn(c *pantherclawv1.SlackAppConfig) *domain.SlackAppConfig {
 	if c.GetDataLevel() == pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_SUMMARY {
 		level = domain.SlackSummary
 	}
-	return &domain.SlackAppConfig{ChannelID: c.GetChannelId(), DataLevel: level, BotToken: c.GetBotToken(), DirectMessages: c.GetDirectMessages(),
+	return &domain.SlackAppConfig{
+		ChannelID: c.GetChannelId(), DataLevel: level, BotToken: c.GetBotToken(), DirectMessages: c.GetDirectMessages(),
 		AllowedEmailDomains: c.GetAllowedEmailDomains(),
 	}
 }

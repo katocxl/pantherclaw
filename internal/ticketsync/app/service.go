@@ -310,8 +310,10 @@ type Ref struct {
 }
 
 func refOf(r dbq.PcExternalRef) Ref {
-	return Ref{ID: r.ID, Connection: r.ConnectionID, Case: r.CaseID, Incident: r.IncidentID, System: domain.System(r.System),
-		Key: r.ExternalKey, RemoteUpdatedAt: r.RemoteUpdatedAt}
+	return Ref{
+		ID: r.ID, Connection: r.ConnectionID, Case: r.CaseID, Incident: r.IncidentID, System: domain.System(r.System),
+		Key: r.ExternalKey, RemoteUpdatedAt: r.RemoteUpdatedAt,
+	}
 }
 
 // LinkCase links case c to ticket key of the configuration's project.
