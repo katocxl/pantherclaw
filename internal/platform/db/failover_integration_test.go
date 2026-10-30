@@ -116,6 +116,23 @@ func TestHR496_TheRunningPathReadsTheAcknowledgedRow(t *testing.T) {
 	if tl, verified := row(); tl != 8 || !verified {
 		t.Fatalf("the accepted timeline was not recorded: %d %v", tl, verified)
 	}
+
+	// Another replica finds the row already at the new timeline.
+	app = d.AppPool(t)
+	if err := db.PromoteForTest(ctx, app, 7, 8); err != nil {
+		t.Fatalf("a replica after the first accepted: %v", err)
+	}
+
+	// T7 verified, T8 unverified, T9 sync: the row vouches for one
+	// promotion, never two (D223).
+	d.AdminExec(t, "UPDATE pc.db_primary_timeline SET timeline = 7, sync_verified = true")
+	app = d.AppPool(t)
+	if err := db.PromoteForTest(ctx, app, 8, 9); !errors.Is(err, db.ErrTimelineChanged) {
+		t.Fatalf("two promotions: %v, want refused", err)
+	}
+	if tl, verified := row(); tl != 7 || !verified {
+		t.Fatalf("a refused jump wrote the row: %d %v", tl, verified)
+	}
 }
 
 // TestHR496_NothingServesAfterAnUnacceptedPromotion: once the running

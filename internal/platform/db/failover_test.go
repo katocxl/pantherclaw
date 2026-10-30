@@ -19,7 +19,7 @@ import (
 // (G0 M19 D207, D218).
 // Covers: PN-010.7
 func TestHR496_PromotionHoldDecision(t *testing.T) {
-	one, two := int64(1), int64(2)
+	one, two, three := int64(1), int64(2), int64(3)
 	cases := []struct {
 		name                string
 		r                   Replication
@@ -35,14 +35,15 @@ func TestHR496_PromotionHoldDecision(t *testing.T) {
 		{name: "declared sync the new primary does not confirm holds", r: ReplicationSync, ack: &one, ackSync: true, hold: true, unverified: true},
 		{name: "new primary configured sync, old timeline not verified, holds", r: ReplicationSync, ack: &one, configured: true, hold: true, sync: true},
 		{name: "sync verified at both ends records the new timeline", r: ReplicationSync, ack: &one, ackSync: true, configured: true, record: true, sync: true},
+		{name: "a row ahead of the primary holds", r: ReplicationSync, ack: &three, ackSync: true, configured: true, hold: true, sync: true},
 	}
 	for _, c := range cases {
 		p, record := decidePromotion(c.r, 2, c.ack, c.ackSync, c.configured)
 		if p.Hold != c.hold || record != c.record || p.Sync != c.sync || p.Unverified != c.unverified || p.Timeline != 2 {
 			t.Errorf("%s: hold=%v record=%v sync=%v unverified=%v timeline=%d", c.name, p.Hold, record, p.Sync, p.Unverified, p.Timeline)
 		}
-		if p.Hold && p.Acknowledged != 1 {
-			t.Errorf("%s: acknowledged = %d, want 1", c.name, p.Acknowledged)
+		if p.Hold && p.Acknowledged != *c.ack {
+			t.Errorf("%s: acknowledged = %d, want %d", c.name, p.Acknowledged, *c.ack)
 		}
 	}
 	if Replication("semi").Valid() || !ReplicationSync.Valid() || !ReplicationAsync.Valid() {
@@ -117,6 +118,21 @@ func TestHR496_AHeldStartNeverVouchesForTheNextPromotion(t *testing.T) {
 	// Restarted on T3 before anyone acknowledged: the row still says T1.
 	if t3, record := decidePromotion(ReplicationSync, 3, &one, false, true); !t3.Hold || record {
 		t.Fatalf("restart on T3 = %+v record=%v, want the hold", t3, record)
+	}
+}
+
+// TestHR496_SyncCoversOnePromotion: T1 verified, T2 unverified, T3 sync
+// stays held on restart: the row still vouches for T1 and says nothing of
+// T2 (G0 M19 D223; the running path is in the integration test).
+// Covers: PN-010.7
+func TestHR496_SyncCoversOnePromotion(t *testing.T) {
+	one := int64(1)
+	if p, record := decidePromotion(ReplicationSync, 2, &one, true, true); p.Hold || !record {
+		t.Fatalf("one promotion = %+v record=%v, want accepted", p, record)
+	}
+	p, record := decidePromotion(ReplicationSync, 3, &one, true, true)
+	if !p.Hold || record {
+		t.Fatalf("two promotions = %+v record=%v, want the hold, unrecorded", p, record)
 	}
 }
 

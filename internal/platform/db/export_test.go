@@ -19,11 +19,11 @@ func BreakTimelineForTest(p *Pool) error {
 // armed as a start that verified sync on timeline, for a new primary that
 // verifies it on next.
 func PromoteForTest(ctx context.Context, p *Pool, timeline, next int64) error {
-	p.timeline.arm(Promotion{Timeline: timeline, Sync: true})
 	c, err := p.pool.Acquire(ctx)
 	if err != nil {
 		return err
 	}
 	defer c.Release()
+	p.timeline.arm(Promotion{Timeline: timeline, Sync: true})
 	return p.timeline.decide(ctx, c.Conn(), next, true)
 }

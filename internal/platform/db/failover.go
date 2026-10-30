@@ -23,9 +23,10 @@ import (
 // and budget reservations may be. pc.db_primary_timeline keeps the
 // acknowledged timeline and whether sync was verified while it ran. A
 // server that finds another timeline starts in the maintenance hold unless
-// sync was verified at both ends: on the acknowledged timeline and on the
-// new primary. `keys bump-epochs` acknowledges the new timeline once every
-// epoch is raised.
+// sync was verified at both ends of one promotion: on the acknowledged
+// timeline and on the new primary, the next timeline after it. Over a
+// larger jump the row says nothing of the timelines between (D223). `keys
+// bump-epochs` acknowledges the new timeline once every epoch is raised.
 
 // Replication is the replication the operator declares (db.replication).
 type Replication string
@@ -162,8 +163,9 @@ func decidePromotion(r Replication, timeline int64, ack *int64, ackSync, configu
 	case *ack == timeline:
 		// The same timeline: its verification is what this start found.
 		return out, true
-	case ackSync && out.Sync:
-		// Sync at both ends: the standby applied every commit.
+	case ackSync && out.Sync && timeline == *ack+1:
+		// Sync at both ends of one promotion: the standby applied every
+		// commit.
 		return out, true
 	default:
 		out.Hold = true
@@ -183,10 +185,10 @@ var ErrTimelineChanged = errors.New("db: the primary was promoted without verifi
 // armed by CheckPromotion. Every new connection reads the timeline again:
 // the same one passes; a new one passes only when this process verified
 // sync at start, the new primary verifies it too, and the acknowledged row
-// still says sync was verified on the timeline it replaces, read under
+// still says sync was verified on the timeline just before it, read under
 // lock since another start may have changed it, and is then recorded;
 // anything else breaks the pool for good (D213): every connection is
-// refused at acquire and the idle ones are closed (D218, D221).
+// refused at acquire and the idle ones are closed (D218, D221, D223).
 type timelineWatch struct {
 	mu       sync.Mutex
 	armed    bool
@@ -298,11 +300,12 @@ func (w *timelineWatch) decide(ctx context.Context, conn *pgx.Conn, tl int64, co
 
 // errRowUnverified reports an acknowledged row that does not vouch for the
 // timeline before the promotion.
-var errRowUnverified = errors.New("db: sync was not verified on the acknowledged timeline")
+var errRowUnverified = errors.New("db: sync was not verified on the timeline before this one")
 
 // acknowledge records tl, verified, if the row says sync was verified on
-// the acknowledged timeline: the new primary then applied every commit
+// the timeline just before it: the new primary then applied every commit
 // before it was promoted, so nothing was lost, and a restart does not hold.
+// A row already at tl, verified, is another replica's acceptance.
 func acknowledge(ctx context.Context, conn *pgx.Conn, tl int64) error {
 	return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, globalSetup, string(GlobalFailover)); err != nil {
@@ -315,7 +318,7 @@ func acknowledge(ctx context.Context, conn *pgx.Conn, tl int64) error {
 			return ErrNoTimelineRow
 		case err != nil:
 			return err
-		case ack == nil || !ackSync:
+		case ack == nil || !ackSync || (tl != *ack+1 && tl != *ack):
 			return errRowUnverified
 		}
 		tag, err := tx.Exec(ctx, recordSQL, tl, true)
