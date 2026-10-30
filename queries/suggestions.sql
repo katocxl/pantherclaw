@@ -21,10 +21,19 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'OPEN'
 RETURNING *;
 
 -- SuggestionFinding reads the posture finding a generation follows,
--- share-locked: a reconciliation that moves it waits for the generation,
--- or the generation waits for it and reads the new state (D91).
+-- share-locked just before the generation writes: a reconciliation that
+-- moves it waits for the write, or the generation waits for it and reads
+-- the new state (D91, D98a).
 -- name: SuggestionFinding :one
 SELECT * FROM pc.posture_findings WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR SHARE;
+
+-- PeekPolicySuggestionForFinding is a finding's newest suggestion,
+-- unlocked: what a generation reads before its evidence (D98a).
+-- name: PeekPolicySuggestionForFinding :one
+SELECT * FROM pc.policy_suggestions
+WHERE org_id = sqlc.arg(org_id) AND posture_finding_id = sqlc.arg(posture_finding_id)
+ORDER BY id DESC
+LIMIT 1;
 
 -- LatestPolicySuggestionForFinding is a finding's newest suggestion,
 -- locked.

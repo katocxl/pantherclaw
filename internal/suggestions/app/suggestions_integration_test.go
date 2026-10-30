@@ -668,6 +668,67 @@ func TestD91_ARemediationDuringAGenerationLeavesTheSuggestionStale(t *testing.T)
 	}
 }
 
+// TestD98a_AReconciliationNeverWaitsForAnEvidenceRead (D98a): a
+// reconciliation that remediates a finding while a generation is reading
+// its evidence commits without waiting for it; the generation then finds
+// the finding changed, runs once more and leaves the suggestion STALE.
+//
+// Covers: F185
+func TestD98a_AReconciliationNeverWaitsForAnEvidenceRead(t *testing.T) {
+	ctx := context.Background()
+	o := world(t)
+	got, _ := generate(t, o)
+	s := got[o.Agent]
+	o.Revoke(t, s.GrantID)
+	hook := &app.Queue{Jobs: insertClient(t, o)}
+
+	held, release := make(chan struct{}), make(chan struct{})
+	stop := sync.OnceFunc(func() { close(release) })
+	defer stop()
+	var outcome app.Outcome
+	generated := make(chan error, 1)
+	go func() {
+		generated <- o.P.InTenantTx(ctx, o.Org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			outcome, err = app.GenerateBetween(ctx, tx, s.PostureFindingID, func() { close(held); <-release })
+			return err
+		})
+	}()
+	select {
+	case <-held:
+	case err := <-generated:
+		t.Fatalf("generation: %v", err)
+	}
+	reconciled := make(chan error, 1)
+	go func() { reconciled <- recomputeWith(ctx, o, hook, func() {}) }()
+	select {
+	case err := <-reconciled:
+		if err != nil {
+			t.Fatalf("the reconciliation waited for the evidence read: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the reconciliation waited for the evidence read")
+	}
+	stop()
+	if err := <-generated; err != nil {
+		t.Fatal(err)
+	}
+
+	if outcome != app.Skipped { // the second run found it remediated and the suggestion STALE
+		t.Fatalf("generation: %s", outcome)
+	}
+	if f := unusedAny(t, o, s.PostureFindingID); f.State != string(podomain.Remediated) {
+		t.Fatalf("finding %s", f.State)
+	}
+	if c := count(t, o, `SELECT count(*) FROM pc.policy_suggestions WHERE id = $1 AND state = 'STALE'`, s.ID); c != 1 {
+		t.Fatal("the suggestion is not STALE")
+	}
+	if c := count(t, o, `SELECT count(*) FROM pc.policy_suggestions WHERE posture_finding_id = $1 AND state = 'OPEN'`,
+		s.PostureFindingID); c != 0 {
+		t.Fatalf("%d OPEN suggestions", c)
+	}
+}
+
 // TestD91_TheGenerationJobCommitsAndRollsBackWithTheReconciliation (D91):
 // the recomputation service, with the suggestions' queue as its finding
 // hook, enqueues one suggestions.generate job per unused-authority finding

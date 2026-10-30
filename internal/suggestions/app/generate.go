@@ -42,51 +42,93 @@ const (
 // tx (D91). Only an active unused-authority finding with a grant has one;
 // a REMEDIATED finding makes its open and drafted suggestions STALE. A
 // suggestion a person drafted or dismissed is left as it is.
+//
+// The evidence is read with no lock, so a reconciliation never waits for
+// it (D98a); only just before writing does the generation share-lock the
+// finding and re-check it and the latest suggestion. If either changed in
+// between, it runs once more, and then skips.
 func Generate(ctx context.Context, tx db.TenantTx, finding ids.UUID) (Outcome, error) {
+	return generate(ctx, tx, finding, nil)
+}
+
+// generate is Generate, calling between (when set) after the first
+// evidence read and before the lock.
+func generate(ctx context.Context, tx db.TenantTx, finding ids.UUID, between func()) (Outcome, error) {
+	for again := true; ; again = false {
+		out, changed, err := generateOnce(ctx, tx, finding, between)
+		if err != nil || !changed {
+			return out, err
+		}
+		if !again {
+			return Skipped, nil // changed twice while it read: the next job takes it
+		}
+		between = nil
+	}
+}
+
+// generateOnce is one generation; changed reports that the finding or its
+// latest suggestion moved while the evidence was read, and nothing was
+// written.
+func generateOnce(ctx context.Context, tx db.TenantTx, finding ids.UUID, between func()) (_ Outcome, changed bool, _ error) {
 	q, org := dbq.New(tx), tx.OrgID()
-	f, err := q.SuggestionFinding(ctx, org, finding)
+	f, err := q.GetPostureFinding(ctx, org, finding)
 	if db.IsNoRows(err) {
-		return Skipped, nil
+		return Skipped, false, nil
 	} else if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if podomain.Kind(f.Kind) != podomain.UnusedAuthority || f.GrantID == nil {
-		return Skipped, nil
+		return Skipped, false, nil
 	}
 	if podomain.State(f.State) == podomain.Remediated {
 		n, err := Resolve(ctx, tx, finding)
 		if err != nil || n == 0 {
-			return Skipped, err
+			return Skipped, false, err
 		}
-		return MadeStale, nil
+		return MadeStale, false, nil
 	}
 	if _, ops := domain.RoutesOf(f.AffectedPaths); len(ops) == 0 {
-		return Skipped, nil // nothing to restrict by operation
+		return Skipped, false, nil // nothing to restrict by operation
 	}
 	if !podomain.State(f.State).Active() {
-		return Skipped, nil // accepted for a while: the suggestion stays as it was
+		return Skipped, false, nil // accepted for a while: the suggestion stays as it was
 	}
-	latest, err := q.LatestPolicySuggestionForFinding(ctx, org, finding)
-	switch {
-	case db.IsNoRows(err):
-	case err != nil:
-		return "", err
-	case domain.State(latest.State) == domain.Drafted:
-		return Skipped, nil
-	case domain.State(latest.State) == domain.Dismissed && latest.FindingRemediatedAt == nil:
-		return Skipped, nil // dismissed until the finding is next remediated
+	latest, err := q.PeekPolicySuggestionForFinding(ctx, org, finding)
+	if skip, err := skipLatest(latest, err); skip || err != nil {
+		return Skipped, false, err
 	}
 	ev, err := gather(ctx, q, org, f)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
+	if between != nil {
+		between()
+	}
+
+	locked, err := q.SuggestionFinding(ctx, org, finding)
+	if db.IsNoRows(err) {
+		return "", true, nil
+	} else if err != nil {
+		return "", false, err
+	}
+	if !sameFinding(f, locked) {
+		return "", true, nil
+	}
+	now, err := q.LatestPolicySuggestionForFinding(ctx, org, finding)
+	if err != nil && !db.IsNoRows(err) {
+		return "", false, err
+	}
+	if now.ID != latest.ID || now.State != latest.State || !sameTime(now.FindingRemediatedAt, latest.FindingRemediatedAt) {
+		return "", true, nil
+	}
+
 	if !latest.ID.IsZero() && domain.State(latest.State) == domain.Open {
 		_, err = q.RefreshPolicySuggestion(ctx, dbq.RefreshPolicySuggestionParams{
 			OrgID: org, ID: latest.ID, Owners: ev.owners, WindowFrom: ev.from, WindowTo: ev.to, Observed: ev.observed,
 			CoverageLimits: ev.limits, Proposed: ev.proposed, ExpectedEffect: ev.effect,
 			Uncertainty: string(ev.assessment.Uncertainty), UncertaintyReasons: ev.assessment.Reasons,
 		})
-		return Refreshed, err
+		return Refreshed, false, err
 	}
 	_, err = q.InsertPolicySuggestion(ctx, dbq.InsertPolicySuggestionParams{
 		OrgID: org, ID: ids.NewV7(), Kind: string(domain.UnusedAuthority), PostureFindingID: finding, GrantID: *f.GrantID,
@@ -94,8 +136,37 @@ func Generate(ctx context.Context, tx db.TenantTx, finding ids.UUID) (Outcome, e
 		CoverageLimits: ev.limits, Proposed: ev.proposed, ExpectedEffect: ev.effect,
 		Uncertainty: string(ev.assessment.Uncertainty), UncertaintyReasons: ev.assessment.Reasons,
 	})
-	return Created, err
+	return Created, false, err
 }
+
+// skipLatest says whether a finding's latest suggestion keeps a generation
+// from writing: a person drafted it, or dismissed it and the finding was
+// not remediated since.
+func skipLatest(latest dbq.PcPolicySuggestion, err error) (bool, error) {
+	switch {
+	case db.IsNoRows(err):
+		return false, nil
+	case err != nil:
+		return false, err
+	case domain.State(latest.State) == domain.Drafted:
+		return true, nil
+	case domain.State(latest.State) == domain.Dismissed && latest.FindingRemediatedAt == nil:
+		return true, nil // dismissed until the finding is next remediated
+	}
+	return false, nil
+}
+
+// sameFinding says whether a finding is as a generation first read it:
+// the same state, snapshot, grant and paths.
+func sameFinding(a, b dbq.PcPostureFinding) bool {
+	return a.State == b.State && a.StateChangedAt.Equal(b.StateChangedAt) && a.LastSnapshotID == b.LastSnapshotID &&
+		sameTime(a.RemediatedAt, b.RemediatedAt) && sameID(a.GrantID, b.GrantID) &&
+		a.PathsTruncated == b.PathsTruncated && slices.Equal(a.AffectedPaths, b.AffectedPaths)
+}
+
+func sameTime(a, b *time.Time) bool { return (a == nil) == (b == nil) && (a == nil || a.Equal(*b)) }
+
+func sameID(a, b *ids.UUID) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
 
 // Resolve applies a finding's remediation to its suggestions, in tx (D91):
 // open and drafted ones become STALE, and dismissed ones record that their

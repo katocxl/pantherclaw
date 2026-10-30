@@ -376,6 +376,45 @@ func (q *Queries) LockPolicySuggestion(ctx context.Context, orgID ids.OrgID, iD 
 	return i, err
 }
 
+const peekPolicySuggestionForFinding = `-- name: PeekPolicySuggestionForFinding :one
+SELECT org_id, id, kind, posture_finding_id, grant_id, agent_id, owners, window_from, window_to, observed, coverage_limits, proposed, expected_effect, uncertainty, uncertainty_reasons, state, draft_policy_version_id, dismissed_by, dismiss_reason, finding_remediated_at, created_at, updated_at FROM pc.policy_suggestions
+WHERE org_id = $1 AND posture_finding_id = $2
+ORDER BY id DESC
+LIMIT 1
+`
+
+// PeekPolicySuggestionForFinding is a finding's newest suggestion,
+// unlocked: what a generation reads before its evidence (D98a).
+func (q *Queries) PeekPolicySuggestionForFinding(ctx context.Context, orgID ids.OrgID, postureFindingID ids.UUID) (PcPolicySuggestion, error) {
+	row := q.db.QueryRow(ctx, peekPolicySuggestionForFinding, orgID, postureFindingID)
+	var i PcPolicySuggestion
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Kind,
+		&i.PostureFindingID,
+		&i.GrantID,
+		&i.AgentID,
+		&i.Owners,
+		&i.WindowFrom,
+		&i.WindowTo,
+		&i.Observed,
+		&i.CoverageLimits,
+		&i.Proposed,
+		&i.ExpectedEffect,
+		&i.Uncertainty,
+		&i.UncertaintyReasons,
+		&i.State,
+		&i.DraftPolicyVersionID,
+		&i.DismissedBy,
+		&i.DismissReason,
+		&i.FindingRemediatedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const refreshPolicySuggestion = `-- name: RefreshPolicySuggestion :one
 UPDATE pc.policy_suggestions SET owners = $1, window_from = $2, window_to = $3,
     observed = $4, coverage_limits = $5, proposed = $6,
@@ -566,8 +605,9 @@ SELECT org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage
 `
 
 // SuggestionFinding reads the posture finding a generation follows,
-// share-locked: a reconciliation that moves it waits for the generation,
-// or the generation waits for it and reads the new state (D91).
+// share-locked just before the generation writes: a reconciliation that
+// moves it waits for the write, or the generation waits for it and reads
+// the new state (D91, D98a).
 func (q *Queries) SuggestionFinding(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPostureFinding, error) {
 	row := q.db.QueryRow(ctx, suggestionFinding, orgID, iD)
 	var i PcPostureFinding
