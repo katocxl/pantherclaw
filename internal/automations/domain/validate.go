@@ -90,6 +90,15 @@ type validator struct {
 	// ceiling operations (exact names and prefixes), resolved infos.
 	ops   []string
 	infos map[string]OperationInfo
+	// A v2 definition's graph (validate_nodes.go). before is what precedes
+	// the node being checked on every path.
+	flow       *Flow
+	nodeAt     map[string]string
+	paths      [][]string
+	pathsKnown bool
+	hasCycle   bool
+	before     map[string]bool
+	beforeNode map[string]map[string]bool
 }
 
 func (v *validator) add(sev Severity, code, path, msg string, args ...any) {
@@ -109,16 +118,28 @@ func (v *validator) lookupErr(path string, err error) {
 // path order of discovery.
 func Validate(ctx context.Context, d *Definition, env ValidationEnv) []Finding {
 	v := &validator{ctx: ctx, env: env, d: d, infos: map[string]OperationInfo{}}
+	if d.IsV2() {
+		v.analyze()
+	}
 	v.identity()
 	v.authority()
 	v.revocable()
 	v.trigger()
 	v.conditions()
-	v.steps()
+	if d.IsV2() {
+		v.nodes()
+	} else {
+		v.steps()
+	}
 	v.ifFails()
-	v.finish()
+	if !d.IsV2() {
+		v.finish()
+	}
 	v.limits()
 	v.irreversible()
+	if d.IsV2() {
+		v.pathChecks()
+	}
 	v.loops()
 	return v.out
 }
@@ -613,9 +634,7 @@ func (v *validator) stepKind(id string) string {
 func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int, scopes []string) {
 	c := v.d.Authority.Ceiling
 	refLaunch := func(p, id string) {
-		if !earlier(seen, id) || v.stepKind(id) != KindLaunchRun {
-			v.err(CodeLimitRange, at+p, "name an earlier launch_run step")
-		}
+		v.earlierStep(at+p, seen, id, KindLaunchRun, "name an earlier launch_run step")
 	}
 	scope := func(p, sc string, allowed ...string) {
 		switch {
@@ -765,9 +784,7 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		if !slices.Contains(scopes, x.Destination.String()) {
 			v.err(CodeUnsupportedCapability, at+"/destination", "list the destination under authority.platform for deliver")
 		}
-		if !earlier(seen, x.From) || v.stepKind(x.From) != KindBuildDigest {
-			v.err(CodeLimitRange, at+"/from", "name an earlier build_digest step")
-		}
+		v.earlierStep(at+"/from", seen, x.From, KindBuildDigest, "name an earlier build_digest step")
 	case *WaitWith:
 		if !dur(x.Duration, time.Second, MaxStepTimeout) {
 			v.err(CodeLimitRange, at+"/duration", "a wait is 1s to 24h")
@@ -787,9 +804,7 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 	case *PauseLaunchesWith:
 		scope("/selector", x.Selector, SelectAffected, SelectList)
 	case *ResumeLaunchesWith:
-		if !earlier(seen, x.Step) || v.stepKind(x.Step) != KindPauseLaunches {
-			v.err(CodeLimitRange, at+"/step", "name an earlier pause_launches step")
-		}
+		v.earlierStep(at+"/step", seen, x.Step, KindPauseLaunches, "name an earlier pause_launches step")
 	case *WaitCoverageWith:
 		if x.MinState != "ENFORCED" && x.MinState != "PARTIAL" {
 			v.err(CodeLimitRange, at+"/min_state", "min_state is ENFORCED or PARTIAL")
@@ -822,9 +837,7 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 			v.err(CodeLimitRange, at, "draft_restriction is from UNUSED_GRANTS over at least 7 days")
 		}
 	case *SimulateRestrictionWith:
-		if !earlier(seen, x.Step) || v.stepKind(x.Step) != KindDraftRestriction {
-			v.err(CodeLimitRange, at+"/step", "name an earlier draft_restriction step")
-		}
+		v.earlierStep(at+"/step", seen, x.Step, KindDraftRestriction, "name an earlier draft_restriction step")
 		if x.Days < 0 || x.Days > 30 {
 			v.err(CodeLimitRange, at+"/days", "days is at most 30")
 		}
@@ -881,8 +894,11 @@ func (v *validator) templates(at, s string) {
 			continue
 		}
 		if o := outputRef.FindStringSubmatch(ref); o != nil {
-			if v.d.Step(o[1]) == nil {
+			switch {
+			case v.d.Step(o[1]) == nil:
 				v.err(CodeTemplateField, at, "step %q does not exist", o[1])
+			case v.d.IsV2() && !v.precedes(o[1]):
+				v.err(CodeNotOnAllPaths, at, "step %q does not run before this on every path", o[1])
 			}
 			continue
 		}
@@ -945,11 +961,24 @@ func (v *validator) ifFails() {
 	for i, s := range v.d.Do {
 		seen[s.ID] = i
 	}
+	if v.d.IsV2() {
+		if len(f.Compensate) > MaxNodes {
+			v.err(CodeLimitRange, "/if_fails/compensate", "at most %d compensation steps", MaxNodes)
+			return
+		}
+		for i := range v.flow.Nodes {
+			seen[v.flow.Nodes[i].ID] = i
+		}
+	}
 	for i := range f.Compensate {
 		at := "/if_fails/compensate/" + strconv.Itoa(i)
+		if v.d.IsV2() {
+			v.compensation(at, f.Compensate[i])
+		}
 		v.step(at, f.Compensate[i], seen, true)
 		seen[f.Compensate[i].ID] = len(v.d.Do) + i
 	}
+	v.before = map[string]bool{}
 	for i, n := range f.Notify {
 		if n != ScopeOwner {
 			v.err(CodeLimitRange, "/if_fails/notify/"+strconv.Itoa(i), "if_fails notifies the OWNER")
@@ -962,18 +991,25 @@ func (v *validator) finish() {
 		v.err(CodeTerminalMissing, "/finish_when", "say what proves the work is done (finish_when)")
 	}
 	for i, f := range v.d.Finish {
-		at := "/finish_when/" + strconv.Itoa(i)
-		s := v.d.Step(f.Step)
-		switch {
-		case s == nil:
-			v.err(CodeTerminalMissing, at+"/step", "step %q does not exist", f.Step)
-		case !f.Condition.Valid():
-			v.err(CodeTerminalMissing, at+"/condition", "%q is not a finish condition", f.Condition)
-		case !Catalog[s.Step].Satisfies(f.Condition):
-			v.err(CodeCompletionRequestOnly, at, "%s cannot prove %s: finish on the step that confirms the outcome, not the one that asks for it",
-				s.Step, f.Condition)
-		}
+		v.finishEntry("/finish_when/"+strconv.Itoa(i), f)
 	}
+}
+
+// finishEntry checks one finish_when entry and reports whether it is sound.
+func (v *validator) finishEntry(at string, f Finish) bool {
+	s := v.d.Step(f.Step)
+	switch {
+	case s == nil:
+		v.err(CodeTerminalMissing, at+"/step", "step %q does not exist", f.Step)
+	case !f.Condition.Valid():
+		v.err(CodeTerminalMissing, at+"/condition", "%q is not a finish condition", f.Condition)
+	case !Catalog[s.Step].Satisfies(f.Condition):
+		v.err(CodeCompletionRequestOnly, at, "%s cannot prove %s: finish on the step that confirms the outcome, not the one that asks for it",
+			s.Step, f.Condition)
+	default:
+		return true
+	}
+	return false
 }
 
 func (v *validator) limits() {
@@ -997,9 +1033,17 @@ func (v *validator) limits() {
 	}
 	for i, s := range v.d.Do {
 		if s.Timeout.D() > v.d.Limits.DeadlineOrDefault() {
-			v.err(CodeLimitRange, "/do/"+strconv.Itoa(i)+"/timeout", "a step's timeout exceeds the execution deadline")
+			v.err(CodeLimitRange, v.stepAt(i, s)+"/timeout", "a step's timeout exceeds the execution deadline")
 		}
 	}
+}
+
+// stepAt is the JSON Pointer of the i-th step of Do.
+func (v *validator) stepAt(i int, s StepSpec) string {
+	if v.d.IsV2() {
+		return v.nodeAt[s.ID]
+	}
+	return "/do/" + strconv.Itoa(i)
 }
 
 // irreversible: every irreversible ceiling operation is reconciled by a
@@ -1051,7 +1095,7 @@ func (v *validator) loops() {
 		}
 	}
 	for i, s := range v.d.Do {
-		check("/do/"+strconv.Itoa(i), s)
+		check(v.stepAt(i, s), s)
 	}
 	if v.d.IfFails != nil {
 		for i, s := range v.d.IfFails.Compensate {
