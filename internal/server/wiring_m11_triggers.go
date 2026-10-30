@@ -95,7 +95,7 @@ func newAutomationEndpoints(pool *db.Pool, kp keys.KeyProvider, trig *triggers.S
 	if err != nil {
 		return nil, err
 	}
-	return ep.WithFailures(&failures.Sink{}), nil
+	return ep.WithFailures(&failures.Sink{}).WithWebhookKeys(keystore.NewWebhookKeys(pool, kp)), nil
 }
 
 // automationTriggerServices builds the trigger and endpoints services the

@@ -76,3 +76,14 @@ UPDATE pc.keys
 SET wrapped_private_key = sqlc.arg(wrapped_private_key), kek_id = sqlc.arg(kek_id)
 WHERE org_id = sqlc.arg(org_id) AND kid = sqlc.arg(kid)
   AND wrapped_private_key = sqlc.arg(old_wrapped_private_key) AND kek_id = sqlc.arg(old_kek_id);
+
+-- name: ListWebhookKeys :many
+-- An org's webhooks keys that are not revoked (G0 M20 D251). live is false
+-- for a RETIRING key whose overlap has ended: it verifies nothing and is in
+-- no JWKS (HR-512).
+SELECT kid, public_key, wrapped_private_key, kek_id, state, created_at, state_changed_at,
+       (state_changed_at + make_interval(secs => sqlc.arg(overlap_seconds)::int))::timestamptz AS retires_at,
+       (state = 'ACTIVE' OR state_changed_at > now() - make_interval(secs => sqlc.arg(overlap_seconds)::int))::bool AS live
+FROM pc.keys
+WHERE org_id = sqlc.arg(org_id) AND purpose = 'webhooks' AND state <> 'REVOKED'
+ORDER BY created_at, kid;

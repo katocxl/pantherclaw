@@ -68,7 +68,7 @@ func newSIEM(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, notify s
 	if notify != nil {
 		health.Notify = notify
 	}
-	svc.WithHealthSink(health).WithFailures(edgesFailures())
+	svc.WithHealthSink(health).WithFailures(edgesFailures()).WithWebhookKeys(keystore.NewWebhookKeys(pool, kp))
 	if bill != nil {
 		svc.WithEditions(bill)
 	}

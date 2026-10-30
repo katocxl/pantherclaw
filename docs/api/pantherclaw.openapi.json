@@ -27171,6 +27171,114 @@
         }
       }
     },
+    "/pantherclaw.v1.WebhookKeyService/ListWebhookKeys": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.WebhookKeyService"
+        ],
+        "summary": "ListWebhookKeys",
+        "description": "ListWebhookKeys lists the org's ACTIVE key and its RETIRING key during\n a rotation's overlap (public halves only).\n permission: webhook_key.read",
+        "operationId": "pantherclaw.v1.WebhookKeyService.ListWebhookKeys",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListWebhookKeysRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListWebhookKeysResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.WebhookKeyService/RotateWebhookKey": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.WebhookKeyService"
+        ],
+        "summary": "RotateWebhookKey",
+        "description": "RotateWebhookKey makes a new ACTIVE key; the old one is RETIRING and\n stays in the JWKS for 24 hours, then is gone. It is refused while a\n RETIRING key is still in its overlap. It needs a step-up, so over the\n API it answers STEP_UP_REQUIRED. Audited.\n permission: webhook_key.manage",
+        "operationId": "pantherclaw.v1.WebhookKeyService.RotateWebhookKey",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RotateWebhookKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RotateWebhookKeyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.WorkloadService/Enroll": {
       "post": {
         "tags": [
@@ -78876,6 +78984,90 @@
         "title": "BatchCeilingsEntry",
         "additionalProperties": false
       },
+      "pantherclaw.v1.ListWebhookKeysRequest": {
+        "type": "object",
+        "title": "ListWebhookKeysRequest",
+        "additionalProperties": false,
+        "description": "ListWebhookKeysRequest is empty."
+      },
+      "pantherclaw.v1.ListWebhookKeysResponse": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.WebhookKey"
+            },
+            "title": "keys",
+            "description": "The ACTIVE key first."
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS."
+          }
+        },
+        "title": "ListWebhookKeysResponse",
+        "additionalProperties": false,
+        "description": "ListWebhookKeysResponse lists the keys and where they are published."
+      },
+      "pantherclaw.v1.RotateWebhookKeyRequest": {
+        "type": "object",
+        "title": "RotateWebhookKeyRequest",
+        "additionalProperties": false,
+        "description": "RotateWebhookKeyRequest is empty."
+      },
+      "pantherclaw.v1.RotateWebhookKeyResponse": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "title": "key",
+            "description": "The new ACTIVE key.",
+            "$ref": "#/components/schemas/pantherclaw.v1.WebhookKey"
+          },
+          "retiringKid": {
+            "type": "string",
+            "title": "retiring_kid",
+            "description": "The key that is now RETIRING (empty when the org had none)."
+          }
+        },
+        "title": "RotateWebhookKeyResponse",
+        "additionalProperties": false,
+        "description": "RotateWebhookKeyResponse names the new and the retiring key."
+      },
+      "pantherclaw.v1.WebhookKey": {
+        "type": "object",
+        "properties": {
+          "kid": {
+            "type": "string",
+            "title": "kid",
+            "description": "Key id, as in the JWKS (\"webhooks-...\")."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"ACTIVE\" (signs) or \"RETIRING\" (verifies only, during the overlap)."
+          },
+          "publicKey": {
+            "type": "string",
+            "title": "public_key",
+            "description": "The Ed25519 public key, base64url without padding (the JWK \"x\")."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "Creation time.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "retireTime": {
+            "title": "retire_time",
+            "description": "RETIRING keys: when it leaves the JWKS.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "WebhookKey",
+        "additionalProperties": false,
+        "description": "WebhookKey is one of the org's webhook signing keys."
+      },
       "pantherclaw.v1.AttestationKind": {
         "type": "string",
         "title": "AttestationKind",
@@ -79677,6 +79869,10 @@
     {
       "name": "pantherclaw.v1.WaitlistService",
       "description": "WaitlistService serves the Agent Waitlist (Pass; PN-004): every pending\n human decision, with priority, deadline, routing and escalation (G0 M5\n part 2). Entries are decided through the service that owns their subject\n (IdentityService.AdmitInstance, the approval page, GrantService,\n PackageService), never here. An entry's kind, subject, priority and\n deadline come from PantherClaw's records, never from agent input, and an\n entry past its deadline resolves to \"not done\" (HR-177), except a\n RECONCILIATION entry, which stays open and escalates."
+    },
+    {
+      "name": "pantherclaw.v1.WebhookKeyService",
+      "description": "WebhookKeyService manages the organization's Ed25519 webhook signing key\n (G0 M20 D251, D261; PN-018, HR-510..512). Destinations that opt in\n receive a `v1a,` signature by this key next to the HMAC `v1,` ones. Its\n public half is published at\n /.well-known/pantherclaw/orgs/{org}/webhook-jwks.json with the RETIRING\n key while a rotation's 24-hour overlap lasts."
     },
     {
       "name": "pantherclaw.v1.WorkloadService",

@@ -508,6 +508,8 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.BreakGlassService/ListBreakGlassActivations":          entitlements.ClassRead,
 	// G0 M20 D251: the Ed25519 webhook opt-in (a name longer than the column).
 	"/pantherclaw.v1.TriggerService/SetAutomationDestinationSignatureScheme": entitlements.ClassChange,
+	"/pantherclaw.v1.WebhookKeyService/ListWebhookKeys":                      entitlements.ClassRead,
+	"/pantherclaw.v1.WebhookKeyService/RotateWebhookKey":                     entitlements.ClassChange,
 }
 
 // ProcedureClass is the plan-gate class of a procedure (D43), for the

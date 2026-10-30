@@ -9,15 +9,22 @@ import (
 	"maps"
 	"net/http"
 
+	"connectrpc.com/connect/v2"
+
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+	"github.com/katocxl/pantherclaw/internal/webhookkeys"
+	"github.com/katocxl/pantherclaw/internal/webhookkeys/webhookkeysrpc"
 )
 
 // m20WebhookProcedures are the Ed25519 webhook opt-ins (G0 M20 D251,
 // HR-510): each destination kind's own manage permission, checked again by
 // its use case (a person, and the edition the destination already has).
 var m20WebhookProcedures = map[string]td.Permission{
+	pantherclawv1connect.WebhookKeyServiceListWebhookKeysProcedure:                      td.PermWebhookKeyRead,
+	pantherclawv1connect.WebhookKeyServiceRotateWebhookKeyProcedure:                     td.PermWebhookKeyManage,
 	pantherclawv1connect.NotificationServiceSetChannelSignatureSchemeProcedure:          td.PermNotificationManage,
 	pantherclawv1connect.SIEMServiceSetSIEMDestinationSignatureSchemeProcedure:          td.PermSIEMManage,
 	pantherclawv1connect.TriggerServiceSetAutomationDestinationSignatureSchemeProcedure: td.PermAutomationEndpointsManage,
@@ -58,4 +65,22 @@ func mountWebhookJWKS(mux *http.ServeMux, src webhookJWKS, log *slog.Logger) {
 		w.Header().Set("Cache-Control", "public, max-age=60")
 		_, _ = w.Write(b)
 	})
+}
+
+// webhookJWKSOf is the per-org key store the JWKS route reads; nil (an
+// empty set) without a key provider.
+func webhookJWKSOf(d apiDeps) webhookJWKS {
+	if d.pool == nil || d.kp == nil {
+		return nil
+	}
+	return keystore.NewWebhookKeys(d.pool, d.kp)
+}
+
+// registerM20Webhooks serves WebhookKeyService (D261).
+func registerM20Webhooks(rs *connect.Server, d apiDeps) {
+	if d.pool == nil || d.kp == nil {
+		return
+	}
+	svc := webhookkeys.New(d.pool, keystore.NewWebhookKeys(d.pool, d.kp), d.publicURL)
+	pantherclawv1connect.RegisterWebhookKeyServiceHandler(rs, webhookkeysrpc.New(svc))
 }

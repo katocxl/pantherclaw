@@ -54,7 +54,7 @@ func TestHR510_WebhookChannelOptInSendsV1aNextToHMAC(t *testing.T) {
 	}
 	admin := e.as(td.KindUser, e.alice, td.RoleOrgAdmin)
 	hook := e.channel(t, napp.NewChannel{Name: "siem", Kind: domain.KindWebhook, EventTypes: []string{"security.*"}, URL: r.URL + "/pc"})
-	logs := e.channel(t, napp.NewChannel{Name: "logs", Kind: domain.KindLog, EventTypes: []string{"security.*"}})
+	logs := e.channel(t, napp.NewChannel{Name: "logs", Kind: domain.KindLog, EventTypes: []string{"approval.*"}})
 
 	// Without keys wired, opting in is refused; HMAC stays.
 	if _, _, err := e.svc.SetChannelSignatureScheme(admin, hook.ID, "hmac+ed25519"); !errors.Is(err, napp.ErrSigningUnavailable) {
