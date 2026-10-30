@@ -207,6 +207,14 @@ type PcAgentInstance struct {
 	SandboxSessionID  *ids.UUID
 }
 
+type PcAgentMilestone struct {
+	OrgID      ids.OrgID
+	AgentID    ids.UUID
+	Kind       string
+	At         time.Time
+	RecordedAt time.Time
+}
+
 type PcAgentPromotion struct {
 	OrgID           ids.OrgID
 	ID              ids.UUID
@@ -384,6 +392,7 @@ type PcApprovalRequest struct {
 	ExecutionID           *ids.UUID
 	StepID                *string
 	RequestedByAutomation *ids.UUID
+	FirstDecidedAt        *time.Time
 }
 
 type PcApprovalRequestLinkedPerson struct {
@@ -929,6 +938,7 @@ type PcCase struct {
 	UpdatedAt           time.Time
 	OperationalClosedAt *time.Time
 	ClosedAt            *time.Time
+	ContainedAt         *time.Time
 }
 
 type PcCaseEntry struct {
@@ -1847,6 +1857,12 @@ type PcExecutionReceipt struct {
 	RemovedByPolicy *ids.UUID
 }
 
+type PcExplanationView struct {
+	OrgID         ids.OrgID
+	TransactionID ids.UUID
+	FirstViewedAt time.Time
+}
+
 type PcExposureChange struct {
 	OrgID     ids.OrgID
 	ChangeSeq int64
@@ -2163,17 +2179,18 @@ type PcIdentityPlaybookRequest struct {
 }
 
 type PcIncident struct {
-	OrgID     ids.OrgID
-	ID        ids.UUID
-	Title     string
-	Severity  string
-	State     string
-	OwnerID   *ids.UUID
-	GroupKey  string
-	OpenedBy  string
-	Test      bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Title       string
+	Severity    string
+	State       string
+	OwnerID     *ids.UUID
+	GroupKey    string
+	OpenedBy    string
+	Test        bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	ContainedAt *time.Time
 }
 
 type PcIncidentEvent struct {
@@ -2480,6 +2497,29 @@ type PcOrgTermsAcceptance struct {
 	AcceptedAt   time.Time
 }
 
+type PcOutcomeCollection struct {
+	OrgID     ids.OrgID
+	StartedAt time.Time
+}
+
+type PcOutcomeMetricSample struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Metric      string
+	Dimension   string
+	WindowStart time.Time
+	WindowEnd   time.Time
+	Scope       string
+	P50Seconds  pgtype.Float8
+	P90Seconds  pgtype.Float8
+	Share       pgtype.Float8
+	Measured    int64
+	Unmeasured  int64
+	Reasons     []byte
+	Collected   bool
+	SampledAt   time.Time
+}
+
 type PcPackagePin struct {
 	OrgID     ids.OrgID
 	PackageID ids.UUID
@@ -2659,6 +2699,14 @@ type PcPolicyRolloutCursor struct {
 	LastTxn          ids.UUID
 	LastEvaluation   int32
 	VerifyAfterAgent *ids.UUID
+}
+
+type PcPolicyRolloutStageEvent struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	FromStage *string
+	ToStage   string
+	At        time.Time
 }
 
 type PcPolicyRolloutTarget struct {
@@ -3008,6 +3056,7 @@ type PcResponseAction struct {
 	SettledAt         *time.Time
 	NextCheckAt       time.Time
 	CheckBackoffS     int32
+	ExecutionID       *ids.UUID
 }
 
 type PcResponsePath struct {

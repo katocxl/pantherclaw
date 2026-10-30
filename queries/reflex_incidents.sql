@@ -163,7 +163,7 @@ SELECT * FROM pc.incident_events WHERE org_id = sqlc.arg(org_id) AND incident_id
 SELECT * FROM pc.alerts WHERE org_id = sqlc.arg(org_id) AND incident_id = sqlc.arg(incident_id) ORDER BY id LIMIT 500;
 
 -- name: SetIncidentState :execrows
-UPDATE pc.incidents SET state = sqlc.arg(to_state), updated_at = now()
+UPDATE pc.incidents SET state = sqlc.arg(to_state), updated_at = now(), contained_at = CASE WHEN sqlc.arg(to_state) = 'CONTAINED' THEN coalesce(contained_at, now()) ELSE contained_at END
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = sqlc.arg(from_state);
 
 -- name: AssignIncident :execrows

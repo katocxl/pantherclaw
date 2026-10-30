@@ -321,7 +321,7 @@ func (q *Queries) GetFailure(ctx context.Context, orgID ids.OrgID, iD ids.UUID) 
 }
 
 const getIncident = `-- name: GetIncident :one
-SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at FROM pc.incidents WHERE org_id = $1 AND id = $2
+SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at FROM pc.incidents WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcIncident, error) {
@@ -339,6 +339,7 @@ func (q *Queries) GetIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID)
 		&i.Test,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ContainedAt,
 	)
 	return i, err
 }
@@ -485,7 +486,7 @@ const insertIncident = `-- name: InsertIncident :one
 INSERT INTO pc.incidents (org_id, id, title, severity, group_key, opened_by, test, owner_id)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8)
-RETURNING org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at
+RETURNING org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at
 `
 
 type InsertIncidentParams struct {
@@ -523,6 +524,7 @@ func (q *Queries) InsertIncident(ctx context.Context, arg InsertIncidentParams) 
 		&i.Test,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ContainedAt,
 	)
 	return i, err
 }
@@ -783,7 +785,7 @@ func (q *Queries) ListFailures(ctx context.Context, arg ListFailuresParams) ([]P
 }
 
 const listIncidents = `-- name: ListIncidents :many
-SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at FROM pc.incidents i
+SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at FROM pc.incidents i
 WHERE i.org_id = $1
   AND ($2::bool OR (
       EXISTS (SELECT 1 FROM pc.alerts a WHERE a.org_id = i.org_id AND a.incident_id = i.id)
@@ -840,6 +842,7 @@ func (q *Queries) ListIncidents(ctx context.Context, arg ListIncidentsParams) ([
 			&i.Test,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ContainedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -946,7 +949,7 @@ func (q *Queries) LockAlert(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (
 }
 
 const lockIncident = `-- name: LockIncident :one
-SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at FROM pc.incidents WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at FROM pc.incidents WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcIncident, error) {
@@ -964,6 +967,7 @@ func (q *Queries) LockIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 		&i.Test,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ContainedAt,
 	)
 	return i, err
 }
@@ -1180,7 +1184,7 @@ func (q *Queries) SetAlertState(ctx context.Context, arg SetAlertStateParams) (i
 }
 
 const setIncidentState = `-- name: SetIncidentState :execrows
-UPDATE pc.incidents SET state = $1, updated_at = now()
+UPDATE pc.incidents SET state = $1, updated_at = now(), contained_at = CASE WHEN $1 = 'CONTAINED' THEN coalesce(contained_at, now()) ELSE contained_at END
 WHERE org_id = $2 AND id = $3 AND state = $4
 `
 

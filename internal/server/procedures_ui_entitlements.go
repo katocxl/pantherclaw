@@ -284,6 +284,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.NotificationService/TestChannel":                      entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/UpdateChannel":                    entitlements.ClassChange,
 	"/pantherclaw.v1.OnboardingService/GetProgress":                        entitlements.ClassAllow,
+	"/pantherclaw.v1.OutcomeService/GetOutcomeMetrics":                     entitlements.ClassRead,
 	"/pantherclaw.v1.OperationsService/GetEvidenceStatus":                  entitlements.ClassRead,
 	"/pantherclaw.v1.OperationsService/GetMetrics":                         entitlements.ClassRead,
 	"/pantherclaw.v1.OperationsService/GetSummary":                         entitlements.ClassRead,

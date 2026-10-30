@@ -566,6 +566,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM10OpsJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM21OutcomeJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerM11GovernJobs(evidenceJobs, jreg, pool, log); err != nil {
 			return err
 		}
@@ -836,6 +839,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReleases(rs, pool, d.m11protect)
 	registerPolicyExceptions(rs, d)
+	registerM21Outcomes(rs, d)
 	mountM10Ops, err := registerM10Ops(rs, d)
 	if err != nil {
 		return nil, err

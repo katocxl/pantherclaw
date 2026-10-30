@@ -459,9 +459,11 @@ func splitByPermission(c tenancy.Caller, metrics []string) (readable, hidden []s
 // and "/interventions" for automation exceptions resolved org-wide.
 const (
 	OutcomeCompleted     = "completed_with_evidence"
+	OutcomeNoEvidence    = "completed_without_evidence"
 	OutcomePartial       = "partial"
 	OutcomeFailed        = "failed"
 	OutcomeReconcile     = "needs_reconciliation"
+	OutcomeCancelled     = "cancelled"
 	OutcomeInterventions = "interventions"
 	OutcomeRefused       = "triggers_refused"
 )

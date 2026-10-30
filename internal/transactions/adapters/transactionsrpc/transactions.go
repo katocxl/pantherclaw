@@ -103,6 +103,7 @@ func (s *Transactions) GetTransactionEvidence(ctx context.Context, req *pantherc
 	if err != nil {
 		return nil, err
 	}
+	_ = s.svc.NoteExplanationView(ctx, id) // a lost first view reads as unread, never as a failed read (F774 M2)
 	out := &pantherclawv1.GetTransactionEvidenceResponse{Transaction: TransactionProto(e.Transaction)}
 	for _, d := range e.Decisions {
 		out.DecisionReceipts = append(out.DecisionReceipts, &pantherclawv1.DecisionReceipt{

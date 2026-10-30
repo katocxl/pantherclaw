@@ -57,6 +57,8 @@ type ContainRequest struct {
 	// was confirmed against (D23).
 	PreviewDigest []byte
 	Idempotency   string
+	// Execution is the automation execution that caused the action (F774 M6).
+	Execution *ids.UUID
 }
 
 // ContainResult is the response action a request created and its status
