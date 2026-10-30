@@ -1,6 +1,6 @@
 # ADR-0041 — The hosted gateway pool: one gateway process per organization on shared hosts
 
-**Status:** Accepted (2026-10-29). Founder decision G9 was answered with the recommended option. The [G0 M19 brief](../g0/M19.md) records it with the coordinator's design decisions D203, D209, D210, D212, D219 and D222. Builds on [ADR-0002](0002-control-plane-and-gateway-split.md) (the gateway is a separate process with no database) and the M9 connector isolation (HR-084, HR-085, HR-216).
+**Status:** Accepted (2026-10-29). Founder decision G9 was answered with the recommended option. The [G0 M19 brief](../g0/M19.md) records it with the coordinator's design decisions D203, D209, D210, D212, D219, D222, D226 and D228. Builds on [ADR-0002](0002-control-plane-and-gateway-split.md) (the gateway is a separate process with no database) and the M9 connector isolation (HR-084, HR-085, HR-216).
 
 **Context.** A gateway certificate binds exactly one organization and one gateway in its URI SAN (`pc:org/<org>/gateway/<gateway>/cert/<cert>`), and everything the server does for a gateway takes the organization from that certificate (HR-181). PantherClaw-hosted gateways exist today only as a static list in the server's configuration (`gateways.pantherclaw_hosted`). They run no connector containers (HR-084), and nothing provisions, isolates, routes or retires them.
 
@@ -11,7 +11,7 @@ Hosted multi-tenant gateways (PN-010.4) need a way to run many organizations' ga
 2. **Records, not configuration.**
    - Operator-level `pc.hosting_hosts` lists the hosts. It has no `org_id` and is visible only under the global purpose `hosting`.
    - `pc.hosted_gateways` (with `org_id` and RLS) records each organization's hosted gateway: host, state, gateway and resources.
-   - Operator-level `pc.hosting_slugs` keeps a slug globally unique, because `<slug>.gw.<domain>` is a public name. Its primary key is the slug, it has no tenant column, and it is reachable only under the global purpose `hosting`. The provisioner claims the slug in the placement transaction, under `FOR UPDATE` on the host row, and deprovisioning releases it. A conflict gives `SLUG_TAKEN`.
+   - Operator-level `pc.hosting_slugs` keeps a slug globally unique, because `<slug>.gw.<domain>` is a public name. Its primary key is the slug, it carries `org_id` and `hosted_id` so that deletion can free it (D228), and it is reachable only under the global purpose `hosting`. The claim commits in its own transaction before the tenant transaction, so a crash leaves a slug held, never a record without its claim. A conflict gives `SLUG_TAKEN`. Placement then takes `FOR UPDATE` on the host row.
    - The provisioner finds its work through `pc.cross_org_list` purposes `hosting_due` and `hosting_assigned`, and does per-org work in tenant transactions. No other SECURITY DEFINER function is added (HR-053).
    - The configuration list stays as a fallback for one release.
 3. **Provisioning by a worker job and a host agent.**
@@ -38,6 +38,9 @@ Hosted multi-tenant gateways (PN-010.4) need a way to run many organizations' ga
    - Team plan and above, one hosted gateway per organization, with a plan quota.
    - Upgrades roll one organization at a time, with a health check, toward the target version of M18's fleet policy.
    - Deprovisioning revokes the certificate (epoch bump) before the process is stopped (HR-503).
+   - The `Stopped` report releases the slug after the record ends, and a retry after a lost release still releases.
+   - Deleting an organization deprovisions its hosted gateways and releases its slugs. `pc_deleter` removes the tenant records and `pc_app` frees the slugs, because `pc_deleter` touches no global table (HR-391, D228).
+   - The host agent removes any container with no assignment, because nothing else stops a process whose record is gone (D228).
 
 **Consequences.**
 - "Certificate = organization identity" stays true for hosted gateways. No server code trusts a gateway for its organization, and HR-181 needs no exception.
