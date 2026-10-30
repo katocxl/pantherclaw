@@ -17,6 +17,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -40,14 +41,48 @@ func TestHR504_DecisionSnapshotsStayRepeatableReadReadOnly(t *testing.T) {
 	}
 }
 
-// TestT219_RacingFirstOfPeriodRefundsNeverOverspend: refunds racing on
-// budgets none of them has reserved on yet (each first of its period, so
-// each prepares the row) never reserve past the limit, through busy rows
-// and their one retry, and every budget gets exactly one row.
+// TestT219_RacingFirstOfPeriodRefundsNeverOverspend: a refund whose budget
+// row is held for 150 ms, past the 100 ms lock timeout, is busy once and
+// allowed by its one retry, reserving once. Then refunds racing on budgets
+// none of them has reserved on yet (each first of its period, so each
+// prepares the row) never reserve past the limit, and every budget gets
+// exactly one row.
 // Covers: PN-011.1
 func TestT219_RacingFirstOfPeriodRefundsNeverOverspend(t *testing.T) {
 	w := newWorld(t)
 	w.auth.Store.(*pgauthority.Store).LockTimeout = 100 * time.Millisecond
+	ctx := context.Background()
+
+	w.refundable("ch_held1", "ch_held2")
+	held := w.run(w.grant("50").ID, ids.UUID{})
+	if r := w.authorize(w.request(held, ids.NewV7(), "ch_held1", "5.00")); r.Permit == "" {
+		t.Fatalf("the first refund prepares the row: %s %s", r.Decision, decisive(r))
+	}
+	release := w.holdBudgetRows()
+	type answer struct {
+		res  finalize.Result
+		err  error
+		took time.Duration
+	}
+	done := make(chan answer, 1)
+	go func() {
+		start := time.Now()
+		res, err := w.auth.Authorize(ctx, w.gw, w.request(held, ids.NewV7(), "ch_held2", "5.00"))
+		done <- answer{res, err, time.Since(start)}
+	}()
+	time.Sleep(150 * time.Millisecond)
+	release()
+	a := <-done
+	if a.err != nil || a.res.Decision != adomain.Allow || a.res.Permit == "" {
+		t.Fatalf("held 150 ms: %s %s %v; want an ALLOW from the one retry", a.res.Decision, decisive(a.res), a.err)
+	}
+	if a.took < 100*time.Millisecond {
+		t.Fatalf("allowed after %v, before the first attempt's lock timeout: no busy retry happened", a.took)
+	}
+	if res, _ := w.budget(); res != "10" {
+		t.Fatalf("after the busy retry %s is reserved; want 10 (two refunds of 5.00, each once)", res)
+	}
+
 	const budgets, perBudget = 5, 30
 	charges := make([]string, budgets*perBudget)
 	for i := range charges {
@@ -59,7 +94,6 @@ func TestT219_RacingFirstOfPeriodRefundsNeverOverspend(t *testing.T) {
 		runs[i] = w.run(w.grant("50").ID, ids.UUID{})
 	}
 
-	ctx := context.Background()
 	var mu sync.Mutex
 	permits := map[ids.UUID]int{}
 	answers := map[string]int{}
@@ -100,7 +134,7 @@ func TestT219_RacingFirstOfPeriodRefundsNeverOverspend(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if rows != budgets || over != 0 {
-		t.Fatalf("%d budget rows (want %d), %d over their limit", rows, budgets, over)
+	if rows != budgets+1 || over != 0 { // the held budget and the racing ones
+		t.Fatalf("%d budget rows (want %d), %d over their limit", rows, budgets+1, over)
 	}
 }
