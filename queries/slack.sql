@@ -4,8 +4,8 @@
 -- Slack approval cards (G0 M14 D22, D23; 00152).
 
 -- name: InsertSlackAppChannel :exec
-INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel, data_level)
-VALUES (sqlc.arg(org_id), sqlc.arg(channel_record_id), sqlc.arg(slack_channel), sqlc.arg(data_level));
+INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel, data_level, direct_messages)
+VALUES (sqlc.arg(org_id), sqlc.arg(channel_record_id), sqlc.arg(slack_channel), sqlc.arg(data_level), sqlc.arg(direct_messages));
 
 -- name: GetSlackAppChannel :one
 SELECT a.*, c.secret, c.state AS channel_state, c.name AS channel_name

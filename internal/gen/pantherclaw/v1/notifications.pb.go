@@ -386,9 +386,14 @@ type SlackAppConfig struct {
 	// The workspace id, from auth.test; read-only.
 	TeamId string `protobuf:"bytes,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	// The bot token (xoxb-...); input only, never returned.
-	BotToken      string `protobuf:"bytes,4,opt,name=bot_token,json=botToken,proto3" json:"bot_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	BotToken string `protobuf:"bytes,4,opt,name=bot_token,json=botToken,proto3" json:"bot_token,omitempty"`
+	// Whether the bot also sends approval direct messages to eligible
+	// deciders who linked their Slack identity (G0 M20 D256). Set when the
+	// channel is created and confirmed by its activation; it never changes,
+	// and at most one channel of an organization has it.
+	DirectMessages bool `protobuf:"varint,5,opt,name=direct_messages,json=directMessages,proto3" json:"direct_messages,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SlackAppConfig) Reset() {
@@ -447,6 +452,13 @@ func (x *SlackAppConfig) GetBotToken() string {
 		return x.BotToken
 	}
 	return ""
+}
+
+func (x *SlackAppConfig) GetDirectMessages() bool {
+	if x != nil {
+		return x.DirectMessages
+	}
+	return false
 }
 
 // Channel is one notification channel.
@@ -1717,14 +1729,15 @@ var File_pantherclaw_v1_notifications_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_notifications_proto_rawDesc = "" +
 	"\n" +
-	"\"pantherclaw/v1/notifications.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x94\x02\n" +
+	"\"pantherclaw/v1/notifications.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbd\x02\n" +
 	"\x0eSlackAppConfig\x12:\n" +
 	"\n" +
 	"channel_id\x18\x01 \x01(\tB\x1b\xbaH\x18r\x162\x14^[CG][A-Z0-9]{8,12}$R\tchannelId\x12G\n" +
 	"\n" +
 	"data_level\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.SlackDataLevelB\b\xbaH\x05\x82\x01\x02\x10\x01R\tdataLevel\x126\n" +
 	"\ateam_id\x18\x03 \x01(\tB\x1d\xbaH\x1ar\x18\x18 2\x14^(T[A-Z0-9]{4,30})?$R\x06teamId\x12E\n" +
-	"\tbot_token\x18\x04 \x01(\tB(\xbaH%r#\x18\x80\x022\x1e^(xoxb-[A-Za-z0-9-]{20,250})?$R\bbotToken\"\x90\a\n" +
+	"\tbot_token\x18\x04 \x01(\tB(\xbaH%r#\x18\x80\x022\x1e^(xoxb-[A-Za-z0-9-]{20,250})?$R\bbotToken\x12'\n" +
+	"\x0fdirect_messages\x18\x05 \x01(\bR\x0edirectMessages\"\x90\a\n" +
 	"\aChannel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +

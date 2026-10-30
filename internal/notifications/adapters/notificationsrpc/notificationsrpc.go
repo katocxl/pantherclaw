@@ -109,7 +109,9 @@ func channel(c napp.ChannelView) *pantherclawv1.Channel {
 		if c.SlackApp.DataLevel == domain.SlackSummary {
 			level = pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_SUMMARY
 		}
-		out.SlackApp = &pantherclawv1.SlackAppConfig{ChannelId: c.SlackApp.ChannelID, DataLevel: level, TeamId: c.SlackApp.TeamID}
+		out.SlackApp = &pantherclawv1.SlackAppConfig{
+			ChannelId: c.SlackApp.ChannelID, DataLevel: level, TeamId: c.SlackApp.TeamID, DirectMessages: c.SlackApp.DirectMessages,
+		}
 	}
 	return out
 }
@@ -289,5 +291,5 @@ func slackAppIn(c *pantherclawv1.SlackAppConfig) *domain.SlackAppConfig {
 	if c.GetDataLevel() == pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_SUMMARY {
 		level = domain.SlackSummary
 	}
-	return &domain.SlackAppConfig{ChannelID: c.GetChannelId(), DataLevel: level, BotToken: c.GetBotToken()}
+	return &domain.SlackAppConfig{ChannelID: c.GetChannelId(), DataLevel: level, BotToken: c.GetBotToken(), DirectMessages: c.GetDirectMessages()}
 }

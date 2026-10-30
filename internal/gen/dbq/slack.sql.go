@@ -252,8 +252,8 @@ func (q *Queries) GetSlackCardByID(ctx context.Context, orgID ids.OrgID, cardID 
 
 const insertSlackAppChannel = `-- name: InsertSlackAppChannel :exec
 
-INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel, data_level)
-VALUES ($1, $2, $3, $4)
+INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel, data_level, direct_messages)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type InsertSlackAppChannelParams struct {
@@ -261,6 +261,7 @@ type InsertSlackAppChannelParams struct {
 	ChannelRecordID ids.UUID
 	SlackChannel    string
 	DataLevel       string
+	DirectMessages  bool
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -273,6 +274,7 @@ func (q *Queries) InsertSlackAppChannel(ctx context.Context, arg InsertSlackAppC
 		arg.ChannelRecordID,
 		arg.SlackChannel,
 		arg.DataLevel,
+		arg.DirectMessages,
 	)
 	return err
 }

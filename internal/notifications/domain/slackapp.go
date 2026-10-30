@@ -22,4 +22,7 @@ type SlackAppConfig struct {
 	DataLevel string
 	TeamID    string
 	BotToken  string
+	// DirectMessages: the bot also sends approval DMs (G0 M20 D256); set
+	// at creation only.
+	DirectMessages bool
 }

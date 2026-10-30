@@ -60953,6 +60953,11 @@
             "maxLength": 256,
             "pattern": "^(xoxb-[A-Za-z0-9-]{20,250})?$",
             "description": "The bot token (xoxb-...); input only, never returned."
+          },
+          "directMessages": {
+            "type": "boolean",
+            "title": "direct_messages",
+            "description": "Whether the bot also sends approval direct messages to eligible\n deciders who linked their Slack identity (G0 M20 D256). Set when the\n channel is created and confirmed by its activation; it never changes,\n and at most one channel of an organization has it."
           }
         },
         "title": "SlackAppConfig",
@@ -61013,6 +61018,14 @@
                 "maxLength": 0
               }
             ]
+          },
+          "directMessages": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "direct_messages",
+            "description": "Whether the bot also sends approval direct messages to eligible\n deciders who linked their Slack identity (G0 M20 D256). Set when the\n channel is created and confirmed by its activation; it never changes,\n and at most one channel of an organization has it."
           }
         },
         "title": "SlackAppConfig",

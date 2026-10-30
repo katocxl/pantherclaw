@@ -138,7 +138,7 @@ func (r *Router) step(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids
 	}
 	if len(fresh) > 0 || (s.NotifyChannels && len(ds) > 0) {
 		m := base
-		m.Personal, m.PersonalOnly = fresh, !s.NotifyChannels
+		m.Personal, m.PersonalOnly, m.Deciders = fresh, !s.NotifyChannels, true
 		m.DedupeKey = "route:" + id.String() + ":" + strconv.Itoa(i)
 		if i > 0 {
 			m.Type = fam.escalated

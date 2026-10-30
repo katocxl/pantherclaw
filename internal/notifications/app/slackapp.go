@@ -27,9 +27,11 @@ import (
 
 // Slack approval cards (G0 M14 D22, D23; HR-313..315). A slack_app channel
 // holds a bot token (its encrypted secret) and sends it only to Slack's
-// Web API, to four methods: auth.test and conversations.info when the
+// Web API, to six methods: auth.test and conversations.info when the
 // channel is activated, chat.postMessage and chat.update when a card is
-// posted, closed or escalated. Nothing comes back from Slack into
+// posted, closed or escalated, and users.lookupByEmail and
+// conversations.open for approval DMs (G0 M20 D256: a person's link is
+// looked up, then a DM opened to them). Nothing comes back from Slack into
 // PantherClaw but these answers, and no answer decides anything.
 
 // SlackAPI is Slack's Web API base URL, the only place a bot token goes.
@@ -41,6 +43,7 @@ const slackMaxAnswer = 1 << 20
 // slackMethods are the only methods a bot token is sent to.
 var slackMethods = map[string]bool{
 	"auth.test": true, "conversations.info": true, "chat.postMessage": true, "chat.update": true,
+	"users.lookupByEmail": true, "conversations.open": true,
 }
 
 var (
@@ -84,10 +87,15 @@ type slackAnswer struct {
 	TeamID string `json:"team_id"`
 	Team   string `json:"team"`
 	BotID  string `json:"bot_id"`
-	User   string `json:"user"`
+	// User is the bot user's name in auth.test answers and an object in
+	// users.lookupByEmail answers (read from body).
+	User jsontext.Value `json:"user"`
 	// Channel is an object in conversations.info answers and an id in
 	// chat answers.
 	Channel jsontext.Value `json:"channel"`
+	// body is the whole answer, for the methods whose objects the fields
+	// above do not hold (users.lookupByEmail).
+	body []byte
 }
 
 // slackChannel is a conversations.info channel.
@@ -113,7 +121,8 @@ var slackTransient = map[string]bool{
 }
 
 // slackCall sends one Web API request with the bot token: JSON body for the
-// chat methods, a query for conversations.info. Redirects are refused, the
+// chat methods and conversations.open, a query for conversations.info and
+// users.lookupByEmail. Redirects are refused, the
 // answer is read up to 4 KiB, and Slack's error is kept only as a code.
 func (s *Service) slackCall(ctx context.Context, token, method string, body any, query url.Values) (slackAnswer, outcome) {
 	if !slackMethods[method] || !slackTokenPattern.MatchString(token) {
@@ -170,6 +179,7 @@ func (s *Service) slackCall(ctx context.Context, token, method string, body any,
 		out.code = "slack_bad_answer"
 		return slackAnswer{}, out
 	}
+	a.body = head
 	if !a.OK {
 		code := a.Error
 		if !slackErrorPattern.MatchString(code) {
@@ -254,7 +264,7 @@ func (s *Service) checkSlack(ctx context.Context, token, channel string) (SlackW
 	default:
 		return SlackWorkspace{}, ErrSlackDown
 	}
-	w := SlackWorkspace{TeamID: a.TeamID, TeamName: domain.CardValue(a.Team), BotID: a.BotID, BotName: domain.CardValue(a.User)}
+	w := SlackWorkspace{TeamID: a.TeamID, TeamName: domain.CardValue(a.Team), BotID: a.BotID, BotName: domain.CardValue(slackString(a.User))}
 	a, out = s.slackCall(ctx, token, "conversations.info", nil, url.Values{"channel": {channel}})
 	var c slackChannel
 	switch {
@@ -579,4 +589,13 @@ func (s *Service) slackApprovals(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return e.SlackApprovals(), nil
+}
+
+// slackString is v when it is a JSON string, else "".
+func slackString(v jsontext.Value) string {
+	var s string
+	if json.Unmarshal(v, &s) != nil {
+		return ""
+	}
+	return s
 }

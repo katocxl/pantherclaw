@@ -94,6 +94,11 @@ message SlackAppConfig {
     max_len: 256
     pattern: "^(xoxb-[A-Za-z0-9-]{20,250})?$"
   }];
+  // Whether the bot also sends approval direct messages to eligible
+  // deciders who linked their Slack identity (G0 M20 D256). Set when the
+  // channel is created and confirmed by its activation; it never changes,
+  // and at most one channel of an organization has it.
+  bool direct_messages = 5;
 }
 
 // NotificationSeverity orders notifications.

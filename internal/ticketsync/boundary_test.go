@@ -42,7 +42,9 @@ func TestHR527_TicketSyncImportsNoAuthority(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repo, "go.mod")); err != nil {
 		t.Fatalf("repo root %s: %v", repo, err)
 	}
-	dirOf := func(pkg string) string { return filepath.Join(repo, filepath.FromSlash(strings.TrimPrefix(pkg, module))) }
+	dirOf := func(pkg string) string {
+		return filepath.Join(repo, filepath.FromSlash(strings.TrimPrefix(pkg, module)))
+	}
 	var pkgs []string
 	err = filepath.WalkDir(here, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || !d.IsDir() {

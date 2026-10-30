@@ -53,6 +53,8 @@ var (
 type SlackAppView struct {
 	ChannelID, DataLevel, TeamID, BotID, State string
 	ActivatedAt, TokenReplacedAt               *time.Time
+	// DirectMessages: the bot also sends approval DMs (G0 M20 D256).
+	DirectMessages bool
 }
 
 // checkSlackAppConfig validates a new configuration (D22, D56): Slack
@@ -84,6 +86,7 @@ func slackAppView(a dbq.PcSlackAppChannel) *SlackAppView {
 	return &SlackAppView{
 		ChannelID: a.SlackChannel, DataLevel: a.DataLevel, TeamID: deref(a.TeamID), BotID: deref(a.BotID), State: a.State,
 		ActivatedAt: a.ActivatedAt, TokenReplacedAt: a.TokenReplacedAt,
+		DirectMessages: a.DirectMessages,
 	}
 }
 
