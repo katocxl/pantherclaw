@@ -15,9 +15,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
+
+var client = &http.Client{Timeout: 10 * time.Second}
 
 var secret = base64.StdEncoding.EncodeToString([]byte("agent@example.com:simulated-api-token"))
 
@@ -45,7 +48,7 @@ func call(t *testing.T, method, url, auth, body string) (int, map[string]any) {
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
@@ -20,6 +21,8 @@ const (
 	head  = "1111111111111111111111111111111111111111"
 	moved = "2222222222222222222222222222222222222222"
 )
+
+var client = &http.Client{Timeout: 10 * time.Second}
 
 func start(t *testing.T) (*Server, string) {
 	t.Helper()
@@ -47,7 +50,7 @@ func call(t *testing.T, method, url, tok, body string) (int, map[string]any) {
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
