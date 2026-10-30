@@ -66,13 +66,14 @@ func TestTemplateRender(t *testing.T) {
 	for _, r := range d.Rules {
 		rules[r["id"].(string)] = r
 	}
-	if len(rules) != 6 || len(d.Skipped) != 1 {
+	if len(rules) != 8 || len(d.Skipped) != 1 {
 		t.Fatalf("rules without an agent: %v, skipped %v", ruleIDs(d.Rules), d.Skipped)
 	}
 	for id, want := range map[string]string{
 		repoRuleID("c2p-merge-review", "acme/api"):            `action.target.id.startsWith('acme/api#')`,
 		repoRuleID("c2p-merge-review", "acme/web"):            `action.target.id.startsWith('acme/web#')`,
 		repoRuleID("c2p-release", "acme/api"):                 `action.target.id == 'acme/api'`,
+		repoRuleID("c2p-merge-consequences", "acme/web"):      `action.target.id.startsWith('acme/web#') && run.consequences_unconfirmed > 0`,
 		repoRuleID("c2p-no-default-branch-write", "acme/api"): `action.target.id == 'acme/api@refs/heads/develop'`,
 		repoRuleID("c2p-no-default-branch-write", "acme/web"): `action.target.id == 'acme/web@refs/heads/main'`,
 	} {

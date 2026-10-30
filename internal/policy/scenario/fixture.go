@@ -84,6 +84,7 @@ type fixture struct {
 	budget  *pdomain.TestBudget
 	conn    pipeline.Connection
 	hold    *pipeline.HoldRequest
+	runs    pipeline.RunConsequenceCounts
 	req     pipeline.Request
 }
 
@@ -99,6 +100,12 @@ func build(org ids.OrgID, now time.Time, def *defs.Definition, rules []consequen
 		g = &pdomain.TestGiven{}
 	}
 	f := &fixture{org: org, now: now, def: def, rules: rules, agentID: DefaultAgentID, env: DefaultEnvironmentID, budget: g.Budget}
+	if c := g.RunConsequences; c != nil {
+		if c.Pending < 0 || c.Unconfirmed < 0 {
+			return nil, caseErr("given.run_consequences: a count cannot be negative")
+		}
+		f.runs = pipeline.RunConsequenceCounts{Pending: c.Pending, Unconfirmed: c.Unconfirmed}
+	}
 	if g.Agent != "" {
 		id, err := ids.ParseUUID(g.Agent)
 		if err != nil {
@@ -439,6 +446,13 @@ func (f *fixture) HoldSettings(context.Context, ids.OrgID) (pipeline.HoldSetting
 	return pipeline.HoldSettings{}, nil
 }
 
+// CustomerRules implements pipeline.Reader: a scenario test decides a
+// policy version over the package's own rules; the org's customer
+// consequence rules only add to what it decides (G0 M17 D108).
+func (f *fixture) CustomerRules(context.Context, ids.OrgID) ([]consequences.Rule, error) {
+	return nil, nil
+}
+
 // evaluate decides the case's action under policy, answering its approval
 // state: "expired" is a request past its deadline; "approved_other_action"
 // an approval bound to another action; "approved" (and step_up "done") an
@@ -543,4 +557,9 @@ func wireType(raw jsontext.Value) fdomain.Type {
 // read history.
 func (f *fixture) SensitiveReads(context.Context, ids.OrgID, ids.UUID) ([]pipeline.SensitiveRead, error) {
 	return nil, nil
+}
+
+// RunConsequences implements pipeline.Reader: the case's counts.
+func (f *fixture) RunConsequences(context.Context, ids.OrgID, ids.UUID) (pipeline.RunConsequenceCounts, error) {
+	return f.runs, nil
 }

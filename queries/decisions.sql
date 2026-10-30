@@ -126,15 +126,19 @@ FROM pc.org_containment
 WHERE org_id = sqlc.arg(org_id);
 
 -- name: InsertDecisionConsequence :exec
--- What one consequence rule said in an evaluation (G0 M8, HR-206).
+-- What one consequence rule said in an evaluation (G0 M8, HR-206), and
+-- where it sits in a chain (G0 M17 D109).
 INSERT INTO pc.decision_consequences (org_id, transaction_id, evaluation, position, rule_id, operation, target_type, target_id,
-    environments, state, unknown, facts_digest)
+    environments, state, unknown, facts_digest, depth, parent_position, source)
 VALUES (sqlc.arg(org_id), sqlc.arg(transaction_id), sqlc.arg(evaluation), sqlc.arg(position), sqlc.arg(rule_id), sqlc.arg(operation),
-    sqlc.arg(target_type), sqlc.arg(target_id), sqlc.arg(environments)::text[], sqlc.arg(state), sqlc.arg(unknown), sqlc.arg(facts_digest));
+    sqlc.arg(target_type), sqlc.arg(target_id), sqlc.arg(environments)::text[], sqlc.arg(state), sqlc.arg(unknown), sqlc.arg(facts_digest),
+    sqlc.arg(depth), sqlc.narg(parent_position), sqlc.arg(source));
 
 -- name: ListDecisionConsequences :many
--- The consequences of an evaluation, in rule order.
-SELECT position, rule_id, operation, target_type, target_id, environments, state, unknown, facts_digest
+-- The consequences of an evaluation, in rule order: a consequence of a
+-- consequence comes after the one it follows from (parent_position).
+SELECT position, rule_id, operation, target_type, target_id, environments, state, unknown, facts_digest, depth, parent_position,
+    source
 FROM pc.decision_consequences
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id) AND evaluation = sqlc.arg(evaluation)
 ORDER BY position;

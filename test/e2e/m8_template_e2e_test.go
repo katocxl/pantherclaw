@@ -223,7 +223,7 @@ func TestE2E_M8_C4_Template(t *testing.T) {
 	}
 	before = audits()
 	code, o, e = alice.pclaw(t, "template", "remove", "coding-to-production", "--repos", other, "--yes")
-	if code != 0 || strings.Count(o, "  remove ") != 3 || !strings.Contains(o, "Waiting for confirmation") {
+	if code != 0 || strings.Count(o, "  remove ") != 4 || !strings.Contains(o, "Waiting for confirmation") {
 		t.Fatalf("remove %s: %d %s %s", other, code, o, e)
 	}
 	// Removing rules loosens the policy (M11.1 D6): it is published once
@@ -239,7 +239,10 @@ func TestE2E_M8_C4_Template(t *testing.T) {
 	if state := signInWithKey(t, s, people, "alice", "alice@example.test").confirmChange(t, cr[1]); state != "APPROVED" {
 		t.Fatalf("change request after alice's confirmation: %s", state)
 	}
-	for _, id := range []string{repoRuleIDOf("c2p-merge-review", other), repoRuleIDOf("c2p-release", other), repoRuleIDOf("c2p-no-default-branch-write", other)} {
+	for _, id := range []string{
+		repoRuleIDOf("c2p-merge-consequences", other), repoRuleIDOf("c2p-merge-review", other), repoRuleIDOf("c2p-release", other),
+		repoRuleIDOf("c2p-no-default-branch-write", other),
+	} {
 		if n := s.row(t, `SELECT count(*)::text FROM pc.policy_versions v, jsonb_array_elements(convert_from(v.bundle, 'UTF8')::jsonb->'rules') r
 			WHERE v.state = 'PUBLISHED' AND r->>'id' = $1`, id); n != "0" {
 			t.Fatalf("rule %s is still published", id)

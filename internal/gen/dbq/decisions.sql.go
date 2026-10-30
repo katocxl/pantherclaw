@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -187,27 +188,32 @@ func (q *Queries) InsertDecision(ctx context.Context, arg InsertDecisionParams) 
 
 const insertDecisionConsequence = `-- name: InsertDecisionConsequence :exec
 INSERT INTO pc.decision_consequences (org_id, transaction_id, evaluation, position, rule_id, operation, target_type, target_id,
-    environments, state, unknown, facts_digest)
+    environments, state, unknown, facts_digest, depth, parent_position, source)
 VALUES ($1, $2, $3, $4, $5, $6,
-    $7, $8, $9::text[], $10, $11, $12)
+    $7, $8, $9::text[], $10, $11, $12,
+    $13, $14, $15)
 `
 
 type InsertDecisionConsequenceParams struct {
-	OrgID         ids.OrgID
-	TransactionID ids.UUID
-	Evaluation    int32
-	Position      int32
-	RuleID        string
-	Operation     string
-	TargetType    string
-	TargetID      string
-	Environments  []string
-	State         string
-	Unknown       []byte
-	FactsDigest   string
+	OrgID          ids.OrgID
+	TransactionID  ids.UUID
+	Evaluation     int32
+	Position       int32
+	RuleID         string
+	Operation      string
+	TargetType     string
+	TargetID       string
+	Environments   []string
+	State          string
+	Unknown        []byte
+	FactsDigest    string
+	Depth          int16
+	ParentPosition pgtype.Int2
+	Source         string
 }
 
-// What one consequence rule said in an evaluation (G0 M8, HR-206).
+// What one consequence rule said in an evaluation (G0 M8, HR-206), and
+// where it sits in a chain (G0 M17 D109).
 func (q *Queries) InsertDecisionConsequence(ctx context.Context, arg InsertDecisionConsequenceParams) error {
 	_, err := q.db.Exec(ctx, insertDecisionConsequence,
 		arg.OrgID,
@@ -222,6 +228,9 @@ func (q *Queries) InsertDecisionConsequence(ctx context.Context, arg InsertDecis
 		arg.State,
 		arg.Unknown,
 		arg.FactsDigest,
+		arg.Depth,
+		arg.ParentPosition,
+		arg.Source,
 	)
 	return err
 }
@@ -301,25 +310,30 @@ func (q *Queries) InsertPermitForTransaction(ctx context.Context, arg InsertPerm
 }
 
 const listDecisionConsequences = `-- name: ListDecisionConsequences :many
-SELECT position, rule_id, operation, target_type, target_id, environments, state, unknown, facts_digest
+SELECT position, rule_id, operation, target_type, target_id, environments, state, unknown, facts_digest, depth, parent_position,
+    source
 FROM pc.decision_consequences
 WHERE org_id = $1 AND transaction_id = $2 AND evaluation = $3
 ORDER BY position
 `
 
 type ListDecisionConsequencesRow struct {
-	Position     int32
-	RuleID       string
-	Operation    string
-	TargetType   string
-	TargetID     string
-	Environments []string
-	State        string
-	Unknown      []byte
-	FactsDigest  string
+	Position       int32
+	RuleID         string
+	Operation      string
+	TargetType     string
+	TargetID       string
+	Environments   []string
+	State          string
+	Unknown        []byte
+	FactsDigest    string
+	Depth          int16
+	ParentPosition pgtype.Int2
+	Source         string
 }
 
-// The consequences of an evaluation, in rule order.
+// The consequences of an evaluation, in rule order: a consequence of a
+// consequence comes after the one it follows from (parent_position).
 func (q *Queries) ListDecisionConsequences(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID, evaluation int32) ([]ListDecisionConsequencesRow, error) {
 	rows, err := q.db.Query(ctx, listDecisionConsequences, orgID, transactionID, evaluation)
 	if err != nil {
@@ -339,6 +353,9 @@ func (q *Queries) ListDecisionConsequences(ctx context.Context, orgID ids.OrgID,
 			&i.State,
 			&i.Unknown,
 			&i.FactsDigest,
+			&i.Depth,
+			&i.ParentPosition,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
