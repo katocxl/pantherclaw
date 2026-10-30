@@ -117,16 +117,16 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		if err != nil {
 			return Request{}, err
 		}
-		switch {
-		case t.Encoding == defs.EncodingForm:
+		switch t.Encoding { //nolint:exhaustive // every other encoding is JSON
+		case defs.EncodingForm:
 			out.ContentType = FormContentType
 			out.Body, err = EncodeForm(obj)
-		case t.Encoding == defs.EncodingAWSQuery:
+		case defs.EncodingAWSQuery:
 			// A flat form whose literal Action and Version name the
 			// operation (G0 M20 D254).
 			out.ContentType = defs.AWSQueryType
 			out.Body, err = EncodeForm(obj)
-		case t.Encoding == defs.EncodingAWSJSON:
+		case defs.EncodingAWSJSON:
 			out.ContentType = defs.AWSJSONContentType
 			if obj, err = nestJSON(obj); err == nil {
 				out.Body, err = json.Marshal(obj, json.Deterministic(true))

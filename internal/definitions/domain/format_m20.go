@@ -64,12 +64,12 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 	if err := d.validateAWSResource(at, h.AWSResource); err != nil {
 		return err
 	}
-	switch {
-	case h.Encoding == EncodingAWSJSON:
+	switch h.Encoding { //nolint:exhaustive // only called for the two AWS encodings
+	case EncodingAWSJSON:
 		if !slices.ContainsFunc(slices.Collect(maps.Keys(h.Headers)), func(k string) bool { return strings.EqualFold(k, AWSTargetHeader) }) {
 			return invalid("%s: aws-json names its operation in a literal %s header", at, AWSTargetHeader)
 		}
-	case h.Encoding == EncodingAWSQuery:
+	case EncodingAWSQuery:
 		named, where := h.Body, "body"
 		if get {
 			named, where = h.Query, "query"
@@ -104,15 +104,15 @@ func (d *Definition) AWSAction() (string, bool) {
 		return "", false
 	}
 	h := d.Dispatch.HTTP
-	switch {
-	case h.Encoding == EncodingAWSJSON:
+	switch h.Encoding { //nolint:exhaustive // any other encoding names no AWS action
+	case EncodingAWSJSON:
 		for k, v := range h.Headers {
 			if strings.EqualFold(k, AWSTargetHeader) {
 				i := strings.LastIndexByte(v, '.')
 				return v[i+1:], i >= 0 && i < len(v)-1
 			}
 		}
-	case h.Encoding == EncodingAWSQuery:
+	case EncodingAWSQuery:
 		ref := h.Body["Action"]
 		if h.Method == methodGet {
 			ref = h.Query["Action"]
