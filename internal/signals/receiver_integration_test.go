@@ -44,6 +44,7 @@ func (s *recordingSink) Received(_ context.Context, _ db.TenantTx, r Received) e
 }
 
 type rxFixture struct {
+	d          *dbtest.DB
 	p          *db.Pool
 	org        ids.OrgID
 	alice, bob ids.UUID
@@ -62,7 +63,7 @@ func newRxFixture(t *testing.T) *rxFixture {
 	t.Helper()
 	d := dbtest.New(t)
 	f := &rxFixture{
-		p: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), bob: ids.NewV7(), cred: ids.NewV7(),
+		d: d, p: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), bob: ids.NewV7(), cred: ids.NewV7(),
 		sink: &recordingSink{}, clk: clock.NewFake(time.Now()),
 	}
 	var err error
@@ -424,8 +425,10 @@ func withinOneWindow() {
 func TestHR494_AnUnknownTransmitterWritesNoCounter(t *testing.T) {
 	f := newRxFixture(t)
 	tok := f.token(t, f.key, f.tx, nil)
-	rows := func() int {
-		return f.count(t, "SELECT count(*) FROM pc.rate_counters WHERE scope = $1", scopeTransmitter)
+	// The table is hidden from a tenant transaction by its purpose policy.
+	rows := func() (n int) {
+		f.d.AdminQueryRow(t, "SELECT count(*) FROM pc.rate_counters WHERE scope = $1", []any{scopeTransmitter}, &n)
+		return n
 	}
 	for name, tx := range map[string]ids.UUID{
 		"unknown":  ids.NewV7(),
