@@ -23,6 +23,8 @@ var m19HostingProcedures = map[string]td.Permission{
 	pantherclawv1connect.HostedGatewayServiceGetHostedGatewayProcedure:         "gateway.read",
 	pantherclawv1connect.HostedGatewayServiceListHostedGatewaysProcedure:       "gateway.read",
 	pantherclawv1connect.HostedGatewayServiceDeprovisionHostedGatewayProcedure: "gateway.manage",
+	// A hosted gateway, by its own certificate (D210).
+	pantherclawv1connect.HostedGatewayIdentityServiceIssueServerCertificateProcedure: "gateway.sync",
 }
 
 // m19HostingClasses are the org procedures' plan-gate classes (G0 UI D43).

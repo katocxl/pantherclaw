@@ -14643,6 +14643,60 @@
         }
       }
     },
+    "/pantherclaw.v1.HostedGatewayIdentityService/IssueServerCertificate": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HostedGatewayIdentityService"
+        ],
+        "summary": "IssueServerCertificate",
+        "description": "IssueServerCertificate returns the calling hosted gateway's 7-day\n agent-facing server certificate for the key in its request. Its one\n name, \u003cslug\u003e.gw.\u003cdomain\u003e, comes from the org's hosted gateway record,\n never from the request; a gateway no live record names gets NotFound.\n permission: gateway.sync",
+        "operationId": "pantherclaw.v1.HostedGatewayIdentityService.IssueServerCertificate",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.IssueServerCertificateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.IssueServerCertificateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.IdentityService/CreateEnrollmentToken": {
       "post": {
         "tags": [
@@ -57222,6 +57276,50 @@
         "additionalProperties": false,
         "description": "HostingAssignment is one hosted gateway a host runs."
       },
+      "pantherclaw.v1.IssueServerCertificateRequest": {
+        "type": "object",
+        "properties": {
+          "csr": {
+            "type": "string",
+            "title": "csr",
+            "maxLength": 4096,
+            "minLength": 64,
+            "format": "byte",
+            "description": "DER PKCS #10 certificate request for an Ed25519 key; only its key is\n used."
+          }
+        },
+        "title": "IssueServerCertificateRequest",
+        "additionalProperties": false,
+        "description": "IssueServerCertificateRequest carries a request for the gateway's\n agent-facing key.",
+        "required": [
+          "csr"
+        ]
+      },
+      "pantherclaw.v1.IssueServerCertificateResponse": {
+        "type": "object",
+        "properties": {
+          "certificate": {
+            "type": "string",
+            "title": "certificate",
+            "format": "byte",
+            "description": "DER certificate naming exactly hostname."
+          },
+          "caCertificate": {
+            "type": "string",
+            "title": "ca_certificate",
+            "format": "byte",
+            "description": "DER CA certificate."
+          },
+          "hostname": {
+            "type": "string",
+            "title": "hostname",
+            "description": "The one DNS name: \u003cslug\u003e.gw.\u003cdomain\u003e."
+          }
+        },
+        "title": "IssueServerCertificateResponse",
+        "additionalProperties": false,
+        "description": "IssueServerCertificateResponse returns the certificate."
+      },
       "pantherclaw.v1.ListAssignmentsRequest": {
         "type": "object",
         "properties": {
@@ -80292,6 +80390,10 @@
     {
       "name": "pantherclaw.v1.HostingAgentService",
       "description": "HostingAgentService is what the host agent of a shared hosting host\n calls on the gateway listener, over its own host certificate: one host,\n the purpose \"hosting\" and no org (HR-500). It is the only service such a\n certificate reaches; it never reaches an org RPC."
+    },
+    {
+      "name": "pantherclaw.v1.HostedGatewayIdentityService",
+      "description": "HostedGatewayIdentityService is what a hosted gateway calls on the gateway\n listener over its own mTLS identity (G0 M19 D210)."
     },
     {
       "name": "pantherclaw.v1.IdentityService",

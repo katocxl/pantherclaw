@@ -380,3 +380,86 @@ func TestTenancy_hosted_gateways(t *testing.T) {
 		t.Fatalf("a tenant transaction sees %d host certificates", n)
 	}
 }
+
+// enrolledGateway provisions org's hosted gateway on host, pulls its token
+// and enrolls it, returning the gateway's identity.
+func (e *env) enrolledGateway(t *testing.T, host app.HostIdentity, org ids.OrgID, ctx context.Context, slug string) ca.Identity {
+	t.Helper()
+	hosted := e.provisioned(t, org, ctx, slug)
+	tok, err := e.svc.PullToken(context.Background(), host, org, hosted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enrolled, err := e.gws.Enroll(context.Background(), tok.Secret.Reveal(), csr(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, _ := x509.ParseCertificate(enrolled.Certificate)
+	id, err := ca.ParseIdentity(cert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// TestT216_AGatewayGetsOnlyItsOwnOrgsHostname: a hosted gateway's
+// agent-facing certificate names exactly its own org's <slug>.gw.<host
+// domain>, taken from the record that names it; another org's gateway
+// gets its own name only, and a gateway no hosted record names gets
+// nothing (D210).
+//
+// Covers: PN-010.4
+func TestT216_AGatewayGetsOnlyItsOwnOrgsHostname(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	host := e.host(t, "h1", 10)
+	a, actx := e.org(t)
+	b, bctx := e.org(t)
+	ga := e.enrolledGateway(t, host, a, actx, "acme")
+	gb := e.enrolledGateway(t, host, b, bctx, "beta")
+	for id, want := range map[ca.Identity]string{ga: "acme.gw.h1.example.test", gb: "beta.gw.h1.example.test"} {
+		pub, _ := key(t)
+		c, err := e.svc.IssueServerCertificate(context.Background(), id, pub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cert, err := x509.ParseCertificate(c.Certificate)
+		if err != nil || c.Hostname != want || len(cert.DNSNames) != 1 || cert.DNSNames[0] != want {
+			t.Fatalf("gateway of org %s got %v (%s), want %s: %v", id.Org, cert.DNSNames, c.Hostname, want, err)
+		}
+	}
+	// A customer-hosted gateway of org a: no record names it.
+	g, err := e.gws.CreateGateway(actx, "own")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, _ := key(t)
+	if _, err := e.svc.IssueServerCertificate(context.Background(), ca.Identity{Org: a, Gateway: g.ID, Cert: ids.NewV7()}, pub); !errors.Is(err, app.ErrNotHosted) {
+		t.Fatalf("an unhosted gateway: %v", err)
+	}
+	// Org a's gateway id under org b's identity is not found either.
+	if _, err := e.svc.IssueServerCertificate(context.Background(), ca.Identity{Org: b, Gateway: ga.Gateway, Cert: ga.Cert}, pub); !errors.Is(err, app.ErrNotHosted) {
+		t.Fatalf("another org's gateway: %v", err)
+	}
+}
+
+// TestHR499_ADowngradeGatesOnlyNewRequests: after a downgrade to Community,
+// the org reads and deprovisions its hosted gateway, but cannot request a
+// new one (D212).
+//
+// Covers: PN-010.4
+func TestHR499_ADowngradeGatesOnlyNewRequests(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	e.host(t, "h1", 10)
+	a, actx := e.org(t)
+	hosted := e.provisioned(t, a, actx, "acme")
+	down := app.New(e.pool, e.ca, nil, edition(billing.Community), "", clock.System{})
+	if _, err := down.Get(actx, hosted); err != nil {
+		t.Fatalf("read after downgrade: %v", err)
+	}
+	if _, err := down.Deprovision(actx, hosted, "downgrade"); err != nil {
+		t.Fatalf("deprovision after downgrade: %v", err)
+	}
+	if _, err := down.Request(actx, "again", profile.Limits{}); !errors.Is(err, domain.ErrEdition) {
+		t.Fatalf("request after downgrade: %v", err)
+	}
+}

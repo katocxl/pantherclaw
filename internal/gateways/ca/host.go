@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"errors"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -77,6 +78,31 @@ func (a *Authority) IssueHost(pub ed25519.PublicKey, id HostIdentity, now time.T
 		NotAfter:              now.Add(ClientLifetime),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+	}
+	return a.issue(tmpl, pub)
+}
+
+// hostedNameRE is a hosted gateway's one name: <slug>.gw.<domain>, lower
+// case, no wildcard.
+var hostedNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.gw\.[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
+
+// IssueHostedServer issues a hosted gateway's agent-facing server
+// certificate (G0 M19 D210): exactly one DNS name, <slug>.gw.<domain>, never
+// a wildcard, valid ServerLifetime, for a key the gateway keeps in its own
+// volume. The caller derives the name from the org's hosted gateway record.
+func (a *Authority) IssueHostedServer(pub ed25519.PublicKey, name string, now time.Time) (Issued, error) {
+	if len(pub) != ed25519.PublicKeySize || len(name) > 253 || !hostedNameRE.MatchString(name) {
+		return Issued{}, ErrRequest
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          a.serial(),
+		Subject:               pkix.Name{CommonName: name},
+		DNSNames:              []string{name},
+		NotBefore:             now.Add(-ClientSkew),
+		NotAfter:              now.Add(ServerLifetime),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 	}
 	return a.issue(tmpl, pub)

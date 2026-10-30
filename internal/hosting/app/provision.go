@@ -280,12 +280,13 @@ const maxPerHost = 1000
 func (s *Service) assigned(ctx context.Context, host ids.UUID, slug string) ([]db.OrgRef, error) {
 	var out []db.OrgRef
 	err := s.pool.InGlobalTx(ctx, db.GlobalCrossOrgList, func(ctx context.Context, tx db.GlobalTx) error {
-		if _, err := tx.Exec(ctx, "SELECT set_config('app.hosting_host', $1::text, true), set_config('app.hosting_slug', $2::text, true)",
-			host.String(), slug); err != nil {
+		// The slug narrows the purpose for placement only; it is set for
+		// this transaction alone, like the host (ListerParams.HostID).
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.hosting_slug', $1::text, true)", slug); err != nil {
 			return err
 		}
 		var err error
-		out, err = db.CrossOrgListIn(ctx, tx, listAssigned, maxPerHost, db.ListerParams{})
+		out, err = db.CrossOrgListIn(ctx, tx, listAssigned, maxPerHost, db.ListerParams{HostID: host})
 		return err
 	})
 	return out, err

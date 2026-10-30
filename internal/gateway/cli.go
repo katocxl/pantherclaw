@@ -205,7 +205,15 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 		return err
 	}
 	var tlsConf *tls.Config
-	if cfg.TLS.CertFile != "" {
+	var hostedCert *hostedTLS
+	if hostedTokenFile != "" {
+		// A hosted gateway's own agent-facing certificate (G0 M19 D210).
+		if hostedCert, err = newHostedTLS(ctx, &cfg, log); err != nil {
+			return err
+		}
+		tlsConf = hostedCert.Config()
+	}
+	if tlsConf == nil && cfg.TLS.CertFile != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.TLS.CertFile, cfg.TLS.KeyFile)
 		if err != nil {
 			return fmt.Errorf("gateway: TLS key pair: %w", err)
@@ -222,6 +230,9 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 	}
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return g.Run(ctx) })
+	if hostedCert != nil {
+		eg.Go(func() error { return hostedCert.Run(ctx) })
+	}
 	// Serve nothing until the first containment snapshot arrived (HR-010).
 	if err := g.WaitReady(ctx, 30*time.Second); err != nil {
 		return err

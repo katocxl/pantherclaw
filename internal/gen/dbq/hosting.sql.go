@@ -115,6 +115,40 @@ func (q *Queries) GetHostingHostByName(ctx context.Context, name string) (PcHost
 	return i, err
 }
 
+const hostedGatewayOfGateway = `-- name: HostedGatewayOfGateway :one
+SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
+WHERE org_id = $1 AND gateway_id = $2::uuid
+  AND state IN ('ENROLLED', 'RUNNING')
+`
+
+// The live hosted gateway record of one of the org's gateways: its slug
+// names the gateway's server certificate (G0 M19 D210).
+func (q *Queries) HostedGatewayOfGateway(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID) (PcHostedGateway, error) {
+	row := q.db.QueryRow(ctx, hostedGatewayOfGateway, orgID, gatewayID)
+	var i PcHostedGateway
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Slug,
+		&i.State,
+		&i.GatewayID,
+		&i.HostID,
+		&i.MilliCpus,
+		&i.MemoryMib,
+		&i.Pids,
+		&i.TokenSealed,
+		&i.TokenPulledAt,
+		&i.Version,
+		&i.TargetVersion,
+		&i.Failure,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeprovisionedAt,
+	)
+	return i, err
+}
+
 const hostingHostCertAuth = `-- name: HostingHostCertAuth :one
 SELECT c.host_id, c.state, c.not_before, c.not_after, c.superseded_at, h.state AS host_state, now()::timestamptz AS db_now
 FROM pc.hosting_host_certs c

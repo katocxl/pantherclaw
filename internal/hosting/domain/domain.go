@@ -52,9 +52,9 @@ var slugRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // ValidSlug reports whether s can name a hosted gateway: one DNS label.
 func ValidSlug(s string) bool { return slugRE.MatchString(s) }
 
-// Allowed reports whether the edition offers hosted gateways: Team and
-// above (PN-010.4).
-func Allowed(e billing.Entitlements) bool { return e.Edition.Paid() }
+// Allowed reports whether the edition may request a hosted gateway: Team
+// and above (PN-010.4, D212). Only a request is gated.
+func Allowed(e billing.Entitlements) bool { return e.HostedGateways() }
 
 // Quota is the most one org's hosted gateway may ask for on its edition
 // (T-218): the Team edition gets the default profile, larger editions up

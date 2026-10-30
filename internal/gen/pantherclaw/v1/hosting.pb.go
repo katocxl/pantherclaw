@@ -1326,6 +1326,118 @@ func (x *RenewHostCertificateResponse) GetCaCertificate() []byte {
 	return nil
 }
 
+// IssueServerCertificateRequest carries a request for the gateway's
+// agent-facing key.
+type IssueServerCertificateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// DER PKCS #10 certificate request for an Ed25519 key; only its key is
+	// used.
+	Csr           []byte `protobuf:"bytes,1,opt,name=csr,proto3" json:"csr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueServerCertificateRequest) Reset() {
+	*x = IssueServerCertificateRequest{}
+	mi := &file_pantherclaw_v1_hosting_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueServerCertificateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueServerCertificateRequest) ProtoMessage() {}
+
+func (x *IssueServerCertificateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_hosting_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueServerCertificateRequest.ProtoReflect.Descriptor instead.
+func (*IssueServerCertificateRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_hosting_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *IssueServerCertificateRequest) GetCsr() []byte {
+	if x != nil {
+		return x.Csr
+	}
+	return nil
+}
+
+// IssueServerCertificateResponse returns the certificate.
+type IssueServerCertificateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// DER certificate naming exactly hostname.
+	Certificate []byte `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	// DER CA certificate.
+	CaCertificate []byte `protobuf:"bytes,2,opt,name=ca_certificate,json=caCertificate,proto3" json:"ca_certificate,omitempty"`
+	// The one DNS name: <slug>.gw.<domain>.
+	Hostname      string `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueServerCertificateResponse) Reset() {
+	*x = IssueServerCertificateResponse{}
+	mi := &file_pantherclaw_v1_hosting_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueServerCertificateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueServerCertificateResponse) ProtoMessage() {}
+
+func (x *IssueServerCertificateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_hosting_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueServerCertificateResponse.ProtoReflect.Descriptor instead.
+func (*IssueServerCertificateResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_hosting_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *IssueServerCertificateResponse) GetCertificate() []byte {
+	if x != nil {
+		return x.Certificate
+	}
+	return nil
+}
+
+func (x *IssueServerCertificateResponse) GetCaCertificate() []byte {
+	if x != nil {
+		return x.CaCertificate
+	}
+	return nil
+}
+
+func (x *IssueServerCertificateResponse) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_hosting_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_hosting_proto_rawDesc = "" +
@@ -1416,7 +1528,14 @@ const file_pantherclaw_v1_hosting_proto_rawDesc = "" +
 	"\xbaH\az\x05\x10@\x18\x80 R\x03csr\"g\n" +
 	"\x1cRenewHostCertificateResponse\x12 \n" +
 	"\vcertificate\x18\x01 \x01(\fR\vcertificate\x12%\n" +
-	"\x0eca_certificate\x18\x02 \x01(\fR\rcaCertificate*\xbb\x02\n" +
+	"\x0eca_certificate\x18\x02 \x01(\fR\rcaCertificate\"=\n" +
+	"\x1dIssueServerCertificateRequest\x12\x1c\n" +
+	"\x03csr\x18\x01 \x01(\fB\n" +
+	"\xbaH\az\x05\x10@\x18\x80 R\x03csr\"\x85\x01\n" +
+	"\x1eIssueServerCertificateResponse\x12 \n" +
+	"\vcertificate\x18\x01 \x01(\fR\vcertificate\x12%\n" +
+	"\x0eca_certificate\x18\x02 \x01(\fR\rcaCertificate\x12\x1a\n" +
+	"\bhostname\x18\x03 \x01(\tR\bhostname*\xbb\x02\n" +
 	"\x12HostedGatewayState\x12$\n" +
 	" HOSTED_GATEWAY_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eHOSTED_GATEWAY_STATE_REQUESTED\x10\x01\x12$\n" +
@@ -1436,7 +1555,9 @@ const file_pantherclaw_v1_hosting_proto_rawDesc = "" +
 	"\x13PullEnrollmentToken\x12*.pantherclaw.v1.PullEnrollmentTokenRequest\x1a+.pantherclaw.v1.PullEnrollmentTokenResponse\x12n\n" +
 	"\x13ReportHostedGateway\x12*.pantherclaw.v1.ReportHostedGatewayRequest\x1a+.pantherclaw.v1.ReportHostedGatewayResponse\x12\\\n" +
 	"\rReportStopped\x12$.pantherclaw.v1.ReportStoppedRequest\x1a%.pantherclaw.v1.ReportStoppedResponse\x12q\n" +
-	"\x14RenewHostCertificate\x12+.pantherclaw.v1.RenewHostCertificateRequest\x1a,.pantherclaw.v1.RenewHostCertificateResponseB\xc5\x01\n" +
+	"\x14RenewHostCertificate\x12+.pantherclaw.v1.RenewHostCertificateRequest\x1a,.pantherclaw.v1.RenewHostCertificateResponse2\x97\x01\n" +
+	"\x1cHostedGatewayIdentityService\x12w\n" +
+	"\x16IssueServerCertificate\x12-.pantherclaw.v1.IssueServerCertificateRequest\x1a..pantherclaw.v1.IssueServerCertificateResponseB\xc5\x01\n" +
 	"\x12com.pantherclaw.v1B\fHostingProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1452,7 +1573,7 @@ func file_pantherclaw_v1_hosting_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_hosting_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pantherclaw_v1_hosting_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_pantherclaw_v1_hosting_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_pantherclaw_v1_hosting_proto_goTypes = []any{
 	(HostedGatewayState)(0),                  // 0: pantherclaw.v1.HostedGatewayState
 	(*HostedGatewayLimits)(nil),              // 1: pantherclaw.v1.HostedGatewayLimits
@@ -1476,13 +1597,15 @@ var file_pantherclaw_v1_hosting_proto_goTypes = []any{
 	(*ReportStoppedResponse)(nil),            // 19: pantherclaw.v1.ReportStoppedResponse
 	(*RenewHostCertificateRequest)(nil),      // 20: pantherclaw.v1.RenewHostCertificateRequest
 	(*RenewHostCertificateResponse)(nil),     // 21: pantherclaw.v1.RenewHostCertificateResponse
-	(*timestamppb.Timestamp)(nil),            // 22: google.protobuf.Timestamp
+	(*IssueServerCertificateRequest)(nil),    // 22: pantherclaw.v1.IssueServerCertificateRequest
+	(*IssueServerCertificateResponse)(nil),   // 23: pantherclaw.v1.IssueServerCertificateResponse
+	(*timestamppb.Timestamp)(nil),            // 24: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_hosting_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.HostedGateway.state:type_name -> pantherclaw.v1.HostedGatewayState
 	1,  // 1: pantherclaw.v1.HostedGateway.limits:type_name -> pantherclaw.v1.HostedGatewayLimits
-	22, // 2: pantherclaw.v1.HostedGateway.create_time:type_name -> google.protobuf.Timestamp
-	22, // 3: pantherclaw.v1.HostedGateway.update_time:type_name -> google.protobuf.Timestamp
+	24, // 2: pantherclaw.v1.HostedGateway.create_time:type_name -> google.protobuf.Timestamp
+	24, // 3: pantherclaw.v1.HostedGateway.update_time:type_name -> google.protobuf.Timestamp
 	1,  // 4: pantherclaw.v1.RequestHostedGatewayRequest.limits:type_name -> pantherclaw.v1.HostedGatewayLimits
 	2,  // 5: pantherclaw.v1.RequestHostedGatewayResponse.hosted_gateway:type_name -> pantherclaw.v1.HostedGateway
 	2,  // 6: pantherclaw.v1.GetHostedGatewayResponse.hosted_gateway:type_name -> pantherclaw.v1.HostedGateway
@@ -1500,17 +1623,19 @@ var file_pantherclaw_v1_hosting_proto_depIdxs = []int32{
 	16, // 18: pantherclaw.v1.HostingAgentService.ReportHostedGateway:input_type -> pantherclaw.v1.ReportHostedGatewayRequest
 	18, // 19: pantherclaw.v1.HostingAgentService.ReportStopped:input_type -> pantherclaw.v1.ReportStoppedRequest
 	20, // 20: pantherclaw.v1.HostingAgentService.RenewHostCertificate:input_type -> pantherclaw.v1.RenewHostCertificateRequest
-	4,  // 21: pantherclaw.v1.HostedGatewayService.RequestHostedGateway:output_type -> pantherclaw.v1.RequestHostedGatewayResponse
-	6,  // 22: pantherclaw.v1.HostedGatewayService.GetHostedGateway:output_type -> pantherclaw.v1.GetHostedGatewayResponse
-	8,  // 23: pantherclaw.v1.HostedGatewayService.ListHostedGateways:output_type -> pantherclaw.v1.ListHostedGatewaysResponse
-	10, // 24: pantherclaw.v1.HostedGatewayService.DeprovisionHostedGateway:output_type -> pantherclaw.v1.DeprovisionHostedGatewayResponse
-	13, // 25: pantherclaw.v1.HostingAgentService.ListAssignments:output_type -> pantherclaw.v1.ListAssignmentsResponse
-	15, // 26: pantherclaw.v1.HostingAgentService.PullEnrollmentToken:output_type -> pantherclaw.v1.PullEnrollmentTokenResponse
-	17, // 27: pantherclaw.v1.HostingAgentService.ReportHostedGateway:output_type -> pantherclaw.v1.ReportHostedGatewayResponse
-	19, // 28: pantherclaw.v1.HostingAgentService.ReportStopped:output_type -> pantherclaw.v1.ReportStoppedResponse
-	21, // 29: pantherclaw.v1.HostingAgentService.RenewHostCertificate:output_type -> pantherclaw.v1.RenewHostCertificateResponse
-	21, // [21:30] is the sub-list for method output_type
-	12, // [12:21] is the sub-list for method input_type
+	22, // 21: pantherclaw.v1.HostedGatewayIdentityService.IssueServerCertificate:input_type -> pantherclaw.v1.IssueServerCertificateRequest
+	4,  // 22: pantherclaw.v1.HostedGatewayService.RequestHostedGateway:output_type -> pantherclaw.v1.RequestHostedGatewayResponse
+	6,  // 23: pantherclaw.v1.HostedGatewayService.GetHostedGateway:output_type -> pantherclaw.v1.GetHostedGatewayResponse
+	8,  // 24: pantherclaw.v1.HostedGatewayService.ListHostedGateways:output_type -> pantherclaw.v1.ListHostedGatewaysResponse
+	10, // 25: pantherclaw.v1.HostedGatewayService.DeprovisionHostedGateway:output_type -> pantherclaw.v1.DeprovisionHostedGatewayResponse
+	13, // 26: pantherclaw.v1.HostingAgentService.ListAssignments:output_type -> pantherclaw.v1.ListAssignmentsResponse
+	15, // 27: pantherclaw.v1.HostingAgentService.PullEnrollmentToken:output_type -> pantherclaw.v1.PullEnrollmentTokenResponse
+	17, // 28: pantherclaw.v1.HostingAgentService.ReportHostedGateway:output_type -> pantherclaw.v1.ReportHostedGatewayResponse
+	19, // 29: pantherclaw.v1.HostingAgentService.ReportStopped:output_type -> pantherclaw.v1.ReportStoppedResponse
+	21, // 30: pantherclaw.v1.HostingAgentService.RenewHostCertificate:output_type -> pantherclaw.v1.RenewHostCertificateResponse
+	23, // 31: pantherclaw.v1.HostedGatewayIdentityService.IssueServerCertificate:output_type -> pantherclaw.v1.IssueServerCertificateResponse
+	22, // [22:32] is the sub-list for method output_type
+	12, // [12:22] is the sub-list for method input_type
 	12, // [12:12] is the sub-list for extension type_name
 	12, // [12:12] is the sub-list for extension extendee
 	0,  // [0:12] is the sub-list for field type_name
@@ -1527,9 +1652,9 @@ func file_pantherclaw_v1_hosting_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_hosting_proto_rawDesc), len(file_pantherclaw_v1_hosting_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   23,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_pantherclaw_v1_hosting_proto_goTypes,
 		DependencyIndexes: file_pantherclaw_v1_hosting_proto_depIdxs,

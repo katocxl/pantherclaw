@@ -19,6 +19,9 @@ const (
 	HostedGatewayServiceName = "pantherclaw.v1.HostedGatewayService"
 	// HostingAgentServiceName is the fully-qualified name of the HostingAgentService service.
 	HostingAgentServiceName = "pantherclaw.v1.HostingAgentService"
+	// HostedGatewayIdentityServiceName is the fully-qualified name of the HostedGatewayIdentityService
+	// service.
+	HostedGatewayIdentityServiceName = "pantherclaw.v1.HostedGatewayIdentityService"
 )
 
 // These constants are the procedure names of the RPCs defined in this package. They're exposed at
@@ -56,6 +59,9 @@ const (
 	// HostingAgentServiceRenewHostCertificateProcedure is the procedure name of the
 	// HostingAgentService's RenewHostCertificate RPC.
 	HostingAgentServiceRenewHostCertificateProcedure = "/pantherclaw.v1.HostingAgentService/RenewHostCertificate"
+	// HostedGatewayIdentityServiceIssueServerCertificateProcedure is the procedure name of the
+	// HostedGatewayIdentityService's IssueServerCertificate RPC.
+	HostedGatewayIdentityServiceIssueServerCertificateProcedure = "/pantherclaw.v1.HostedGatewayIdentityService/IssueServerCertificate"
 )
 
 var (
@@ -475,6 +481,89 @@ func (h hostingAgentServiceHandler) renewHostCertificate(ctx context.Context, _ 
 		return err
 	}
 	res, err := h.svc.RenewHostCertificate(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+var (
+	hostedGatewayIdentityServiceIssueServerCertificateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_hosting_proto.Services().ByName("HostedGatewayIdentityService").Methods().ByName("IssueServerCertificate"),
+			Procedure:  HostedGatewayIdentityServiceIssueServerCertificateProcedure,
+		}
+	})
+)
+
+// HostedGatewayIdentityServiceClient is a client for the
+// pantherclaw.v1.HostedGatewayIdentityService service.
+type HostedGatewayIdentityServiceClient interface {
+	// IssueServerCertificate returns the calling hosted gateway's 7-day
+	// agent-facing server certificate for the key in its request. Its one
+	// name, <slug>.gw.<domain>, comes from the org's hosted gateway record,
+	// never from the request; a gateway no live record names gets NotFound.
+	// permission: gateway.sync
+	IssueServerCertificate(context.Context, *v1.IssueServerCertificateRequest) (*v1.IssueServerCertificateResponse, error)
+}
+
+// NewHostedGatewayIdentityServiceClient constructs a client for the
+// pantherclaw.v1.HostedGatewayIdentityService service. Multiple service clients may share a single
+// connect.Client.
+func NewHostedGatewayIdentityServiceClient(client *connect.Client) HostedGatewayIdentityServiceClient {
+	return &hostedGatewayIdentityServiceClient{client: client}
+}
+
+// HostedGatewayIdentityServiceHandler is an implementation of the
+// pantherclaw.v1.HostedGatewayIdentityService service.
+type HostedGatewayIdentityServiceHandler interface {
+	// IssueServerCertificate returns the calling hosted gateway's 7-day
+	// agent-facing server certificate for the key in its request. Its one
+	// name, <slug>.gw.<domain>, comes from the org's hosted gateway record,
+	// never from the request; a gateway no live record names gets NotFound.
+	// permission: gateway.sync
+	IssueServerCertificate(context.Context, *v1.IssueServerCertificateRequest) (*v1.IssueServerCertificateResponse, error)
+}
+
+// RegisterHostedGatewayIdentityServiceHandler registers svc as the
+// pantherclaw.v1.HostedGatewayIdentityService implementation on server.
+func RegisterHostedGatewayIdentityServiceHandler(server *connect.Server, svc HostedGatewayIdentityServiceHandler) {
+	adapter := hostedGatewayIdentityServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: hostedGatewayIdentityServiceIssueServerCertificateSpec(), Handler: adapter.issueServerCertificate},
+	)
+}
+
+// UnimplementedHostedGatewayIdentityServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedHostedGatewayIdentityServiceHandler struct{}
+
+func (UnimplementedHostedGatewayIdentityServiceHandler) IssueServerCertificate(context.Context, *v1.IssueServerCertificateRequest) (*v1.IssueServerCertificateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.HostedGatewayIdentityService.IssueServerCertificate is not implemented")
+}
+
+type hostedGatewayIdentityServiceClient struct {
+	client *connect.Client
+}
+
+func (c *hostedGatewayIdentityServiceClient) IssueServerCertificate(ctx context.Context, req *v1.IssueServerCertificateRequest) (*v1.IssueServerCertificateResponse, error) {
+	var res v1.IssueServerCertificateResponse
+	if err := c.client.CallUnary(ctx, hostedGatewayIdentityServiceIssueServerCertificateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type hostedGatewayIdentityServiceHandler struct {
+	svc HostedGatewayIdentityServiceHandler
+}
+
+func (h hostedGatewayIdentityServiceHandler) issueServerCertificate(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.IssueServerCertificateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.IssueServerCertificate(ctx, &req)
 	if err != nil {
 		return err
 	}

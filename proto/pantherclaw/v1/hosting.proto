@@ -60,6 +60,17 @@ service HostingAgentService {
   rpc RenewHostCertificate(RenewHostCertificateRequest) returns (RenewHostCertificateResponse);
 }
 
+// HostedGatewayIdentityService is what a hosted gateway calls on the gateway
+// listener over its own mTLS identity (G0 M19 D210).
+service HostedGatewayIdentityService {
+  // IssueServerCertificate returns the calling hosted gateway's 7-day
+  // agent-facing server certificate for the key in its request. Its one
+  // name, <slug>.gw.<domain>, comes from the org's hosted gateway record,
+  // never from the request; a gateway no live record names gets NotFound.
+  // permission: gateway.sync
+  rpc IssueServerCertificate(IssueServerCertificateRequest) returns (IssueServerCertificateResponse);
+}
+
 // HostedGatewayState is a hosted gateway's lifecycle.
 enum HostedGatewayState {
   HOSTED_GATEWAY_STATE_UNSPECIFIED = 0;
@@ -282,4 +293,25 @@ message RenewHostCertificateResponse {
   bytes certificate = 1;
   // DER CA certificate.
   bytes ca_certificate = 2;
+}
+
+// IssueServerCertificateRequest carries a request for the gateway's
+// agent-facing key.
+message IssueServerCertificateRequest {
+  // DER PKCS #10 certificate request for an Ed25519 key; only its key is
+  // used.
+  bytes csr = 1 [(buf.validate.field).bytes = {
+    min_len: 64
+    max_len: 4096
+  }];
+}
+
+// IssueServerCertificateResponse returns the certificate.
+message IssueServerCertificateResponse {
+  // DER certificate naming exactly hostname.
+  bytes certificate = 1;
+  // DER CA certificate.
+  bytes ca_certificate = 2;
+  // The one DNS name: <slug>.gw.<domain>.
+  string hostname = 3;
 }

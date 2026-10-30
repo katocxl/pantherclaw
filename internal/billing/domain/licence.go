@@ -329,3 +329,9 @@ func (e Entitlements) SlackApprovals() bool { return e.Edition.Paid() }
 // F101–F103): Team and above. Scope already in force keeps being enforced
 // after a downgrade.
 func (e Entitlements) DataScoping() bool { return e.Edition.Paid() }
+
+// HostedGateways reports whether the edition may request a
+// PantherClaw-hosted gateway (G0 M19 D203, D212, PN-010.4: Team and
+// above). It gates provisioning only: after a downgrade a hosted gateway
+// keeps running, and reading or deprovisioning it works in every edition.
+func (e Entitlements) HostedGateways() bool { return e.Edition.Paid() }

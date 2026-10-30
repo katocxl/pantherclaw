@@ -57,6 +57,13 @@ type GatewayConfig struct {
 		CASHA256    string `json:"ca_sha256"`
 		IdentityDir string `json:"identity_dir"`
 	} `json:"control"`
+	// TLS: the agent-facing key and certificate live in the gateway's own
+	// volume; the gateway makes the key and fetches the certificate itself
+	// (G0 M19 D210).
+	TLS struct {
+		CertFile string `json:"cert_file"`
+		KeyFile  string `json:"key_file"`
+	} `json:"tls"`
 }
 
 // Prepare creates the hosted gateway's private directory (readable only by
@@ -73,6 +80,7 @@ func (p *Private) Prepare(hosted ids.UUID, apiURL, pin string) (string, error) {
 	var c GatewayConfig
 	c.Listen = fmt.Sprintf("0.0.0.0:%d", profile.Port)
 	c.Control.APIURL, c.Control.CASHA256, c.Control.IdentityDir = apiURL, pin, profile.StateDir
+	c.TLS.CertFile, c.TLS.KeyFile = profile.StateDir+"/tls/cert.pem", profile.StateDir+"/tls/key.pem"
 	b, err := json.Marshal(c)
 	if err != nil {
 		return "", err

@@ -136,3 +136,10 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND host_id = sqlc.arg(hos
 -- name: FailHostedGateway :execrows
 UPDATE pc.hosted_gateways SET state = 'FAILED', failure = sqlc.arg(failure), token_sealed = NULL, updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'REQUESTED';
+
+-- name: HostedGatewayOfGateway :one
+-- The live hosted gateway record of one of the org's gateways: its slug
+-- names the gateway's server certificate (G0 M19 D210).
+SELECT * FROM pc.hosted_gateways
+WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id)::uuid
+  AND state IN ('ENROLLED', 'RUNNING');

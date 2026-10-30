@@ -254,6 +254,9 @@ type ListerParams struct {
 	// After is the paging cursor of the org-keyed purposes: only orgs
 	// above it are returned (G0 M13 D45). Zero starts at the first org.
 	After ids.OrgID
+	// HostID is the hosting host of the purpose hosting_assigned (G0 M19
+	// D203, D209), set in app.hosting_host. Zero matches nothing.
+	HostID ids.UUID
 }
 
 func (lp ListerParams) settings() [][2]string {
@@ -266,6 +269,9 @@ func (lp ListerParams) settings() [][2]string {
 	out := [][2]string{{"app.lister_after", after}}
 	if !lp.AccountID.IsZero() {
 		out = append(out, [2]string{"app.account_id", lp.AccountID.String()})
+	}
+	if !lp.HostID.IsZero() {
+		out = append(out, [2]string{"app.hosting_host", lp.HostID.String()})
 	}
 	if lp.BillingProvider != "" || lp.BillingKind != "" || lp.BillingRef != "" {
 		out = append(out, [2]string{"app.billing_provider", lp.BillingProvider},
