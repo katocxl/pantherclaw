@@ -3,7 +3,8 @@
 
 // Package gitlabfacts reads the GitLab facts pc.gitlab names (G0 M20
 // D254): a merge request's head, its approvals, its head pipeline and its
-// target branch's protection. It parses GitLab's answers and never
+// target branch's protection, and the deployment a merge starts. It parses
+// GitLab's answers and never
 // guesses: what it cannot read is unread, so the decision sees the fact
 // missing (HR-160), never an approved merge request or a passed pipeline.
 package gitlabfacts
@@ -24,7 +25,7 @@ const (
 )
 
 // Names are every fact this package reads.
-var Names = []string{MergeRequestHead, MergeRequestApprovals, MergeRequestPipeline, BranchProtection}
+var Names = []string{MergeRequestHead, MergeRequestApprovals, MergeRequestPipeline, BranchProtection, MergeRequestDeployment}
 
 var (
 	shaRe    = regexp.MustCompile(`^[0-9a-f]{40}$`)

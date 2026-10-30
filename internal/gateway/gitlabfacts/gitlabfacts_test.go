@@ -3,7 +3,10 @@
 
 package gitlabfacts
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const (
 	head = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -13,6 +16,36 @@ const (
 func mr(sha, pipeline string) []byte {
 	return []byte(`{"iid":7,"project_id":42,"state":"opened","sha":"` + head + `","source_branch":"fix","target_branch":"main",` +
 		`"head_pipeline":{"id":900,"sha":"` + sha + `","status":"` + pipeline + `"}}`)
+}
+
+// TestT229_ADeploymentNeedsAPipelineThatPassedAtTheHead: a project with no
+// environment deploys nothing; with one, the fact has a state only when the
+// head pipeline passed at the head, and anything else is unread, so the
+// consequence is unknown and the merge at least held (HR-521, T-229).
+//
+// Covers: F756
+func TestT229_ADeploymentNeedsAPipelineThatPassedAtTheHead(t *testing.T) {
+	envs, passed, running := []byte(`[{"id":1,"name":"production"}]`), map[string]any{"id": "900", "passed": true}, map[string]any{"id": "901", "passed": false}
+	if v := Deployment(200, []byte(`[]`), running); v["state"] != "none" {
+		t.Fatalf("no environment: %v", v)
+	}
+	v := Deployment(200, envs, passed)
+	if e, _ := v["environments"].([]any); v["state"] != "verified" || len(e) != 1 || e[0] != "production" || v["pipeline"] != "900" {
+		t.Fatalf("verified: %v", v)
+	}
+	full := []byte(`[` + strings.Repeat(`{"name":"e"},`, EnvironmentsPageSize-1) + `{"name":"e"}]`)
+	for name, got := range map[string]map[string]any{
+		"running":         Deployment(200, envs, running),
+		"unread pipeline": Deployment(200, envs, Unread("no")),
+		"refused":         Deployment(403, envs, passed),
+		"not JSON":        Deployment(200, []byte(`{`), passed),
+		"bad name":        Deployment(200, []byte(`[{"name":"a\nb"}]`), passed),
+		"a full page":     Deployment(200, full, passed),
+	} {
+		if _, unread := got["unread"]; !unread {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
 }
 
 // TestHR521_GitLabFactsNeverGuess: a pipeline passed only when it succeeded
