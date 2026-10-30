@@ -105,6 +105,38 @@ func TestHR543_OnlyAStrictlyValidPolicyAnswerIsAccepted(t *testing.T) {
 	}
 }
 
+// Covers: F181
+func TestHR543_AConstraintLimitIsCheckedAgainstItsParamsType(t *testing.T) {
+	answer := func(constraint string) []byte {
+		rule := strings.Replace(goodRule, `"constraint":null`, `"constraint":`+constraint, 1)
+		return policyAnswer(strings.Replace(rule, "FORBID", string(pdomain.Constrain), 1))
+	}
+	accepted := []string{
+		`{"kind":"amount_max","param":"amount","max":"100.00","currency":"USD","values":[]}`,
+		`{"kind":"count_max","param":"count","max":"5","currency":"","values":[]}`,
+		`{"kind":"allowed_values","param":"tier","max":"","currency":"","values":["gold"]}`,
+	}
+	for _, c := range accepted {
+		if _, _, err := parsePolicy("limit refunds", answer(c), ids.NewV7(), visibleOps, testFields); err != nil {
+			t.Errorf("%s: %v", c, err)
+		}
+	}
+	refused := map[string]string{
+		"not a number":     `{"kind":"amount_max","param":"amount","max":"a lot","currency":"USD","values":[]}`,
+		"no currency":      `{"kind":"amount_max","param":"amount","max":"100.00","currency":"","values":[]}`,
+		"not a currency":   `{"kind":"amount_max","param":"amount","max":"100.00","currency":"true || true","values":[]}`,
+		"not a whole one":  `{"kind":"count_max","param":"count","max":"1.5","currency":"","values":[]}`,
+		"no order":         `{"kind":"count_max","param":"reference","max":"5","currency":"","values":[]}`,
+		"unoffered param":  `{"kind":"count_max","param":"none","max":"5","currency":"","values":[]}`,
+		"a stray currency": `{"kind":"allowed_values","param":"tier","max":"","currency":"USD","values":["gold"]}`,
+	}
+	for name, c := range refused {
+		if _, _, err := parsePolicy("limit refunds", answer(c), ids.NewV7(), visibleOps, testFields); !errors.Is(err, ports.ErrInvalidOutput) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 // Covers: F181, F304
 func TestHR543_VagueTermsAreSettledOrTheDraftIsRefused(t *testing.T) {
 	const text = "hold refunds for a lot of money"

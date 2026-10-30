@@ -134,6 +134,21 @@ func (d draftRule) rule(id, when string) pdomain.Rule {
 	return r
 }
 
+// limit reports whether c reads an offered parameter and any limit it sets is
+// a value of that parameter's type, which must have an order. Rule.Validate
+// checks only that a limit is there.
+func (f policyFields) limit(c *draftConstraint) bool {
+	if !f.hasParam(c.Param) {
+		return false
+	}
+	if c.Max == "" && c.Currency == "" {
+		return true
+	}
+	p := f[paramPrefix+c.Param]
+	_, ok := p.literal(c.Max, c.Currency)
+	return ok && ordered(p.Type)
+}
+
 // covered reports whether op, exact or a prefix, reaches an operation the
 // person may read: a draft names nothing else.
 func covered(op string, visible []string) bool {
@@ -159,7 +174,7 @@ func parsePolicy(text string, output []byte, call ids.UUID, visible []string, fi
 	out := make([]pdomain.Rule, 0, len(o.Rules))
 	for i, d := range o.Rules {
 		when, ok := fields.renderPolicy(d.Conditions)
-		if !ok || (d.Constraint != nil && !fields.hasParam(d.Constraint.Param)) {
+		if !ok || (d.Constraint != nil && !fields.limit(d.Constraint)) {
 			return nil, nil, ports.ErrInvalidOutput
 		}
 		r := d.rule("model-"+call.String()+"-"+strconv.Itoa(i), when)
