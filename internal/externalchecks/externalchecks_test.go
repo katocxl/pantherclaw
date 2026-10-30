@@ -5,8 +5,8 @@ package externalchecks
 
 import (
 	"context"
-	"errors"
 	"crypto/x509"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
