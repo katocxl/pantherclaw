@@ -1,6 +1,6 @@
 # ADR-0040 — High-availability semantics: shared limits, stated staleness, fail-closed failover
 
-**Status:** Accepted (2026-10-29). Founder decisions G10 (shared state in Postgres only) and G11 (no monitor fast path, no offline read continuation) were answered with the recommended option. The [G0 M19 brief](../g0/M19.md) records them with the coordinator's design decisions D201, D202, D204, D207, D208, D211 and D213. Builds on [ADR-0002](0002-control-plane-and-gateway-split.md) (the gateway has no database), [ADR-0015](0015-budget-settlement-off-the-hot-row.md) (settlement off the hot row) and [ADR-0036](0036-server-backed-mcp-state-discovery-and-reviewed-surface.md) (server-backed MCP state).
+**Status:** Accepted (2026-10-29). Founder decisions G10 (shared state in Postgres only) and G11 (no monitor fast path, no offline read continuation) were answered with the recommended option. The [G0 M19 brief](../g0/M19.md) records them with the coordinator's design decisions D201, D202, D204, D207, D208, D211, D213–D218, D220 and D221. Builds on [ADR-0002](0002-control-plane-and-gateway-split.md) (the gateway has no database), [ADR-0015](0015-budget-settlement-off-the-hot-row.md) (settlement off the hot row) and [ADR-0036](0036-server-backed-mcp-state-discovery-and-reviewed-surface.md) (server-backed MCP state).
 
 **Context.** PantherClaw can run several API replicas, but several parts are still per replica or single:
 - The authenticated API's limits per organization and per credential are counted in memory per replica, so N replicas admit N times the limit (R-58).
@@ -28,17 +28,18 @@ High availability (PN-010.7) must not weaken any decision-path guarantee: no dec
    - LISTEN reconnects and re-polls. Nothing is served from a standby or from a cache as a decision.
    - Production HA recommends `synchronous_commit=remote_apply` with one synchronous standby.
    - **The timeline rule** (HR-496; D207, D213). A promotion shows up as a new primary timeline.
-     - **Record.** The acknowledged timeline is kept in the single-row operator table `pc.db_primary_timeline`.
+     - **Record.** The acknowledged timeline and its `sync_verified` flag are kept in the single-row operator table `pc.db_primary_timeline`.
      - **When sync counts.** Replication counts as synchronous only when the configuration declares it AND the primary verifies `synchronous_commit = remote_apply` with a non-empty `synchronous_standby_names`. Otherwise it counts as asynchronous, with a warning.
-     - **At start-up.** The server compares the primary's timeline with the acknowledged one. If they differ and replication is not verified sync, it starts in the maintenance hold (HR-379). On the first start, with no row yet, it records the timeline and does not hold.
+     - **At start-up.** The server compares the primary's timeline with the acknowledged one. A moved timeline counts as sync only if the old acknowledged row has `sync_verified = true` AND the new primary verifies; otherwise the server starts in the maintenance hold (HR-379). On the first start, with no row yet, it records the timeline and does not hold.
      - **At run time.** Every new connection reads its timeline (`pg_walfile_name(pg_current_wal_lsn())`) in the pool's after-connect hook.
-       - A connection on a different timeline is accepted only when this process verified sync at start AND the new primary verifies sync on that connection; the new timeline is then recorded.
-       - Otherwise the process gets `ErrTimelineChanged`: it refuses every connection, makes no decision, and fails readiness and liveness, so the orchestrator restarts it into the start-up hold.
+       - A connection on a different timeline is accepted only when the acknowledged row has `sync_verified = true`, never on this process's own start-up result alone, AND the new primary verifies sync on that connection; the new timeline is then recorded. A process in the hold carries no sync.
+       - Otherwise the process gets `ErrTimelineChanged`: it refuses every connection, makes no decision, and fails readiness and liveness, so the orchestrator restarts it into the start-up hold. Pooled connections serve nothing after that: a pool hook refuses them, idle ones are closed, and beginning a transaction refuses.
      - **Leaving the hold.** `bump-epochs` (HR-373) records the new timeline. This is the same path as after a restore (T-171).
 5. **Workers scale out** (HR-498). Every River job is audited, and those not safe with two workers are fixed. The chart then defaults to two workers with a PodDisruptionBudget.
 6. **Gateway replicas share A2A ownership** on M15's `pc.gateway_mcp_state` (kinds `A2A_TASK`, `A2A_CONTEXT`), with its binding and caps (HR-411, HR-412).
    - Both kinds use the TASK caps and the 1-hour lifetime.
    - An `A2A_TASK` body is the sealed context id; an `A2A_CONTEXT` entry has none.
+   - A new task's entry is reserved under a per-request id before the call goes to the target, so a cap refusal comes before the target creates anything. The cap is keyed by the calling principal. A message that names an existing task reserves nothing.
    - Per-replica circuit breakers and A2A client and drift state stay local and documented.
 7. **Decision speed** (D208).
    - Decision snapshots stay `REPEATABLE READ, READ ONLY`, and no write moves into them (HR-504). Merging Prepare into the snapshot would open every evaluation read-write to save one round trip per budget period, so it is not done.
@@ -50,7 +51,7 @@ High availability (PN-010.7) must not weaken any decision-path guarantee: no dec
 
 | Cache | Where | Decision path | Bound | Invalidation |
 |---|---|---|---|---|
-| Gateway certificate checks (`authCache`) | `internal/gateways/app/enroll.go` | yes | 1 s | forgotten locally on revoke or disable, and on every replica through `LISTEN pc_containment` (HR-492) |
+| Gateway certificate checks (`authCache`) | `internal/gateways/app/enroll.go` | yes | 1 s | forgotten locally on revoke or disable, and on every replica through `LISTEN pc_containment` (HR-492); a per-org generation drops a result read before the forget |
 | Containment view per org (server hub) | `internal/gateways/app/watch.go` | yes | 250 ms poll | woken at once by `LISTEN pc_containment` |
 | Gateway containment view | `internal/gateway/control/containment.go` | yes | 2 s (`MaxStaleness`); stale → fail closed | the WatchContainment stream and its heartbeats |
 | Wait handles | `internal/approvals/app/wait.go` | yes (approval outcome) | the long-poll period; state is read from the database | woken by `LISTEN pc_wait` |
@@ -71,7 +72,7 @@ S19a's tests confirm each bound and record any correction in this table at the e
 - A database failover is an outage of decisions, not a loss of safety. Its length is the promotion time plus reconnection.
 - With an asynchronous standby, the last committed writes can be lost (R-67). The maintenance hold and epoch bump stop old authority from acting again, at the cost of operator work after a promotion. Because the timeline is checked on every new connection, a promotion behind a stable endpoint is caught too, not only at restart. A declared but unverified synchronous setup is treated as asynchronous.
 - Two workers need every job to stay safe under concurrency (HR-498). New jobs inherit this requirement.
-- The failover test runs locally with two Postgres containers. It is not a CI gate, and its result is recorded in the exit pull request.
+- The failover test runs locally with two Postgres containers, under the build tag `integration && failover`. It is not a CI gate, and its result is recorded in the exit pull request.
 
 **Alternatives.**
 - Valkey or another shared store: rejected by G10, as a new dependency and operational burden at $0.
