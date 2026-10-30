@@ -1995,6 +1995,14 @@ type PcGatewayEpochDelivery struct {
 	DeliveredAt time.Time
 }
 
+type PcGatewayFleetPolicy struct {
+	OrgID               ids.OrgID
+	MinimumVersion      *string
+	SilenceAfterSeconds int32
+	UpdatedBy           string
+	UpdatedAt           time.Time
+}
+
 type PcGatewayMcpState struct {
 	OrgID        ids.OrgID
 	GatewayID    ids.UUID
