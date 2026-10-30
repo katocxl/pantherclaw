@@ -1,0 +1,21 @@
+{{template "head" .}}
+<h1>External policy check: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>. Created at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Check</dt><dd><code>{{.ID}}</code></dd>
+<dt>Endpoint</dt><dd><code>{{.Endpoint}}</code></dd>
+<dt>Certificate authority</dt><dd>{{if .CAPEM}}its own CA bundle{{else}}the system roots{{end}}</dd>
+<dt>Timeout</dt><dd>{{.TimeoutMs}} ms</dd>
+<dt>Operations</dt><dd>{{range $i, $o := .Operations}}{{if $i}}, {{end}}<code>{{$o}}</code>{{end}}</dd>
+</dl>
+<p class="note">Once active, PantherClaw asks this endpoint about every action whose operation matches, after the policy rules. Its answer can only restrict a decision: deny denies, hold asks an approver, allow changes nothing. If it does not answer within the timeout, the action cannot be authorized. It is sent the action's meaning and the length, never the content, of anything the action would disclose.</p>
+{{if and .CanManage (eq .State "PENDING")}}
+<h2>Activate</h2>
+<p class="note">Activating needs your security key. At most three checks are active at once.</p>
+<p><button type="button" class="danger" data-action="activate" data-path="/policies/external-checks/{{.ID}}/activate">Activate with your security key</button></p>
+{{else if eq .State "PENDING"}}
+<p class="note">You cannot activate this: that needs policy.external_check.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/automation_endpoints.js"></script>
+{{template "foot" .}}

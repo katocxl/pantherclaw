@@ -60,6 +60,8 @@ type Config struct {
 	// WebAuthn and Notifications are M5 part 1 (config_m5.go).
 	WebAuthn      WebAuthnConfig      `json:"webauthn"`
 	Notifications NotificationsConfig `json:"notifications"`
+	// ExternalChecks is M16 (config_m16.go).
+	ExternalChecks ExternalChecksConfig `json:"external_checks"`
 	// Waitlist is M5 part 2 (config_m5p2.go).
 	Waitlist WaitlistConfig `json:"waitlist"`
 	// GatewayAPI is M6 (config_m6.go).
@@ -228,6 +230,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateDevSlack()...)
 	errs = append(errs, c.validateObservability()...)
 	errs = append(errs, c.validateLimits()...)
+	errs = append(errs, c.validateExternalChecks()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

@@ -58,7 +58,7 @@ func (q *Queries) DeactivateFactDeclarations(ctx context.Context, orgID ids.OrgI
 
 const disableFactProvider = `-- name: DisableFactProvider :execresult
 UPDATE pc.fact_providers SET state = 'DISABLED'
-WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE'
+WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE' AND NOT builtin
 `
 
 func (q *Queries) DisableFactProvider(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (pgconn.CommandTag, error) {
@@ -98,6 +98,64 @@ func (q *Queries) DisableMovedGatewayProviders(ctx context.Context, orgID ids.Or
 		return nil, err
 	}
 	return items, nil
+}
+
+const ensureBuiltinFactDeclaration = `-- name: EnsureBuiltinFactDeclaration :exec
+INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, kind)
+VALUES ($1, $2, $3, $4, $5, $6, 'value')
+ON CONFLICT (org_id, provider_id, name) DO NOTHING
+`
+
+type EnsureBuiltinFactDeclarationParams struct {
+	OrgID       ids.OrgID
+	ProviderID  ids.UUID
+	Name        string
+	ValueType   string
+	SubjectType string
+	MaxLagS     int32
+}
+
+func (q *Queries) EnsureBuiltinFactDeclaration(ctx context.Context, arg EnsureBuiltinFactDeclarationParams) error {
+	_, err := q.db.Exec(ctx, ensureBuiltinFactDeclaration,
+		arg.OrgID,
+		arg.ProviderID,
+		arg.Name,
+		arg.ValueType,
+		arg.SubjectType,
+		arg.MaxLagS,
+	)
+	return err
+}
+
+const ensureBuiltinFactProvider = `-- name: EnsureBuiltinFactProvider :exec
+
+INSERT INTO pc.fact_providers (org_id, id, name, builtin, created_by)
+VALUES ($1, $2, 'pc.signals', true, 'system:pc.signals')
+ON CONFLICT (org_id) WHERE builtin DO NOTHING
+`
+
+// The built-in provider (G0 M16 D82, HR-441): pc.signals, one per org,
+// created on first use by the Shared Signals receiver. No RPC reaches
+// these queries.
+func (q *Queries) EnsureBuiltinFactProvider(ctx context.Context, orgID ids.OrgID, iD ids.UUID) error {
+	_, err := q.db.Exec(ctx, ensureBuiltinFactProvider, orgID, iD)
+	return err
+}
+
+const getBuiltinFactProvider = `-- name: GetBuiltinFactProvider :one
+SELECT id, state FROM pc.fact_providers WHERE org_id = $1 AND builtin
+`
+
+type GetBuiltinFactProviderRow struct {
+	ID    ids.UUID
+	State string
+}
+
+func (q *Queries) GetBuiltinFactProvider(ctx context.Context, orgID ids.OrgID) (GetBuiltinFactProviderRow, error) {
+	row := q.db.QueryRow(ctx, getBuiltinFactProvider, orgID)
+	var i GetBuiltinFactProviderRow
+	err := row.Scan(&i.ID, &i.State)
+	return i, err
 }
 
 const getFact = `-- name: GetFact :one
@@ -186,9 +244,9 @@ func (q *Queries) GetFactProviderByConnection(ctx context.Context, orgID ids.Org
 }
 
 const insertFactDeclaration = `-- name: InsertFactDeclaration :exec
-INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, connection_id)
+INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, connection_id, kind)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7)
+        $7, coalesce(nullif($8::text, ''), 'value'))
 `
 
 type InsertFactDeclarationParams struct {
@@ -199,6 +257,7 @@ type InsertFactDeclarationParams struct {
 	SubjectType  string
 	MaxLagS      int32
 	ConnectionID *ids.UUID
+	Kind         string
 }
 
 func (q *Queries) InsertFactDeclaration(ctx context.Context, arg InsertFactDeclarationParams) error {
@@ -210,6 +269,7 @@ func (q *Queries) InsertFactDeclaration(ctx context.Context, arg InsertFactDecla
 		arg.SubjectType,
 		arg.MaxLagS,
 		arg.ConnectionID,
+		arg.Kind,
 	)
 	return err
 }
@@ -369,7 +429,7 @@ func (q *Queries) ListActiveFactSubjects(ctx context.Context, orgID ids.OrgID) (
 }
 
 const listFactDeclarations = `-- name: ListFactDeclarations :many
-SELECT name, value_type, subject_type, max_lag_s FROM pc.fact_declarations
+SELECT name, value_type, subject_type, max_lag_s, kind FROM pc.fact_declarations
 WHERE org_id = $1 AND provider_id = $2 AND active
 ORDER BY name
 `
@@ -379,6 +439,7 @@ type ListFactDeclarationsRow struct {
 	ValueType   string
 	SubjectType string
 	MaxLagS     int32
+	Kind        string
 }
 
 func (q *Queries) ListFactDeclarations(ctx context.Context, orgID ids.OrgID, providerID ids.UUID) ([]ListFactDeclarationsRow, error) {
@@ -395,6 +456,7 @@ func (q *Queries) ListFactDeclarations(ctx context.Context, orgID ids.OrgID, pro
 			&i.ValueType,
 			&i.SubjectType,
 			&i.MaxLagS,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -407,7 +469,7 @@ func (q *Queries) ListFactDeclarations(ctx context.Context, orgID ids.OrgID, pro
 }
 
 const listFactProviders = `-- name: ListFactProviders :many
-SELECT id, name, service_account_id, gateway_id, connection_id, state FROM pc.fact_providers
+SELECT id, name, service_account_id, gateway_id, connection_id, state, builtin FROM pc.fact_providers
 WHERE org_id = $1 AND ($2::boolean OR state = 'ACTIVE')
 ORDER BY name, id
 LIMIT 500
@@ -420,6 +482,7 @@ type ListFactProvidersRow struct {
 	GatewayID        *ids.UUID
 	ConnectionID     *ids.UUID
 	State            string
+	Builtin          bool
 }
 
 func (q *Queries) ListFactProviders(ctx context.Context, orgID ids.OrgID, includeDisabled bool) ([]ListFactProvidersRow, error) {
@@ -438,6 +501,7 @@ func (q *Queries) ListFactProviders(ctx context.Context, orgID ids.OrgID, includ
 			&i.GatewayID,
 			&i.ConnectionID,
 			&i.State,
+			&i.Builtin,
 		); err != nil {
 			return nil, err
 		}
@@ -450,7 +514,7 @@ func (q *Queries) ListFactProviders(ctx context.Context, orgID ids.OrgID, includ
 }
 
 const listFactsAbout = `-- name: ListFactsAbout :many
-SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id
+SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, f.source, f.method
 FROM pc.facts f
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.active
@@ -473,6 +537,8 @@ type ListFactsAboutRow struct {
 	ObservedAt time.Time
 	RecordedAt time.Time
 	ProviderID ids.UUID
+	Source     *string
+	Method     *string
 }
 
 // ListFactsAbout returns the facts of active providers about one subject;
@@ -497,6 +563,8 @@ func (q *Queries) ListFactsAbout(ctx context.Context, arg ListFactsAboutParams) 
 			&i.ObservedAt,
 			&i.RecordedAt,
 			&i.ProviderID,
+			&i.Source,
+			&i.Method,
 		); err != nil {
 			return nil, err
 		}
@@ -509,7 +577,7 @@ func (q *Queries) ListFactsAbout(ctx context.Context, arg ListFactsAboutParams) 
 }
 
 const listProviderDeclarations = `-- name: ListProviderDeclarations :many
-SELECT provider_id, name, value_type, subject_type, max_lag_s FROM pc.fact_declarations
+SELECT provider_id, name, value_type, subject_type, max_lag_s, kind FROM pc.fact_declarations
 WHERE org_id = $1 AND provider_id = ANY($2::uuid[])
 ORDER BY name
 `
@@ -520,6 +588,7 @@ type ListProviderDeclarationsRow struct {
 	ValueType   string
 	SubjectType string
 	MaxLagS     int32
+	Kind        string
 }
 
 // ListProviderDeclarations returns every declaration of the providers,
@@ -539,6 +608,7 @@ func (q *Queries) ListProviderDeclarations(ctx context.Context, orgID ids.OrgID,
 			&i.ValueType,
 			&i.SubjectType,
 			&i.MaxLagS,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -551,7 +621,7 @@ func (q *Queries) ListProviderDeclarations(ctx context.Context, orgID ids.OrgID,
 }
 
 const listSubjectFacts = `-- name: ListSubjectFacts :many
-SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type
+SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type, d.kind, f.source, f.method
 FROM pc.facts f
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.active
@@ -578,6 +648,9 @@ type ListSubjectFactsRow struct {
 	RecordedAt time.Time
 	ProviderID ids.UUID
 	ValueType  string
+	Kind       string
+	Source     *string
+	Method     *string
 }
 
 // ListSubjectFacts returns the facts of active providers about one subject.
@@ -609,6 +682,9 @@ func (q *Queries) ListSubjectFacts(ctx context.Context, arg ListSubjectFactsPara
 			&i.RecordedAt,
 			&i.ProviderID,
 			&i.ValueType,
+			&i.Kind,
+			&i.Source,
+			&i.Method,
 		); err != nil {
 			return nil, err
 		}
@@ -639,11 +715,13 @@ func (q *Queries) LockServedConnection(ctx context.Context, orgID ids.OrgID, pro
 }
 
 const putConnectionFact = `-- name: PutConnectionFact :execresult
-INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at, connection_id)
+INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at, connection_id,
+                           source, method)
 VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8, now(), $9)
+        $6, $7, $8, now(), $9, $10, $11)
 ON CONFLICT (org_id, connection_id, name, subject_type, subject_id) WHERE connection_id IS NOT NULL DO UPDATE
-SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now()
+SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now(),
+    source = EXCLUDED.source, method = EXCLUDED.method
 WHERE f.observed_at <= EXCLUDED.observed_at
 `
 
@@ -657,6 +735,8 @@ type PutConnectionFactParams struct {
 	Value        []byte
 	ObservedAt   time.Time
 	ConnectionID *ids.UUID
+	Source       *string
+	Method       *string
 }
 
 // PutConnectionFact is PutFact for a gateway provider's observation: one
@@ -672,15 +752,18 @@ func (q *Queries) PutConnectionFact(ctx context.Context, arg PutConnectionFactPa
 		arg.Value,
 		arg.ObservedAt,
 		arg.ConnectionID,
+		arg.Source,
+		arg.Method,
 	)
 }
 
 const putFact = `-- name: PutFact :execresult
-INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at)
+INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at, source, method)
 VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8, now())
+        $6, $7, $8, now(), $9, $10)
 ON CONFLICT (org_id, name, subject_type, subject_id) WHERE connection_id IS NULL DO UPDATE
-SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now()
+SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now(),
+    source = EXCLUDED.source, method = EXCLUDED.method
 WHERE f.observed_at <= EXCLUDED.observed_at
 `
 
@@ -693,6 +776,8 @@ type PutFactParams struct {
 	ProviderID  ids.UUID
 	Value       []byte
 	ObservedAt  time.Time
+	Source      *string
+	Method      *string
 }
 
 // PutFact records an org-scoped observation; an older one never replaces a
@@ -707,5 +792,7 @@ func (q *Queries) PutFact(ctx context.Context, arg PutFactParams) (pgconn.Comman
 		arg.ProviderID,
 		arg.Value,
 		arg.ObservedAt,
+		arg.Source,
+		arg.Method,
 	)
 }

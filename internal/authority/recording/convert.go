@@ -232,12 +232,19 @@ func fromGrant(g gdomain.Grant) (Grant, error) {
 	if err != nil {
 		return Grant{}, err
 	}
+	flows, err := gdomain.EncodeFlows(g.Flows)
+	if err != nil {
+		return Grant{}, err
+	}
 	out := Grant{
 		ID: g.ID.String(), Revision: g.Revision, State: string(g.State), Agent: uid(g.AgentID), Instance: uid(g.InstanceID),
 		Principal: principalOf(g.Principal), Environment: uid(g.EnvironmentID), TaskRef: g.TaskRef, NotBefore: g.NotBefore,
 		ExpiresAt: g.ExpiresAt, Bounds: bounds, Requirements: reqs, Limits: lim, DelegationDepth: g.Delegation.Depth,
 		MaxChildren: g.Delegation.MaxChildren, MinAttestation: g.MinAttestation, Depth: g.Depth, Grantor: principalOf(g.Grantor),
 		Basis: g.Basis, RevisedAt: g.RevisedAt,
+	}
+	if flows != nil {
+		out.Flows = flows
 	}
 	if !g.Parent.IsZero() {
 		out.Parent = g.Parent.String()
@@ -251,7 +258,7 @@ func (g Grant) value(org ids.OrgID) (gdomain.Grant, error) {
 		ExpiresAt: g.ExpiresAt, Delegation: gdomain.Delegation{Depth: g.DelegationDepth, MaxChildren: g.MaxChildren},
 		MinAttestation: g.MinAttestation, Depth: g.Depth, Basis: g.Basis, RevisedAt: g.RevisedAt,
 	}
-	var errs [10]error
+	var errs [11]error
 	out.ID, errs[0] = gdomain.ParseGrantID(g.ID)
 	out.AgentID, errs[1] = parseUID(g.Agent)
 	out.InstanceID, errs[2] = parseUID(g.Instance)
@@ -264,6 +271,7 @@ func (g Grant) value(org ids.OrgID) (gdomain.Grant, error) {
 	out.Bounds, errs[7] = gdomain.DecodeBounds(g.Bounds)
 	errs[8] = json.Unmarshal(g.Requirements, &out.Requirements, json.RejectUnknownMembers(true))
 	out.Limits, errs[9] = gdomain.DecodeLimits(g.Limits)
+	out.Flows, errs[10] = gdomain.DecodeFlows(g.Flows)
 	return out, errors.Join(errs[:]...)
 }
 
@@ -347,7 +355,7 @@ func fromFacts(subjectType, subjectID string, names []string, found map[string]f
 		}
 		out.Facts = append(out.Facts, Fact{
 			Name: name, Type: string(f.Value.Type), Value: v, ObservedAt: f.ObservedAt, RecordedAt: f.RecordedAt,
-			Provider: uid(f.ProviderID),
+			Provider: uid(f.ProviderID), Kind: kindOf(f.Kind), Source: f.Source, Method: f.Method,
 		})
 	}
 	return out, nil
@@ -372,7 +380,7 @@ func (f Facts) value() (map[string]fdomain.Fact, error) {
 		}
 		out[x.Name] = fdomain.Fact{
 			Name: x.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID, Value: v, ObservedAt: x.ObservedAt,
-			RecordedAt: x.RecordedAt, ProviderID: p,
+			RecordedAt: x.RecordedAt, ProviderID: p, Kind: fdomain.Kind(x.Kind), Source: x.Source, Method: x.Method,
 		}
 	}
 	return out, nil
@@ -569,6 +577,12 @@ func (r Reads) check() error {
 	if c := r.Controls; c != nil && ok(c.Err) {
 		add(c.value())
 	}
+	if x := r.Sensitive; x != nil {
+		add(ids.ParseUUID(x.Run))
+		if ok(x.Err) {
+			add(x.value())
+		}
+	}
 	for _, d := range r.Definitions {
 		if ok(d.Err) && (d.Digest == "" || d.Digest != d.Pin.Digest) {
 			errs = append(errs, fmt.Errorf("definition %q", d.Pin.Digest))
@@ -657,4 +671,42 @@ func (r Reads) check() error {
 		ok(h.Err)
 	}
 	return errors.Join(errs...)
+}
+
+func fromSensitive(run ids.UUID, reads []pipeline.SensitiveRead, err error) *Sensitive {
+	out := &Sensitive{Run: run.String(), Err: errKind(err)}
+	for _, x := range reads {
+		out.Reads = append(out.Reads, SensitiveRead{
+			Transaction: x.TransactionID.String(), Run: x.RunID.String(), Operation: x.Operation, Class: x.Class, At: x.At,
+		})
+	}
+	return out
+}
+
+func (s Sensitive) value() ([]pipeline.SensitiveRead, error) {
+	var out []pipeline.SensitiveRead
+	for _, x := range s.Reads {
+		txn, err := ids.ParseUUID(x.Transaction)
+		if err != nil {
+			return nil, fmt.Errorf("sensitive read %q: %w", x.Transaction, err)
+		}
+		run, err := ids.ParseUUID(x.Run)
+		if err != nil {
+			return nil, fmt.Errorf("sensitive read %q: %w", x.Transaction, err)
+		}
+		if x.Class != "pii" && x.Class != "secret" {
+			return nil, fmt.Errorf("sensitive read %q: class %q", x.Transaction, x.Class)
+		}
+		out = append(out, pipeline.SensitiveRead{TransactionID: txn, RunID: run, Operation: x.Operation, Class: x.Class, At: x.At})
+	}
+	return out, errOf(s.Err)
+}
+
+// kindOf records a fact's kind only when it is not a value, so a value
+// fact's recording is the bytes it always was.
+func kindOf(k fdomain.Kind) string {
+	if k.Of() == fdomain.KindValue {
+		return ""
+	}
+	return string(k)
 }

@@ -9,9 +9,9 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.narg(service_accoun
         sqlc.arg(created_by));
 
 -- name: InsertFactDeclaration :exec
-INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, connection_id)
+INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, connection_id, kind)
 VALUES (sqlc.arg(org_id), sqlc.arg(provider_id), sqlc.arg(name), sqlc.arg(value_type), sqlc.arg(subject_type), sqlc.arg(max_lag_s),
-        sqlc.narg(connection_id));
+        sqlc.narg(connection_id), coalesce(nullif(sqlc.arg(kind)::text, ''), 'value'));
 
 -- ListActiveDeclarations are the active declarations of active providers
 -- with their scope: connection_id is NULL for an org-scoped (service
@@ -39,7 +39,7 @@ WHERE p.org_id = sqlc.arg(org_id) AND p.connection_id = sqlc.arg(connection_id):
   AND c.gateway_id = p.gateway_id AND c.state = 'ACTIVE';
 
 -- name: ListFactDeclarations :many
-SELECT name, value_type, subject_type, max_lag_s FROM pc.fact_declarations
+SELECT name, value_type, subject_type, max_lag_s, kind FROM pc.fact_declarations
 WHERE org_id = sqlc.arg(org_id) AND provider_id = sqlc.arg(provider_id) AND active
 ORDER BY name;
 
@@ -59,7 +59,7 @@ ORDER BY d.name;
 
 -- name: DisableFactProvider :execresult
 UPDATE pc.fact_providers SET state = 'DISABLED'
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE';
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE' AND NOT builtin;
 
 -- name: DeactivateFactDeclarations :exec
 UPDATE pc.fact_declarations SET active = false
@@ -73,21 +73,24 @@ WHERE org_id = sqlc.arg(org_id) AND name = sqlc.arg(name) AND subject_type = sql
 -- PutFact records an org-scoped observation; an older one never replaces a
 -- newer one.
 -- name: PutFact :execresult
-INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at)
+INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at, source, method)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(subject_type), sqlc.arg(subject_id),
-        sqlc.arg(provider_id), sqlc.arg(value), sqlc.arg(observed_at), now())
+        sqlc.arg(provider_id), sqlc.arg(value), sqlc.arg(observed_at), now(), sqlc.narg(source), sqlc.narg(method))
 ON CONFLICT (org_id, name, subject_type, subject_id) WHERE connection_id IS NULL DO UPDATE
-SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now()
+SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now(),
+    source = EXCLUDED.source, method = EXCLUDED.method
 WHERE f.observed_at <= EXCLUDED.observed_at;
 
 -- PutConnectionFact is PutFact for a gateway provider's observation: one
 -- value per connection (D43).
 -- name: PutConnectionFact :execresult
-INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at, connection_id)
+INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at, connection_id,
+                           source, method)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(subject_type), sqlc.arg(subject_id),
-        sqlc.arg(provider_id), sqlc.arg(value), sqlc.arg(observed_at), now(), sqlc.arg(connection_id))
+        sqlc.arg(provider_id), sqlc.arg(value), sqlc.arg(observed_at), now(), sqlc.arg(connection_id), sqlc.narg(source), sqlc.narg(method))
 ON CONFLICT (org_id, connection_id, name, subject_type, subject_id) WHERE connection_id IS NOT NULL DO UPDATE
-SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now()
+SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now(),
+    source = EXCLUDED.source, method = EXCLUDED.method
 WHERE f.observed_at <= EXCLUDED.observed_at;
 
 -- ListSubjectFacts returns the facts of active providers about one subject.
@@ -97,7 +100,7 @@ WHERE f.observed_at <= EXCLUDED.observed_at;
 -- A gateway provider's facts count only while its gateway still serves
 -- its connection and the connection is active (#299 review follow-up).
 -- name: ListSubjectFacts :many
-SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type
+SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type, d.kind, f.source, f.method
 FROM pc.facts f
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.active
@@ -131,7 +134,7 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND 
 RETURNING id, gateway_id;
 
 -- name: ListFactProviders :many
-SELECT id, name, service_account_id, gateway_id, connection_id, state FROM pc.fact_providers
+SELECT id, name, service_account_id, gateway_id, connection_id, state, builtin FROM pc.fact_providers
 WHERE org_id = sqlc.arg(org_id) AND (sqlc.arg(include_disabled)::boolean OR state = 'ACTIVE')
 ORDER BY name, id
 LIMIT 500;
@@ -139,14 +142,14 @@ LIMIT 500;
 -- ListProviderDeclarations returns every declaration of the providers,
 -- active or not (a disabled provider's declarations are inactive).
 -- name: ListProviderDeclarations :many
-SELECT provider_id, name, value_type, subject_type, max_lag_s FROM pc.fact_declarations
+SELECT provider_id, name, value_type, subject_type, max_lag_s, kind FROM pc.fact_declarations
 WHERE org_id = sqlc.arg(org_id) AND provider_id = ANY(sqlc.arg(provider_ids)::uuid[])
 ORDER BY name;
 
 -- ListFactsAbout returns the facts of active providers about one subject;
 -- every name when names is empty.
 -- name: ListFactsAbout :many
-SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id
+SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, f.source, f.method
 FROM pc.facts f
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.active
@@ -162,3 +165,20 @@ SELECT value FROM pc.facts
 WHERE org_id = sqlc.arg(org_id) AND name = sqlc.arg(name) AND subject_type = sqlc.arg(subject_type) AND subject_id = sqlc.arg(subject_id)
   AND connection_id IS NOT DISTINCT FROM sqlc.narg(connection_id)::uuid
 FOR UPDATE;
+
+-- The built-in provider (G0 M16 D82, HR-441): pc.signals, one per org,
+-- created on first use by the Shared Signals receiver. No RPC reaches
+-- these queries.
+
+-- name: EnsureBuiltinFactProvider :exec
+INSERT INTO pc.fact_providers (org_id, id, name, builtin, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), 'pc.signals', true, 'system:pc.signals')
+ON CONFLICT (org_id) WHERE builtin DO NOTHING;
+
+-- name: GetBuiltinFactProvider :one
+SELECT id, state FROM pc.fact_providers WHERE org_id = sqlc.arg(org_id) AND builtin;
+
+-- name: EnsureBuiltinFactDeclaration :exec
+INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, kind)
+VALUES (sqlc.arg(org_id), sqlc.arg(provider_id), sqlc.arg(name), sqlc.arg(value_type), sqlc.arg(subject_type), sqlc.arg(max_lag_s), 'value')
+ON CONFLICT (org_id, provider_id, name) DO NOTHING;

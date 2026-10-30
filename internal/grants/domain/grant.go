@@ -175,7 +175,10 @@ type Grant struct {
 	// Requirements add approvals or step-ups (F043).
 	Requirements []Requirement
 	// Limits are the grant's task budgets and counters (F110, F111).
-	Limits     Limits
+	Limits Limits
+	// Flows are the data flows the grant allows after a sensitive read (G0
+	// M16 D75); nil allows none.
+	Flows      []FlowAllowance
 	Delegation Delegation
 	// MinAttestation is the lowest workload attestation level (0, 1, 2)
 	// that may use the grant.
@@ -272,6 +275,9 @@ func (g Grant) validate(lookup func(op string) *defs.Definition) error {
 		if err := r.validate(fmt.Sprintf("requirements[%d]", i)); err != nil {
 			return err
 		}
+	}
+	if err := validateFlows(g.Flows); err != nil {
+		return err
 	}
 	if err := g.Limits.validate(true); err != nil {
 		return err

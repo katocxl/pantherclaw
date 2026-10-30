@@ -221,6 +221,7 @@ func (w *World) Finalize(ctx context.Context, org ids.OrgID, wr finalize.Write) 
 		return err
 	}
 	f.receipts[InputKey{wr.TransactionID, wr.Evaluation}] = receipt
+	w.recordRead(wr)
 	f.txns[key] = &finalize.Stored{
 		TransactionID: wr.TransactionID, ActionHash: ev.ActionHash, Decision: ev.Decision,
 		Reason: wr.Reason, Final: wr.Final, Evaluations: wr.Evaluation, Receipt: receipt.JWS,
