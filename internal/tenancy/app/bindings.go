@@ -86,7 +86,8 @@ func (a *Access) checkDelegatedAdmin(ctx context.Context, role td.RoleName) erro
 // permission; the principal and the scope must exist and be active. The
 // caller binds only within its ceiling: org-level role.bind binds anything,
 // otherwise role.bind on the scope and a binding of the same role at the
-// scope or an ancestor (G0 M18 D152, HR-472, HR-473). A caller granting
+// scope or an ancestor, with the scope's path taken from the current
+// hierarchy (G0 M18 D152, HR-472, HR-473). A caller granting
 // itself a role is allowed and audited with self_grant=true (ADR-0016).
 func (a *Access) CreateRoleBinding(ctx context.Context, role td.RoleName, principal td.PrincipalRef, scope td.Scope) (RoleBinding, bool, error) {
 	if _, err := td.CheckBindable(role, principal.Kind, scope.Type); err != nil {
@@ -205,7 +206,8 @@ func checkScope(ctx context.Context, q *dbq.Queries, org ids.OrgID, s td.Scope, 
 }
 
 // DeleteRoleBinding removes a binding. Removing the last active Org Admin is
-// refused. Unbinding follows the same ceiling as binding (G0 M18 D152,
+// refused. Unbinding follows the same ceiling as binding, with the
+// binding's stored scope resolved to its current path (G0 M18 D152,
 // HR-474).
 func (a *Access) DeleteRoleBinding(ctx context.Context, id td.RoleBindingID) error {
 	return inOrg(ctx, a.pool, func(ctx context.Context, c Caller, q *dbq.Queries, tx db.TenantTx) error {

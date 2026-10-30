@@ -58,7 +58,7 @@ func TestHR472_ScopeAdminBindsOnlyRolesItHoldsInsideItsScope(t *testing.T) {
 	for _, ok := range []struct {
 		role  td.RoleName
 		scope td.Scope
-	}{{td.RoleDeveloper, w.team}, {td.RoleDeveloper, w.env}, {td.RoleScopeAdmin, w.env}} {
+	}{{td.RoleDeveloper, w.team}, {td.RoleDeveloper, w.env}, {td.RoleScopeAdmin, w.env}, {td.RoleScopeAdmin, w.team}} {
 		if _, _, err := w.a.CreateRoleBinding(ctx, ok.role, userRef(w.bob), ok.scope); err != nil {
 			t.Errorf("%s at %s: %v", ok.role, ok.scope.Type, err)
 		}
@@ -76,13 +76,15 @@ func TestHR472_ScopeAdminBindsOnlyRolesItHoldsInsideItsScope(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if n := w.f.auditCount(t, w.org, "access.role_bound"); n != 3 {
-		t.Errorf("role_bound audited %d times, want 3", n)
+	if n := w.f.auditCount(t, w.org, "access.role_bound"); n != 4 {
+		t.Errorf("role_bound audited %d times, want 4", n)
 	}
 }
 
 // TestHR473_ScopeAdminCannotBindOrgScopeRoles: org-scope bindings need
 // org-level role.bind; the Org Admin binds them and binds Scope Admin.
+//
+// Covers: F584
 func TestHR473_ScopeAdminCannotBindOrgScopeRoles(t *testing.T) {
 	w := newDelegationWorld(t)
 	ctx := as(w.org, td.Binding{Role: td.RoleScopeAdmin, Scope: w.bu}, orgRole(w.org, td.RoleViewer))
@@ -103,6 +105,8 @@ func TestHR473_ScopeAdminCannotBindOrgScopeRoles(t *testing.T) {
 // TestHR474_ScopeAdminUnbindsOnlyInsideItsCeiling: a Scope Admin removes
 // a binding it could make, but not an org-scope binding, one at a sibling
 // team or one of a role it doesn't hold.
+//
+// Covers: F584
 func TestHR474_ScopeAdminUnbindsOnlyInsideItsCeiling(t *testing.T) {
 	w := newDelegationWorld(t)
 	admin := adminOf(w.org)
@@ -124,6 +128,8 @@ func TestHR474_ScopeAdminUnbindsOnlyInsideItsCeiling(t *testing.T) {
 
 // TestT206_ScopeAdminEscalation: re-delegated Scope Admins stay below the
 // scope they were given, and binding Scope Admin needs Enterprise.
+//
+// Covers: F584
 func TestT206_ScopeAdminEscalation(t *testing.T) {
 	w := newDelegationWorld(t)
 	// A Scope Admin re-delegated at the environment cannot reach back up
@@ -160,5 +166,34 @@ func TestHR474_UnbindingWorksAfterADowngrade(t *testing.T) {
 	}
 	if err := w.a.DeleteRoleBinding(admin, sa.ID); err != nil {
 		t.Fatalf("Org Admin removing the Scope Admin binding after the downgrade: %v", err)
+	}
+}
+
+// TestHR472_CeilingUsesTheCurrentHierarchy: paths come from the hierarchy
+// as it is now (D152, D164). After a team moves from one business unit to
+// another, the first unit's Scope Admin can no longer bind or unbind there,
+// and the second unit's can, including for a binding made before the move.
+//
+// Covers: F584
+func TestHR472_CeilingUsesTheCurrentHierarchy(t *testing.T) {
+	w := newDelegationWorld(t)
+	first := as(w.org, td.Binding{Role: td.RoleScopeAdmin, Scope: w.bu}, td.Binding{Role: td.RoleDeveloper, Scope: w.bu})
+	second := as(w.org, td.Binding{Role: td.RoleScopeAdmin, Scope: w.bu2}, td.Binding{Role: td.RoleDeveloper, Scope: w.bu2})
+	before := must2(w.a.CreateRoleBinding(first, td.RoleDeveloper, userRef(w.bob), w.team))
+	if _, _, err := w.a.CreateRoleBinding(second, td.RoleDeveloper, userRef(w.bob), w.env); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Fatalf("before the move, the other unit's Scope Admin bound in the team: %v", err)
+	}
+	w.f.d.AdminExec(t, "UPDATE pc.teams SET business_unit_id = $1 WHERE org_id = $2 AND id = $3", w.bu2.ID, w.org, w.team.ID)
+	if _, _, err := w.a.CreateRoleBinding(first, td.RoleDeveloper, userRef(w.bob), w.env); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Errorf("after the move, the old unit's Scope Admin bound in the team: %v", err)
+	}
+	if err := w.a.DeleteRoleBinding(first, before.ID); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Errorf("after the move, the old unit's Scope Admin unbound in the team: %v", err)
+	}
+	if _, _, err := w.a.CreateRoleBinding(second, td.RoleDeveloper, userRef(w.bob), w.env); err != nil {
+		t.Errorf("after the move, the new unit's Scope Admin: %v", err)
+	}
+	if err := w.a.DeleteRoleBinding(second, before.ID); err != nil {
+		t.Errorf("after the move, the new unit's Scope Admin unbinding the earlier binding: %v", err)
 	}
 }

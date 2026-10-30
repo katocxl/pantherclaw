@@ -121,6 +121,8 @@ func TestHR472_ScopedAdminBindsOnlyRolesItHoldsAtOrAboveTheTarget(t *testing.T) 
 // TestHR473_OrgScopeRolesNeedOrgLevelRoleBind: an org-scope binding needs
 // org-level role.bind, even for a role the Scope Admin holds at the org;
 // an Org Admin binds any role anywhere.
+//
+// Covers: F584
 func TestHR473_OrgScopeRolesNeedOrgLevelRoleBind(t *testing.T) {
 	w := newCeilingWorld()
 	s := w.person(
@@ -144,6 +146,8 @@ func TestHR473_OrgScopeRolesNeedOrgLevelRoleBind(t *testing.T) {
 // TestHR474_UnbindingFollowsTheSameCeiling: unbinding uses the same check
 // with the binding's role and scope, so a Scope Admin cannot remove an Org
 // Admin's or a sibling team's binding, nor one of a role it doesn't hold.
+//
+// Covers: F584
 func TestHR474_UnbindingFollowsTheSameCeiling(t *testing.T) {
 	w := newCeilingWorld()
 	s := w.person(domain.Binding{Role: domain.RoleScopeAdmin, Scope: w.team}, domain.Binding{Role: domain.RoleDeveloper, Scope: w.team})
@@ -166,6 +170,8 @@ func TestHR474_UnbindingFollowsTheSameCeiling(t *testing.T) {
 // break-glass binding is not "held" for delegation; a binding from another
 // org grants nothing; an API key without role.bind in its scopes binds
 // nothing.
+//
+// Covers: F584
 func TestT206_ScopedAdminEscalation(t *testing.T) {
 	w := newCeilingWorld()
 	dev := w.person(domain.Binding{Role: domain.RoleDeveloper, Scope: w.team})
