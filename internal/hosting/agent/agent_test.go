@@ -80,6 +80,7 @@ func (e *engine) CreateContainer(_ context.Context, c docker.Container) (docker.
 	*e.order = append(*e.order, "create")
 	return docker.ContainerInfo{}, nil
 }
+
 func (e *engine) InspectContainer(_ context.Context, name string) (docker.ContainerInfo, error) {
 	var i docker.ContainerInfo
 	i.State.Running = e.running[name]
@@ -102,15 +103,19 @@ type adapter struct{ h *control }
 func (a adapter) ListAssignments(ctx context.Context, r *pb.ListAssignmentsRequest) (*pb.ListAssignmentsResponse, error) {
 	return a.h.ListAssignments(ctx, r)
 }
+
 func (a adapter) PullEnrollmentToken(ctx context.Context, r *pb.PullEnrollmentTokenRequest) (*pb.PullEnrollmentTokenResponse, error) {
 	return a.h.PullEnrollmentToken(ctx, r)
 }
+
 func (a adapter) ReportHostedGateway(ctx context.Context, r *pb.ReportHostedGatewayRequest) (*pb.ReportHostedGatewayResponse, error) {
 	return a.h.ReportHostedGateway(ctx, r)
 }
+
 func (a adapter) ReportStopped(ctx context.Context, r *pb.ReportStoppedRequest) (*pb.ReportStoppedResponse, error) {
 	return a.h.ReportStopped(ctx, r)
 }
+
 func (a adapter) RenewHostCertificate(ctx context.Context, r *pb.RenewHostCertificateRequest) (*pb.RenewHostCertificateResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "unimplemented")
 }
@@ -121,6 +126,13 @@ func newAgent(t *testing.T) (*Agent, *control, *engine, *bytes.Buffer) {
 	if r, err := filepath.EvalSymlinks(root); err == nil {
 		root = r
 	}
+	// Each private directory ends 0500; open them so TempDir can clean up.
+	t.Cleanup(func() {
+		dirs, _ := os.ReadDir(root)
+		for _, d := range dirs {
+			_ = os.Chmod(filepath.Join(root, d.Name()), 0o700)
+		}
+	})
 	var order []string
 	c := &control{order: &order}
 	e := &engine{containers: map[string]docker.Container{}, running: map[string]bool{}, order: &order}
