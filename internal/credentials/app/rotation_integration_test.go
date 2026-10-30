@@ -503,8 +503,10 @@ func TestT224_EveryRotationChangeEnqueuesARecompute(t *testing.T) {
 	}
 	l, _ := e.lease(t, e.gateway)
 	e.report(t, l, domain.Probe{AppStatus: 401, ActiveStatus: 200, ActiveMatches: true})
-	for _, k := range []string{"audit.credential.rotation_activated", "audit.credential.rotation_rolled_back", "audit.credential.rotation_failed",
-		"audit.credential.rotation_confirmed", "audit.credential.rotation_tested"} {
+	for _, k := range []string{
+		"audit.credential.rotation_activated", "audit.credential.rotation_rolled_back", "audit.credential.rotation_failed",
+		"audit.credential.rotation_confirmed", "audit.credential.rotation_tested",
+	} {
 		if events[k] == 0 {
 			t.Errorf("%s ran no recompute (ran for %v)", k, last)
 		}

@@ -351,9 +351,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 	m6.verifications = verification
-	if err := wireM20Rotation(pool, m6, verification, bill, log); err != nil {
-		return err
-	}
+	wireM20Rotation(pool, m6, verification, bill, log)
 	m6.facts = gatewayFacts(pool)
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 

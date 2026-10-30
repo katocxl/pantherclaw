@@ -96,8 +96,10 @@ func TestHR519_RollbackOnlyBeforeConfirmation(t *testing.T) {
 // 401 for both keys (a skewed clock) returns it to AWAITING_OLD_REMOVAL.
 // Covers: F424
 func TestHR520_OldKeyRevokedOnlyWhenRefused(t *testing.T) {
-	for _, status := range []int{0, http.StatusOK, http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests,
-		http.StatusInternalServerError, http.StatusBadGateway} {
+	for _, status := range []int{
+		0, http.StatusOK, http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests,
+		http.StatusInternalServerError, http.StatusBadGateway,
+	} {
 		p := domain.Probe{AppStatus: status, ActiveStatus: http.StatusOK, ActiveMatches: true}
 		if p.OldKeyRefused() {
 			t.Fatalf("status %d counted as a refusal", status)
@@ -174,16 +176,25 @@ func TestT224_RotationMovesMatchTheSchema(t *testing.T) {
 // Covers: F424
 func TestT224_ATestFailsOnlyOnADefiniteRefusal(t *testing.T) {
 	for _, p := range []domain.Probe{
-		{AppStatus: 401}, {AppStatus: 403}, {AppStatus: 404}, {AppStatus: 200},
-		{AppStatus: 200, AppMatches: true, InstallationStatus: 404}, {AppStatus: 200, AppMatches: true, InstallationStatus: 403},
+		{AppStatus: 401},
+		{AppStatus: 403},
+		{AppStatus: 404},
+		{AppStatus: 200},
+		{AppStatus: 200, AppMatches: true, InstallationStatus: 404},
+		{AppStatus: 200, AppMatches: true, InstallationStatus: 403},
 	} {
 		if !p.TestRefused() || p.TestPassed() {
 			t.Errorf("%+v is not a refusal", p)
 		}
 	}
 	for _, p := range []domain.Probe{
-		{}, {AppStatus: 429}, {AppStatus: 500}, {AppStatus: 502}, {AppStatus: 200, AppMatches: true},
-		{AppStatus: 200, AppMatches: true, InstallationStatus: 429}, {AppStatus: 200, AppMatches: true, InstallationStatus: 503},
+		{},
+		{AppStatus: 429},
+		{AppStatus: 500},
+		{AppStatus: 502},
+		{AppStatus: 200, AppMatches: true},
+		{AppStatus: 200, AppMatches: true, InstallationStatus: 429},
+		{AppStatus: 200, AppMatches: true, InstallationStatus: 503},
 	} {
 		if p.TestRefused() {
 			t.Errorf("%+v counted as a refusal", p)
