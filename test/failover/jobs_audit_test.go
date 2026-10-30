@@ -104,6 +104,7 @@ var twoWorkerAudit = map[string]string{
 	"siem.export_org":                            "unique; FOR UPDATE, cursor CAS, batch lease",
 	"signals.janitor_dispatch":                   "fan-out",
 	"signals.janitor_org":                        "unique",
+	"suggestions.generate":                       "unique",
 	"support.breakglass_sweep":                   "lock: UPDATE where ended_at IS NULL RETURNING",
 	"transactions.target_logs_dispatch":          "fan-out",
 	"transactions.target_logs_org":               "unique",
