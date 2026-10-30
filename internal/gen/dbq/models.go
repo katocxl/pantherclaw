@@ -1393,6 +1393,28 @@ type PcCredential struct {
 	Kind         string
 }
 
+type PcCredentialRotation struct {
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	ConnectionID          ids.UUID
+	State                 string
+	OldCredentialID       ids.UUID
+	CandidateCredentialID *ids.UUID
+	PreviewDigest         string
+	RequestedBy           string
+	TestVerificationID    *ids.UUID
+	TestPassedAt          *time.Time
+	ActivatedBy           *string
+	ActivatedAt           *time.Time
+	RollbackUntil         *time.Time
+	ConfirmVerificationID *ids.UUID
+	ConfirmedAt           *time.Time
+	EndReason             *string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	FinishedAt            *time.Time
+}
+
 type PcCrossOrgListAudit struct {
 	ID       int64
 	Purpose  string
