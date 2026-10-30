@@ -90,10 +90,13 @@ const (
 	// GlobalRateLimit is the shared rate limiter's pc.rate_counters (G0
 	// M13 D9, HR-376): counters only, keyed by opaque ids, no tenant data.
 	GlobalRateLimit GlobalPurpose = "rate_limit"
+	// GlobalHosting is the shared hosting hosts and their host agents'
+	// certificates (G0 M19 D203, HR-500): operator-level, no tenant data.
+	GlobalHosting GlobalPurpose = "hosting"
 )
 
 var globalPurposes = []GlobalPurpose{
-	GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts, GlobalRateLimit,
+	GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts, GlobalRateLimit, GlobalHosting,
 }
 
 // TxOption customizes a transaction.

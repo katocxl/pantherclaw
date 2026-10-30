@@ -136,8 +136,20 @@ func (s *Service) WithPantherClawHosted(gateways []ids.UUID) *Service {
 	return s
 }
 
-// PantherClawHosted reports whether PantherClaw hosts a gateway.
+// PantherClawHosted reports whether the server's configuration names a
+// gateway as PantherClaw-hosted (the fallback list, kept for one release,
+// G0 M19 D203).
 func (s *Service) PantherClawHosted(gateway ids.UUID) bool { return s.hosted[gateway] }
+
+// hostedIn reports, in the caller's transaction, whether PantherClaw hosts
+// a gateway: the configured list, or a hosted gateway record that names it
+// (migration 00229, G0 M19 D203), whatever its state (HR-084).
+func (s *Service) hostedIn(ctx context.Context, q *dbq.Queries, org ids.OrgID, gateway ids.UUID) (bool, error) {
+	if s.hosted[gateway] {
+		return true, nil
+	}
+	return q.IsHostedGateway(ctx, org, gateway)
+}
 
 // putConnector stores a connector connection's spec at the connection's
 // revision, after checking its egress connection: an active http

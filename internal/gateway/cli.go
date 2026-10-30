@@ -175,9 +175,10 @@ func cmdEnroll(ctx context.Context, args []string, stdout, stderr io.Writer, env
 }
 
 func serve(ctx context.Context, args []string, stderr io.Writer, env config.LookupEnv, onStart func(addr string)) error {
-	var enrollFile string
+	var enrollFile, hostedTokenFile string
 	cfg, err := loadConfig(args, stderr, env, "serve", func(fs *flag.FlagSet) {
 		fs.StringVar(&enrollFile, "enroll-file", "", "enroll from this file when no identity is saved (development)")
+		fs.StringVar(&hostedTokenFile, "hosted-token-file", "", "PantherClaw-hosted: enroll from this single-use token file when no identity is saved")
 	})
 	if err != nil {
 		return err
@@ -185,9 +186,17 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	if err := checkHosted(&cfg, enrollFile, hostedTokenFile); err != nil {
+		return err
+	}
 	level, _ := pclog.ParseLevel(cfg.Log.Level)
 	log := pclog.New(stderr, pclog.Options{Service: "pantherclaw-gateway", Version: version.Get().Version, Level: level})
-	id, err := LoadOrEnroll(ctx, &cfg, enrollFile, log)
+	var id *control.Identity
+	if hostedTokenFile != "" {
+		id, err = LoadOrEnrollHosted(ctx, &cfg, hostedTokenFile, log)
+	} else {
+		id, err = LoadOrEnroll(ctx, &cfg, enrollFile, log)
+	}
 	if err != nil {
 		return err
 	}

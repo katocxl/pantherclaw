@@ -58,11 +58,15 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 		if err != nil {
 			return err
 		}
-		out.Connections = s.withoutConnectors(id.Gateway, conns)
+		hosted, err := s.hostedIn(ctx, q, id.Org, id.Gateway)
+		if err != nil {
+			return err
+		}
+		out.Connections = withoutConnectors(hosted, conns)
 		if out.KindConfigs, err = s.kindConfigs(ctx, tx, id.Org, out.Connections); err != nil {
 			return err
 		}
-		if !s.hosted[id.Gateway] {
+		if !hosted {
 			if out.Connectors, err = q.GatewayConnectorSpecs(ctx, id.Org, id.Gateway); err != nil {
 				return err
 			}

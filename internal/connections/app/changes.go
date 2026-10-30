@@ -249,8 +249,12 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			if err := activeGateway(ctx, q, c.Org, *in.Gateway); err != nil {
 				return err
 			}
-			if conn.Kind == KindMCPContainer && s.hosted[*in.Gateway] {
-				return ErrHostedGateway
+			if conn.Kind == KindMCPContainer {
+				if hosted, err := s.hostedIn(ctx, q, c.Org, *in.Gateway); err != nil {
+					return err
+				} else if hosted {
+					return ErrHostedGateway
+				}
 			}
 			if conn.Kind == KindMCPContainer && in.Connector == nil {
 				return ErrConnector
