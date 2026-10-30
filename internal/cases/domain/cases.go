@@ -71,10 +71,15 @@ const (
 	KindLink       Kind = "LINK"
 	KindOwner      Kind = "OWNER"
 	KindState      Kind = "STATE"
+	// KindExternal records a change made in an outside ticket system that
+	// PantherClaw did not apply (G0 M20 D255, HR-528). Only the ticket sync
+	// actor writes it (author type system); it carries a text and moves
+	// nothing, and may land on a closed case.
+	KindExternal Kind = "EXTERNAL"
 )
 
 // Kinds lists every entry kind.
-var Kinds = []Kind{KindFact, KindHypothesis, KindQuestion, KindAnswer, KindNote, KindImpact, KindLink, KindOwner, KindState}
+var Kinds = []Kind{KindFact, KindHypothesis, KindQuestion, KindAnswer, KindNote, KindImpact, KindLink, KindOwner, KindState, KindExternal}
 
 // Basis says how a fact or hypothesis is known (F648).
 type Basis = reflexdomain.Basis
@@ -287,7 +292,7 @@ func (d Draft) Validate() error {
 	bad := func(format string, a ...any) error {
 		return fmt.Errorf("%w: "+format, append([]any{ErrInvalid}, a...)...)
 	}
-	needsText := map[Kind]bool{KindFact: true, KindHypothesis: true, KindQuestion: true, KindAnswer: true, KindNote: true, KindImpact: true}
+	needsText := map[Kind]bool{KindFact: true, KindHypothesis: true, KindQuestion: true, KindAnswer: true, KindNote: true, KindImpact: true, KindExternal: true}
 	switch {
 	case needsText[d.Kind] && !textOK(d.Text, MaxText):
 		return bad("a %s needs a text of 1 to %d characters", d.Kind, MaxText)
@@ -405,7 +410,7 @@ func (d Draft) Validate() error {
 		if d.NoContainmentNeeded && (d.State == StateOpen || d.Reason == "") {
 			return bad("no containment needed is given with a reason when containing or closing")
 		}
-	case KindQuestion, KindNote:
+	case KindQuestion, KindNote, KindExternal:
 	default:
 		return bad("unknown kind %q", d.Kind)
 	}
@@ -464,6 +469,9 @@ func (d Draft) Body(c, id ids.UUID, seq int64, author Author) ([]byte, error) {
 	}
 	if err := author.validate(); err != nil {
 		return nil, err
+	}
+	if d.Kind == KindExternal && author.Type != "system" {
+		return nil, fmt.Errorf("%w: only the ticket sync writes external changes", ErrInvalid)
 	}
 	if seq < 1 {
 		return nil, fmt.Errorf("%w: entries are numbered from 1", ErrInvalid)
