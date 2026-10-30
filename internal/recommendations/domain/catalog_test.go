@@ -91,7 +91,7 @@ func TestHR536_IntegrationStateNeedsOrgScope(t *testing.T) {
 	connected := bare
 	connected.Integrations = domain.Integrations{
 		Issuers: domain.IntegrationKinds(), Channels: domain.IntegrationKinds(), SIEM: true, FactProviders: true,
-		Packages: []string{domain.PackageAWS, domain.PackageJira},
+		Packages: []string{domain.PackageGitLab, domain.PackageJira, domain.PackageTeams, domain.PackageAWS},
 	}
 	var scoped int
 	for _, e := range domain.Catalog() {

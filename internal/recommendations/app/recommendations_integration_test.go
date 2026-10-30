@@ -201,14 +201,14 @@ func TestHR536_AgentCountsCoverOnlyVisibleAgents(t *testing.T) {
 	o := exposuretest.New(t)
 	a := o.Claim(t, o.Agent)
 	o.Claim(t, o.Other)
-	discover(t, o, o.Agent, "openai_api_key")
+	own := discover(t, o, o.Agent, "openai_api_key")
 	discover(t, o, o.Other, "openai_api_key")
 	scoped := list(team(o, a), t, o, false)
 	if _, ok := item(scoped, domain.CIWorkload); ok {
 		t.Fatal("a team viewer sees whether the org has a CI issuer")
 	}
 	mine, ok := item(scoped, domain.ModelKeys)
-	if !ok || mine.Evidence.Count != 1 || len(records(mine)) != 1 {
+	if !ok || mine.Evidence.Count != 1 || len(records(mine)) != 1 || records(mine)[0] != own {
 		t.Fatalf("team: %+v %v", mine, ok)
 	}
 	all, ok := item(list(orgWide(o), t, o, false), domain.CIWorkload)
