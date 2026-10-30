@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -89,7 +90,7 @@ func TestHR526_TheDeployIsAnMCPToolFixedByThePackage(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := `{"cluster":"prod","service":"web","taskDefinition":"` + awssim.TaskDefinition(2) + `"}`
-	if string(r.Body) != want || r.Method != "POST" || r.URL.Path != "/" || r.ContentType != domain.AWSJSONContentType ||
+	if string(r.Body) != want || r.Method != http.MethodPost || r.URL.Path != "/" || r.ContentType != domain.AWSJSONContentType ||
 		r.Headers["X-Amz-Target"] != "AmazonEC2ContainerServiceV20141113.UpdateService" {
 		t.Fatalf("request %s %s %s %v", r.Method, r.URL, r.Body, r.Headers)
 	}
@@ -176,8 +177,8 @@ func TestHR190_DescribeServicesIsSentAsAListOfTheTarget(t *testing.T) {
 // lookup without id_param is valid on no other read (D283, D284).
 // Covers: HR-190
 func TestHR190_NoOtherPOSTIsAVerificationRead(t *testing.T) {
-	read := func(new string) []byte {
-		return bytes.ReplaceAll(pcawsecs.Package, []byte("X-Amz-Target: "+describe), []byte(new))
+	read := func(header string) []byte {
+		return bytes.ReplaceAll(pcawsecs.Package, []byte("X-Amz-Target: "+describe), []byte(header))
 	}
 	for name, raw := range map[string][]byte{
 		"UpdateService as a read": read("X-Amz-Target: AmazonEC2ContainerServiceV20141113.UpdateService"),

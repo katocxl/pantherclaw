@@ -115,7 +115,7 @@ func (s *Server) serveECS(w http.ResponseWriter, body []byte, target, service, k
 		TaskDefinition string   `json:"taskDefinition"`
 	}
 	if !ok || json.Unmarshal(body, &in, json.RejectUnknownMembers(true)) != nil {
-		writeECSError(w, http.StatusBadRequest, "SerializationException", "the request")
+		writeECSError(w, "SerializationException", "the request")
 		return
 	}
 	name := in.Service
@@ -129,14 +129,14 @@ func (s *Server) serveECS(w http.ResponseWriter, body []byte, target, service, k
 	call.Allowed = s.allowed(service, action, call.Resource, sess)
 	s.calls = append(s.calls, call)
 	if !call.Allowed {
-		writeECSError(w, http.StatusBadRequest, "AccessDeniedException", fmt.Sprintf("not authorized to perform %s:%s", service, action))
+		writeECSError(w, "AccessDeniedException", fmt.Sprintf("not authorized to perform %s:%s", service, action))
 		return
 	}
 	found := in.Cluster == Cluster && name == Service
 	switch service + ":" + action {
 	case "ecs:UpdateService":
 		if !found {
-			writeECSError(w, http.StatusBadRequest, "ServiceNotFoundException", "Service not found.")
+			writeECSError(w, "ServiceNotFoundException", "Service not found.")
 			return
 		}
 		s.update(in.TaskDefinition)
@@ -148,7 +148,7 @@ func (s *Server) serveECS(w http.ResponseWriter, body []byte, target, service, k
 		}
 		writeECS(w, map[string]any{"services": []*ecsService{s.ecs}, "failures": []any{}})
 	default:
-		writeECSError(w, http.StatusBadRequest, "InvalidAction", "unknown action "+action)
+		writeECSError(w, "InvalidAction", "unknown action "+action)
 	}
 }
 
@@ -173,8 +173,9 @@ func writeECS(w http.ResponseWriter, v any) {
 	_ = json.MarshalWrite(w, v)
 }
 
-func writeECSError(w http.ResponseWriter, status int, kind, message string) {
+// writeECSError answers as ECS does: every error here is a 400.
+func writeECSError(w http.ResponseWriter, kind, message string) {
 	w.Header().Set("Content-Type", ecsContentType)
-	w.WriteHeader(status)
+	w.WriteHeader(http.StatusBadRequest)
 	_ = json.MarshalWrite(w, map[string]string{"__type": kind, "message": message})
 }
