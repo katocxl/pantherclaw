@@ -132,3 +132,12 @@ func Rewrap(ctx context.Context, kp KeyProvider, wrapped, aad []byte) (newWrappe
 	}
 	return out, kekID, nil
 }
+
+// Routes reports whether the router has a provider for a stored kek_id;
+// an unprefixed id is a file KEK.
+func (r *Router) Routes(kekID string) bool {
+	if strings.HasPrefix(kekID, PrefixOpenBao) {
+		return r.bao != nil && kekID == r.bao.CurrentKEK()
+	}
+	return r.file != nil && r.file.Holds(strings.TrimPrefix(kekID, PrefixFile))
+}

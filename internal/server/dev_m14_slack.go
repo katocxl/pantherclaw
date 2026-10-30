@@ -28,7 +28,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 )
 
@@ -45,7 +44,7 @@ func seedSlackChannel(ctx context.Context, cfg *Config, pool *db.Pool, org ids.O
 	if err != nil {
 		return fmt.Errorf("dev seed: --slack-token-file: %w", err)
 	}
-	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	kp, err := newKeyProvider(cfg)
 	if err != nil {
 		return err
 	}

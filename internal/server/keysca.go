@@ -55,7 +55,7 @@ func cmdRotateGatewayCA(ctx context.Context, args []string, stdout, stderr io.Wr
 		return err
 	}
 	defer pool.Close()
-	kp, err := keys.NewFileProvider(cfg.KEKFiles)
+	kp, err := newKeyProvider(cfg)
 	if err != nil {
 		return err
 	}

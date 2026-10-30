@@ -144,3 +144,9 @@ func GenerateKEKFile(path string) error {
 	}
 	return f.Close()
 }
+
+// Holds reports whether the provider has the KEK with this unprefixed id.
+func (p *FileProvider) Holds(kid string) bool {
+	_, ok := p.keks[kid]
+	return ok
+}

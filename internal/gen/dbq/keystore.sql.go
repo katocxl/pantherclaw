@@ -287,6 +287,36 @@ func (q *Queries) ListSigningKeysToRewrap(ctx context.Context, orgID ids.OrgID, 
 	return items, nil
 }
 
+const listStoredKEKIDs = `-- name: ListStoredKEKIDs :many
+SELECT k.kek_id FROM pc.keys AS k WHERE k.org_id = $1 AND k.state <> 'REVOKED'
+UNION
+SELECT d.kek_id FROM pc.deks AS d WHERE d.org_id = $1
+ORDER BY kek_id
+`
+
+// The distinct kek_id values of an org's stored keys, for the start-up
+// check that every one has a provider (D165). Revoked signing keys are
+// never unwrapped, so they don't count.
+func (q *Queries) ListStoredKEKIDs(ctx context.Context, orgID ids.OrgID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listStoredKEKIDs, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var kek_id string
+		if err := rows.Scan(&kek_id); err != nil {
+			return nil, err
+		}
+		items = append(items, kek_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWebhookKeys = `-- name: ListWebhookKeys :many
 SELECT kid, public_key, wrapped_private_key, kek_id, state, created_at, state_changed_at,
        (state_changed_at + make_interval(secs => $1::int))::timestamptz AS retires_at,

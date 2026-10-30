@@ -87,3 +87,12 @@ SELECT kid, public_key, wrapped_private_key, kek_id, state, created_at, state_ch
 FROM pc.keys
 WHERE org_id = sqlc.arg(org_id) AND purpose = 'webhooks' AND state <> 'REVOKED'
 ORDER BY created_at, kid;
+
+-- name: ListStoredKEKIDs :many
+-- The distinct kek_id values of an org's stored keys, for the start-up
+-- check that every one has a provider (D165). Revoked signing keys are
+-- never unwrapped, so they don't count.
+SELECT k.kek_id FROM pc.keys AS k WHERE k.org_id = sqlc.arg(org_id) AND k.state <> 'REVOKED'
+UNION
+SELECT d.kek_id FROM pc.deks AS d WHERE d.org_id = sqlc.arg(org_id)
+ORDER BY kek_id;
