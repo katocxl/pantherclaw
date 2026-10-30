@@ -91,7 +91,7 @@ func (s *Store) Claim(ctx context.Context, org ids.OrgID, gateway ids.UUID, limi
 					return err
 				}
 				if request == nil {
-					if err := q.FinishVerification(ctx, "CANCELLED", org, v.ID); err != nil {
+					if err := q.FinishVerification(ctx, "CANCELLED", org, v.ID); err != nil { //nolint:misspell // stored state
 						return err
 					}
 					continue

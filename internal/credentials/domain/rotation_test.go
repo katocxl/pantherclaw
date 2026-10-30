@@ -5,7 +5,6 @@ package domain_test
 
 import (
 	"errors"
-	"net/http"
 	"testing"
 	"time"
 
@@ -97,10 +96,10 @@ func TestHR519_RollbackOnlyBeforeConfirmation(t *testing.T) {
 // Covers: F424
 func TestHR520_OldKeyRevokedOnlyWhenRefused(t *testing.T) {
 	for _, status := range []int{
-		0, http.StatusOK, http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests,
-		http.StatusInternalServerError, http.StatusBadGateway,
+		0, 200, 403, 404, 429,
+		500, 502,
 	} {
-		p := domain.Probe{AppStatus: status, ActiveStatus: http.StatusOK, ActiveMatches: true}
+		p := domain.Probe{AppStatus: status, ActiveStatus: 200, ActiveMatches: true}
 		if p.OldKeyRefused() {
 			t.Fatalf("status %d counted as a refusal", status)
 		}
@@ -110,17 +109,17 @@ func TestHR520_OldKeyRevokedOnlyWhenRefused(t *testing.T) {
 		}
 	}
 	for name, p := range map[string]domain.Probe{
-		"both refused (a skewed clock)": {AppStatus: http.StatusUnauthorized, ActiveStatus: http.StatusUnauthorized},
-		"no control":                    {AppStatus: http.StatusUnauthorized},
-		"the control names another App": {AppStatus: http.StatusUnauthorized, ActiveStatus: http.StatusOK},
-		"the control rate limited":      {AppStatus: http.StatusUnauthorized, ActiveStatus: http.StatusTooManyRequests, ActiveMatches: true},
+		"both refused (a skewed clock)": {AppStatus: 401, ActiveStatus: 401},
+		"no control":                    {AppStatus: 401},
+		"the control names another App": {AppStatus: 401, ActiveStatus: 200},
+		"the control rate limited":      {AppStatus: 401, ActiveStatus: 429, ActiveMatches: true},
 	} {
 		if p.OldKeyRefused() {
 			t.Fatalf("%s counted as a refusal", name)
 		}
 	}
 	r := domain.Rotation{State: domain.RotationConfirming}
-	if err := r.Confirmed(domain.Probe{AppStatus: http.StatusUnauthorized, ActiveStatus: http.StatusOK, ActiveMatches: true}.OldKeyRefused()); err != nil || r.State != domain.RotationConfirmed {
+	if err := r.Confirmed(domain.Probe{AppStatus: 401, ActiveStatus: 200, ActiveMatches: true}.OldKeyRefused()); err != nil || r.State != domain.RotationConfirmed {
 		t.Fatalf("401: %v, %s", err, r.State)
 	}
 	early := domain.Rotation{State: domain.RotationAwaitingOldRemoval}

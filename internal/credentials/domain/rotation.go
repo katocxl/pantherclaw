@@ -5,7 +5,6 @@ package domain
 
 import (
 	"errors"
-	"net/http"
 	"strconv"
 	"time"
 )
@@ -71,6 +70,8 @@ func (s RotationState) Activated() bool {
 	switch s {
 	case RotationActivating, RotationAwaitingOldRemoval, RotationConfirming, RotationConfirmed, RotationRolledBack:
 		return true
+	case RotationRequested, RotationCandidateSealed, RotationTesting, RotationFailed:
+		return false
 	}
 	return false
 }
@@ -91,6 +92,8 @@ func CanMoveRotation(from, to RotationState) bool {
 		return to == RotationConfirming
 	case RotationConfirming:
 		return to == RotationConfirmed || to == RotationAwaitingOldRemoval
+	case RotationConfirmed, RotationFailed, RotationRolledBack:
+		return false
 	}
 	return false
 }
@@ -208,6 +211,14 @@ func (r *Rotation) Confirmed(refused bool) error {
 	return r.move(RotationConfirmed)
 }
 
+// The HTTP statuses a probe's result turns on.
+const (
+	statusOK           = 200
+	statusUnauthorized = 401
+	statusForbidden    = 403
+	statusNotFound     = 404
+)
+
 // Probe results the gateway reports for a rotation lease: what GitHub
 // answered for GET /app and for the installation read, signed with the
 // candidate (test) or the old key (confirm).
@@ -228,7 +239,7 @@ type Probe struct {
 // TestPassed reports whether a target test passed: GitHub accepted the
 // candidate as the App it was sealed for, and for the installation.
 func (p Probe) TestPassed() bool {
-	return p.AppStatus == http.StatusOK && p.AppMatches && p.InstallationStatus == http.StatusOK
+	return p.AppStatus == statusOK && p.AppMatches && p.InstallationStatus == statusOK
 }
 
 // OldKeyRefused reports whether GitHub refused the old key (HR-520, D274):
@@ -237,7 +248,7 @@ func (p Probe) TestPassed() bool {
 // refusal of both, a rate limit, an error, no answer) proves nothing, so
 // the old credential is not revoked.
 func (p Probe) OldKeyRefused() bool {
-	return p.AppStatus == http.StatusUnauthorized && p.ActiveStatus == http.StatusOK && p.ActiveMatches
+	return p.AppStatus == statusUnauthorized && p.ActiveStatus == statusOK && p.ActiveMatches
 }
 
 // TestRefused reports whether GitHub definitely refused a candidate (D274):
@@ -246,9 +257,9 @@ func (p Probe) OldKeyRefused() bool {
 // the rotation stays TESTING for another test.
 func (p Probe) TestRefused() bool {
 	refused := func(s int) bool {
-		return s == http.StatusUnauthorized || s == http.StatusForbidden || s == http.StatusNotFound
+		return s == statusUnauthorized || s == statusForbidden || s == statusNotFound
 	}
-	return refused(p.AppStatus) || (p.AppStatus == http.StatusOK && !p.AppMatches) || refused(p.InstallationStatus)
+	return refused(p.AppStatus) || (p.AppStatus == statusOK && !p.AppMatches) || refused(p.InstallationStatus)
 }
 
 // The fields a rotation lease's report carries (JSON pointers, as a

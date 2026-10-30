@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -395,12 +396,10 @@ func (s *Service) ActivateRotation(ctx context.Context, rotation ids.UUID, su St
 func activatable(r Rotation) error {
 	d := rotationOf(r)
 	if err := d.Activate(true, time.Now()); err != nil {
-		switch err {
-		case domain.ErrRotationNotSafe:
+		if errors.Is(err, domain.ErrRotationNotSafe) {
 			return ErrRotationUntested
-		default:
-			return ErrRotationState
 		}
+		return ErrRotationState
 	}
 	return nil
 }
@@ -675,6 +674,9 @@ func (s *Service) ConfirmRotation(ctx context.Context, rotation ids.UUID) (Rotat
 			if _, err := q.AwaitOldRemoval(ctx, c.Org, r.ID); err != nil {
 				return err
 			}
+		case domain.RotationRequested, domain.RotationCandidateSealed, domain.RotationTesting,
+			domain.RotationConfirmed, domain.RotationFailed, domain.RotationRolledBack:
+			return ErrRotationState
 		default:
 			return ErrRotationState
 		}
@@ -893,6 +895,9 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 		}
 		details["old_version_id"] = r.OldCredentialID.String()
 		return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_confirmed", r.ConnectionID, r.ID, details)
+	case txdomain.PurposeFollowUp, txdomain.PurposeReconcile, txdomain.PurposeTargetLog, txdomain.PurposeOrgScan,
+		txdomain.PurposeConnectionTest, txdomain.PurposeConsequence:
+		return done, txapp.ErrLease
 	}
 	return done, txapp.ErrLease
 }
