@@ -8,7 +8,7 @@
 1. **Scoped administrators bind only what they hold, only inside their scope** (G5; HR-472..474).
    - A new role, Scope Admin, is bindable only at business unit, team or environment scope and carries `role.bind`, `role.read` and `user.read`.
    - Binding and unbinding require `role.bind` on the target scope's path. A caller without organization-level `role.bind` must also hold a binding of the same role at the target scope or an ancestor. Organization-scope roles need organization-level `role.bind`.
-   - Re-delegation is allowed below the caller's own scope. Invitations with roles and the service-account `noEscalation` shortcut stay organization-level. Paths use the current hierarchy; separation of duties is unchanged and a self-grant is still audited.
+   - Re-delegation is allowed at or below the caller's own scope (D164). Invitations with roles and the service-account `noEscalation` shortcut stay organization-level. Paths use the current hierarchy; separation of duties is unchanged and a self-grant is still audited.
 2. **The organization's own admin configures its identity providers, as a protected change** (G6; HR-481..484).
    - Organization identity providers are records (`pc.org_identity_providers`): issuer (immutable once active), client id, and a client secret sealed with the organization's DEK that is never returned.
    - Every create, change, disable and the "own providers only" setting is a two-person protected change under the CUSTODY category, always protected in every protect mode with no emergency path (D162). Only a person may make it, and every organization admin is notified.
@@ -16,9 +16,9 @@
    - Discovery is HTTPS only through the egress guard, with no private or loopback address, no insecure loopback and no development provider; subject tokens are off. A change is refused when no active Org Admin would keep a sign-in path. A change that strands some admins lists them in the request, so the second person knows who is affected (D162).
 3. **OpenBao first, cloud KMS later** (G7; HR-486..488).
    - An in-house Transit client over `net/http` (encrypt, decrypt, rewrap; token file or AppRole), TLS required except on loopback, implements `KeyProvider`. A `kek_id` prefix (`file:` or `bao:`) routes each unwrap, so file and OpenBao keys work side by side during a migration.
-   - Re-wrapping happens in place: a column grant `UPDATE (wrapped_key, kek_id)` on `pc.deks` and `pc.keys`, with a trigger that allows only both columns changing together. The job unwraps the old key, re-wraps it, checks that the new one unwraps, then writes and audits.
+   - Re-wrapping happens in place, only as a dedicated LOGIN role `pc_keystore` used only by the re-wrap job (D171): column grants `UPDATE (wrapped_key, kek_id)` on `pc.deks` and `UPDATE (wrapped_private_key, kek_id)` on `pc.keys` to that role alone, with a trigger that allows only both columns changing together. `pc_app` gets nothing new. The job unwraps the old key, re-wraps it, checks that the new one unwraps, then writes and audits.
    - An outage fails closed; the bounded DEK cache keeps serving the keys it already holds.
-   - BlobStore and fan-out ports are extracted with Postgres adapters and no change in behaviour; the search port waits.
+   - The fan-out port is extracted with a Postgres adapter and no change in behaviour. The BlobStore port ships with an in-memory test adapter only; its real adapter comes with the first caller that moves (D172). The search port waits.
 4. **pclaw keeps its secrets in the OS keychain** (HR-485). The refresh token, the device key seed and, if it fits, the access token go to the keychain (`zalando/go-keyring`); metadata stays in the file. `--credential-store=auto|keychain|file`; `auto` falls back to the 0600 file with a warning. No secret ever goes on a command line.
 5. **SCIM and SAML come after M18** (G8), as a private enterprise module.
 
@@ -27,7 +27,7 @@
 **Consequences.**
 - Business units and teams can be administered locally without granting anyone organization-wide `role.bind`; delegation can never exceed the delegator's own roles.
 - A hosted, multi-organization deployment can sign each organization in through its own provider; the deployment providers keep working unless an organization opts out.
-- `pc.deks` and `pc.keys` gain their first update grant on key material; the trigger and the verify-before-write job are what keep it safe. Key-encryption keys can move from files to OpenBao without downtime.
+- `pc.deks` and `pc.keys` gain their first update grant on key material, held only by `pc_keystore`; the role separation, the trigger and the verify-before-write job are what keep it safe. Key-encryption keys can move from files to OpenBao without downtime.
 - The minimum gateway version is advisory (HR-470): versions are self-reported and are never used as a control.
 
 **Alternatives.** A scoped admin limited by a permission superset rather than the same role (harder to audit, and a union of bindings can create surprises); identity providers configured only by the deployment operator (no self-service for hosted organizations); identity-provider changes following the organization's protect category (OFF by default, so one compromised admin session could swap the provider); the official `openbao/api` module (MPL-2.0, with a large transitive dependency set); new DEK versions under a new key instead of re-wrapping (an old key-encryption key could never be retired); keeping pclaw secrets only in the file.

@@ -474,7 +474,7 @@
 | HR-474 | Unbinding follows the same ceiling. | T-206 | M18 |
 | HR-475 | A CIDR-restricted key is refused from any other IP, with the bad-key error. | T-208 | M18 |
 | HR-476 | The client IP comes only from trusted proxies. | T-208 | M18 |
-| HR-477 | An exception group covers only the agents snapshotted at approval. | T-209 | M18 |
+| HR-477 | An exception group covers only the agents snapshotted at approval, and editing the cohort voids a pending group request. | T-209 | M18 |
 | HR-478 | Bulk simulation is read-only and within the existing caps. | T-213 | M18 |
 | HR-479 | A gated rollout completes only at its VERIFIED threshold. | — (G0 M18 D154) | M18 |
 | HR-480 | Aggregates show only readable agents. | T-213 | M18 |
@@ -484,5 +484,5 @@
 | HR-484 | The last admin sign-in path can't be disabled: a change is refused only when no active Org Admin would keep a sign-in path, and the request lists every admin it would strand. | T-207 | M18 |
 | HR-485 | pclaw keeps its secrets in the OS keychain when one is available, never on a command line. The file fallback is warned. | T-211 | M18 |
 | HR-486 | An unwrap failure fails closed. | T-210 | M18 |
-| HR-487 | A re-wrap verifies before it writes and changes both columns together. | T-210 | M18 |
+| HR-487 | A re-wrap verifies before it writes and changes both columns together, and only the pc_keystore role, used only by the re-wrap job, may re-wrap. | T-210 | M18 |
 | HR-488 | OpenBao is reached only at the configured address, with TLS. | T-210 | M18 |
