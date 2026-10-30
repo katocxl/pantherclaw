@@ -4,12 +4,15 @@
 -- fleet sweep has alerted for each gateway, so a silence episode alerts
 -- once when it starts and once when it ends, and a version below the
 -- org's minimum alerts once per version. silent_since is the last report
--- before the silence; below_minimum_version is the parsed version alerted
--- ('unknown' when it does not parse).
+-- before the silence; last_report_at is the gateway's last status report,
+-- written by every report and never pruned, so a silence longer than the
+-- replica retention is still seen; below_minimum_version is the parsed
+-- version alerted ('unknown' when it does not parse).
 -- +goose Up
 CREATE TABLE pc.gateway_alert_state (
     org_id                    uuid        NOT NULL REFERENCES pc.orgs (id),
     gateway_id                uuid        NOT NULL,
+    last_report_at            timestamptz,
     silent_since              timestamptz,
     silent_notified_at        timestamptz,
     below_minimum_version     text        CHECK (char_length(below_minimum_version) BETWEEN 1 AND 72),
@@ -29,7 +32,7 @@ CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.gateway_alert_state
     FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT ON pc.gateway_alert_state TO pc_app;
-GRANT UPDATE (silent_since, silent_notified_at, below_minimum_version, below_minimum_notified_at) ON pc.gateway_alert_state TO pc_app;
+GRANT UPDATE (last_report_at, silent_since, silent_notified_at, below_minimum_version, below_minimum_notified_at) ON pc.gateway_alert_state TO pc_app;
 GRANT SELECT ON pc.gateway_alert_state TO pc_audit_ro;
 -- +goose StatementBegin
 DO $$ BEGIN

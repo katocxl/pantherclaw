@@ -139,38 +139,38 @@ func (f *Fleet) Sweep(ctx context.Context, org ids.OrgID) (SweepResult, error) {
 }
 
 // evaluate returns a gateway's next alert state and the notifications the
-// change sends. A gateway that never reported is not silent; one whose
-// replicas were all pruned while silent stays silent. Versions are judged
-// on live replicas only, so a silent gateway keeps its version alert.
+// change sends. Silence is judged on the gateway's last report time, which
+// is never pruned (D167): a gateway that never reported is not silent, and
+// one silent for longer than the replica retention still is. Versions are
+// judged on live replicas only, so a silent gateway keeps its version alert.
 func evaluate(gw ids.UUID, p FleetPolicy, replicas []dbq.PcGatewayReplica, st dbq.PcGatewayAlertState, now time.Time,
 ) (dbq.PcGatewayAlertState, []napp.Message) {
 	next := dbq.PcGatewayAlertState{
-		OrgID: st.OrgID, GatewayID: gw, SilentSince: st.SilentSince, SilentNotifiedAt: st.SilentNotifiedAt,
+		OrgID: st.OrgID, GatewayID: gw, LastReportAt: st.LastReportAt, SilentSince: st.SilentSince, SilentNotifiedAt: st.SilentNotifiedAt,
 		BelowMinimumVersion: st.BelowMinimumVersion, BelowMinimumNotifiedAt: st.BelowMinimumNotifiedAt,
 	}
 	var msgs []napp.Message
 	id := gw.String()
-	var last time.Time
 	var live []dbq.PcGatewayReplica
 	for _, r := range replicas {
-		if r.LastSeen.After(last) {
-			last = r.LastSeen
-		}
 		if now.Sub(r.LastSeen) < p.SilenceAfter {
 			live = append(live, r)
 		}
 	}
-	silent := len(replicas) > 0 && len(live) == 0
+	reported := st.LastReportAt != nil
+	silent := reported && now.Sub(*st.LastReportAt) >= p.SilenceAfter
 	switch {
 	case silent && next.SilentSince == nil:
-		since := last
+		since := *st.LastReportAt
 		next.SilentSince, next.SilentNotifiedAt = &since, &now
 		msgs = append(msgs, napp.Message{
 			Type: "gateway.silent", DedupeKey: "gateway.silent:" + id + ":" + strconv.FormatInt(since.UnixMicro(), 10),
-			Params: map[string]string{"gateway": id, "since": since.UTC().Format(time.RFC3339),
-				"threshold": strconv.FormatInt(int64(p.SilenceAfter/time.Second), 10)},
+			Params: map[string]string{
+				"gateway": id, "since": since.UTC().Format(time.RFC3339),
+				"threshold": strconv.FormatInt(int64(p.SilenceAfter/time.Second), 10),
+			},
 		})
-	case len(live) > 0 && next.SilentSince != nil:
+	case reported && !silent && next.SilentSince != nil:
 		since := *next.SilentSince
 		next.SilentSince, next.SilentNotifiedAt = nil, nil
 		msgs = append(msgs, napp.Message{

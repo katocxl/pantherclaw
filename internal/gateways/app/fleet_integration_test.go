@@ -228,7 +228,11 @@ func TestT212_FakedVersionOrSuppressedSilence(t *testing.T) {
 		t.Fatal(err)
 	}
 	sweep(t, f, e.org)
-	for _, m := range n.take() {
+	got := n.take()
+	if len(got) != 1 || got[0].Type != "gateway.below_minimum" {
+		t.Fatalf("want one below-minimum notice, got %+v", got)
+	}
+	for _, m := range got {
 		for k, v := range m.Params {
 			if strings.Contains(v, "evil") || strings.Contains(v, "<") {
 				t.Fatalf("reported text reached the notice: %s=%q", k, v)
@@ -288,6 +292,60 @@ func TestFleetEditionsAndPermissions(t *testing.T) {
 	}
 	if got, err := ent.GetFleetPolicy(e.admin); err != nil || got.MinimumVersion.String() != "v1.2.3-rc.1" || got.UpdatedBy == "" {
 		t.Fatalf("read back: %+v %v", got, err)
+	}
+	// A valid version whose normalized form (with its "v") passes 64
+	// characters is an invalid minimum, not an internal error (D167).
+	long := "1.2.3-" + strings.Repeat("a", 58)
+	if _, ok := app.ParseVersion(long); !ok {
+		t.Fatal("the 64-character version does not parse")
+	}
+	if _, err := ent.SetFleetPolicy(e.admin, long, 0); !errors.Is(err, app.ErrMinimumVersion) {
+		t.Fatalf("an over-long minimum: %v", err)
+	}
+	// Downgraded to Team: the org can still clear its minimum, keeping the
+	// threshold or going back to the default, but not set a new policy.
+	if _, err := team.SetFleetPolicy(e.admin, "v1.0.0", 600*time.Second); !errors.Is(err, app.ErrFleetPolicyEdition) {
+		t.Fatalf("Team set a minimum: %v", err)
+	}
+	if _, err := team.SetFleetPolicy(e.admin, "", 900*time.Second); !errors.Is(err, app.ErrFleetPolicyEdition) {
+		t.Fatalf("Team changed the threshold: %v", err)
+	}
+	if p, err := team.SetFleetPolicy(e.admin, "", 600*time.Second); err != nil || p.MinimumVersion.Known() || p.SilenceAfter != 600*time.Second {
+		t.Fatalf("Team cleared the minimum keeping the threshold: %+v %v", p, err)
+	}
+	if p, err := community.SetFleetPolicy(e.admin, "", 0); err != nil || p.MinimumVersion.Known() || p.SilenceAfter != app.DefaultSilenceAfter {
+		t.Fatalf("Community cleared the policy: %+v %v", p, err)
+	}
+}
+
+// TestHR471_SilenceLongerThanRetentionStillAlertsOnce: silence is judged on
+// the gateway's last report time, which the replica prune never removes, so
+// an org that becomes entitled after a gateway has been silent for longer
+// than the replica retention still gets one silent alert and, when the
+// gateway reports again, one recovery (G0 M18 D167).
+// Covers: PN-010.6
+func TestHR471_SilenceLongerThanRetentionStillAlertsOnce(t *testing.T) {
+	e := newEnv(t)
+	_, gw := e.enroll(t, "long-gone")
+	f, svc, clk, n := e.fleetAt(time.Now(), editions{e.org: billing.Enterprise})
+	start := clk.Now()
+	report(t, svc, gw, replicaA, "1.0.0")
+	clk.Advance(app.ReplicaRetention + time.Hour)
+	if p, err := svc.PruneReplicas(context.Background(), e.org); err != nil || p != 1 {
+		t.Fatalf("prune: %d %v", p, err)
+	}
+	if r := sweep(t, f, e.org); r.Silent != 1 {
+		t.Fatalf("no silent alert after the prune: %+v", r)
+	}
+	if m := n.take(); len(m) != 1 || m[0].Params["since"] != start.UTC().Format(time.RFC3339) {
+		t.Fatalf("notices %+v", m)
+	}
+	if r := sweep(t, f, e.org); r != (app.SweepResult{}) {
+		t.Fatalf("the same silence alerted again: %+v", r)
+	}
+	report(t, svc, gw, replicaB, "1.0.0")
+	if r := sweep(t, f, e.org); r.Recovered != 1 || r.Silent != 0 {
+		t.Fatalf("recovery: %+v", r)
 	}
 }
 

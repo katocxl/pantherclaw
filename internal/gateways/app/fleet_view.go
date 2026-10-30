@@ -85,21 +85,21 @@ func (f *Fleet) GetFleetPolicy(ctx context.Context) (FleetPolicy, error) {
 	return f.s.FleetPolicy(ctx, c.Org)
 }
 
-// SetFleetPolicy sets the caller's org's fleet policy (gateway.manage,
-// Enterprise). An empty minimum clears it; a zero silenceAfter is the
-// default. The minimum is stored normalized and stays advisory (HR-470).
+// SetFleetPolicy sets the caller's org's fleet policy (gateway.manage). An
+// empty minimum clears it; a zero silenceAfter is the default. Setting a
+// minimum or changing the threshold needs Enterprise; clearing the minimum
+// with the threshold default or unchanged works in every edition, so an
+// org that left Enterprise can still remove its policy (D167). The minimum
+// is stored normalized and stays advisory (HR-470).
 func (f *Fleet) SetFleetPolicy(ctx context.Context, minimum string, silenceAfter time.Duration) (FleetPolicy, error) {
 	c, err := f.s.manager(ctx, td.PermGatewayManage)
 	if err != nil {
 		return FleetPolicy{}, err
 	}
-	if err := f.entitled(ctx, billing.Entitlements.FleetPolicy, ErrFleetPolicyEdition); err != nil {
-		return FleetPolicy{}, err
-	}
 	var minText *string
 	if minimum != "" {
 		v, ok := ParseVersion(minimum)
-		if !ok {
+		if !ok || len(v.String()) > maxVersionLen {
 			return FleetPolicy{}, ErrMinimumVersion
 		}
 		s := v.String()
@@ -111,10 +111,19 @@ func (f *Fleet) SetFleetPolicy(ctx context.Context, minimum string, silenceAfter
 	if silenceAfter < MinSilenceAfter || silenceAfter > MaxSilenceAfter || silenceAfter%time.Second != 0 {
 		return FleetPolicy{}, ErrSilenceAfter
 	}
+	cur, err := f.s.FleetPolicy(ctx, c.Org)
+	if err != nil {
+		return FleetPolicy{}, err
+	}
+	if clearing := minText == nil && (silenceAfter == DefaultSilenceAfter || silenceAfter == cur.SilenceAfter); !clearing {
+		if err := f.entitled(ctx, billing.Entitlements.FleetPolicy, ErrFleetPolicyEdition); err != nil {
+			return FleetPolicy{}, err
+		}
+	}
 	var out FleetPolicy
 	err = f.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		r, err := dbq.New(tx).UpsertGatewayFleetPolicy(ctx, dbq.UpsertGatewayFleetPolicyParams{
-			OrgID: c.Org, MinimumVersion: minText, SilenceAfterSeconds: int32(silenceAfter / time.Second),
+			OrgID: c.Org, MinimumVersion: minText, SilenceAfterSeconds: int32(silenceAfter / time.Second), //nolint:gosec // G115: 120..86400, checked above
 			UpdatedBy: c.Principal.String(), UpdatedAt: f.clk.Now(),
 		})
 		if err != nil {
@@ -238,8 +247,10 @@ func (f *Fleet) ListFleet(ctx context.Context, size int32, token string) (FleetV
 			}
 			for _, r := range st[g.ID].Replicas {
 				v, _ := ParseVersion(r.Version)
-				fr := FleetReplica{Replica: r, Version: v, Compliance: compliance(v, out.Policy.MinimumVersion),
-					ConfigLag: max(g.ConfigVersion-r.ConfigVersion, 0)}
+				fr := FleetReplica{
+					Replica: r, Version: v, Compliance: compliance(v, out.Policy.MinimumVersion),
+					ConfigLag: max(g.ConfigVersion-r.ConfigVersion, 0),
+				}
 				fg.BelowMinimum = fg.BelowMinimum || fr.Compliance == BelowMinimum || fr.Compliance == VersionUnknown
 				fg.Replicas = append(fg.Replicas, fr)
 			}

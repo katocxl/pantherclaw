@@ -37,3 +37,9 @@ SET silent_since = EXCLUDED.silent_since, silent_notified_at = EXCLUDED.silent_n
 
 -- name: LockGatewayAlertState :exec
 SELECT pg_advisory_xact_lock(hashtextextended('pc.gateway_alert_state:' || sqlc.arg(org_id)::uuid::text, 0));
+
+-- name: RecordGatewayReport :exec
+INSERT INTO pc.gateway_alert_state (org_id, gateway_id, last_report_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(gateway_id), sqlc.arg(last_report_at))
+ON CONFLICT (org_id, gateway_id) DO UPDATE
+SET last_report_at = GREATEST(pc.gateway_alert_state.last_report_at, EXCLUDED.last_report_at);

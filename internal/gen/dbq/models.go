@@ -1962,6 +1962,7 @@ type PcGateway struct {
 type PcGatewayAlertState struct {
 	OrgID                  ids.OrgID
 	GatewayID              ids.UUID
+	LastReportAt           *time.Time
 	SilentSince            *time.Time
 	SilentNotifiedAt       *time.Time
 	BelowMinimumVersion    *string

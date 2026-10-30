@@ -38,7 +38,7 @@ var compliances = map[gwapp.Compliance]pb.VersionCompliance{
 }
 
 func fleetPolicyOf(p gwapp.FleetPolicy) *pb.FleetPolicy {
-	out := &pb.FleetPolicy{SilenceAfterSeconds: int32(p.SilenceAfter / time.Second), UpdatedBy: p.UpdatedBy}
+	out := &pb.FleetPolicy{SilenceAfterSeconds: int32(p.SilenceAfter / time.Second), UpdatedBy: p.UpdatedBy} //nolint:gosec // G115: 120..86400
 	if p.MinimumVersion.Known() {
 		out.MinimumVersion = p.MinimumVersion.String()
 	}

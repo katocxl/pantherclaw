@@ -67,7 +67,7 @@ func (q *Queries) ListActiveGatewayIDs(ctx context.Context, orgID ids.OrgID, aft
 
 const listGatewayAlertStates = `-- name: ListGatewayAlertStates :many
 
-SELECT org_id, gateway_id, silent_since, silent_notified_at, below_minimum_version, below_minimum_notified_at FROM pc.gateway_alert_state
+SELECT org_id, gateway_id, last_report_at, silent_since, silent_notified_at, below_minimum_version, below_minimum_notified_at FROM pc.gateway_alert_state
 WHERE org_id = $1 AND gateway_id = ANY($2::uuid[])
 `
 
@@ -84,6 +84,7 @@ func (q *Queries) ListGatewayAlertStates(ctx context.Context, orgID ids.OrgID, g
 		if err := rows.Scan(
 			&i.OrgID,
 			&i.GatewayID,
+			&i.LastReportAt,
 			&i.SilentSince,
 			&i.SilentNotifiedAt,
 			&i.BelowMinimumVersion,
@@ -105,6 +106,18 @@ SELECT pg_advisory_xact_lock(hashtextextended('pc.gateway_alert_state:' || $1::u
 
 func (q *Queries) LockGatewayAlertState(ctx context.Context, orgID ids.UUID) error {
 	_, err := q.db.Exec(ctx, lockGatewayAlertState, orgID)
+	return err
+}
+
+const recordGatewayReport = `-- name: RecordGatewayReport :exec
+INSERT INTO pc.gateway_alert_state (org_id, gateway_id, last_report_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (org_id, gateway_id) DO UPDATE
+SET last_report_at = GREATEST(pc.gateway_alert_state.last_report_at, EXCLUDED.last_report_at)
+`
+
+func (q *Queries) RecordGatewayReport(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID, lastReportAt *time.Time) error {
+	_, err := q.db.Exec(ctx, recordGatewayReport, orgID, gatewayID, lastReportAt)
 	return err
 }
 
