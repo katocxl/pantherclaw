@@ -81,6 +81,11 @@ type Hub struct {
 	done     chan struct{}
 	doneOnce sync.Once
 
+	// notified, when set, is told the org of every notification, watched
+	// or not: the gateway certificate cache forgets the org's entries
+	// (HR-492).
+	notified func(ids.OrgID)
+
 	mu      sync.Mutex
 	orgs    map[ids.OrgID]*orgWatch
 	streams map[ids.UUID]int // per certificate
@@ -103,6 +108,14 @@ func NewHub(pool *db.Pool, log *slog.Logger) *Hub {
 		log = pclog.Discard()
 	}
 	return &Hub{pool: pool, log: log, now: time.Now, done: make(chan struct{}), orgs: map[ids.OrgID]*orgWatch{}, streams: map[ids.UUID]int{}}
+}
+
+// ForgetOnNotify makes every pc_containment notification also forget the
+// org's cached certificate checks in svc (G0 M19 D201, HR-492). Call it
+// before Run.
+func (h *Hub) ForgetOnNotify(svc *Service) *Hub {
+	h.notified = svc.ForgetOrg
+	return h
 }
 
 // Done closes when the hub stops; streams end with it.
@@ -289,6 +302,9 @@ func (h *Hub) listen(ctx context.Context) error {
 		org, err := ids.Parse[ids.Org](n.Payload)
 		if err != nil {
 			continue
+		}
+		if h.notified != nil {
+			h.notified(org)
 		}
 		h.mu.Lock()
 		if w := h.orgs[org]; w != nil {

@@ -288,3 +288,25 @@ func TestHR375_ExportsAreCappedPerOrg(t *testing.T) {
 		t.Fatalf("containment with the counter unavailable: %d", st)
 	}
 }
+
+// TestHR490_AStoreErrorRefusesButSafetyCalls (G0 M19 D201): when the
+// shared counter behind the API limits cannot be reached, an ordinary
+// call is refused with RATE_LIMITED and Retry-After (HR-376), and a
+// procedure of the safety or allow classes is still admitted.
+// Covers: HR-490, HR-376
+func TestHR490_AStoreErrorRefusesButSafetyCalls(t *testing.T) {
+	who := pantherclawv1connect.AccessServiceWhoAmIProcedure
+	contain := pantherclawv1connect.AccessServiceListRolesProcedure // stands in for a safety procedure
+	limits := rpcauth.APILimits{
+		PerOrg: 100, PerCredential: 100, Limiter: ratelimit.NewLeased(failingShared{}, nil),
+		OrgExempt: func(p string) bool { return p == contain },
+	}
+	perms := map[string]td.Permission{who: td.PermAuthenticated, contain: td.PermAuthenticated}
+	call := limitServer(t, perms, nil, limits, nil)
+	if st, ra := call(who, "key-a"); st != http.StatusTooManyRequests || ra == "" {
+		t.Fatalf("an ordinary call with the counter down: %d Retry-After %q", st, ra)
+	}
+	if st, _ := call(contain, "key-a"); st != http.StatusOK {
+		t.Fatalf("a safety call with the counter down: %d", st)
+	}
+}

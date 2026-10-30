@@ -82,7 +82,7 @@ func (s *Store) Take(ctx context.Context, scope, key string, window time.Duratio
 		// The window's end on the database's clock (D28).
 		return Decision{RetryAfter: time.Duration(row.RetrySeconds * float64(time.Second))}, nil
 	}
-	return Decision{Allowed: true}, nil
+	return Decision{Allowed: true, WindowLeft: time.Duration(row.RetrySeconds * float64(time.Second))}, nil
 }
 
 // JanitorInterval is how often old windows are removed.

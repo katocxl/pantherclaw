@@ -233,7 +233,9 @@ func Fingerprint(public []byte) string {
 // row on every call (HR-181): the gateway must be ACTIVE and the
 // certificate unexpired by the database clock and ACTIVE, or SUPERSEDED by
 // a renewal less than SupersededGrace ago. Results are cached at most one
-// second, so revocation applies within a second.
+// second, so revocation applies within a second; the replica that revokes
+// forgets at once, and every other replica forgets the org's entries on
+// its LISTEN pc_containment notification (ForgetOrg, G0 M19 D201, HR-492).
 func (s *Service) Authenticate(ctx context.Context, id Identity) error {
 	if ok, hit := s.auth.get(id, s.clk.Now()); hit {
 		if ok {
@@ -274,6 +276,7 @@ type authCache struct {
 }
 
 type authEntry struct {
+	org     ids.OrgID
 	gateway ids.UUID
 	ok      bool
 	until   time.Time
@@ -302,7 +305,7 @@ func (c *authCache) put(id Identity, ok bool, now time.Time) {
 	if len(c.entries) >= authCacheLimit {
 		clear(c.entries)
 	}
-	c.entries[id.Cert] = authEntry{gateway: id.Gateway, ok: ok, until: now.Add(authTTL)}
+	c.entries[id.Cert] = authEntry{org: id.Org, gateway: id.Gateway, ok: ok, until: now.Add(authTTL)}
 }
 
 func (c *authCache) forget(cert ids.UUID) {
@@ -320,3 +323,21 @@ func (c *authCache) forgetGateway(gateway ids.UUID) {
 		}
 	}
 }
+
+func (c *authCache) forgetOrg(org ids.OrgID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k, e := range c.entries {
+		if e.org == org {
+			delete(c.entries, k)
+		}
+	}
+}
+
+// ForgetOrg drops the cached certificate checks of org's gateways. The
+// containment hub calls it on every pc_containment notification of the
+// org, which a revocation (an epoch bump) and a gateway's disable or
+// revoke (its state) send, so another replica's revocation applies here
+// at once; a missed notification costs at most authTTL (HR-492). The
+// payload names the org only (HR-056), so all of its entries go.
+func (s *Service) ForgetOrg(org ids.OrgID) { s.auth.forgetOrg(org) }

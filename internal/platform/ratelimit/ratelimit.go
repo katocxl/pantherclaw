@@ -6,12 +6,17 @@
 //
 //   - Store counts in PostgreSQL (pc.rate_counters), so a limit holds
 //     across every replica (HR-376): automation inbound per source and
-//     AuthZEN per enforcement point. Its windows are aligned to the Unix
-//     epoch on the database's clock. A caller that cannot reach the store
-//     refuses the request (fail closed) and logs it.
-//   - Memory counts on this replica only: the authenticated API's limits
-//     per organization and per credential (HR-375), which are documented
-//     as per replica.
+//     AuthZEN per enforcement point, signal transmitters and evidence
+//     replays (G0 M19 D201). Its windows are aligned to the Unix epoch on
+//     the database's clock. A caller that cannot reach the store refuses
+//     the request (fail closed) and logs it.
+//   - Memory counts on this replica only (tests, and the per-IP limits
+//     documented as per replica, HR-494).
+//
+// Leased spends chunks leased from a Store on this replica, so the
+// authenticated API's limits per organization and per credential (HR-375)
+// hold across replicas at one write per chunk (G0 M19 D201, HR-490).
+// Leases counts concurrent streams and waits across replicas (HR-491).
 //
 // Take adds n events to a key's window only when all of them fit, so a
 // refused request never uses up the window.
@@ -32,6 +37,9 @@ type Decision struct {
 	Allowed bool
 	// RetryAfter is how long until the key's window ends (refusals only).
 	RetryAfter time.Duration
+	// WindowLeft is how long until the key's window ends (allowed only); a
+	// leased chunk expires with it.
+	WindowLeft time.Duration
 }
 
 // Limiter counts events per scope and key in fixed windows.
@@ -107,5 +115,5 @@ func (m *Memory) Take(_ context.Context, scope, key string, window time.Duration
 		return Decision{RetryAfter: w.end.Sub(now)}, nil
 	}
 	w.count += n
-	return Decision{Allowed: true}, nil
+	return Decision{Allowed: true, WindowLeft: w.end.Sub(now)}, nil
 }
