@@ -317,6 +317,10 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 			sealer = d.Broker.key
 		}
 		g.mcp.WithServerState(d.MCPState, sealer, d.Org, d.GatewayID)
+		// A2A task and context ownership too (G0 M19 D211).
+		if sealer != nil {
+			g.a2a.WithServerState(d.MCPState, sealer, d.Org, d.GatewayID)
+		}
 	}
 	if e := cfg.Control.VerifyEvery.D(); e > 0 {
 		g.verifyEvery = e

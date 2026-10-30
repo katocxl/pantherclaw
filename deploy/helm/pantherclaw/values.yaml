@@ -47,7 +47,9 @@ api:
   trustedProxies: []
 
 worker:
-  replicas: 1
+  # Two workers by default (G0 M19 D202, HR-498): every job is safe with
+  # two or more, and the worker PodDisruptionBudget keeps one running.
+  replicas: 2
   concurrency: 10
   # The worker's health listener (health.addr, HR-397): /livez and /readyz only.
   healthPort: 8081
@@ -68,6 +70,17 @@ gatewayAPI:
 
 database:
   host: postgres.example.internal
+  # A primary and its standbys instead of host (G0 M19 D202): each "host" or
+  # "host:port", tried in order for the read-write primary, TLS verified per
+  # host (verify-full). The network policy allows egress to database.port
+  # only, so give every host that port. A stable endpoint (a managed service
+  # or a proxy that always names the primary) in host is the alternative.
+  hosts: []
+  # async (default) or sync. sync declares one synchronous standby with
+  # synchronous_commit=remote_apply; it counts only when the primary confirms
+  # it at start-up. After a promotion without it, the server starts in the
+  # maintenance hold until `keys bump-epochs --all --confirm` (HR-496).
+  replication: async
   port: 5432
   name: pantherclaw
   sslmode: verify-full

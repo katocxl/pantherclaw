@@ -94,6 +94,19 @@ func (q *Queries) ListUsageDays(ctx context.Context, orgID ids.OrgID, since pgty
 	return items, nil
 }
 
+const lockUsageMeter = `-- name: LockUsageMeter :exec
+SELECT pg_advisory_xact_lock(hashtextextended('pc.usage_meter:' || $1::text, 0))
+`
+
+// Serializes the org's meter and recount transactions (G0 M19 D202,
+// HR-498): MeterUsageDay builds each day on the previous day's
+// stored_bytes, so an overlapping recount and meter (two workers, or two
+// jobs in one) would otherwise write totals from a stale previous day.
+func (q *Queries) LockUsageMeter(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, lockUsageMeter, orgID)
+	return err
+}
+
 const meterUsageDay = `-- name: MeterUsageDay :exec
 WITH bounds AS (
     SELECT ($2::date)::timestamp AT TIME ZONE 'UTC' AS day_start,

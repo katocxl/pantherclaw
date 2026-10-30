@@ -158,6 +158,13 @@ type DBConfig struct {
 	StatementTimeout     config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
 	LockTimeout          config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
 	IdleInTxTimeout      config.Duration `json:"idle_in_transaction_timeout" env:"PC_DB_IDLE_IN_TX_TIMEOUT"`
+	// Hosts, when set, replaces host: the primary and its standbys, each
+	// "host" or "host:port", tried in order for the read-write primary with
+	// TLS verified per host (G0 M19 D202, HR-495, HR-497).
+	Hosts []string `json:"hosts" env:"PC_DB_HOSTS"`
+	// Replication is the declared replication, async (default) or sync; sync
+	// counts only when the primary confirms it at start-up (D207, HR-496).
+	Replication string `json:"replication" env:"PC_DB_REPLICATION"`
 }
 
 // DefaultConfig returns safe defaults: loopback listener, TLS-verified DB.
@@ -173,7 +180,7 @@ func DefaultConfig() Config {
 			Host: d.Host, Port: d.Port, Name: d.Database, SSLMode: d.SSLMode,
 			AppUser: db.RoleApp, MigratorUser: db.RoleMigrator, MaxConns: int(d.MaxConns),
 			StatementTimeout: config.Duration(d.StatementTimeout), LockTimeout: config.Duration(d.LockTimeout),
-			IdleInTxTimeout: config.Duration(d.IdleInTxTimeout),
+			IdleInTxTimeout: config.Duration(d.IdleInTxTimeout), Replication: string(db.ReplicationAsync),
 		},
 		WorkerConcurrency: 10,
 		Backups:           BackupsConfig{RetentionDays: 60},
@@ -225,6 +232,9 @@ func (c *Config) Validate() error {
 	if c.DB.AppPasswordFile == "" {
 		errs = append(errs, errors.New("database.app_password_file is required"))
 	}
+	if !db.Replication(c.DB.Replication).Valid() {
+		errs = append(errs, errors.New("database.replication must be async or sync"))
+	}
 	if c.DB.AppUser == db.RoleMigrator || c.DB.AppUser == "postgres" {
 		errs = append(errs, errors.New("database.app_user must be the unprivileged application role"))
 	}
@@ -269,7 +279,7 @@ func (c *Config) dbConfig(user, passwordFile string, maxConns int) (db.Config, e
 		return db.Config{}, err
 	}
 	return db.Config{
-		Host: c.DB.Host, Port: c.DB.Port, Database: c.DB.Name, User: user, Password: pw,
+		Host: c.dbHost(), Port: c.DB.Port, Database: c.DB.Name, User: user, Password: pw,
 		SSLMode: c.DB.SSLMode, SSLRootCert: c.DB.SSLRootCert,
 		MaxConns:         int32(maxConns), //nolint:gosec // G115: validated by db.Config.Validate (≤ 1000)
 		StatementTimeout: c.DB.StatementTimeout.D(), LockTimeout: c.DB.LockTimeout.D(),
@@ -450,4 +460,13 @@ func (c *Config) trustedProxies() ([]netip.Prefix, error) {
 		out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
 	}
 	return out, nil
+}
+
+// dbHost is database.host, or database.hosts as the comma-separated list
+// db.Config takes (G0 M19 D202).
+func (c *Config) dbHost() string {
+	if len(c.DB.Hosts) > 0 {
+		return strings.Join(c.DB.Hosts, ",")
+	}
+	return c.DB.Host
 }

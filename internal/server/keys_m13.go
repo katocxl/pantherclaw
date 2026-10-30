@@ -157,7 +157,7 @@ func cmdBumpEpochs(ctx context.Context, args []string, stdout, stderr io.Writer,
 	if !confirm {
 		return errors.New("keys bump-epochs: raises every organization's containment epoch, so gateways drop their cached state; run again with --confirm")
 	}
-	_, pool, err := openOperatorPool(ctx, cfgPath, stderr, env, name)
+	cfg, pool, err := openOperatorPool(ctx, cfgPath, stderr, env, name)
 	if err != nil {
 		return err
 	}
@@ -182,6 +182,12 @@ func cmdBumpEpochs(ctx context.Context, args []string, stdout, stderr io.Writer,
 	}
 	_, _ = fmt.Fprintf(stdout, "raised the containment epoch of %d organization(s)\n", len(orgs)-skipped)
 	_, _ = fmt.Fprintf(stdout, "skipped %d irreversible DELETED organization(s)\n", skipped)
+	// Every epoch is raised, so the promotion hold may end (D207, HR-496).
+	tl, err := pool.AcknowledgeTimeline(ctx, db.Replication(cfg.DB.Replication))
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	_, _ = fmt.Fprintf(stdout, "acknowledged database timeline %d\n", tl)
 	return nil
 }
 

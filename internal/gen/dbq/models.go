@@ -1480,6 +1480,13 @@ type PcDataRequestPart struct {
 	CreatedAt time.Time
 }
 
+type PcDbPrimaryTimeline struct {
+	Singleton    bool
+	Timeline     pgtype.Int8
+	SyncVerified bool
+	UpdateTime   time.Time
+}
+
 type PcDecisionConsequence struct {
 	OrgID          ids.OrgID
 	TransactionID  ids.UUID

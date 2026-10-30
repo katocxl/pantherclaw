@@ -277,6 +277,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err := checkSchemaAtStart(ctx, cfg, pool, log); err != nil {
 		return err
 	}
+	if err := holdAfterPromotion(ctx, cfg, pool, log); err != nil {
+		return err
+	}
 	workers := newWorkerHeartbeat(cfg.Role)
 
 	kp, err := newCheckedKeyProvider(ctx, cfg, pool)
@@ -931,10 +934,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	mountM14Data(mux, d)
 	mountM16External(mux, d)
-	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "ok\n")
-	})
+	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		b, err := reg.JWKS()

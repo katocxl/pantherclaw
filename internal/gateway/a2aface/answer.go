@@ -4,6 +4,7 @@
 package a2aface
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
@@ -133,9 +134,9 @@ func refusal(res dispatch.Result) *faceError {
 
 // answer relays a dispatched call's answer, recording the tasks and
 // contexts the peer gave this run, or answers the refusal.
-func (h *Handler) answer(w http.ResponseWriter, c call, res dispatch.Result) {
+func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, c call, res dispatch.Result) {
 	if res.Class == dispatch.AuthenticationFailed {
-		h.refusePAP(w, c, res.PAPError, res.Nonce)
+		h.refusePAP(ctx, w, c, res.PAPError, res.Nonce)
 		return
 	}
 	if res.Nonce != "" {
@@ -148,7 +149,7 @@ func (h *Handler) answer(w http.ResponseWriter, c call, res dispatch.Result) {
 		h.fail(w, c, refusal(res))
 		return
 	}
-	body, ok := h.result(c, res.Response.Body)
+	body, ok := h.result(ctx, c, res.Response.Body)
 	if !ok {
 		h.fail(w, c, refusal(dispatch.Result{Class: dispatch.EnforcementFailed, Code: "a2a_answer_invalid", TransactionID: res.TransactionID, Receipt: res.Receipt}))
 		return
@@ -170,7 +171,7 @@ func (h *Handler) answer(w http.ResponseWriter, c call, res dispatch.Result) {
 // carried it), notes the tasks and contexts it gives this run and, for a
 // listing, keeps only this run's tasks. The answer is untrusted: it must
 // decode as what the method answers, or nothing of it is relayed.
-func (h *Handler) result(c call, body []byte) ([]byte, bool) {
+func (h *Handler) result(ctx context.Context, c call, body []byte) ([]byte, bool) {
 	o := c.owner()
 	switch c.method {
 	case wire.MethodSendMessage:
@@ -182,9 +183,11 @@ func (h *Handler) result(c call, body []byte) ([]byte, bool) {
 			if !wire.ValidID(r.Task.ID) {
 				return nil, false
 			}
-			h.owned.record(o, r.Task.ID, r.Task.ContextID)
+			c.releaseSlot()
+			h.owned.record(ctx, o, r.Task.ID, r.Task.ContextID)
 		} else if r.Message.ContextID != "" {
-			h.owned.record(o, "", r.Message.ContextID)
+			c.releaseSlot()
+			h.owned.record(ctx, o, "", r.Message.ContextID)
 		}
 		return body, true
 	case wire.MethodGetTask, wire.MethodCancelTask:
@@ -200,7 +203,7 @@ func (h *Handler) result(c call, body []byte) ([]byte, bool) {
 		}
 		kept := l.Tasks[:0]
 		for _, t := range l.Tasks {
-			if _, ok := h.owned.task(o, t.ID); ok {
+			if _, ok := h.owned.task(ctx, o, t.ID); ok {
 				kept = append(kept, t)
 			}
 		}

@@ -42,6 +42,7 @@ var globalTables = []string{
 	"goose_db_version",     // migration bookkeeping; no pc_app access
 	"licence_state",        // single global row: the installed licence (no tenant data)
 	"schema_info",          // single global row: the applied schema version; pc_app reads it (G0 M13 D19, HR-370)
+	"db_primary_timeline",  // single global row: the acknowledged primary timeline; rows only in purpose failover (G0 M19 D207, HR-496)
 	"rate_counters",        // the shared rate limiter's counters: opaque keys, no tenant data; rows only in purpose rate_limit (G0 M13 D9, D28, HR-376)
 }
 

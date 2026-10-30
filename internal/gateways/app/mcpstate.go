@@ -45,6 +45,11 @@ const (
 	// MCPElicitation is an elicitation relayed to the agent (D39): kept like
 	// a task, with a sealed body, within the same bounds.
 	MCPElicitation = "ELICITATION"
+	// MCPA2ATask and MCPA2AContext are the A2A face's tasks and contexts
+	// (G0 M19 D211): a task with its context id as a sealed body, a context
+	// with none, each with the TASK bounds and lifetime.
+	MCPA2ATask    = "A2A_TASK"
+	MCPA2AContext = "A2A_CONTEXT"
 )
 
 // Errors (D12).
@@ -99,6 +104,12 @@ func (e MCPEntry) valid(now time.Time) bool {
 	case MCPElicitation:
 		ttl = !e.ExpireTime.After(now.Add(MaxMCPElicitationTTL))
 		ok = e.ActionID == "" && e.JKT == "" && e.Status == "" && !e.Busy && len(e.SealedBody) > 0
+	case MCPA2ATask:
+		ttl = !e.ExpireTime.After(now.Add(MaxMCPHoldTTL))
+		ok = e.ActionID == "" && e.JKT == "" && e.Status == "" && !e.Busy && len(e.SealedBody) > 0
+	case MCPA2AContext:
+		ttl = !e.ExpireTime.After(now.Add(MaxMCPHoldTTL))
+		ok = e.ActionID == "" && e.JKT == "" && e.Status == "" && !e.Busy && len(e.SealedBody) == 0
 	}
 	return ttl && ok
 }
@@ -215,6 +226,20 @@ func (s *Service) makeRoom(ctx context.Context, q *dbq.Queries, id Identity, e M
 	c, err := q.CountGatewayMCPState(ctx, dbq.CountGatewayMCPStateParams{OrgID: id.Org, GatewayID: id.Gateway, InstanceID: e.Instance, Now: now})
 	if err != nil {
 		return err
+	}
+	if isNew && (e.Kind == MCPA2ATask || e.Kind == MCPA2AContext) {
+		// Each A2A kind has the TASK bounds of its own, per caller (D211,
+		// D218).
+		k, err := q.CountGatewayMCPStateOfKind(ctx, dbq.CountGatewayMCPStateOfKindParams{
+			OrgID: id.Org, GatewayID: id.Gateway, Kind: e.Kind, InstanceID: e.Instance, RunID: e.Run, Now: now,
+		})
+		if err != nil {
+			return err
+		}
+		if k.Entries >= MaxMCPEntries || k.CallerEntries >= MaxMCPEntriesPerInstance {
+			return ErrMCPStateFull
+		}
+		isNew = false // not counted in the MCP entries below
 	}
 	switch {
 	case e.Kind == MCPSession:
