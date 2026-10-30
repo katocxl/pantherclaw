@@ -20745,6 +20745,168 @@
         }
       }
     },
+    "/pantherclaw.v1.RecommendationService/ListRecommendations": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RecommendationService"
+        ],
+        "summary": "ListRecommendations",
+        "description": "ListRecommendations computes the recommendations the viewer may see, in\n catalogue order.\n permission: posture.read",
+        "operationId": "pantherclaw.v1.RecommendationService.ListRecommendations",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListRecommendationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListRecommendationsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.RecommendationService/DismissRecommendation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RecommendationService"
+        ],
+        "summary": "DismissRecommendation",
+        "description": "DismissRecommendation hides a recommendation for the org, with a reason.\n permission: posture.manage",
+        "operationId": "pantherclaw.v1.RecommendationService.DismissRecommendation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DismissRecommendationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DismissRecommendationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.RecommendationService/UndismissRecommendation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RecommendationService"
+        ],
+        "summary": "UndismissRecommendation",
+        "description": "UndismissRecommendation undoes a dismissal.\n permission: posture.manage",
+        "operationId": "pantherclaw.v1.RecommendationService.UndismissRecommendation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.UndismissRecommendationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.UndismissRecommendationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.RangeService/StartRange": {
       "post": {
         "tags": [
@@ -68294,6 +68456,262 @@
         "additionalProperties": false,
         "description": "SetProtectedCategoryModeResponse returns the category."
       },
+      "pantherclaw.v1.RecommendationCategory": {
+        "type": "string",
+        "title": "RecommendationCategory",
+        "enum": [
+          "RECOMMENDATION_CATEGORY_UNSPECIFIED",
+          "RECOMMENDATION_CATEGORY_IDENTITY",
+          "RECOMMENDATION_CATEGORY_CLASSIFICATION",
+          "RECOMMENDATION_CATEGORY_APPROVAL",
+          "RECOMMENDATION_CATEGORY_INCIDENT",
+          "RECOMMENDATION_CATEGORY_EXPORT",
+          "RECOMMENDATION_CATEGORY_UNSUPPORTED"
+        ]
+      },
+      "pantherclaw.v1.RecommendationEvidenceSource": {
+        "type": "string",
+        "title": "RecommendationEvidenceSource",
+        "enum": [
+          "RECOMMENDATION_EVIDENCE_SOURCE_UNSPECIFIED",
+          "RECOMMENDATION_EVIDENCE_SOURCE_DISCOVERIES",
+          "RECOMMENDATION_EVIDENCE_SOURCE_COVERAGE",
+          "RECOMMENDATION_EVIDENCE_SOURCE_ONBOARDING",
+          "RECOMMENDATION_EVIDENCE_SOURCE_AGENTS"
+        ]
+      },
+      "pantherclaw.v1.DismissRecommendationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 128,
+            "minLength": 3
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 1000,
+            "minLength": 10
+          }
+        },
+        "title": "DismissRecommendationRequest",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.DismissRecommendationResponse": {
+        "type": "object",
+        "title": "DismissRecommendationResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListRecommendationsRequest": {
+        "type": "object",
+        "properties": {
+          "includeDismissed": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "include_dismissed",
+            "description": "include_dismissed also returns dismissed recommendations."
+          }
+        },
+        "title": "ListRecommendationsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListRecommendationsResponse": {
+        "type": "object",
+        "properties": {
+          "recommendations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Recommendation"
+            },
+            "title": "recommendations"
+          },
+          "restricted": {
+            "type": "boolean",
+            "title": "restricted",
+            "description": "restricted: the viewer lacks posture.read at org scope, so agent counts\n cover only their agents and org-wide recommendations are left out."
+          },
+          "asOf": {
+            "title": "as_of",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ListRecommendationsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.Recommendation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "id is the catalogue entry's stable id, e.g. identity.ci_workload."
+          },
+          "category": {
+            "title": "category",
+            "$ref": "#/components/schemas/pantherclaw.v1.RecommendationCategory"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "detail"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.RecommendationTarget"
+            },
+            "title": "targets",
+            "description": "targets is empty for an UNSUPPORTED recommendation."
+          },
+          "enables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "enables"
+          },
+          "stillUnsupported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "still_unsupported",
+            "description": "still_unsupported is never empty."
+          },
+          "evidence": {
+            "title": "evidence",
+            "$ref": "#/components/schemas/pantherclaw.v1.RecommendationEvidence"
+          },
+          "dismissed": {
+            "type": "boolean",
+            "title": "dismissed"
+          },
+          "dismissal": {
+            "title": "dismissal",
+            "$ref": "#/components/schemas/pantherclaw.v1.RecommendationDismissal"
+          }
+        },
+        "title": "Recommendation",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.RecommendationDismissal": {
+        "type": "object",
+        "properties": {
+          "dismissedBy": {
+            "type": "string",
+            "title": "dismissed_by"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "reason is a person's text: display it as such."
+          },
+          "dismissedAt": {
+            "title": "dismissed_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "RecommendationDismissal",
+        "additionalProperties": false,
+        "description": "RecommendationDismissal says who dismissed a recommendation. Only a viewer\n with posture.read at org scope gets one."
+      },
+      "pantherclaw.v1.RecommendationEvidence": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "title": "source",
+            "$ref": "#/components/schemas/pantherclaw.v1.RecommendationEvidenceSource"
+          },
+          "count": {
+            "type": "integer",
+            "title": "count",
+            "format": "int32",
+            "description": "count is the records behind it that the viewer may see."
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.RecommendationRecord"
+            },
+            "title": "records",
+            "description": "records are at most 20 of them."
+          },
+          "link": {
+            "type": "string",
+            "title": "link",
+            "description": "link is the read procedure that lists the evidence."
+          }
+        },
+        "title": "RecommendationEvidence",
+        "additionalProperties": false,
+        "description": "RecommendationEvidence is what made a recommendation apply."
+      },
+      "pantherclaw.v1.RecommendationRecord": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "kind: agent, discovery or transaction."
+          },
+          "id": {
+            "type": "string",
+            "title": "id"
+          }
+        },
+        "title": "RecommendationRecord",
+        "additionalProperties": false,
+        "description": "RecommendationRecord is one record behind a recommendation."
+      },
+      "pantherclaw.v1.RecommendationTarget": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "package": {
+            "type": "string",
+            "title": "package",
+            "description": "package is the tool package a connection would use; empty when the\n integration is not a connection."
+          }
+        },
+        "title": "RecommendationTarget",
+        "additionalProperties": false,
+        "description": "RecommendationTarget is an integration that would help."
+      },
+      "pantherclaw.v1.UndismissRecommendationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "maxLength": 128,
+            "minLength": 3
+          }
+        },
+        "title": "UndismissRecommendationRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.UndismissRecommendationResponse": {
+        "type": "object",
+        "title": "UndismissRecommendationResponse",
+        "additionalProperties": false
+      },
       "pantherclaw.v1.RangeObservedBy": {
         "type": "string",
         "title": "RangeObservedBy",
@@ -79305,6 +79723,10 @@
     {
       "name": "pantherclaw.v1.PublisherService",
       "description": "PublisherService handles compromised publishers (G0 M11 part 2 D43;\n F595, F596, HR-293, T-129; Business edition). Marking a person\n compromised stops their confirming, approving, publishing, activating and\n promoting at once, voids their pending requests, pauses the automations\n whose ceiling they approved and halts the rollouts they confirmed; what\n they published since the given time is listed, each item is reviewed\n KEEP or ROLLBACK by someone else, and only then can two other people\n clear the mark. A valid signature never exempts."
+    },
+    {
+      "name": "pantherclaw.v1.RecommendationService",
+      "description": "RecommendationService says which integrations would close what discovered\n agents and credentials need (G0 M21 D302, D308; F343; HR-535, HR-536; Team\n edition).\n\n Recommendations are computed on each read from a closed catalogue, over\n discoveries, coverage, onboarding and connections. A recommendation\n changes nothing: it names what would help, what that enables and what\n stays unsupported. Reads show only what the viewer may see: signals from\n agents count only the agents the viewer's posture.read reaches, and\n org-wide integration gaps need posture.read at org scope. Dismissing hides\n a recommendation for the whole org until it is undone, so it needs\n posture.manage at org scope."
     },
     {
       "name": "pantherclaw.v1.RangeService",

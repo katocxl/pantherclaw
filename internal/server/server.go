@@ -844,6 +844,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerCases(rs, d, grants)
 	registerResponse(rs, d)
 	registerExposure(rs, d)
+	registerRecommendations(rs, d)
 	edges, err := registerM10Edges(rs, d)
 	if err != nil {
 		return nil, err

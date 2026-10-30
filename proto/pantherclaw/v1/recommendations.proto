@@ -1,0 +1,141 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// RecommendationService says which integrations would close what discovered
+// agents and credentials need (G0 M21 D302, D308; F343; HR-535, HR-536; Team
+// edition).
+//
+// Recommendations are computed on each read from a closed catalogue, over
+// discoveries, coverage, onboarding and connections. A recommendation
+// changes nothing: it names what would help, what that enables and what
+// stays unsupported. Reads show only what the viewer may see: signals from
+// agents count only the agents the viewer's posture.read reaches, and
+// org-wide integration gaps need posture.read at org scope. Dismissing hides
+// a recommendation for the whole org until it is undone, so it needs
+// posture.manage at org scope.
+service RecommendationService {
+  // ListRecommendations computes the recommendations the viewer may see, in
+  // catalogue order.
+  // permission: posture.read
+  rpc ListRecommendations(ListRecommendationsRequest) returns (ListRecommendationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DismissRecommendation hides a recommendation for the org, with a reason.
+  // permission: posture.manage
+  rpc DismissRecommendation(DismissRecommendationRequest) returns (DismissRecommendationResponse);
+  // UndismissRecommendation undoes a dismissal.
+  // permission: posture.manage
+  rpc UndismissRecommendation(UndismissRecommendationRequest) returns (UndismissRecommendationResponse);
+}
+
+enum RecommendationCategory {
+  RECOMMENDATION_CATEGORY_UNSPECIFIED = 0;
+  RECOMMENDATION_CATEGORY_IDENTITY = 1;
+  RECOMMENDATION_CATEGORY_CLASSIFICATION = 2;
+  RECOMMENDATION_CATEGORY_APPROVAL = 3;
+  RECOMMENDATION_CATEGORY_INCIDENT = 4;
+  RECOMMENDATION_CATEGORY_EXPORT = 5;
+  // A discovered need no integration covers: it has no targets.
+  RECOMMENDATION_CATEGORY_UNSUPPORTED = 6;
+}
+
+enum RecommendationEvidenceSource {
+  RECOMMENDATION_EVIDENCE_SOURCE_UNSPECIFIED = 0;
+  RECOMMENDATION_EVIDENCE_SOURCE_DISCOVERIES = 1;
+  RECOMMENDATION_EVIDENCE_SOURCE_COVERAGE = 2;
+  RECOMMENDATION_EVIDENCE_SOURCE_ONBOARDING = 3;
+  RECOMMENDATION_EVIDENCE_SOURCE_AGENTS = 4;
+}
+
+// RecommendationTarget is an integration that would help.
+message RecommendationTarget {
+  string name = 1;
+  // package is the tool package a connection would use; empty when the
+  // integration is not a connection.
+  string package = 2;
+}
+
+// RecommendationRecord is one record behind a recommendation.
+message RecommendationRecord {
+  // kind: agent, discovery or transaction.
+  string kind = 1;
+  string id = 2;
+}
+
+// RecommendationEvidence is what made a recommendation apply.
+message RecommendationEvidence {
+  RecommendationEvidenceSource source = 1;
+  // count is the records behind it that the viewer may see.
+  int32 count = 2;
+  // records are at most 20 of them.
+  repeated RecommendationRecord records = 3;
+  // link is the read procedure that lists the evidence.
+  string link = 4;
+}
+
+// RecommendationDismissal says who dismissed a recommendation. Only a viewer
+// with posture.read at org scope gets one.
+message RecommendationDismissal {
+  string dismissed_by = 1;
+  // reason is a person's text: display it as such.
+  string reason = 2;
+  google.protobuf.Timestamp dismissed_at = 3;
+}
+
+message Recommendation {
+  // id is the catalogue entry's stable id, e.g. identity.ci_workload.
+  string id = 1;
+  RecommendationCategory category = 2;
+  string title = 3;
+  string detail = 4;
+  // targets is empty for an UNSUPPORTED recommendation.
+  repeated RecommendationTarget targets = 5;
+  repeated string enables = 6;
+  // still_unsupported is never empty.
+  repeated string still_unsupported = 7;
+  RecommendationEvidence evidence = 8;
+  bool dismissed = 9;
+  RecommendationDismissal dismissal = 10;
+}
+
+message ListRecommendationsRequest {
+  // include_dismissed also returns dismissed recommendations.
+  bool include_dismissed = 1;
+}
+
+message ListRecommendationsResponse {
+  repeated Recommendation recommendations = 1;
+  // restricted: the viewer lacks posture.read at org scope, so agent counts
+  // cover only their agents and org-wide recommendations are left out.
+  bool restricted = 2;
+  google.protobuf.Timestamp as_of = 3;
+}
+
+message DismissRecommendationRequest {
+  string id = 1 [(buf.validate.field).string = {
+    min_len: 3
+    max_len: 128
+  }];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 10
+    max_len: 1000
+  }];
+}
+
+message DismissRecommendationResponse {}
+
+message UndismissRecommendationRequest {
+  string id = 1 [(buf.validate.field).string = {
+    min_len: 3
+    max_len: 128
+  }];
+}
+
+message UndismissRecommendationResponse {}
