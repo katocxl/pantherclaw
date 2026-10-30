@@ -40,6 +40,8 @@ Usage:
                          [--fail-after-pending] [--bank-changed-recently] [--key-file FILE] [--livemode-key KEY | --livemode-key-file FILE]
   pantherclaw-sim slack [--addr 127.0.0.1:9095] [--token-file FILE] [--channels LIST] [--external-shared LIST] [--not-in-channel LIST]
                         [--rate-limit 0] [--invalid-auth] [--channel-not-found]
+  pantherclaw-sim jira [--addr 127.0.0.1:9096] [--secret-file FILE] [--customer-visible LIST] [--webhook-url URL [--webhook-secret-file FILE]]
+                       [--rate-limit 0] [--invalid-auth] [--not-found]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
   pantherclaw-sim a2a [--addr 127.0.0.1:9093] [--base-url URL] [--name NAME] [--token-file FILE] [--sign-key FILE [--jwks-out FILE]]
@@ -70,6 +72,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runStripe(ctx, args[1:], stderr)
 	case "slack":
 		err = runSlack(ctx, args[1:], stderr)
+	case "jira":
+		err = runJira(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	case "a2a":
