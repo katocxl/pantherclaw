@@ -315,7 +315,7 @@ SELECT r.id
 FROM pc.export_receipts r
 WHERE r.org_id = $1 AND r.abort_state = 'PENDING' AND r.upload_id IS NOT NULL
   AND (r.state <> 'PUSHING' OR r.started_at <= now() - make_interval(secs => $2::int))
-ORDER BY r.id
+ORDER BY r.abort_tried_at NULLS FIRST, r.id
 LIMIT $3::int
 `
 
@@ -717,6 +717,19 @@ func (q *Queries) RetryExportReceipt(ctx context.Context, arg RetryExportReceipt
 		arg.OrgID,
 		arg.ID,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setExportAbortTried = `-- name: SetExportAbortTried :execrows
+UPDATE pc.export_receipts SET abort_tried_at = now()
+WHERE org_id = $1 AND id = $2 AND abort_state = 'PENDING'
+`
+
+func (q *Queries) SetExportAbortTried(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setExportAbortTried, orgID, iD)
 	if err != nil {
 		return 0, err
 	}

@@ -270,7 +270,11 @@ func (s *Service) Push(ctx context.Context, in PushRequest) (Receipt, error) {
 			if s.jobs == nil {
 				return errors.New("exports: jobs are unavailable")
 			}
-			if err := jobs.InsertTx(ctx, s.jobs, tx, PushArgs{Org: c.Org, Receipt: id}, nil); err != nil {
+			receipt, err := ids.FromUUID[ReceiptID](id)
+			if err != nil {
+				return err
+			}
+			if err := jobs.InsertTx(ctx, s.jobs, tx, PushArgs{Org: c.Org, Receipt: receipt}, nil); err != nil {
 				return err
 			}
 		}
@@ -492,7 +496,10 @@ type push struct {
 	uploadID    string
 	parts       int
 	abort       string
-	t           transport
+	// manifest says a manifest may be at the destination for an upload that
+	// did not finish.
+	manifest bool
+	t        transport
 }
 
 // final is a failure no retry can change.
@@ -552,6 +559,7 @@ func (s *Service) load(ctx context.Context, org ids.OrgID, id ids.UUID) (*push, 
 		if r.UploadID != nil && r.AbortState == "PENDING" {
 			p.uploadID = *r.UploadID
 			p.parts = int(r.Parts)
+			p.manifest = r.Class == ClassOrgExports
 		}
 		p.t, err = s.transportOf(ctx, org, r.DestinationID, tg, r.Secret)
 		return err
@@ -630,11 +638,14 @@ func (s *Service) newUploadFor(p *push) *upload {
 
 // abortUpload ends a failed upload, whatever happened to the push: its
 // context may be gone, so it runs on its own (HR-516). An abort that still
-// fails stays PENDING and the sweep tries again.
-func (s *Service) abortUpload(ctx context.Context, p *push) bool {
+// fails stays PENDING and the sweep tries again. A manifest sent for it
+// goes too, best effort: it lists what never arrived.
+func (s *Service) abortUpload(ctx context.Context, p *push) error {
+	s.removeManifest(ctx, p)
 	if p.uploadID == "" {
-		return true
+		return nil
 	}
+	s.abortTried(ctx, p.org, p.id)
 	var err error
 	for range abortAttempts {
 		actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abortTimeout)
@@ -646,17 +657,41 @@ func (s *Service) abortUpload(ctx context.Context, p *push) bool {
 	}
 	if err != nil {
 		s.log.WarnContext(ctx, "exports.abort_failed", slog.String("receipt", p.id.String()), pclog.Err(err))
-		return false
+		return err
 	}
 	if err := s.pool.InTenantTx(context.WithoutCancel(ctx), p.org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := dbq.New(tx).SetExportAborted(ctx, p.org, p.id)
 		return err
 	}); err != nil {
 		s.log.WarnContext(ctx, "exports.abort_unrecorded", slog.String("receipt", p.id.String()), pclog.Err(err))
-		return false
+		return err
 	}
 	p.uploadID = ""
-	return true
+	return nil
+}
+
+// abortTried records an attempt, so uploads a target will not delete take
+// their turn behind the others (HR-516).
+func (s *Service) abortTried(ctx context.Context, org ids.OrgID, id ids.UUID) {
+	if err := s.pool.InTenantTx(context.WithoutCancel(ctx), org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := dbq.New(tx).SetExportAbortTried(ctx, org, id)
+		return err
+	}); err != nil {
+		s.log.WarnContext(ctx, "exports.abort_unrecorded", slog.String("receipt", id.String()), pclog.Err(err))
+	}
+}
+
+func (s *Service) removeManifest(ctx context.Context, p *push) {
+	if !p.manifest {
+		return
+	}
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abortTimeout)
+	defer cancel()
+	if err := p.t.Delete(dctx, p.key+ManifestSuffix); err != nil {
+		s.log.WarnContext(ctx, "exports.manifest_left", slog.String("receipt", p.id.String()), pclog.Err(err))
+		return
+	}
+	p.manifest = false
 }
 
 // Run pushes one stored artifact. last is the job's last attempt: its
@@ -671,7 +706,7 @@ func (s *Service) Run(ctx context.Context, org ids.OrgID, id ids.UUID, last bool
 	}
 	// An abort that failed on an earlier attempt comes first: a new upload's
 	// id would replace the one it still has to end (HR-516).
-	if !s.abortUpload(ctx, p) {
+	if s.abortUpload(ctx, p) != nil {
 		cause := pushError{Code: "abort_pending"}
 		if !last {
 			return cause
@@ -689,7 +724,7 @@ func (s *Service) Run(ctx context.Context, org ids.OrgID, id ids.UUID, last bool
 	u := s.newUploadFor(p)
 	res, err := s.send(ctx, p, u)
 	if err != nil {
-		s.abortUpload(ctx, p)
+		_ = s.abortUpload(ctx, p) // logged; a pending abort stays for the sweep
 		last = last || isFinal(err)
 		if serr := s.settleFailure(ctx, p, err, last); serr != nil {
 			return errors.Join(err, serr)
@@ -793,6 +828,7 @@ func (s *Service) sendExport(ctx context.Context, p *push, u *upload) (sent, err
 	}
 	// The manifest goes first: a failure then leaves nothing whole at the
 	// destination, and a whole object always has its manifest.
+	p.manifest = true
 	if _, err := p.t.Put(ctx, p.key+ManifestSuffix, []byte(*r.Manifest)); err != nil {
 		return sent{}, err
 	}
@@ -879,10 +915,16 @@ func (s *Service) recordFailure(ctx context.Context, tx db.TenantTx, org ids.Org
 	return err
 }
 
+// ReceiptID is the ID kind of a delivery receipt.
+type ReceiptID struct{}
+
+// KindName implements ids.Kind.
+func (ReceiptID) KindName() string { return "export receipt" }
+
 // PushArgs asks for one receipt's push. Job args carry ids only (HR-056).
 type PushArgs struct {
-	Org     ids.OrgID `json:"org"`
-	Receipt ids.UUID  `json:"receipt"`
+	Org     ids.OrgID         `json:"org"`
+	Receipt ids.ID[ReceiptID] `json:"receipt"`
 }
 
 // Kind implements river.JobArgs.
@@ -902,7 +944,7 @@ type pushWorker struct {
 func (w *pushWorker) Timeout(*river.Job[PushArgs]) time.Duration { return pushTimeout }
 
 func (w *pushWorker) Work(ctx context.Context, job *river.Job[PushArgs]) error {
-	return w.svc.Run(ctx, job.Args.Org, job.Args.Receipt, job.Attempt >= job.MaxAttempts)
+	return w.svc.Run(ctx, job.Args.Org, job.Args.Receipt.UUID(), job.Attempt >= job.MaxAttempts)
 }
 
 // Stream is one export streaming to a destination while it builds. The
@@ -979,6 +1021,7 @@ loop:
 				}
 				continue
 			}
+			st.p.manifest = true
 			if _, err = st.p.t.Put(ctx, st.p.key+ManifestSuffix, op.manifest); err != nil {
 				break loop
 			}
@@ -994,7 +1037,7 @@ loop:
 		return
 	}
 	st.err = err
-	st.s.abortUpload(ctx, st.p)
+	_ = st.s.abortUpload(ctx, st.p) // logged; a pending abort stays for the sweep
 	if serr := st.s.settleFailure(ctx, st.p, err, true); serr != nil {
 		st.err = errors.Join(err, serr)
 	}

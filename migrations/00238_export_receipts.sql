@@ -31,6 +31,7 @@ CREATE TABLE pc.export_receipts (
     state           text        NOT NULL DEFAULT 'QUEUED' CHECK (state IN ('QUEUED', 'PUSHING', 'DELIVERED', 'FAILED')),
     upload_id       text        CHECK (upload_id IS NULL OR char_length(upload_id) BETWEEN 1 AND 1024),
     abort_state     text        NOT NULL DEFAULT 'NONE' CHECK (abort_state IN ('NONE', 'PENDING', 'ABORTED')),
+    abort_tried_at  timestamptz,
     size_bytes      bigint      NOT NULL DEFAULT 0 CHECK (size_bytes >= 0),
     sha256          bytea       CHECK (sha256 IS NULL OR octet_length(sha256) = 32),
     parts           integer     NOT NULL DEFAULT 0 CHECK (parts >= 0),
@@ -115,7 +116,7 @@ CREATE POLICY tenant_isolation ON pc.export_receipts
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
 
 GRANT SELECT, INSERT ON pc.export_receipts TO pc_app;
-GRANT UPDATE (artifact_id, state, upload_id, abort_state, size_bytes, sha256, parts, etag, attempts, last_status, failure_code,
+GRANT UPDATE (artifact_id, state, upload_id, abort_state, abort_tried_at, size_bytes, sha256, parts, etag, attempts, last_status, failure_code,
     started_at, delivered_at, removed_here_at, notice_state, notice_key, notice_sha256, notice_sent_at, notice_attempts)
     ON pc.export_receipts TO pc_app;
 GRANT SELECT ON pc.export_receipts TO pc_audit_ro;

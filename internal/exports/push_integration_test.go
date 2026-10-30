@@ -383,6 +383,145 @@ func TestHR516_AHangingDestinationStopsOnlyItsOrg(t *testing.T) {
 	}
 }
 
+// TestHR516_ATimeoutEndsTheStepNotTheOrg: a target that stops answering
+// costs one request of each step, and aborts that time out never keep the
+// notices from their turn.
+// Covers: F517
+func TestHR516_ATimeoutEndsTheStepNotTheOrg(t *testing.T) {
+	f := newPushFixture(t)
+	dest := f.destination(t, "vault", ClassEvidencePacks)
+	ctx := context.Background()
+	for range 2 {
+		pack := f.pack(t, []byte("a short evidence pack, one part"), false)
+		r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassEvidencePacks, Artifact: pack})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.svc.Run(ctx, f.org, r.ID, true); err != nil {
+			t.Fatal(err)
+		}
+		f.d.AdminExec(t, "UPDATE pc.evidence_packs SET state = 'EXPIRED', content = NULL WHERE org_id = $1 AND id = $2", f.org, pack)
+	}
+	f.sim.failPart, f.sim.failAborts = 2, 2*abortAttempts
+	for range 2 {
+		r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassEvidencePacks, Artifact: f.pack(t, packBody, false)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.svc.Run(ctx, f.org, r.ID, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.d.AdminExec(t, "UPDATE pc.export_receipts SET abort_tried_at = NULL WHERE org_id = $1", f.org)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	f.sim.mu.Lock()
+	f.sim.hangBucket, f.sim.release = "bkt", release
+	f.sim.mu.Unlock()
+	f.svc.internal.Timeout = 200 * time.Millisecond
+	if err := f.svc.Sweep(ctx, f.org); err == nil {
+		t.Fatal("a hanging destination reported success")
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.export_receipts WHERE org_id = $1 AND abort_tried_at IS NOT NULL", f.org); n != 1 {
+		t.Fatalf("%d aborts tried, want the one that timed out", n)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.export_receipts WHERE org_id = $1 AND notice_attempts > 0", f.org); n != 1 {
+		t.Fatalf("%d notices tried, want the one that timed out", n)
+	}
+	// The next hour takes the abort that was not tried, then the oldest try.
+	var turns []ids.UUID
+	if err := f.p.InTenantTx(ctx, f.org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		turns, err = dbq.New(tx).ListExportAborts(ctx, f.org, 0, 2)
+		return err
+	}, db.ReadOnly()); err != nil {
+		t.Fatal(err)
+	}
+	if len(turns) != 2 {
+		t.Fatalf("aborts %v", turns)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.export_receipts WHERE org_id = $1 AND id = $2 AND abort_tried_at IS NULL", f.org, turns[0]); n != 1 {
+		t.Fatal("a tried abort came before the untried one")
+	}
+}
+
+// TestHR516_ALoadErrorLeavesTheNotices: a receipt that cannot be loaded
+// takes its turn and the notices still go out.
+// Covers: F517
+func TestHR516_ALoadErrorLeavesTheNotices(t *testing.T) {
+	f := newPushFixture(t)
+	ctx := context.Background()
+	broken := f.destination(t, "broken", ClassEvidencePacks)
+	f.sim.failPart, f.sim.failAborts = 2, abortAttempts
+	stuck, err := f.svc.Push(f.admin, PushRequest{Destination: broken, Class: ClassEvidencePacks, Artifact: f.pack(t, packBody, false)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Run(ctx, f.org, stuck.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	f.sim.failPart = 0
+	dest := f.destination(t, "vault", ClassEvidencePacks)
+	pack := f.pack(t, []byte("a short evidence pack, one part"), false)
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassEvidencePacks, Artifact: pack})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Run(ctx, f.org, r.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	f.d.AdminExec(t, "UPDATE pc.evidence_packs SET state = 'EXPIRED', content = NULL WHERE org_id = $1 AND id = $2", f.org, pack)
+	f.d.AdminExec(t, "UPDATE pc.export_destinations SET secret = decode(repeat('00', 16), 'hex') WHERE org_id = $1 AND id = $2", f.org, broken)
+	if err := f.svc.Sweep(ctx, f.org); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.receipt(t, r.ID); got.NoticeState != "SENT" {
+		t.Fatalf("notice %+v", got)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.export_receipts WHERE org_id = $1 AND id = $2 AND abort_tried_at IS NOT NULL", f.org, stuck.ID); n != 1 {
+		t.Fatalf("the unloadable abort took no turn: %d", n)
+	}
+}
+
+// TestHR516_AFailedCompleteRemovesTheManifest: the manifest goes before
+// Complete, so an upload that fails there takes it back.
+// Covers: F517
+func TestHR516_AFailedCompleteRemovesTheManifest(t *testing.T) {
+	f := newPushFixture(t)
+	dest := f.destination(t, "vault", ClassOrgExports)
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassOrgExports, Stream: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	request := ids.NewV7()
+	f.d.AdminExec(t, `INSERT INTO pc.data_requests (org_id, id, kind, state, created_by) VALUES ($1, $2, 'EXPORT', 'BUILDING', $3)`, f.org, request, f.user)
+	st, err := f.svc.Open(ctx, f.org, request, f.user)
+	if err != nil || st == nil {
+		t.Fatalf("open: %v %v", st, err)
+	}
+	keep := func(context.Context) error { return nil }
+	if err := st.Write(ctx, bytes.Repeat([]byte("x"), 90), keep); err != nil {
+		t.Fatal(err)
+	}
+	f.sim.mu.Lock()
+	f.sim.completeError = true
+	f.sim.mu.Unlock()
+	if err := st.Finish(ctx, "signed-manifest", keep); err == nil {
+		t.Fatal("a failed Complete reported success")
+	}
+	st.Abort()
+	got := f.receipt(t, r.ID)
+	if got.State != ReceiptFailed || got.AbortState != "ABORTED" || len(f.sim.keys()) != 0 || f.sim.openUploads() != 0 {
+		t.Fatalf("receipt %+v, objects %v, %d open", got, f.sim.keys(), f.sim.openUploads())
+	}
+	f.sim.mu.Lock()
+	defer f.sim.mu.Unlock()
+	if len(f.sim.deletes) != 1 || f.sim.deletes[0] != "bkt/"+got.ObjectKey+ManifestSuffix {
+		t.Fatalf("deleted %v", f.sim.deletes)
+	}
+}
+
 // TestF517_AnExpiredArtifactNeverLeaves: past its expiry by the database
 // clock an artifact is gone, whether or not the expiry job has run yet, at
 // the request and again when the push starts.

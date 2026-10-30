@@ -1892,6 +1892,7 @@ type PcExportReceipt struct {
 	State          string
 	UploadID       *string
 	AbortState     string
+	AbortTriedAt   *time.Time
 	SizeBytes      int64
 	Sha256         []byte
 	Parts          int32

@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -39,9 +40,11 @@ type sent struct {
 
 // transport carries one destination's objects. Parts of a large object go
 // through Begin, Part and Complete; Abort removes what a failed upload left
-// and succeeds when nothing is left.
+// and succeeds when nothing is left. Delete removes one object; a missing
+// one is already gone.
 type transport interface {
 	Put(ctx context.Context, key string, body []byte) (sent, error)
+	Delete(ctx context.Context, key string) error
 	Begin(ctx context.Context, key string) (string, error)
 	Part(ctx context.Context, key, upload string, number int, body []byte) (sent, error)
 	Complete(ctx context.Context, key, upload string, parts []sent) (sent, error)
@@ -76,6 +79,12 @@ func failureOf(err error) (string, int) {
 	return "push_failed", 0
 }
 
+// timedOut says a destination did not answer in time.
+func timedOut(err error) bool {
+	code, _ := failureOf(err)
+	return code == "timeout"
+}
+
 func statusError(status int) error {
 	return pushError{Code: "http_" + strconv.Itoa(status/100) + "xx", Status: status}
 }
@@ -98,6 +107,10 @@ type answer struct {
 func do(c *http.Client, req *http.Request) (answer, error) {
 	res, err := c.Do(req)
 	if err != nil {
+		var ne net.Error
+		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()) {
+			return answer{}, pushError{Code: "timeout"}
+		}
 		return answer{}, pushError{Code: "connection"}
 	}
 	defer func() { _ = res.Body.Close() }()
@@ -184,6 +197,17 @@ func (t *s3Transport) Put(ctx context.Context, key string, body []byte) (sent, e
 		return sent{}, err
 	}
 	return sent{ETag: etagOf(res), SHA256: sum, Status: res.Status}, nil
+}
+
+func (t *s3Transport) Delete(ctx context.Context, key string) error {
+	res, err := t.request(ctx, http.MethodDelete, key, "", nil, nil, nil)
+	if err != nil {
+		return err
+	}
+	if res.Status/100 != 2 && res.Status != http.StatusNotFound {
+		return statusError(res.Status)
+	}
+	return nil
 }
 
 func (t *s3Transport) Begin(ctx context.Context, key string) (string, error) {
@@ -321,6 +345,17 @@ func (t *putTransport) Put(ctx context.Context, key string, body []byte) (sent, 
 	return sent{ETag: etagOf(res), SHA256: sum, Status: res.Status}, nil
 }
 
+func (t *putTransport) Delete(ctx context.Context, key string) error {
+	res, err := t.send(ctx, http.MethodDelete, key, nil, nil)
+	if err != nil {
+		return err
+	}
+	if res.Status/100 != 2 && res.Status != http.StatusNotFound {
+		return statusError(res.Status)
+	}
+	return nil
+}
+
 func chunkKey(key string, number int) string { return fmt.Sprintf("%s.chunk-%06d", key, number) }
 
 // Begin needs nothing from the target: the receipt's id names the upload.
@@ -358,12 +393,8 @@ func (t *putTransport) Complete(ctx context.Context, key, _ string, parts []sent
 // target that refuses DELETE keeps them, and the abort stays pending.
 func (t *putTransport) Abort(ctx context.Context, key, _ string, parts int) error {
 	for n := 1; n <= parts; n++ {
-		res, err := t.send(ctx, http.MethodDelete, chunkKey(key, n), nil, nil)
-		if err != nil {
+		if err := t.Delete(ctx, chunkKey(key, n)); err != nil {
 			return err
-		}
-		if res.Status/100 != 2 && res.Status != http.StatusNotFound {
-			return statusError(res.Status)
 		}
 	}
 	return nil

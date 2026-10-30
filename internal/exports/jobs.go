@@ -17,9 +17,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 )
 
-// SweepTimeout fits one org's sweep: every notice at a request's limit and
-// every abort at all its attempts.
-const SweepTimeout = maxSweepItems*RequestTimeout + maxSweepItems*abortAttempts*abortTimeout + time.Minute
+// SweepTimeout fits one org's sweep of destinations that answer slowly:
+// every notice just inside a request's limit and every abort at all its
+// attempts. One that does not answer ends the sweep's step at its first
+// timeout.
+const SweepTimeout = maxSweepItems*RequestTimeout + maxSweepItems*(abortAttempts+1)*abortTimeout + time.Minute
 
 // SweepOrgArgs asks for one org's sweep. Job args carry ids only (HR-056).
 type SweepOrgArgs struct {

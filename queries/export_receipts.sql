@@ -186,8 +186,12 @@ SELECT r.id
 FROM pc.export_receipts r
 WHERE r.org_id = sqlc.arg(org_id) AND r.abort_state = 'PENDING' AND r.upload_id IS NOT NULL
   AND (r.state <> 'PUSHING' OR r.started_at <= now() - make_interval(secs => sqlc.arg(stale_seconds)::int))
-ORDER BY r.id
+ORDER BY r.abort_tried_at NULLS FIRST, r.id
 LIMIT sqlc.arg(max_rows)::int;
+
+-- name: SetExportAbortTried :execrows
+UPDATE pc.export_receipts SET abort_tried_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND abort_state = 'PENDING';
 
 -- name: FailStaleExportReceipts :execrows
 UPDATE pc.export_receipts

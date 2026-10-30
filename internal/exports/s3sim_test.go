@@ -181,6 +181,7 @@ func (s *s3Sim) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodDelete:
 		s.deletes = append(s.deletes, key)
+		delete(s.objects, key)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

@@ -58,7 +58,10 @@ type RemovalNotice struct {
 }
 
 // Sweep is one org's hourly pass: uploads left behind are aborted, streamed
-// pushes nobody started end, artifacts gone here get their notices.
+// pushes nobody started end, artifacts gone here get their notices. A
+// timeout ends what is left of that step for the hour, so a hanging
+// destination costs one request of each, and aborts that fail never keep
+// notices from going out.
 func (s *Service) Sweep(ctx context.Context, org ids.OrgID) error {
 	var aborts []ids.UUID
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -94,9 +97,13 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) error {
 	for _, id := range aborts {
 		p, err := s.load(ctx, org, id)
 		if err != nil {
-			return err
+			s.log.WarnContext(ctx, "exports.abort_failed", slog.String("receipt", id.String()), pclog.Err(err))
+			s.abortTried(ctx, org, id)
+			continue
 		}
-		s.abortUpload(ctx, p)
+		if timedOut(s.abortUpload(ctx, p)) {
+			break
+		}
 	}
 	var notices []dbq.ListExportNoticesRow
 	if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -111,6 +118,9 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) error {
 		if err := s.sendNotice(ctx, org, n.ID); err != nil {
 			s.log.WarnContext(ctx, "exports.notice_failed", slog.String("receipt", n.ID.String()), pclog.Err(err))
 			errs = append(errs, err)
+			if timedOut(err) {
+				break
+			}
 		}
 	}
 	return errors.Join(errs...)
