@@ -42,8 +42,12 @@ func (s *Service) ReportConnectorState(ctx context.Context, id Identity, r Conne
 		if err != nil || g.State != "ACTIVE" {
 			return ErrGatewayCredentials
 		}
+		hosted, err := s.hostedIn(ctx, q, id.Org, id.Gateway)
+		if err != nil {
+			return err
+		}
 		conn, err := q.GetConnection(ctx, id.Org, r.Connection)
-		if db.IsNoRows(err) || (err == nil && (conn.GatewayID != id.Gateway || conn.Kind != kindMCPContainer || s.hosted[id.Gateway])) {
+		if db.IsNoRows(err) || (err == nil && (conn.GatewayID != id.Gateway || conn.Kind != kindMCPContainer || hosted)) {
 			return ErrConnectorNotFound
 		} else if err != nil {
 			return err

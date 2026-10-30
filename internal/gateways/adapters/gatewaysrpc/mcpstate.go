@@ -19,12 +19,16 @@ var mcpKinds = map[pb.MCPStateKind]string{
 	pb.MCPStateKind_MCP_STATE_KIND_TASK:        gwapp.MCPTask,
 	pb.MCPStateKind_MCP_STATE_KIND_SESSION:     gwapp.MCPSession,
 	pb.MCPStateKind_MCP_STATE_KIND_ELICITATION: gwapp.MCPElicitation,
+	pb.MCPStateKind_MCP_STATE_KIND_A2A_TASK:    gwapp.MCPA2ATask,
+	pb.MCPStateKind_MCP_STATE_KIND_A2A_CONTEXT: gwapp.MCPA2AContext,
 }
 
 var mcpKindsBack = map[string]pb.MCPStateKind{
 	gwapp.MCPHold: pb.MCPStateKind_MCP_STATE_KIND_HOLD, gwapp.MCPTask: pb.MCPStateKind_MCP_STATE_KIND_TASK,
 	gwapp.MCPSession:     pb.MCPStateKind_MCP_STATE_KIND_SESSION,
 	gwapp.MCPElicitation: pb.MCPStateKind_MCP_STATE_KIND_ELICITATION,
+	gwapp.MCPA2ATask:     pb.MCPStateKind_MCP_STATE_KIND_A2A_TASK,
+	gwapp.MCPA2AContext:  pb.MCPStateKind_MCP_STATE_KIND_A2A_CONTEXT,
 }
 
 func optUUID(s string) (*ids.UUID, error) {

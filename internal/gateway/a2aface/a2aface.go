@@ -22,6 +22,7 @@ package a2aface
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"io"
@@ -35,6 +36,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
@@ -55,19 +57,22 @@ const prefix = "/a2a/"
 // from the implementation-defined range; the HTTP+JSON binding answers a
 // google.rpc.Status whose ErrorInfo has domain pantherclaw.dev.
 const (
-	codeRefused       = -32050
-	codeAuthenticate  = -32051
-	codeUnavailable   = -32052
-	codeUnknownConn   = -32053
-	errorDomain       = "pantherclaw.dev"
-	CodePushNot       = "PUSH_NOT_SUPPORTED"
-	CodePartNot       = "A2A_PART_UNSUPPORTED"
-	CodeFieldNot      = "A2A_FIELD_UNSUPPORTED"
-	CodeTaskUnknown   = "A2A_TASK_UNKNOWN"
-	CodeSkillNot      = "A2A_SKILL_NOT_ALLOWED"
-	CodeCardDrift     = "A2A_CARD_DRIFT"
-	CodeBadRequest    = "A2A_REQUEST_INVALID"
-	CodeVersion       = "VERSION_NOT_SUPPORTED"
+	codeRefused      = -32050
+	codeAuthenticate = -32051
+	codeUnavailable  = -32052
+	codeUnknownConn  = -32053
+	errorDomain      = "pantherclaw.dev"
+	CodePushNot      = "PUSH_NOT_SUPPORTED"
+	CodePartNot      = "A2A_PART_UNSUPPORTED"
+	CodeFieldNot     = "A2A_FIELD_UNSUPPORTED"
+	CodeTaskUnknown  = "A2A_TASK_UNKNOWN"
+	CodeSkillNot     = "A2A_SKILL_NOT_ALLOWED"
+	CodeCardDrift    = "A2A_CARD_DRIFT"
+	CodeBadRequest   = "A2A_REQUEST_INVALID"
+	CodeVersion      = "VERSION_NOT_SUPPORTED"
+	// CodeStateFull: the gateway cannot keep the task a send may create
+	// (D218).
+	CodeStateFull     = "A2A_STATE_FULL"
 	reasonHeld        = "PANTHERCLAW_HELD"
 	reasonRefused     = "PANTHERCLAW_REFUSED"
 	reasonFailed      = "PANTHERCLAW_FAILED"
@@ -100,10 +105,10 @@ type Handler struct {
 	publicURL string
 	origin    string
 	log       *slog.Logger
-	owned     *owned
+	owned     ownership
 	// send decides and sends one call (answer.go), relaying a stream to
 	// sink; tests replace it.
-	send func(c call, sink dispatch.A2ASink) dispatch.Result
+	send func(ctx context.Context, c call, sink dispatch.A2ASink) dispatch.Result
 }
 
 // New returns the A2A face. publicURL is the gateway's base URL: proofs
@@ -155,9 +160,29 @@ type call struct {
 	// mapParams is what the package maps: the checked request params, or
 	// the task or context a path and query name.
 	mapParams []byte
+	// release frees the place a send reserved for its task (D218);
+	// nil for other methods.
+	release func()
 }
 
-func (c call) owner() owner { return owner{conn: c.conn.GetId(), run: c.in.Run} }
+// createsTask reports a send that may create a task: one that names a
+// task continues it, and needs no place (D221).
+func (c call) createsTask() bool {
+	return c.send != nil && c.send.Message.TaskID == "" &&
+		(c.method == wire.MethodSendMessage || c.method == wire.MethodSendStreamingMessage)
+}
+
+// releaseSlot frees the send's reserved place, before its answer is
+// recorded.
+func (c call) releaseSlot() {
+	if c.release != nil {
+		c.release()
+	}
+}
+
+func (c call) owner() owner {
+	return owner{conn: c.conn.GetId(), run: c.in.Run, instance: c.in.Instance}
+}
 
 // faceError is an answer that is an error, in either binding.
 type faceError struct {
@@ -170,6 +195,7 @@ type faceError struct {
 
 // ServeHTTP serves one request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	name, rest, _ := Path(r.URL.EscapedPath())
 	binding := wire.BindingHTTPJSON
 	if rest == "" {
@@ -205,7 +231,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rest == wire.CardPath {
-		h.card(w, c, body)
+		h.card(ctx, w, c, body)
 		return
 	}
 	if v := version(r); v != "" && v != wire.Version {
@@ -247,20 +273,36 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, c, &faceError{status: http.StatusForbidden, rpc: rpc, reason: CodePushNot, message: "not supported through PantherClaw"})
 		return
 	}
-	in, ok := h.inbound(w, c, body)
+	in, ok := h.inbound(ctx, w, c, body)
 	if !ok {
 		return
 	}
 	c.in = in
-	if ferr := h.read(&c, params); ferr != nil {
+	if ferr := h.read(ctx, &c, params); ferr != nil {
 		h.fail(w, c, ferr)
 		return
 	}
+	if c.createsTask() {
+		// A send may create a task: its place is kept before the peer sees
+		// the call, so a full or unreachable store refuses it here (D218).
+		// The key is this request's, since two sends may name one message
+		// id and each releases only its own (D221).
+		release, err := h.owned.reserve(ctx, c.owner(), ids.NewV7().String())
+		if err != nil {
+			h.fail(w, c, &faceError{
+				status: http.StatusServiceUnavailable, rpc: codeUnavailable, reason: CodeStateFull,
+				message: "the gateway cannot keep another A2A task for this caller now",
+			})
+			return
+		}
+		defer release()
+		c.release = release
+	}
 	if wire.Streaming(c.method) {
-		h.stream(w, c)
+		h.stream(ctx, w, c)
 		return
 	}
-	h.answer(w, c, h.send(c, nil))
+	h.answer(ctx, w, c, h.send(ctx, c, nil))
 }
 
 // version is the A2A version a request names (header, or query parameter).
@@ -340,16 +382,16 @@ func depth(b []byte) int {
 
 // inbound reads a request's PAP/1 credentials and refuses one that cannot
 // be a verified workload's, as the other faces do.
-func (h *Handler) inbound(w http.ResponseWriter, c call, body []byte) (dispatch.Inbound, bool) {
+func (h *Handler) inbound(ctx context.Context, w http.ResponseWriter, c call, body []byte) (dispatch.Inbound, bool) {
 	in := dispatch.ReadInbound(c.r, body, h.publicURL+c.r.URL.Path)
 	switch {
 	case in.Creds.GetProof() == "":
-		h.refusePAP(w, c, pap.CodeUseNonce, "")
+		h.refusePAP(ctx, w, c, pap.CodeUseNonce, "")
 	case !in.HasToken:
-		code, nonce := h.engine.ReportUnknown(c.r.Context(), in.Creds, c.r.UserAgent(), "")
-		h.refusePAP(w, c, code, nonce)
+		code, nonce := h.engine.ReportUnknown(ctx, in.Creds, c.r.UserAgent(), "")
+		h.refusePAP(ctx, w, c, code, nonce)
 	case !in.SubjectOK:
-		h.refusePAP(w, c, pap.CodeInvalidToken, "")
+		h.refusePAP(ctx, w, c, pap.CodeInvalidToken, "")
 	case in.Run == "":
 		h.fail(w, c, badRequest(http.StatusBadRequest, "the "+dispatch.HeaderRunID+" header is required"))
 	default:
@@ -359,9 +401,9 @@ func (h *Handler) inbound(w http.ResponseWriter, c call, body []byte) (dispatch.
 }
 
 // refusePAP answers 401 with a PAP-Error code and a nonce (PAP-1 §12).
-func (h *Handler) refusePAP(w http.ResponseWriter, c call, code pap.Code, nonce string) {
+func (h *Handler) refusePAP(ctx context.Context, w http.ResponseWriter, c call, code pap.Code, nonce string) {
 	if nonce == "" {
-		nonce = h.engine.Nonce(c.r.Context())
+		nonce = h.engine.Nonce(ctx)
 	}
 	if nonce != "" {
 		w.Header().Set(dispatch.HeaderNonce, nonce)
@@ -375,7 +417,7 @@ func (h *Handler) refusePAP(w http.ResponseWriter, c call, code pap.Code, nonce 
 
 // card serves the pinned card as the agent sees it at the gateway, to a
 // verified workload.
-func (h *Handler) card(w http.ResponseWriter, c call, body []byte) {
+func (h *Handler) card(ctx context.Context, w http.ResponseWriter, c call, body []byte) {
 	if c.r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		h.fail(w, c, badRequest(http.StatusMethodNotAllowed, "the agent card is read with GET"))
@@ -384,20 +426,20 @@ func (h *Handler) card(w http.ResponseWriter, c call, body []byte) {
 	in := dispatch.ReadInbound(c.r, body, h.publicURL+c.r.URL.Path)
 	switch {
 	case in.Creds.GetProof() == "":
-		h.refusePAP(w, c, pap.CodeUseNonce, "")
+		h.refusePAP(ctx, w, c, pap.CodeUseNonce, "")
 		return
 	case !in.HasToken || !in.SubjectOK:
-		h.refusePAP(w, c, pap.CodeInvalidToken, "")
+		h.refusePAP(ctx, w, c, pap.CodeInvalidToken, "")
 		return
 	}
-	v, err := h.engine.Verify(c.r.Context(), in.Creds, "")
+	v, err := h.engine.Verify(ctx, in.Creds, "")
 	if err != nil {
-		h.log.ErrorContext(c.r.Context(), "gateway.authority_unavailable", pclog.Err(err))
+		h.log.ErrorContext(ctx, "gateway.authority_unavailable", pclog.Err(err))
 		h.fail(w, c, &faceError{status: http.StatusServiceUnavailable, rpc: codeUnavailable, reason: reasonUnavailable, message: "the Authority is unavailable"})
 		return
 	}
 	if !v.OK {
-		h.refusePAP(w, c, v.Code, v.Nonce)
+		h.refusePAP(ctx, w, c, v.Code, v.Nonce)
 		return
 	}
 	out, err := wire.Rewrite(c.peer.Card, c.peer.Binding, h.publicURL+prefix+c.conn.GetName(), c.peer.Skills)
@@ -415,10 +457,10 @@ func (h *Handler) card(w http.ResponseWriter, c call, body []byte) {
 
 // read decodes and checks the call's parameters, and rebuilds what the
 // gateway will send (D31).
-func (h *Handler) read(c *call, params jsontext.Value) *faceError {
+func (h *Handler) read(ctx context.Context, c *call, params jsontext.Value) *faceError {
 	switch c.method {
 	case wire.MethodSendMessage, wire.MethodSendStreamingMessage:
-		req, ferr := h.readSend(*c, params)
+		req, ferr := h.readSend(ctx, *c, params)
 		if ferr != nil {
 			return ferr
 		}
@@ -444,7 +486,7 @@ func (h *Handler) read(c *call, params jsontext.Value) *faceError {
 		if !wire.ValidID(c.taskID) {
 			return taskUnknown()
 		}
-		if _, ok := h.owned.task(c.owner(), c.taskID); !ok {
+		if _, ok := h.owned.task(ctx, c.owner(), c.taskID); !ok {
 			return taskUnknown()
 		}
 		c.mapParams, _ = json.Marshal(map[string]string{"id": c.taskID})
@@ -470,7 +512,7 @@ func (h *Handler) read(c *call, params jsontext.Value) *faceError {
 		}
 		// A listing names a context this run created: no listing shows
 		// another run's tasks (D31).
-		if p.ContextID == "" || !h.owned.context(c.owner(), p.ContextID) {
+		if p.ContextID == "" || !h.owned.context(ctx, c.owner(), p.ContextID) {
 			return taskUnknown()
 		}
 		c.list = &p
@@ -495,7 +537,7 @@ type sendProbe struct {
 // readSend checks a SendMessage request and rebuilds it: text parts only,
 // a task or context only of this run's, no push configuration, no
 // extensions or references, and none of the agent's metadata (D31).
-func (h *Handler) readSend(c call, params jsontext.Value) (*wire.SendMessageRequest, *faceError) {
+func (h *Handler) readSend(ctx context.Context, c call, params jsontext.Value) (*wire.SendMessageRequest, *faceError) {
 	var probe sendProbe
 	if err := json.Unmarshal(params, &probe); err != nil {
 		return nil, invalidParams(CodeBadRequest, "invalid params")
@@ -542,12 +584,12 @@ func (h *Handler) readSend(c call, params jsontext.Value) (*wire.SendMessageRequ
 	}
 	w := c.owner()
 	if m.TaskID != "" {
-		ctx, ok := h.owned.task(w, m.TaskID)
-		if !ok || (m.ContextID != "" && m.ContextID != ctx) {
+		taskContext, ok := h.owned.task(ctx, w, m.TaskID)
+		if !ok || (m.ContextID != "" && m.ContextID != taskContext) {
 			return nil, taskUnknown()
 		}
-		m.ContextID = ctx
-	} else if m.ContextID != "" && !h.owned.context(w, m.ContextID) {
+		m.ContextID = taskContext
+	} else if m.ContextID != "" && !h.owned.context(ctx, w, m.ContextID) {
 		return nil, taskUnknown()
 	}
 	parts := make([]wire.Part, len(m.Parts))

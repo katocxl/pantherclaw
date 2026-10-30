@@ -132,6 +132,9 @@ Usage:
   pantherclaw-server dev connection --org ID --target-url URL [--config FILE] [--gateway NAME] [--name N] [--mode M]
                              [--access-mode M]
                                                      DEVELOPMENT ONLY: a payments connection for an existing gateway
+  pantherclaw-server hosting add-host --name N --domain D --capacity N --milli-cpus N --memory-mib N
+                             --csr FILE --bundle-out FILE [--config FILE]
+                                                     record a shared hosting host and issue its agent certificate
   pantherclaw-server secrets stage --from DIR --to DIR
                                                      copy each regular file of DIR as a 0400 secret file
                                                      (Kubernetes init container; symlinks and others refused)
@@ -177,6 +180,8 @@ func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, en
 		err = cmdOrg(ctx, args[1:], stdout, stderr, env)
 	case "evidence":
 		err = cmdEvidence(ctx, args[1:], stdout, stderr, env)
+	case "hosting":
+		err = cmdHosting(ctx, args[1:], stdout, stderr, env)
 	case "dev":
 		err = cmdDev(ctx, args[1:], stdout, stderr, env)
 	case "secrets":
@@ -277,6 +282,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err := checkSchemaAtStart(ctx, cfg, pool, log); err != nil {
 		return err
 	}
+	if err := holdAfterPromotion(ctx, cfg, pool, log); err != nil {
+		return err
+	}
 	workers := newWorkerHeartbeat(cfg.Role)
 
 	kp, err := newCheckedKeyProvider(ctx, cfg, pool)
@@ -344,7 +352,8 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
 	m6.credentials.OnGitHubInstallation(ghScans.InstallationRecorded)
 	svc.WithToolObservations(m6.connections)
-	m6.connections.WithEntitlements(bill) // the inventory draft is Team and above (G0 M15 D23)
+	m6.connections.WithEntitlements(bill)                                      // the inventory draft is Team and above (G0 M15 D23)
+	m6.hosting = newHosting(cfg, pool, m6.ca, kp, bill).WithFleet(m6.gateways) // hosted gateways (G0 M19 D203)
 	m5p2, err := newM5p2(cfg, pool, bill, m5.notifications, log)
 	if err != nil {
 		return err
@@ -617,6 +626,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM15GatewayJobs(evidenceJobs, jreg, pool, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerM19HostingJobs(evidenceJobs, jreg, cfg, pool, kp, log); err != nil {
 			return err
 		}
 		if evidenceJobs, err = registerM18FleetJobs(evidenceJobs, jreg, m6.fleet, log); err != nil {
@@ -931,10 +943,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	mountM14Data(mux, d)
 	mountM16External(mux, d)
-	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "ok\n")
-	})
+	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		b, err := reg.JWKS()

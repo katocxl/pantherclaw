@@ -28,6 +28,7 @@ import (
 	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/gateways/ca"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	hostingapp "github.com/katocxl/pantherclaw/internal/hosting/app"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
@@ -51,6 +52,8 @@ type m6Services struct {
 	connections *capp.Service
 	// credentials hold sealed credentials (HR-182).
 	credentials *credapp.Service
+	// hosting is the PantherClaw-hosted gateways (G0 M19 D203); nil serves none.
+	hosting *hostingapp.Service
 	// verifications are leased to gateways over this listener (G0 M7);
 	// nil leaves the RPCs unimplemented.
 	verifications gatewaysrpc.Verifications
@@ -102,6 +105,7 @@ func (m *m6Services) registerPublic(rs *connect.Server) {
 	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gatewaysrpc.NewGateway(m.gateways))
 	pantherclawv1connect.RegisterContainmentServiceHandler(rs, responserpc.New(m.response))
 	pantherclawv1connect.RegisterConnectionServiceHandler(rs, connectionsrpc.New(m.connections, m.credentials))
+	m.registerHostingPublic(rs)
 }
 
 // mountPages adds the emergency-stop page, the only place the kill switch
@@ -136,6 +140,9 @@ func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (h
 	}
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
+	if err := m.mountHosting(mux, log); err != nil {
+		return nil, err
+	}
 	// Gateways verify permits with the JWKS, fetched here over mTLS.
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		b, err := m.reg.JWKS()
@@ -230,6 +237,8 @@ func (m *m6Services) serveGateways(ctx context.Context, g *errgroup.Group, cfg *
 		return nil
 	})
 	// The containment streams' early wake-ups; stopping it ends the streams.
+	// Its notifications also reach the certificate cache (G0 M19 D201).
+	m.hub.ForgetOnNotify(m.gateways)
 	g.Go(func() error { return m.hub.Run(ctx) })
 	g.Go(func() error {
 		<-ctx.Done()

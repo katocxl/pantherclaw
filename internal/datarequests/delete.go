@@ -148,6 +148,12 @@ func (s *Service) DeleteOrg(ctx context.Context, org ids.OrgID, id ids.UUID) err
 	if err := s.removeOrgRows(ctx, org); err != nil {
 		return err
 	}
+	// pc_app frees them: pc_deleter touches no global table (HR-391).
+	if err := s.Pool.InGlobalTx(ctx, db.GlobalHosting, func(ctx context.Context, tx db.GlobalTx) error {
+		return dbq.New(tx).ReleaseOrgHostingSlugs(ctx, org)
+	}); err != nil {
+		return err
+	}
 	// Hold the one journal row to record completion, preventing two workers
 	// from racing it.
 	return s.Pool.InTenantTx(ctx, ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
@@ -281,6 +287,9 @@ func (s *Service) freeze(ctx context.Context, org ids.OrgID, id ids.UUID) (*dele
 				}
 			}
 			if _, err := q.SetDataRequestState(ctx, dbq.SetDataRequestStateParams{State: "DELETING", OrgID: org, ID: id, FromState: r.State}); err != nil {
+				return err
+			}
+			if err := q.DeprovisionOrgHostedGateways(ctx, org); err != nil {
 				return err
 			}
 			if _, err := q.MarkOrgDeleted(ctx, org); err != nil {

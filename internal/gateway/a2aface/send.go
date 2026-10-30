@@ -4,6 +4,7 @@
 package a2aface
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -20,7 +21,7 @@ var errEvent = errors.New("a2aface: an event this call may not relay")
 
 // dispatch maps a call through the connection's package and sends it down
 // the one dispatch path; a stream's events go to sink.
-func (h *Handler) dispatch(c call, sink dispatch.A2ASink) dispatch.Result {
+func (h *Handler) dispatch(ctx context.Context, c call, sink dispatch.A2ASink) dispatch.Result {
 	if c.conn.Mapper == nil {
 		return dispatch.Result{Class: dispatch.CannotAuthorize, Code: "invalid_arguments"}
 	}
@@ -28,7 +29,6 @@ func (h *Handler) dispatch(c call, sink dispatch.A2ASink) dispatch.Result {
 	if action == "" {
 		action = ids.NewV7().String()
 	}
-	ctx := c.r.Context()
 	parsed, err := c.conn.Mapper.A2A(ctx, mapping.Context{
 		Org: h.config.Current().Org, Env: c.in.Env, RunID: c.in.Run, ActionID: action, AgentInstance: c.in.Instance,
 		Connection: c.conn.GetId(),
@@ -45,7 +45,7 @@ func (h *Handler) dispatch(c call, sink dispatch.A2ASink) dispatch.Result {
 // stream serves SendStreamingMessage and SubscribeToTask: the events are
 // relayed as they arrive, each checked (HR-327); a call refused before any
 // event is answered as an error.
-func (h *Handler) stream(w http.ResponseWriter, c call) {
+func (h *Handler) stream(ctx context.Context, w http.ResponseWriter, c call) {
 	started := false
 	task := c.taskID // SubscribeToTask: the one task; a send learns it
 	o := c.owner()
@@ -67,11 +67,13 @@ func (h *Handler) stream(w http.ResponseWriter, c call) {
 		}
 		switch {
 		case ev.Task != nil:
-			h.owned.record(o, ev.Task.ID, ev.Task.ContextID)
+			c.releaseSlot()
+			h.owned.record(ctx, o, ev.Task.ID, ev.Task.ContextID)
 		case ev.Message != nil && ev.Message.ContextID != "":
-			h.owned.record(o, "", ev.Message.ContextID)
+			c.releaseSlot()
+			h.owned.record(ctx, o, "", ev.Message.ContextID)
 		case id != "":
-			if _, ok := h.owned.task(o, id); !ok {
+			if _, ok := h.owned.task(ctx, o, id); !ok {
 				return errEvent
 			}
 		}
@@ -96,7 +98,7 @@ func (h *Handler) stream(w http.ResponseWriter, c call) {
 		}
 		return nil
 	}
-	res := h.send(c, sink)
+	res := h.send(ctx, c, sink)
 	if started {
 		// The stream was answered; how it ended is on the transaction.
 		return
@@ -104,5 +106,5 @@ func (h *Handler) stream(w http.ResponseWriter, c call) {
 	if res.Class == "" {
 		res.Class, res.Code = dispatch.EnforcementFailed, dispatch.CodeA2AStream
 	}
-	h.answer(w, c, res)
+	h.answer(ctx, w, c, res)
 }

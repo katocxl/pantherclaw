@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
@@ -15,8 +16,9 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
-	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -55,11 +57,48 @@ type Replayer interface {
 	RecordedInputs(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int) (*recording.Recording, error)
 }
 
+// replayLimiter counts each caller's replays: in the shared store, so the
+// limit holds across replicas (G0 M19 D201), or in memory on clk without a
+// database. A counter error is logged and refuses the replay (HR-376).
+type replayLimiter struct {
+	limiter ratelimit.Limiter
+	window  time.Duration
+	log     *slog.Logger
+}
+
+// scopeReplay is the shared counter's scope of a caller's replays.
+const scopeReplay = "evidence.replay"
+
 // WithReplay adds decision replay to the service, limited to
-// ReplaysPerMinute per caller (clk nil: the system clock).
+// ReplaysPerMinute per caller (clk nil: the system clock; it counts only
+// without a database).
 func (s *Service) WithReplay(r Replayer, clk clock.Clock) *Service {
-	s.replay, s.replayLimit = r, httpx.NewLimiter(ReplaysPerMinute, time.Minute, clk)
+	var l ratelimit.Limiter = ratelimit.NewMemory(clk)
+	if s.pool != nil {
+		l = ratelimit.NewStore(s.pool)
+	}
+	s.replay, s.replayLimit = r, &replayLimiter{limiter: l, window: time.Minute, log: slog.Default()}
 	return s
+}
+
+// WithReplayWindow shortens the replay limit's window (whole seconds, on
+// the database's clock); tests only, so they can wait for a window to end.
+// Call it after WithReplay.
+func (s *Service) WithReplayWindow(d time.Duration) *Service {
+	if s.replayLimit != nil && d >= time.Second && d < time.Minute {
+		s.replayLimit.window = d.Truncate(time.Second)
+	}
+	return s
+}
+
+// allow counts one replay of c.
+func (l *replayLimiter) allow(ctx context.Context, c tenancy.Caller) bool {
+	d, err := l.limiter.Take(ctx, scopeReplay, callerKey(c), l.window, 1, ReplaysPerMinute)
+	if err != nil {
+		l.log.ErrorContext(ctx, "evidence.replay_rate_unavailable", pclog.Err(err))
+		return false
+	}
+	return d.Allowed
 }
 
 // ReplayResult is a replay, with the recorded inputs for a caller allowed
@@ -90,7 +129,8 @@ func (s *Service) ReplayDecision(ctx context.Context, txn ids.UUID, evaluation i
 	if s.replay == nil {
 		return ReplayResult{}, ErrReplayUnavailable
 	}
-	if !s.replayLimit.Allow(callerKey(c)) {
+	// Counted between transactions, never inside one (ratelimit.Store).
+	if !s.replayLimit.allow(ctx, c) {
 		telemetry.RateLimited(ctx, telemetry.ScopeReplay)
 		return ReplayResult{}, ErrReplayRateLimited
 	}

@@ -124,6 +124,10 @@ func (s *Service) CreateGateway(ctx context.Context, name string) (dbq.PcGateway
 	return out, err
 }
 
+// ErrGatewayHosted: PantherClaw runs this gateway, and only its provisioner
+// mints its enrollment tokens.
+var ErrGatewayHosted = pcerr.New(pcerr.FailedPrecondition, "GATEWAY_HOSTED", "this gateway is PantherClaw-hosted and cannot be enrolled by hand")
+
 // EnrollmentToken is a minted token; Secret is shown once.
 type EnrollmentToken struct {
 	Secret        credential.Token
@@ -150,6 +154,12 @@ func (s *Service) CreateEnrollmentToken(ctx context.Context, gateway ids.UUID) (
 		}
 		if g.State != "ACTIVE" {
 			return ErrGatewayRevoked
+		}
+		// Only the provisioner enrolls a hosted gateway (G0 M19 D219).
+		if hosted, err := q.IsHostedGateway(ctx, c.Org, g.ID); err != nil {
+			return err
+		} else if hosted {
+			return ErrGatewayHosted
 		}
 		tok, err := credential.New(credential.GatewayEnrollmentToken, "", c.Org)
 		if err != nil {

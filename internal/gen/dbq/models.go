@@ -1480,6 +1480,13 @@ type PcDataRequestPart struct {
 	CreatedAt time.Time
 }
 
+type PcDbPrimaryTimeline struct {
+	Singleton    bool
+	Timeline     pgtype.Int8
+	SyncVerified bool
+	UpdateTime   time.Time
+}
+
 type PcDecisionConsequence struct {
 	OrgID          ids.OrgID
 	TransactionID  ids.UUID
@@ -2187,6 +2194,64 @@ type PcHoldSlot struct {
 	ScopeID   ids.UUID
 	Pending   int32
 	UpdatedAt time.Time
+}
+
+type PcHostedGateway struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Slug            string
+	State           string
+	GatewayID       *ids.UUID
+	HostID          *ids.UUID
+	MilliCpus       int32
+	MemoryMib       int32
+	Pids            int32
+	TokenSealed     []byte
+	TokenPulledAt   *time.Time
+	EnrollmentID    *ids.UUID
+	EnrolledCertID  *ids.UUID
+	Version         *string
+	TargetVersion   *string
+	Failure         *string
+	CreatedBy       string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DeprovisionedAt *time.Time
+}
+
+type PcHostingHost struct {
+	ID           ids.UUID
+	Name         string
+	Domain       string
+	State        string
+	Capacity     int32
+	MilliCpus    int32
+	MemoryMib    int32
+	AgentVersion *string
+	LastSeen     *time.Time
+	CreatedAt    time.Time
+}
+
+type PcHostingHostCert struct {
+	ID            ids.UUID
+	HostID        ids.UUID
+	Serial        []byte
+	KeyThumbprint string
+	State         string
+	IssuedVia     string
+	PreviousID    *ids.UUID
+	NotBefore     time.Time
+	NotAfter      time.Time
+	SupersededAt  *time.Time
+	RevokedAt     *time.Time
+	CreatedAt     time.Time
+}
+
+type PcHostingSlug struct {
+	Slug      string
+	OrgID     ids.OrgID
+	HostedID  ids.UUID
+	ClaimedAt time.Time
 }
 
 type PcIdentityDeletionGuard struct {
@@ -3518,6 +3583,16 @@ type PcSsfTransmitter struct {
 	EventsRefused       int64
 	LastRefusalAt       *time.Time
 	LastRefusalCode     *string
+}
+
+type PcStreamLease struct {
+	OrgID     ids.OrgID
+	Kind      string
+	Key       string
+	ID        ids.UUID
+	Holder    string
+	ExpiresAt time.Time
+	CreatedAt time.Time
 }
 
 type PcSupportAccessGrant struct {

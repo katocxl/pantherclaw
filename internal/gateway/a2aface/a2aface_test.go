@@ -4,6 +4,7 @@
 package a2aface
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
@@ -32,7 +33,7 @@ func testFace(t *testing.T) (*Handler, *control.Connection, *int) {
 	}
 	h := New(nil, fixedConfig{cfg}, peerOf, "https://gw.example", nil)
 	sent := 0
-	h.send = func(call, dispatch.A2ASink) dispatch.Result {
+	h.send = func(context.Context, call, dispatch.A2ASink) dispatch.Result {
 		sent++
 		return dispatch.Result{Class: dispatch.CannotAuthorize, Code: "test"}
 	}
@@ -122,7 +123,7 @@ func TestRequestsRefusedBeforeAuthentication(t *testing.T) {
 
 func sendCall(h *Handler, conn *control.Connection) call {
 	peer, _ := h.peerOf(conn)
-	return call{conn: conn, peer: peer, in: dispatch.Inbound{Run: run}, binding: wire.BindingJSONRPC, method: wire.MethodSendMessage}
+	return call{r: httptest.NewRequest(http.MethodPost, "/", nil), conn: conn, peer: peer, in: dispatch.Inbound{Run: run}, binding: wire.BindingJSONRPC, method: wire.MethodSendMessage}
 }
 
 // TestHR323_OnlyTextPartsAndOwnedIDsAreRelayed: a message is rebuilt from
@@ -132,9 +133,9 @@ func sendCall(h *Handler, conn *control.Connection) call {
 func TestHR323_OnlyTextPartsAndOwnedIDsAreRelayed(t *testing.T) {
 	h, conn, _ := testFace(t)
 	c := sendCall(h, conn)
-	h.owned.record(c.owner(), "task-1", "ctx-1")
+	h.owned.record(context.Background(), c.owner(), "task-1", "ctx-1")
 	other := owner{conn: conn.GetId(), run: "0190f3b4-7c2e-7aaa-8bbb-000000000002"}
-	h.owned.record(other, "task-9", "ctx-9")
+	h.owned.record(context.Background(), other, "task-9", "ctx-9")
 	msg := func(extra string) string {
 		return `{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"refund ch_1"}],"metadata":{"skill":"refunds"}` + extra + `}}`
 	}
@@ -159,11 +160,11 @@ func TestHR323_OnlyTextPartsAndOwnedIDsAreRelayed(t *testing.T) {
 		"unknown task":      {msg(`,"taskId":"task-404"`), CodeTaskUnknown},
 		"task in wrong c":   {msg(`,"taskId":"task-1","contextId":"ctx-9"`), CodeTaskUnknown},
 	} {
-		if _, ferr := h.readSend(c, jsontext.Value(c2.params)); ferr == nil || ferr.reason != c2.reason {
+		if _, ferr := h.readSend(context.Background(), c, jsontext.Value(c2.params)); ferr == nil || ferr.reason != c2.reason {
 			t.Errorf("%s: %+v, want %s", name, ferr, c2.reason)
 		}
 	}
-	req, ferr := h.readSend(c, jsontext.Value(`{"message":{"messageId":"m2","role":"ROLE_USER","taskId":"task-1",`+
+	req, ferr := h.readSend(context.Background(), c, jsontext.Value(`{"message":{"messageId":"m2","role":"ROLE_USER","taskId":"task-1",`+
 		`"parts":[{"text":"a","mediaType":"text/plain","metadata":{"x":1}}],"metadata":{"skill":"refunds","https://pantherclaw.dev/a2a/peer-run/v1":"forged"}},`+
 		`"metadata":{"forged":true}}`))
 	if ferr != nil {
@@ -185,26 +186,26 @@ func TestHR323_OnlyTextPartsAndOwnedIDsAreRelayed(t *testing.T) {
 func TestHR323_TaskReadsAndListsAreThisRunsOnly(t *testing.T) {
 	h, conn, _ := testFace(t)
 	c := sendCall(h, conn)
-	h.owned.record(c.owner(), "task-1", "ctx-1")
+	h.owned.record(context.Background(), c.owner(), "task-1", "ctx-1")
 	for _, m := range []string{wire.MethodGetTask, wire.MethodCancelTask, wire.MethodSubscribeToTask} {
 		c.method = m
-		if ferr := h.read(&c, jsontext.Value(`{"id":"task-2"}`)); ferr == nil || ferr.reason != CodeTaskUnknown {
+		if ferr := h.read(context.Background(), &c, jsontext.Value(`{"id":"task-2"}`)); ferr == nil || ferr.reason != CodeTaskUnknown {
 			t.Errorf("%s other task: %+v", m, ferr)
 		}
-		if ferr := h.read(&c, jsontext.Value(`{"id":"task-1"}`)); ferr != nil {
+		if ferr := h.read(context.Background(), &c, jsontext.Value(`{"id":"task-1"}`)); ferr != nil {
 			t.Errorf("%s own task: %+v", m, ferr)
 		}
 	}
 	c.method = wire.MethodListTasks
 	for _, p := range []string{`{}`, `{"contextId":"ctx-2"}`} {
-		if ferr := h.read(&c, jsontext.Value(p)); ferr == nil || ferr.reason != CodeTaskUnknown {
+		if ferr := h.read(context.Background(), &c, jsontext.Value(p)); ferr == nil || ferr.reason != CodeTaskUnknown {
 			t.Errorf("list %s: %+v", p, ferr)
 		}
 	}
-	if ferr := h.read(&c, jsontext.Value(`{"contextId":"ctx-1"}`)); ferr != nil {
+	if ferr := h.read(context.Background(), &c, jsontext.Value(`{"contextId":"ctx-1"}`)); ferr != nil {
 		t.Fatalf("list own context: %+v", ferr)
 	}
-	body, ok := h.result(c, []byte(`{"tasks":[{"id":"task-1","contextId":"ctx-1","status":{"state":"TASK_STATE_WORKING"}},`+
+	body, ok := h.result(context.Background(), c, []byte(`{"tasks":[{"id":"task-1","contextId":"ctx-1","status":{"state":"TASK_STATE_WORKING"}},`+
 		`{"id":"task-7","contextId":"ctx-1","status":{"state":"TASK_STATE_COMPLETED"}}],"totalSize":2,"pageSize":50,"nextPageToken":"n"}`))
 	if !ok {
 		t.Fatal("listing refused")
@@ -221,22 +222,22 @@ func TestHR327_PeerAnswersAreChecked(t *testing.T) {
 	h, conn, _ := testFace(t)
 	c := sendCall(h, conn)
 	for _, bad := range []string{`{}`, `{"task":{"id":"t"},"message":{"messageId":"m","role":"ROLE_AGENT","parts":[]}}`, `[]`, `{"task":{"id":"a/b","status":{"state":"x"}}}`} {
-		if _, ok := h.result(c, []byte(bad)); ok {
+		if _, ok := h.result(context.Background(), c, []byte(bad)); ok {
 			t.Errorf("answer %s relayed", bad)
 		}
 	}
-	if _, ok := h.result(c, []byte(`{"task":{"id":"task-5","contextId":"ctx-5","status":{"state":"TASK_STATE_WORKING"}}}`)); !ok {
+	if _, ok := h.result(context.Background(), c, []byte(`{"task":{"id":"task-5","contextId":"ctx-5","status":{"state":"TASK_STATE_WORKING"}}}`)); !ok {
 		t.Fatal("task answer refused")
 	}
-	if ctx, ok := h.owned.task(c.owner(), "task-5"); !ok || ctx != "ctx-5" || !h.owned.context(c.owner(), "ctx-5") {
+	if ctx, ok := h.owned.task(context.Background(), c.owner(), "task-5"); !ok || ctx != "ctx-5" || !h.owned.context(context.Background(), c.owner(), "ctx-5") {
 		t.Fatal("answered task not recorded for the run")
 	}
 	other := owner{conn: conn.GetId(), run: "0190f3b4-7c2e-7aaa-8bbb-000000000002"}
-	if _, ok := h.owned.task(other, "task-5"); ok {
+	if _, ok := h.owned.task(context.Background(), other, "task-5"); ok {
 		t.Fatal("another run owns the task")
 	}
 	c.method, c.taskID = wire.MethodGetTask, "task-5"
-	if _, ok := h.result(c, []byte(`{"id":"task-6","status":{"state":"TASK_STATE_WORKING"}}`)); ok {
+	if _, ok := h.result(context.Background(), c, []byte(`{"id":"task-6","status":{"state":"TASK_STATE_WORKING"}}`)); ok {
 		t.Fatal("an answer about another task was relayed")
 	}
 }
@@ -244,14 +245,14 @@ func TestHR327_PeerAnswersAreChecked(t *testing.T) {
 func TestOwnedForgetsOldestFirst(t *testing.T) {
 	o := newOwned(2)
 	w := owner{conn: "c", run: "r"}
-	o.record(w, "t1", "")
-	o.record(w, "t2", "")
-	o.record(w, "t3", "")
-	if _, ok := o.task(w, "t1"); ok {
+	o.record(context.Background(), w, "t1", "")
+	o.record(context.Background(), w, "t2", "")
+	o.record(context.Background(), w, "t3", "")
+	if _, ok := o.task(context.Background(), w, "t1"); ok {
 		t.Fatal("t1 kept beyond the bound")
 	}
 	for _, id := range []string{"t2", "t3"} {
-		if _, ok := o.task(w, id); !ok {
+		if _, ok := o.task(context.Background(), w, id); !ok {
 			t.Fatalf("%s forgotten", id)
 		}
 	}
@@ -275,7 +276,7 @@ func TestHR323_SkillsDefaultToTheCards(t *testing.T) {
 	c.peer = Peer{Card: []byte(`{"name":"p","supportedInterfaces":[{"url":"https://p","protocolBinding":"JSONRPC"}],` +
 		`"skills":[{"id":"refunds","name":"Refunds","description":"r"}]}`), Binding: wire.BindingJSONRPC}
 	ask := func(skill string) *faceError {
-		_, ferr := h.readSend(c, jsontext.Value(`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x"}],"metadata":{"skill":"`+skill+`"}}}`))
+		_, ferr := h.readSend(context.Background(), c, jsontext.Value(`{"message":{"messageId":"m1","role":"ROLE_USER","parts":[{"text":"x"}],"metadata":{"skill":"`+skill+`"}}}`))
 		return ferr
 	}
 	if ferr := ask("refunds"); ferr != nil {

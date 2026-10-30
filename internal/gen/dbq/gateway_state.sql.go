@@ -57,6 +57,47 @@ func (q *Queries) CountGatewayMCPState(ctx context.Context, arg CountGatewayMCPS
 	return i, err
 }
 
+const countGatewayMCPStateOfKind = `-- name: CountGatewayMCPStateOfKind :one
+SELECT count(*)::bigint AS entries,
+       count(*) FILTER (WHERE CASE WHEN $1::uuid IS NULL
+                                   THEN instance_id IS NULL AND run_id IS NOT DISTINCT FROM $2::uuid
+                                   ELSE instance_id = $1::uuid END)::bigint AS caller_entries
+FROM pc.gateway_mcp_state
+WHERE org_id = $3 AND gateway_id = $4 AND kind = $5
+  AND expire_time > $6
+`
+
+type CountGatewayMCPStateOfKindParams struct {
+	InstanceID *ids.UUID
+	RunID      *ids.UUID
+	OrgID      ids.OrgID
+	GatewayID  ids.UUID
+	Kind       string
+	Now        time.Time
+}
+
+type CountGatewayMCPStateOfKindRow struct {
+	Entries       int64
+	CallerEntries int64
+}
+
+// The live entries of one A2A kind (G0 M19 D211, D218): each kind has the
+// TASK bounds of its own, in all and of one caller: its agent instance, or
+// its run when it names no instance.
+func (q *Queries) CountGatewayMCPStateOfKind(ctx context.Context, arg CountGatewayMCPStateOfKindParams) (CountGatewayMCPStateOfKindRow, error) {
+	row := q.db.QueryRow(ctx, countGatewayMCPStateOfKind,
+		arg.InstanceID,
+		arg.RunID,
+		arg.OrgID,
+		arg.GatewayID,
+		arg.Kind,
+		arg.Now,
+	)
+	var i CountGatewayMCPStateOfKindRow
+	err := row.Scan(&i.Entries, &i.CallerEntries)
+	return i, err
+}
+
 const deleteGatewayMCPState = `-- name: DeleteGatewayMCPState :execrows
 DELETE FROM pc.gateway_mcp_state
 WHERE org_id = $1 AND gateway_id = $2 AND kind = $3 AND key = $4

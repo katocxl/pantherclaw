@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	"github.com/katocxl/pantherclaw/internal/platform/telemetry"
 	"github.com/katocxl/pantherclaw/internal/signals/setverify"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -31,8 +32,9 @@ const (
 	// MaxBody is the largest request body read.
 	MaxBody = setverify.MaxToken
 	// RateLimit and RateWindow bound the header-valid tokens of one
-	// transmitter; IPRateLimit bounds the requests of one source address
-	// before anything is parsed (D64 L2).
+	// transmitter, across every replica in the shared store (G0 M19 D201);
+	// IPRateLimit bounds the requests of one source address before
+	// anything is parsed (D64 L2), per replica (HR-494).
 	RateLimit   = 120
 	IPRateLimit = 240
 	RateWindow  = time.Minute
@@ -98,16 +100,27 @@ type Sink interface {
 
 // Receiver serves POST /v1/ssf/{org}/{transmitter} (RFC 8935 push).
 type Receiver struct {
-	s       *Service
-	limiter *httpx.Limiter
-	byIP    *httpx.Limiter
+	s *Service
+	// limiter counts each transmitter's tokens in the shared store; a
+	// counter error refuses the request (HR-376).
+	limiter ratelimit.Limiter
+	// byIP is per replica: counting unauthenticated floods in the
+	// database would amplify them (HR-494).
+	byIP *httpx.Limiter
 }
+
+// scopeTransmitter is the shared counter's scope of a transmitter's tokens.
+const scopeTransmitter = "signals.transmitter"
 
 // Receiver returns the push endpoint's handler; clientIP resolves the
 // source address behind trusted proxies (nil: the remote address).
 func (s *Service) Receiver(clientIP httpx.ClientIPFunc) *Receiver {
+	var limiter ratelimit.Limiter = ratelimit.NewMemory(s.clock)
+	if s.pool != nil {
+		limiter = ratelimit.NewStore(s.pool)
+	}
 	return &Receiver{
-		s: s, limiter: httpx.NewLimiter(RateLimit, RateWindow, s.clock),
+		s: s, limiter: limiter,
 		byIP: httpx.NewLimiter(IPRateLimit, RateWindow, s.clock).WithClientIP(clientIP),
 	}
 }
@@ -167,11 +180,23 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, setverify.CodeOf(err), desc)
 		return
 	}
-	if !h.limiter.Allow(org.String() + "/" + tid.String()) {
+	t, status, code, desc := h.s.active(r.Context(), org, tid)
+	if status != 0 {
+		writeError(w, status, code, desc)
+		return
+	}
+	// Counted only for a transmitter found ACTIVE, so a POST to made-up ids
+	// writes no row (HR-494), and between transactions, never inside one
+	// (ratelimit.Store).
+	if d, err := h.limiter.Take(r.Context(), scopeTransmitter, org.String()+"/"+tid.String(), RateWindow, 1, RateLimit); err != nil {
+		h.s.log.ErrorContext(r.Context(), "signals.rate_unavailable", pclog.Err(err))
+		tooMany(w, r)
+		return
+	} else if !d.Allowed {
 		tooMany(w, r)
 		return
 	}
-	status, code, desc := h.s.receive(r.Context(), org, tid, token)
+	status, code, desc = h.s.receive(r.Context(), org, tid, t, token)
 	if status == http.StatusAccepted {
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusAccepted)
@@ -180,20 +205,25 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	writeError(w, status, code, desc)
 }
 
-// receive verifies and records one token for transmitter tid of org.
-func (s *Service) receive(ctx context.Context, org ids.OrgID, tid ids.UUID, token string) (status int, code, desc string) {
-	var t dbq.GetSSFTransmitterRow
+// active loads transmitter tid of org. A status other than 0 is the answer
+// when it is unknown, inactive or cannot be read.
+func (s *Service) active(ctx context.Context, org ids.OrgID, tid ids.UUID) (t dbq.GetSSFTransmitterRow, status int, code, desc string) {
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
 		t, err = dbq.New(tx).GetSSFTransmitter(ctx, org, tid)
 		return err
 	}, db.ReadOnly())
 	if db.IsNoRows(err) || (err == nil && t.State != StateActive) {
-		return http.StatusNotFound, setverify.CodeInvalidRequest, "unknown transmitter"
+		return t, http.StatusNotFound, setverify.CodeInvalidRequest, "unknown transmitter"
 	} else if err != nil {
 		s.log.ErrorContext(ctx, "signals.load_failed", pclog.Err(err))
-		return http.StatusServiceUnavailable, setverify.CodeInvalidRequest, "try again later"
+		return t, http.StatusServiceUnavailable, setverify.CodeInvalidRequest, "try again later"
 	}
+	return t, 0, "", ""
+}
+
+// receive verifies and records one token for the active transmitter t.
+func (s *Service) receive(ctx context.Context, org ids.OrgID, tid ids.UUID, t dbq.GetSSFTransmitterRow, token string) (status int, code, desc string) {
 	if err := s.business(ctx); err != nil {
 		// A lapsed licence accepts nothing and says so once (D5).
 		s.lapsed(ctx, org)

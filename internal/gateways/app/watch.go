@@ -15,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 )
 
 // Containment stream timing (HR-010, G0 M6 design decision 4).
@@ -22,6 +23,10 @@ const (
 	// PollEvery is how often each watched org's containment is read, so a
 	// missed notification costs at most this long.
 	PollEvery = 250 * time.Millisecond
+	// readWithin bounds one read, well inside ConfirmedWithin: a read stuck
+	// on a connection attempt fails, confirming nothing, and the next tick
+	// tries again (G0 M19 D227).
+	readWithin = 500 * time.Millisecond
 	// HeartbeatEvery is how often a stream sends its state when nothing
 	// changed.
 	HeartbeatEvery = 500 * time.Millisecond
@@ -32,8 +37,16 @@ const (
 	// StreamLifetime caps a stream; the gateway reconnects and loads a new
 	// snapshot.
 	StreamLifetime = 15 * time.Minute
-	// MaxStreamsPerCert caps concurrent streams of one certificate.
+	// MaxStreamsPerCert caps concurrent streams of one certificate across
+	// every replica (pc.stream_leases, G0 M19 D201, HR-491).
 	MaxStreamsPerCert = 4
+	// leaseWithin bounds taking a stream's lease.
+	leaseWithin = 5 * time.Second
+	// listenRetryFirst and listenRetryMax bound the wait before LISTEN is
+	// tried again: a long outage never leaves it asleep once the database
+	// is back (G0 M19 D224).
+	listenRetryFirst = 100 * time.Millisecond
+	listenRetryMax   = 500 * time.Millisecond
 )
 
 // ErrTooManyStreams reports a certificate that already has
@@ -80,10 +93,22 @@ type Hub struct {
 	// done closes when Run ends (server shutdown), ending every stream.
 	done     chan struct{}
 	doneOnce sync.Once
+	// pollEvery is PollEvery; listenDown, if set, runs each time LISTEN is
+	// lost. Tests set them.
+	pollEvery  time.Duration
+	listenDown func()
 
-	mu      sync.Mutex
-	orgs    map[ids.OrgID]*orgWatch
-	streams map[ids.UUID]int // per certificate
+	// notified, when set, is told the org of every notification, watched
+	// or not: the gateway certificate cache forgets the org's entries
+	// (HR-492).
+	notified func(ids.OrgID)
+	// reconnected, when set, runs on each new LISTEN.
+	reconnected func()
+	// leases counts each certificate's streams across replicas.
+	leases *ratelimit.Leases
+
+	mu   sync.Mutex
+	orgs map[ids.OrgID]*orgWatch
 }
 
 type orgWatch struct {
@@ -102,11 +127,24 @@ func NewHub(pool *db.Pool, log *slog.Logger) *Hub {
 	if log == nil {
 		log = pclog.Discard()
 	}
-	return &Hub{pool: pool, log: log, now: time.Now, done: make(chan struct{}), orgs: map[ids.OrgID]*orgWatch{}, streams: map[ids.UUID]int{}}
+	return &Hub{
+		pool: pool, log: log, now: time.Now, done: make(chan struct{}), pollEvery: PollEvery, leases: ratelimit.NewLeases(pool, log),
+		orgs: map[ids.OrgID]*orgWatch{},
+	}
 }
 
-// Done closes when the hub stops; streams end with it.
-func (s *Subscription) Done() <-chan struct{} { return s.hub.done }
+// ForgetOnNotify makes every pc_containment notification also forget the
+// org's cached certificate checks in svc (G0 M19 D201, HR-492), and each
+// new LISTEN forget them all: a notification missed while it was down could
+// be for any org, watched or not (D224). Call it before Run.
+func (h *Hub) ForgetOnNotify(svc *Service) *Hub {
+	h.notified, h.reconnected = svc.ForgetOrg, svc.ForgetAll
+	return h
+}
+
+// Done closes when the hub stops or the stream's lease is lost; the stream
+// ends with it.
+func (s *Subscription) Done() <-chan struct{} { return s.done }
 
 // Subscription is one stream's view of its gateway's containment.
 type Subscription struct {
@@ -116,15 +154,25 @@ type Subscription struct {
 	cert    ids.UUID
 	ch      chan struct{}
 	w       *orgWatch
+	lease   *ratelimit.Lease
+	done    chan struct{}
+	closed  chan struct{}
 }
 
-// Subscribe opens a view for a gateway certificate.
+// Subscribe opens a view for a gateway certificate. It takes one of the
+// certificate's MaxStreamsPerCert leases first; if the leases cannot be
+// read, the stream is refused.
 func (h *Hub) Subscribe(id Identity) (*Subscription, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), leaseWithin)
+	defer cancel()
+	lease, err := h.leases.Acquire(ctx, id.Org, ratelimit.LeaseContainmentStream, id.Cert.String(), MaxStreamsPerCert)
+	if errors.Is(err, ratelimit.ErrLeaseLimit) {
+		return nil, ErrTooManyStreams
+	} else if err != nil {
+		return nil, err
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.streams[id.Cert] >= MaxStreamsPerCert {
-		return nil, ErrTooManyStreams
-	}
 	w, ok := h.orgs[id.Org]
 	if !ok {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -132,10 +180,20 @@ func (h *Hub) Subscribe(id Identity) (*Subscription, error) {
 		h.orgs[id.Org] = w
 		go h.poll(ctx, id.Org, w)
 	}
-	s := &Subscription{hub: h, org: id.Org, gateway: id.Gateway, cert: id.Cert, ch: make(chan struct{}, 1), w: w}
+	s := &Subscription{
+		hub: h, org: id.Org, gateway: id.Gateway, cert: id.Cert, ch: make(chan struct{}, 1), w: w, lease: lease,
+		done: make(chan struct{}), closed: make(chan struct{}),
+	}
 	w.subs[s] = struct{}{}
-	h.streams[id.Cert]++
 	signal(w.wake)
+	go func() {
+		select {
+		case <-h.done:
+		case <-lease.Lost():
+		case <-s.closed:
+		}
+		close(s.done)
+	}()
 	return s, nil
 }
 
@@ -146,22 +204,23 @@ func signal(ch chan struct{}) {
 	}
 }
 
-// Close ends the subscription; the org's poller stops with its last one.
+// Close ends the subscription and releases its lease; the org's poller
+// stops with its last one.
 func (s *Subscription) Close() {
 	h := s.hub
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if _, ok := s.w.subs[s]; !ok {
+		h.mu.Unlock()
 		return
 	}
 	delete(s.w.subs, s)
-	if h.streams[s.cert]--; h.streams[s.cert] <= 0 {
-		delete(h.streams, s.cert)
-	}
+	close(s.closed)
 	if len(s.w.subs) == 0 {
 		s.w.stop()
 		delete(h.orgs, s.org)
 	}
+	h.mu.Unlock()
+	s.lease.Release()
 }
 
 // Changed is signaled after every read of the org's containment.
@@ -180,10 +239,13 @@ func (s *Subscription) State() (Containment, bool) {
 // poll reads the org's containment every PollEvery, or at once when woken,
 // until the last subscriber leaves.
 func (h *Hub) poll(ctx context.Context, org ids.OrgID, w *orgWatch) {
-	t := time.NewTicker(PollEvery)
+	t := time.NewTicker(h.pollEvery)
 	defer t.Stop()
 	for {
-		if err := h.read(ctx, org, w); err != nil && ctx.Err() == nil && !errors.Is(err, errOrgInactive) {
+		read, cancel := context.WithTimeout(ctx, readWithin)
+		err := h.read(read, org, w)
+		cancel()
+		if err != nil && ctx.Err() == nil && !errors.Is(err, errOrgInactive) {
 			h.log.WarnContext(ctx, "gateways.containment_read_failed", slog.String("org_id", org.String()), pclog.Err(err))
 		}
 		select {
@@ -249,27 +311,47 @@ func (h *Hub) read(ctx context.Context, org ids.OrgID, w *orgWatch) error {
 }
 
 // Run listens for pc_containment notifications and wakes the org's poller
-// at once, reconnecting with backoff, until ctx ends.
+// at once, reconnecting with backoff, until ctx ends. Each new LISTEN wakes
+// every poller: a notification sent while it was down is lost (D224).
 func (h *Hub) Run(ctx context.Context) error {
 	defer h.doneOnce.Do(func() { close(h.done) })
-	backoff := 100 * time.Millisecond
+	backoff := listenRetryFirst
 	for ctx.Err() == nil {
-		err := h.listen(ctx)
+		err := h.listen(ctx, func() {
+			backoff = listenRetryFirst
+			if h.reconnected != nil {
+				h.reconnected()
+			}
+			h.wakeAll()
+		})
 		if ctx.Err() != nil {
 			return nil
 		}
 		h.log.WarnContext(ctx, "gateways.containment_listen_failed", pclog.Err(err))
+		if h.listenDown != nil {
+			h.listenDown()
+		}
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(backoff):
 		}
-		backoff = min(backoff*2, 5*time.Second)
+		backoff = min(backoff*2, listenRetryMax)
 	}
 	return nil
 }
 
-func (h *Hub) listen(ctx context.Context) error {
+// wakeAll wakes every org's poller.
+func (h *Hub) wakeAll() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, w := range h.orgs {
+		signal(w.wake)
+	}
+}
+
+// listen runs one LISTEN until it fails; listening runs once it is up.
+func (h *Hub) listen(ctx context.Context, listening func()) error {
 	conn, err := h.pool.Pgx().Acquire(ctx)
 	if err != nil {
 		return err
@@ -281,6 +363,7 @@ func (h *Hub) listen(ctx context.Context) error {
 	if _, err := conn.Exec(ctx, "LISTEN pc_containment"); err != nil {
 		return err
 	}
+	listening()
 	for {
 		n, err := conn.Conn().WaitForNotification(ctx)
 		if err != nil {
@@ -289,6 +372,9 @@ func (h *Hub) listen(ctx context.Context) error {
 		org, err := ids.Parse[ids.Org](n.Payload)
 		if err != nil {
 			continue
+		}
+		if h.notified != nil {
+			h.notified(org)
 		}
 		h.mu.Lock()
 		if w := h.orgs[org]; w != nil {

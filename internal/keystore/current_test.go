@@ -73,3 +73,27 @@ func TestCurrentCacheReadsTheCurrentDEKOncePerTTL(t *testing.T) {
 		t.Fatalf("DEK: %v, reads %d", err, src.versions)
 	}
 }
+
+// TestHR493_ACurrentDEKIsAtMostOneTTLOld (ADR-0040, current data-encryption
+// key, off the decision path): a rotation is used no later than one TTL
+// after it, and not served from memory past it.
+// Covers: HR-493
+func TestHR493_ACurrentDEKIsAtMostOneTTLOld(t *testing.T) {
+	src := &countingDEKs{version: 1}
+	clk := clock.NewFake(time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))
+	const ttl = 30 * time.Second
+	c := keystore.NewCurrentCache(src, ttl, clk)
+	org, ctx := ids.New[ids.Org](), context.Background()
+	if v, _, err := c.CurrentDEK(ctx, org, "evaluation_inputs"); err != nil || v != 1 {
+		t.Fatalf("v = %d, %v", v, err)
+	}
+	src.version = 2 // rotated
+	clk.Advance(ttl - time.Millisecond)
+	if v, _, _ := c.CurrentDEK(ctx, org, "evaluation_inputs"); v != 1 {
+		t.Fatalf("within the TTL: v = %d, want the cached 1", v)
+	}
+	clk.Advance(time.Millisecond)
+	if v, _, _ := c.CurrentDEK(ctx, org, "evaluation_inputs"); v != 2 {
+		t.Fatalf("at the TTL: v = %d, want 2", v)
+	}
+}

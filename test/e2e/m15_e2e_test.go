@@ -19,7 +19,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/pclaw"
-	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
 // The M15 exit (G0 M15 D15): the gateway's MCP holds, tasks and sessions
@@ -34,12 +33,12 @@ func (s *stack) replica(t *testing.T) (url string, stop func()) {
 	cfg := s.gatewayCfg
 	cfg.PublicURL = "http://" + gs.Listener.Addr().String()
 	ctx, cancel := context.WithCancel(context.Background())
-	id, err := gateway.LoadOrEnroll(ctx, &cfg, s.gatewayEnroll, pclog.Discard())
+	id, err := gateway.LoadOrEnroll(ctx, &cfg, s.gatewayEnroll, s.gatewayLog())
 	if err != nil {
 		cancel()
 		t.Fatal(err)
 	}
-	g, err := gateway.New(ctx, &cfg, id, pclog.Discard())
+	g, err := gateway.New(ctx, &cfg, id, s.gatewayLog())
 	if err != nil {
 		cancel()
 		t.Fatal(err)

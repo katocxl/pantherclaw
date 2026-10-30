@@ -44,6 +44,7 @@ func (s *recordingSink) Received(_ context.Context, _ db.TenantTx, r Received) e
 }
 
 type rxFixture struct {
+	d          *dbtest.DB
 	p          *db.Pool
 	org        ids.OrgID
 	alice, bob ids.UUID
@@ -62,7 +63,7 @@ func newRxFixture(t *testing.T) *rxFixture {
 	t.Helper()
 	d := dbtest.New(t)
 	f := &rxFixture{
-		p: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), bob: ids.NewV7(), cred: ids.NewV7(),
+		d: d, p: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), bob: ids.NewV7(), cred: ids.NewV7(),
 		sink: &recordingSink{}, clk: clock.NewFake(time.Now()),
 	}
 	var err error
@@ -356,7 +357,9 @@ func TestT113_JunkCannotSpendATransmittersBudget(t *testing.T) {
 	if !limited {
 		t.Error("a source address was never limited")
 	}
-	// The transmitter's budget, with well-formed tokens from many addresses.
+	// The transmitter's budget, with well-formed tokens from many addresses,
+	// all in one window of the shared counter.
+	withinOneWindow()
 	tok := f.token(t, f.key, f.tx, nil)
 	limited = false
 	for i := range RateLimit + 1 {
@@ -367,5 +370,82 @@ func TestT113_JunkCannotSpendATransmittersBudget(t *testing.T) {
 	}
 	if !limited {
 		t.Error("the transmitter was never rate-limited")
+	}
+}
+
+// TestHR490_ATransmittersBudgetHoldsAcrossReplicas (G0 M19 D201): a
+// transmitter's tokens are counted in the shared store, so tokens spread
+// over two replicas meet one budget: half of it on each passes, the next
+// token on either is refused.
+// Covers: HR-490, T-214
+func TestHR490_ATransmittersBudgetHoldsAcrossReplicas(t *testing.T) {
+	f := newRxFixture(t)
+	withinOneWindow()
+	second := http.NewServeMux()
+	f.svc.Receiver(nil).Mount(second) // another replica's handler and limiter
+	tok := f.token(t, f.key, f.tx, nil)
+	push := func(mux *http.ServeMux, i int) int {
+		req := httptest.NewRequest(http.MethodPost, "/v1/ssf/"+f.org.String()+"/"+f.tx.String(), strings.NewReader(tok))
+		req.Header.Set("Content-Type", ContentType)
+		req.RemoteAddr = "192.0.2." + strconv.Itoa(i%200+1) + ":40000"
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	for i := range RateLimit {
+		mux := f.mux
+		if i%2 == 1 {
+			mux = second
+		}
+		if code := push(mux, i); code == http.StatusTooManyRequests {
+			t.Fatalf("token %d refused within the budget", i+1)
+		}
+	}
+	if code := push(second, RateLimit); code != http.StatusTooManyRequests {
+		t.Fatalf("the budget's next token on the other replica: %d", code)
+	}
+}
+
+// withinOneWindow waits for the next window of RateWindow when less than
+// 20 seconds of the current one are left: the shared counter's windows are
+// aligned to the Unix epoch on the database's clock, so a test that fills
+// a transmitter's budget does so within one window.
+func withinOneWindow() {
+	now := time.Now()
+	if end := now.Truncate(RateWindow).Add(RateWindow); end.Sub(now) < 20*time.Second {
+		time.Sleep(time.Until(end.Add(300 * time.Millisecond)))
+	}
+}
+
+// TestHR494_AnUnknownTransmitterWritesNoCounter: a well-formed token posted
+// to made-up ids, or to a transmitter that is not ACTIVE, is answered 404
+// without a counter row: only an ACTIVE transmitter's tokens are counted in
+// the shared store, so unauthenticated POSTs cannot fill it.
+// Covers: HR-494
+func TestHR494_AnUnknownTransmitterWritesNoCounter(t *testing.T) {
+	f := newRxFixture(t)
+	tok := f.token(t, f.key, f.tx, nil)
+	// The table is hidden from a tenant transaction by its purpose policy.
+	rows := func() (n int) {
+		f.d.AdminQueryRow(t, "SELECT count(*) FROM pc.rate_counters WHERE scope = $1", []any{scopeTransmitter}, &n)
+		return n
+	}
+	for name, tx := range map[string]ids.UUID{
+		"unknown":  ids.NewV7(),
+		"inactive": f.transmitter(t, "paused", false),
+	} {
+		if a := f.post(t, f.org, tx, ContentType, tok); a.status != http.StatusNotFound {
+			t.Fatalf("%s transmitter: %+v", name, a)
+		}
+	}
+	if a := f.post(t, ids.New[ids.Org](), ids.NewV7(), ContentType, tok); a.status != http.StatusNotFound {
+		t.Fatalf("another org: %+v", a)
+	}
+	if n := rows(); n != 0 {
+		t.Fatalf("%d counter rows for transmitters that do not take tokens", n)
+	}
+	f.post(t, f.org, f.tx, ContentType, tok)
+	if rows() != 1 {
+		t.Fatal("an active transmitter's token was not counted")
 	}
 }

@@ -112,6 +112,9 @@ func (s *Service) Meter(ctx context.Context, org ids.OrgID) error {
 	now := s.clock.Now().UTC()
 	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if err := q.LockUsageMeter(ctx, org.String()); err != nil {
+			return err
+		}
 		sample, err := q.CountAdmittedInstances(ctx, org)
 		if err != nil {
 			return err
@@ -133,6 +136,9 @@ func (s *Service) Recount(ctx context.Context, org ids.OrgID) error {
 	base := pgDate(now.AddDate(0, 0, -2))
 	if err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if err := q.LockUsageMeter(ctx, org.String()); err != nil {
+			return err
+		}
 		if err := q.MeterUsageDay(ctx, org, base, 0); err != nil {
 			return err
 		}

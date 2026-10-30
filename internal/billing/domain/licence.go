@@ -340,6 +340,12 @@ func (e Entitlements) SlackApprovals() bool { return e.Edition.Paid() }
 // after a downgrade.
 func (e Entitlements) DataScoping() bool { return e.Edition.Paid() }
 
+// HostedGateways reports whether the edition may request a
+// PantherClaw-hosted gateway (G0 M19 D203, D212, PN-010.4: Team and
+// above). It gates provisioning only: after a downgrade a hosted gateway
+// keeps running, and reading or deprovisioning it works in every edition.
+func (e Entitlements) HostedGateways() bool { return e.Edition.Paid() }
+
 // Platform administration (G0 M18 D159, D161). The pclaw OS keychain
 // (PN-012.9) and the OpenBao key service (PN-012.10) are Community and have
 // no gate; a hardening rule is never edition-gated. Each gate below covers

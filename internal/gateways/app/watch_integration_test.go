@@ -6,9 +6,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -89,6 +93,64 @@ func TestHR010_ContainmentChangesReachTheStreamWithinASecond(t *testing.T) {
 	waitFor(t, s, time.Second, func(c Containment) bool { return c.ConfigVersion == 2 })
 	e.exec(t, "UPDATE pc.gateways SET state = 'REVOKED', revoked_by = 'x', revoked_at = now() WHERE id = $1", e.gw)
 	waitFor(t, s, time.Second, func(c Containment) bool { return !c.GatewayActive })
+}
+
+// logWriter counts the log lines that name a containment read failure.
+type logWriter struct{ failed *atomic.Int32 }
+
+func (l logWriter) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte("containment_read_failed")) {
+		l.failed.Add(1)
+	}
+	return len(p), nil
+}
+
+// TestHR010_AReadStuckOnASilentHostFailsAndIsTriedAgain: the first database
+// host accepts and never answers, so a new connection waits out its 5 s
+// connect timeout there. Each read gives up well before that and the next
+// tick reads again, and a failed read confirms nothing, so the stream stays
+// quiet (G0 M19 D227).
+// Covers: PN-010.7
+func TestHR010_AReadStuckOnASilentHostFailsAndIsTriedAgain(t *testing.T) {
+	d := dbtest.New(t)
+	silent, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = silent.Close() }()
+	go func() {
+		for {
+			c, err := silent.Accept()
+			if err != nil {
+				return
+			}
+			defer func() { _ = c.Close() }()
+		}
+	}()
+	port := silent.Addr().(*net.TCPAddr).Port
+
+	e := newWatchEnv(t)
+	cfg := d.App
+	cfg.Hosts = []db.Endpoint{{Host: "127.0.0.1", Port: port}, {Host: cfg.Host, Port: cfg.Port}}
+	stuck := d.Pool(t, cfg)
+	stuck.Pgx().Reset() // the next read has to connect
+
+	var failed atomic.Int32
+	h := NewHub(e.pool, slog.New(slog.NewTextHandler(logWriter{&failed}, nil)))
+	h.pool = stuck
+	s, err := h.Subscribe(Identity{Org: e.org, Gateway: e.gw, Cert: ids.NewV7()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for deadline := time.Now().Add(2 * time.Second); failed.Load() < 2; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d failed reads in 2 s, want at least 2: a read waited on the silent host", failed.Load())
+		}
+	}
+	if c, fresh := s.State(); fresh {
+		t.Fatalf("a failed read confirmed %+v", c)
+	}
 }
 
 // TestHR010_WithoutNotificationsThePollStillCatchesChanges: with no LISTEN
@@ -229,8 +291,71 @@ func TestHR010_StreamsArePerCertificateCapped(t *testing.T) {
 		s.Close()
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if len(h.orgs) != 0 || len(h.streams) != 0 {
-		t.Fatalf("the hub kept %d orgs and %d certificates after every stream closed", len(h.orgs), len(h.streams))
+	orgs := len(h.orgs)
+	h.mu.Unlock()
+	var leases int
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.stream_leases").Scan(&leases)
+	}); err != nil {
+		t.Fatal(err)
 	}
+	if orgs != 0 || leases != 0 {
+		t.Fatalf("the hub kept %d orgs and %d leases after every stream closed", orgs, leases)
+	}
+}
+
+// TestHR010_ANotificationMissedWhileDownIsActedOnAtReconnect: a change
+// committed while LISTEN is down notifies nobody; the reconnect wakes the
+// poller, so it arrives then. The poll is an hour here, so nothing else can
+// bring it (G0 M19 D224).
+// Covers: PN-010.7
+func TestHR010_ANotificationMissedWhileDownIsActedOnAtReconnect(t *testing.T) {
+	e := newWatchEnv(t)
+	h := NewHub(e.pool, pclog.Discard())
+	h.pollEvery = time.Hour
+	missed := make(chan error, 1)
+	var once sync.Once
+	h.listenDown = func() {
+		once.Do(func() {
+			missed <- e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+				_, err := tx.Exec(ctx, "UPDATE pc.org_containment SET epoch = epoch + 1 WHERE org_id = $1", e.org)
+				return err
+			})
+		})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = h.Run(ctx) }()
+	s, err := h.Subscribe(Identity{Org: e.org, Gateway: e.gw, Cert: ids.NewV7()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	waitFor(t, s, 5*time.Second, func(c Containment) bool { return c.Epoch == 1 })
+
+	// Drop the LISTEN connection once it is up.
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		var n int
+		if err := e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity
+				WHERE datname = current_database() AND query = 'LISTEN pc_containment'`).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d LISTEN connections", n)
+		}
+	}
+	select {
+	case err := <-missed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the hub did not see LISTEN go down")
+	}
+	waitFor(t, s, 2*time.Second, func(c Containment) bool { return c.Epoch == 2 })
 }

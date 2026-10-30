@@ -177,6 +177,17 @@ tasks:
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
         go -C sdk/go/internal/sqltest test -count=1 ./...
 
+  failover:
+    desc: The local failover tests (G0 M19 D202, D213), each on a fresh compose profile `failover` (a primary on 5434, its synchronous standby on 5435) that the tests start, kill and promote; needs Docker; not a CI gate
+    dotenv: ["deploy/compose/.env"]
+    cmds:
+      - defer: "{{.COMPOSE}} -p pc-failover --profile failover down --timeout 1"
+      - for: ['^TestFailover_SyncPromotion$', '^TestT215_AsyncPromotionHoldsUntilTheEpochBump$', '^TestFailover_SyncToAnUnverifiedPrimaryIsRefused$']
+        cmd: >-
+          PC_TEST_REQUIRE_DB=1
+          PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5434/postgres?sslmode=disable"
+          go test -tags "integration failover" -count=1 -v -timeout 20m -run '{{.ITEM}}' ./test/e2e/
+
   test:github-live:
     desc: "Manual and opt-in: the M8 GitHub run and the v0.1.0 three routes and coding to production against GitHub itself with your sandbox App (needs Docker; docs/runbooks/github-live.md); never part of check"
     dotenv: ["deploy/compose/.env"]
@@ -286,9 +297,9 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M18)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M19)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M18"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M19"}}
 
   range:library:
     desc: Regenerate the server's embedded scenario library (internal/redteam/library/library.json) from redteam/scenarios after changing a scenario (G0 M17 D125)

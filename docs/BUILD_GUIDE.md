@@ -504,6 +504,7 @@ M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M
 ```
 
 M15 and M16 are post-1.0 milestones (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); M15 lands before M16 ([G0 M15](g0/M15.md), founder decision F9).
+M19 is a post-1.0 milestone (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); it lands after M15–M18, in migration order ([G0 M19](g0/M19.md)), and the delivery order above gains it at the exit.
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -724,6 +725,26 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Organization identity providers** (PN-012.7, G6) as two-person protected changes; **API-key IP allow lists** (PN-012.8).
 - **Platform** (G7): pclaw secrets in the OS keychain (PN-012.9); OpenBao Transit as a key service with in-place re-wrap, and BlobStore and fan-out ports (PN-012.10).
 - Migrations `00216`–`00224` (`00225` spare); SCIM and SAML follow M18 (G8).
+
+### M19 — Scale: high availability, hosted per-org gateways and decision speed
+**HR:** HR-490..505 · **PN:** PN-010.7, PN-010.4, PN-011.1 (rest) · **ADR:** 0040, 0041 · **G0:** [g0/M19.md](g0/M19.md).
+- **High availability** (PN-010.7, [ADR-0040](adr/0040-high-availability-semantics.md)):
+  - The API's limits per organization and per credential are spent from leased chunks of the shared Postgres counter (R-58 closed).
+  - Stream and wait caps hold across replicas through leases.
+  - The gateway certificate cache forgets revocations through LISTEN.
+  - Every decision-path cache has a stated staleness bound of at most 2 s.
+  - The server connects to several database hosts (`target_session_attrs=read-write`, TLS verify-full per host) and makes no decision while no read-write primary answers. A promotion is detected from the primary's timeline at start-up and on every new connection. Without verified synchronous replication, the server holds or refuses connections until `bump-epochs` records the new timeline.
+  - Workers run with two or more replicas.
+  - A2A ownership is shared between gateway replicas on M15's state.
+  - The local failover test is `task failover` (a Postgres standby in Docker). Its tests carry the build tag `integration && failover`, so normal runs and CI never include them.
+- **Hosted gateways** (PN-010.4, founder decision G9, [ADR-0041](adr/0041-hosted-per-org-gateway-pool.md)):
+  - One gateway process per organization on shared hosts, each in its own isolated container.
+  - Provisioned from records by a worker job and the host agent `pantherclaw-host`, whose identity has no organization authority.
+  - Enrolment tokens go only through the process's private tmpfs, and deprovisioning revokes first.
+  - Reached by a per-org hostname `<slug>.gw.<domain>` with SNI passthrough; slugs are unique across organizations (`pc.hosting_slugs`). Its server certificate comes from the internal gateway CA with exactly that one name, and its key never leaves the container.
+  - No connectors (HR-084 unchanged).
+- **Decision speed** (PN-011.1): decision snapshots stay `REPEATABLE READ, READ ONLY` (the Prepare merge is dropped, a follow-up); a busy budget row is retried once inside the Authority, from a fresh snapshot, before `BUDGET_BUSY`; measured side by side in `docs/perf/M19.md`. Finalize + BeginDispatch is not merged (follow-up founder decision).
+- Migrations `00226`–`00230` (`00231`–`00235` spare); a new `hosting.proto`; the new permission `hosting.agent` (declarable only) and the `HostedGateways` Team gate (provisioning only).
 
 ---
 
