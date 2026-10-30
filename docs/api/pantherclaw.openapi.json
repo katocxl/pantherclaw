@@ -70182,6 +70182,11 @@
           "counts": {
             "title": "counts",
             "$ref": "#/components/schemas/pantherclaw.v1.RangeCounts"
+          },
+          "origin": {
+            "type": "string",
+            "title": "origin",
+            "description": "origin is \"library\" or \"customer\": a range runs one or the other. A\n customer range is customer-authored and has no assurance report."
           }
         },
         "title": "Range",
@@ -70355,6 +70360,11 @@
           "recordTime": {
             "title": "record_time",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "origin": {
+            "type": "string",
+            "title": "origin",
+            "description": "origin is \"library\" or \"customer\" (customer-authored), derived by the\n server from the scenario id."
           }
         },
         "title": "RangeResult",
@@ -70367,7 +70377,7 @@
           "id": {
             "type": "string",
             "title": "id",
-            "pattern": "^RT-[0-9]{3}$"
+            "pattern": "^(RT-[0-9]{3}|CX-[0-9]{3,5})$"
           },
           "digest": {
             "type": "string",
@@ -70416,7 +70426,7 @@
         },
         "title": "RangeScenarioDecl",
         "additionalProperties": false,
-        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form."
+        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form.\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125)."
       },
       "pantherclaw.v1.RangeScenarioDeclInput": {
         "type": "object",
@@ -70424,7 +70434,7 @@
           "id": {
             "type": "string",
             "title": "id",
-            "pattern": "^RT-[0-9]{3}$"
+            "pattern": "^(RT-[0-9]{3}|CX-[0-9]{3,5})$"
           },
           "digest": {
             "type": "string",
@@ -70476,7 +70486,7 @@
         },
         "title": "RangeScenarioDecl",
         "additionalProperties": false,
-        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form.",
+        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form.\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125).",
         "x-pantherclaw-input-of": "pantherclaw.v1.RangeScenarioDecl",
         "required": [
           "id",
@@ -70659,7 +70669,7 @@
           "scenarioId": {
             "type": "string",
             "title": "scenario_id",
-            "pattern": "^RT-[0-9]{3}$"
+            "pattern": "^(RT-[0-9]{3}|CX-[0-9]{3,5})$"
           },
           "scenarioDigest": {
             "type": "string",

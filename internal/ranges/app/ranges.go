@@ -24,12 +24,13 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	"github.com/katocxl/pantherclaw/internal/ranges/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/library"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 var (
-	idPattern     = regexp.MustCompile(`^RT-[0-9]{3}$`)
+	idPattern     = regexp.MustCompile(`^(RT-[0-9]{3}|CX-[0-9]{3,5})$`)
 	digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
@@ -42,7 +43,7 @@ const (
 
 // Errors of the range use cases.
 var (
-	ErrEdition      = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "this needs a higher licence: business-tier scenarios need Business, assurance reports Team")
+	ErrEdition      = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "this needs a higher licence: business-tier and customer scenarios need Business, assurance reports Team")
 	ErrNotFound     = pcerr.New(pcerr.NotFound, "RANGE_NOT_FOUND", "range not found")
 	ErrAgentMissing = pcerr.New(pcerr.NotFound, "AGENT_NOT_FOUND", "agent not found")
 	ErrNotRange     = pcerr.New(pcerr.FailedPrecondition, "NOT_A_RANGE_AGENT", "ranges run only for range agents")
@@ -50,6 +51,9 @@ var (
 	ErrNotFinished  = pcerr.New(pcerr.FailedPrecondition, "RANGE_NOT_FINISHED", "the range has not finished")
 	ErrBaseline     = pcerr.New(pcerr.FailedPrecondition, "BASELINE_INVALID", "the baseline must be a finished range")
 	ErrScenarios    = pcerr.New(pcerr.InvalidArgument, "INVALID_SCENARIOS", "declare 1 to 200 distinct scenarios")
+	ErrNotLibrary   = pcerr.New(pcerr.InvalidArgument, "RANGE_SCENARIO_NOT_LIBRARY", "an RT scenario must be the PantherClaw library's, with its digest; write your own scenarios as CX-###")
+	ErrMixed        = pcerr.New(pcerr.InvalidArgument, "RANGE_ORIGIN_MIXED", "a range runs library scenarios or customer scenarios, not both")
+	ErrNotAttested  = pcerr.New(pcerr.FailedPrecondition, "RANGE_CUSTOMER_NOT_ATTESTED", "a range of customer-authored scenarios has no assurance report: its unsigned summary is the result")
 	ErrUndeclared   = pcerr.New(pcerr.InvalidArgument, "SCENARIO_NOT_DECLARED", "the scenario, with this digest, was not declared when the range started")
 	ErrRecorded     = pcerr.New(pcerr.AlreadyExists, "RESULT_RECORDED", "the scenario already has a result in this range")
 	ErrSteps        = pcerr.New(pcerr.InvalidArgument, "INVALID_STEPS", "steps need distinct ids, a PASS or FAIL needs at least one, and at most 40")
@@ -149,11 +153,18 @@ func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, 
 	if in.RunnerVersion == "" || len(in.RunnerVersion) > MaxRunnerLength {
 		return domain.Range{}, ErrScenarios
 	}
+	decls, origin, err := authentic(in.Scenarios)
+	if err != nil {
+		return domain.Range{}, err
+	}
 	ents, err := s.entitlements(ctx)
 	if err != nil {
 		return domain.Range{}, err
 	}
-	for _, sc := range in.Scenarios {
+	if origin == domain.OriginCustomer && !ents.RangeCustomScenarios() {
+		return domain.Range{}, ErrEdition
+	}
+	for _, sc := range decls {
 		if sc.Tier == domain.TierBusiness && !ents.RangeFullLibrary() {
 			return domain.Range{}, ErrEdition
 		}
@@ -169,7 +180,7 @@ func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, 
 		}
 		if in.Baseline != nil {
 			b, err := tx.Range(ctx, *in.Baseline, false)
-			if err != nil || b.State != domain.Finished {
+			if err != nil || b.State != domain.Finished || b.Origin != origin {
 				if err != nil && !errors.Is(err, ErrNotFound) {
 					return err
 				}
@@ -180,11 +191,11 @@ func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, 
 		if err != nil {
 			return err
 		}
-		set := slices.Clone(in.Scenarios)
+		set := decls
 		slices.SortFunc(set, func(x, y domain.Scenario) int { return strings.Compare(x.ID, y.ID) })
 		out = domain.Range{
 			ID: ids.NewV7(), Agent: a.ID, StartedBy: c.Principal.String(), RunnerVersion: in.RunnerVersion,
-			SetDigest: domain.SetDigest(set), Scenarios: set, Versions: versions, Baseline: in.Baseline,
+			SetDigest: domain.SetDigest(set), Origin: origin, Scenarios: set, Versions: versions, Baseline: in.Baseline,
 			State: domain.Running,
 		}
 		if out, err = tx.InsertRange(ctx, out); err != nil {
@@ -197,6 +208,33 @@ func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, 
 		})
 	})
 	return out, err
+}
+
+// authentic returns the declarations with each origin set from its id, and
+// the range's single origin (D124, D126). An RT scenario is the library's
+// only when its digest is the library's, and its tier is the library's,
+// whatever the runner declared (D125, HR-467).
+func authentic(set []domain.Scenario) ([]domain.Scenario, string, error) {
+	out := slices.Clone(set)
+	origin := ""
+	for i := range out {
+		sc := &out[i]
+		sc.Origin = domain.OriginOf(sc.ID)
+		if origin != "" && origin != sc.Origin {
+			return nil, "", ErrMixed
+		}
+		origin = sc.Origin
+		if sc.Origin != domain.OriginLibrary {
+			sc.Tier = domain.TierBusiness // D126: a customer scenario is business-tier
+			continue
+		}
+		e, ok := library.Lookup(sc.ID)
+		if !ok || e.Digest != sc.Digest {
+			return nil, "", ErrNotLibrary
+		}
+		sc.Tier = e.Tier
+	}
+	return out, origin, nil
 }
 
 func checkDecls(set []domain.Scenario) error {
@@ -578,6 +616,9 @@ func (s *Service) ExportAssuranceReport(ctx context.Context, id ids.UUID) (ids.U
 		}
 		if rng.State != domain.Finished {
 			return ErrNotFinished
+		}
+		if rng.Origin == domain.OriginCustomer {
+			return ErrNotAttested // HR-466
 		}
 		return nil
 	})

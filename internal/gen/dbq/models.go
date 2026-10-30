@@ -3002,6 +3002,7 @@ type PcRedteamResult struct {
 	ObservedBy     string
 	Mismatches     int32
 	RecordedAt     time.Time
+	Origin         string
 }
 
 type PcRedteamRun struct {
@@ -3018,6 +3019,7 @@ type PcRedteamRun struct {
 	State             string
 	StartedAt         time.Time
 	FinishedAt        *time.Time
+	Origin            string
 }
 
 type PcReflexDigest struct {

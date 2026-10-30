@@ -147,7 +147,7 @@ func (t *txn) InsertRange(ctx context.Context, r domain.Range) (domain.Range, er
 	row, err := t.q.InsertRedteamRun(ctx, dbq.InsertRedteamRunParams{
 		OrgID: t.org, ID: r.ID, RangeAgentID: r.Agent, StartedBy: r.StartedBy, RunnerVersion: r.RunnerVersion,
 		ScenarioSetDigest: r.SetDigest, Scenarios: scenarios, PolicyVersions: policies, PackageVersions: packages,
-		BaselineRangeID: r.Baseline,
+		BaselineRangeID: r.Baseline, Origin: r.Origin,
 	})
 	if err != nil {
 		return r, err
@@ -162,10 +162,10 @@ func rangeOf(r dbq.PcRedteamRun) (domain.Range, error) {
 	}
 	out := domain.Range{
 		ID: r.ID, Agent: r.RangeAgentID, StartedBy: r.StartedBy, RunnerVersion: r.RunnerVersion, SetDigest: r.ScenarioSetDigest,
-		Baseline: r.BaselineRangeID, State: domain.State(r.State), Started: r.StartedAt, Finished: r.FinishedAt,
+		Origin: r.Origin, Baseline: r.BaselineRangeID, State: domain.State(r.State), Started: r.StartedAt, Finished: r.FinishedAt,
 	}
 	for _, d := range decls {
-		out.Scenarios = append(out.Scenarios, domain.Scenario{ID: d.ID, Digest: d.Digest, Tier: d.Tier, Category: d.Category, Suite: d.Suite, Title: d.Title, StepCount: d.Steps})
+		out.Scenarios = append(out.Scenarios, domain.Scenario{ID: d.ID, Digest: d.Digest, Tier: d.Tier, Category: d.Category, Suite: d.Suite, Title: d.Title, StepCount: d.Steps, Origin: domain.OriginOf(d.ID)})
 	}
 	var err error
 	if out.Versions.Policies, err = versionsOf(r.PolicyVersions); err != nil {
@@ -254,7 +254,7 @@ func (e expectJSON) domain() domain.Expect { return domain.Expect(e) }
 
 func resultOf(r dbq.PcRedteamResult) (domain.Result, error) {
 	res := domain.Result{
-		Scenario: domain.Scenario{ID: r.ScenarioID, Digest: r.ScenarioDigest, Tier: r.Tier, Category: r.Category, Suite: r.Suite, Title: r.Title},
+		Scenario: domain.Scenario{ID: r.ScenarioID, Digest: r.ScenarioDigest, Tier: r.Tier, Category: r.Category, Suite: r.Suite, Title: r.Title, Origin: r.Origin},
 		Verdict:  domain.Verdict(r.Verdict), Recorded: r.RecordedAt,
 	}
 	if r.ClaimedVerdict != nil {
@@ -338,7 +338,7 @@ func (t *txn) InsertResult(ctx context.Context, rng ids.UUID, r domain.Result) (
 	at, err := t.q.InsertRedteamResult(ctx, dbq.InsertRedteamResultParams{
 		OrgID: t.org, RangeID: rng, ScenarioID: r.Scenario.ID, ScenarioDigest: r.Scenario.Digest, Title: r.Scenario.Title,
 		Suite: r.Scenario.Suite, Category: r.Scenario.Category, Tier: r.Scenario.Tier, Verdict: string(r.Verdict),
-		ClaimedVerdict: claimed, Steps: raw, ObservedBy: by, Mismatches: int32(mismatches),
+		ClaimedVerdict: claimed, Steps: raw, ObservedBy: by, Mismatches: int32(mismatches), Origin: domain.OriginOf(r.Scenario.ID),
 	})
 	if db.IsNoRows(err) {
 		return time.Time{}, false, nil

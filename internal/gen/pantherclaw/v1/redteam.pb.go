@@ -194,6 +194,9 @@ func (RangeObservedBy) EnumDescriptor() ([]byte, []int) {
 
 // RangeScenarioDecl declares a scenario of the set a range runs. The
 // digest is the SHA-256 (lowercase hex) of the scenario's canonical form.
+// RT-### is the PantherClaw library: the server accepts it only with the
+// library's digest and takes its tier from the library. CX-### is
+// customer-authored (G0 M17 D124, D125).
 type RangeScenarioDecl struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -814,8 +817,11 @@ type RangeResult struct {
 	ClaimedVerdict RangeVerdict           `protobuf:"varint,6,opt,name=claimed_verdict,json=claimedVerdict,proto3,enum=pantherclaw.v1.RangeVerdict" json:"claimed_verdict,omitempty"`
 	Steps          []*RangeStep           `protobuf:"bytes,7,rep,name=steps,proto3" json:"steps,omitempty"`
 	RecordTime     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=record_time,json=recordTime,proto3" json:"record_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// origin is "library" or "customer" (customer-authored), derived by the
+	// server from the scenario id.
+	Origin        string `protobuf:"bytes,9,opt,name=origin,proto3" json:"origin,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RangeResult) Reset() {
@@ -902,6 +908,13 @@ func (x *RangeResult) GetRecordTime() *timestamppb.Timestamp {
 		return x.RecordTime
 	}
 	return nil
+}
+
+func (x *RangeResult) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
 }
 
 type RecordResultResponse struct {
@@ -1083,8 +1096,11 @@ type Range struct {
 	StartTime         *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	FinishTime        *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=finish_time,json=finishTime,proto3" json:"finish_time,omitempty"`
 	Counts            *RangeCounts           `protobuf:"bytes,11,opt,name=counts,proto3" json:"counts,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// origin is "library" or "customer": a range runs one or the other. A
+	// customer range is customer-authored and has no assurance report.
+	Origin        string `protobuf:"bytes,12,opt,name=origin,proto3" json:"origin,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Range) Reset() {
@@ -1192,6 +1208,13 @@ func (x *Range) GetCounts() *RangeCounts {
 		return x.Counts
 	}
 	return nil
+}
+
+func (x *Range) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
 }
 
 type FinishRangeResponse struct {
@@ -1547,9 +1570,9 @@ var File_pantherclaw_v1_redteam_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpantherclaw/v1/redteam.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe7\x02\n" +
-	"\x11RangeScenarioDecl\x12$\n" +
-	"\x02id\x18\x01 \x01(\tB\x14\xbaH\x11r\x0f2\r^RT-[0-9]{3}$R\x02id\x12-\n" +
+	"\x1cpantherclaw/v1/redteam.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf7\x02\n" +
+	"\x11RangeScenarioDecl\x124\n" +
+	"\x02id\x18\x01 \x01(\tB$\xbaH!r\x1f2\x1d^(RT-[0-9]{3}|CX-[0-9]{3,5})$R\x02id\x12-\n" +
 	"\x06digest\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x06digest\x12.\n" +
 	"\x04tier\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15R\tcommunityR\bbusinessR\x04tier\x12N\n" +
 	"\bcategory\x18\x04 \x01(\tB2\xbaH/r-R\n" +
@@ -1580,10 +1603,10 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x10decisive_control\x18\x06 \x01(\tB\x19\xbaH\x16r\x14\x18\x102\x10^(HR-[0-9]{3})?$R\x0fdecisiveControl\x124\n" +
 	"\x04kind\x18\a \x01(\tB \xbaH\x1dr\x1b\x10\x01\x18 2\x15^[a-z]+([.][a-z_]+)?$R\x04kind\x12<\n" +
 	"\n" +
-	"probe_kind\x18\b \x01(\tB\x1d\xbaH\x1ar\x18\x18@2\x14^([a-z][a-z0-9_]*)?$R\tprobeKind\"\xbb\x02\n" +
+	"probe_kind\x18\b \x01(\tB\x1d\xbaH\x1ar\x18\x18@2\x14^([a-z][a-z0-9_]*)?$R\tprobeKind\"\xcb\x02\n" +
 	"\x13RecordResultRequest\x12#\n" +
-	"\brange_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\arangeId\x125\n" +
-	"\vscenario_id\x18\x02 \x01(\tB\x14\xbaH\x11r\x0f2\r^RT-[0-9]{3}$R\n" +
+	"\brange_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\arangeId\x12E\n" +
+	"\vscenario_id\x18\x02 \x01(\tB$\xbaH!r\x1f2\x1d^(RT-[0-9]{3}|CX-[0-9]{3,5})$R\n" +
 	"scenarioId\x12>\n" +
 	"\x0fscenario_digest\x18\x03 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x0escenarioDigest\x12H\n" +
 	"\averdict\x18\x04 \x01(\x0e2\x1c.pantherclaw.v1.RangeVerdictB\x10\xbaH\r\x82\x01\n" +
@@ -1604,7 +1627,7 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	" \x01(\tR\x0fdecisiveControl\x12\x12\n" +
 	"\x04kind\x18\v \x01(\tR\x04kind\x12\x1d\n" +
 	"\n" +
-	"probe_kind\x18\f \x01(\tR\tprobeKind\"\xf4\x02\n" +
+	"probe_kind\x18\f \x01(\tR\tprobeKind\"\x8c\x03\n" +
 	"\vRangeResult\x12\x1f\n" +
 	"\vscenario_id\x18\x01 \x01(\tR\n" +
 	"scenarioId\x12'\n" +
@@ -1615,7 +1638,8 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x0fclaimed_verdict\x18\x06 \x01(\x0e2\x1c.pantherclaw.v1.RangeVerdictR\x0eclaimedVerdict\x12/\n" +
 	"\x05steps\x18\a \x03(\v2\x19.pantherclaw.v1.RangeStepR\x05steps\x12;\n" +
 	"\vrecord_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"recordTime\"K\n" +
+	"recordTime\x12\x16\n" +
+	"\x06origin\x18\t \x01(\tR\x06origin\"K\n" +
 	"\x14RecordResultResponse\x123\n" +
 	"\x06result\x18\x01 \x01(\v2\x1b.pantherclaw.v1.RangeResultR\x06result\"9\n" +
 	"\x12FinishRangeRequest\x12#\n" +
@@ -1625,7 +1649,7 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x04fail\x18\x02 \x01(\x05R\x04fail\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\x05R\x05error\x12\x18\n" +
 	"\askipped\x18\x04 \x01(\x05R\askipped\x12\x18\n" +
-	"\amissing\x18\x05 \x01(\x05R\amissing\"\xff\x03\n" +
+	"\amissing\x18\x05 \x01(\x05R\amissing\"\x97\x04\n" +
 	"\x05Range\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12$\n" +
 	"\x0erange_agent_id\x18\x02 \x01(\tR\frangeAgentId\x12\x1d\n" +
@@ -1641,7 +1665,8 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\vfinish_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"finishTime\x123\n" +
-	"\x06counts\x18\v \x01(\v2\x1b.pantherclaw.v1.RangeCountsR\x06counts\"y\n" +
+	"\x06counts\x18\v \x01(\v2\x1b.pantherclaw.v1.RangeCountsR\x06counts\x12\x16\n" +
+	"\x06origin\x18\f \x01(\tR\x06origin\"y\n" +
 	"\x13FinishRangeResponse\x12+\n" +
 	"\x05range\x18\x01 \x01(\v2\x15.pantherclaw.v1.RangeR\x05range\x125\n" +
 	"\aresults\x18\x02 \x03(\v2\x1b.pantherclaw.v1.RangeResultR\aresults\"6\n" +

@@ -8,7 +8,6 @@ package pgauthority_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/ranges/adapters/pgranges"
 	rangeapp "github.com/katocxl/pantherclaw/internal/ranges/app"
 	rdomain "github.com/katocxl/pantherclaw/internal/ranges/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/library"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -64,7 +64,8 @@ func TestHR224_RangePacksVerifyOffline(t *testing.T) {
 	svc := &rangeapp.Service{Store: pgranges.Store{Pool: w.pool}, Editions: licence{billing.Team}, Exporter: rangePacks{p}}
 
 	decl := func(id string) rdomain.Scenario {
-		return rdomain.Scenario{ID: id, Digest: strings.Repeat("a", 64), Tier: rdomain.TierCommunity, Category: "boundary", Suite: "coding-agent", Title: id, StepCount: 1}
+		e, _ := library.Lookup(id)
+		return rdomain.Scenario{ID: id, Digest: e.Digest, Tier: rdomain.TierCommunity, Category: "boundary", Suite: "coding-agent", Title: id, StepCount: 1}
 	}
 	rng, err := svc.StartRange(owner, rangeapp.StartInput{Agent: w.agent, Scenarios: []rdomain.Scenario{decl("RT-001"), decl("RT-002"), decl("RT-003")}, RunnerVersion: "test"})
 	if err != nil {

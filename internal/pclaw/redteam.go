@@ -55,7 +55,7 @@ func init() {
 	commands["redteam run"] = command{
 		usage: "redteam run --scenarios DIR --workload-file FILE --gateway URL [--suite coding-agent|platform|all] [--grant ID] " +
 			"[--token-file FILE] [--role ROLE=CONNECTION]… [--fixture NAME=VALUE]… [--provides github,payments,mcp] " +
-			"[--interactive] [--baseline PACK --trust FILE] [--out DIR]",
+			"[--interactive] [--baseline PACK --trust FILE | --baseline-range RANGE_ID] [--out DIR]",
 		run: redteamRun,
 	}
 	commands["redteam report"] = command{usage: "redteam report RANGE_ID --out PACK.zip", run: redteamReport}
@@ -83,7 +83,7 @@ var (
 type runOptions struct {
 	dir, suite, keyFile, gateway, grant, tokenFile string
 	roles, fixtures                                list
-	provides, baseline, trust, out                 string
+	provides, baseline, trust, out, baselineRange  string
 	interactive                                    bool
 }
 
@@ -91,7 +91,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	var o runOptions
 	fs := flag.NewFlagSet("redteam run", flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
-	fs.StringVar(&o.dir, "scenarios", "", "directory of RT-###-*.yaml scenario files")
+	fs.StringVar(&o.dir, "scenarios", "", "directory of RT-###-*.yaml (library) or CX-###-*.yaml (customer) scenario files")
 	fs.StringVar(&o.suite, "suite", "coding-agent", "coding-agent, platform or all")
 	fs.StringVar(&o.keyFile, "workload-file", "", "the range instance's enrolled workload key file")
 	fs.StringVar(&o.gateway, "gateway", "", "the gateway's public URL")
@@ -103,6 +103,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	fs.BoolVar(&o.interactive, "interactive", false, "run person steps: print what to approve and wait for you")
 	fs.StringVar(&o.baseline, "baseline", "", "a baseline assurance pack: fail on any regression from it")
 	fs.StringVar(&o.trust, "trust", "", "trust file for verifying the baseline pack")
+	fs.StringVar(&o.baselineRange, "baseline-range", "", "for customer (CX-###) scenarios: an earlier finished customer range to fail on any regression from")
 	fs.StringVar(&o.out, "out", ".", "directory for summary-<range>.json")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -114,6 +115,8 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		return failExit("--suite must be one of %s", strings.Join(suites, ", "))
 	case o.baseline != "" && o.trust == "":
 		return failExit("--baseline needs --trust: the baseline pack is verified offline first")
+	case o.baseline != "" && o.baselineRange != "":
+		return failExit("--baseline and --baseline-range are exclusive")
 	}
 	for _, r := range o.roles {
 		if !roleRe.MatchString(r) {
@@ -140,6 +143,16 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	set = slices.DeleteFunc(set, func(l rtapp.Loaded) bool { return o.suite != "all" && l.Scenario.Suite != o.suite })
 	if len(set) == 0 {
 		return failExit("no scenarios of suite %s in %s", o.suite, o.dir)
+	}
+	origin, err := setOrigin(set)
+	if err != nil {
+		return failExit("%v", err)
+	}
+	switch {
+	case origin == rtdomain.OriginCustomer && o.baseline != "":
+		return failExit("customer scenarios have no assurance pack to compare with: use --baseline-range RANGE_ID")
+	case origin == rtdomain.OriginLibrary && o.baselineRange != "":
+		return failExit("--baseline-range is for customer (CX-###) scenarios; library scenarios compare with an assurance pack (--baseline)")
 	}
 
 	kf, err := workloadclient.ReadKeyFile(o.keyFile)
@@ -171,6 +184,16 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	c, err := a.clients()
 	if err != nil {
 		return failExit("%v", err)
+	}
+	if origin == rtdomain.OriginCustomer {
+		if err := checkCustomerEdition(ctx, c); err != nil {
+			return failExit("%v", err)
+		}
+		if o.baselineRange != "" {
+			if base, err = loadRangeBaseline(ctx, c, o.baselineRange); err != nil {
+				return failExit("baseline: %v", err)
+			}
+		}
 	}
 
 	rt := a.http.Transport
@@ -270,7 +293,10 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		c := rtdomain.Compare(base.entries, rtapp.Entries(results))
 		cmp = &c
 	}
-	sum := newSummary(rangeID, fin.GetRange(), set, results, cmp)
+	sum, err := newSummary(rangeID, fin.GetRange(), set, results, cmp)
+	if err != nil {
+		return failExit("%v", err)
+	}
 	sum.Notes = append(append([]string(nil), grantNotes...), driver.Notes()...)
 	if base != nil {
 		sum.Baseline = fmt.Sprintf("range %s, finished %s, %d scenarios", base.rangeID, base.finished, len(base.entries))
@@ -404,17 +430,20 @@ var hrRe = regexp.MustCompile(`^HR-[0-9]{3}$`)
 // summary is the unsigned summary.json: what this run saw, for the person
 // who ran it. The signed assurance report is `redteam report`.
 type summary struct {
-	Statement     string          `json:"statement"`
-	Unsigned      bool            `json:"unsigned"`
-	RangeID       string          `json:"range_id"`
-	RunnerVersion string          `json:"runner_version"`
-	SetDigest     string          `json:"scenario_set_digest"`
-	Counts        map[string]int  `json:"counts"`
-	Results       []summaryResult `json:"results"`
-	Regressions   []string        `json:"regressions,omitempty"`
-	Changed       []string        `json:"changed_since_baseline,omitempty"`
-	Baseline      string          `json:"baseline,omitempty"`
-	Notes         []string        `json:"notes,omitempty"`
+	Statement     string `json:"statement"`
+	Unsigned      bool   `json:"unsigned"`
+	RangeID       string `json:"range_id"`
+	RunnerVersion string `json:"runner_version"`
+	SetDigest     string `json:"scenario_set_digest"`
+	// Origin is library or customer; a customer summary is marked
+	// customer-authored (G0 M17 D126, HR-466).
+	Origin      string          `json:"origin"`
+	Counts      map[string]int  `json:"counts"`
+	Results     []summaryResult `json:"results"`
+	Regressions []string        `json:"regressions,omitempty"`
+	Changed     []string        `json:"changed_since_baseline,omitempty"`
+	Baseline    string          `json:"baseline,omitempty"`
+	Notes       []string        `json:"notes,omitempty"`
 }
 
 type summaryResult struct {
@@ -423,6 +452,7 @@ type summaryResult struct {
 	Title    string `json:"title"`
 	Category string `json:"category"`
 	Tier     string `json:"tier"`
+	Origin   string `json:"origin"`
 	Verdict  string `json:"verdict"`
 	Detail   string `json:"detail,omitempty"`
 	Steps    int    `json:"steps_run"`
@@ -430,26 +460,46 @@ type summaryResult struct {
 
 const summaryStatement = "Tested-control evidence against simulated targets, recorded by this runner. Unsigned. Not a compliance certification."
 
-func newSummary(rangeID string, r *pantherclawv1.Range, set []rtapp.Loaded, results []rtdomain.Result, cmp *rtdomain.Comparison) summary {
+// newSummary pairs each scenario of set with its result. The runner returns
+// one result per scenario, in order; anything else is an error, so no
+// scenario is dropped from the summary and its origin is the set's.
+func newSummary(rangeID string, r *pantherclawv1.Range, set []rtapp.Loaded, results []rtdomain.Result, cmp *rtdomain.Comparison) (summary, error) {
+	if len(results) != len(set) {
+		return summary{}, fmt.Errorf("the runner returned %d results for %d scenarios", len(results), len(set))
+	}
+	origin, err := setOrigin(set)
+	if err != nil {
+		return summary{}, err
+	}
 	digests := map[string]string{}
 	s := summary{Statement: summaryStatement, Unsigned: true, RangeID: rangeID, RunnerVersion: r.GetRunnerVersion(), Counts: map[string]int{}}
 	for i, l := range set {
 		digests[l.Scenario.ID] = l.Digest
-		res := results[i]
+		res := results[i] //nolint:gosec // G602: len(results) == len(set), checked above
+		if res.ScenarioID != l.Scenario.ID {
+			return summary{}, fmt.Errorf("result %d is for %s, not scenario %s", i, res.ScenarioID, l.Scenario.ID)
+		}
 		s.Counts[string(res.Verdict)]++
 		s.Results = append(s.Results, summaryResult{
 			ID: l.Scenario.ID, Digest: l.Digest, Title: l.Scenario.Title, Category: l.Scenario.Category,
-			Tier: l.Scenario.Tier, Verdict: string(res.Verdict), Detail: res.Detail, Steps: len(res.Steps),
+			Tier: l.Scenario.Tier, Origin: rtdomain.OriginOf(l.Scenario.ID), Verdict: string(res.Verdict), Detail: res.Detail, Steps: len(res.Steps),
 		})
 	}
 	s.SetDigest = rtdomain.SetDigest(digests)
+	s.Origin = origin
+	if origin == "" {
+		s.Origin = rtdomain.OriginLibrary // an empty set
+	}
+	if origin == rtdomain.OriginCustomer {
+		s.Statement = customerStatement
+	}
 	if cmp != nil {
 		for _, rg := range cmp.Regressions {
 			s.Regressions = append(s.Regressions, rg.ID+" "+string(rg.Now))
 		}
 		s.Changed = cmp.Changed
 	}
-	return s
+	return s, nil
 }
 
 func writeSummary(dir string, s summary) error {
