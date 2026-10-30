@@ -1473,7 +1473,8 @@ type PcDecisionConsequence struct {
 	CreatedAt      time.Time
 	Depth          int16
 	ParentPosition pgtype.Int2
-	Source         string
+	// The chain's provenance (G0 M17 D145): customer when a customer rule gave the consequence or it is below one a customer rule gave, even from a package rule; such a consequence is never waived.
+	Source string
 }
 
 type PcDecisionReceipt struct {
