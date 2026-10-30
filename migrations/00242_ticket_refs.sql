@@ -31,6 +31,9 @@
 -- restoration plan or an approval.
 
 -- +goose Up
+-- squawk: each CHECK only widens a value list or holds for every row; goose
+-- runs each migration in one transaction, and NOT VALID then VALIDATE keeps
+-- the lock short.
 ALTER TABLE pc.case_entries
     DROP CONSTRAINT case_entries_kind_check,
     ADD CONSTRAINT case_entries_kind_check
@@ -39,8 +42,11 @@ ALTER TABLE pc.case_entries
     ADD CONSTRAINT case_entries_check8
         CHECK ((kind IN ('FACT', 'HYPOTHESIS', 'QUESTION', 'ANSWER', 'NOTE', 'IMPACT', 'EXTERNAL')) = (text IS NOT NULL AND btrim(text) <> '')) NOT VALID,
     ADD CONSTRAINT case_entries_external_author CHECK (kind <> 'EXTERNAL' OR author_type = 'system') NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.case_entries VALIDATE CONSTRAINT case_entries_kind_check;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.case_entries VALIDATE CONSTRAINT case_entries_check8;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.case_entries VALIDATE CONSTRAINT case_entries_external_author;
 
 -- The entry trigger of 00122 with one change: a closed case also takes

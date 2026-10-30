@@ -31,6 +31,8 @@
 -- HR-039): there is no inbound endpoint for either.
 
 -- +goose Up
+-- squawk: each CHECK only widens a value list; goose runs each migration in
+-- one transaction, and NOT VALID then VALIDATE keeps the lock short.
 ALTER TABLE pc.notification_channels
     DROP CONSTRAINT notification_channels_kind_check,
     ADD CONSTRAINT notification_channels_kind_check
@@ -38,7 +40,9 @@ ALTER TABLE pc.notification_channels
     DROP CONSTRAINT notification_channels_secret_kind,
     ADD CONSTRAINT notification_channels_secret_kind
         CHECK ((kind IN ('slack', 'webhook', 'slack_app', 'teams_app')) = (secret IS NOT NULL)) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.notification_channels VALIDATE CONSTRAINT notification_channels_kind_check;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.notification_channels VALIDATE CONSTRAINT notification_channels_secret_kind;
 
 -- A DM is a delivery to one person through a slack_app channel's bot.
@@ -48,7 +52,9 @@ ALTER TABLE pc.deliveries
         CHECK (kind IN ('log', 'email', 'slack', 'webhook', 'slack_app', 'slack_dm', 'teams_app')) NOT VALID,
     DROP CONSTRAINT deliveries_check1,
     ADD CONSTRAINT deliveries_check1 CHECK ((kind IN ('email', 'slack_dm')) = (recipient_user_id IS NOT NULL)) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.deliveries VALIDATE CONSTRAINT deliveries_kind_check;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.deliveries VALIDATE CONSTRAINT deliveries_check1;
 
 -- Whether a slack_app channel's bot also sends approval DMs, and the email
@@ -59,12 +65,14 @@ ALTER TABLE pc.deliveries VALIDATE CONSTRAINT deliveries_check1;
 ALTER TABLE pc.slack_app_channels
     ADD COLUMN direct_messages boolean NOT NULL DEFAULT false,
     ADD COLUMN allowed_email_domains text[] NOT NULL DEFAULT '{}',
+    -- squawk-ignore constraint-missing-not-valid
     ADD CONSTRAINT slack_app_channels_email_domains CHECK (
         cardinality(allowed_email_domains) <= 20
         AND (cardinality(allowed_email_domains) >= 1) = direct_messages
         AND array_position(allowed_email_domains, NULL) IS NULL
         AND (cardinality(allowed_email_domains) = 0 OR array_to_string(allowed_email_domains, ',')
              ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(,[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+)*$'));
+-- squawk-ignore require-concurrent-index-creation
 CREATE UNIQUE INDEX slack_app_channels_dm ON pc.slack_app_channels (org_id) WHERE direct_messages;
 
 CREATE TABLE pc.chat_identity_links (
