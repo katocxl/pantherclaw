@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"time"
 
+	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/gateways/ca"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/hosting/domain"
@@ -178,15 +179,42 @@ func (s *Service) Report(ctx context.Context, id HostIdentity, org ids.OrgID, ho
 	if len(version) > 64 {
 		return pcerr.New(pcerr.InvalidArgument, "VERSION_INVALID", "version too long")
 	}
+	var target *string
+	if s.fleet != nil {
+		p, err := s.fleet.FleetPolicy(ctx, org)
+		if err != nil {
+			return err
+		}
+		target = rolloutTarget(version, p.MinimumVersion)
+	}
 	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		n, err := dbq.New(tx).ReportHostedGateway(ctx, dbq.ReportHostedGatewayParams{
+		q := dbq.New(tx)
+		n, err := q.ReportHostedGateway(ctx, dbq.ReportHostedGatewayParams{
 			Healthy: healthy, Version: &version, OrgID: org, ID: hosted, HostID: &id.Host,
 		})
-		if err == nil && n == 0 {
+		if err != nil {
+			return err
+		}
+		if n == 0 {
 			return ErrNotAssigned
 		}
+		_, err = q.SetHostedTarget(ctx, target, org, hosted)
 		return err
 	})
+}
+
+// rolloutTarget is the version a hosted gateway should upgrade to: the
+// org's fleet minimum, while it reports a lower or an unknown version. The
+// minimum never moves a gateway down, and without one there is no target.
+func rolloutTarget(reported string, minimum gwapp.Version) *string {
+	if !minimum.Known() {
+		return nil
+	}
+	if v, ok := gwapp.ParseVersion(reported); ok && v.Compare(minimum) >= 0 {
+		return nil
+	}
+	t := minimum.String()
+	return &t
 }
 
 // Stopped records that the host stopped and removed a deprovisioned

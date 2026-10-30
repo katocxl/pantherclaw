@@ -20,6 +20,7 @@ import (
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/gateways/ca"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/hosting/domain"
@@ -54,7 +55,18 @@ type Service struct {
 	// gatewayAPIURL is the server's gateway listener, told to hosted
 	// gateways with their token.
 	gatewayAPIURL string
+	// fleet reads an org's fleet policy, whose minimum version is the target
+	// of its hosted gateway's upgrades (nil: none, as on the worker).
+	fleet FleetPolicies
 }
+
+// FleetPolicies reads an org's fleet policy (M18's gateways Service).
+type FleetPolicies interface {
+	FleetPolicy(ctx context.Context, org ids.OrgID) (gwapp.FleetPolicy, error)
+}
+
+// WithFleet sets the fleet policy read upgrades roll toward.
+func (s *Service) WithFleet(f FleetPolicies) *Service { s.fleet = f; return s }
 
 // New returns the hosted gateway use cases.
 func New(pool *db.Pool, authority *ca.Authority, env *pccrypto.Envelope, ents Entitlements, gatewayAPIURL string, clk clock.Clock) *Service {

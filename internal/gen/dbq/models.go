@@ -2154,6 +2154,8 @@ type PcHostedGateway struct {
 	Pids            int32
 	TokenSealed     []byte
 	TokenPulledAt   *time.Time
+	EnrollmentID    *ids.UUID
+	EnrolledCertID  *ids.UUID
 	Version         *string
 	TargetVersion   *string
 	Failure         *string

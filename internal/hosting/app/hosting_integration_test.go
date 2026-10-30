@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,9 +41,11 @@ func (e edition) Current(context.Context) (billing.Entitlements, error) {
 
 type env struct {
 	pool *db.Pool
-	ca   *ca.Authority
-	svc  *app.Service
-	gws  *gwapp.Service
+	// admin bypasses the app role, to age records.
+	admin *db.Pool
+	ca    *ca.Authority
+	svc   *app.Service
+	gws   *gwapp.Service
 }
 
 func newEnv(t *testing.T, ed billing.Edition) *env {
@@ -71,7 +74,7 @@ func newEnv(t *testing.T, ed billing.Edition) *env {
 	}
 	envl := pccrypto.NewEnvelope(keystore.NewDEKStore(pool, kp))
 	return &env{
-		pool: pool, ca: authority,
+		pool: pool, admin: d.Pool(t, d.AdminConfig()), ca: authority,
 		svc: app.New(pool, authority, envl, edition(ed), "https://gw-api.example.test:8443", clock.System{}),
 		gws: gwapp.New(pool, authority, "https://gw-api.example.test:8443", nil),
 	}
@@ -462,4 +465,171 @@ func TestHR499_ADowngradeGatesOnlyNewRequests(t *testing.T) {
 	if _, err := down.Request(actx, "again", profile.Limits{}); !errors.Is(err, domain.ErrEdition) {
 		t.Fatalf("request after downgrade: %v", err)
 	}
+}
+
+// TestHR499_OnlyTheProvisionersEnrollmentGetsTheHostname: an org admin
+// cannot mint a token for its hosted gateway, and another certificate of
+// that gateway gets no server certificate; the enrolled one does (D219).
+//
+// Covers: PN-010.4
+func TestHR499_OnlyTheProvisionersEnrollmentGetsTheHostname(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	host := e.host(t, "h1", 10)
+	a, actx := e.org(t)
+	id := e.enrolledGateway(t, host, a, actx, "acme")
+	if _, err := e.gws.CreateEnrollmentToken(actx, id.Gateway); !errors.Is(err, gwapp.ErrGatewayHosted) {
+		t.Fatalf("a token for a hosted gateway: %v", err)
+	}
+	pub, _ := key(t)
+	other := ca.Identity{Org: a, Gateway: id.Gateway, Cert: ids.NewV7()}
+	if _, err := e.svc.IssueServerCertificate(context.Background(), other, pub); !errors.Is(err, app.ErrNotHosted) {
+		t.Fatalf("another certificate of the gateway: %v", err)
+	}
+	if _, err := e.svc.IssueServerCertificate(context.Background(), id, pub); err != nil {
+		t.Fatalf("the enrolled certificate: %v", err)
+	}
+}
+
+// race provisions the orgs at once and counts who was placed and who found
+// no room; every other outcome fails.
+func (e *env) race(t *testing.T, orgs ...ids.OrgID) (placed, refused int) {
+	t.Helper()
+	errs := make([]error, len(orgs))
+	var wg sync.WaitGroup
+	for i, org := range orgs {
+		wg.Go(func() { _, errs[i] = e.svc.ProvisionOrg(context.Background(), org) })
+	}
+	wg.Wait()
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			placed++
+		case errors.Is(err, domain.ErrNoCapacity):
+			refused++
+		default:
+			t.Fatal(err)
+		}
+	}
+	return placed, refused
+}
+
+// TestT216_TwoOrgsRacingForOneSlugNeverShareAHost: placements on a host are
+// one after the other, so <slug>.gw.<domain> names one process (D219).
+//
+// Covers: PN-010.4
+func TestT216_TwoOrgsRacingForOneSlugNeverShareAHost(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	e.host(t, "h1", 10)
+	a, actx := e.org(t)
+	b, bctx := e.org(t)
+	for _, ctx := range []context.Context{actx, bctx} {
+		if _, err := e.svc.Request(ctx, "acme", profile.Limits{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if placed, refused := e.race(t, a, b); placed != 1 || refused != 1 {
+		t.Fatalf("placed %d, refused %d", placed, refused)
+	}
+}
+
+// TestT218_RacingPlacementsStayWithinCapacity: the same lock bounds a
+// host's capacity (D219).
+//
+// Covers: PN-010.4
+func TestT218_RacingPlacementsStayWithinCapacity(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	e.host(t, "h1", 1)
+	a, actx := e.org(t)
+	b, bctx := e.org(t)
+	for ctx, slug := range map[context.Context]string{actx: "acme", bctx: "beta"} {
+		if _, err := e.svc.Request(ctx, slug, profile.Limits{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if placed, refused := e.race(t, a, b); placed != 1 || refused != 1 {
+		t.Fatalf("placed %d, refused %d", placed, refused)
+	}
+}
+
+// TestHR502_AReissuedTokenEndsTheOneBefore: a token not pulled in time is
+// replaced, and the old one no longer enrolls (D219).
+//
+// Covers: PN-010.4
+func TestHR502_AReissuedTokenEndsTheOneBefore(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	e.host(t, "h1", 10)
+	a, actx := e.org(t)
+	hosted := e.provisioned(t, a, actx, "acme")
+	before, err := e.svc.Get(actx, hosted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := e.admin.Pgx()
+	if _, err := admin.Exec(context.Background(), `UPDATE pc.hosted_gateways SET updated_at = now() - interval '11 minutes' WHERE id = $1`, hosted); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(context.Background(), `UPDATE pc.gateway_enrollment_tokens SET created_at = now() - interval '11 minutes', expires_at = now() + interval '4 minutes' WHERE id = $1`, *before.EnrollmentID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ProvisionOrg(context.Background(), a); err != nil {
+		t.Fatal(err)
+	}
+	after, err := e.svc.Get(actx, hosted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.EnrollmentID == nil || *after.EnrollmentID == *before.EnrollmentID {
+		t.Fatal("no new token")
+	}
+	var live bool
+	if err := admin.QueryRow(context.Background(), `SELECT expires_at > now() FROM pc.gateway_enrollment_tokens WHERE id = $1`, *before.EnrollmentID).Scan(&live); err != nil {
+		t.Fatal(err)
+	}
+	if live {
+		t.Fatal("the replaced token is still live")
+	}
+}
+
+// TestReportSetsTheTargetFromTheFleetPolicy: a hosted gateway below its
+// org's fleet minimum gets that version as its target, and loses it once it
+// reports the minimum or above; without a minimum there is none.
+//
+// Covers: PN-010.4
+func TestReportSetsTheTargetFromTheFleetPolicy(t *testing.T) {
+	e := newEnv(t, billing.Enterprise)
+	host := e.host(t, "h1", 10)
+	a, actx := e.org(t)
+	hosted := e.provisioned(t, a, actx, "acme")
+	svc := e.svc.WithFleet(e.gws)
+	if _, err := svc.PullToken(context.Background(), host, a, hosted); err != nil {
+		t.Fatal(err)
+	}
+	report := func(version, want string) {
+		t.Helper()
+		if err := svc.Report(context.Background(), host, a, hosted, true, version); err != nil {
+			t.Fatal(err)
+		}
+		h, err := svc.Get(actx, hosted)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := ""
+		if h.TargetVersion != nil {
+			got = *h.TargetVersion
+		}
+		if got != want {
+			t.Fatalf("reported %s: target %q, want %q", version, got, want)
+		}
+	}
+	report("1.0.0", "")
+	if err := e.pool.InTenantTx(context.Background(), a, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, "INSERT INTO pc.gateway_fleet_policy (org_id, minimum_version, updated_by) VALUES ($1, 'v1.2.0', 'test')", a)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	report("1.0.0", "v1.2.0")
+	report("dev", "v1.2.0")
+	report("1.2.0", "")
+	report("1.3.0", "")
 }

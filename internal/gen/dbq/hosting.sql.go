@@ -15,6 +15,59 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const bindHostedEnrollment = `-- name: BindHostedEnrollment :exec
+UPDATE pc.hosted_gateways SET enrolled_cert_id = $1, updated_at = now()
+WHERE org_id = $2 AND gateway_id = $3 AND enrollment_id = $4
+`
+
+type BindHostedEnrollmentParams struct {
+	CertID       *ids.UUID
+	OrgID        ids.OrgID
+	GatewayID    *ids.UUID
+	EnrollmentID *ids.UUID
+}
+
+// Records the certificate the provisioner's token enrolled; a token of any
+// other gateway changes nothing.
+func (q *Queries) BindHostedEnrollment(ctx context.Context, arg BindHostedEnrollmentParams) error {
+	_, err := q.db.Exec(ctx, bindHostedEnrollment,
+		arg.CertID,
+		arg.OrgID,
+		arg.GatewayID,
+		arg.EnrollmentID,
+	)
+	return err
+}
+
+const certDescendsFrom = `-- name: CertDescendsFrom :one
+WITH RECURSIVE chain AS (
+    SELECT c.id, c.previous_id FROM pc.gateway_certs c WHERE c.org_id = $2 AND c.id = $3
+    UNION ALL
+    SELECT c.id, c.previous_id FROM pc.gateway_certs c
+    JOIN chain ON c.org_id = $2 AND c.id = chain.previous_id
+)
+SELECT EXISTS (SELECT 1 FROM chain WHERE chain.id = $1::uuid)
+`
+
+// Whether the certificate is the enrolled one or a renewal of it.
+func (q *Queries) CertDescendsFrom(ctx context.Context, enrolledCertID ids.UUID, orgID ids.OrgID, certID ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, certDescendsFrom, enrolledCertID, orgID, certID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const expireHostedEnrollmentToken = `-- name: ExpireHostedEnrollmentToken :exec
+UPDATE pc.gateway_enrollment_tokens SET expires_at = now()
+WHERE org_id = $1 AND id = $2 AND used_at IS NULL AND expires_at > now()
+`
+
+// Ends a token that was replaced before it was used.
+func (q *Queries) ExpireHostedEnrollmentToken(ctx context.Context, orgID ids.OrgID, iD ids.UUID) error {
+	_, err := q.db.Exec(ctx, expireHostedEnrollmentToken, orgID, iD)
+	return err
+}
+
 const failHostedGateway = `-- name: FailHostedGateway :execrows
 UPDATE pc.hosted_gateways SET state = 'FAILED', failure = $1, token_sealed = NULL, updated_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'REQUESTED'
@@ -42,7 +95,7 @@ func (q *Queries) FinishDeprovisionHostedGateway(ctx context.Context, orgID ids.
 }
 
 const getHostedGateway = `-- name: GetHostedGateway :one
-SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways WHERE org_id = $1 AND id = $2
+SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetHostedGateway(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcHostedGateway, error) {
@@ -60,6 +113,8 @@ func (q *Queries) GetHostedGateway(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.Pids,
 		&i.TokenSealed,
 		&i.TokenPulledAt,
+		&i.EnrollmentID,
+		&i.EnrolledCertID,
 		&i.Version,
 		&i.TargetVersion,
 		&i.Failure,
@@ -116,7 +171,7 @@ func (q *Queries) GetHostingHostByName(ctx context.Context, name string) (PcHost
 }
 
 const hostedGatewayOfGateway = `-- name: HostedGatewayOfGateway :one
-SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
+SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
 WHERE org_id = $1 AND gateway_id = $2::uuid
   AND state IN ('ENROLLED', 'RUNNING')
 `
@@ -138,6 +193,8 @@ func (q *Queries) HostedGatewayOfGateway(ctx context.Context, orgID ids.OrgID, g
 		&i.Pids,
 		&i.TokenSealed,
 		&i.TokenPulledAt,
+		&i.EnrollmentID,
+		&i.EnrolledCertID,
 		&i.Version,
 		&i.TargetVersion,
 		&i.Failure,
@@ -186,7 +243,7 @@ func (q *Queries) HostingHostCertAuth(ctx context.Context, id ids.UUID) (Hosting
 const insertHostedGateway = `-- name: InsertHostedGateway :one
 INSERT INTO pc.hosted_gateways (org_id, id, slug, milli_cpus, memory_mib, pids, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at
+RETURNING org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at
 `
 
 type InsertHostedGatewayParams struct {
@@ -222,6 +279,8 @@ func (q *Queries) InsertHostedGateway(ctx context.Context, arg InsertHostedGatew
 		&i.Pids,
 		&i.TokenSealed,
 		&i.TokenPulledAt,
+		&i.EnrollmentID,
+		&i.EnrolledCertID,
 		&i.Version,
 		&i.TargetVersion,
 		&i.Failure,
@@ -361,11 +420,10 @@ func (q *Queries) ListActiveHostingHosts(ctx context.Context) ([]PcHostingHost, 
 }
 
 const listDueHostedGateways = `-- name: ListDueHostedGateways :many
-SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
+SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
 WHERE org_id = $1
   AND (state = 'REQUESTED'
-       OR (state = 'PROVISIONED' AND token_pulled_at IS NULL AND updated_at < now() - interval '10 minutes')
-       OR (state = 'RUNNING' AND target_version IS NOT NULL AND target_version IS DISTINCT FROM version))
+       OR (state = 'PROVISIONED' AND token_pulled_at IS NULL AND updated_at < now() - interval '10 minutes'))
 ORDER BY id
 FOR UPDATE SKIP LOCKED
 `
@@ -392,6 +450,8 @@ func (q *Queries) ListDueHostedGateways(ctx context.Context, orgID ids.OrgID) ([
 			&i.Pids,
 			&i.TokenSealed,
 			&i.TokenPulledAt,
+			&i.EnrollmentID,
+			&i.EnrolledCertID,
 			&i.Version,
 			&i.TargetVersion,
 			&i.Failure,
@@ -411,7 +471,7 @@ func (q *Queries) ListDueHostedGateways(ctx context.Context, orgID ids.OrgID) ([
 }
 
 const listHostedGateways = `-- name: ListHostedGateways :many
-SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
+SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
 WHERE org_id = $1
   AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY id
@@ -439,6 +499,8 @@ func (q *Queries) ListHostedGateways(ctx context.Context, orgID ids.OrgID, after
 			&i.Pids,
 			&i.TokenSealed,
 			&i.TokenPulledAt,
+			&i.EnrollmentID,
+			&i.EnrolledCertID,
 			&i.Version,
 			&i.TargetVersion,
 			&i.Failure,
@@ -458,7 +520,7 @@ func (q *Queries) ListHostedGateways(ctx context.Context, orgID ids.OrgID, after
 }
 
 const liveHostedGateway = `-- name: LiveHostedGateway :one
-SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
+SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways
 WHERE org_id = $1 AND state NOT IN ('DEPROVISIONED', 'FAILED')
 `
 
@@ -478,6 +540,8 @@ func (q *Queries) LiveHostedGateway(ctx context.Context, orgID ids.OrgID) (PcHos
 		&i.Pids,
 		&i.TokenSealed,
 		&i.TokenPulledAt,
+		&i.EnrollmentID,
+		&i.EnrolledCertID,
 		&i.Version,
 		&i.TargetVersion,
 		&i.Failure,
@@ -489,8 +553,32 @@ func (q *Queries) LiveHostedGateway(ctx context.Context, orgID ids.OrgID) (PcHos
 	return i, err
 }
 
+const lockActiveHostingHost = `-- name: LockActiveHostingHost :one
+SELECT id, name, domain, state, capacity, milli_cpus, memory_mib, agent_version, last_seen, created_at FROM pc.hosting_hosts WHERE id = $1 AND state = 'ACTIVE' FOR UPDATE
+`
+
+// Held while one hosted gateway is placed on the host, so the slug and
+// capacity checks and the placement are one step (G0 M19 D219).
+func (q *Queries) LockActiveHostingHost(ctx context.Context, id ids.UUID) (PcHostingHost, error) {
+	row := q.db.QueryRow(ctx, lockActiveHostingHost, id)
+	var i PcHostingHost
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Domain,
+		&i.State,
+		&i.Capacity,
+		&i.MilliCpus,
+		&i.MemoryMib,
+		&i.AgentVersion,
+		&i.LastSeen,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const lockHostedGateway = `-- name: LockHostedGateway :one
-SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at FROM pc.hosted_gateways WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockHostedGateway(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcHostedGateway, error) {
@@ -508,6 +596,8 @@ func (q *Queries) LockHostedGateway(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.Pids,
 		&i.TokenSealed,
 		&i.TokenPulledAt,
+		&i.EnrollmentID,
+		&i.EnrolledCertID,
 		&i.Version,
 		&i.TargetVersion,
 		&i.Failure,
@@ -546,16 +636,18 @@ func (q *Queries) LockHostingHostCert(ctx context.Context, id ids.UUID) (PcHosti
 const provisionHostedGateway = `-- name: ProvisionHostedGateway :execrows
 UPDATE pc.hosted_gateways
 SET state = 'PROVISIONED', gateway_id = $1, host_id = $2,
-    token_sealed = $3, token_pulled_at = NULL, failure = NULL, updated_at = now()
-WHERE org_id = $4 AND id = $5 AND state = 'REQUESTED'
+    token_sealed = $3, enrollment_id = $4, token_pulled_at = NULL, failure = NULL,
+    updated_at = now()
+WHERE org_id = $5 AND id = $6 AND state = 'REQUESTED'
 `
 
 type ProvisionHostedGatewayParams struct {
-	GatewayID   *ids.UUID
-	HostID      *ids.UUID
-	TokenSealed []byte
-	OrgID       ids.OrgID
-	ID          ids.UUID
+	GatewayID    *ids.UUID
+	HostID       *ids.UUID
+	TokenSealed  []byte
+	EnrollmentID *ids.UUID
+	OrgID        ids.OrgID
+	ID           ids.UUID
 }
 
 func (q *Queries) ProvisionHostedGateway(ctx context.Context, arg ProvisionHostedGatewayParams) (int64, error) {
@@ -563,6 +655,7 @@ func (q *Queries) ProvisionHostedGateway(ctx context.Context, arg ProvisionHoste
 		arg.GatewayID,
 		arg.HostID,
 		arg.TokenSealed,
+		arg.EnrollmentID,
 		arg.OrgID,
 		arg.ID,
 	)
@@ -573,12 +666,24 @@ func (q *Queries) ProvisionHostedGateway(ctx context.Context, arg ProvisionHoste
 }
 
 const reissueHostedToken = `-- name: ReissueHostedToken :execrows
-UPDATE pc.hosted_gateways SET token_sealed = $1, updated_at = now()
-WHERE org_id = $2 AND id = $3 AND state = 'PROVISIONED' AND token_pulled_at IS NULL
+UPDATE pc.hosted_gateways SET token_sealed = $1, enrollment_id = $2, updated_at = now()
+WHERE org_id = $3 AND id = $4 AND state = 'PROVISIONED' AND token_pulled_at IS NULL
 `
 
-func (q *Queries) ReissueHostedToken(ctx context.Context, tokenSealed []byte, orgID ids.OrgID, iD ids.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, reissueHostedToken, tokenSealed, orgID, iD)
+type ReissueHostedTokenParams struct {
+	TokenSealed  []byte
+	EnrollmentID *ids.UUID
+	OrgID        ids.OrgID
+	ID           ids.UUID
+}
+
+func (q *Queries) ReissueHostedToken(ctx context.Context, arg ReissueHostedTokenParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reissueHostedToken,
+		arg.TokenSealed,
+		arg.EnrollmentID,
+		arg.OrgID,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -661,7 +766,7 @@ SET state = CASE WHEN host_id IS NULL THEN 'DEPROVISIONED' ELSE 'DEPROVISIONING'
     deprovisioned_at = CASE WHEN host_id IS NULL THEN now() END,
     token_sealed = NULL, updated_at = now()
 WHERE org_id = $1 AND id = $2 AND state NOT IN ('DEPROVISIONING', 'DEPROVISIONED', 'FAILED')
-RETURNING org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at
+RETURNING org_id, id, slug, state, gateway_id, host_id, milli_cpus, memory_mib, pids, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version, failure, created_by, created_at, updated_at, deprovisioned_at
 `
 
 // Marks the org's hosted gateway for stopping; the caller has revoked its
@@ -681,6 +786,8 @@ func (q *Queries) StartDeprovisionHostedGateway(ctx context.Context, orgID ids.O
 		&i.Pids,
 		&i.TokenSealed,
 		&i.TokenPulledAt,
+		&i.EnrollmentID,
+		&i.EnrolledCertID,
 		&i.Version,
 		&i.TargetVersion,
 		&i.Failure,

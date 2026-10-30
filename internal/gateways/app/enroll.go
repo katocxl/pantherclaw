@@ -93,6 +93,12 @@ func (s *Service) Enroll(ctx context.Context, token string, csr []byte) (Enrolle
 		} else if n != 1 {
 			return ErrEnrollment
 		}
+		// A hosted gateway's record keeps what its provisioner's token enrolled.
+		if err := q.BindHostedEnrollment(ctx, dbq.BindHostedEnrollmentParams{
+			CertID: &id.Cert, OrgID: org, GatewayID: &g.ID, EnrollmentID: &t.ID,
+		}); err != nil {
+			return err
+		}
 		out = Enrolled{Certificate: iss.DER, CACertificate: s.ca.Certificate(), Gateway: g.ID, Org: org, GatewayAPIURL: s.gatewayAPIURL}
 		return record(ctx, tx, gatewayActor(id), "gateway.enrolled", g.ID, map[string]string{
 			"certificate_id": id.Cert.String(), "key_thumbprint": iss.Thumbprint, "enrollment_id": t.ID.String(),

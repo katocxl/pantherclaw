@@ -59,6 +59,12 @@ type Agent struct {
 	Log     *slog.Logger
 	// Health checks a running process; default: a TCP connect to its port.
 	Health func(ctx context.Context, addr string) error
+	// RollTimeout bounds the wait for an upgraded process to answer;
+	// default DefaultRollTimeout.
+	RollTimeout time.Duration
+	// held maps a version whose upgrade failed here to when it may be tried
+	// again (rollout.go).
+	held map[string]time.Time
 }
 
 // Interval is how often the agent reconciles.
@@ -99,14 +105,16 @@ func (a *Agent) Reconcile(ctx context.Context) error {
 		}
 	}
 	a.Router.Set(routes)
+	if err := a.roll(ctx, res.GetAssignments(), routes); err != nil {
+		errs = append(errs, err)
+		a.Log.WarnContext(ctx, "hosting.upgrade_failed", pclog.Err(err))
+	}
 	return errors.Join(errs...)
 }
 
 func (a *Agent) image(version string) (string, string) {
-	if version != "" {
-		if img, ok := a.Images[version]; ok {
-			return img, version
-		}
+	if img, ok := a.imageOf(version); ok {
+		return img, version
 	}
 	return a.Images[a.Default], a.Default
 }

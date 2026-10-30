@@ -130,27 +130,20 @@ func PeriodicJobs() []*river.PeriodicJob {
 // pulls it, and a host; a token not pulled in time is replaced. It returns
 // how many it provisioned.
 func (s *Service) ProvisionOrg(ctx context.Context, org ids.OrgID) (int, error) {
-	n := 0
+	var requested []dbq.PcHostedGateway
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if state, err := q.OrgState(ctx, org); err != nil || state != "ACTIVE" {
 			return err // a deleted org gets nothing (HR-392)
 		}
 		due, err := q.ListDueHostedGateways(ctx, org)
-		if err != nil || len(due) == 0 {
+		if err != nil {
 			return err
 		}
 		for _, h := range due {
 			switch h.State {
 			case domain.StateRequested:
-				host, err := s.place(ctx, h.Slug)
-				if err != nil {
-					return err
-				}
-				if err := s.provision(ctx, tx, q, h, host); err != nil {
-					return err
-				}
-				n++
+				requested = append(requested, h)
 			case domain.StateProvisioned:
 				if err := s.reissue(ctx, tx, q, h); err != nil {
 					return err
@@ -159,7 +152,41 @@ func (s *Service) ProvisionOrg(ctx context.Context, org ids.OrgID) (int, error) 
 		}
 		return nil
 	})
-	return n, err
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, h := range requested {
+		done, err := s.placeAndProvision(ctx, h)
+		if err != nil {
+			return n, err
+		}
+		if done {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// placeAndProvision places a requested hosted gateway on a host and
+// provisions it there. It reports false if another worker got there first.
+func (s *Service) placeAndProvision(ctx context.Context, h dbq.PcHostedGateway) (bool, error) {
+	done := false
+	err := s.place(ctx, h.Slug, func(host dbq.PcHostingHost) error {
+		return s.pool.InTenantTx(ctx, h.OrgID, func(ctx context.Context, tx db.TenantTx) error {
+			q := dbq.New(tx)
+			if state, err := q.OrgState(ctx, h.OrgID); err != nil || state != "ACTIVE" {
+				return err
+			}
+			cur, err := q.LockHostedGateway(ctx, h.OrgID, h.ID)
+			if err != nil || cur.State != domain.StateRequested {
+				return err
+			}
+			done = true
+			return s.provision(ctx, tx, q, cur, host)
+		})
+	})
+	return done, err
 }
 
 // hostedGatewayName is the gateway record's name: "hosted-" and the slug,
@@ -185,7 +212,7 @@ func (s *Service) provision(ctx context.Context, tx db.TenantTx, q *dbq.Queries,
 		return err
 	}
 	if n, err := q.ProvisionHostedGateway(ctx, dbq.ProvisionHostedGatewayParams{
-		GatewayID: &g.ID, HostID: &host.ID, TokenSealed: sealed, OrgID: h.OrgID, ID: h.ID,
+		GatewayID: &g.ID, HostID: &host.ID, TokenSealed: sealed, EnrollmentID: &enrollment, OrgID: h.OrgID, ID: h.ID,
 	}); err != nil {
 		return err
 	} else if n != 1 {
@@ -200,11 +227,18 @@ func (s *Service) reissue(ctx context.Context, tx db.TenantTx, q *dbq.Queries, h
 	if h.GatewayID == nil {
 		return nil
 	}
+	if h.EnrollmentID != nil { // the token it replaces ends now, not at its TTL
+		if err := q.ExpireHostedEnrollmentToken(ctx, h.OrgID, *h.EnrollmentID); err != nil {
+			return err
+		}
+	}
 	sealed, enrollment, err := s.mint(ctx, q, h, *h.GatewayID)
 	if err != nil {
 		return err
 	}
-	if n, err := q.ReissueHostedToken(ctx, sealed, h.OrgID, h.ID); err != nil || n != 1 {
+	if n, err := q.ReissueHostedToken(ctx, dbq.ReissueHostedTokenParams{
+		TokenSealed: sealed, EnrollmentID: &enrollment, OrgID: h.OrgID, ID: h.ID,
+	}); err != nil || n != 1 {
 		return err
 	}
 	return record(ctx, tx, systemActor, "hosted_gateway.token_reissued", h.ID, map[string]string{"enrollment_id": enrollment.String()})
@@ -231,16 +265,18 @@ func (s *Service) mint(ctx context.Context, q *dbq.Queries, h dbq.PcHostedGatewa
 
 // place picks the active host with the fewest hosted gateways below its
 // capacity (T-218) that runs none with the same slug, so that
-// <slug>.gw.<host domain> names one process; both are counted across orgs
+// <slug>.gw.<host domain> names one process, and runs fn while it holds that
+// host's row: the checks repeat under the lock, so two placements on one
+// host are one after the other (G0 M19 D219). Both are counted across orgs
 // through the audited lister.
-func (s *Service) place(ctx context.Context, slug string) (dbq.PcHostingHost, error) {
+func (s *Service) place(ctx context.Context, slug string, fn func(dbq.PcHostingHost) error) error {
 	var hosts []dbq.PcHostingHost
 	if err := s.pool.InGlobalTx(ctx, db.GlobalHosting, func(ctx context.Context, tx db.GlobalTx) error {
 		var err error
 		hosts, err = dbq.New(tx).ListActiveHostingHosts(ctx)
 		return err
 	}); err != nil {
-		return dbq.PcHostingHost{}, err
+		return err
 	}
 	type load struct {
 		host dbq.PcHostingHost
@@ -248,27 +284,49 @@ func (s *Service) place(ctx context.Context, slug string) (dbq.PcHostingHost, er
 	}
 	var room []load
 	for _, h := range hosts {
-		refs, err := s.assigned(ctx, h.ID, "")
+		n, ok, err := s.fits(ctx, h, slug)
 		if err != nil {
-			return dbq.PcHostingHost{}, err
+			return err
 		}
-		if len(refs) >= int(h.Capacity) {
-			continue
+		if ok {
+			room = append(room, load{h, n})
 		}
-		same, err := s.assigned(ctx, h.ID, slug)
-		if err != nil {
-			return dbq.PcHostingHost{}, err
-		}
-		if len(same) == 0 {
-			room = append(room, load{h, len(refs)})
-		}
-	}
-	if len(room) == 0 {
-		return dbq.PcHostingHost{}, domain.ErrNoCapacity
 	}
 	slices.SortStableFunc(room, func(a, b load) int { return a.n - b.n })
-	return room[0].host, nil
+	for _, r := range room {
+		placed := false
+		err := s.pool.InGlobalTx(ctx, db.GlobalHosting, func(gctx context.Context, tx db.GlobalTx) error {
+			host, err := dbq.New(tx).LockActiveHostingHost(gctx, r.host.ID)
+			if db.IsNoRows(err) {
+				return nil
+			} else if err != nil {
+				return err
+			}
+			if _, ok, err := s.fits(ctx, host, slug); err != nil || !ok {
+				return err
+			}
+			placed = true
+			return fn(host)
+		})
+		if err != nil || placed {
+			return err
+		}
+	}
+	return domain.ErrNoCapacity
 }
+
+// fits counts the host's hosted gateways and reports whether it can take
+// one more with this slug.
+func (s *Service) fits(ctx context.Context, h dbq.PcHostingHost, slug string) (int, bool, error) {
+	refs, err := s.assigned(ctx, h.ID, "")
+	if err != nil || len(refs) >= int(h.Capacity) {
+		return len(refs), false, err
+	}
+	same, err := s.assigned(ctx, h.ID, slug)
+	return len(refs), err == nil && len(same) == 0, err
+}
+
+// through the audited lister.
 
 // maxPerHost bounds a host's assignments the lister returns: above every
 // host capacity (migration 00228).

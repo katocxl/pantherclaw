@@ -19,6 +19,11 @@ SELECT * FROM pc.hosting_hosts WHERE name = sqlc.arg(name);
 -- name: ListActiveHostingHosts :many
 SELECT * FROM pc.hosting_hosts WHERE state = 'ACTIVE' ORDER BY id;
 
+-- name: LockActiveHostingHost :one
+-- Held while one hosted gateway is placed on the host, so the slug and
+-- capacity checks and the placement are one step (G0 M19 D219).
+SELECT * FROM pc.hosting_hosts WHERE id = sqlc.arg(id) AND state = 'ACTIVE' FOR UPDATE;
+
 -- name: TouchHostingHost :exec
 UPDATE pc.hosting_hosts SET last_seen = now(), agent_version = sqlc.arg(agent_version) WHERE id = sqlc.arg(id);
 
@@ -77,8 +82,7 @@ LIMIT sqlc.arg(max_rows);
 SELECT * FROM pc.hosted_gateways
 WHERE org_id = sqlc.arg(org_id)
   AND (state = 'REQUESTED'
-       OR (state = 'PROVISIONED' AND token_pulled_at IS NULL AND updated_at < now() - interval '10 minutes')
-       OR (state = 'RUNNING' AND target_version IS NOT NULL AND target_version IS DISTINCT FROM version))
+       OR (state = 'PROVISIONED' AND token_pulled_at IS NULL AND updated_at < now() - interval '10 minutes'))
 ORDER BY id
 FOR UPDATE SKIP LOCKED;
 
@@ -91,11 +95,12 @@ SELECT EXISTS (SELECT 1 FROM pc.hosted_gateways WHERE org_id = sqlc.arg(org_id) 
 -- name: ProvisionHostedGateway :execrows
 UPDATE pc.hosted_gateways
 SET state = 'PROVISIONED', gateway_id = sqlc.arg(gateway_id), host_id = sqlc.arg(host_id),
-    token_sealed = sqlc.arg(token_sealed), token_pulled_at = NULL, failure = NULL, updated_at = now()
+    token_sealed = sqlc.arg(token_sealed), enrollment_id = sqlc.arg(enrollment_id), token_pulled_at = NULL, failure = NULL,
+    updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'REQUESTED';
 
 -- name: ReissueHostedToken :execrows
-UPDATE pc.hosted_gateways SET token_sealed = sqlc.arg(token_sealed), updated_at = now()
+UPDATE pc.hosted_gateways SET token_sealed = sqlc.arg(token_sealed), enrollment_id = sqlc.arg(enrollment_id), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PROVISIONED' AND token_pulled_at IS NULL;
 
 -- name: TakeHostedToken :execrows
@@ -113,6 +118,27 @@ SET state = CASE WHEN sqlc.arg(healthy)::boolean THEN 'RUNNING' ELSE state END,
     version = sqlc.arg(version), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND host_id = sqlc.arg(host_id)
   AND state IN ('ENROLLED', 'RUNNING');
+
+-- name: ExpireHostedEnrollmentToken :exec
+-- Ends a token that was replaced before it was used.
+UPDATE pc.gateway_enrollment_tokens SET expires_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND used_at IS NULL AND expires_at > now();
+
+-- name: BindHostedEnrollment :exec
+-- Records the certificate the provisioner's token enrolled; a token of any
+-- other gateway changes nothing.
+UPDATE pc.hosted_gateways SET enrolled_cert_id = sqlc.arg(cert_id), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id) AND enrollment_id = sqlc.arg(enrollment_id);
+
+-- name: CertDescendsFrom :one
+-- Whether the certificate is the enrolled one or a renewal of it.
+WITH RECURSIVE chain AS (
+    SELECT c.id, c.previous_id FROM pc.gateway_certs c WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(cert_id)
+    UNION ALL
+    SELECT c.id, c.previous_id FROM pc.gateway_certs c
+    JOIN chain ON c.org_id = sqlc.arg(org_id) AND c.id = chain.previous_id
+)
+SELECT EXISTS (SELECT 1 FROM chain WHERE chain.id = sqlc.arg(enrolled_cert_id)::uuid);
 
 -- name: SetHostedTarget :execrows
 UPDATE pc.hosted_gateways SET target_version = sqlc.narg(target_version), updated_at = now()

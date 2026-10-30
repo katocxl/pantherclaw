@@ -37,6 +37,11 @@ CREATE TABLE pc.hosted_gateways (
     -- (HR-062), until the host agent pulls it once; then cleared.
     token_sealed     bytea       CHECK (octet_length(token_sealed) <= 1024),
     token_pulled_at  timestamptz,
+    -- The token the provisioner minted last, and the certificate it
+    -- enrolled: the only identity that gets this row's server certificate
+    -- (G0 M19 D219), through its renewals.
+    enrollment_id    uuid,
+    enrolled_cert_id uuid,
     version          text        CHECK (char_length(version) <= 64),
     target_version   text        CHECK (char_length(target_version) <= 64),
     failure          text        CHECK (char_length(failure) <= 500),
@@ -46,6 +51,7 @@ CREATE TABLE pc.hosted_gateways (
     deprovisioned_at timestamptz,
     PRIMARY KEY (org_id, id),
     FOREIGN KEY (org_id, gateway_id) REFERENCES pc.gateways (org_id, id),
+    FOREIGN KEY (org_id, enrolled_cert_id) REFERENCES pc.gateway_certs (org_id, id),
     CHECK ((state IN ('REQUESTED', 'FAILED')) OR (gateway_id IS NOT NULL AND host_id IS NOT NULL)),
     CHECK ((state = 'DEPROVISIONED') = (deprovisioned_at IS NOT NULL))
 );
@@ -64,11 +70,14 @@ CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.hosted_gateways
     FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT ON pc.hosted_gateways TO pc_app;
-GRANT UPDATE (state, gateway_id, host_id, token_sealed, token_pulled_at, version, target_version, failure, updated_at, deprovisioned_at)
+GRANT UPDATE (state, gateway_id, host_id, token_sealed, token_pulled_at, enrollment_id, enrolled_cert_id, version, target_version,
+    failure, updated_at, deprovisioned_at)
     ON pc.hosted_gateways TO pc_app;
+-- A reissued token ends the one before it (D219).
+GRANT UPDATE (expires_at) ON pc.gateway_enrollment_tokens TO pc_app;
 GRANT SELECT ON pc.hosted_gateways TO pc_audit_ro;
 -- The lister reads only what its two purposes select (HR-053).
-GRANT SELECT (org_id, id, slug, state, host_id, version, target_version, token_pulled_at, updated_at) ON pc.hosted_gateways TO pc_lister;
+GRANT SELECT (org_id, id, slug, state, host_id, token_pulled_at, updated_at) ON pc.hosted_gateways TO pc_lister;
 -- +goose StatementBegin
 DO $$ BEGIN
     IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
@@ -266,9 +275,8 @@ BEGIN
                 LIMIT p_max_rows;
         WHEN 'hosting_due' THEN
             -- Active orgs with a hosted gateway the provisioner must act
-            -- on (G0 M19 D203): requested and not yet provisioned, a token
-            -- not pulled within 10 minutes (it expires after 15), or
-            -- running another version than its rollout target.
+            -- on (G0 M19 D203): requested and not yet provisioned, or a
+            -- token not pulled within 10 minutes (it expires after 15).
             RETURN QUERY
                 SELECT o.id, o.id
                 FROM pc.orgs o
@@ -278,9 +286,7 @@ BEGIN
                               WHERE h.org_id = o.id
                                 AND (h.state = 'REQUESTED'
                                      OR (h.state = 'PROVISIONED' AND h.token_pulled_at IS NULL
-                                         AND h.updated_at < now() - interval '10 minutes')
-                                     OR (h.state = 'RUNNING' AND h.target_version IS NOT NULL
-                                         AND h.target_version IS DISTINCT FROM h.version)))
+                                         AND h.updated_at < now() - interval '10 minutes')))
                 ORDER BY 1
                 LIMIT p_max_rows;
         WHEN 'hosting_assigned' THEN
@@ -306,6 +312,7 @@ $$;
 -- +goose StatementEnd
 
 -- +goose Down
+REVOKE UPDATE (expires_at) ON pc.gateway_enrollment_tokens FROM pc_app;
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION pc.cross_org_list(p_purpose text, p_max_rows integer)
 RETURNS TABLE (org_id uuid, id uuid)

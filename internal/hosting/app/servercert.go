@@ -31,13 +31,21 @@ type ServerCertificate struct {
 // identity only. Its one name, <slug>.gw.<host domain>, comes from the
 // org's hosted gateway record that names this gateway, never from the
 // request: a gateway gets only its own org's name, and a gateway no live
-// record names gets nothing.
+// record names gets nothing. The caller must hold the certificate the
+// provisioner's token enrolled, or a renewal of it (D219).
 func (s *Service) IssueServerCertificate(ctx context.Context, id ca.Identity, pub ed25519.PublicKey) (ServerCertificate, error) {
 	var h dbq.PcHostedGateway
 	err := s.pool.InTenantTx(ctx, id.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
 		var err error
-		h, err = dbq.New(tx).HostedGatewayOfGateway(ctx, id.Org, id.Gateway)
-		if db.IsNoRows(err) || (err == nil && h.HostID == nil) {
+		h, err = q.HostedGatewayOfGateway(ctx, id.Org, id.Gateway)
+		if db.IsNoRows(err) || (err == nil && (h.HostID == nil || h.EnrolledCertID == nil)) {
+			return ErrNotHosted
+		} else if err != nil {
+			return err
+		}
+		ok, err := q.CertDescendsFrom(ctx, *h.EnrolledCertID, id.Org, id.Cert)
+		if err == nil && !ok {
 			return ErrNotHosted
 		}
 		return err
