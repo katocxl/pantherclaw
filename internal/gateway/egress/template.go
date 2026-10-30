@@ -113,7 +113,7 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 	}
 	out := Request{Method: t.Method, URL: u, Headers: maps.Clone(t.Headers)}
 	if len(t.Body) > 0 {
-		obj, err := r.body(t.Body, transaction, &gc)
+		obj, err := r.body(t.Body, transaction, t.Encoding != defs.EncodingForm, &gc)
 		if err != nil {
 			return Request{}, err
 		}
@@ -122,7 +122,9 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 			out.Body, err = EncodeForm(obj)
 		} else {
 			out.ContentType = JSONContentType
-			out.Body, err = json.Marshal(obj, json.Deterministic(true))
+			if obj, err = nestJSON(obj); err == nil {
+				out.Body, err = json.Marshal(obj, json.Deterministic(true))
+			}
 		}
 		if err != nil {
 			return Request{}, fmt.Errorf("%w: %w", ErrBuild, err)
@@ -163,7 +165,7 @@ func (r refs) group(ref string, gc *groupCount) (any, error) {
 // group the id left unmatched is left out; when every target-group field of
 // the body and query is left out, nothing names the target and Build fails
 // (G0 M14 D49).
-func (r refs) body(fields map[string]string, transaction string, gc *groupCount) (map[string]any, error) {
+func (r refs) body(fields map[string]string, transaction string, jsonBody bool, gc *groupCount) (map[string]any, error) {
 	obj := make(map[string]any, len(fields))
 	for field, ref := range fields {
 		var v any
@@ -171,6 +173,8 @@ func (r refs) body(fields map[string]string, transaction string, gc *groupCount)
 		switch {
 		case ref == defs.TransactionKey:
 			v = "pc-" + transaction // G0 M14 D50
+		case jsonBody && (ref == defs.BoolTrue || ref == defs.BoolFalse):
+			v = ref == defs.BoolTrue // a JSON boolean, from the package only (G0 M20 D263, D272)
 		case strings.HasPrefix(ref, "literal."):
 			v = strings.TrimPrefix(ref, "literal.") // G0 M14 D52
 		case strings.HasPrefix(ref, "target.id."):

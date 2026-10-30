@@ -14,6 +14,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	simhandshake "github.com/katocxl/pantherclaw/internal/sim/handshake"
 	"github.com/katocxl/pantherclaw/internal/sim/payments"
 )
 
@@ -52,6 +53,20 @@ func TestVerifyAcceptsASimulatorAndCaches(t *testing.T) {
 	now = now.Add(TTL + time.Second)
 	if err := c.Verify(t.Context(), "conn", ts.URL, cl); err != nil || hits.Load() != 2 {
 		t.Fatalf("no re-check after the TTL: %v %d", err, hits.Load())
+	}
+}
+
+// TestHR221_TheM20SimulatorsAnswerTheHandshake: a simulated connection to the
+// Jira or GitLab simulator is verified like any other (G0 M20 D254).
+//
+// Covers: F756
+func TestHR221_TheM20SimulatorsAnswerTheHandshake(t *testing.T) {
+	for _, kind := range []string{"jira", "gitlab"} {
+		ts := httptest.NewServer(simhandshake.Wrap(kind, http.NotFoundHandler()))
+		defer ts.Close()
+		if err := New().Verify(t.Context(), "conn", ts.URL, client(t, ts.URL)); err != nil {
+			t.Errorf("%s: %v", kind, err)
+		}
 	}
 }
 

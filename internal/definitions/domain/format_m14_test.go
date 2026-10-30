@@ -70,7 +70,11 @@ func TestM14_FormTemplates(t *testing.T) {
 		"literal in the path":         func(h *domain.HTTPDispatch) { h.Path = "/v1/{literal.x}" },
 		"form on GET":                 func(h *domain.HTTPDispatch) { h.Method, h.Body = "GET", nil },
 		"unknown encoding":            func(h *domain.HTTPDispatch) { h.Encoding = "xml" },
-		"bracket key in JSON":         func(h *domain.HTTPDispatch) { h.Encoding = domain.EncodingJSON },
+		// A JSON body nests objects through bracket keys but never takes a []
+		// list (G0 M20 D260).
+		"list key in JSON": func(h *domain.HTTPDispatch) {
+			h.Encoding, h.Body = domain.EncodingJSON, map[string]string{"metadata[]": "literal.v"}
+		},
 	} {
 		d := formWrite(map[string]string{"metadata[k]": "literal.v"})
 		edit(d.Dispatch.HTTP)
@@ -337,6 +341,40 @@ func TestM14_RequiredSets(t *testing.T) {
 		d.Constraints = []domain.ConstraintSpec{c}
 		if err := d.Validate(); (err == nil) != ok {
 			t.Errorf("%s required: %v", kind, err)
+		}
+	}
+}
+
+// TestHR526_MCPArgumentsStayFlat: an MCP arguments template never nests,
+// so a bracket key there refuses the definition; bool.true and bool.false
+// are JSON body values only (G0 M20 D260, D263, D272).
+//
+// Covers: F756
+func TestHR526_MCPArgumentsStayFlat(t *testing.T) {
+	mcp := func(args map[string]string) *domain.Definition {
+		d := formWrite(nil)
+		d.Dispatch = &domain.Dispatch{MCP: &domain.MCPDispatch{
+			Tool: "create_refund", UpstreamDigest: "sha256:" + strings.Repeat("0f", 32), Arguments: args,
+		}}
+		return d
+	}
+	if err := mcp(map[string]string{"charge": "target.id"}).Validate(); err != nil {
+		t.Fatalf("a flat argument: %v", err)
+	}
+	for name, args := range map[string]map[string]string{
+		"bracket key":  {"metadata[charge]": "target.id"},
+		"nested key":   {"a[b][c]": "target.id"},
+		"list key":     {"a[]": "params.kinds"},
+		"bool.true":    {"confirm": "bool.true"},
+		"bool in path": nil,
+	} {
+		d := mcp(args)
+		if name == "bool in path" {
+			d = formWrite(nil)
+			d.Dispatch.HTTP.Encoding, d.Dispatch.HTTP.Path = domain.EncodingJSON, "/v1/{bool.true}"
+		}
+		if err := d.Validate(); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
 		}
 	}
 }

@@ -34,6 +34,9 @@ var (
 		"slack.interaction_post", "authzen.evaluate", "a2a.send", "a2a.card_swap",
 		// G0 UI: a signed-in browser session of a person (RT-060, RT-061).
 		"browser",
+		// G0 M20 D254: an agent commenting through pc.jira and merging through
+		// pc.gitlab.
+		"jira.comment", "gitlab.merge", "gitlab.deploy",
 	}
 	faces       = []string{"mcp", "http", "sdk", "hook", "a2a", "authzen"}
 	methods     = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
@@ -168,7 +171,7 @@ var CustomerStepKinds = []string{
 // and the simulator swaps belong to the harness.
 var CustomerCapabilities = []string{
 	"github", "payments", "mcp", "person", "stripe.refund", "stripe.transfer", "pg.query", "slack.post",
-	"authzen.evaluate", "a2a.send",
+	"authzen.evaluate", "a2a.send", "jira.comment", "gitlab.merge", "gitlab.deploy",
 }
 
 // KnownCapabilities returns every capability a scenario may require.

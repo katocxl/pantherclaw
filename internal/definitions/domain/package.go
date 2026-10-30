@@ -31,6 +31,10 @@ type Package struct {
 	// TargetLogs are reviewed reads that list what the target created, for
 	// reconciliation against execution receipts (HR-112, G0 M7).
 	TargetLogs []TargetLog `json:"target_logs,omitzero"`
+	// Coverage is the package's optional coverage declaration (G0 M20
+	// D254, HR-523): validated against the package, never read by a
+	// decision.
+	Coverage *Coverage `json:"coverage,omitzero"`
 }
 
 // Channel is how an agent reaches a tool.
@@ -375,7 +379,10 @@ func (p *Package) Validate() error {
 	if tests > 1 {
 		return invalid("a package has at most one connection test")
 	}
-	return p.validateConsequences(ops)
+	if err := p.validateConsequences(ops); err != nil {
+		return err
+	}
+	return p.validateCoverage()
 }
 
 // Definition returns the definition of op.
