@@ -672,6 +672,8 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F012 | Accessibility & formats | Keyboard operation and accessible status text; meaning is never carried by colour alone. Tables for ranking, timelines for sequence; fast-comprehension goals are usability targets. | MVP | Team | UI | F012, F223, F303 |
 | F643 | Progressive disclosure | One-agent setup comes first. Repeated-work, team and enterprise governance controls appear as needed, with role-appropriate next steps and a layout organised around tasks and consequences. | MVP | Team | UI | F643–F646, F649, F650 |
 
+**Edition note (M18: PN-010.6, PN-012.7, PN-012.8, F584, F602; G0 M18 D161).** An edition gates only creating, activating or changing these features. Anything already in force keeps working in every edition: a downgrade keeps API-key CIDR lists enforced, rollout VERIFIED thresholds in place, active organization identity providers signing people in, and role bindings bound. Reading, removing, disabling and unbinding work in every edition. The fleet sweep and bulk simulation run only for entitled organizations.
+
 **Edition note (F001, F006, F009, F012, F643).** These rows describe the web console, which is part of the paid hosted offering (Team; founder decision F2 of G0 UI). The server-rendered approval and confirmation pages, the CLI and the API stay Community.
 
 **Web console, hosted accounts and plans (milestone UI; [G0 UI](g0/UI.md)).** The console, the website and the demo are built in the commercial distribution from the core plus the extension point; the core rows below (accounts, plans, the gate, onboarding progress, test seams) are in this repository.

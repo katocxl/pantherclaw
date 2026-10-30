@@ -478,10 +478,10 @@
 | HR-478 | Bulk simulation is read-only and within the existing caps. | T-213 | M18 |
 | HR-479 | A gated rollout completes only at its VERIFIED threshold. | — (G0 M18 D154) | M18 |
 | HR-480 | Aggregates show only readable agents. | T-213 | M18 |
-| HR-481 | Org IdP changes are two-person protected changes, and every admin is notified. | T-207 | M18 |
+| HR-481 | Org IdP changes are two-person protected changes, always protected under CUSTODY in every protect mode, and every admin is notified. | T-207 | M18 |
 | HR-482 | Client secrets are sealed and never returned. | T-207 | M18 |
 | HR-483 | Discovery goes through the egress guard, HTTPS only. | T-207 | M18 |
-| HR-484 | The last admin sign-in path can't be disabled. | T-207 | M18 |
+| HR-484 | The last admin sign-in path can't be disabled: a change is refused only when no active Org Admin would keep a sign-in path, and the request lists every admin it would strand. | T-207 | M18 |
 | HR-485 | pclaw keeps its secrets in the OS keychain when one is available, never on a command line. The file fallback is warned. | T-211 | M18 |
 | HR-486 | An unwrap failure fails closed. | T-210 | M18 |
 | HR-487 | A re-wrap verifies before it writes and changes both columns together. | T-210 | M18 |
