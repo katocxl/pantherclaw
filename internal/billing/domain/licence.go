@@ -329,3 +329,44 @@ func (e Entitlements) SlackApprovals() bool { return e.Edition.Paid() }
 // F101–F103): Team and above. Scope already in force keeps being enforced
 // after a downgrade.
 func (e Entitlements) DataScoping() bool { return e.Edition.Paid() }
+
+// Platform administration (G0 M18 D159, D161). The pclaw OS keychain
+// (PN-012.9) and the OpenBao key service (PN-012.10) are Community and have
+// no gate; a hardening rule is never edition-gated. Each gate below covers
+// only creating, activating or changing: whatever is already in force keeps
+// working in every edition, so a downgrade never drops a restriction or
+// locks anyone out, and reading, removing, disabling and unbinding work in
+// every edition.
+
+// APIKeyIPAllowLists reports whether the edition limits API keys to CIDR
+// ranges (PN-012.8): Team and above. It gates creating a key with ranges;
+// a key's ranges stay enforced after a downgrade.
+func (e Entitlements) APIKeyIPAllowLists() bool { return e.Edition.Paid() }
+
+// FleetView reports whether the edition shows the gateway fleet view:
+// versions, replicas and configuration lag (PN-010.6): Team and above. It
+// gates the view only; gateways keep reporting and serving in every edition.
+func (e Entitlements) FleetView() bool { return e.Edition.Paid() }
+
+// FleetPolicy reports whether the edition sets a fleet policy (an advisory
+// minimum version and a silence threshold) and sends its alerts
+// (PN-010.6): Enterprise. It gates setting or changing the policy; reading
+// or clearing it works in every edition.
+func (e Entitlements) FleetPolicy() bool { return e.Edition == Enterprise }
+
+// DelegatedAdmin reports whether the edition binds the Scope Admin role
+// (F584, F602): Enterprise. It gates new Scope Admin bindings; existing
+// bindings stay, keep their ceiling, and can be removed in every edition.
+func (e Entitlements) DelegatedAdmin() bool { return e.Edition == Enterprise }
+
+// LargeFleetAdmin reports whether the edition offers exception groups, bulk
+// simulation by cohort, the rollout VERIFIED threshold and per-cohort
+// findings (F602): Enterprise. It gates creating or changing them; a
+// rollout's VERIFIED threshold already set still holds after a downgrade.
+func (e Entitlements) LargeFleetAdmin() bool { return e.Edition == Enterprise }
+
+// OrgIdentityProviders reports whether the edition lets an organization
+// configure its own identity providers (PN-012.7): Enterprise. It gates
+// creating, activating or changing one; ACTIVE providers still sign people
+// in after a downgrade, and disabling one works in every edition.
+func (e Entitlements) OrgIdentityProviders() bool { return e.Edition == Enterprise }
