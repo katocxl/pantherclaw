@@ -62,7 +62,7 @@ var (
 	idRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 	// CustomerRuleIDRe is a customer consequence rule's id (G0 M17 D106):
 	// cx. first, so it never collides with a package rule's.
-	CustomerRuleIDRe = regexp.MustCompile(`^cx.[a-z0-9][a-z0-9_.-]{0,63}$`)
+	CustomerRuleIDRe = regexp.MustCompile(`^cx\.[a-z0-9][a-z0-9_.-]{0,63}$`)
 	// targetTextRe is the literal text of a consequence target template.
 	targetTextRe = regexp.MustCompile(`^[A-Za-z0-9._/@#:-]*$`)
 )

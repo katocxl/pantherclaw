@@ -7,12 +7,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -37,6 +39,39 @@ func disputePays(id string, depth int) defs.ConsequenceRule {
 		ValidUntil:  "2027-10-08", MaxDepth: depth,
 	}
 }
+
+// chainedPayouts is the payout package with a second hop: a payout on a
+// scheduled charge notifies the merchant and goes instant, both down to
+// depth 2 (R-472's B → C and B → D).
+func chainedPayouts(raw []byte) []byte {
+	s := pipelinetest.PayoutConsequence(string(raw))
+	const anchor = "# What the simulated API created"
+	payout := s[strings.Index(s, "  - operation: payments.payout.trigger"):strings.Index(s, anchor)]
+	for _, op := range []string{"payments.payout.notify", "payments.payout.instant"} {
+		s = strings.Replace(s, anchor, strings.Replace(payout, "payments.payout.trigger", op, 1)+anchor, 1)
+	}
+	for _, l := range [][2]string{{"payout-notifies", "payments.payout.notify"}, {"payout-goes-instant", "payments.payout.instant"}} {
+		s += `  - id: ` + l[0] + `
+    operation: payments.payout.trigger
+    when: facts.payments_charge_payouts.state != 'none'
+    requires_facts: [payments.charge.payouts]
+    max_depth: 2
+    consequence:
+      operation: ` + l[1] + `
+      effect: funds.transfer
+      description: A scheduled payout goes on.
+    valid_until: 2027-10-08
+`
+	}
+	return []byte(s)
+}
+
+// chainedBounds cover the refund and every payout in chainedPayouts.
+const chainedBounds = `{
+  "operations": ["payments.refund.create", "payments.payout.trigger", "payments.payout.notify", "payments.payout.instant"],
+  "targets": {"payments.charge": {"prefixes": ["ch_"]}},
+  "params": {"payments.refund.create": {"amount": {"max": {"USD": "100.00"}}}}
+}`
 
 func states(ev *pipeline.Evaluation) []string {
 	var out []string
@@ -135,6 +170,38 @@ func TestT199_ACustomerRuleCannotLoosen(t *testing.T) {
 	f.w.SetCustomerRules(ghost)
 	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, consequences.ReasonEvaluation)
 
+	// Customer rules cannot crowd the package's chain out of its pass
+	// (R-472, D144): the package predicts refund → payout → notify and
+	// → instant, and the policy forbids instant payouts. 15 customer rules
+	// on the refund would fill one shared pass at depth 1, leaving notify
+	// the fanout and instant never derived, a hold; the refund stays denied.
+	fc := newFxWith(t, chainedPayouts, "")
+	g := fc.newGrant(chainedBounds)
+	fc.w.Grants.Put(g)
+	fc.run = fc.newRun(g.ID)
+	noInstant := pdomain.Rule{
+		ID: "no-instant", Kind: pdomain.Forbid, Summary: "no instant payouts", Operations: []string{"payments.payout.instant"},
+		When: "true", Reason: "NO_INSTANT_PAYOUTS",
+	}
+	if err := fc.w.SetPolicy([]pdomain.Rule{noInstant}, nil); err != nil {
+		t.Fatal(err)
+	}
+	fc.payouts("ch_1", scheduled, time.Second)
+	fc.disputed("ch_1", true)
+	expect(t, fc.call(fc.run, "create_refund", refund("ch_1", "30.00")), adomain.Deny, "NO_INSTANT_PAYOUTS")
+	var many []defs.ConsequenceRule
+	for i := range 15 {
+		many = append(many, disputePays(fmt.Sprintf("cx.dispute-pays-%02d", i), 0))
+	}
+	fc.w.SetCustomerRules(many...)
+	ev = fc.call(fc.run, "create_refund", refund("ch_1", "30.00"))
+	expect(t, ev, adomain.Deny, "NO_INSTANT_PAYOUTS")
+	if got := states(ev)[:3]; !slices.Equal(got, []string{
+		"refund-triggers-payout:PREDICTED:package", "payout-notifies:PREDICTED:package", "payout-goes-instant:PREDICTED:package",
+	}) {
+		t.Fatalf("the package's chain: %q", got)
+	}
+
 	f.w.SetCustomerRules(disputePays("cx.dispute-pays", 0))
 	f.w.Fail["CustomerRules"] = true
 	v4 := &pipeline.Pipeline{Reader: f.w, Replaying: 4}
@@ -146,7 +213,8 @@ func TestT199_ACustomerRuleCannotLoosen(t *testing.T) {
 
 // TestT200_AConsequenceChainCannotExplodeOrLoop (T-200): customer rules
 // that would give a refund more than 16 consequences stop at the 17th,
-// which is UNKNOWN, CONSEQUENCE_FANOUT, so the refund is at least a hold;
+// which is UNKNOWN, CONSEQUENCE_FANOUT, so the refund is at least a hold,
+// and the package's own consequence comes first, outside that count (D144);
 // rules that predict the payout from the payout itself, all the way down,
 // never derive it twice (HR-455).
 //
@@ -163,7 +231,8 @@ func TestT200_AConsequenceChainCannotExplodeOrLoop(t *testing.T) {
 	f.w.SetCustomerRules(rules...)
 	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
 	last := ev.Consequences[len(ev.Consequences)-1]
-	if len(ev.Consequences) != consequences.MaxConsequences+1 || last.State != consequences.Unknown || last.Reason != consequences.ReasonFanout {
+	// The package's one, then the customer pass's 16 and its fanout (D144).
+	if len(ev.Consequences) != 1+consequences.MaxConsequences+1 || ev.Consequences[0].Source != consequences.SourcePackage || last.State != consequences.Unknown || last.Reason != consequences.ReasonFanout {
 		t.Fatalf("fanout: %d %+v", len(ev.Consequences), last)
 	}
 	if ev.Decision != adomain.RequireApproval || !slices.ContainsFunc(ev.Checklist, func(it pipeline.Item) bool { return it.Code == consequences.ReasonFanout }) {
@@ -178,5 +247,80 @@ func TestT200_AConsequenceChainCannotExplodeOrLoop(t *testing.T) {
 		"refund-triggers-payout:NOT_TRIGGERED:package", "cx.dispute-pays:PREDICTED:customer", "cx.payout-pays-out:PREDICTED:customer",
 	}) {
 		t.Fatalf("loop: %q", got)
+	}
+}
+
+// disputedInstant is the payout package with an instant payout that a
+// payout on a disputed charge starts, down to depth 2.
+func disputedInstant(raw []byte) []byte {
+	s := pipelinetest.PayoutConsequence(string(raw))
+	const anchor = "# What the simulated API created"
+	payout := s[strings.Index(s, "  - operation: payments.payout.trigger"):strings.Index(s, anchor)]
+	s = strings.Replace(s, anchor, strings.Replace(payout, "payments.payout.trigger", "payments.payout.instant", 1)+anchor, 1)
+	return []byte(s + `  - id: disputed-payout-goes-instant
+    operation: payments.payout.trigger
+    when: facts.payments_charge_disputed
+    requires_facts: [payments.charge.disputed]
+    max_depth: 2
+    consequence:
+      operation: payments.payout.instant
+      effect: funds.transfer
+      description: A payout on a disputed charge goes instant.
+    valid_until: 2027-10-08
+`)
+}
+
+// TestHR454_ProvenanceIsInheritedDownAChain (G0 M17 D145): a package
+// rule's consequence below a customer one is a customer consequence, so
+// an exception that waives the package rule's operation does not waive
+// it there: the refund is denied, not waived. The same exception still
+// waives it when only package rules reach it.
+//
+// Covers: F405, F408, F411
+func TestHR454_ProvenanceIsInheritedDownAChain(t *testing.T) {
+	noInstant := pdomain.Rule{
+		ID: "no-instant", Kind: pdomain.Forbid, Summary: "no instant payouts", Operations: []string{"payments.payout.instant"},
+		When: "true", Reason: "NO_INSTANT_PAYOUTS", Exceptable: true,
+	}
+	d := pdomain.RuleDigest(noInstant)
+	setup := func(payouts map[string]any) *fx {
+		f := newFxWith(t, disputedInstant, "")
+		g := f.newGrant(chainedBounds)
+		f.w.Grants.Put(g)
+		f.run = f.newRun(g.ID)
+		if err := f.w.SetPolicy([]pdomain.Rule{noInstant}, nil); err != nil {
+			t.Fatal(err)
+		}
+		f.w.SetExceptions([]pdomain.Exception{{
+			ID: exceptionID, Bundle: "org-policy", Rule: noInstant.ID, RuleDigest: hex.EncodeToString(d[:]),
+			Operations: []string{"payments.payout.instant"}, ExpiresAt: now.Add(time.Hour),
+		}})
+		f.payouts("ch_1", payouts, time.Second)
+		f.disputed("ch_1", true)
+		return f
+	}
+
+	// Customer refund → payout, then the package's payout → instant.
+	f := setup(map[string]any{"state": "none", "environments": []any{}})
+	f.w.SetCustomerRules(disputePays("cx.dispute-pays", 0))
+	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	expect(t, ev, adomain.Deny, "NO_INSTANT_PAYOUTS")
+	if got := states(ev); !slices.Equal(got, []string{
+		"refund-triggers-payout:NOT_TRIGGERED:package", "cx.dispute-pays:PREDICTED:customer", "disputed-payout-goes-instant:PREDICTED:customer",
+	}) {
+		t.Fatalf("consequences %q", got)
+	}
+	if c := ev.Consequences[2]; c.Rule != "disputed-payout-goes-instant" || c.Depth != 2 || c.Parent != 1 {
+		t.Fatalf("the inherited consequence: %+v", c)
+	}
+
+	// The package's refund → payout → instant: waived.
+	f = setup(scheduled)
+	ev = f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	if ev.Decision != adomain.Allow || !slices.ContainsFunc(ev.Checklist, func(it pipeline.Item) bool { return it.Code == pdomain.ReasonExceptionApplied }) {
+		t.Fatalf("a package chain: %s %+v", ev.Decision, ev.Checklist)
+	}
+	if got := states(ev); !slices.Equal(got, []string{"refund-triggers-payout:PREDICTED:package", "disputed-payout-goes-instant:PREDICTED:package"}) {
+		t.Fatalf("consequences %q", got)
 	}
 }

@@ -166,6 +166,17 @@ func open(ctx context.Context, tx db.TenantTx, org ids.OrgID, d Definitions, row
 // manager is the caller, who must be a person signed in as themselves
 // holding consequence_rule.manage at org scope, in a Team org.
 func (s *Service) manager(ctx context.Context) (tenancy.Caller, error) {
+	c, err := s.person(ctx)
+	if err != nil {
+		return c, err
+	}
+	return c, s.team(ctx)
+}
+
+// person is the caller, who must be a person signed in as themselves
+// holding consequence_rule.manage at org scope, in any edition: an org
+// that left Team can still retire the rules that keep deciding (D144).
+func (s *Service) person(ctx context.Context) (tenancy.Caller, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
 		return c, err
@@ -173,10 +184,7 @@ func (s *Service) manager(ctx context.Context) (tenancy.Caller, error) {
 	if !c.Human() || c.Credential == tenancy.CredAPIKey {
 		return c, ErrHumanOnly
 	}
-	if err := c.Require(td.PermConsequenceRuleManage, td.OrgPath(c.Org)); err != nil {
-		return c, err
-	}
-	return c, s.team(ctx)
+	return c, c.Require(td.PermConsequenceRuleManage, td.OrgPath(c.Org))
 }
 
 func (s *Service) team(ctx context.Context) error {
@@ -283,9 +291,10 @@ func (s *Service) Propose(ctx context.Context, r defs.ConsequenceRule) (Version,
 
 // Retire opens the protected change that retires a rule's ACTIVE version
 // once a second person confirms it: retiring takes requirements away
-// (HR-453).
+// (HR-453). It needs no edition, so an org that left Team can still
+// remove its rules (D144).
 func (s *Service) Retire(ctx context.Context, ruleID string) (*protect.PendingError, error) {
-	c, err := s.manager(ctx)
+	c, err := s.person(ctx)
 	if err != nil {
 		return nil, err
 	}

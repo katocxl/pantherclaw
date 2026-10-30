@@ -167,19 +167,25 @@ type Input struct {
 	Direct bool
 }
 
-// MaxConsequences is how many consequences one action's rules give at
-// most (G0 M17 D109). A rule that would give one more is UNKNOWN,
-// CONSEQUENCE_FANOUT, and nothing after it is derived.
+// MaxConsequences is how many consequences each pass of one action's rules
+// gives at most (G0 M17 D109, D144). A rule that would give one more is UNKNOWN,
+// CONSEQUENCE_FANOUT, and nothing after it is derived in that pass.
 const MaxConsequences = 16
 
-// Source is where a consequence rule comes from (G0 M17 D106).
+// Source is where a consequence rule comes from (G0 M17 D106) and, for a
+// consequence, its chain's provenance (D145): a consequence is a customer
+// one when a customer rule gave it or it is below one a customer rule
+// gave, even when a package rule gave it there. A customer consequence is
+// never waived (D108).
 type Source string
 
 // Sources (00208's decision_consequences.source).
 const (
-	// SourcePackage: a rule of the action's signed package version.
+	// SourcePackage: a rule of the action's signed package version, on a
+	// chain of package consequences only.
 	SourcePackage Source = "package"
-	// SourceCustomer: one of the org's reviewed customer rules.
+	// SourceCustomer: one of the org's reviewed customer rules, or any rule
+	// below a consequence one gave.
 	SourceCustomer Source = "customer"
 )
 
@@ -191,7 +197,7 @@ const MaxDepth = defs.MaxConsequenceDepth
 type Consequence struct {
 	Rule                           string
 	Operation, Effect, Description string
-	// Source is where the rule comes from; empty is SourcePackage.
+	// Source is the consequence's provenance (D145); empty is SourcePackage.
 	Source Source
 	// Depth is the consequence's place in its chain, 1 (or 0) for a
 	// consequence of the action itself; Parent is, for a deeper one, the
@@ -261,47 +267,105 @@ type hop struct {
 	depth, parent int
 	// err is set when the consequence's facts could not be read.
 	err error
+	// rules are the rules evaluated at the hop.
+	rules []Rule
+	// source is the hop's provenance: SourceCustomer below a customer
+	// consequence, so everything derived there is customer too (D145).
+	source Source
 }
 
-// Evaluate evaluates the rules for the action's operation, in order, and
-// then, down each chain (G0 M17 D109, F411, F412), the rules for the
-// operation of each consequence they predict that apply that deep, with
-// the facts about that consequence's target. Each consequence comes after
-// the one it follows from. A chain stops at a consequence that is not
-// predicted: an UNKNOWN one that further rules apply to says derivation
-// stopped there, and stays UNKNOWN (HR-206). A consequence whose operation
-// and target were already reached is not derived from again, chains are at
-// most MaxDepth deep, and past MaxConsequences the rest is UNKNOWN
-// (HR-455).
+// Evaluate evaluates the consequence rules in two passes (G0 M17 D109,
+// D144, F411, F412). The package's rules come first: the rules for the
+// action's operation, in order, and then, down each chain, the rules for
+// the operation of each consequence they predict that apply that deep,
+// with the facts about that consequence's target. The org's customer rules
+// come after, from the action and from each package consequence in turn,
+// and down a chain a customer consequence starts, both kinds of rule apply.
+// Each pass gives at most MaxConsequences, and a rule that would give one
+// more is UNKNOWN and ends the pass, so customer rules can never take the
+// package's place (HR-454). Each consequence comes after the one it
+// follows from. A chain stops at a consequence that is not predicted: an
+// UNKNOWN one that further rules apply to says derivation stopped there,
+// and stays UNKNOWN (HR-206). A consequence whose operation and target
+// were already reached is not derived from again, and chains are at most
+// MaxDepth deep (HR-455).
 func (e *Evaluator) Evaluate(ctx context.Context, rules []Rule, in Input) []Consequence {
-	out := make([]Consequence, 0, len(rules))
-	reached := map[[2]string]bool{{in.On.Operation, in.TargetID}: true}
-	queue := []hop{{in: in, depth: 1, parent: -1}}
+	var pkg, cx []Rule
+	for _, r := range rules {
+		if r.Source == SourceCustomer {
+			cx = append(cx, r)
+		} else {
+			pkg = append(pkg, r)
+		}
+	}
+	action := [2]string{in.On.Operation, in.TargetID}
+	reached := map[[2]string]bool{action: true}
+	out := e.walk(ctx, in, make([]Consequence, 0, len(rules)), reached, pkg, []hop{{in: in, depth: 1, parent: -1, rules: pkg}})
+	if len(cx) == 0 {
+		return out
+	}
+	queue := []hop{{in: in, depth: 1, parent: -1, rules: cx}}
+	if !in.Direct {
+		seeded := map[[2]string]bool{action: true}
+		for i := range out {
+			c := &out[i]
+			names := next(cx, c.Operation, c.Depth+1)
+			if len(names) == 0 || c.Err != nil || c.Reason == ReasonFanout {
+				continue
+			}
+			key := [2]string{c.Operation, c.Target.ID}
+			switch {
+			case c.State == Unknown && len(next(pkg, c.Operation, c.Depth+1)) == 0:
+				c.Unknown = append(c.Unknown, stopped(c.Rule, c.Depth))
+			case c.State == Predicted && !seeded[key]:
+				seeded[key], reached[key] = true, true
+				h := e.more(ctx, in, *c, names, c.Depth+1, i)
+				h.rules = cx
+				queue = append(queue, h)
+			}
+		}
+	}
+	return e.walk(ctx, in, out, reached, rules, queue)
+}
+
+// walk derives breadth-first from the hops in queue, appending to out at
+// most MaxConsequences; a consequence the hop's rules predict is derived
+// from with all.
+func (e *Evaluator) walk(ctx context.Context, in Input, out []Consequence, reached map[[2]string]bool, all []Rule, queue []hop) []Consequence {
+	n := 0
 	for len(queue) > 0 {
 		h := queue[0]
 		queue = queue[1:]
-		for _, r := range rules {
+		for _, r := range h.rules {
 			if r.Operation != h.in.On.Operation || r.Depth() < h.depth || (in.Direct && h.depth > 1) {
 				continue
 			}
-			if len(out) == MaxConsequences {
+			if n == MaxConsequences {
 				return append(out, fanout(r, h))
 			}
 			c := e.one(ctx, r, h)
 			at := len(out)
-			if names := next(rules, c.Operation, h.depth+1); len(names) > 0 && c.Err == nil && !in.Direct {
+			if names := next(all, c.Operation, h.depth+1); len(names) > 0 && c.Err == nil && !in.Direct {
 				switch {
 				case c.State == Unknown:
-					c.Unknown = append(c.Unknown, fmt.Sprintf("derivation stopped at %s, depth %d: its consequences are not derived", c.Rule, h.depth))
+					c.Unknown = append(c.Unknown, stopped(c.Rule, h.depth))
 				case c.State == Predicted && !reached[[2]string{c.Operation, c.Target.ID}]:
 					reached[[2]string{c.Operation, c.Target.ID}] = true
-					queue = append(queue, e.more(ctx, in, c, names, h.depth+1, at))
+					nh := e.more(ctx, in, c, names, h.depth+1, at)
+					nh.rules, nh.source = all, c.Source
+					queue = append(queue, nh)
 				}
 			}
 			out = append(out, c)
+			n++
 		}
 	}
 	return out
+}
+
+// stopped is the note on an UNKNOWN consequence that further rules apply to.
+func stopped(rule string, depth int) string {
+	return fmt.Sprintf("derivation stopped at %s, depth %d: its consequences are not derived", rule, depth)
 }
 
 // next are the facts the rules for operation op that apply at depth need,
@@ -354,9 +418,14 @@ func fanout(r Rule, h hop) Consequence {
 	return c
 }
 
-// base is rule r's consequence at hop h before it is evaluated.
+// base is rule r's consequence at hop h before it is evaluated. It is a
+// customer consequence when r is a customer rule or h is below one, even
+// when r is a package rule: provenance is inherited (G0 M17 D145).
 func base(r Rule, h hop) Consequence {
 	source := r.Source
+	if h.source == SourceCustomer {
+		source = SourceCustomer
+	}
 	if source == "" {
 		source = SourcePackage
 	}

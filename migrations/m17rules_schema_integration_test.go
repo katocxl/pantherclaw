@@ -27,8 +27,8 @@ const m17rChained = `INSERT INTO pc.decision_consequences (org_id, transaction_i
 // TestM17Rules_ConsequenceChainSchema: a row written without the chain
 // columns is a depth-1 package consequence; a deeper one names an earlier
 // position of the same evaluation as its parent, at most four deep, and a
-// depth-1 one names none; the source is a package or a customer rule,
-// and only a customer rule has a cx. id.
+// depth-1 one names none; the source is the chain's provenance, package or
+// customer, and a cx. id is always a customer one (D145).
 //
 // Covers: F411
 func TestM17Rules_ConsequenceChainSchema(t *testing.T) {
@@ -42,7 +42,8 @@ func TestM17Rules_ConsequenceChainSchema(t *testing.T) {
 		t.Fatalf("defaults = %d, %q; want 1, package", depth, source)
 	}
 	f.mustExec(t, m17rChained, f.org, f.txn, 1, 2, 0, "customer", "cx.deploy-settings")
-	f.mustExec(t, m17rChained, f.org, f.txn, 2, 3, 1, "package", pkgRule)
+	// A package rule below a customer consequence is a customer one (D145).
+	f.mustExec(t, m17rChained, f.org, f.txn, 2, 3, 1, "customer", pkgRule)
 	f.want(t, m5Check, "deeper without a parent", m17rChained, f.org, f.txn, 3, 2, nil, "package", pkgRule)
 	f.want(t, m5Check, "depth 1 with a parent", m17rChained, f.org, f.txn, 3, 1, 0, "package", pkgRule)
 	f.want(t, m5Check, "parent after the child", m17rChained, f.org, f.txn, 3, 2, 4, "package", pkgRule)
@@ -50,7 +51,6 @@ func TestM17Rules_ConsequenceChainSchema(t *testing.T) {
 	f.want(t, m5Check, "five deep", m17rChained, f.org, f.txn, 3, 5, 2, "package", pkgRule)
 	f.want(t, m5Check, "another source", m17rChained, f.org, f.txn, 3, 2, 0, "model", pkgRule)
 	f.want(t, m5Check, "a customer rule as a package one", m17rChained, f.org, f.txn, 3, 2, 0, "package", "cx.deploy-settings")
-	f.want(t, m5Check, "a package rule as a customer one", m17rChained, f.org, f.txn, 3, 2, 0, "customer", pkgRule)
 	f.want(t, m5Check, "another rule id", m17rChained, f.org, f.txn, 3, 2, 0, "customer", "cx.")
 }
 
