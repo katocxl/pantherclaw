@@ -259,9 +259,10 @@ func TestHR457_EveryLinkIsANamedRuleOverVerifiedFacts(t *testing.T) {
 	if err := noFacts.ValidateCustomer(ops); !errors.Is(err, defs.ErrInvalid) || !strings.Contains(err.Error(), "no invented causality") {
 		t.Fatalf("a rule without facts: %v", err)
 	}
-	unnamed := link("deploys", "github.pull.merge", "github.deployment.trigger", "x.y", 1)
-	if err := unnamed.ValidateCustomer(ops); !errors.Is(err, defs.ErrInvalid) {
-		t.Fatalf("a customer rule without a cx. name: %v", err)
+	for _, id := range []string{"deploys", "cxa", "cx-foo", "cxa.deploys"} {
+		if err := link(id, "github.pull.merge", "github.deployment.trigger", "x.y", 1).ValidateCustomer(ops); !errors.Is(err, defs.ErrInvalid) {
+			t.Fatalf("a customer rule named %s, without cx.: %v", id, err)
+		}
 	}
 	if err := link("cx.deploys", "github.pull.merge", "github.deployment.trigger", "x.y", 1).ValidateCustomer(ops); err != nil {
 		t.Fatalf("a valid customer rule: %v", err)

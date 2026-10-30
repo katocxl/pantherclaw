@@ -139,8 +139,8 @@ func rule() defs.ConsequenceRule {
 // PROPOSED and opens a protected change with CONSEQUENCE_RULES off; its
 // author cannot confirm it, a second person can, and the rule is then
 // ACTIVE with them as its approver; retiring it is a protected change
-// too. A rule whose operation is not an ACTIVE definition, or a Community
-// org, proposes nothing.
+// too, and still works once the org has left Team. A rule whose operation
+// is not an ACTIVE definition, or a Community org, proposes nothing.
 //
 // Covers: F405, F413
 func TestHR453_ACustomerRuleTakesTwoPeople(t *testing.T) {
@@ -197,8 +197,30 @@ func TestHR453_ACustomerRuleTakesTwoPeople(t *testing.T) {
 	if _, _, err := e.svc.Propose(e.as(e.author), bad); !errors.Is(err, consequencerules.ErrInvalid) {
 		t.Fatalf("an operation that is not ACTIVE: %v", err)
 	}
+	// An org that leaves Team keeps its ACTIVE rules deciding and can
+	// propose no more, but can still retire them, through two people (D144).
+	_, held3, err := e.svc.Propose(e.as(e.author), rule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.confirm(held3.Request, e.other); err != nil {
+		t.Fatal(err)
+	}
 	e.svc.Editions = edition{bdomain.Community}
 	if _, _, err := e.svc.Propose(e.as(e.author), rule()); !errors.Is(err, consequencerules.ErrEdition) {
 		t.Fatalf("Community: %v", err)
+	}
+	retire, err = e.svc.Retire(e.as(e.author), "cx.merge-pages")
+	if err != nil || retire == nil {
+		t.Fatalf("retire in Community: %v %+v", err, retire)
+	}
+	if err := e.confirm(retire.Request, e.author); !errors.Is(err, protect.ErrState) {
+		t.Fatalf("retirement confirmed by its author: %v", err)
+	}
+	if err := e.confirm(retire.Request, e.other); err != nil {
+		t.Fatal(err)
+	}
+	if a := e.active(t); len(a) != 0 {
+		t.Fatalf("after retiring in Community: %+v", a)
 	}
 }

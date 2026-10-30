@@ -63,6 +63,9 @@ type Served struct {
 	// CustomerRules are the recorded customer rule versions, loaded again by
 	// id and version (their digests checked) with their definitions by pin.
 	CustomerRules []consequences.Rule
+	// MissingCustomerRules name the recorded versions that could not be
+	// loaded as they were ("cx.rule v2"), for the gap (D144).
+	MissingCustomerRules []string
 }
 
 // Reader serves a recording to the pipeline. It reads nothing else and
@@ -478,7 +481,11 @@ func (r *Reader) CustomerRules(_ context.Context, org ids.OrgID) ([]consequences
 		same = s.Customer != nil && s.ID == w.ID && s.Customer.Version == w.Version && hex.EncodeToString(s.Customer.Digest[:]) == w.Digest
 	}
 	if !same {
-		return nil, r.gap("customer_rules", pipeline.StepFacts, "the customer consequence rules are not the ones recorded")
+		detail := "the customer consequence rules are not the ones recorded"
+		if m := r.served.MissingCustomerRules; len(m) > 0 {
+			detail += ": " + strings.Join(m, ", ") + " could not be loaded as recorded"
+		}
+		return nil, r.gap("customer_rules", pipeline.StepFacts, detail)
 	}
 	return slices.Clone(r.served.CustomerRules), nil
 }

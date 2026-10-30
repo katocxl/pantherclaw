@@ -473,8 +473,8 @@ func (r containedReader) Controls(context.Context, ids.OrgID, pipeline.ControlKe
 // customerRules loads the customer consequence rule versions the
 // evaluation read, each by id and version with its recorded digest, and
 // the definition of its consequence operation by its recorded pin (G0 M17
-// D106). One that cannot be loaded as it was is left out, which the
-// recording reader reports as a gap.
+// D106). One that cannot be loaded as it was is left out and named, and
+// the recording reader reports the gap (D144).
 func (e *Engine) customerRules(ctx context.Context, org ids.OrgID, rec *recording.Recording, s *recording.Served) error {
 	c := rec.Reads.CustomerRules
 	if c == nil || c.Err != "" {
@@ -489,10 +489,12 @@ func (e *Engine) customerRules(ctx context.Context, org ids.OrgID, rec *recordin
 			return fmt.Errorf("replay: customer rule %s digest is %d bytes", x.ID, len(raw))
 		}
 		digest := [32]byte(raw)
+		missing := fmt.Sprintf("%s v%d", x.ID, x.Version)
 		r, err := e.Source.CustomerRule(ctx, org, x.ID, x.Version, digest)
 		switch {
 		case errors.Is(err, ErrNotFound):
-			return nil
+			s.MissingCustomerRules = append(s.MissingCustomerRules, missing)
+			continue
 		case err != nil:
 			return fmt.Errorf("replay: customer rule %s: %w", x.ID, err)
 		}
@@ -502,7 +504,8 @@ func (e *Engine) customerRules(ctx context.Context, org ids.OrgID, rec *recordin
 			pinned, err := e.Source.Definition(ctx, org, *x.Pin)
 			switch {
 			case errors.Is(err, ErrNotFound):
-				return nil
+				s.MissingCustomerRules = append(s.MissingCustomerRules, missing)
+				continue
 			case err != nil:
 				return fmt.Errorf("replay: customer rule %s definition: %w", x.ID, err)
 			}
