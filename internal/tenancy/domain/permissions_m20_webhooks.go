@@ -24,7 +24,7 @@ func init() {
 	catalog = append(catalog, m20WebhooksCatalog...)
 	for i := range roles {
 		r := &roles[i]
-		switch r.Name {
+		switch r.Name { //nolint:exhaustive // only these roles gain the M20 webhook key permissions
 		case RoleOrgAdmin, RoleSecurityAdmin:
 			r.Permissions = append(r.Permissions, PermWebhookKeyRead, PermWebhookKeyManage)
 			r.Description += " Reads and rotates the org's webhook signing key (with a security key)."

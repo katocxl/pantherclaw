@@ -82,7 +82,7 @@ func mountWebhookJWKS(mux *http.ServeMux, src webhookJWKS, clientIP httpx.Client
 		}
 		w.Header().Set("Content-Type", "application/jwk-set+json")
 		w.Header().Set("Cache-Control", "public, max-age=60")
-		_, _ = w.Write(b)
+		_, _ = w.Write(b) //nolint:gosec // G705: b is the keystore-built JWKS, not request input; the path only picks an org parsed as a UUID
 	})
 }
 
