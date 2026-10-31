@@ -5,7 +5,7 @@
 // (G0 M23 D104). Every adapter calls the use case an API caller would, so its
 // permission and edition checks apply unchanged, and none activates, publishes
 // or enables anything (HR-561). FindDraft is what a reclaimed install uses to
-// recognise the draft a crash left behind (D130); it only reads.
+// recognize the draft a crash left behind (D130); it only reads.
 package drafts
 
 import (

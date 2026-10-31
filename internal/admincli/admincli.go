@@ -184,10 +184,10 @@ func keygen(args []string, stdout, stderr io.Writer) error {
 	_, _ = fmt.Fprintf(stdout, "Generated %s root key %s\n  private key: %s (%s)\n  public key:  %s\n\n", p, kid, privPath, encrypted, pubPath)
 	_, _ = fmt.Fprintf(stdout, "Next steps:\n  1. Copy the private key to a second offline medium. Never copy it to CI or a server.\n")
 	roots := "internal/billing/licence/roots.json"
-	switch p {
-	case rootkey.PurposePackages:
+	if p == rootkey.PurposePackages {
 		roots = "internal/definitions/trust/roots.json"
-	case rootkey.PurposeHub:
+	}
+	if p == rootkey.PurposeHub {
 		roots = "internal/hub/roots.json"
 	}
 	_, _ = fmt.Fprintf(stdout, "  2. Add the key from %s to %s and commit it.\n", pubPath, roots)

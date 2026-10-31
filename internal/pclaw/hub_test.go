@@ -293,7 +293,7 @@ func TestHubScenarioStaysLocal(t *testing.T) {
 	if code, _, errs := run(t, env, "hub", "install", "pc.range.cx", "--scenario-dir", dir, "--source", h.dir); code != 0 {
 		t.Fatal(errs)
 	}
-	if b, err := os.ReadFile(path); err != nil || string(b) != "id: CX-90001\n" { //nolint:gosec // G304: test path
+	if b, err := os.ReadFile(path); err != nil || string(b) != "id: CX-90001\n" {
 		t.Fatalf("%q %v", b, err)
 	}
 	if code, out, _ := run(t, env, "hub", "install", "pc.range.cx", "--scenario-dir", dir, "--source", h.dir); code != 0 || !strings.Contains(out, "already there") {

@@ -34,7 +34,7 @@ func TestHubBuildOfTheSeedContent(t *testing.T) {
 	if !strings.Contains(out.String(), "development Hub key") {
 		t.Fatalf("no development notice: %s", out.String())
 	}
-	b, err := os.ReadFile(pub) //nolint:gosec // G304: test path
+	b, err := os.ReadFile(pub)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestHubBuildOfTheSeedContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := os.ReadFile(filepath.Join(dir, "index.jws")) //nolint:gosec // G304: test path
+	doc, err := os.ReadFile(filepath.Join(dir, "index.jws"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestHubBuildOfTheSeedContent(t *testing.T) {
 		t.Fatalf("index %+v", v.Index)
 	}
 	for _, e := range v.Items {
-		raw, err := os.ReadFile(filepath.Join(dir, "items", e.SHA256+".json")) //nolint:gosec // G304: test path
+		raw, err := os.ReadFile(filepath.Join(dir, "items", e.SHA256+".json"))
 		if err != nil {
 			t.Fatal(err)
 		}

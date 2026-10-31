@@ -41,7 +41,7 @@ import (
 const defaultHubSource = "https://raw.githubusercontent.com/katocxl/pantherclaw/hub-index/"
 
 // envHubDevKey names the public JWKS of the development Hub key. It is
-// honoured for a directory or loopback source only (D101).
+// honored for a directory or loopback source only (D101).
 const envHubDevKey = "PANTHERCLAW_HUB_DEV_KEY"
 
 // defaultScenarioDir is a directory of customer-authored scenarios alone:
@@ -106,7 +106,7 @@ func (a *app) hubSource(raw string) (*hubSource, error) {
 func (s *hubSource) read(ctx context.Context, rel string, maxBytes int64) ([]byte, error) {
 	var r io.Reader
 	if s.base == nil {
-		f, err := os.Open(filepath.Join(s.dir, filepath.FromSlash(rel))) //nolint:gosec // G304: the operator's own --source directory
+		f, err := os.Open(filepath.Join(s.dir, filepath.FromSlash(rel)))
 		if err != nil {
 			return nil, fmt.Errorf("hub: %w", err)
 		}
