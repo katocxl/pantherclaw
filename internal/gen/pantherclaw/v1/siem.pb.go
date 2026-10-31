@@ -82,6 +82,8 @@ type SIEMDestination struct {
 	// When the previous signing secret stops signing; unset without a
 	// rotation in progress.
 	RotationEndTime *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=rotation_end_time,json=rotationEndTime,proto3" json:"rotation_end_time,omitempty"`
+	// "hmac" (the default) or "hmac+ed25519".
+	SignatureScheme string `protobuf:"bytes,26,opt,name=signature_scheme,json=signatureScheme,proto3" json:"signature_scheme,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -289,6 +291,13 @@ func (x *SIEMDestination) GetRotationEndTime() *timestamppb.Timestamp {
 		return x.RotationEndTime
 	}
 	return nil
+}
+
+func (x *SIEMDestination) GetSignatureScheme() string {
+	if x != nil {
+		return x.SignatureScheme
+	}
+	return ""
 }
 
 // CreateSIEMDestinationRequest describes a destination.
@@ -1153,11 +1162,122 @@ func (x *ListSIEMBatchesResponse) GetBatches() []*SIEMBatch {
 	return nil
 }
 
+// SetSIEMDestinationSignatureSchemeRequest names a destination and its scheme.
+type SetSIEMDestinationSignatureSchemeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Destination id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// "hmac" or "hmac+ed25519".
+	SignatureScheme string `protobuf:"bytes,2,opt,name=signature_scheme,json=signatureScheme,proto3" json:"signature_scheme,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SetSIEMDestinationSignatureSchemeRequest) Reset() {
+	*x = SetSIEMDestinationSignatureSchemeRequest{}
+	mi := &file_pantherclaw_v1_siem_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSIEMDestinationSignatureSchemeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSIEMDestinationSignatureSchemeRequest) ProtoMessage() {}
+
+func (x *SetSIEMDestinationSignatureSchemeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_siem_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSIEMDestinationSignatureSchemeRequest.ProtoReflect.Descriptor instead.
+func (*SetSIEMDestinationSignatureSchemeRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_siem_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SetSIEMDestinationSignatureSchemeRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SetSIEMDestinationSignatureSchemeRequest) GetSignatureScheme() string {
+	if x != nil {
+		return x.SignatureScheme
+	}
+	return ""
+}
+
+// SetSIEMDestinationSignatureSchemeResponse is the destination and where receivers fetch the
+// org's webhook keys.
+type SetSIEMDestinationSignatureSchemeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The destination.
+	Destination *SIEMDestination `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
+	// The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys.
+	JwksUrl       string `protobuf:"bytes,2,opt,name=jwks_url,json=jwksUrl,proto3" json:"jwks_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSIEMDestinationSignatureSchemeResponse) Reset() {
+	*x = SetSIEMDestinationSignatureSchemeResponse{}
+	mi := &file_pantherclaw_v1_siem_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSIEMDestinationSignatureSchemeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSIEMDestinationSignatureSchemeResponse) ProtoMessage() {}
+
+func (x *SetSIEMDestinationSignatureSchemeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_siem_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSIEMDestinationSignatureSchemeResponse.ProtoReflect.Descriptor instead.
+func (*SetSIEMDestinationSignatureSchemeResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_siem_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SetSIEMDestinationSignatureSchemeResponse) GetDestination() *SIEMDestination {
+	if x != nil {
+		return x.Destination
+	}
+	return nil
+}
+
+func (x *SetSIEMDestinationSignatureSchemeResponse) GetJwksUrl() string {
+	if x != nil {
+		return x.JwksUrl
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_siem_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_siem_proto_rawDesc = "" +
 	"\n" +
-	"\x19pantherclaw/v1/siem.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9c\b\n" +
+	"\x19pantherclaw/v1/siem.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc7\b\n" +
 	"\x0fSIEMDestination\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
@@ -1188,7 +1308,8 @@ const file_pantherclaw_v1_siem_proto_rawDesc = "" +
 	"\x0efailed_batches\x18\x16 \x01(\x03R\rfailedBatches\x12\x18\n" +
 	"\aretries\x18\x17 \x01(\x03R\aretries\x12?\n" +
 	"\rwaiting_since\x18\x18 \x01(\v2\x1a.google.protobuf.TimestampR\fwaitingSince\x12F\n" +
-	"\x11rotation_end_time\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\x0frotationEndTime\"\x98\x02\n" +
+	"\x11rotation_end_time\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\x0frotationEndTime\x12)\n" +
+	"\x10signature_scheme\x18\x1a \x01(\tR\x0fsignatureScheme\"\x98\x02\n" +
 	"\x1cCreateSIEMDestinationRequest\x12C\n" +
 	"\x04name\x18\x01 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12&\n" +
 	"\x03url\x18\x02 \x01(\tB\x14\xbaH\x11r\x0f\x10\t\x18\x80\x10:\bhttps://R\x03url\x12\x1a\n" +
@@ -1245,13 +1366,20 @@ const file_pantherclaw_v1_siem_proto_rawDesc = "" +
 	"\fdeliver_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vdeliverTime\x12!\n" +
 	"\fskipped_uids\x18\r \x03(\tR\vskippedUids\"N\n" +
 	"\x17ListSIEMBatchesResponse\x123\n" +
-	"\abatches\x18\x01 \x03(\v2\x19.pantherclaw.v1.SIEMBatchR\abatches2\xce\x06\n" +
+	"\abatches\x18\x01 \x03(\v2\x19.pantherclaw.v1.SIEMBatchR\abatches\"\x8a\x01\n" +
+	"(SetSIEMDestinationSignatureSchemeRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12D\n" +
+	"\x10signature_scheme\x18\x02 \x01(\tB\x19\xbaH\x16r\x14R\x04hmacR\fhmac+ed25519R\x0fsignatureScheme\"\x89\x01\n" +
+	")SetSIEMDestinationSignatureSchemeResponse\x12A\n" +
+	"\vdestination\x18\x01 \x01(\v2\x1f.pantherclaw.v1.SIEMDestinationR\vdestination\x12\x19\n" +
+	"\bjwks_url\x18\x02 \x01(\tR\ajwksUrl2\xe9\a\n" +
 	"\vSIEMService\x12t\n" +
 	"\x15CreateSIEMDestination\x12,.pantherclaw.v1.CreateSIEMDestinationRequest\x1a-.pantherclaw.v1.CreateSIEMDestinationResponse\x12p\n" +
 	"\x12GetSIEMDestination\x12).pantherclaw.v1.GetSIEMDestinationRequest\x1a*.pantherclaw.v1.GetSIEMDestinationResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x14ListSIEMDestinations\x12+.pantherclaw.v1.ListSIEMDestinationsRequest\x1a,.pantherclaw.v1.ListSIEMDestinationsResponse\"\x03\x90\x02\x01\x12z\n" +
 	"\x17SetSIEMDestinationState\x12..pantherclaw.v1.SetSIEMDestinationStateRequest\x1a/.pantherclaw.v1.SetSIEMDestinationStateResponse\x12\x86\x01\n" +
-	"\x1bRotateSIEMDestinationSecret\x122.pantherclaw.v1.RotateSIEMDestinationSecretRequest\x1a3.pantherclaw.v1.RotateSIEMDestinationSecretResponse\x12q\n" +
+	"\x1bRotateSIEMDestinationSecret\x122.pantherclaw.v1.RotateSIEMDestinationSecretRequest\x1a3.pantherclaw.v1.RotateSIEMDestinationSecretResponse\x12\x98\x01\n" +
+	"!SetSIEMDestinationSignatureScheme\x128.pantherclaw.v1.SetSIEMDestinationSignatureSchemeRequest\x1a9.pantherclaw.v1.SetSIEMDestinationSignatureSchemeResponse\x12q\n" +
 	"\x14RetrySIEMDestination\x12+.pantherclaw.v1.RetrySIEMDestinationRequest\x1a,.pantherclaw.v1.RetrySIEMDestinationResponse\x12g\n" +
 	"\x0fListSIEMBatches\x12&.pantherclaw.v1.ListSIEMBatchesRequest\x1a'.pantherclaw.v1.ListSIEMBatchesResponse\"\x03\x90\x02\x01B\xc2\x01\n" +
 	"\x12com.pantherclaw.v1B\tSiemProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
@@ -1268,62 +1396,67 @@ func file_pantherclaw_v1_siem_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_siem_proto_rawDescData
 }
 
-var file_pantherclaw_v1_siem_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pantherclaw_v1_siem_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_pantherclaw_v1_siem_proto_goTypes = []any{
-	(*SIEMDestination)(nil),                     // 0: pantherclaw.v1.SIEMDestination
-	(*CreateSIEMDestinationRequest)(nil),        // 1: pantherclaw.v1.CreateSIEMDestinationRequest
-	(*CreateSIEMDestinationResponse)(nil),       // 2: pantherclaw.v1.CreateSIEMDestinationResponse
-	(*GetSIEMDestinationRequest)(nil),           // 3: pantherclaw.v1.GetSIEMDestinationRequest
-	(*GetSIEMDestinationResponse)(nil),          // 4: pantherclaw.v1.GetSIEMDestinationResponse
-	(*ListSIEMDestinationsRequest)(nil),         // 5: pantherclaw.v1.ListSIEMDestinationsRequest
-	(*ListSIEMDestinationsResponse)(nil),        // 6: pantherclaw.v1.ListSIEMDestinationsResponse
-	(*SetSIEMDestinationStateRequest)(nil),      // 7: pantherclaw.v1.SetSIEMDestinationStateRequest
-	(*SetSIEMDestinationStateResponse)(nil),     // 8: pantherclaw.v1.SetSIEMDestinationStateResponse
-	(*RotateSIEMDestinationSecretRequest)(nil),  // 9: pantherclaw.v1.RotateSIEMDestinationSecretRequest
-	(*RotateSIEMDestinationSecretResponse)(nil), // 10: pantherclaw.v1.RotateSIEMDestinationSecretResponse
-	(*RetrySIEMDestinationRequest)(nil),         // 11: pantherclaw.v1.RetrySIEMDestinationRequest
-	(*RetrySIEMDestinationResponse)(nil),        // 12: pantherclaw.v1.RetrySIEMDestinationResponse
-	(*ListSIEMBatchesRequest)(nil),              // 13: pantherclaw.v1.ListSIEMBatchesRequest
-	(*SIEMBatch)(nil),                           // 14: pantherclaw.v1.SIEMBatch
-	(*ListSIEMBatchesResponse)(nil),             // 15: pantherclaw.v1.ListSIEMBatchesResponse
-	(*timestamppb.Timestamp)(nil),               // 16: google.protobuf.Timestamp
+	(*SIEMDestination)(nil),                           // 0: pantherclaw.v1.SIEMDestination
+	(*CreateSIEMDestinationRequest)(nil),              // 1: pantherclaw.v1.CreateSIEMDestinationRequest
+	(*CreateSIEMDestinationResponse)(nil),             // 2: pantherclaw.v1.CreateSIEMDestinationResponse
+	(*GetSIEMDestinationRequest)(nil),                 // 3: pantherclaw.v1.GetSIEMDestinationRequest
+	(*GetSIEMDestinationResponse)(nil),                // 4: pantherclaw.v1.GetSIEMDestinationResponse
+	(*ListSIEMDestinationsRequest)(nil),               // 5: pantherclaw.v1.ListSIEMDestinationsRequest
+	(*ListSIEMDestinationsResponse)(nil),              // 6: pantherclaw.v1.ListSIEMDestinationsResponse
+	(*SetSIEMDestinationStateRequest)(nil),            // 7: pantherclaw.v1.SetSIEMDestinationStateRequest
+	(*SetSIEMDestinationStateResponse)(nil),           // 8: pantherclaw.v1.SetSIEMDestinationStateResponse
+	(*RotateSIEMDestinationSecretRequest)(nil),        // 9: pantherclaw.v1.RotateSIEMDestinationSecretRequest
+	(*RotateSIEMDestinationSecretResponse)(nil),       // 10: pantherclaw.v1.RotateSIEMDestinationSecretResponse
+	(*RetrySIEMDestinationRequest)(nil),               // 11: pantherclaw.v1.RetrySIEMDestinationRequest
+	(*RetrySIEMDestinationResponse)(nil),              // 12: pantherclaw.v1.RetrySIEMDestinationResponse
+	(*ListSIEMBatchesRequest)(nil),                    // 13: pantherclaw.v1.ListSIEMBatchesRequest
+	(*SIEMBatch)(nil),                                 // 14: pantherclaw.v1.SIEMBatch
+	(*ListSIEMBatchesResponse)(nil),                   // 15: pantherclaw.v1.ListSIEMBatchesResponse
+	(*SetSIEMDestinationSignatureSchemeRequest)(nil),  // 16: pantherclaw.v1.SetSIEMDestinationSignatureSchemeRequest
+	(*SetSIEMDestinationSignatureSchemeResponse)(nil), // 17: pantherclaw.v1.SetSIEMDestinationSignatureSchemeResponse
+	(*timestamppb.Timestamp)(nil),                     // 18: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_siem_proto_depIdxs = []int32{
-	16, // 0: pantherclaw.v1.SIEMDestination.create_time:type_name -> google.protobuf.Timestamp
-	16, // 1: pantherclaw.v1.SIEMDestination.activate_time:type_name -> google.protobuf.Timestamp
-	16, // 2: pantherclaw.v1.SIEMDestination.confirm_time:type_name -> google.protobuf.Timestamp
-	16, // 3: pantherclaw.v1.SIEMDestination.last_delivered_time:type_name -> google.protobuf.Timestamp
-	16, // 4: pantherclaw.v1.SIEMDestination.failing_since:type_name -> google.protobuf.Timestamp
-	16, // 5: pantherclaw.v1.SIEMDestination.waiting_since:type_name -> google.protobuf.Timestamp
-	16, // 6: pantherclaw.v1.SIEMDestination.rotation_end_time:type_name -> google.protobuf.Timestamp
+	18, // 0: pantherclaw.v1.SIEMDestination.create_time:type_name -> google.protobuf.Timestamp
+	18, // 1: pantherclaw.v1.SIEMDestination.activate_time:type_name -> google.protobuf.Timestamp
+	18, // 2: pantherclaw.v1.SIEMDestination.confirm_time:type_name -> google.protobuf.Timestamp
+	18, // 3: pantherclaw.v1.SIEMDestination.last_delivered_time:type_name -> google.protobuf.Timestamp
+	18, // 4: pantherclaw.v1.SIEMDestination.failing_since:type_name -> google.protobuf.Timestamp
+	18, // 5: pantherclaw.v1.SIEMDestination.waiting_since:type_name -> google.protobuf.Timestamp
+	18, // 6: pantherclaw.v1.SIEMDestination.rotation_end_time:type_name -> google.protobuf.Timestamp
 	0,  // 7: pantherclaw.v1.CreateSIEMDestinationResponse.destination:type_name -> pantherclaw.v1.SIEMDestination
 	0,  // 8: pantherclaw.v1.GetSIEMDestinationResponse.destination:type_name -> pantherclaw.v1.SIEMDestination
 	0,  // 9: pantherclaw.v1.ListSIEMDestinationsResponse.destinations:type_name -> pantherclaw.v1.SIEMDestination
 	0,  // 10: pantherclaw.v1.SetSIEMDestinationStateResponse.destination:type_name -> pantherclaw.v1.SIEMDestination
 	0,  // 11: pantherclaw.v1.RetrySIEMDestinationResponse.destination:type_name -> pantherclaw.v1.SIEMDestination
-	16, // 12: pantherclaw.v1.SIEMBatch.next_attempt_time:type_name -> google.protobuf.Timestamp
-	16, // 13: pantherclaw.v1.SIEMBatch.create_time:type_name -> google.protobuf.Timestamp
-	16, // 14: pantherclaw.v1.SIEMBatch.deliver_time:type_name -> google.protobuf.Timestamp
+	18, // 12: pantherclaw.v1.SIEMBatch.next_attempt_time:type_name -> google.protobuf.Timestamp
+	18, // 13: pantherclaw.v1.SIEMBatch.create_time:type_name -> google.protobuf.Timestamp
+	18, // 14: pantherclaw.v1.SIEMBatch.deliver_time:type_name -> google.protobuf.Timestamp
 	14, // 15: pantherclaw.v1.ListSIEMBatchesResponse.batches:type_name -> pantherclaw.v1.SIEMBatch
-	1,  // 16: pantherclaw.v1.SIEMService.CreateSIEMDestination:input_type -> pantherclaw.v1.CreateSIEMDestinationRequest
-	3,  // 17: pantherclaw.v1.SIEMService.GetSIEMDestination:input_type -> pantherclaw.v1.GetSIEMDestinationRequest
-	5,  // 18: pantherclaw.v1.SIEMService.ListSIEMDestinations:input_type -> pantherclaw.v1.ListSIEMDestinationsRequest
-	7,  // 19: pantherclaw.v1.SIEMService.SetSIEMDestinationState:input_type -> pantherclaw.v1.SetSIEMDestinationStateRequest
-	9,  // 20: pantherclaw.v1.SIEMService.RotateSIEMDestinationSecret:input_type -> pantherclaw.v1.RotateSIEMDestinationSecretRequest
-	11, // 21: pantherclaw.v1.SIEMService.RetrySIEMDestination:input_type -> pantherclaw.v1.RetrySIEMDestinationRequest
-	13, // 22: pantherclaw.v1.SIEMService.ListSIEMBatches:input_type -> pantherclaw.v1.ListSIEMBatchesRequest
-	2,  // 23: pantherclaw.v1.SIEMService.CreateSIEMDestination:output_type -> pantherclaw.v1.CreateSIEMDestinationResponse
-	4,  // 24: pantherclaw.v1.SIEMService.GetSIEMDestination:output_type -> pantherclaw.v1.GetSIEMDestinationResponse
-	6,  // 25: pantherclaw.v1.SIEMService.ListSIEMDestinations:output_type -> pantherclaw.v1.ListSIEMDestinationsResponse
-	8,  // 26: pantherclaw.v1.SIEMService.SetSIEMDestinationState:output_type -> pantherclaw.v1.SetSIEMDestinationStateResponse
-	10, // 27: pantherclaw.v1.SIEMService.RotateSIEMDestinationSecret:output_type -> pantherclaw.v1.RotateSIEMDestinationSecretResponse
-	12, // 28: pantherclaw.v1.SIEMService.RetrySIEMDestination:output_type -> pantherclaw.v1.RetrySIEMDestinationResponse
-	15, // 29: pantherclaw.v1.SIEMService.ListSIEMBatches:output_type -> pantherclaw.v1.ListSIEMBatchesResponse
-	23, // [23:30] is the sub-list for method output_type
-	16, // [16:23] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	0,  // 16: pantherclaw.v1.SetSIEMDestinationSignatureSchemeResponse.destination:type_name -> pantherclaw.v1.SIEMDestination
+	1,  // 17: pantherclaw.v1.SIEMService.CreateSIEMDestination:input_type -> pantherclaw.v1.CreateSIEMDestinationRequest
+	3,  // 18: pantherclaw.v1.SIEMService.GetSIEMDestination:input_type -> pantherclaw.v1.GetSIEMDestinationRequest
+	5,  // 19: pantherclaw.v1.SIEMService.ListSIEMDestinations:input_type -> pantherclaw.v1.ListSIEMDestinationsRequest
+	7,  // 20: pantherclaw.v1.SIEMService.SetSIEMDestinationState:input_type -> pantherclaw.v1.SetSIEMDestinationStateRequest
+	9,  // 21: pantherclaw.v1.SIEMService.RotateSIEMDestinationSecret:input_type -> pantherclaw.v1.RotateSIEMDestinationSecretRequest
+	16, // 22: pantherclaw.v1.SIEMService.SetSIEMDestinationSignatureScheme:input_type -> pantherclaw.v1.SetSIEMDestinationSignatureSchemeRequest
+	11, // 23: pantherclaw.v1.SIEMService.RetrySIEMDestination:input_type -> pantherclaw.v1.RetrySIEMDestinationRequest
+	13, // 24: pantherclaw.v1.SIEMService.ListSIEMBatches:input_type -> pantherclaw.v1.ListSIEMBatchesRequest
+	2,  // 25: pantherclaw.v1.SIEMService.CreateSIEMDestination:output_type -> pantherclaw.v1.CreateSIEMDestinationResponse
+	4,  // 26: pantherclaw.v1.SIEMService.GetSIEMDestination:output_type -> pantherclaw.v1.GetSIEMDestinationResponse
+	6,  // 27: pantherclaw.v1.SIEMService.ListSIEMDestinations:output_type -> pantherclaw.v1.ListSIEMDestinationsResponse
+	8,  // 28: pantherclaw.v1.SIEMService.SetSIEMDestinationState:output_type -> pantherclaw.v1.SetSIEMDestinationStateResponse
+	10, // 29: pantherclaw.v1.SIEMService.RotateSIEMDestinationSecret:output_type -> pantherclaw.v1.RotateSIEMDestinationSecretResponse
+	17, // 30: pantherclaw.v1.SIEMService.SetSIEMDestinationSignatureScheme:output_type -> pantherclaw.v1.SetSIEMDestinationSignatureSchemeResponse
+	12, // 31: pantherclaw.v1.SIEMService.RetrySIEMDestination:output_type -> pantherclaw.v1.RetrySIEMDestinationResponse
+	15, // 32: pantherclaw.v1.SIEMService.ListSIEMBatches:output_type -> pantherclaw.v1.ListSIEMBatchesResponse
+	25, // [25:33] is the sub-list for method output_type
+	17, // [17:25] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_siem_proto_init() }
@@ -1337,7 +1470,7 @@ func file_pantherclaw_v1_siem_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_siem_proto_rawDesc), len(file_pantherclaw_v1_siem_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

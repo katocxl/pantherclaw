@@ -107,6 +107,13 @@ type stack struct {
 	// slack is the Slack simulator and the seeded connection "slack" to it
 	// (G0 M14, options.slack; m14_slack_e2e_test.go).
 	slack *slackSim
+	// jira and gitlab are the Jira and GitLab simulators and the seeded
+	// connections to them (G0 M20, options.jira and options.gitlab;
+	// m20_connectors_e2e_test.go).
+	jira   *jiraSim
+	gitlab *gitlabSim
+	// aws is the AWS simulator and the seeded connection to it (options.awsECS).
+	aws *awsSim
 	// a2a is the A2A simulator acting as the peer agent, the seeded a2a
 	// connection "peer" to it and the peer's workload (G0 M14, options.a2a).
 	a2a *a2aPeerSim
@@ -170,6 +177,15 @@ type options struct {
 	// connection "slack" to it, its bot token held by the gateway (dev seed
 	// --slack-url, G0 M14 D25).
 	slack bool
+	// jira and gitlab also start the Jira and GitLab simulators and seed
+	// pc.jira and pc.gitlab and the connections "jira" and "gitlab" to them,
+	// their credentials held by the gateway (dev seed --jira-url and
+	// --gitlab-url, G0 M20 D254).
+	jira, gitlab bool
+	// awsECS also starts the AWS simulator and seeds pc.aws.ecs and the
+	// connection "aws-ecs" to it, its base key held by the gateway (dev seed
+	// --aws-ecs-url, G0 M20 D286).
+	awsECS bool
 	// a2a also starts the A2A simulator as a PantherClaw peer agent and seeds
 	// pc.a2a, the peer agent and the connection "peer" (dev seed --a2a-url,
 	// G0 M14 D33).
@@ -325,6 +341,18 @@ func start(t *testing.T, o options) *stack {
 		s.slack = startSlackSim(t)
 		args = append(args, "--slack-url", s.slack.url+"/api")
 	}
+	if o.jira {
+		s.jira = startJiraSim(t)
+		args = append(args, "--jira-url", s.jira.url)
+	}
+	if o.gitlab {
+		s.gitlab = startGitLabSim(t)
+		args = append(args, "--gitlab-url", s.gitlab.url)
+	}
+	if o.awsECS {
+		s.aws = startAWSSim(t)
+		args = append(args, "--aws-ecs-url", s.aws.url)
+	}
 	if o.postgres != nil {
 		args = append(args, "--postgres", s.postgresSeedFile(t, dir, o.postgres))
 	}
@@ -352,6 +380,15 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.slack {
 		s.slack.seeded(t, out.String())
+	}
+	if o.jira {
+		s.jira.seeded(t, out.String())
+	}
+	if o.gitlab {
+		s.gitlab.seeded(t, out.String())
+	}
+	if o.awsECS {
+		s.aws.seeded(t, out.String())
 	}
 	if o.a2a {
 		s.a2aSeeded(t, out.String())
@@ -419,7 +456,7 @@ func start(t *testing.T, o options) *stack {
 		// GitHub the stack calls (github.api_url).
 		gc.GitHub.APIURL = s.gh.url
 	}
-	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.postgres != nil || o.brokerKey {
+	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.jira || o.gitlab || o.awsECS || o.postgres != nil || o.brokerKey {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -457,6 +494,15 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.slack {
 		s.waitConfig(t, s.sealFor(t, s.slack.conn, slackBotToken))
+	}
+	if o.jira {
+		s.waitConfig(t, s.sealFor(t, s.jira.conn, jiraSecret))
+	}
+	if o.gitlab {
+		s.waitConfig(t, s.sealFor(t, s.gitlab.conn, gitlabToken))
+	}
+	if o.awsECS {
+		s.waitConfig(t, s.sealAWSECS(t))
 	}
 	if o.postgres != nil {
 		s.postgresReady(t)

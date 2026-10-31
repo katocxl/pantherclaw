@@ -745,6 +745,15 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
   - No connectors (HR-084 unchanged).
 - **Decision speed** (PN-011.1): decision snapshots stay `REPEATABLE READ, READ ONLY` (the Prepare merge is dropped, a follow-up); a busy budget row is retried once inside the Authority, from a fresh snapshot, before `BUDGET_BUSY`; measured side by side in `docs/perf/M19.md`. Finalize + BeginDispatch is not merged (follow-up founder decision).
 - Migrations `00226`–`00230` (`00231`–`00235` spare); a new `hosting.proto`; the new permission `hosting.agent` (declarable only) and the `HostedGateways` Team gate (provisioning only).
+### M20 — Integrations breadth
+**HR:** HR-510..529 · **PN:** PN-018, PN-017.3 · **F:** F517, F424, F756, F545, F161 · **ADR:** 0042 · **G0:** [g0/M20.md](g0/M20.md).
+- **Ed25519 webhooks** (founder decision G13, [ADR-0042](adr/0042-integrations-breadth.md)): one `webhooks` key per organization in a per-org JWKS; a destination that opts in receives `v1a,` next to `v1,`, and HMAC stays the default and is always sent; a rotated key verifies for 24 hours.
+- **Export destinations** (F517, Business): HTTPS PUT and S3-compatible destinations for packs, proof bundles and organization exports, activated with a step-up through the egress guards; a delivery receipt per push, streamed parts above 2 GiB, signed removal notices; SigV4 in-house.
+- **Target-confirmed rotation** (F424, G14): a GitHub App key is sealed as a candidate, tested at GitHub through a gateway lease, activated as a Custody protected change with a step-up, and the old key is revoked only when GitHub refuses it; rollback until confirmation.
+- **Connectors** (F756, G12, Team): GitLab, Jira, Microsoft Teams (Bot Framework, `oauth_client` credentials) and AWS (ECS deploys and IAM reads, `aws_sigv4` AssumeRole sessions), each with facts and a simulator; a validated package `coverage:` block; fixed mapping headers and AWS encodings.
+- **Ticket sync** (F545, G15, Business): Jira cases and incidents synced through gateway leases with one owner per field; a ticket status never restores authority.
+- **Approval channels** (F161, PN-017.3): Slack direct messages and Teams cards to eligible deciders, link only.
+- Migrations `00236`–`00244` (`00240` only if needed, `00245` spare); no new permissions.
 
 ---
 

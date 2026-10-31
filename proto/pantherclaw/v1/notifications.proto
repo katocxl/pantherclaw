@@ -40,12 +40,36 @@ service NotificationService {
   // secret is returned once; the old one keeps signing for 24 hours.
   // permission: notification.manage
   rpc RotateChannelSecret(RotateChannelSecretRequest) returns (RotateChannelSecretResponse);
+  // SetChannelSignatureScheme opts a webhook channel in to Ed25519 signatures
+  // ("hmac+ed25519": a `v1a,` signature by the org's webhooks key next to the
+  // HMAC `v1,` ones) or back to HMAC only ("hmac", the default). HMAC is
+  // always sent. Audited.
+  // permission: notification.manage
+  rpc SetChannelSignatureScheme(SetChannelSignatureSchemeRequest) returns (SetChannelSignatureSchemeResponse);
   // TestChannel sends a test notification to one channel.
   // permission: notification.manage
   rpc TestChannel(TestChannelRequest) returns (TestChannelResponse);
   // ListDeliveries lists deliveries, newest first.
   // permission: notification.read
   rpc ListDeliveries(ListDeliveriesRequest) returns (ListDeliveriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ProposeSlackLink looks the caller up in the workspace of the org's Slack
+  // DM channel by their own email and proposes the link (G0 M20 D256,
+  // D265): a full, confirmed member with that email, on one of the
+  // channel's email domains. The caller confirms it with ConfirmChatLink.
+  // permission: authenticated
+  rpc ProposeSlackLink(ProposeSlackLinkRequest) returns (ProposeSlackLinkResponse);
+  // ConfirmChatLink confirms the caller's own proposed link: approval DMs
+  // for requests they may decide then reach them.
+  // permission: authenticated
+  rpc ConfirmChatLink(ConfirmChatLinkRequest) returns (ConfirmChatLinkResponse);
+  // RevokeChatLink revokes the caller's own link.
+  // permission: authenticated
+  rpc RevokeChatLink(RevokeChatLinkRequest) returns (RevokeChatLinkResponse);
+  // ListChatLinks lists the caller's own links, newest first.
+  // permission: authenticated
+  rpc ListChatLinks(ListChatLinksRequest) returns (ListChatLinksResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
@@ -65,6 +89,10 @@ enum ChannelKind {
   // place (G0 M14 D22, Team edition): minimal data and a link button only,
   // never a decision in Slack.
   CHANNEL_KIND_SLACK_APP = 5;
+  // A Teams bot posting link-only Adaptive Cards to one standard channel (G0
+  // M20 D256, Team edition), activated with a step-up; never a decision in
+  // Teams.
+  CHANNEL_KIND_TEAMS_APP = 6;
 }
 
 // SlackDataLevel is how much a Slack approval card shows (G0 M14 D23).
@@ -93,6 +121,23 @@ message SlackAppConfig {
   string bot_token = 4 [(buf.validate.field).string = {
     max_len: 256
     pattern: "^(xoxb-[A-Za-z0-9-]{20,250})?$"
+  }];
+  // Whether the bot also sends approval direct messages to eligible
+  // deciders who linked their Slack identity (G0 M20 D256). Set when the
+  // channel is created and confirmed by its activation; it never changes,
+  // and at most one channel of an organization has it.
+  bool direct_messages = 5;
+  // The email domains a person's Slack link may use: lowercase exact
+  // domains, no wildcards, 1 to 20 for a DM channel and none otherwise (G0
+  // M20 D265). Set when the channel is created; it never changes.
+  repeated string allowed_email_domains = 6 [(buf.validate.field).repeated = {
+    max_items: 20
+    items: {
+      string: {
+        max_len: 253
+        pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+      }
+    }
   }];
 }
 
@@ -161,6 +206,8 @@ message Channel {
   google.protobuf.Timestamp update_time = 17;
   // slack_app channels: the configuration, without the bot token.
   SlackAppConfig slack_app = 18;
+  // Webhook channels: "hmac" (the default) or "hmac+ed25519".
+  string signature_scheme = 19;
 }
 
 // DeliveryState is the state of one delivery.
@@ -247,6 +294,9 @@ message CreateChannelRequest {
   // slack_app channels: the configuration, with the bot token. Required
   // for, and only for, a slack_app channel.
   SlackAppConfig slack_app = 7;
+  // teams_app channels: the configuration, with the bot's client secret
+  // (G0 M20 D256). Required for, and only for, a teams_app channel.
+  TeamsAppConfig teams_app = 8;
 }
 
 // CreateChannelResponse returns the channel and, for a webhook channel, the
@@ -397,4 +447,102 @@ message ListDeliveriesResponse {
   repeated Delivery deliveries = 1;
   // Token for the next page; empty at the end.
   string next_page_token = 2;
+}
+
+// SetChannelSignatureSchemeRequest names a webhook channel and its scheme.
+message SetChannelSignatureSchemeRequest {
+  // Channel id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "hmac" or "hmac+ed25519".
+  string signature_scheme = 2 [(buf.validate.field).string = {
+    in: [
+      "hmac",
+      "hmac+ed25519"
+    ]
+  }];
+}
+
+// SetChannelSignatureSchemeResponse is the channel and where receivers fetch the
+// org's webhook keys.
+message SetChannelSignatureSchemeResponse {
+  // The channel.
+  Channel channel = 1;
+  // The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys.
+  string jwks_url = 2;
+}
+
+// ChatLinkState is a chat identity link's state (G0 M20 D256, D265).
+enum ChatLinkState {
+  CHAT_LINK_STATE_UNSPECIFIED = 0;
+  // Looked up in Slack, waiting for the person to confirm it.
+  CHAT_LINK_STATE_PROPOSED = 1;
+  // Confirmed by the person: approval DMs reach them.
+  CHAT_LINK_STATE_CONFIRMED = 2;
+  // Slack no longer answered the email with this member before a DM.
+  CHAT_LINK_STATE_STALE = 3;
+  CHAT_LINK_STATE_REVOKED = 4;
+}
+
+// ChatLink is a person's Slack identity link.
+message ChatLink {
+  string id = 1;
+  // Always "slack".
+  string provider = 2;
+  // The Slack workspace and user ids.
+  string team_id = 3;
+  string external_user_id = 4;
+  // The email Slack matched.
+  string email = 5;
+  ChatLinkState state = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Timestamp confirm_time = 8;
+}
+
+message ProposeSlackLinkRequest {}
+
+message ProposeSlackLinkResponse {
+  ChatLink link = 1;
+}
+
+message ConfirmChatLinkRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ConfirmChatLinkResponse {
+  ChatLink link = 1;
+}
+
+message RevokeChatLinkRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message RevokeChatLinkResponse {
+  ChatLink link = 1;
+}
+
+message ListChatLinksRequest {}
+
+message ListChatLinksResponse {
+  repeated ChatLink links = 1;
+}
+
+// TeamsAppConfig is a teams_app channel's configuration (G0 M20 D256).
+message TeamsAppConfig {
+  // The Entra tenant the bot is installed in.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  // The team's General channel id and the channel the cards go to.
+  string team_id = 2 [(buf.validate.field).string.pattern = "^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$"];
+  string channel_id = 3 [(buf.validate.field).string.pattern = "^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$"];
+  // The bot's Microsoft App ID.
+  string app_id = 4 [(buf.validate.field).string.uuid = true];
+  // The bot's client secret; input only, never returned.
+  string client_secret = 5 [(buf.validate.field).string = {
+    min_len: 16
+    max_len: 512
+  }];
+  // The Bot Framework service URL (https).
+  string service_url = 6 [(buf.validate.field).string = {
+    max_len: 512
+    prefix: "https://"
+  }];
 }

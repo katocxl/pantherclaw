@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	credentials "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
@@ -110,6 +111,8 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 		return e.connectionTest(ctx, conn, l)
 	case "target_log":
 		return e.targetLog(ctx, conn, l)
+	case "ticket_sync":
+		return e.ticketSync(ctx, conn, l)
 	}
 	read, v, list, err := reviewedRead(conn, l.Operation)
 	if err != nil {
@@ -243,8 +246,11 @@ func (e *Engine) judge(ctx context.Context, conn *control.Connection, v *defs.Ve
 	if len(matched) == 0 {
 		return out, nil
 	}
+	if l.IDParam == "" {
+		return judgeItems(v, matched, crowded, declared, out), nil
+	}
 	read, found := conn.Package.Definition(v.Operation)
-	if !found || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil || read.Dispatch.HTTP.Method != http.MethodGet {
+	if !found || !conn.Package.VerificationRead(read) {
 		return Observation{}, fmt.Errorf("%w: lookup read", ErrNotReviewedRead)
 	}
 	if l.Statuses != nil && (len(matched) > maxMatched || crowded) {
@@ -295,6 +301,25 @@ func (e *Engine) judge(ctx context.Context, conn *control.Connection, v *defs.Ve
 	return out, nil
 }
 
+// judgeItems reads the matched items themselves, for the one read that
+// already returns all of them (G0 M20 D284): the items are the observation,
+// and items whose status differs, or more than can be read, are a
+// disagreement for a person, never a verdict from one of them (HR-191). A
+// missing status is a status of its own: it never confirms.
+func judgeItems(v *defs.VerifierSpec, matched [][]byte, crowded bool, declared map[string]bool, out Observation) Observation {
+	out.Found, out.Fields = true, fields(matched[0], declared)
+	first, _ := defs.PointerValue(matched[0], v.States.Field)
+	disagree := crowded || len(matched) > maxMatched
+	for _, it := range matched[1:] {
+		state, _ := defs.PointerValue(it, v.States.Field)
+		disagree = disagree || state != first
+	}
+	if disagree {
+		out.Fields[v.States.Field] = defs.VerdictDisagreement
+	}
+	return out
+}
+
 // verdict is an item's latest status from a creator the lookup names,
 // newest first as the read lists them; a status that needs an earlier one
 // it does not have is unproven; "" when none counts.
@@ -330,7 +355,7 @@ func reviewedRead(conn *control.Connection, op string) (*defs.Definition, *defs.
 		return nil, nil, nil, ErrNotReviewedRead
 	}
 	read, ok := conn.Package.Definition(op)
-	if !ok || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil || read.Dispatch.HTTP.Method != http.MethodGet {
+	if !ok || !conn.Package.VerificationRead(read) {
 		return nil, nil, nil, ErrNotReviewedRead
 	}
 	for i := range conn.Package.Definitions {
@@ -429,6 +454,22 @@ func (e *Engine) read(ctx context.Context, conn *control.Connection, read *defs.
 // readWith makes a reviewed read through the connection, with an action token
 // when token is set, and returns the whole answer.
 func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *defs.Definition, target actionir.Target,
+	params map[string]string, token string,
+) (egress.Response, bool) {
+	if conn.Package == nil || !conn.Package.VerificationRead(read) ||
+		// The POST exception is a held AWS session or nothing (D290): awsSession
+		// also requires its seal to name ECS.
+		(read.PostVerificationRead() && (conn.GetAccessMode() != "pantherclaw_held" || conn.Credential.GetKind() != credentials.KindAWSSigV4)) {
+		e.log.WarnContext(ctx, "gateway.verification_not_built", slog.String("connection_id", conn.GetId()), pclog.Err(ErrNotReviewedRead))
+		return egress.Response{}, false
+	}
+	return e.sendReviewed(ctx, conn, read, target, params, token)
+}
+
+// sendReviewed builds a reviewed definition's request through the connection and
+// sends it. Only readWith, which holds the read rule (HR-190), and ticketSync,
+// which holds its own list of writes (D255), call it.
+func (e *Engine) sendReviewed(ctx context.Context, conn *control.Connection, read *defs.Definition, target actionir.Target,
 	params map[string]string, token string,
 ) (egress.Response, bool) {
 	raw, err := json.Marshal(params, json.Deterministic(true))

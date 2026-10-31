@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -34,8 +35,10 @@ const maxCredential = 64 << 10
 
 func init() {
 	commands["seal"] = command{
-		usage: "seal --connection ID --from-file FILE [--fingerprint sha256:HEX] [--github-app ID --installation N --account LOGIN]",
-		run:   seal,
+		usage: "seal --connection ID --from-file FILE|- [--fingerprint sha256:HEX] [--github-app ID --installation N --account LOGIN]\n" +
+			"  [--oauth-token-url URL --oauth-client-id ID --oauth-scope SCOPE]\n" +
+			"  [--aws-access-key-id ID --aws-role-arn ARN [--aws-external-id ID] --aws-sts-url URL --aws-sts-region R --aws-region R --aws-service S]",
+		run: seal,
 	}
 	commands["credential list"] = rpc("credential list CONNECTION", 1, func(*flag.FlagSet) call {
 		return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
@@ -64,7 +67,13 @@ func readCredential(path string) (secret []byte, privateKey bool, err error) {
 		return nil, false, err
 	}
 	defer func() { _ = f.Close() }()
-	b, err := io.ReadAll(io.LimitReader(f, maxCredential+1))
+	return credentialFrom(f)
+}
+
+// credentialFrom reads a credential as readCredential does, from a file or
+// from stdin.
+func credentialFrom(r io.Reader) (secret []byte, privateKey bool, err error) {
+	b, err := io.ReadAll(io.LimitReader(r, maxCredential+1))
 	if err != nil {
 		return nil, false, err
 	}
@@ -100,15 +109,28 @@ func seal(ctx context.Context, a *app, args []string) error {
 	fs := flag.NewFlagSet("seal", flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
 	conn := fs.String("connection", "", "connection id")
-	from := fs.String("from-file", "", "file holding the credential (never pass it on the command line)")
+	from := fs.String("from-file", "", "file holding the credential, or - for stdin (never pass it on the command line)")
 	expect := fs.String("fingerprint", "", "the broker key fingerprint the gateway's operator gave you; sealing stops if it differs")
 	app := fs.String("github-app", "", "seal a GitHub App: its client id (Iv…) or numeric id; --from-file is then the App's private key (.pem)")
 	installation := fs.Int64("installation", 0, "with --github-app: the installation id")
 	account := fs.String("account", "", "with --github-app: the account the App is installed on, in lowercase")
+	tokenURL := fs.String("oauth-token-url", "", "seal an OAuth client: its token endpoint, on a host the connection binds; --from-file is then the client secret")
+	clientID := fs.String("oauth-client-id", "", "with --oauth-token-url: the client id")
+	scope := fs.String("oauth-scope", "", "with --oauth-token-url: the one scope to ask for")
+	accessKey := fs.String("aws-access-key-id", "", "seal an AWS base key: its access key id; --from-file is then the secret access key")
+	roleARN := fs.String("aws-role-arn", "", "with --aws-access-key-id: the role every session assumes")
+	externalID := fs.String("aws-external-id", "", "with --aws-access-key-id: the role's external id, when its trust policy needs one")
+	stsURL := fs.String("aws-sts-url", "", "with --aws-access-key-id: the STS endpoint, on a host the connection binds")
+	stsRegion := fs.String("aws-sts-region", "", "with --aws-access-key-id: the region STS signs in")
+	region := fs.String("aws-region", "", "with --aws-access-key-id: the region of the connection's endpoint")
+	service := fs.String("aws-service", "", "with --aws-access-key-id: the service of the connection's endpoint, such as iam or ecs")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 || *conn == "" || *from == "" || (*app == "") != (*installation == 0 && *account == "") {
+	isOAuth := *tokenURL != "" || *clientID != "" || *scope != ""
+	isAWS := *accessKey != "" || *roleARN != "" || *externalID != "" || *stsURL != "" || *stsRegion != "" || *region != "" || *service != ""
+	if fs.NArg() != 0 || *conn == "" || *from == "" || (*app == "") != (*installation == 0 && *account == "") ||
+		(*app != "" && (isOAuth || isAWS)) || (isOAuth && isAWS) {
 		return errUsage
 	}
 	c, err := a.clients()
@@ -135,7 +157,15 @@ func seal(ctx context.Context, a *app, args []string) error {
 		"It will be sent only to %s, in the %s header%s.\n",
 		k.GetVersion(), k.GetConnectionId(), fp, k.GetGatewayId(), strings.Join(k.GetAllowedHosts(), ", "), k.GetHeader(),
 		map[bool]string{true: " with scheme " + k.GetScheme(), false: ""}[k.GetScheme() != ""])
-	secret, privateKey, err := readCredential(*from)
+	var (
+		secret     []byte
+		privateKey bool
+	)
+	if *from == "-" {
+		secret, privateKey, err = credentialFrom(a.stdin)
+	} else {
+		secret, privateKey, err = readCredential(*from)
+	}
 	if err != nil {
 		return err
 	}
@@ -147,11 +177,26 @@ func seal(ctx context.Context, a *app, args []string) error {
 			"seal a GitHub App's key with --github-app, --installation and --account; nothing was sealed")
 	}
 	kind := domain.KindStatic
-	if *app != "" {
+	switch {
+	case *app != "":
 		if secret, err = gitHubApp(k, *app, *installation, *account, secret); err != nil {
 			return err
 		}
 		kind = domain.KindGitHubApp
+	case isOAuth:
+		if secret, err = sealOAuthClient(k, *tokenURL, *clientID, *scope, secret); err != nil {
+			return err
+		}
+		kind = domain.KindOAuthClient
+	case isAWS:
+		c := domain.AWSSigV4{
+			V: 1, AccessKeyID: *accessKey, RoleARN: *roleARN, ExternalID: *externalID, STSURL: *stsURL,
+			STSRegion: *stsRegion, Region: *region, Service: *service,
+		}
+		if secret, err = sealAWSSigV4(k, c, secret); err != nil {
+			return err
+		}
+		kind = domain.KindAWSSigV4
 	}
 	b := domain.Binding{
 		Org: k.GetOrgId(), Connection: k.GetConnectionId(), Version: k.GetVersion(), AllowedHosts: k.GetAllowedHosts(),
@@ -193,4 +238,65 @@ func gitHubApp(k *pb.GetSealingKeyResponse, app string, installation int64, acco
 			"and the App's RSA private key (at least 2048 bits, PEM) in --from-file")
 	}
 	return plain, nil
+}
+
+// sealOAuthClient turns a client secret into the content of an OAuth client
+// credential (G0 M20 D254, D280) and clears the secret. The gateway places
+// the tokens it mints as Authorization: Bearer, so the connection must
+// already use that header and scheme, and the token endpoint must be on a
+// host the seal binds (HR-060). A Teams bot must name its home tenant
+// (D279).
+func sealOAuthClient(k *pb.GetSealingKeyResponse, tokenURL, clientID, scope string, secret []byte) ([]byte, error) {
+	defer clear(secret)
+	if k.GetHeader() != domain.OAuthClientHeader || k.GetScheme() != domain.OAuthClientScheme {
+		return nil, errors.New("an OAuth client's tokens go in Authorization: Bearer; set the connection's credential header and scheme to that first; nothing was sealed")
+	}
+	o := domain.OAuthClient{V: 1, TokenURL: tokenURL, ClientID: clientID, Scope: scope, ClientSecret: secret}
+	plain, err := o.Encode()
+	if errors.Is(err, domain.ErrOAuthClientTenant) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, errors.New("--oauth-token-url needs an http(s) token endpoint with no query, --oauth-client-id, one --oauth-scope, " +
+			"and the client secret, printable with no spaces, in --from-file; nothing was sealed")
+	}
+	u, err := o.Token()
+	if err != nil || !bound(k, u) {
+		clear(plain)
+		return nil, errors.New("the token endpoint's host is not one this connection binds; add it to the connection's allowed hosts first; nothing was sealed")
+	}
+	return plain, nil
+}
+
+// sealAWSSigV4 turns a secret access key into the content of an AWS credential
+// (G0 M20 D254, D280) and clears the key. The connection must already use
+// the SigV4 header and scheme, and STS must be on a host the seal binds
+// (HR-060).
+func sealAWSSigV4(k *pb.GetSealingKeyResponse, c domain.AWSSigV4, secret []byte) ([]byte, error) {
+	defer clear(secret)
+	if k.GetHeader() != domain.AWSSigV4Header || k.GetScheme() != domain.AWSSigV4Scheme {
+		return nil, errors.New("an AWS request is signed in Authorization with scheme " + domain.AWSSigV4Scheme +
+			"; set the connection's credential header and scheme to that first; nothing was sealed")
+	}
+	c.SecretAccessKey = secret
+	plain, err := c.Encode()
+	if err != nil {
+		return nil, errors.New("--aws-access-key-id needs --aws-role-arn, an http(s) --aws-sts-url with no path, --aws-sts-region, --aws-region, " +
+			"--aws-service, and the secret access key in --from-file; nothing was sealed")
+	}
+	u, err := c.STS()
+	if err != nil || !bound(k, u) {
+		clear(plain)
+		return nil, errors.New("the STS endpoint's host is not one this connection binds; add it to the connection's allowed hosts first; nothing was sealed")
+	}
+	return plain, nil
+}
+
+// bound reports whether the connection's seal binds u's host.
+func bound(k *pb.GetSealingKeyResponse, u *url.URL) bool {
+	port := "443"
+	if u.Scheme == "http" {
+		port = "80"
+	}
+	return domain.HostBound(k.GetAllowedHosts(), u.Host, port)
 }

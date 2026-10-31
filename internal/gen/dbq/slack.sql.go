@@ -168,7 +168,7 @@ func (q *Queries) FailSlackCardClose(ctx context.Context, orgID ids.OrgID, cardI
 }
 
 const getSlackAppChannel = `-- name: GetSlackAppChannel :one
-SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.shared_externally_at, a.last_checked_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
+SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.shared_externally_at, a.last_checked_at, a.updated_at, a.direct_messages, a.allowed_email_domains, c.secret, c.state AS channel_state, c.name AS channel_name
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = $1 AND a.channel_record_id = $2
@@ -191,6 +191,8 @@ type GetSlackAppChannelRow struct {
 	SharedExternallyAt  *time.Time
 	LastCheckedAt       *time.Time
 	UpdatedAt           time.Time
+	DirectMessages      bool
+	AllowedEmailDomains []string
 	Secret              []byte
 	ChannelState        string
 	ChannelName         string
@@ -216,6 +218,8 @@ func (q *Queries) GetSlackAppChannel(ctx context.Context, orgID ids.OrgID, chann
 		&i.SharedExternallyAt,
 		&i.LastCheckedAt,
 		&i.UpdatedAt,
+		&i.DirectMessages,
+		&i.AllowedEmailDomains,
 		&i.Secret,
 		&i.ChannelState,
 		&i.ChannelName,
@@ -250,15 +254,18 @@ func (q *Queries) GetSlackCardByID(ctx context.Context, orgID ids.OrgID, cardID 
 
 const insertSlackAppChannel = `-- name: InsertSlackAppChannel :exec
 
-INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel, data_level)
-VALUES ($1, $2, $3, $4)
+INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel, data_level, direct_messages, allowed_email_domains)
+VALUES ($1, $2, $3, $4, $5,
+    $6::text[])
 `
 
 type InsertSlackAppChannelParams struct {
-	OrgID           ids.OrgID
-	ChannelRecordID ids.UUID
-	SlackChannel    string
-	DataLevel       string
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	SlackChannel        string
+	DataLevel           string
+	DirectMessages      bool
+	AllowedEmailDomains []string
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -271,6 +278,8 @@ func (q *Queries) InsertSlackAppChannel(ctx context.Context, arg InsertSlackAppC
 		arg.ChannelRecordID,
 		arg.SlackChannel,
 		arg.DataLevel,
+		arg.DirectMessages,
+		arg.AllowedEmailDomains,
 	)
 	return err
 }
@@ -306,7 +315,7 @@ func (q *Queries) LatestSlackCard(ctx context.Context, orgID ids.OrgID, requestI
 }
 
 const listSlackAppChannels = `-- name: ListSlackAppChannels :many
-SELECT org_id, channel_record_id, slack_channel, data_level, state, team_id, bot_id, created_at, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_at, shared_externally_at, last_checked_at, updated_at FROM pc.slack_app_channels
+SELECT org_id, channel_record_id, slack_channel, data_level, state, team_id, bot_id, created_at, activated_by, activated_credential, activated_at, token_replaced_by, token_replaced_at, shared_externally_at, last_checked_at, updated_at, direct_messages, allowed_email_domains FROM pc.slack_app_channels
 WHERE org_id = $1 AND channel_record_id = ANY ($2::uuid[])
 `
 
@@ -336,6 +345,8 @@ func (q *Queries) ListSlackAppChannels(ctx context.Context, orgID ids.OrgID, cha
 			&i.SharedExternallyAt,
 			&i.LastCheckedAt,
 			&i.UpdatedAt,
+			&i.DirectMessages,
+			&i.AllowedEmailDomains,
 		); err != nil {
 			return nil, err
 		}
@@ -348,7 +359,7 @@ func (q *Queries) ListSlackAppChannels(ctx context.Context, orgID ids.OrgID, cha
 }
 
 const lockSlackAppChannel = `-- name: LockSlackAppChannel :one
-SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.shared_externally_at, a.last_checked_at, a.updated_at, c.secret, c.state AS channel_state, c.name AS channel_name
+SELECT a.org_id, a.channel_record_id, a.slack_channel, a.data_level, a.state, a.team_id, a.bot_id, a.created_at, a.activated_by, a.activated_credential, a.activated_at, a.token_replaced_by, a.token_replaced_at, a.shared_externally_at, a.last_checked_at, a.updated_at, a.direct_messages, a.allowed_email_domains, c.secret, c.state AS channel_state, c.name AS channel_name
 FROM pc.slack_app_channels a
 JOIN pc.notification_channels c ON c.org_id = a.org_id AND c.id = a.channel_record_id
 WHERE a.org_id = $1 AND a.channel_record_id = $2
@@ -372,6 +383,8 @@ type LockSlackAppChannelRow struct {
 	SharedExternallyAt  *time.Time
 	LastCheckedAt       *time.Time
 	UpdatedAt           time.Time
+	DirectMessages      bool
+	AllowedEmailDomains []string
 	Secret              []byte
 	ChannelState        string
 	ChannelName         string
@@ -397,6 +410,8 @@ func (q *Queries) LockSlackAppChannel(ctx context.Context, orgID ids.OrgID, chan
 		&i.SharedExternallyAt,
 		&i.LastCheckedAt,
 		&i.UpdatedAt,
+		&i.DirectMessages,
+		&i.AllowedEmailDomains,
 		&i.Secret,
 		&i.ChannelState,
 		&i.ChannelName,

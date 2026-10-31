@@ -37,6 +37,7 @@ var (
 		pantherclawv1.ChannelKind_CHANNEL_KIND_LOG: domain.KindLog, pantherclawv1.ChannelKind_CHANNEL_KIND_EMAIL: domain.KindEmail,
 		pantherclawv1.ChannelKind_CHANNEL_KIND_SLACK: domain.KindSlack, pantherclawv1.ChannelKind_CHANNEL_KIND_WEBHOOK: domain.KindWebhook,
 		pantherclawv1.ChannelKind_CHANNEL_KIND_SLACK_APP: domain.KindSlackApp,
+		pantherclawv1.ChannelKind_CHANNEL_KIND_TEAMS_APP: domain.KindTeamsApp,
 	}
 	severities = map[pantherclawv1.NotificationSeverity]domain.Severity{
 		pantherclawv1.NotificationSeverity_NOTIFICATION_SEVERITY_INFO:     domain.Info,
@@ -103,13 +104,17 @@ func channel(c napp.ChannelView) *pantherclawv1.Channel {
 		Health: healths[c.Health], ConsecutiveFailures: int32(min(c.ConsecutiveFailures, 1<<30)), //nolint:gosec // G115: bounded
 		LastSuccessTime: tsp(c.LastSuccess), LastFailureTime: tsp(c.LastFailure), LastFailureCode: c.LastFailureCode,
 		PreviousSecretExpireTime: tsp(c.PreviousSecretExpiry), CreateTime: ts(c.CreatedAt), UpdateTime: ts(c.UpdatedAt),
+		SignatureScheme: string(c.SignatureScheme),
 	}
 	if c.SlackApp != nil {
 		level := pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_MINIMAL
 		if c.SlackApp.DataLevel == domain.SlackSummary {
 			level = pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_SUMMARY
 		}
-		out.SlackApp = &pantherclawv1.SlackAppConfig{ChannelId: c.SlackApp.ChannelID, DataLevel: level, TeamId: c.SlackApp.TeamID}
+		out.SlackApp = &pantherclawv1.SlackAppConfig{
+			ChannelId: c.SlackApp.ChannelID, DataLevel: level, TeamId: c.SlackApp.TeamID, DirectMessages: c.SlackApp.DirectMessages,
+			AllowedEmailDomains: c.SlackApp.AllowedEmailDomains,
+		}
 	}
 	return out
 }
@@ -151,6 +156,7 @@ func (h *Handler) CreateChannel(ctx context.Context, req *pantherclawv1.CreateCh
 		Name: req.GetName(), Kind: kinds[req.GetKind()], EventTypes: req.GetEventTypes(), MinSeverity: sev,
 		RecipientRole: req.GetRecipientRole(), URL: req.GetUrl(),
 		SlackApp: slackAppIn(req.GetSlackApp()),
+		TeamsApp: teamsAppIn(req.GetTeamsApp()),
 	})
 	if err != nil {
 		return nil, err
@@ -289,5 +295,24 @@ func slackAppIn(c *pantherclawv1.SlackAppConfig) *domain.SlackAppConfig {
 	if c.GetDataLevel() == pantherclawv1.SlackDataLevel_SLACK_DATA_LEVEL_SUMMARY {
 		level = domain.SlackSummary
 	}
-	return &domain.SlackAppConfig{ChannelID: c.GetChannelId(), DataLevel: level, BotToken: c.GetBotToken()}
+	return &domain.SlackAppConfig{
+		ChannelID: c.GetChannelId(), DataLevel: level, BotToken: c.GetBotToken(), DirectMessages: c.GetDirectMessages(),
+		AllowedEmailDomains: c.GetAllowedEmailDomains(),
+	}
+}
+
+// SetChannelSignatureScheme implements NotificationServiceHandler (G0 M20
+// D251).
+func (h *Handler) SetChannelSignatureScheme(ctx context.Context, req *pantherclawv1.SetChannelSignatureSchemeRequest) (
+	*pantherclawv1.SetChannelSignatureSchemeResponse, error,
+) {
+	id, err := parse(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	c, jwks, err := h.s.SetChannelSignatureScheme(ctx, id, req.GetSignatureScheme())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SetChannelSignatureSchemeResponse{Channel: channel(c), JwksUrl: jwks}, nil
 }

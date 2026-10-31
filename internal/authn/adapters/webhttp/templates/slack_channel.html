@@ -5,7 +5,9 @@
 <dt>Channel</dt><dd><code>{{.ID}}</code></dd>
 <dt>Slack channel</dt><dd><code>{{.Slack.ChannelID}}</code>{{with .Slack.TeamID}} in workspace <code>{{.}}</code>{{end}}</dd>
 <dt>Cards show</dt><dd>{{if .Summary}}The request's kind, consequence, expiry and short reference, plus the approval's title, the agent's name and the environment.{{else}}The request's kind, consequence, expiry and short reference only.{{end}} Never amounts, parameters, the principal or who decided.</dd>
-<dt>Decisions</dt><dd>Cards only link to the approval page. Nothing done in Slack — a button, a reaction or a reply — decides anything.</dd>
+<dt>Direct messages</dt><dd>{{if .Slack.DirectMessages}}On: approval requests also go, as a message with the same card, to each eligible decider who linked and confirmed their Slack identity.{{else}}Off: this channel sends no direct messages.{{end}}</dd>
+{{if .Slack.DirectMessages}}<dt>Allowed email domains</dt><dd>A Slack identity links only for an email on {{range $i, $d := .Slack.AllowedEmailDomains}}{{if $i}}, {{end}}<code>{{$d}}</code>{{end}}. These never change once the channel is created.</dd>
+{{end}}<dt>Decisions</dt><dd>Cards only link to the approval page. Nothing done in Slack — a button, a reaction or a reply — decides anything.</dd>
 </dl>
 {{if and .CanManage .Pending}}
 <h2>Activate</h2>

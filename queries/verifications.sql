@@ -17,6 +17,8 @@ JOIN pc.org_containment o ON o.org_id = v.org_id
 WHERE v.org_id = sqlc.arg(org_id) AND v.state = 'PENDING' AND v.next_at <= now() AND v.deadline_at > now()
   AND c.gateway_id = sqlc.arg(gateway_id) AND c.state = 'ACTIVE' AND NOT o.kill_switch
   AND (v.purpose <> 'connection_test' OR v.attempts < sqlc.arg(max_test_attempts)::integer)
+  -- A ticket sync write is leased once: it is never sent twice (D255).
+  AND (v.purpose <> 'ticket_sync' OR v.attempts = 0)
 ORDER BY v.next_at
 LIMIT sqlc.arg(max_tasks)
 FOR UPDATE OF v SKIP LOCKED;
@@ -58,14 +60,17 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'LEASED';
 -- or ends them when the task's deadline passed too, when it is a
 -- connection test leased max_test_attempts times (HR-188), or when it is an
 -- organization scan leased three times, each a whole scan's worth of the
--- installation's API quota (HR-209).
+-- installation's API quota (HR-209), or a rotation test or confirmation
+-- leased three times (G0 M20 S20c).
 -- name: ReleaseExpiredLeases :many
 UPDATE pc.verifications
 SET state = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= sqlc.arg(max_test_attempts)::integer)
                       OR (purpose = 'org_scan' AND attempts >= 3)
+                      OR (purpose IN ('credential_rotation_test', 'credential_rotation_confirm') AND attempts >= 3)
                  THEN 'EXPIRED' ELSE 'PENDING' END,
     finished_at = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= sqlc.arg(max_test_attempts)::integer)
                             OR (purpose = 'org_scan' AND attempts >= 3)
+                            OR (purpose IN ('credential_rotation_test', 'credential_rotation_confirm') AND attempts >= 3)
                        THEN now() END,
     lease_hash = NULL, leased_by = NULL, leased_at = NULL, lease_expires_at = NULL
 WHERE org_id = sqlc.arg(org_id) AND state = 'LEASED' AND lease_expires_at < now()

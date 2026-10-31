@@ -92,6 +92,12 @@ const (
 	SurfaceIdentityProviderPut     Surface = "identity_provider.put"
 	SurfaceIdentityProviderDisable Surface = "identity_provider.disable"
 	SurfaceIdentityProviderOwnOnly Surface = "identity_provider.own_only"
+	// SurfaceCredentialRotate activates a GitHub App key rotation's tested
+	// candidate (G0 M20 S20c, D253, D259; CUSTODY).
+	SurfaceCredentialRotate Surface = "credential.rotate" //nolint:gosec // G101: a surface name, not a credential
+	// SurfaceTicketFieldOwner gives a field of an org's ticket sync to the
+	// ticket system (G0 M20 D264); taking one back applies directly.
+	SurfaceTicketFieldOwner Surface = "ticket.field_owner"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -107,6 +113,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermReleaseWindowManage
 	case SurfaceCredentialPut:
 		return td.PermCredentialSeal
+	case SurfaceCredentialRotate:
+		return td.PermCredentialSeal
 	case SurfaceConnectionUpdate, SurfaceRouteMode:
 		return td.PermConnectionManage
 	case SurfaceExclusionCreate:
@@ -115,6 +123,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermConsequenceRuleManage
 	case SurfaceIdentityProviderPut, SurfaceIdentityProviderDisable, SurfaceIdentityProviderOwnOnly:
 		return td.PermIdentityProviderManage
+	case SurfaceTicketFieldOwner:
+		return td.PermConnectionManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}

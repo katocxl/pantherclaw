@@ -22,4 +22,11 @@ type SlackAppConfig struct {
 	DataLevel string
 	TeamID    string
 	BotToken  string
+	// DirectMessages: the bot also sends approval DMs (G0 M20 D256); set
+	// at creation only.
+	DirectMessages bool
+	// AllowedEmailDomains are the email domains a person's Slack link may
+	// use (D265): 1 to 20 lowercase exact domains for a DM channel, none
+	// otherwise; set at creation only.
+	AllowedEmailDomains []string
 }

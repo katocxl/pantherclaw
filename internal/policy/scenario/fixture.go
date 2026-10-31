@@ -90,8 +90,8 @@ type fixture struct {
 
 var _ pipeline.Reader = (*fixture)(nil)
 
-// build turns a case into a fixture and its request. reads are the HTTP
-// GET reads of the active definitions, which the fixture connection serves.
+// build turns a case into a fixture and its request. reads are the verifier
+// reads of the active packages, which the fixture connection serves.
 func build(org ids.OrgID, now time.Time, def *defs.Definition, rules []consequences.Rule, catalog map[string]fdomain.Type, reads []string,
 	tc *pdomain.TestCase,
 ) (*fixture, error) {

@@ -184,6 +184,7 @@ type attempt struct {
 	msgID    string
 	body     []byte
 	secrets  [][]byte
+	scheme   ndomain.SignatureScheme
 	attempts int
 	dest     ids.UUID
 	exec     ids.UUID
@@ -217,7 +218,7 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 			fail = "destination_disabled"
 			return nil
 		}
-		a.url, a.internal = d.Url, d.Internal
+		a.url, a.internal, a.scheme = d.Url, d.Internal, ndomain.SignatureScheme(d.SignatureScheme)
 		if CheckURL(a.url, s.ownHost, a.internal, s.cfg.AllowedPrivateRanges) != nil {
 			fail = "destination_url"
 			return nil //nolint:nilerr // a refused URL fails the delivery below
@@ -256,7 +257,7 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 	if fail != "" {
 		return false, s.finish(ctx, org, id, a, nil, fail, true)
 	}
-	status, code := s.post(ctx, a)
+	status, code := s.post(ctx, org, a)
 	if status >= 200 && status < 300 {
 		return true, s.finish(ctx, org, id, a, &status, "", false)
 	}
@@ -269,7 +270,7 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 
 // post sends one attempt with Standard Webhooks headers: one signature per
 // valid secret (current first) during a rotation overlap.
-func (s *Service) post(ctx context.Context, a attempt) (int, string) {
+func (s *Service) post(ctx context.Context, org ids.OrgID, a attempt) (int, string) {
 	ts := s.clock.Now().Unix()
 	ctx, cancel := context.WithTimeout(ctx, RequestTimeout)
 	defer cancel()
@@ -281,7 +282,11 @@ func (s *Service) post(ctx context.Context, a attempt) (int, string) {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set(inbound.HeaderID, a.msgID)
 	req.Header.Set(inbound.HeaderTimestamp, strconv.FormatInt(ts, 10))
-	req.Header.Set(inbound.HeaderSignature, ndomain.Signatures(a.secrets, a.msgID, ts, a.body))
+	sig, err := ndomain.SignatureHeader(ctx, s.webhookKeys, org, a.scheme, a.secrets, a.msgID, ts, a.body)
+	if err != nil {
+		return 0, "signing_key_unavailable"
+	}
+	req.Header.Set(inbound.HeaderSignature, sig)
 	client := s.public
 	if a.internal {
 		client = s.internal

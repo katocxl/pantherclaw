@@ -154,6 +154,9 @@ type Service struct {
 	editions Editions
 	// failures records owned failures (a lapsed edition); nil: not wired.
 	failures reflexports.FailureSink
+	// webhookKeys signs opted-in batches with the org's Ed25519 key (G0 M20
+	// D251); nil leaves every destination on HMAC only.
+	webhookKeys ndomain.WebhookKeys
 }
 
 // New returns the service.
@@ -254,6 +257,8 @@ type Destination struct {
 	// then. Nil when nothing is waiting.
 	WaitingSince *time.Time
 	Health       string
+	// SignatureScheme is hmac (the default) or hmac+ed25519 (G0 M20 D251).
+	SignatureScheme string
 }
 
 // Health values of a destination.
@@ -722,7 +727,8 @@ func fromRow(r dbq.GetSIEMDestinationRow) Destination {
 		ConfirmedAt: r.ConfirmedAt, CursorSeq: r.CursorSeq, LastDeliveredSeq: r.LastDeliveredSeq, LastDeliveredAt: r.LastDeliveredAt,
 		ConsecutiveFailures: int(r.ConsecutiveFailures), FailingSince: r.FailingSince, LastFailureAt: r.LastFailureAt,
 		DeliveredBatches: r.DeliveredBatches, FailedBatches: r.FailedBatches, Retries: r.Retries, RotationEndsAt: r.PrevSecretExpiresAt,
-		WaitingSince: r.OpenBatchSince,
+		WaitingSince:    r.OpenBatchSince,
+		SignatureScheme: r.SignatureScheme,
 	}
 	if r.LastFailureCode != nil {
 		d.LastFailureCode = *r.LastFailureCode

@@ -288,6 +288,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.NotificationService/ListChannels":                     entitlements.ClassRead,
 	"/pantherclaw.v1.NotificationService/ListDeliveries":                   entitlements.ClassRead,
 	"/pantherclaw.v1.NotificationService/RotateChannelSecret":              entitlements.ClassChange,
+	"/pantherclaw.v1.NotificationService/SetChannelSignatureScheme":        entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/TestChannel":                      entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/UpdateChannel":                    entitlements.ClassChange,
 	"/pantherclaw.v1.OnboardingService/GetProgress":                        entitlements.ClassAllow,
@@ -401,6 +402,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.SIEMService/ListSIEMDestinations":                     entitlements.ClassRead,
 	"/pantherclaw.v1.SIEMService/RetrySIEMDestination":                     entitlements.ClassChange,
 	"/pantherclaw.v1.SIEMService/RotateSIEMDestinationSecret":              entitlements.ClassChange,
+	"/pantherclaw.v1.SIEMService/SetSIEMDestinationSignatureScheme":        entitlements.ClassChange,
 	"/pantherclaw.v1.SIEMService/SetSIEMDestinationState":                  entitlements.ClassChange,
 	"/pantherclaw.v1.SandboxService/EndSession":                            entitlements.ClassSafety,
 	"/pantherclaw.v1.SandboxService/GetSession":                            entitlements.ClassRead,
@@ -522,6 +524,26 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.IdentityProviderService/SetOwnProvidersOnly":     entitlements.ClassChange,
 	"/pantherclaw.v1.IdentityProviderService/GetIdentityProvider":     entitlements.ClassRead,
 	"/pantherclaw.v1.IdentityProviderService/ListIdentityProviders":   entitlements.ClassRead,
+	// G0 M20 D251: the Ed25519 webhook opt-in (a name longer than the column).
+	"/pantherclaw.v1.TriggerService/SetAutomationDestinationSignatureScheme": entitlements.ClassChange,
+	"/pantherclaw.v1.WebhookKeyService/ListWebhookKeys":                      entitlements.ClassRead,
+	"/pantherclaw.v1.WebhookKeyService/RotateWebhookKey":                     entitlements.ClassChange,
+	// G0 M20 D255, D256: ticket sync and the chat identity links of approval
+	// DMs. Pausing a sync and revoking a link only take something away.
+	"/pantherclaw.v1.TicketSyncService/CreateTicketSyncConfig": entitlements.ClassChange,
+	"/pantherclaw.v1.TicketSyncService/ListTicketSyncConfigs":  entitlements.ClassRead,
+	"/pantherclaw.v1.TicketSyncService/RotateTicketSyncSecret": entitlements.ClassChange,
+	"/pantherclaw.v1.TicketSyncService/SetTicketSyncPaused":    entitlements.ClassSafety,
+	"/pantherclaw.v1.TicketSyncService/LinkCaseTicket":         entitlements.ClassChange,
+	"/pantherclaw.v1.TicketSyncService/LinkIncidentTicket":     entitlements.ClassChange,
+	"/pantherclaw.v1.TicketSyncService/OpenCaseTicket":         entitlements.ClassChange,
+	"/pantherclaw.v1.TicketSyncService/OpenIncidentTicket":     entitlements.ClassChange,
+	"/pantherclaw.v1.TicketSyncService/GetTicketFieldOwners":   entitlements.ClassRead,
+	"/pantherclaw.v1.TicketSyncService/SetTicketFieldOwner":    entitlements.ClassChange,
+	"/pantherclaw.v1.NotificationService/ProposeSlackLink":     entitlements.ClassChange,
+	"/pantherclaw.v1.NotificationService/ConfirmChatLink":      entitlements.ClassChange,
+	"/pantherclaw.v1.NotificationService/RevokeChatLink":       entitlements.ClassSafety,
+	"/pantherclaw.v1.NotificationService/ListChatLinks":        entitlements.ClassRead,
 }
 
 // ProcedureClass is the plan-gate class of a procedure (D43), for the

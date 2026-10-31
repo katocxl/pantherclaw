@@ -83,7 +83,7 @@ func (s *stack) sealFor(t *testing.T, conn ids.UUID, secret string) int64 {
 	// A gateway admin without a security key: an invalid test key would break
 	// the approver keys export of a scenario that also approves.
 	id := ids.NewV7()
-	s.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'slack-gateway-admin')", s.org, id)
+	s.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', $3)", s.org, id, "gateway-admin-"+conn.String())
 	admin := tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
 		Org: s.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: id},
 		Bindings: []td.Binding{{Role: td.RoleGatewayAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}}},

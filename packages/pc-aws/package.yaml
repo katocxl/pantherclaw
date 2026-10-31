@@ -1,0 +1,228 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that read AWS IAM (G0 M20 D254, D262,
+# F756; founder decision G12). It reaches IAM's query API through an http
+# connection whose credential is of kind aws_sigv4: PantherClaw holds a
+# base access key that signs nothing but an sts:AssumeRole of one role, once
+# per dispatch, for 15 minutes, with a session policy that allows exactly
+# the one IAM action the operation names below (HR-525). The agent never
+# holds a key, and the base key never reaches IAM.
+#
+# IAM speaks aws-query: a POST to / whose literal Action and Version name
+# the operation; both are fixed here, never by the agent (HR-526). Every
+# aws-query operation shares POST /, so agents reach these reads through
+# MCP tools only (D262). A role's target account must be the account of the
+# connection's role, or the gateway refuses the action (T-225).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.aws
+version: 1.0.0
+publisher: pantherclaw
+summary: Read AWS IAM roles and their policies
+
+definitions:
+  - operation: aws.iam.role.read
+    summary: Read an IAM role, its trust policy and its maximum session duration
+    access: read
+    target:
+      type: aws_iam_role
+      id_pattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
+      account: required
+      account_pattern: '^[0-9]{12}$'
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: mcp
+        tool: aws_iam_get_role
+        route: aws-iam-role-read
+        description: >-
+          Read an IAM role by its name in an AWS account: its ARN, its trust
+          policy (who may assume it) and its maximum session duration.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [account_id, role_name]
+          properties:
+            account_id:
+              type: string
+              description: The 12-digit AWS account id
+              pattern: '^[0-9]{12}$'
+            role_name:
+              type: string
+              description: The role's name, such as deploy-role
+              pattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
+        extract:
+          target_id: input.role_name
+          target_account: input.account_id
+          params: {}
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-query
+        body:
+          Action: literal.GetRole
+          Version: literal.2010-05-08
+          RoleName: target.id
+
+  - operation: aws.iam.role.attached_policies.read
+    summary: List the managed policies attached to an IAM role
+    access: read
+    target:
+      type: aws_iam_role
+      id_pattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
+      account: required
+      account_pattern: '^[0-9]{12}$'
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: mcp
+        tool: aws_iam_list_attached_role_policies
+        route: aws-iam-role-attached-policies-read
+        description: >-
+          List the managed policies attached to an IAM role, by the role's
+          name in an AWS account.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [account_id, role_name]
+          properties:
+            account_id:
+              type: string
+              description: The 12-digit AWS account id
+              pattern: '^[0-9]{12}$'
+            role_name:
+              type: string
+              description: The role's name
+              pattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
+        extract:
+          target_id: input.role_name
+          target_account: input.account_id
+          params: {}
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-query
+        body:
+          Action: literal.ListAttachedRolePolicies
+          Version: literal.2010-05-08
+          RoleName: target.id
+
+  - operation: aws.iam.role.inline_policy.read
+    summary: Read one inline policy of an IAM role
+    access: read
+    target:
+      type: aws_iam_role
+      id_pattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
+      account: required
+      account_pattern: '^[0-9]{12}$'
+    params:
+      policy_name:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9+=,.@_-]{1,128}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: mcp
+        tool: aws_iam_get_role_policy
+        route: aws-iam-role-inline-policy-read
+        description: >-
+          Read one inline policy of an IAM role, by the role's name in an AWS
+          account and the policy's name.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [account_id, role_name, policy_name]
+          properties:
+            account_id:
+              type: string
+              description: The 12-digit AWS account id
+              pattern: '^[0-9]{12}$'
+            role_name:
+              type: string
+              description: The role's name
+              pattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
+            policy_name:
+              type: string
+              description: The inline policy's name
+              pattern: '^[A-Za-z0-9+=,.@_-]{1,128}$'
+        extract:
+          target_id: input.role_name
+          target_account: input.account_id
+          params:
+            policy_name: input.policy_name
+    dispatch:
+      http:
+        method: POST
+        path: /
+        encoding: aws-query
+        body:
+          Action: literal.GetRolePolicy
+          Version: literal.2010-05-08
+          RoleName: target.id
+          PolicyName: params.policy_name
+
+  # The connection test (C2): a harmless read that needs no input. A session
+  # narrowed to iam:GetAccountSummary proves the base key, the role's trust
+  # and the IAM endpoint at once.
+  - operation: aws.iam.account.read
+    summary: Read the IAM account summary (the connection test)
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    dispatch:
+      http:
+        method: GET
+        path: /
+        encoding: aws-query
+        query:
+          Action: literal.GetAccountSummary
+          Version: literal.2010-05-08

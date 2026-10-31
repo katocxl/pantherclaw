@@ -1,0 +1,21 @@
+{{template "head" .}}
+<h1>Teams approval channel: {{.Name}}</h1>
+<p>State: <strong>{{if .Pending}}Waiting for activation{{else}}Active{{end}}</strong>{{with .Teams.ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}{{with .Teams.SharedAt}}; last found with outside members {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Channel</dt><dd><code>{{.ID}}</code></dd>
+<dt>Teams channel</dt><dd><code>{{.Teams.ChannelID}}</code> in team <code>{{.Teams.TeamID}}</code></dd>
+<dt>Tenant</dt><dd><code>{{.Teams.TenantID}}</code></dd>
+<dt>Bot</dt><dd><code>{{.Teams.AppID}}</code> at <code>{{.Teams.ServiceURL}}</code></dd>
+<dt>Cards show</dt><dd>The request's kind, consequence, expiry and short reference only. Never amounts, parameters, the principal or who decided.</dd>
+<dt>Decisions</dt><dd>Cards only link to the approval page. Nothing done in Teams decides anything.</dd>
+</dl>
+{{if and .CanManage .Pending}}
+<h2>Activate</h2>
+<p class="note">Check that this is the team and channel you expect. PantherClaw then signs in as the bot and reads every member of the channel: a guest or a member of another tenant refuses it. The members are read again before each card. Activating needs your security key.</p>
+<p><button type="button" class="danger" id="activate" data-path="{{.ActionPath}}">Activate with your security key</button></p>
+{{else if .Pending}}
+<p class="note">Activating this channel needs notification.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/slack_channel.js"></script>
+{{template "foot" .}}

@@ -536,6 +536,7 @@ type PcAutomationDestination struct {
 	DisabledBy          *ids.UUID
 	DisabledAt          *time.Time
 	UpdatedAt           time.Time
+	SignatureScheme     string
 }
 
 type PcAutomationEventReceipt struct {
@@ -1009,6 +1010,23 @@ type PcChangeWindow struct {
 	RetiredAt   *time.Time
 }
 
+type PcChatIdentityLink struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	UserID         ids.UUID
+	Provider       string
+	TeamID         string
+	ExternalUserID string
+	Email          string
+	State          string
+	ProposedBy     string
+	CreatedAt      time.Time
+	ConfirmedAt    *time.Time
+	StaleAt        *time.Time
+	RevokedAt      *time.Time
+	UpdatedAt      time.Time
+}
+
 type PcCheckpoint struct {
 	OrgID     ids.OrgID
 	TreeSize  int64
@@ -1393,6 +1411,29 @@ type PcCredential struct {
 	RevokedBy    *string
 	RevokedAt    *time.Time
 	Kind         string
+}
+
+type PcCredentialRotation struct {
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	ConnectionID          ids.UUID
+	State                 string
+	OldCredentialID       ids.UUID
+	CandidateCredentialID *ids.UUID
+	PreviewDigest         string
+	RequestedBy           string
+	TestVerificationID    *ids.UUID
+	TestPassedAt          *time.Time
+	ActivatedBy           *string
+	ActivatedAt           *time.Time
+	RollbackUntil         *time.Time
+	ConfirmVerificationID *ids.UUID
+	ConfirmedAt           *time.Time
+	AwaitingSince         *time.Time
+	EndReason             *string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	FinishedAt            *time.Time
 }
 
 type PcCrossOrgListAudit struct {
@@ -1879,6 +1920,70 @@ type PcExecutionReceipt struct {
 	RemovedByPolicy *ids.UUID
 }
 
+type PcExportDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Kind                string
+	Url                 string
+	Bucket              *string
+	Region              *string
+	KeyPrefix           string
+	PathStyle           bool
+	Internal            bool
+	DataClasses         []string
+	State               string
+	Secret              []byte
+	SecretReplacedAt    *time.Time
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	ConfirmedAt         *time.Time
+	LastDeliveredAt     *time.Time
+	ConsecutiveFailures int32
+	FailingSince        *time.Time
+	LastFailureAt       *time.Time
+	LastFailureCode     *string
+	DeliveredPushes     int64
+	FailedPushes        int64
+}
+
+type PcExportReceipt struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	DestinationID  ids.UUID
+	Class          string
+	ArtifactID     *ids.UUID
+	Streamed       bool
+	FromSeq        pgtype.Int8
+	ToSeq          pgtype.Int8
+	RequestedBy    ids.UUID
+	ObjectKey      string
+	State          string
+	UploadID       *string
+	AbortState     string
+	AbortTriedAt   *time.Time
+	SizeBytes      int64
+	Sha256         []byte
+	Parts          int32
+	Etag           *string
+	Attempts       int32
+	LastStatus     *int32
+	FailureCode    *string
+	CreatedAt      time.Time
+	StartedAt      *time.Time
+	DeliveredAt    *time.Time
+	RemovedHereAt  *time.Time
+	NoticeState    string
+	NoticeKey      *string
+	NoticeSha256   []byte
+	NoticeSentAt   *time.Time
+	NoticeAttempts int32
+}
+
 type PcExposureChange struct {
 	OrgID     ids.OrgID
 	ChangeSeq int64
@@ -1936,6 +2041,21 @@ type PcExternalPolicyCheck struct {
 	ActivatedAt         *time.Time
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
+}
+
+type PcExternalRef struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	CaseID          *ids.UUID
+	IncidentID      *ids.UUID
+	System          string
+	ConnectionID    ids.UUID
+	ExternalKey     string
+	ExternalID      *string
+	CreatedBy       string
+	CreatedAt       time.Time
+	RemoteUpdatedAt *time.Time
+	UpdatedAt       time.Time
 }
 
 type PcFact struct {
@@ -2505,6 +2625,7 @@ type PcNotificationChannel struct {
 	CreatedBy           string
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
+	SignatureScheme     string
 }
 
 type PcObservation struct {
@@ -3501,6 +3622,7 @@ type PcSiemDestination struct {
 	DeliveredBatches    int64
 	FailedBatches       int64
 	Retries             int64
+	SignatureScheme     string
 }
 
 type PcSlackAppChannel struct {
@@ -3520,6 +3642,8 @@ type PcSlackAppChannel struct {
 	SharedExternallyAt  *time.Time
 	LastCheckedAt       *time.Time
 	UpdatedAt           time.Time
+	DirectMessages      bool
+	AllowedEmailDomains []string
 }
 
 type PcSlackCard struct {
@@ -3534,6 +3658,19 @@ type PcSlackCard struct {
 	CloseAttempts   int32
 	CloseRetries    int32
 	CloseAfter      *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type PcSlackDirectMessage struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	RequestID       ids.UUID
+	UserID          ids.UUID
+	ChannelRecordID ids.UUID
+	ImChannel       *string
+	Ts              *string
+	State           string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -3697,6 +3834,86 @@ type PcTeam struct {
 	State          string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+type PcTeamsAppChannel struct {
+	OrgID               ids.OrgID
+	ChannelRecordID     ids.UUID
+	TenantID            ids.UUID
+	TeamID              string
+	TeamsChannel        string
+	AppID               ids.UUID
+	ServiceUrl          string
+	State               string
+	MembershipType      *string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	SecretReplacedBy    *string
+	SecretReplacedAt    *time.Time
+	SharedAt            *time.Time
+	LastCheckedAt       *time.Time
+	UpdatedAt           time.Time
+}
+
+type PcTeamsCard struct {
+	OrgID           ids.OrgID
+	CardID          ids.UUID
+	RequestID       ids.UUID
+	ChannelRecordID ids.UUID
+	ActivityID      *string
+	State           string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type PcTicketFieldOwner struct {
+	OrgID     ids.OrgID
+	Field     string
+	Owner     string
+	ChangedBy string
+	ChangedAt time.Time
+}
+
+type PcTicketInboundEvent struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	ConfigID   ids.UUID
+	DeliveryID string
+	BodySha256 []byte
+	IssueKey   *string
+	Outcome    string
+	ReceivedAt time.Time
+}
+
+type PcTicketOutbound struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConfigID       ids.UUID
+	CaseID         *ids.UUID
+	IncidentID     *ids.UUID
+	Action         string
+	VerificationID ids.UUID
+	State          string
+	ResultCode     *string
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
+}
+
+type PcTicketSyncConfig struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	System              string
+	ConnectionID        ids.UUID
+	ProjectKey          string
+	State               string
+	WebhookSecret       []byte
+	PrevWebhookSecret   []byte
+	PrevSecretExpiresAt *time.Time
+	CreatedBy           string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type PcToolObservation struct {

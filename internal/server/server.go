@@ -81,6 +81,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	tsapp "github.com/katocxl/pantherclaw/internal/ticketsync/app"
 	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 )
 
@@ -333,6 +334,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	exportDeps := exportsDeps{pool: pool, kp: kp, reg: reg, bill: bill, publicURL: cfg.Auth.PublicURL, logOrigin: cfg.logOrigin(), log: log}
+	if err := wireExportStream(dataRequests, exportDeps); err != nil {
+		return err
+	}
 	ui.deletion = newAccountDeletion(ui.store, dataRequests)
 	ui.wireInvitationEmails(cfg, m5.notifications)
 	// A monitor-mode action with an unknown consequence notifies (HR-206).
@@ -358,11 +363,13 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
-	verification, err := newVerification(pool, reg, m5.notifications)
+	tickets := newTicketSync(pool, kp, bill)
+	verification, err := newVerification(pool, reg, m5.notifications, tickets)
 	if err != nil {
 		return err
 	}
 	m6.verifications = verification
+	wireM20Rotation(pool, m6, verification, bill, log)
 	m6.facts = gatewayFacts(pool)
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill).WithNotify(m5.notifications))
 
@@ -477,6 +484,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			m6:           m6,
 			m5p2:         m5p2,
 			verification: verification,
+			tickets:      tickets,
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
 			m10ops:       m10OpsDeps{authn: authn, tokens: tokens, sessions: sessions},
@@ -601,6 +609,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM10EdgesJobs(evidenceJobs, jreg, pool, kp, bill, m5, cfg.Auth.PublicURL, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM20ExportsJobs(evidenceJobs, jreg, exportDeps); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerAutomationTriggersJobs(evidenceJobs, jreg, pool, kp, bill, cfg.Auth.PublicURL, autos, log); err != nil {
 			return err
 		}
@@ -632,6 +643,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM18FleetJobs(evidenceJobs, jreg, m6.fleet, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerM20WebhookJobs(evidenceJobs, jreg, pool, kp, log); err != nil {
 			return err
 		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
@@ -804,6 +818,9 @@ type apiDeps struct {
 	// support is customer-approved support access (wiring_m13_support.go);
 	// nil or off when not configured.
 	support supportService
+	// tickets is ticket sync (wiring_m20_tickets.go); nil: apiHandler builds
+	// one.
+	tickets *tsapp.Service
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -896,9 +913,13 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := registerM20Exports(rs, d); err != nil {
+		return nil, err
+	}
 	registerReflexCore(rs, d)
 	registerM11Govern(rs, d)
 	registerSlackChannels(d)
+	registerTeamsChannels(d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
 	if err := registerAutomationAssurance(rs, d, autos); err != nil {
 		return nil, err
@@ -920,12 +941,15 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
 	registerDataRequests(rs, d)
+	registerM20Webhooks(rs, d)
+	registerM20Tickets(rs, d)
 	registerSupport(rs, d)
 	registerM16External(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	automationTriggers.mount(mux)
 	authzen.mount(mux)
+	mountTicketWebhooks(mux, d)
 	if err := mountM14A2A(mux, d); err != nil {
 		return nil, err
 	}
@@ -943,6 +967,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	mountM14Data(mux, d)
 	mountM16External(mux, d)
+	mountWebhookJWKS(mux, webhookJWKSOf(d), d.clientIP, log)
 	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {

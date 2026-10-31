@@ -103,7 +103,8 @@ type Handler struct {
 	policyBindings Bindings
 	// integrations is the integration activation pages (G0 M10); nil when
 	// not mounted.
-	integrations Integrations
+	integrations       Integrations
+	exportDestinations ExportDestinations
 	// playbook is the identity playbook page (G0 M10 D38); nil when not
 	// mounted.
 	playbook         PlaybookRequests
@@ -121,6 +122,7 @@ type Handler struct {
 	// slackChannels is the Slack approval channel page (G0 M14 D22); nil when
 	// not mounted.
 	slackChannels SlackChannels
+	teamsChannels TeamsChannels
 	// accounts is the hosted account pages (G0 UI D8); nil when not
 	// served.
 	accounts  AccountBrowser
@@ -164,11 +166,13 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountCoverage(mux)
 	h.mountPolicyChanges(mux)
 	h.mountIntegrations(mux)
+	h.mountExportDestinations(mux)
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)
 	h.mountPromotions(mux)
 	h.mountProtect(mux)
 	h.mountSlackChannels(mux)
+	h.mountTeamsChannels(mux)
 	h.mountAccounts(mux)
 }
 

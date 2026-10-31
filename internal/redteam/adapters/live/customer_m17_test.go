@@ -32,9 +32,10 @@ func TestCustomerStepKindsAreTheLiveKinds(t *testing.T) {
 // for a step kind the live driver lacks or a stack a live range does not
 // run: sandbox (sandbox.probe), second_org (server.read), browser
 // (browser.call), the simulator swaps and slack.interaction_post
-// (sim.mutate), billing (a stack with hosted plans).
+// (sim.mutate), billing (a stack with hosted plans), aws.ecs.deploy (on a
+// live range, a real deploy).
 var harnessCapabilities = []string{
-	"sandbox", "second_org", "browser", "stripe.key_swap", "pg.role_swap", "a2a.card_swap", "slack.interaction_post", "billing",
+	"sandbox", "second_org", "browser", "stripe.key_swap", "pg.role_swap", "a2a.card_swap", "slack.interaction_post", "billing", "aws.ecs.deploy",
 }
 
 // TestCustomerCapabilitiesAreWhatALiveRangeProvides: every capability is

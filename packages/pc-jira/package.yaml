@@ -1,0 +1,492 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that work in Jira (G0 M20 D254, F756).
+# It reaches Jira's REST API through an http connection whose credential
+# PantherClaw holds: Basic, an Atlassian account's email and API token as
+# base64 of email:token, checked against credential_pattern before any byte
+# is sent (HR-301). The pattern is weak, so the connection's bound hosts
+# carry the weight: the sealed credential opens only for the Jira site the
+# connection names, cloud or self-managed, and is never placed on a request
+# to any other host (HR-522). The agent never holds the token.
+#
+# What an agent writes into Jira is a disclosure param (HR-079), and type
+# content: never dispatched as text (HR-023). Before every write the gateway
+# reads the project the write lands in and reports jira.issue.external, or
+# jira.project.external for a new issue (one fact is about one target type):
+# whether it is a service desk, whose customers read what is written there.
+# A write into such a project predicts the consequence jira.issue.disclose
+# (external_disclosure), which a policy must allow (HR-522, T-226); a
+# project that cannot be read is a missing fact, never an internal one
+# (HR-160).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.jira
+version: 1.0.0
+publisher: pantherclaw
+summary: Read, create, comment on and move Jira issues, with customer-visible projects as disclosure
+
+definitions:
+  - operation: jira.issue.read
+    summary: Read a Jira issue
+    access: read
+    target:
+      type: jira_issue
+      id_pattern: '^(?P<project>[A-Z][A-Z0-9_]{1,9})-(?P<number>[1-9][0-9]{0,8})$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: http
+        method: GET
+        path: /rest/api/2/issue/{issue}
+        route: jira-issue-read
+        extract:
+          target_id: path.issue
+          params: {}
+      - channel: mcp
+        tool: jira_get_issue
+        route: jira-issue-read
+        description: >-
+          Read a Jira issue by its key, such as ENG-42: its summary, status,
+          type, project and description.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [issue_key]
+          properties:
+            issue_key:
+              type: string
+              description: The issue key, such as ENG-42
+              pattern: '^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,8}$'
+        extract:
+          target_id: input.issue_key
+          params: {}
+    dispatch:
+      credential_pattern: '^[A-Za-z0-9+/]{20,1000}={0,2}$'
+      http:
+        method: GET
+        path: /rest/api/2/issue/{target.id}
+
+  - operation: jira.issue.comment
+    summary: Comment on a Jira issue
+    access: write
+    target:
+      type: jira_issue
+      id_pattern: '^(?P<project>[A-Z][A-Z0-9_]{1,9})-(?P<number>[1-9][0-9]{0,8})$'
+      account: none
+    params:
+      body:
+        type: content
+        material: true
+        required: true
+        max_length: 8192
+        # The comment leaves PantherClaw for everyone who can read the
+        # issue, customers too in a service desk: a disclosure param.
+        disclosure: true
+        max_bytes: 8192
+    # A comment needs a destination bound: a grant or envelope that names no
+    # issues lets it comment nowhere (D57, D78).
+    constraints:
+      - kind: target_set
+      - kind: destination_set
+        required: true
+    effects:
+      - kind: message.send
+        description: Adds a comment that everyone who can read the issue can read
+    reversibility: compensatable
+    dedupe_key: [target.id, params.body]
+    prerequisites:
+      - fact: jira.issue.external
+        max_age_seconds: 300
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Comment on Jira issue {target.id}
+      fields:
+        - target.id
+        - facts.jira.issue.external
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: http
+        method: POST
+        path: /rest/api/2/issue/{issue}/comment
+        route: jira-issue-comment
+        extract:
+          target_id: path.issue
+          params:
+            body: input.body
+          destinations:
+            - kind: external
+              id: path.issue
+      - channel: mcp
+        tool: jira_add_comment
+        route: jira-issue-comment
+        description: >-
+          Add a comment to a Jira issue by its key, such as ENG-42. The
+          comment is plain text of at most 8192 bytes.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [issue_key, body]
+          properties:
+            issue_key:
+              type: string
+              description: The issue key, such as ENG-42
+              pattern: '^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,8}$'
+            body:
+              type: string
+              description: The comment text
+              maxLength: 8192
+        extract:
+          target_id: input.issue_key
+          params:
+            body: input.body
+          destinations:
+            - kind: external
+              id: input.issue_key
+    dispatch:
+      credential_pattern: '^[A-Za-z0-9+/]{20,1000}={0,2}$'
+      http:
+        method: POST
+        path: /rest/api/2/issue/{target.id}/comment
+        body:
+          body: params.body
+
+  - operation: jira.issue.create
+    summary: Create a Jira issue in a project
+    access: write
+    target:
+      type: jira_project
+      id_pattern: '^(?P<project>[A-Z][A-Z0-9_]{1,9})$'
+      account: none
+    params:
+      summary:
+        type: content
+        material: true
+        required: true
+        max_length: 255
+        # The issue leaves PantherClaw for everyone who can read the
+        # project, customers too in a service desk: disclosure params.
+        disclosure: true
+        max_bytes: 255
+      description:
+        type: content
+        material: true
+        max_length: 8192
+        disclosure: true
+        max_bytes: 8192
+      issue_type:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z][A-Za-z0-9_-]{0,29}$'
+    # A new issue needs a destination bound: a grant or envelope that names
+    # no projects lets it create nowhere (D57, D78).
+    constraints:
+      - kind: target_set
+      - kind: destination_set
+        required: true
+    effects:
+      - kind: issue.create
+        description: Creates an issue that everyone who can read the project can read
+    reversibility: compensatable
+    dedupe_key: [target.id, params.summary]
+    prerequisites:
+      - fact: jira.project.external
+        max_age_seconds: 300
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Create a Jira issue in project {target.id}
+      fields:
+        - target.id
+        - params.issue_type
+        - facts.jira.project.external
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: http
+        method: POST
+        path: /rest/api/2/issue
+        route: jira-issue-create
+        extract:
+          target_id: input.fields.project.key
+          params:
+            summary: input.fields.summary
+            description: input.fields.?description
+            issue_type: input.fields.issuetype.name
+          destinations:
+            - kind: external
+              id: input.fields.project.key
+      - channel: mcp
+        tool: jira_create_issue
+        route: jira-issue-create
+        description: >-
+          Create a Jira issue in a project by its key, such as ENG, with a
+          summary of at most 255 bytes, an optional plain-text description
+          of at most 8192 bytes and an issue type such as Task or Bug.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [project_key, summary, issue_type]
+          properties:
+            project_key:
+              type: string
+              description: The project key, such as ENG
+              pattern: '^[A-Z][A-Z0-9_]{1,9}$'
+            summary:
+              type: string
+              description: The issue's summary
+              maxLength: 255
+            description:
+              type: string
+              description: The issue's description, plain text
+              maxLength: 8192
+            issue_type:
+              type: string
+              description: The issue type, such as Task or Bug
+              pattern: '^[A-Za-z][A-Za-z0-9_-]{0,29}$'
+        extract:
+          target_id: input.project_key
+          params:
+            summary: input.summary
+            description: input.?description
+            issue_type: input.issue_type
+          destinations:
+            - kind: external
+              id: input.project_key
+    dispatch:
+      credential_pattern: '^[A-Za-z0-9+/]{20,1000}={0,2}$'
+      http:
+        method: POST
+        path: /rest/api/2/issue
+        # Jira takes the issue as nested objects (D260).
+        body:
+          fields[project][key]: target.id
+          fields[summary]: params.summary
+          fields[description]: params.description
+          fields[issuetype][name]: params.issue_type
+
+  - operation: jira.issue.transition
+    summary: Move a Jira issue through its workflow
+    access: write
+    target:
+      type: jira_issue
+      id_pattern: '^(?P<project>[A-Z][A-Z0-9_]{1,9})-(?P<number>[1-9][0-9]{0,8})$'
+      account: none
+    params:
+      transition_id:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[1-9][0-9]{0,5}$'
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: issue.transition
+        description: Changes the issue's status, which everyone who can read the issue sees
+    reversibility: compensatable
+    dedupe_key: [target.id, params.transition_id]
+    prerequisites:
+      - fact: jira.issue.external
+        max_age_seconds: 300
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Move Jira issue {target.id} by transition {params.transition_id}
+      fields:
+        - target.id
+        - params.transition_id
+        - facts.jira.issue.external
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    mappings:
+      - channel: http
+        method: POST
+        path: /rest/api/2/issue/{issue}/transitions
+        route: jira-issue-transition
+        extract:
+          target_id: path.issue
+          params:
+            transition_id: input.transition.id
+      - channel: mcp
+        tool: jira_transition_issue
+        route: jira-issue-transition
+        description: >-
+          Move a Jira issue, by its key such as ENG-42, through its workflow
+          with a transition id, such as 31.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [issue_key, transition_id]
+          properties:
+            issue_key:
+              type: string
+              description: The issue key, such as ENG-42
+              pattern: '^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,8}$'
+            transition_id:
+              type: string
+              description: The transition id, such as 31
+              pattern: '^[1-9][0-9]{0,5}$'
+        extract:
+          target_id: input.issue_key
+          params:
+            transition_id: input.transition_id
+    dispatch:
+      credential_pattern: '^[A-Za-z0-9+/]{20,1000}={0,2}$'
+      http:
+        method: POST
+        path: /rest/api/2/issue/{target.id}/transitions
+        body:
+          transition[id]: params.transition_id
+
+  # The connection test (C2): a harmless read that needs no input, listing
+  # the projects the credential can see.
+  - operation: jira.project.read
+    summary: List the Jira projects the credential can see
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+    dispatch:
+      credential_pattern: '^[A-Za-z0-9+/]{20,1000}={0,2}$'
+      http:
+        method: GET
+        path: /rest/api/3/project/search
+
+  # The consequence of a write into a customer-visible project (a service
+  # desk): what is written reaches the organization's customers. It is
+  # decided, never sent: no mapping reaches it.
+  - operation: jira.issue.disclose
+    summary: A write that reaches customers through a Jira service desk
+    access: write
+    target:
+      type: jira_issue
+      id_pattern: '^(?P<project>[A-Z][A-Z0-9_]{1,9})-(?P<number>[1-9][0-9]{0,8})$'
+      account: none
+    params: {}
+    effects:
+      - kind: external_disclosure
+        description: Discloses what is written to people outside the organization
+    reversibility: irreversible
+    dedupe_key: [target.id]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: A write reaches customers through Jira issue {target.id}
+      fields:
+        - target.id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+
+
+  # The same consequence for a new issue in a customer-visible project.
+  - operation: jira.project.disclose
+    summary: A new issue that reaches customers through a Jira service desk
+    access: write
+    target:
+      type: jira_project
+      id_pattern: '^(?P<project>[A-Z][A-Z0-9_]{1,9})$'
+      account: none
+    params: {}
+    effects:
+      - kind: external_disclosure
+        description: Discloses the new issue to people outside the organization
+    reversibility: irreversible
+    dedupe_key: [target.id]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: A new issue reaches customers through Jira project {target.id}
+      fields:
+        - target.id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-30
+
+consequences:
+  - id: customer-visible-issue
+    operation: jira.issue.create
+    when: facts.jira_project_external.external == true
+    requires_facts: [jira.project.external]
+    consequence:
+      operation: jira.project.disclose
+      effect: external_disclosure
+      description: >-
+        The project is a service desk, so the new issue reaches the
+        organization's customers.
+    valid_until: 2027-10-30
+  - id: customer-visible-transition
+    operation: jira.issue.transition
+    when: facts.jira_issue_external.external == true
+    requires_facts: [jira.issue.external]
+    consequence:
+      operation: jira.issue.disclose
+      effect: external_disclosure
+      description: >-
+        The issue is in a service desk project, so its customers see the
+        status change.
+    valid_until: 2027-10-30
+  - id: customer-visible-comment
+    operation: jira.issue.comment
+    when: facts.jira_issue_external.external == true
+    requires_facts: [jira.issue.external]
+    consequence:
+      operation: jira.issue.disclose
+      effect: external_disclosure
+      description: >-
+        The issue is in a service desk project, so the comment reaches the
+        organization's customers.
+    valid_until: 2027-10-30
+
+# What the package covers (F756, HR-523): no environment, records scoped by
+# issue and project, recipients classified by the project's customer visibility.
+coverage:
+  environment:
+    source: none
+  record_scope: [jira_issue, jira_project]
+  recipient_fact: jira.issue.external
+  channels: [http, mcp]

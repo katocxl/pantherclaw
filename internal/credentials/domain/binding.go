@@ -15,6 +15,7 @@ package domain
 import (
 	"encoding/binary"
 	"errors"
+	"net"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,9 +55,9 @@ type Binding struct {
 	AllowedHosts    []string
 	BrokerKey       string
 	Header, Scheme  string
-	// Kind is KindStatic (or empty) or KindGitHubApp; only a GitHub App
-	// credential adds it to the info, so every credential sealed before
-	// kinds existed still opens.
+	// Kind is KindStatic (or empty), KindGitHubApp, KindOAuthClient or
+	// KindAWSSigV4; only a kind other than static adds it to the info, so
+	// every credential sealed before kinds existed still opens.
 	Kind string
 }
 
@@ -106,4 +107,23 @@ func CheckFormat(sealed []byte) error {
 		return ErrFormat
 	}
 	return nil
+}
+
+// HostBound reports whether a host may receive a credential: an allowed
+// "host" entry matches any port of that host, a "host:port" entry only that
+// port. Hosts compare case-insensitively.
+func HostBound(allowedHosts []string, rawHost, defaultPort string) bool {
+	host, port, err := net.SplitHostPort(rawHost)
+	if err != nil {
+		host, port = rawHost, defaultPort
+	}
+	host = strings.ToLower(strings.TrimSuffix(strings.Trim(host, "[]"), "."))
+	return slices.ContainsFunc(allowedHosts, func(entry string) bool {
+		h, p, err := net.SplitHostPort(entry)
+		if err != nil {
+			h, p = entry, ""
+		}
+		h = strings.ToLower(strings.Trim(h, "[]"))
+		return h == host && (p == "" || p == port)
+	})
 }

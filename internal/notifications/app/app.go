@@ -100,6 +100,15 @@ type Service struct {
 	// M14 D22); a simulator only in dev and tests.
 	slackBase string
 	slackHTTP *http.Client
+	// teamsLogin and teamsHTTP reach Microsoft Entra and the Bot Framework
+	// for teams_app channels (G0 M20 D256); teamsService replaces every
+	// channel's service URL with a simulator, in dev and tests only.
+	teamsLogin   string
+	teamsHTTP    *http.Client
+	teamsService string
+	// webhookKeys signs opted-in webhooks with the org's Ed25519 key (G0
+	// M20 D251); nil leaves every destination on HMAC only.
+	webhookKeys domain.WebhookKeys
 }
 
 // New returns the service. jc may be an insert-only client (API role).
@@ -140,6 +149,11 @@ type Message struct {
 	Subject *Subject
 	// Personal lists users who get it by email whatever the channels say.
 	Personal []ids.UUID
+	// Deciders says Personal are the eligible deciders of the approval
+	// request the notice links to, as the waitlist router computed them
+	// (G0 M20 D256): those with a confirmed Slack link also get it as a
+	// direct message. Only the router sets it.
+	Deciders bool
 	// DedupeKey, when set, makes a second notification with the same key a
 	// no-op (for example one notice per paused channel).
 	DedupeKey string
@@ -222,6 +236,11 @@ func (s *Service) Enqueue(ctx context.Context, tx db.TenantTx, m Message) (Enque
 		}
 		out.Deliveries++
 	}
+	dms, err := s.dmRecipientsFor(ctx, tx, q, m, out.Notification)
+	if err != nil {
+		return Enqueued{}, err
+	}
+	out.Deliveries += dms
 	if m.PersonalOnly {
 		return out, nil
 	}

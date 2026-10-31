@@ -376,3 +376,45 @@ func TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug(t *testing.T) {
 		t.Fatal("another org's slug went too")
 	}
 }
+
+// TestHR390_AnOrgWithTicketWebhooksIsDeleted: the append-only ticket inbound
+// log does not stop an organization's deletion: pc_deleter removes its rows
+// (00177's exception), and nobody else can.
+func TestHR390_AnOrgWithTicketWebhooksIsDeleted(t *testing.T) {
+	d, s, org := setup(t)
+	gw, conn, config, event := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
+	secret := make([]byte, 16)
+	if err := s.Pool.InTenantTx(t.Context(), org, func(ctx context.Context, tx db.TenantTx) error {
+		for _, q := range []struct {
+			sql  string
+			args []any
+		}{
+			{"INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'gw', 'test')", []any{org, gw}},
+			{`INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, created_by, updated_by)
+				VALUES ($1, $2, 'jira', 'http', $3, 'pc.jira', 'https://example.atlassian.net', 'none', 'test', 'test')`, []any{org, conn, gw}},
+			{`INSERT INTO pc.ticket_sync_configs (org_id, id, system, connection_id, project_key, webhook_secret, created_by)
+				VALUES ($1, $2, 'jira', $3, 'SEC', $4, 'test')`, []any{org, config, conn, secret}},
+			{`INSERT INTO pc.ticket_inbound_events (org_id, id, config_id, delivery_id, body_sha256, outcome)
+				VALUES ($1, $2, $3, 'delivery-1', $4, 'UNLINKED')`, []any{org, event, config, make([]byte, 32)}},
+		} {
+			if _, err := tx.Exec(ctx, q.sql, q.args...); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Pool.InTenantTx(t.Context(), org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, "DELETE FROM pc.ticket_inbound_events WHERE org_id = $1", org)
+		return err
+	}); err == nil {
+		t.Fatal("pc_app deleted from the inbound log")
+	}
+	finishDeletion(t, s, org, deletionRequest(t, s, org, time.Now().Add(-time.Hour)))
+	var left int
+	d.AdminQueryRow(t, "SELECT count(*) FROM pc.ticket_inbound_events WHERE org_id = $1", []any{org}, &left)
+	if left != 0 {
+		t.Fatalf("%d inbound rows left", left)
+	}
+}

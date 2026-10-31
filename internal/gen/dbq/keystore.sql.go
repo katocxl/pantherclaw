@@ -318,6 +318,60 @@ func (q *Queries) ListStoredKEKIDs(ctx context.Context, orgID ids.OrgID) ([]stri
 	return items, nil
 }
 
+const listWebhookKeys = `-- name: ListWebhookKeys :many
+SELECT kid, public_key, wrapped_private_key, kek_id, state, created_at, state_changed_at,
+       (state_changed_at + make_interval(secs => $1::int))::timestamptz AS retires_at,
+       (state = 'ACTIVE' OR state_changed_at > now() - make_interval(secs => $1::int))::bool AS live
+FROM pc.keys
+WHERE org_id = $2 AND purpose = 'webhooks' AND state <> 'REVOKED'
+ORDER BY created_at, kid
+`
+
+type ListWebhookKeysRow struct {
+	Kid               string
+	PublicKey         []byte
+	WrappedPrivateKey []byte
+	KekID             string
+	State             string
+	CreatedAt         time.Time
+	StateChangedAt    time.Time
+	RetiresAt         time.Time
+	Live              bool
+}
+
+// An org's webhooks keys that are not revoked (G0 M20 D251). live is false
+// for a RETIRING key whose overlap has ended: it verifies nothing and is in
+// no JWKS (HR-512).
+func (q *Queries) ListWebhookKeys(ctx context.Context, overlapSeconds int32, orgID ids.OrgID) ([]ListWebhookKeysRow, error) {
+	rows, err := q.db.Query(ctx, listWebhookKeys, overlapSeconds, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWebhookKeysRow{}
+	for rows.Next() {
+		var i ListWebhookKeysRow
+		if err := rows.Scan(
+			&i.Kid,
+			&i.PublicKey,
+			&i.WrappedPrivateKey,
+			&i.KekID,
+			&i.State,
+			&i.CreatedAt,
+			&i.StateChangedAt,
+			&i.RetiresAt,
+			&i.Live,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockKeystore = `-- name: LockKeystore :exec
 SELECT pg_advisory_xact_lock(hashtextextended('pc.keystore:' || $1::uuid::text, 0))
 `

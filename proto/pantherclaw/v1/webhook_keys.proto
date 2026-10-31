@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// WebhookKeyService manages the organization's Ed25519 webhook signing key
+// (G0 M20 D251, D261; PN-018, HR-510..512). Destinations that opt in
+// receive a `v1a,` signature by this key next to the HMAC `v1,` ones. Its
+// public half is published at
+// /.well-known/pantherclaw/orgs/{org}/webhook-jwks.json with the RETIRING
+// key while a rotation's 24-hour overlap lasts.
+service WebhookKeyService {
+  // ListWebhookKeys lists the org's ACTIVE key and its RETIRING key during
+  // a rotation's overlap (public halves only).
+  // permission: webhook_key.read
+  rpc ListWebhookKeys(ListWebhookKeysRequest) returns (ListWebhookKeysResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RotateWebhookKey makes a new ACTIVE key; the old one is RETIRING and
+  // stays in the JWKS for 24 hours, then is gone. It is refused while a
+  // RETIRING key is still in its overlap. It needs a step-up, so over the
+  // API it answers STEP_UP_REQUIRED. Audited.
+  // permission: webhook_key.manage
+  rpc RotateWebhookKey(RotateWebhookKeyRequest) returns (RotateWebhookKeyResponse);
+}
+
+// WebhookKey is one of the org's webhook signing keys.
+message WebhookKey {
+  // Key id, as in the JWKS ("webhooks-...").
+  string kid = 1;
+  // "ACTIVE" (signs) or "RETIRING" (verifies only, during the overlap).
+  string state = 2;
+  // The Ed25519 public key, base64url without padding (the JWK "x").
+  string public_key = 3;
+  // Creation time.
+  google.protobuf.Timestamp create_time = 4;
+  // RETIRING keys: when it leaves the JWKS.
+  google.protobuf.Timestamp retire_time = 5;
+}
+
+// ListWebhookKeysRequest is empty.
+message ListWebhookKeysRequest {}
+
+// ListWebhookKeysResponse lists the keys and where they are published.
+message ListWebhookKeysResponse {
+  // The ACTIVE key first.
+  repeated WebhookKey keys = 1;
+  // The org's webhook JWKS.
+  string jwks_url = 2;
+}
+
+// RotateWebhookKeyRequest is empty.
+message RotateWebhookKeyRequest {}
+
+// RotateWebhookKeyResponse names the new and the retiring key.
+message RotateWebhookKeyResponse {
+  // The new ACTIVE key.
+  WebhookKey key = 1;
+  // The key that is now RETIRING (empty when the org had none).
+  string retiring_kid = 2;
+}

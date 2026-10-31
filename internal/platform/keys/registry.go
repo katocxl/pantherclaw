@@ -35,6 +35,8 @@ const (
 	// The anchors and checkpoints_pq keys are not Ed25519 (AltKey).
 	PurposeAnchors       Purpose = "anchors"        // ECDSA P-256: the anchored global root (G0 M7, HR-195)
 	PurposeCheckpointsPQ Purpose = "checkpoints_pq" // ML-DSA-65: optional checkpoint and pack co-signatures
+	// The webhooks key is per organization, never a platform key (G0 M20 D251).
+	PurposeWebhooks Purpose = "webhooks" // Ed25519: the `v1a,` signature of opted-in webhooks
 )
 
 // Purposes lists every Ed25519 signing purpose; each has an active key.
@@ -48,6 +50,14 @@ func Purposes() []Purpose {
 // AltPurposes lists the purposes whose keys use another algorithm.
 func AltPurposes() []Purpose { return []Purpose{PurposeAnchors, PurposeCheckpointsPQ} }
 
+// OrgPurposes lists the Ed25519 purposes whose keys belong to each
+// organization rather than to the platform: the platform registry never
+// creates or loads them (G0 M20 D251, HR-511).
+func OrgPurposes() []Purpose { return []Purpose{PurposeWebhooks} }
+
+// OrgScoped reports whether p is one of OrgPurposes.
+func (p Purpose) OrgScoped() bool { return slices.Contains(OrgPurposes(), p) }
+
 // EvidencePurposes lists the purposes of the keys published in
 // evidence-keys.json (PAP-1 §11): what offline verifiers pin.
 func EvidencePurposes() []Purpose {
@@ -56,7 +66,7 @@ func EvidencePurposes() []Purpose {
 
 // Valid reports whether p is a known purpose.
 func (p Purpose) Valid() bool {
-	return slices.Contains(Purposes(), p) || slices.Contains(AltPurposes(), p)
+	return slices.Contains(Purposes(), p) || slices.Contains(AltPurposes(), p) || slices.Contains(OrgPurposes(), p)
 }
 
 // Algorithm is a signing algorithm, named as in JOSE and the trust file.
@@ -142,6 +152,9 @@ func NewRegistry() *Registry {
 func (r *Registry) Put(k SigningKey) error {
 	if !k.Purpose.Valid() || k.Purpose.Algorithm() != AlgEdDSA {
 		return fmt.Errorf("keys: %q is not an Ed25519 purpose", k.Purpose)
+	}
+	if k.Purpose.OrgScoped() {
+		return fmt.Errorf("keys: %q keys belong to an organization, not the platform registry", k.Purpose)
 	}
 	if len(k.Public) != ed25519.PublicKeySize || k.KID != KIDFor(k.Purpose, k.Public) {
 		return fmt.Errorf("keys: kid %q does not match its public key and purpose", k.KID)

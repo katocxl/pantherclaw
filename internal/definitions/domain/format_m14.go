@@ -14,12 +14,35 @@ import (
 // Encoding is how an HTTP body is written: JSON, or a form (G0 M14 D8).
 type Encoding string
 
-// Encodings. The empty encoding is JSON.
+// Encodings. The empty encoding is JSON. aws-json and aws-query are AWS's
+// protocols (G0 M20 D254): a JSON body as application/x-amz-json-1.1 with
+// the operation in a fixed X-Amz-Target header, and a flat form body whose
+// fixed Action and Version name the operation, answered in XML. Both are
+// POSTs to the service's root path.
 const (
-	EncodingDefault Encoding = ""
-	EncodingJSON    Encoding = "json"
-	EncodingForm    Encoding = "form"
+	EncodingDefault  Encoding = ""
+	EncodingJSON     Encoding = "json"
+	EncodingForm     Encoding = "form"
+	EncodingAWSJSON  Encoding = "aws-json"
+	EncodingAWSQuery Encoding = "aws-query"
 )
+
+// AWS returns whether e is one of AWS's protocols.
+func (e Encoding) AWS() bool { return e == EncodingAWSJSON || e == EncodingAWSQuery }
+
+// AWS protocol details (D254): the media types of aws-json bodies (1.1
+// sent, 1.0 or 1.1 read) and the header that names an aws-json operation.
+const (
+	AWSJSONContentType = "application/x-amz-json-1.1"
+	AWSQueryType       = "application/x-www-form-urlencoded; charset=utf-8"
+	AWSTargetHeader    = "X-Amz-Target"
+)
+
+// AWSJSONContentTypes are the aws-json media types a mapping reads.
+var AWSJSONContentTypes = []string{"application/x-amz-json-1.0", AWSJSONContentType}
+
+// RootPath is the only path an aws-json or aws-query template has.
+const RootPath = "/"
 
 // SuccessCheck is a top-level JSON boolean a 2xx answer must carry (D8).
 type SuccessCheck struct {

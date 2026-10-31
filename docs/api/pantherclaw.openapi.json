@@ -5352,6 +5352,60 @@
         }
       }
     },
+    "/pantherclaw.v1.TriggerService/SetAutomationDestinationSignatureScheme": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TriggerService"
+        ],
+        "summary": "SetAutomationDestinationSignatureScheme",
+        "description": "SetAutomationDestinationSignatureScheme opts a destination in to Ed25519\n signatures (\"hmac+ed25519\": a `v1a,` signature by the org's webhooks key\n next to the HMAC `v1,` ones) or back to HMAC only (\"hmac\", the default).\n HMAC is always sent. Audited (a person only).\n permission: automation.endpoints.manage",
+        "operationId": "pantherclaw.v1.TriggerService.SetAutomationDestinationSignatureScheme",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetAutomationDestinationSignatureSchemeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetAutomationDestinationSignatureSchemeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.TriggerService/SetAutomationDestinationState": {
       "post": {
         "tags": [
@@ -11672,6 +11726,438 @@
         }
       }
     },
+    "/pantherclaw.v1.ExportDestinationService/CreateExportDestination": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "CreateExportDestination",
+        "description": "CreateExportDestination adds a PENDING destination (a person only). The\n credential is sealed and never returned.\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.ExportDestinationService.CreateExportDestination",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateExportDestinationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateExportDestinationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/GetExportDestination": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "GetExportDestination",
+        "description": "GetExportDestination returns one destination and its delivery health.\n permission: siem.read",
+        "operationId": "pantherclaw.v1.ExportDestinationService.GetExportDestination",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetExportDestinationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetExportDestinationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/ListExportDestinations": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "ListExportDestinations",
+        "description": "ListExportDestinations lists destinations that are not disabled.\n permission: siem.read",
+        "operationId": "pantherclaw.v1.ExportDestinationService.ListExportDestinations",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListExportDestinationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListExportDestinationsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/SetExportDestinationState": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "SetExportDestinationState",
+        "description": "SetExportDestinationState pauses, resumes or disables a destination (a\n person only). Disabling is final.\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.ExportDestinationService.SetExportDestinationState",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetExportDestinationStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetExportDestinationStateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/ReplaceExportDestinationCredential": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "ReplaceExportDestinationCredential",
+        "description": "ReplaceExportDestinationCredential replaces the sealed credential (a\n person only). The target never changes.\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.ExportDestinationService.ReplaceExportDestinationCredential",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReplaceExportDestinationCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReplaceExportDestinationCredentialResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/PushExportArtifact": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "PushExportArtifact",
+        "description": "PushExportArtifact queues one artifact's push (a person only, who also\n needs the artifact's own permission) and returns its receipt. An active\n legal hold never blocks a push.\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.ExportDestinationService.PushExportArtifact",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.PushExportArtifactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.PushExportArtifactResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/GetExportReceipt": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "GetExportReceipt",
+        "description": "GetExportReceipt returns one push's receipt.\n permission: siem.read",
+        "operationId": "pantherclaw.v1.ExportDestinationService.GetExportReceipt",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetExportReceiptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetExportReceiptResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ExportDestinationService/ListExportReceipts": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ExportDestinationService"
+        ],
+        "summary": "ListExportReceipts",
+        "description": "ListExportReceipts lists receipts, newest first.\n permission: siem.read",
+        "operationId": "pantherclaw.v1.ExportDestinationService.ListExportReceipts",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListExportReceiptsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListExportReceiptsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ExposureService/GetExposure": {
       "post": {
         "tags": [
@@ -17775,6 +18261,60 @@
         }
       }
     },
+    "/pantherclaw.v1.NotificationService/SetChannelSignatureScheme": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "SetChannelSignatureScheme",
+        "description": "SetChannelSignatureScheme opts a webhook channel in to Ed25519 signatures\n (\"hmac+ed25519\": a `v1a,` signature by the org's webhooks key next to the\n HMAC `v1,` ones) or back to HMAC only (\"hmac\", the default). HMAC is\n always sent. Audited.\n permission: notification.manage",
+        "operationId": "pantherclaw.v1.NotificationService.SetChannelSignatureScheme",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetChannelSignatureSchemeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetChannelSignatureSchemeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.NotificationService/TestChannel": {
       "post": {
         "tags": [
@@ -17873,6 +18413,222 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.ListDeliveriesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/ProposeSlackLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "ProposeSlackLink",
+        "description": "ProposeSlackLink looks the caller up in the workspace of the org's Slack\n DM channel by their own email and proposes the link (G0 M20 D256,\n D265): a full, confirmed member with that email, on one of the\n channel's email domains. The caller confirms it with ConfirmChatLink.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.ProposeSlackLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ProposeSlackLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ProposeSlackLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/ConfirmChatLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "ConfirmChatLink",
+        "description": "ConfirmChatLink confirms the caller's own proposed link: approval DMs\n for requests they may decide then reach them.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.ConfirmChatLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ConfirmChatLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ConfirmChatLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/RevokeChatLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "RevokeChatLink",
+        "description": "RevokeChatLink revokes the caller's own link.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.RevokeChatLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokeChatLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokeChatLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/ListChatLinks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "ListChatLinks",
+        "description": "ListChatLinks lists the caller's own links, newest first.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.ListChatLinks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListChatLinksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListChatLinksResponse"
                 }
               }
             }
@@ -25659,6 +26415,60 @@
         }
       }
     },
+    "/pantherclaw.v1.SIEMService/SetSIEMDestinationSignatureScheme": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SIEMService"
+        ],
+        "summary": "SetSIEMDestinationSignatureScheme",
+        "description": "SetSIEMDestinationSignatureScheme opts a destination in to Ed25519\n signatures (\"hmac+ed25519\": a `v1a,` signature by the org's webhooks key\n next to the HMAC `v1,` ones) or back to HMAC only (\"hmac\", the default).\n HMAC is always sent. Audited (a person only).\n permission: siem.manage",
+        "operationId": "pantherclaw.v1.SIEMService.SetSIEMDestinationSignatureScheme",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetSIEMDestinationSignatureSchemeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetSIEMDestinationSignatureSchemeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.SIEMService/RetrySIEMDestination": {
       "post": {
         "tags": [
@@ -28035,6 +28845,546 @@
         }
       }
     },
+    "/pantherclaw.v1.TicketSyncService/CreateTicketSyncConfig": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "CreateTicketSyncConfig",
+        "description": "CreateTicketSyncConfig binds a project behind a connection. The webhook\n secret is returned once, with the webhook URL to give the ticket\n system. A person only; audited.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.CreateTicketSyncConfig",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateTicketSyncConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateTicketSyncConfigResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/ListTicketSyncConfigs": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "ListTicketSyncConfigs",
+        "description": "ListTicketSyncConfigs lists the organization's configurations.\n permission: connection.read",
+        "operationId": "pantherclaw.v1.TicketSyncService.ListTicketSyncConfigs",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListTicketSyncConfigsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListTicketSyncConfigsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/RotateTicketSyncSecret": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "RotateTicketSyncSecret",
+        "description": "RotateTicketSyncSecret replaces a configuration's webhook secret; the\n previous one verifies for 24 hours. The new one is returned once.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.RotateTicketSyncSecret",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RotateTicketSyncSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RotateTicketSyncSecretResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/SetTicketSyncPaused": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "SetTicketSyncPaused",
+        "description": "SetTicketSyncPaused pauses or resumes a configuration.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.SetTicketSyncPaused",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetTicketSyncPausedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetTicketSyncPausedResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/LinkCaseTicket": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "LinkCaseTicket",
+        "description": "LinkCaseTicket links a case to an existing ticket of the\n configuration's project.\n permission: case.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.LinkCaseTicket",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.LinkCaseTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.LinkCaseTicketResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/LinkIncidentTicket": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "LinkIncidentTicket",
+        "description": "LinkIncidentTicket links an incident to an existing ticket.\n permission: incident.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.LinkIncidentTicket",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.LinkIncidentTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.LinkIncidentTicketResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/OpenCaseTicket": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "OpenCaseTicket",
+        "description": "OpenCaseTicket opens a ticket for a case through the gateway; the new\n issue is linked when the gateway reports it.\n permission: case.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.OpenCaseTicket",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.OpenCaseTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.OpenCaseTicketResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/OpenIncidentTicket": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "OpenIncidentTicket",
+        "description": "OpenIncidentTicket opens a ticket for an incident through the gateway.\n permission: incident.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.OpenIncidentTicket",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.OpenIncidentTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.OpenIncidentTicketResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/GetTicketFieldOwners": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "GetTicketFieldOwners",
+        "description": "GetTicketFieldOwners returns the owner of every field.\n permission: case.read",
+        "operationId": "pantherclaw.v1.TicketSyncService.GetTicketFieldOwners",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetTicketFieldOwnersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetTicketFieldOwnersResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/SetTicketFieldOwner": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "SetTicketFieldOwner",
+        "description": "SetTicketFieldOwner sets a field's owner. Containment and restoration\n are refused for the ticket system; giving another field to it may wait\n for a second person (PROTECTED_CHANGE_PENDING).\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.TicketSyncService.SetTicketFieldOwner",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetTicketFieldOwnerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetTicketFieldOwnerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.TransactionService/ListTransactions": {
       "post": {
         "tags": [
@@ -28997,6 +30347,114 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetWaitlistMetricsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.WebhookKeyService/ListWebhookKeys": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.WebhookKeyService"
+        ],
+        "summary": "ListWebhookKeys",
+        "description": "ListWebhookKeys lists the org's ACTIVE key and its RETIRING key during\n a rotation's overlap (public halves only).\n permission: webhook_key.read",
+        "operationId": "pantherclaw.v1.WebhookKeyService.ListWebhookKeys",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListWebhookKeysRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListWebhookKeysResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.WebhookKeyService/RotateWebhookKey": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.WebhookKeyService"
+        ],
+        "summary": "RotateWebhookKey",
+        "description": "RotateWebhookKey makes a new ACTIVE key; the old one is RETIRING and\n stays in the JWKS for 24 hours, then is gone. It is refused while a\n RETIRING key is still in its overlap. It needs a step-up, so over the\n API it answers STEP_UP_REQUIRED. Audited.\n permission: webhook_key.manage",
+        "operationId": "pantherclaw.v1.WebhookKeyService.RotateWebhookKey",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RotateWebhookKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RotateWebhookKeyResponse"
                 }
               }
             }
@@ -39200,6 +40658,11 @@
             "title": "rotation_end_time",
             "description": "When the previous secret stops signing, during a rotation.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "description": "\"hmac\" (the default) or \"hmac+ed25519\"."
           }
         },
         "title": "AutomationDestination",
@@ -39840,6 +41303,51 @@
         "title": "ScheduleOccurrence",
         "additionalProperties": false,
         "description": "ScheduleOccurrence is one previewed occurrence."
+      },
+      "pantherclaw.v1.SetAutomationDestinationSignatureSchemeRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "enum": [
+              "hmac",
+              "hmac+ed25519"
+            ],
+            "description": "\"hmac\" or \"hmac+ed25519\"."
+          }
+        },
+        "title": "SetAutomationDestinationSignatureSchemeRequest",
+        "additionalProperties": false,
+        "description": "SetAutomationDestinationSignatureSchemeRequest names a destination and its scheme.",
+        "required": [
+          "id",
+          "signatureScheme"
+        ]
+      },
+      "pantherclaw.v1.SetAutomationDestinationSignatureSchemeResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AutomationDestination"
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys."
+          }
+        },
+        "title": "SetAutomationDestinationSignatureSchemeResponse",
+        "additionalProperties": false,
+        "description": "SetAutomationDestinationSignatureSchemeResponse is the destination and where receivers fetch the\n org's webhook keys."
       },
       "pantherclaw.v1.SetAutomationDestinationStateRequest": {
         "type": "object",
@@ -52824,6 +54332,775 @@
         "additionalProperties": false,
         "description": "SetRetentionPolicyResponse returns the category after the change."
       },
+      "pantherclaw.v1.CreateExportDestinationRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Lowercase letters, digits and dashes."
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "https_put",
+              "s3"
+            ],
+            "description": "https_put or s3."
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "maxLength": 2048,
+            "minLength": 9,
+            "description": "The https URL: the PUT base URL, or the S3 endpoint."
+          },
+          "bucket": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "bucket",
+            "maxLength": 63,
+            "description": "The S3 bucket."
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "region",
+            "maxLength": 32,
+            "description": "The S3 region."
+          },
+          "keyPrefix": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "key_prefix",
+            "maxLength": 256,
+            "description": "The prefix of every object key."
+          },
+          "pathStyle": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "path_style",
+            "description": "S3 path-style addressing."
+          },
+          "internal": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "internal",
+            "description": "Whether the target may be a private or loopback address."
+          },
+          "dataClasses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 4,
+              "minItems": 1
+            },
+            "title": "data_classes",
+            "maxItems": 4,
+            "minItems": 1,
+            "description": "The artifacts this destination receives."
+          },
+          "credential": {
+            "title": "credential",
+            "description": "The credential, sealed at rest and never returned.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportCredential"
+          }
+        },
+        "title": "CreateExportDestinationRequest",
+        "required": [
+          "credential",
+          "name",
+          "kind",
+          "url",
+          "dataClasses"
+        ],
+        "additionalProperties": false,
+        "description": "CreateExportDestinationRequest describes a destination."
+      },
+      "pantherclaw.v1.CreateExportDestinationResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+          }
+        },
+        "title": "CreateExportDestinationResponse",
+        "additionalProperties": false,
+        "description": "CreateExportDestinationResponse is the new destination."
+      },
+      "pantherclaw.v1.ExportCredential": {
+        "type": "object",
+        "properties": {
+          "bearerToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "bearer_token",
+            "maxLength": 4096,
+            "description": "The bearer token of an https_put destination."
+          },
+          "accessKeyId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "access_key_id",
+            "maxLength": 128,
+            "description": "The access key id of an s3 destination."
+          },
+          "secretAccessKey": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "secret_access_key",
+            "maxLength": 256,
+            "description": "The secret access key of an s3 destination."
+          }
+        },
+        "title": "ExportCredential",
+        "additionalProperties": false,
+        "description": "ExportCredential is what a destination authenticates with: a bearer token\n for https_put, an access key for s3."
+      },
+      "pantherclaw.v1.ExportDestination": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Destination id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name."
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "https_put or s3."
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "description": "The https URL: the PUT base URL, or the S3 endpoint."
+          },
+          "bucket": {
+            "type": "string",
+            "title": "bucket",
+            "description": "The S3 bucket."
+          },
+          "region": {
+            "type": "string",
+            "title": "region",
+            "description": "The S3 region."
+          },
+          "keyPrefix": {
+            "type": "string",
+            "title": "key_prefix",
+            "description": "The prefix of every object key."
+          },
+          "pathStyle": {
+            "type": "boolean",
+            "title": "path_style",
+            "description": "S3 path-style addressing (https://endpoint/bucket/key)."
+          },
+          "internal": {
+            "type": "boolean",
+            "title": "internal",
+            "description": "Whether the target may be a private or loopback address."
+          },
+          "dataClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "data_classes",
+            "description": "The artifacts this destination receives: evidence_packs,\n payload_captures, proof_bundles, org_exports."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE, PAUSED or DISABLED."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who created it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activatedBy": {
+            "type": "string",
+            "title": "activated_by",
+            "description": "Who activated it."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmUrl": {
+            "type": "string",
+            "title": "confirm_url",
+            "description": "The page where a person activates it with a security key."
+          },
+          "health": {
+            "type": "string",
+            "title": "health",
+            "description": "NOT_CONFIRMED, HEALTHY, DEGRADED or FAILING."
+          },
+          "confirmTime": {
+            "title": "confirm_time",
+            "description": "The first delivered push.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastDeliveredTime": {
+            "title": "last_delivered_time",
+            "description": "The latest delivered push.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "consecutiveFailures": {
+            "type": "integer",
+            "title": "consecutive_failures",
+            "format": "int32",
+            "description": "Failed pushes in a row."
+          },
+          "failingSince": {
+            "title": "failing_since",
+            "description": "When the current run of failures began.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastFailureCode": {
+            "type": "string",
+            "title": "last_failure_code",
+            "description": "The latest failure's code."
+          },
+          "deliveredPushes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "delivered_pushes",
+            "format": "int64",
+            "description": "Delivered pushes."
+          },
+          "failedPushes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "failed_pushes",
+            "format": "int64",
+            "description": "Failed pushes."
+          },
+          "credentialReplaceTime": {
+            "title": "credential_replace_time",
+            "description": "When the credential was last replaced.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ExportDestination",
+        "additionalProperties": false,
+        "description": "ExportDestination is one export destination. Its credential is never\n returned."
+      },
+      "pantherclaw.v1.ExportReceipt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Receipt id."
+          },
+          "destinationId": {
+            "type": "string",
+            "title": "destination_id",
+            "description": "The destination."
+          },
+          "destinationName": {
+            "type": "string",
+            "title": "destination_name",
+            "description": "The destination's name."
+          },
+          "class": {
+            "type": "string",
+            "title": "class",
+            "description": "evidence_packs, proof_bundles or org_exports."
+          },
+          "artifactId": {
+            "type": "string",
+            "title": "artifact_id",
+            "description": "The pack or the data request."
+          },
+          "streamed": {
+            "type": "boolean",
+            "title": "streamed",
+            "description": "Whether the export streamed straight to the destination as it built."
+          },
+          "fromSeq": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "from_seq",
+            "format": "int64",
+            "description": "A proof bundle's first ledger sequence."
+          },
+          "toSeq": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "to_seq",
+            "format": "int64",
+            "description": "A proof bundle's last ledger sequence."
+          },
+          "requestedBy": {
+            "type": "string",
+            "title": "requested_by",
+            "description": "Who asked."
+          },
+          "objectKey": {
+            "type": "string",
+            "title": "object_key",
+            "description": "The object's key at the destination."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "QUEUED, PUSHING, DELIVERED or FAILED."
+          },
+          "abortState": {
+            "type": "string",
+            "title": "abort_state",
+            "description": "NONE, PENDING (an upload to abort) or ABORTED."
+          },
+          "sizeBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "size_bytes",
+            "format": "int64",
+            "description": "Bytes delivered."
+          },
+          "sha256": {
+            "type": "string",
+            "title": "sha256",
+            "description": "The SHA-256 of the bytes delivered, in hex."
+          },
+          "parts": {
+            "type": "integer",
+            "title": "parts",
+            "format": "int32",
+            "description": "Upload parts."
+          },
+          "etag": {
+            "type": "string",
+            "title": "etag",
+            "description": "The destination's ETag."
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "attempts",
+            "format": "int32",
+            "description": "Attempts so far."
+          },
+          "lastStatus": {
+            "type": "integer",
+            "title": "last_status",
+            "format": "int32",
+            "description": "The destination's last HTTP status."
+          },
+          "failureCode": {
+            "type": "string",
+            "title": "failure_code",
+            "description": "Why it failed."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was asked for.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "deliverTime": {
+            "title": "deliver_time",
+            "description": "When it was delivered.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "removedHereTime": {
+            "title": "removed_here_time",
+            "description": "When the copy here was removed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "noticeState": {
+            "type": "string",
+            "title": "notice_state",
+            "description": "NONE, PENDING, SENT or UNDELIVERABLE."
+          },
+          "noticeKey": {
+            "type": "string",
+            "title": "notice_key",
+            "description": "The signed removal notice's key at the destination."
+          },
+          "noticeSendTime": {
+            "title": "notice_send_time",
+            "description": "When the notice was delivered.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "title": "status",
+            "description": "What may be said of the artifact, such as \"removed here; a copy exists\n at vault\"."
+          }
+        },
+        "title": "ExportReceipt",
+        "additionalProperties": false,
+        "description": "ExportReceipt is the record of one push (HR-514). It outlives the copy\n here; status never says the copy at the destination is gone (HR-515)."
+      },
+      "pantherclaw.v1.GetExportDestinationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          }
+        },
+        "title": "GetExportDestinationRequest",
+        "additionalProperties": false,
+        "description": "GetExportDestinationRequest names a destination.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetExportDestinationResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+          }
+        },
+        "title": "GetExportDestinationResponse",
+        "additionalProperties": false,
+        "description": "GetExportDestinationResponse is one destination."
+      },
+      "pantherclaw.v1.GetExportReceiptRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Receipt id."
+          }
+        },
+        "title": "GetExportReceiptRequest",
+        "additionalProperties": false,
+        "description": "GetExportReceiptRequest names a receipt.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetExportReceiptResponse": {
+        "type": "object",
+        "properties": {
+          "receipt": {
+            "title": "receipt",
+            "description": "The receipt.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportReceipt"
+          }
+        },
+        "title": "GetExportReceiptResponse",
+        "additionalProperties": false,
+        "description": "GetExportReceiptResponse is one receipt."
+      },
+      "pantherclaw.v1.ListExportDestinationsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "description": "Token from a previous response."
+          }
+        },
+        "title": "ListExportDestinationsRequest",
+        "additionalProperties": false,
+        "description": "ListExportDestinationsRequest is one page."
+      },
+      "pantherclaw.v1.ListExportDestinationsResponse": {
+        "type": "object",
+        "properties": {
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+            },
+            "title": "destinations",
+            "description": "Destinations."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Next page token."
+          }
+        },
+        "title": "ListExportDestinationsResponse",
+        "additionalProperties": false,
+        "description": "ListExportDestinationsResponse is one page."
+      },
+      "pantherclaw.v1.ListExportReceiptsRequest": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "destination_id",
+            "maxLength": 36,
+            "description": "Only this destination's receipts."
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "description": "Token from a previous response."
+          }
+        },
+        "title": "ListExportReceiptsRequest",
+        "additionalProperties": false,
+        "description": "ListExportReceiptsRequest is one page."
+      },
+      "pantherclaw.v1.ListExportReceiptsResponse": {
+        "type": "object",
+        "properties": {
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ExportReceipt"
+            },
+            "title": "receipts",
+            "description": "Receipts."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Next page token."
+          }
+        },
+        "title": "ListExportReceiptsResponse",
+        "additionalProperties": false,
+        "description": "ListExportReceiptsResponse is one page."
+      },
+      "pantherclaw.v1.PushExportArtifactRequest": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "title": "destination_id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "class": {
+            "type": "string",
+            "title": "class",
+            "enum": [
+              "evidence_packs",
+              "proof_bundles",
+              "org_exports"
+            ],
+            "description": "evidence_packs, proof_bundles or org_exports."
+          },
+          "artifactId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "artifact_id",
+            "maxLength": 36,
+            "description": "The pack, or the ready data request."
+          },
+          "stream": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "stream",
+            "description": "Waits an hour for the caller's next organization export and streams it\n straight to the destination, whatever its size. The export is started\n on its confirmation page as always."
+          },
+          "fromSeq": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "from_seq",
+            "minimum": 0,
+            "format": "int64",
+            "description": "A proof bundle's first ledger sequence."
+          },
+          "toSeq": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "to_seq",
+            "minimum": 0,
+            "format": "int64",
+            "description": "A proof bundle's last ledger sequence."
+          }
+        },
+        "title": "PushExportArtifactRequest",
+        "additionalProperties": false,
+        "description": "PushExportArtifactRequest names what to push and where.",
+        "required": [
+          "destinationId",
+          "class"
+        ]
+      },
+      "pantherclaw.v1.PushExportArtifactResponse": {
+        "type": "object",
+        "properties": {
+          "receipt": {
+            "title": "receipt",
+            "description": "The receipt.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportReceipt"
+          }
+        },
+        "title": "PushExportArtifactResponse",
+        "additionalProperties": false,
+        "description": "PushExportArtifactResponse is the receipt."
+      },
+      "pantherclaw.v1.ReplaceExportDestinationCredentialRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "credential": {
+            "title": "credential",
+            "description": "The new credential.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportCredential"
+          }
+        },
+        "title": "ReplaceExportDestinationCredentialRequest",
+        "required": [
+          "credential",
+          "id"
+        ],
+        "additionalProperties": false,
+        "description": "ReplaceExportDestinationCredentialRequest replaces a credential."
+      },
+      "pantherclaw.v1.ReplaceExportDestinationCredentialResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+          }
+        },
+        "title": "ReplaceExportDestinationCredentialResponse",
+        "additionalProperties": false,
+        "description": "ReplaceExportDestinationCredentialResponse is the destination."
+      },
+      "pantherclaw.v1.SetExportDestinationStateRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "enum": [
+              "ACTIVE",
+              "PAUSED",
+              "DISABLED"
+            ],
+            "description": "ACTIVE (resume), PAUSED or DISABLED."
+          }
+        },
+        "title": "SetExportDestinationStateRequest",
+        "additionalProperties": false,
+        "description": "SetExportDestinationStateRequest changes a destination's state.",
+        "required": [
+          "id",
+          "state"
+        ]
+      },
+      "pantherclaw.v1.SetExportDestinationStateResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ExportDestination"
+          }
+        },
+        "title": "SetExportDestinationStateResponse",
+        "additionalProperties": false,
+        "description": "SetExportDestinationStateResponse is the destination."
+      },
       "pantherclaw.v1.ExposureLabel": {
         "type": "string",
         "title": "ExposureLabel",
@@ -65325,7 +67602,8 @@
           "CHANNEL_KIND_EMAIL",
           "CHANNEL_KIND_SLACK",
           "CHANNEL_KIND_WEBHOOK",
-          "CHANNEL_KIND_SLACK_APP"
+          "CHANNEL_KIND_SLACK_APP",
+          "CHANNEL_KIND_TEAMS_APP"
         ],
         "description": "ChannelKind is where a channel delivers."
       },
@@ -65338,6 +67616,18 @@
           "CHANNEL_STATE_PAUSED"
         ],
         "description": "ChannelState is whether a channel delivers."
+      },
+      "pantherclaw.v1.ChatLinkState": {
+        "type": "string",
+        "title": "ChatLinkState",
+        "enum": [
+          "CHAT_LINK_STATE_UNSPECIFIED",
+          "CHAT_LINK_STATE_PROPOSED",
+          "CHAT_LINK_STATE_CONFIRMED",
+          "CHAT_LINK_STATE_STALE",
+          "CHAT_LINK_STATE_REVOKED"
+        ],
+        "description": "ChatLinkState is a chat identity link's state (G0 M20 D256, D265)."
       },
       "pantherclaw.v1.DeliveryState": {
         "type": "string",
@@ -65471,11 +67761,85 @@
             "title": "slack_app",
             "description": "slack_app channels: the configuration, without the bot token.",
             "$ref": "#/components/schemas/pantherclaw.v1.SlackAppConfig"
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "description": "Webhook channels: \"hmac\" (the default) or \"hmac+ed25519\"."
           }
         },
         "title": "Channel",
         "additionalProperties": false,
         "description": "Channel is one notification channel."
+      },
+      "pantherclaw.v1.ChatLink": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "provider",
+            "description": "Always \"slack\"."
+          },
+          "teamId": {
+            "type": "string",
+            "title": "team_id",
+            "description": "The Slack workspace and user ids."
+          },
+          "externalUserId": {
+            "type": "string",
+            "title": "external_user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email",
+            "description": "The email Slack matched."
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChatLinkState"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmTime": {
+            "title": "confirm_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ChatLink",
+        "additionalProperties": false,
+        "description": "ChatLink is a person's Slack identity link."
+      },
+      "pantherclaw.v1.ConfirmChatLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "ConfirmChatLinkRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ConfirmChatLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChatLink"
+          }
+        },
+        "title": "ConfirmChatLinkResponse",
+        "additionalProperties": false
       },
       "pantherclaw.v1.CreateChannelRequest": {
         "type": "object",
@@ -65556,6 +67920,18 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.SlackAppConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamsApp": {
+            "title": "teams_app",
+            "description": "teams_app channels: the configuration, with the bot's client secret\n (G0 M20 D256). Required for, and only for, a teams_app channel.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.TeamsAppConfig"
               },
               {
                 "type": "null"
@@ -65783,6 +68159,25 @@
         "additionalProperties": false,
         "description": "ListChannelsResponse is one page of channels."
       },
+      "pantherclaw.v1.ListChatLinksRequest": {
+        "type": "object",
+        "title": "ListChatLinksRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListChatLinksResponse": {
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ChatLink"
+            },
+            "title": "links"
+          }
+        },
+        "title": "ListChatLinksResponse",
+        "additionalProperties": false
+      },
       "pantherclaw.v1.ListDeliveriesRequest": {
         "type": "object",
         "properties": {
@@ -65869,6 +68264,48 @@
         "additionalProperties": false,
         "description": "ListDeliveriesResponse is one page of deliveries."
       },
+      "pantherclaw.v1.ProposeSlackLinkRequest": {
+        "type": "object",
+        "title": "ProposeSlackLinkRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ProposeSlackLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChatLink"
+          }
+        },
+        "title": "ProposeSlackLinkResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.RevokeChatLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "RevokeChatLinkRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RevokeChatLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "$ref": "#/components/schemas/pantherclaw.v1.ChatLink"
+          }
+        },
+        "title": "RevokeChatLinkResponse",
+        "additionalProperties": false
+      },
       "pantherclaw.v1.RotateChannelSecretRequest": {
         "type": "object",
         "properties": {
@@ -65904,6 +68341,51 @@
         "additionalProperties": false,
         "description": "RotateChannelSecretResponse returns the new secret once."
       },
+      "pantherclaw.v1.SetChannelSignatureSchemeRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Channel id."
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "enum": [
+              "hmac",
+              "hmac+ed25519"
+            ],
+            "description": "\"hmac\" or \"hmac+ed25519\"."
+          }
+        },
+        "title": "SetChannelSignatureSchemeRequest",
+        "additionalProperties": false,
+        "description": "SetChannelSignatureSchemeRequest names a webhook channel and its scheme.",
+        "required": [
+          "id",
+          "signatureScheme"
+        ]
+      },
+      "pantherclaw.v1.SetChannelSignatureSchemeResponse": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "title": "channel",
+            "description": "The channel.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Channel"
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys."
+          }
+        },
+        "title": "SetChannelSignatureSchemeResponse",
+        "additionalProperties": false,
+        "description": "SetChannelSignatureSchemeResponse is the channel and where receivers fetch the\n org's webhook keys."
+      },
       "pantherclaw.v1.SlackAppConfig": {
         "type": "object",
         "properties": {
@@ -65931,6 +68413,23 @@
             "maxLength": 256,
             "pattern": "^(xoxb-[A-Za-z0-9-]{20,250})?$",
             "description": "The bot token (xoxb-...); input only, never returned."
+          },
+          "directMessages": {
+            "type": "boolean",
+            "title": "direct_messages",
+            "description": "Whether the bot also sends approval direct messages to eligible\n deciders who linked their Slack identity (G0 M20 D256). Set when the\n channel is created and confirmed by its activation; it never changes,\n and at most one channel of an organization has it."
+          },
+          "allowedEmailDomains": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+              "maxItems": 20
+            },
+            "title": "allowed_email_domains",
+            "maxItems": 20,
+            "description": "The email domains a person's Slack link may use: lowercase exact\n domains, no wildcards, 1 to 20 for a DM channel and none otherwise (G0\n M20 D265). Set when the channel is created; it never changes."
           }
         },
         "title": "SlackAppConfig",
@@ -65991,6 +68490,29 @@
                 "maxLength": 0
               }
             ]
+          },
+          "directMessages": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "direct_messages",
+            "description": "Whether the bot also sends approval direct messages to eligible\n deciders who linked their Slack identity (G0 M20 D256). Set when the\n channel is created and confirmed by its activation; it never changes,\n and at most one channel of an organization has it."
+          },
+          "allowedEmailDomains": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+              "maxItems": 20
+            },
+            "title": "allowed_email_domains",
+            "maxItems": 20,
+            "description": "The email domains a person's Slack link may use: lowercase exact\n domains, no wildcards, 1 to 20 for a DM channel and none otherwise (G0\n M20 D265). Set when the channel is created; it never changes."
           }
         },
         "title": "SlackAppConfig",
@@ -65999,6 +68521,58 @@
         "x-pantherclaw-input-of": "pantherclaw.v1.SlackAppConfig",
         "required": [
           "channelId"
+        ]
+      },
+      "pantherclaw.v1.TeamsAppConfig": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "title": "tenant_id",
+            "format": "uuid",
+            "description": "The Entra tenant the bot is installed in."
+          },
+          "teamId": {
+            "type": "string",
+            "title": "team_id",
+            "pattern": "^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$",
+            "description": "The team's General channel id and the channel the cards go to."
+          },
+          "channelId": {
+            "type": "string",
+            "title": "channel_id",
+            "pattern": "^19:[A-Za-z0-9_-]{1,128}@thread[.](tacv2|skype)$"
+          },
+          "appId": {
+            "type": "string",
+            "title": "app_id",
+            "format": "uuid",
+            "description": "The bot's Microsoft App ID."
+          },
+          "clientSecret": {
+            "type": "string",
+            "title": "client_secret",
+            "maxLength": 512,
+            "minLength": 16,
+            "description": "The bot's client secret; input only, never returned."
+          },
+          "serviceUrl": {
+            "type": "string",
+            "title": "service_url",
+            "maxLength": 512,
+            "description": "The Bot Framework service URL (https)."
+          }
+        },
+        "title": "TeamsAppConfig",
+        "additionalProperties": false,
+        "description": "TeamsAppConfig is a teams_app channel's configuration (G0 M20 D256).",
+        "required": [
+          "tenantId",
+          "teamId",
+          "channelId",
+          "appId",
+          "clientSecret",
+          "serviceUrl"
         ]
       },
       "pantherclaw.v1.TestChannelRequest": {
@@ -79251,11 +81825,61 @@
             "title": "rotation_end_time",
             "description": "When the previous signing secret stops signing; unset without a\n rotation in progress.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "description": "\"hmac\" (the default) or \"hmac+ed25519\"."
           }
         },
         "title": "SIEMDestination",
         "additionalProperties": false,
         "description": "SIEMDestination is one export destination."
+      },
+      "pantherclaw.v1.SetSIEMDestinationSignatureSchemeRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Destination id."
+          },
+          "signatureScheme": {
+            "type": "string",
+            "title": "signature_scheme",
+            "enum": [
+              "hmac",
+              "hmac+ed25519"
+            ],
+            "description": "\"hmac\" or \"hmac+ed25519\"."
+          }
+        },
+        "title": "SetSIEMDestinationSignatureSchemeRequest",
+        "additionalProperties": false,
+        "description": "SetSIEMDestinationSignatureSchemeRequest names a destination and its scheme.",
+        "required": [
+          "id",
+          "signatureScheme"
+        ]
+      },
+      "pantherclaw.v1.SetSIEMDestinationSignatureSchemeResponse": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "title": "destination",
+            "description": "The destination.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SIEMDestination"
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS: its ACTIVE and RETIRING webhooks keys."
+          }
+        },
+        "title": "SetSIEMDestinationSignatureSchemeResponse",
+        "additionalProperties": false,
+        "description": "SetSIEMDestinationSignatureSchemeResponse is the destination and where receivers fetch the\n org's webhook keys."
       },
       "pantherclaw.v1.SetSIEMDestinationStateRequest": {
         "type": "object",
@@ -81892,6 +84516,403 @@
         "additionalProperties": false,
         "description": "UpdateTeamResponse returns the result."
       },
+      "pantherclaw.v1.CreateTicketSyncConfigRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid"
+          },
+          "projectKey": {
+            "type": "string",
+            "title": "project_key",
+            "pattern": "^[A-Z][A-Z0-9_]{1,9}$"
+          }
+        },
+        "title": "CreateTicketSyncConfigRequest",
+        "additionalProperties": false,
+        "required": [
+          "connectionId",
+          "projectKey"
+        ]
+      },
+      "pantherclaw.v1.CreateTicketSyncConfigResponse": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "title": "config",
+            "$ref": "#/components/schemas/pantherclaw.v1.TicketSyncConfig"
+          },
+          "webhookSecret": {
+            "type": "string",
+            "title": "webhook_secret",
+            "description": "Returned once; PantherClaw keeps it only encrypted."
+          }
+        },
+        "title": "CreateTicketSyncConfigResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetTicketFieldOwnersRequest": {
+        "type": "object",
+        "title": "GetTicketFieldOwnersRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetTicketFieldOwnersResponse": {
+        "type": "object",
+        "properties": {
+          "owners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TicketFieldOwner"
+            },
+            "title": "owners"
+          }
+        },
+        "title": "GetTicketFieldOwnersResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.LinkCaseTicketRequest": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "title": "case_id",
+            "format": "uuid"
+          },
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "pattern": "^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,9}$"
+          }
+        },
+        "title": "LinkCaseTicketRequest",
+        "additionalProperties": false,
+        "required": [
+          "caseId",
+          "configId",
+          "key"
+        ]
+      },
+      "pantherclaw.v1.LinkCaseTicketResponse": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "title": "ref",
+            "$ref": "#/components/schemas/pantherclaw.v1.TicketRef"
+          }
+        },
+        "title": "LinkCaseTicketResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.LinkIncidentTicketRequest": {
+        "type": "object",
+        "properties": {
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id",
+            "format": "uuid"
+          },
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "pattern": "^[A-Z][A-Z0-9_]{1,9}-[1-9][0-9]{0,9}$"
+          }
+        },
+        "title": "LinkIncidentTicketRequest",
+        "additionalProperties": false,
+        "required": [
+          "incidentId",
+          "configId",
+          "key"
+        ]
+      },
+      "pantherclaw.v1.LinkIncidentTicketResponse": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "title": "ref",
+            "$ref": "#/components/schemas/pantherclaw.v1.TicketRef"
+          }
+        },
+        "title": "LinkIncidentTicketResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListTicketSyncConfigsRequest": {
+        "type": "object",
+        "title": "ListTicketSyncConfigsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListTicketSyncConfigsResponse": {
+        "type": "object",
+        "properties": {
+          "configs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TicketSyncConfig"
+            },
+            "title": "configs"
+          }
+        },
+        "title": "ListTicketSyncConfigsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.OpenCaseTicketRequest": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "title": "case_id",
+            "format": "uuid"
+          },
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid"
+          }
+        },
+        "title": "OpenCaseTicketRequest",
+        "additionalProperties": false,
+        "required": [
+          "caseId",
+          "configId"
+        ]
+      },
+      "pantherclaw.v1.OpenCaseTicketResponse": {
+        "type": "object",
+        "properties": {
+          "outboundId": {
+            "type": "string",
+            "title": "outbound_id",
+            "description": "The outbound task; the ticket is linked once the gateway reports it."
+          }
+        },
+        "title": "OpenCaseTicketResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.OpenIncidentTicketRequest": {
+        "type": "object",
+        "properties": {
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id",
+            "format": "uuid"
+          },
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid"
+          }
+        },
+        "title": "OpenIncidentTicketRequest",
+        "additionalProperties": false,
+        "required": [
+          "incidentId",
+          "configId"
+        ]
+      },
+      "pantherclaw.v1.OpenIncidentTicketResponse": {
+        "type": "object",
+        "properties": {
+          "outboundId": {
+            "type": "string",
+            "title": "outbound_id"
+          }
+        },
+        "title": "OpenIncidentTicketResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.RotateTicketSyncSecretRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "RotateTicketSyncSecretRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RotateTicketSyncSecretResponse": {
+        "type": "object",
+        "properties": {
+          "webhookSecret": {
+            "type": "string",
+            "title": "webhook_secret"
+          }
+        },
+        "title": "RotateTicketSyncSecretResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SetTicketFieldOwnerRequest": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "field",
+            "enum": [
+              "state",
+              "severity",
+              "containment",
+              "restoration",
+              "assignee",
+              "labels",
+              "priority",
+              "comments"
+            ]
+          },
+          "owner": {
+            "type": "string",
+            "title": "owner",
+            "enum": [
+              "PANTHERCLAW",
+              "TICKET"
+            ]
+          }
+        },
+        "title": "SetTicketFieldOwnerRequest",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "owner"
+        ]
+      },
+      "pantherclaw.v1.SetTicketFieldOwnerResponse": {
+        "type": "object",
+        "title": "SetTicketFieldOwnerResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SetTicketSyncPausedRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "paused": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "paused"
+          }
+        },
+        "title": "SetTicketSyncPausedRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.SetTicketSyncPausedResponse": {
+        "type": "object",
+        "title": "SetTicketSyncPausedResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.TicketFieldOwner": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "field",
+            "description": "state, severity, containment, restoration, assignee, labels, priority\n or comments."
+          },
+          "owner": {
+            "type": "string",
+            "title": "owner",
+            "description": "PANTHERCLAW or TICKET."
+          },
+          "movable": {
+            "type": "boolean",
+            "title": "movable",
+            "description": "Whether the organization may choose its owner (not for containment or\n restoration)."
+          }
+        },
+        "title": "TicketFieldOwner",
+        "additionalProperties": false,
+        "description": "TicketFieldOwner is one field and its owner."
+      },
+      "pantherclaw.v1.TicketRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "caseId": {
+            "type": "string",
+            "title": "case_id"
+          },
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id"
+          },
+          "system": {
+            "type": "string",
+            "title": "system"
+          },
+          "key": {
+            "type": "string",
+            "title": "key"
+          }
+        },
+        "title": "TicketRef",
+        "additionalProperties": false,
+        "description": "TicketRef is a link between a case or an incident and a ticket."
+      },
+      "pantherclaw.v1.TicketSyncConfig": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id"
+          },
+          "system": {
+            "type": "string",
+            "title": "system",
+            "description": "Always \"jira\"."
+          },
+          "projectKey": {
+            "type": "string",
+            "title": "project_key"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "ACTIVE or PAUSED."
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "webhookUrl": {
+            "type": "string",
+            "title": "webhook_url",
+            "description": "Where the ticket system sends its webhooks."
+          }
+        },
+        "title": "TicketSyncConfig",
+        "additionalProperties": false,
+        "description": "TicketSyncConfig is a sync configuration, without its secrets."
+      },
       "pantherclaw.v1.DownstreamState": {
         "type": "string",
         "title": "DownstreamState",
@@ -84448,6 +87469,90 @@
         "title": "BatchCeilingsEntry",
         "additionalProperties": false
       },
+      "pantherclaw.v1.ListWebhookKeysRequest": {
+        "type": "object",
+        "title": "ListWebhookKeysRequest",
+        "additionalProperties": false,
+        "description": "ListWebhookKeysRequest is empty."
+      },
+      "pantherclaw.v1.ListWebhookKeysResponse": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.WebhookKey"
+            },
+            "title": "keys",
+            "description": "The ACTIVE key first."
+          },
+          "jwksUrl": {
+            "type": "string",
+            "title": "jwks_url",
+            "description": "The org's webhook JWKS."
+          }
+        },
+        "title": "ListWebhookKeysResponse",
+        "additionalProperties": false,
+        "description": "ListWebhookKeysResponse lists the keys and where they are published."
+      },
+      "pantherclaw.v1.RotateWebhookKeyRequest": {
+        "type": "object",
+        "title": "RotateWebhookKeyRequest",
+        "additionalProperties": false,
+        "description": "RotateWebhookKeyRequest is empty."
+      },
+      "pantherclaw.v1.RotateWebhookKeyResponse": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "title": "key",
+            "description": "The new ACTIVE key.",
+            "$ref": "#/components/schemas/pantherclaw.v1.WebhookKey"
+          },
+          "retiringKid": {
+            "type": "string",
+            "title": "retiring_kid",
+            "description": "The key that is now RETIRING (empty when the org had none)."
+          }
+        },
+        "title": "RotateWebhookKeyResponse",
+        "additionalProperties": false,
+        "description": "RotateWebhookKeyResponse names the new and the retiring key."
+      },
+      "pantherclaw.v1.WebhookKey": {
+        "type": "object",
+        "properties": {
+          "kid": {
+            "type": "string",
+            "title": "kid",
+            "description": "Key id, as in the JWKS (\"webhooks-...\")."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"ACTIVE\" (signs) or \"RETIRING\" (verifies only, during the overlap)."
+          },
+          "publicKey": {
+            "type": "string",
+            "title": "public_key",
+            "description": "The Ed25519 public key, base64url without padding (the JWK \"x\")."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "Creation time.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "retireTime": {
+            "title": "retire_time",
+            "description": "RETIRING keys: when it leaves the JWKS.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "WebhookKey",
+        "additionalProperties": false,
+        "description": "WebhookKey is one of the org's webhook signing keys."
+      },
       "pantherclaw.v1.AttestationKind": {
         "type": "string",
         "title": "AttestationKind",
@@ -85117,6 +88222,10 @@
       "description": "EvidenceAdminService sets what evidence the caller's org keeps and\n captures (G0 M7 track B, design decisions 9 and 10; HR-198, HR-199,\n T-075, T-076): retention policies per category, legal holds, restricted\n payload capture profiles, and the audited read of a capture. Every call\n is human only. Retention and holds need evidence.retention.manage and\n capture profiles evidence.capture.manage, at org scope (the Records\n Manager role); reading a capture needs evidence.read_restricted where\n the transaction's agent lives (the Auditor role), so whoever configures\n capture is not the one who reads it.\n\n Retention removes only bodies: receipt and ledger entry bodies, observed\n values, replay inputs and approval notes. Chain hashes, Merkle leaves\n and checkpoints stay, so the chain and every checkpoint still verify and\n `pclaw verify` reports a removed body as not available. Lengthening a\n period applies at once; shortening one takes effect 7 days later, is\n audited and is notified to the org's admins and auditors, so a hold can\n still be placed. A hold applies at once and blocks every removal inside\n it until it is released; releasing one is audited and notified."
     },
     {
+      "name": "pantherclaw.v1.ExportDestinationService",
+      "description": "ExportDestinationService manages export destinations (G0 M20 D252; F517,\n HR-513; Business edition). A destination is an HTTPS PUT target or an\n S3-compatible bucket that receives evidence packs, proof bundles and\n organization exports. It is created PENDING and receives nothing until a\n person activates it on its page (confirm_url) with a security key; its\n target and data classes never change."
+    },
+    {
       "name": "pantherclaw.v1.ExposureService",
       "description": "ExposureService reads breach radius (G0 M10 D27–D31; F253–F260, F430;\n HR-253, HR-254; Team edition).\n\n Reach is kept in three views that never stand in for each other:\n OBSERVED (effects actually dispatched), EFFECTIVE (active grant bounds\n with the published policy and coverage) and CREDENTIAL (what a credential\n or a bypass route can do outside PantherClaw's decisions). Every right\n carries a label: USABLE, CONDITIONAL, EXPIRED or UNCERTAIN; a scope that\n could not be read is UNCERTAIN, never absent. A snapshot is recomputed\n when grants, policy, coverage, connections or credentials change, and a\n read says when it is stale. Every read filters by the caller's\n exposure.read where each agent lives before it lists, counts or ranks\n anything; credential rights, held by no agent, need exposure.read at org\n scope."
     },
@@ -85281,6 +88390,10 @@
       "description": "TenancyService manages the organization hierarchy (F573): the org,\n business units (Business edition), teams and their members, and\n environments. The org always comes from the caller's credential; ids of\n other orgs are reported as not found. Each call also checks the permission\n at the scope of the resource (a binding applies to its scope and below)."
     },
     {
+      "name": "pantherclaw.v1.TicketSyncService",
+      "description": "TicketSyncService links cases and incidents to tickets in an outside\n ticket system, Jira first (G0 M20 D255, D264; F545, HR-527, HR-528).\n Ticket sync needs the Business edition.\n\n A sync configuration binds one project behind one connection; the\n ticket system's credential stays sealed to the gateway, which sends\n every call (a lease of purpose ticket_sync). Inbound changes come as\n webhooks signed with the configuration's secret. A ticket status never\n restores authority or lifts containment: an inbound change to a field\n PantherClaw owns is ignored and recorded, a Done is only noted, and a\n change to a field the ticket system owns is mirrored as a note.\n Containment and restoration are always PantherClaw's; giving another\n field to the ticket system is a protected change."
+    },
+    {
       "name": "pantherclaw.v1.TransactionService",
       "description": "TransactionService reads what happened to agent actions (G0 M7 track A,\n F466–F479). A decision receipt says what was allowed, an execution\n receipt what the gateway sent and what the target answered, and an effect\n receipt what a verifier observed; the execution state and the effect\n state are always shown side by side. Reads are scoped like run.read, by\n the agent's place in the hierarchy: a list leaves out what the caller\n cannot read."
     },
@@ -85295,6 +88408,10 @@
     {
       "name": "pantherclaw.v1.WaitlistService",
       "description": "WaitlistService serves the Agent Waitlist (Pass; PN-004): every pending\n human decision, with priority, deadline, routing and escalation (G0 M5\n part 2). Entries are decided through the service that owns their subject\n (IdentityService.AdmitInstance, the approval page, GrantService,\n PackageService), never here. An entry's kind, subject, priority and\n deadline come from PantherClaw's records, never from agent input, and an\n entry past its deadline resolves to \"not done\" (HR-177), except a\n RECONCILIATION entry, which stays open and escalates."
+    },
+    {
+      "name": "pantherclaw.v1.WebhookKeyService",
+      "description": "WebhookKeyService manages the organization's Ed25519 webhook signing key\n (G0 M20 D251, D261; PN-018, HR-510..512). Destinations that opt in\n receive a `v1a,` signature by this key next to the HMAC `v1,` ones. Its\n public half is published at\n /.well-known/pantherclaw/orgs/{org}/webhook-jwks.json with the RETIRING\n key while a rotation's 24-hour overlap lasts."
     },
     {
       "name": "pantherclaw.v1.WorkloadService",

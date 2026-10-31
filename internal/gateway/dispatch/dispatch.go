@@ -255,6 +255,9 @@ type Engine struct {
 	clients map[string]clientEntry
 	// apis are the GitHub API clients of kind-mcp connections (gitHubAPI).
 	apis map[string]clientEntry
+	// tokenClients are the token endpoint clients of oauth_client
+	// credentials, one per connection revision (G0 M20 D254).
+	tokenClients map[string]clientEntry
 	// drift is what the last check of each kind-mcp connection found.
 	drift map[string]driftEntry
 }
@@ -292,7 +295,7 @@ func New(o Options) (*Engine, error) {
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 		connectors:  o.Connectors,
 		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation, localRefusals: o.ReportLocalRefusal,
-		sims: simcheck.New(), githubAPI: strings.TrimSuffix(o.GitHubAPIURL, "/"), apis: map[string]clientEntry{},
+		sims: simcheck.New(), githubAPI: strings.TrimSuffix(o.GitHubAPIURL, "/"), apis: map[string]clientEntry{}, tokenClients: map[string]clientEntry{},
 	}, nil
 }
 
@@ -431,6 +434,18 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return res
 	}
 	if read, unreported := e.reportSlackFacts(ctx, conn, c.Action.Action); read && unreported != nil {
+		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
+	if read, unreported := e.reportTeamsFacts(ctx, conn, c.Action.Action); read && unreported != nil {
+		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
+	if read, unreported := e.reportJiraFacts(ctx, conn, c.Action.Action); read && unreported != nil {
+		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
+	if read, unreported := e.reportECSFacts(ctx, conn, c.Action.Action); read && unreported != nil {
+		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
+	if read, unreported := e.reportGitLabFacts(ctx, conn, c.Action.Action); read && unreported != nil {
 		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
 	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings})
@@ -583,7 +598,7 @@ var (
 )
 
 // errKind refuses to place a credential that is not static.
-var errKind = errors.New("dispatch: a GitHub App credential is never placed as sealed")
+var errKind = errors.New("dispatch: a credential of a minted kind (a GitHub App, an OAuth client) is never placed as sealed")
 
 // errPEM refuses to place a static credential that holds a private key in
 // any common form (a PEM block, base64 PEM, a bare PEM body, DER), such as an
@@ -863,7 +878,11 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 
 // credential opens the connection's sealed credential and places on req
 // what the action on target under def may use. A static credential is
-// placed as sealed. A GitHub App credential never is: the gateway mints an
+// placed as sealed. An OAuth client credential never is: the gateway mints
+// an access token for this dispatch at its token endpoint and places that
+// (G0 M20 D254, HR-524), and an AWS one signs only an AssumeRole narrowed to
+// the dispatch's one action, whose session signs the request (HR-525).
+// Nor is a GitHub App credential: the gateway mints an
 // installation token for exactly the target's repository and def's
 // declared permissions and places that (HR-203, HR-204). The caller keeps
 // secret, which it scrubs from what goes back to the agent, until it calls
@@ -878,12 +897,38 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
-	if conn.Credential.GetKind() == credentials.KindGitHubApp {
-		if err := CheckCredentialPattern(def, credentials.KindGitHubApp, nil); err != nil {
+	switch kind := conn.Credential.GetKind(); kind {
+	case credentials.KindGitHubApp:
+		if err := CheckCredentialPattern(def, kind, nil); err != nil {
 			return nil, nil, nil, err // a pattern is for a static credential
 		}
-	}
-	if conn.Credential.GetKind() != credentials.KindGitHubApp {
+	case credentials.KindOAuthClient:
+		// A token minted for this dispatch is placed, never the client
+		// secret (G0 M20 D254, HR-524).
+		if err := CheckCredentialPattern(def, kind, nil); err != nil {
+			return nil, nil, nil, err
+		}
+		tok, err := e.clientToken(ctx, conn)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := tok.Place(req); err != nil {
+			tok.Clear()
+			return nil, nil, nil, err
+		}
+		return tok.Token(), tok.Clear, func() *pb.CredentialAccess { return nil }, nil
+	case credentials.KindAWSSigV4:
+		// Signed with a session assumed for this dispatch and narrowed to
+		// its one action, never with the base key (G0 M20 D254, HR-525).
+		if err := CheckCredentialPattern(def, kind, nil); err != nil {
+			return nil, nil, nil, err
+		}
+		s, err := e.signAWS(ctx, conn, def, target, req)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return s.Secret(), s.Clear, func() *pb.CredentialAccess { return nil }, nil
+	default:
 		plain, err := e.openStatic(ctx, conn)
 		if err != nil {
 			return nil, nil, nil, err

@@ -68,6 +68,9 @@ const (
 	// TriggerServiceRotateAutomationDestinationSecretProcedure is the procedure name of the
 	// TriggerService's RotateAutomationDestinationSecret RPC.
 	TriggerServiceRotateAutomationDestinationSecretProcedure = "/pantherclaw.v1.TriggerService/RotateAutomationDestinationSecret"
+	// TriggerServiceSetAutomationDestinationSignatureSchemeProcedure is the procedure name of the
+	// TriggerService's SetAutomationDestinationSignatureScheme RPC.
+	TriggerServiceSetAutomationDestinationSignatureSchemeProcedure = "/pantherclaw.v1.TriggerService/SetAutomationDestinationSignatureScheme"
 	// TriggerServiceSetAutomationDestinationStateProcedure is the procedure name of the
 	// TriggerService's SetAutomationDestinationState RPC.
 	TriggerServiceSetAutomationDestinationStateProcedure = "/pantherclaw.v1.TriggerService/SetAutomationDestinationState"
@@ -183,6 +186,13 @@ var (
 			Procedure:  TriggerServiceRotateAutomationDestinationSecretProcedure,
 		}
 	})
+	triggerServiceSetAutomationDestinationSignatureSchemeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_automation_triggers_proto.Services().ByName("TriggerService").Methods().ByName("SetAutomationDestinationSignatureScheme"),
+			Procedure:  TriggerServiceSetAutomationDestinationSignatureSchemeProcedure,
+		}
+	})
 	triggerServiceSetAutomationDestinationStateSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -264,6 +274,12 @@ type TriggerServiceClient interface {
 	// STEP_UP_REQUIRED.
 	// permission: automation.endpoints.manage
 	RotateAutomationDestinationSecret(context.Context, *v1.RotateAutomationDestinationSecretRequest) (*v1.RotateAutomationDestinationSecretResponse, error)
+	// SetAutomationDestinationSignatureScheme opts a destination in to Ed25519
+	// signatures ("hmac+ed25519": a `v1a,` signature by the org's webhooks key
+	// next to the HMAC `v1,` ones) or back to HMAC only ("hmac", the default).
+	// HMAC is always sent. Audited (a person only).
+	// permission: automation.endpoints.manage
+	SetAutomationDestinationSignatureScheme(context.Context, *v1.SetAutomationDestinationSignatureSchemeRequest) (*v1.SetAutomationDestinationSignatureSchemeResponse, error)
 	// SetAutomationDestinationState pauses, resumes or disables a
 	// destination.
 	// permission: automation.endpoints.manage
@@ -338,6 +354,12 @@ type TriggerServiceHandler interface {
 	// STEP_UP_REQUIRED.
 	// permission: automation.endpoints.manage
 	RotateAutomationDestinationSecret(context.Context, *v1.RotateAutomationDestinationSecretRequest) (*v1.RotateAutomationDestinationSecretResponse, error)
+	// SetAutomationDestinationSignatureScheme opts a destination in to Ed25519
+	// signatures ("hmac+ed25519": a `v1a,` signature by the org's webhooks key
+	// next to the HMAC `v1,` ones) or back to HMAC only ("hmac", the default).
+	// HMAC is always sent. Audited (a person only).
+	// permission: automation.endpoints.manage
+	SetAutomationDestinationSignatureScheme(context.Context, *v1.SetAutomationDestinationSignatureSchemeRequest) (*v1.SetAutomationDestinationSignatureSchemeResponse, error)
 	// SetAutomationDestinationState pauses, resumes or disables a
 	// destination.
 	// permission: automation.endpoints.manage
@@ -369,6 +391,7 @@ func RegisterTriggerServiceHandler(server *connect.Server, svc TriggerServiceHan
 		connect.Method{Spec: triggerServiceCreateAutomationDestinationSpec(), Handler: adapter.createAutomationDestination},
 		connect.Method{Spec: triggerServiceActivateAutomationDestinationSpec(), Handler: adapter.activateAutomationDestination},
 		connect.Method{Spec: triggerServiceRotateAutomationDestinationSecretSpec(), Handler: adapter.rotateAutomationDestinationSecret},
+		connect.Method{Spec: triggerServiceSetAutomationDestinationSignatureSchemeSpec(), Handler: adapter.setAutomationDestinationSignatureScheme},
 		connect.Method{Spec: triggerServiceSetAutomationDestinationStateSpec(), Handler: adapter.setAutomationDestinationState},
 		connect.Method{Spec: triggerServiceGetAutomationDestinationSpec(), Handler: adapter.getAutomationDestination},
 		connect.Method{Spec: triggerServiceListAutomationDestinationsSpec(), Handler: adapter.listAutomationDestinations},
@@ -432,6 +455,10 @@ func (UnimplementedTriggerServiceHandler) ActivateAutomationDestination(context.
 
 func (UnimplementedTriggerServiceHandler) RotateAutomationDestinationSecret(context.Context, *v1.RotateAutomationDestinationSecretRequest) (*v1.RotateAutomationDestinationSecretResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.TriggerService.RotateAutomationDestinationSecret is not implemented")
+}
+
+func (UnimplementedTriggerServiceHandler) SetAutomationDestinationSignatureScheme(context.Context, *v1.SetAutomationDestinationSignatureSchemeRequest) (*v1.SetAutomationDestinationSignatureSchemeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.TriggerService.SetAutomationDestinationSignatureScheme is not implemented")
 }
 
 func (UnimplementedTriggerServiceHandler) SetAutomationDestinationState(context.Context, *v1.SetAutomationDestinationStateRequest) (*v1.SetAutomationDestinationStateResponse, error) {
@@ -557,6 +584,14 @@ func (c *triggerServiceClient) ActivateAutomationDestination(ctx context.Context
 func (c *triggerServiceClient) RotateAutomationDestinationSecret(ctx context.Context, req *v1.RotateAutomationDestinationSecretRequest) (*v1.RotateAutomationDestinationSecretResponse, error) {
 	var res v1.RotateAutomationDestinationSecretResponse
 	if err := c.client.CallUnary(ctx, triggerServiceRotateAutomationDestinationSecretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) SetAutomationDestinationSignatureScheme(ctx context.Context, req *v1.SetAutomationDestinationSignatureSchemeRequest) (*v1.SetAutomationDestinationSignatureSchemeResponse, error) {
+	var res v1.SetAutomationDestinationSignatureSchemeResponse
+	if err := c.client.CallUnary(ctx, triggerServiceSetAutomationDestinationSignatureSchemeSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -750,6 +785,18 @@ func (h triggerServiceHandler) rotateAutomationDestinationSecret(ctx context.Con
 		return err
 	}
 	res, err := h.svc.RotateAutomationDestinationSecret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) setAutomationDestinationSignatureScheme(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetAutomationDestinationSignatureSchemeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetAutomationDestinationSignatureScheme(ctx, &req)
 	if err != nil {
 		return err
 	}

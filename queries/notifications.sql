@@ -64,6 +64,7 @@ SELECT d.id, d.kind, d.state, d.attempts, d.channel_id, d.recipient_user_id,
        n.created_at AS notification_created_at, (n.expires_at <= now())::bool AS expired,
        c.state AS channel_state, c.name AS channel_name, c.url AS channel_url, c.secret AS channel_secret,
        c.prev_secret AS channel_prev_secret, coalesce(c.prev_secret_expires_at > now(), false)::bool AS prev_secret_live,
+       c.signature_scheme AS channel_signature_scheme,
        u.email AS recipient_email, u.state AS recipient_state
 FROM pc.deliveries d
 JOIN pc.notifications n ON n.org_id = d.org_id AND n.id = d.notification_id
@@ -216,3 +217,16 @@ SELECT coalesce(CASE sqlc.arg(subject_type)::text
     WHEN 'connection' THEN (SELECT c.simulated FROM pc.connections c
                             WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(subject_id))
 END, false)::boolean AS simulated;
+
+-- name: SetChannelSignatureScheme :one
+-- Opts a webhook channel in to or out of Ed25519 signatures (G0 M20 D251,
+-- HR-510); it returns the previous scheme for the audit entry.
+WITH old AS (
+    SELECT c.id, c.signature_scheme FROM pc.notification_channels c
+    WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id) AND c.kind = 'webhook' AND c.state <> 'DISABLED'
+    FOR UPDATE
+)
+UPDATE pc.notification_channels c SET signature_scheme = sqlc.arg(scheme), updated_at = now()
+FROM old
+WHERE c.org_id = sqlc.arg(org_id) AND c.id = old.id
+RETURNING old.signature_scheme AS previous;

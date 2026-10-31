@@ -70,3 +70,61 @@ func ReadInstallation(ctx context.Context, s Sender, baseURL string, hosts []str
 	out.Permissions, out.RepositorySelection = body.Permissions, body.RepositorySelection
 	return out, nil
 }
+
+// ProbeApp asks GitHub who the App is (GET /app) with an App JWT signed by
+// the opened key, for a key rotation (G0 M20 S20c, D253): its status, and
+// whether the answer names the App the key was sealed for (its numeric id
+// or client id). It mints nothing. A status of 0 with an error means no
+// answer came.
+func ProbeApp(ctx context.Context, s Sender, baseURL string, hosts []string, app domain.GitHubApp, now time.Time) (int, bool, error) {
+	key, err := app.Key()
+	if err != nil {
+		return 0, false, err
+	}
+	jwt, err := appJWT(key, app.Issuer, now)
+	if err != nil {
+		return 0, false, err
+	}
+	defer clear(jwt)
+	base, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
+	if err != nil {
+		return 0, false, err
+	}
+	res, err := send(ctx, s, base, hosts, http.MethodGet, "/app", nil, jwt)
+	if err != nil {
+		return 0, false, err
+	}
+	defer clear(res.Body)
+	var body struct {
+		ID       int64  `json:"id"`
+		ClientID string `json:"client_id"`
+	}
+	matches := res.Status == http.StatusOK && json.Unmarshal(res.Body, &body) == nil &&
+		((body.ID > 0 && strconv.FormatInt(body.ID, 10) == app.Issuer) || (body.ClientID != "" && body.ClientID == app.Issuer))
+	return res.Status, matches, nil
+}
+
+// ProbeInstallation reads the installation behind a key under rotation
+// (GET /app/installations/{id}) with an App JWT signed by it, and returns
+// GitHub's status; it mints nothing.
+func ProbeInstallation(ctx context.Context, s Sender, baseURL string, hosts []string, app domain.GitHubApp, now time.Time) (int, error) {
+	key, err := app.Key()
+	if err != nil {
+		return 0, err
+	}
+	jwt, err := appJWT(key, app.Issuer, now)
+	if err != nil {
+		return 0, err
+	}
+	defer clear(jwt)
+	base, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
+	if err != nil {
+		return 0, err
+	}
+	res, err := send(ctx, s, base, hosts, http.MethodGet, "/app/installations/"+strconv.FormatInt(app.Installation, 10), nil, jwt)
+	if err != nil {
+		return 0, err
+	}
+	clear(res.Body)
+	return res.Status, nil
+}

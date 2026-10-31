@@ -71,6 +71,8 @@ type Destination struct {
 	DisabledAt          *time.Time
 	// RotationEndsAt is when the previous secret stops signing.
 	RotationEndsAt *time.Time
+	// SignatureScheme is hmac (the default) or hmac+ed25519 (G0 M20 D251).
+	SignatureScheme string
 }
 
 // CreatedDestination is a new destination; Secret is shown once.
@@ -100,6 +102,7 @@ func destinationOf(r dbq.GetAutomationDestinationRow) Destination {
 		ID: r.ID, Name: r.Name, URL: r.Url, Internal: r.Internal, Purposes: r.Purposes, State: r.State,
 		CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, ActivatedBy: r.ActivatedBy, ActivatedCredential: r.ActivatedCredential,
 		ActivatedAt: r.ActivatedAt, DisabledAt: r.DisabledAt, RotationEndsAt: r.PrevUntil,
+		SignatureScheme: r.SignatureScheme,
 	}
 }
 

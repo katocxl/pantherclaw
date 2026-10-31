@@ -81,6 +81,8 @@ type batchPlan struct {
 	internal bool
 	url      string
 	secrets  [][]byte
+	org      ids.OrgID
+	scheme   ndomain.SignatureScheme
 }
 
 // ExportOnce runs one export step of a destination: it re-sends the open
@@ -123,7 +125,7 @@ func (s *Service) plan(ctx context.Context, tx db.TenantTx, org ids.OrgID, id id
 	for _, c := range row.DataClasses {
 		classes = append(classes, ocsf.DataClass(c))
 	}
-	p := &batchPlan{url: row.Url, internal: row.Internal}
+	p := &batchPlan{url: row.Url, internal: row.Internal, org: org, scheme: ndomain.SignatureScheme(row.SignatureScheme)}
 	if row.BatchID != nil {
 		if !row.BatchDue {
 			return nil, Step{}, nil
@@ -288,7 +290,11 @@ func (s *Service) send(ctx context.Context, p *batchPlan) outcome {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("webhook-id", msgID)
 	req.Header.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
-	req.Header.Set("webhook-signature", ndomain.Signatures(p.secrets, msgID, ts, p.body))
+	sig, err := ndomain.SignatureHeader(ctx, s.webhookKeys, p.org, p.scheme, p.secrets, msgID, ts, p.body)
+	if err != nil {
+		return outcome{code: "signing_key_unavailable"}
+	}
+	req.Header.Set("webhook-signature", sig)
 	client := s.public
 	if p.internal {
 		client = s.internal

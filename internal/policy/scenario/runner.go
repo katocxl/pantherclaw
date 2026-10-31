@@ -158,7 +158,7 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 		return res, nil
 	}
 	now := r.now()
-	reads := httpReads(ds)
+	reads := httpReads(ds, pkgs)
 	cases := make([]prepared, len(b.Tests))
 	for i := range b.Tests {
 		tc := &b.Tests[i]
@@ -307,14 +307,26 @@ func definitionFor(ds []*defs.Definition, op string) (*defs.Definition, string) 
 	return nil, fmt.Sprintf("%d active definitions of %s: a case cannot tell which one decides", len(found), op)
 }
 
-// httpReads are the reads a gateway can make over HTTP for a verifier,
-// from every active definition (pipeline.Connection.Reads).
-func httpReads(ds []*defs.Definition) []string {
-	pkg := &defs.Package{}
-	for _, d := range ds {
-		pkg.Definitions = append(pkg.Definitions, *d)
+// httpReads are the reads a gateway can make over HTTP for a verifier
+// (pipeline.Connection.Reads): each active package's own, as the Authority
+// takes them from a connection's pinned package, because only the package
+// says whether a POST read is allowed (D290, D291). A reader with no packages
+// knows no identity: its definitions count as a package of no name, so only
+// GET reads do.
+func httpReads(ds []*defs.Definition, pkgs []*defs.Package) []string {
+	if len(pkgs) == 0 {
+		pkg := &defs.Package{}
+		for _, d := range ds {
+			pkg.Definitions = append(pkg.Definitions, *d)
+		}
+		return pkg.HTTPReads()
 	}
-	return pkg.HTTPReads()
+	var reads []string
+	for _, p := range pkgs {
+		reads = append(reads, p.HTTPReads()...)
+	}
+	slices.Sort(reads)
+	return slices.Compact(reads)
 }
 
 // mutant is one change to a bundle the tests must notice: rule index's

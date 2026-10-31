@@ -184,6 +184,62 @@ func (q *Queries) GatewayPackages(ctx context.Context, orgID ids.OrgID, gatewayI
 	return items, nil
 }
 
+const gatewayRotationCredential = `-- name: GatewayRotationCredential :one
+SELECT cr.id, cr.connection_id, cr.version, cr.broker_key_id, cr.sealed, cr.allowed_hosts, cr.header, cr.scheme, cr.kind
+FROM pc.credentials cr
+JOIN pc.connections c ON c.org_id = cr.org_id AND c.id = cr.connection_id
+JOIN pc.broker_keys b ON b.org_id = cr.org_id AND b.id = cr.broker_key_id
+WHERE cr.org_id = $1 AND cr.id = $2 AND c.gateway_id = $3
+  AND b.gateway_id = $3 AND cr.state = $4 AND c.state <> 'RETIRED'
+`
+
+type GatewayRotationCredentialParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	GatewayID ids.UUID
+	State     string
+}
+
+type GatewayRotationCredentialRow struct {
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Version      int32
+	BrokerKeyID  ids.UUID
+	Sealed       []byte
+	AllowedHosts []string
+	Header       string
+	Scheme       *string
+	Kind         string
+}
+
+// GatewayRotationCredential is the sealed credential a rotation lease
+// carries to this gateway (G0 M20 S20c, D259): a CANDIDATE to test or a
+// SUPERSEDED old key to confirm dead, in the same sealed form as the
+// configuration, and only when it is sealed to this gateway's broker key
+// for a connection this gateway serves. No gateway configuration carries
+// either (HR-517).
+func (q *Queries) GatewayRotationCredential(ctx context.Context, arg GatewayRotationCredentialParams) (GatewayRotationCredentialRow, error) {
+	row := q.db.QueryRow(ctx, gatewayRotationCredential,
+		arg.OrgID,
+		arg.ID,
+		arg.GatewayID,
+		arg.State,
+	)
+	var i GatewayRotationCredentialRow
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.Version,
+		&i.BrokerKeyID,
+		&i.Sealed,
+		&i.AllowedHosts,
+		&i.Header,
+		&i.Scheme,
+		&i.Kind,
+	)
+	return i, err
+}
+
 const gatewaySealedCredentials = `-- name: GatewaySealedCredentials :many
 SELECT cr.id, cr.connection_id, cr.version, cr.broker_key_id, cr.sealed, cr.allowed_hosts, cr.header, cr.scheme, cr.kind
 FROM pc.credentials cr
