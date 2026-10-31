@@ -259,6 +259,10 @@ message SimulationStep {
   string kind = 2;
   string decision = 3;
   string reason = 4;
+  // On a v2 version, the branch that leads here when more than one was
+  // possible: "<node> <label>". A guard that could not be evaluated shows
+  // every way out as possible.
+  string branch = 5;
 }
 
 // SimulationForecast is per-day expectations from the history.
@@ -387,10 +391,19 @@ message InspectedStep {
   repeated string scopes = 5;
 }
 
+// InspectedPath is one path of a v2 version.
+message InspectedPath {
+  repeated string node_ids = 1;
+  // The outcome its terminal declares.
+  string outcome = 2;
+}
+
 message InspectVersionResponse {
   repeated InspectedStep steps = 1;
   // notes: what could not be read (a connection without a package).
   repeated string notes = 2;
+  // Every path of a v2 version; empty on v1.
+  repeated InspectedPath paths = 3;
 }
 
 message PreviewBlastRadiusRequest {

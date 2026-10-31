@@ -122,7 +122,7 @@ func (s *contain) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext)
 	res, err := s.d.Container.Contain(ctx, tx, reflexdomain.ContainRequest{
 		Org: sc.Org, Scope: reflexdomain.Subject{Type: reflexdomain.SubjectRun, ID: target.String()},
 		Control: reflexdomain.ControlDenyAll, Reason: s.reason(sc, w), Actor: automationActor(sc),
-		Idempotency: idempotency(sc),
+		Idempotency: idempotency(sc), Execution: &sc.Execution.ID,
 	})
 	if err != nil {
 		if r, ok := refusal(err); ok {

@@ -171,13 +171,14 @@ func (s *Containment) Contain(ctx context.Context, ptx pgx.Tx, r reflexdomain.Co
 	}
 	return s.contain(ctx, tx, r.Org, c, containOpts{
 		actor: actor, source: source, evActor: evActor, caseID: r.CaseID, incidentID: r.IncidentID,
-		previewDigest: r.PreviewDigest, idempotency: r.Idempotency,
+		previewDigest: r.PreviewDigest, idempotency: r.Idempotency, execution: r.Execution,
 	})
 }
 
 type containOpts struct {
 	actor, source      string
 	evActor            evdomain.Actor
+	execution          *ids.UUID
 	caseID, incidentID *ids.UUID
 	previewDigest      []byte
 	skipReason         string
@@ -233,6 +234,7 @@ func (s *Containment) contain(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		ID: ids.NewV7(), Kind: rdomain.KindContain, ScopeType: c.ScopeType, ScopeID: c.ScopeID, Control: c.Control,
 		Operation: c.Operation, Reason: c.Reason, CaseID: o.caseID, IncidentID: o.incidentID, Actor: o.actor, Source: o.source,
 		SkipReason: o.skipReason, SkipStepUpAt: o.skipStepUpAt, IdempotencyKey: o.idempotency, RequestDigest: reqDigest,
+		Execution: o.execution,
 	}
 	a.PreviewDigest, a.PreviewSummary = p.Digest, summaryOf(p)
 	added, err := pgresponse.AddControl(ctx, tx, org, a, o.expires)

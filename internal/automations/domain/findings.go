@@ -52,6 +52,15 @@ const (
 	CodePrefixIrreversible       = "CEILING_PREFIX_IRREVERSIBLE"
 	CodeLimitInvalid             = "LIMIT_INVALID"
 	CodeInputNotJSON             = "INPUT_NOT_JSON"
+	// Graph findings of a v2 definition (D301, D307).
+	CodeUnreachableNode            = "UNREACHABLE_NODE"
+	CodePathNotTerminated          = "PATH_NOT_TERMINATED"
+	CodeCycle                      = "CYCLE"
+	CodeSwitchNoDefault            = "SWITCH_NO_DEFAULT"
+	CodeJoinInvalid                = "JOIN_INVALID"
+	CodeNotOnAllPaths              = "NOT_ON_ALL_PATHS"
+	CodePathOutsideCeiling         = "PATH_OUTSIDE_CEILING"
+	CodeIrreversibleUnwaitedOnPath = "IRREVERSIBLE_UNWAITED_ON_PATH"
 )
 
 // HasErrors reports whether any finding is an error.

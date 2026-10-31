@@ -34,11 +34,11 @@ LIMIT 10001;
 -- name: InsertResponseAction :one
 INSERT INTO pc.response_actions (org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id,
                                  actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at,
-                                 idempotency_key, request_digest)
+                                 idempotency_key, request_digest, execution_id)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kind), sqlc.arg(scope_type), sqlc.arg(scope_id),
         sqlc.narg(control), sqlc.narg(operation), sqlc.arg(reason), sqlc.narg(case_id), sqlc.narg(incident_id),
         sqlc.arg(actor), sqlc.arg(source), sqlc.narg(preview_digest), sqlc.arg(preview_summary), sqlc.arg(skip_preview), sqlc.narg(skip_reason),
-        sqlc.narg(skip_step_up_at), sqlc.narg(idempotency_key), sqlc.narg(request_digest))
+        sqlc.narg(skip_step_up_at), sqlc.narg(idempotency_key), sqlc.narg(request_digest), sqlc.narg(execution_id))
 RETURNING requested_at;
 
 -- InsertContainmentControl adds a control; its trigger raises the epoch in

@@ -1,0 +1,228 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/search.proto";
+
+// ModelService is an organization's optional model drafting (G0 M21 D304,
+// D309; G16, F181, F304, HR-541, HR-545). It is off by default, Business
+// edition, and uses the organization's own provider key. A person turns it
+// on and sets the key only on the browser settings page, with a security-key
+// step-up; no RPC does either, and no RPC ever returns the key.
+service ModelService {
+  // GetModelSettings returns the organization's settings, never its key.
+  // permission: org.read
+  rpc GetModelSettings(GetModelSettingsRequest) returns (GetModelSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // UpdateModelSettings sets the model id and the organization's caps, which
+  // can only be lower than the server's. A person only.
+  // permission: org.update
+  rpc UpdateModelSettings(UpdateModelSettingsRequest) returns (UpdateModelSettingsResponse);
+  // DisableModelDrafting turns drafting off. A person only; no step-up.
+  // permission: org.update
+  rpc DisableModelDrafting(DisableModelDraftingRequest) returns (DisableModelDraftingResponse);
+  // ClearModelKey removes the key and turns drafting off. A person only; no
+  // step-up.
+  // permission: org.update
+  rpc ClearModelKey(ClearModelKeyRequest) returns (ClearModelKeyResponse);
+  // DraftQuery turns text into a search query that is shown and never run.
+  // Only the task, the text, the output schema and names the caller may read
+  // are sent (HR-542). A person only.
+  // permission: search.read
+  rpc DraftQuery(DraftQueryRequest) returns (DraftQueryResponse);
+  // DraftPolicy turns text into a DRAFT policy version, origin=model, with its
+  // rules added to the published policy. It never publishes; the M11.1 gate
+  // does, for a person (HR-544). A person only.
+  // permission: policy.author
+  rpc DraftPolicy(DraftPolicyRequest) returns (DraftPolicyResponse);
+  // DraftAutomation turns text into a new automation with a DRAFT version,
+  // origin=model. It never enables it; the M11.1 gate does, for a person
+  // (HR-544). A person only.
+  // permission: automation.manage
+  rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse);
+  // GetModelDraft returns a stored draft's origin=model mark and the thresholds
+  // its reviewer confirms (D314). The caller also needs policy.read or
+  // automation.read, as the draft's kind asks.
+  // permission: org.read
+  rpc GetModelDraft(GetModelDraftRequest) returns (GetModelDraftResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ModelSettings is an organization's settings, without its key.
+message ModelSettings {
+  // Whether the organization turned drafting on.
+  bool enabled = 1;
+  // Whether this server and edition allow it at all.
+  bool available = 2;
+  // Whether a key is stored.
+  bool key_set = 3;
+  // When the key was set.
+  google.protobuf.Timestamp key_set_at = 4;
+  // The provider's model id.
+  string model = 5;
+  // The caps in force.
+  int32 calls_per_minute = 6;
+  // Tokens a UTC day.
+  int64 tokens_per_day = 7;
+  // The server's caps, which the organization can only lower.
+  int32 max_calls_per_minute = 8;
+  // The server's tokens a UTC day.
+  int64 max_tokens_per_day = 9;
+}
+
+// GetModelSettingsRequest has no fields.
+message GetModelSettingsRequest {}
+
+// GetModelSettingsResponse carries the settings.
+message GetModelSettingsResponse {
+  // The settings.
+  ModelSettings settings = 1;
+}
+
+// UpdateModelSettingsRequest sets the model and the caps.
+message UpdateModelSettingsRequest {
+  // The provider's model id.
+  string model = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+  }];
+  // Calls a minute; 0 means the server's cap.
+  int32 calls_per_minute = 2 [(buf.validate.field).int32.gte = 0];
+  // Tokens a UTC day; 0 means the server's cap.
+  int64 tokens_per_day = 3 [(buf.validate.field).int64.gte = 0];
+}
+
+// UpdateModelSettingsResponse carries the settings.
+message UpdateModelSettingsResponse {
+  // The settings.
+  ModelSettings settings = 1;
+}
+
+// DisableModelDraftingRequest has no fields.
+message DisableModelDraftingRequest {}
+
+// DisableModelDraftingResponse carries the settings.
+message DisableModelDraftingResponse {
+  // The settings.
+  ModelSettings settings = 1;
+}
+
+// ClearModelKeyRequest has no fields.
+message ClearModelKeyRequest {}
+
+// ClearModelKeyResponse carries the settings.
+message ClearModelKeyResponse {
+  // The settings.
+  ModelSettings settings = 1;
+}
+
+// DraftAmbiguity is a vague term and the threshold the model proposes for it.
+// The reviewer confirms it; it changes nothing by itself.
+message DraftAmbiguity {
+  // The vague words, as the person wrote them.
+  string term = 1;
+  // A concrete value to confirm.
+  string proposed_threshold = 2;
+}
+
+// DraftQueryRequest is the text to draft from.
+message DraftQueryRequest {
+  // The person's own text.
+  string text = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+  // An IANA time zone; empty means UTC.
+  string timezone = 2 [(buf.validate.field).string.max_len = 64];
+}
+
+// DraftQueryResponse is a query to show. Nothing ran.
+message DraftQueryResponse {
+  // How the draft was read, under the caller's permissions.
+  Interpretation interpretation = 1;
+  // The thresholds to confirm.
+  repeated DraftAmbiguity ambiguities = 2;
+  // The audited call.
+  string call_id = 3;
+}
+
+// DraftPolicyRequest is the text to draft from.
+message DraftPolicyRequest {
+  // The person's own text.
+  string text = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+}
+
+// DraftPolicyResponse is a stored DRAFT version. Nothing is in force.
+message DraftPolicyResponse {
+  // The DRAFT policy version.
+  string version_id = 1;
+  // Its number.
+  int32 version = 2;
+  // The added rules, in words.
+  repeated string summaries = 3;
+  // The thresholds to confirm.
+  repeated DraftAmbiguity ambiguities = 4;
+  // The audited call.
+  string call_id = 5;
+}
+
+// DraftAutomationRequest is the text to draft from.
+message DraftAutomationRequest {
+  // The person's own text.
+  string text = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+}
+
+// DraftAutomationResponse is a stored DRAFT. Nothing runs.
+message DraftAutomationResponse {
+  // The new automation.
+  string automation_id = 1;
+  // Its DRAFT version.
+  string version_id = 2;
+  // The automation's name.
+  string name = 3;
+  // The thresholds to confirm.
+  repeated DraftAmbiguity ambiguities = 4;
+  // The audited call.
+  string call_id = 5;
+}
+
+// GetModelDraftRequest names a policy or automation version.
+message GetModelDraftRequest {
+  // The version.
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ModelDraft marks a stored version as drafted by a model.
+message ModelDraft {
+  // The version.
+  string version_id = 1;
+  // POLICY or AUTOMATION.
+  string kind = 2;
+  // Always "model".
+  string origin = 3;
+  // The thresholds to confirm.
+  repeated DraftAmbiguity ambiguities = 4;
+  // The audited call.
+  string call_id = 5;
+  // When it was drafted.
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// GetModelDraftResponse carries the draft's mark.
+message GetModelDraftResponse {
+  // The mark.
+  ModelDraft draft = 1;
+}

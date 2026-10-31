@@ -500,11 +500,12 @@ Each milestone starts with a G0 brief in [GATES_AND_REVIEW.md](security/GATES_AN
 
 ```
 M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M12 → v0.1.0 preview
-   → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0 → M15 → M16
+   → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0 → M15 → M16 → M17 → M18 → M19 → M20 → M21
 ```
 
 M15 and M16 are post-1.0 milestones (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); M15 lands before M16 ([G0 M15](g0/M15.md), founder decision F9).
 M19 is a post-1.0 milestone (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); it lands after M15–M18, in migration order ([G0 M19](g0/M19.md)), and the delivery order above gains it at the exit.
+M21 is a post-1.0 milestone that lands after M20, in migration-number order ([G0 M21](g0/M21.md)).
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -754,6 +755,14 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Ticket sync** (F545, G15, Business): Jira cases and incidents synced through gateway leases with one owner per field; a ticket status never restores authority.
 - **Approval channels** (F161, PN-017.3): Slack direct messages and Teams cards to eligible deciders, link only.
 - Migrations `00236`–`00244` (`00240` only if needed, `00245` spare); no new permissions.
+
+### M21 — Branching automations, recommendations, outcome metrics and model drafting
+**HR:** HR-530..545 · **F:** F181, F304 (model drafts), F343, F678 (branches), F774 · **ADR:** 0043 · **G0:** [g0/M21.md](g0/M21.md).
+- **Branching automations** (F678, [ADR-0043](adr/0043-branching-automations-and-the-model-provider-boundary.md)): a v2 definition format with `branch`, `switch` and `join` nodes over mutually exclusive paths; the validator refuses cycles and unreachable nodes and checks authority and irreversible waits per path; node-pointer run state; only the taken path is compensated. v1 definitions and running executions are unchanged.
+- **Recommendations** (F343, Team): which identity, classification, approval, incident or export integration would close a discovered need, what it enables and what stays unsupported; viewer-scoped, never acting.
+- **Outcome metrics** (F774, Business, founder decision G17): time to protected work, to explanation and to containment, friction, change assurance and automation usefulness, as distributions with unmeasured cases and reasons; not collected is never zero. The six definitions are drafts awaiting founder sign-off.
+- **Model drafting** (F181, F304, Business, founder decision G16): an optional model provider with the customer's own key, off by default; it drafts queries, policies and automations from text and never runs anything; only the reviewed structured form executes.
+- Migrations `00246`–`00254` (`00255` spare).
 
 ---
 

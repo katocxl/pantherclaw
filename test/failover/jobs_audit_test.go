@@ -93,6 +93,8 @@ var twoWorkerAudit = map[string]string{
 	"notifications.slack_reconcile_org":          "unique; conditional MarkSlackSharedExternally",
 	"operations.metrics_dispatch":                "fan-out",
 	"operations.metrics_org":                     "unique",
+	"outcomes.rollup_dispatch":                   "fan-out",
+	"outcomes.rollup_org":                        "unique; samples insert ON CONFLICT DO NOTHING",
 	"policy.exception_sweep_dispatch":            "fan-out",
 	"policy.exception_sweep_org":                 "unique",
 	"policy.rollout_sweep_dispatch":              "fan-out",

@@ -1824,7 +1824,7 @@ func (x *GetVersionGraphRequest) GetVersionId() string {
 type AutomationGraphNode struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// TRIGGER, CONDITION, STEP, GATE or FINISH.
+	// TRIGGER, CONDITION, STEP, GATE, BRANCH, SWITCH, JOIN or FINISH.
 	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	// The step kind or trigger kind.
 	Kind  string `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -1913,8 +1913,12 @@ type AutomationGraphEdge struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	From  string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
 	To    string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
-	// NEXT, ON_FAILURE, COMPENSATE, FINISHES or USES.
-	Type          string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// NEXT, BRANCH, ON_FAILURE, COMPENSATE or FINISHES.
+	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// A BRANCH edge: which way it is ("then", "else", "case 0", "default").
+	Label string `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"`
+	// A BRANCH edge: the guard that selects it; empty for else and default.
+	Guard         string `protobuf:"bytes,5,opt,name=guard,proto3" json:"guard,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1966,6 +1970,20 @@ func (x *AutomationGraphEdge) GetTo() string {
 func (x *AutomationGraphEdge) GetType() string {
 	if x != nil {
 		return x.Type
+	}
+	return ""
+}
+
+func (x *AutomationGraphEdge) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *AutomationGraphEdge) GetGuard() string {
+	if x != nil {
+		return x.Guard
 	}
 	return ""
 }
@@ -3014,11 +3032,13 @@ const file_pantherclaw_v1_automations_proto_rawDesc = "" +
 	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05label\x18\x04 \x01(\tR\x05label\x12\x1c\n" +
 	"\tauthority\x18\x05 \x03(\tR\tauthority\x12\x1c\n" +
-	"\teffectful\x18\x06 \x01(\bR\teffectful\"M\n" +
+	"\teffectful\x18\x06 \x01(\bR\teffectful\"y\n" +
 	"\x13AutomationGraphEdge\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x02 \x01(\tR\x02to\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\"\x8f\x01\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x14\n" +
+	"\x05label\x18\x04 \x01(\tR\x05label\x12\x14\n" +
+	"\x05guard\x18\x05 \x01(\tR\x05guard\"\x8f\x01\n" +
 	"\x17GetVersionGraphResponse\x129\n" +
 	"\x05nodes\x18\x01 \x03(\v2#.pantherclaw.v1.AutomationGraphNodeR\x05nodes\x129\n" +
 	"\x05edges\x18\x02 \x03(\v2#.pantherclaw.v1.AutomationGraphEdgeR\x05edges\"\xfa\x01\n" +

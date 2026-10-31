@@ -237,7 +237,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(request_id), sqlc.arg(user_id),
 
 -- A decline or a narrower proposal ends a waiting request (HR-171).
 -- name: DeclineApprovalRequest :one
-UPDATE pc.approval_requests SET state = 'DECLINED', end_reason = sqlc.arg(end_reason), ended_at = now()
+UPDATE pc.approval_requests SET state = 'DECLINED', end_reason = sqlc.arg(end_reason), ended_at = now(), first_decided_at = coalesce(first_decided_at, now())
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'EVIDENCE_REQUESTED') AND deadline_at > now()
 RETURNING grant_id, run_id;
 
@@ -261,7 +261,7 @@ SELECT count(*)::integer FROM pc.approval_evidence WHERE org_id = sqlc.arg(org_i
 -- When every requirement is met, the request is APPROVED with its
 -- consume-by time (decision 6).
 -- name: MarkApproved :execrows
-UPDATE pc.approval_requests SET state = 'APPROVED', approved_at = now(), consume_by = sqlc.arg(consume_by)
+UPDATE pc.approval_requests SET state = 'APPROVED', approved_at = now(), consume_by = sqlc.arg(consume_by), first_decided_at = coalesce(first_decided_at, now())
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING' AND deadline_at > now()
   AND sqlc.arg(consume_by)::timestamptz > now();
 

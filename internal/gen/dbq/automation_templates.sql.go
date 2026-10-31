@@ -289,7 +289,7 @@ func (q *Queries) InsertAutomationProposal(ctx context.Context, arg InsertAutoma
 }
 
 const latestApprovalRequestOfTransaction = `-- name: LatestApprovalRequestOfTransaction :one
-SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key, execution_id, step_id, requested_by_automation FROM pc.approval_requests
+SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key, execution_id, step_id, requested_by_automation, first_decided_at FROM pc.approval_requests
 WHERE org_id = $1 AND transaction_id = $2
 ORDER BY created_at DESC
 LIMIT 1
@@ -333,6 +333,7 @@ func (q *Queries) LatestApprovalRequestOfTransaction(ctx context.Context, orgID 
 		&i.ExecutionID,
 		&i.StepID,
 		&i.RequestedByAutomation,
+		&i.FirstDecidedAt,
 	)
 	return i, err
 }

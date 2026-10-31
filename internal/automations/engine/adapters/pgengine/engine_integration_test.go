@@ -63,7 +63,11 @@ const gateSteps = `"do":[
 	"finish_when":[]`
 
 func definition(agent ids.UUID, authority, body string) string {
-	return `{"apiVersion":"` + autodomain.APIVersion + `","kind":"Automation","purpose":"test","work_kind":"AGENT_WORK",
+	version := autodomain.APIVersion
+	if strings.HasPrefix(body, `"nodes"`) {
+		version = autodomain.APIVersionV2
+	}
+	return `{"apiVersion":"` + version + `","kind":"Automation","purpose":"test","work_kind":"AGENT_WORK",
 		"review_by":"` + time.Now().AddDate(0, 0, 30).Format(time.DateOnly) + `",
 		"when":{"manual":{"params":{"ticket":{"type":"string","pattern":"T-[0-9]+"}}}},
 		"authority":{"principal":"self","ceiling":{"agents":["` + agent.String() + `"],

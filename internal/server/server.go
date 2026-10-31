@@ -471,6 +471,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			support:   sup,
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
+			model:     cfg.Model,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
 				cfg.Auth.PublicURL, limiter),
 			device:    device,
@@ -601,6 +602,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM10OpsJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerM21OutcomeJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
 		if evidenceJobs, err = registerM11GovernJobs(evidenceJobs, jreg, pool, log); err != nil {
@@ -757,7 +761,9 @@ type apiDeps struct {
 	idps m18IdPs
 	pool *db.Pool
 	// cel are the configured CEL limits (cel).
-	cel       celenv.Limits
+	cel celenv.Limits
+	// model is optional model drafting (model).
+	model     ModelConfig
 	reg       *keys.Registry
 	log       *slog.Logger
 	authority *authority.Service
@@ -900,6 +906,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReleases(rs, pool, d.m11protect)
 	registerPolicyExceptions(rs, d)
+	registerM21Outcomes(rs, d)
 	mountM10Ops, err := registerM10Ops(rs, d)
 	if err != nil {
 		return nil, err
@@ -909,6 +916,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerResponse(rs, d)
 	registerExposure(rs, d)
 	registerSuggestions(rs, d)
+	registerRecommendations(rs, d)
 	edges, err := registerM10Edges(rs, d)
 	if err != nil {
 		return nil, err
@@ -921,6 +929,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerSlackChannels(d)
 	registerTeamsChannels(d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
+	if err := registerM21Model(rs, d, autos); err != nil {
+		return nil, err
+	}
 	if err := registerAutomationAssurance(rs, d, autos); err != nil {
 		return nil, err
 	}

@@ -593,3 +593,24 @@
 | HR-527 | A ticket status never restores authority or lifts containment. Containment and restoration can never be owned by Jira; moving any other field from PantherClaw to Jira is held behind the protect surface `ticket.field_owner` (category COVERAGE_EXCLUSION), and moving it back applies directly. | T-227 | M20 |
 | HR-528 | Inbound changes to PantherClaw-owned fields are ignored and recorded. | T-227 | M20 |
 | HR-529 | Approval DMs and cards go only to eligible deciders, carry a link only, and never take a decision in-channel. For Slack DMs the bot token may also be sent to `users.lookupByEmail` (only for verified email addresses on the organization's domains, the link confirmed by the person in the console) and `conversations.open`, with the `im:write` scope, in addition to HR-315's four methods. A Slack link is proposed only for a verified PantherClaw email that `users.lookupByEmail` returns exactly for a full member (not a bot, guest or deleted user) whose domain is in the channel's `allowed_email_domains` (set at creation, confirmed by the step-up activation, then immutable; at most 20 exact lowercase domains); before each DM the verified email, the same Slack user id and full membership are checked again, and otherwise no DM is sent, the link is marked stale and audited. A `teams_app` channel is re-checked at send; one that changed gets no card and goes back to PENDING_ACTIVATION with `shared_at`. | T-228, T-145 | M20 |
+
+## Branching automations, recommendations, outcome metrics and model drafting (G0 M21)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-530 | v1 definitions and running v1 executions are unchanged. | T-231 | M21 |
+| HR-531 | No cycles, and every node is reachable. | T-230 | M21 |
+| HR-532 | Authority and irreversible-wait checks hold per path; a path outside the ceiling is refused (`PATH_OUTSIDE_CEILING`). | T-230 | M21 |
+| HR-533 | A running execution's pinned version and state are never re-pointed. | T-231 | M21 |
+| HR-534 | Only the taken path's nodes are compensated. | T-231 | M21 |
+| HR-535 | A recommendation never acts and always states what stays unsupported. | T-232 | M21 |
+| HR-536 | Recommendations show only what the viewer may see. | T-232 | M21 |
+| HR-537 | Not collected is never zero. | T-233 | M21 |
+| HR-538 | Requested containment is never counted as confirmed. | T-233 | M21 |
+| HR-539 | No metric claims raw volume as value. | T-233 | M21 |
+| HR-540 | Every metric states its scope and as-of. | T-233 | M21 |
+| HR-541 | Model drafting is off by default, Business, opt-in per org. | T-234 | M21 |
+| HR-542 | No records or untrusted text are sent to the model. | T-234 | M21 |
+| HR-543 | Only strictly parsed structured output is accepted. | T-235 | M21 |
+| HR-544 | Model output never executes; it is a draft or a shown query. | T-235 | M21 |
+| HR-545 | Every call is audited, and the key is write-only. | T-234 | M21 |

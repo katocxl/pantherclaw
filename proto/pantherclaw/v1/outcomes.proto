@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// OutcomeService reads the outcome metrics (G0 M21 D303, F774; HR-537..540;
+// Business). Each metric is a distribution of durations or a share, with the
+// cases it measured and the cases it could not, never a raw volume presented
+// as value. A window without a measured case is NOT_COLLECTED, never 0.
+// Every metric states its scope and as-of time, and its definition stays a
+// draft until the founder signs it off.
+service OutcomeService {
+  // GetOutcomeMetrics returns one series per metric and dimension, with a
+  // point per day: the window of window_days that ends that day. Metrics
+  // cover the whole organization, so they need operations.read across it,
+  // and each metric needs its sources' read permissions there, else it reads
+  // RESTRICTED.
+  // permission: operations.read
+  rpc GetOutcomeMetrics(GetOutcomeMetricsRequest) returns (GetOutcomeMetricsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// GetOutcomeMetricsRequest asks for days of a window length.
+message GetOutcomeMetricsRequest {
+  // Metrics to read; all when empty.
+  repeated string metrics = 1 [(buf.validate.field).repeated = {
+    max_items: 32
+    items: {
+      string: {
+        min_len: 1
+        max_len: 64
+        pattern: "^[a-z][a-z0-9_.]*$"
+      }
+    }
+  }];
+  // The window length: 7 or 30.
+  int32 window_days = 2 [(buf.validate.field).int32 = {
+    in: [
+      7,
+      30
+    ]
+  }];
+  // Windows ending after start_time, up to end_time; at most 30 days,
+  // rounded down to a UTC day.
+  google.protobuf.Timestamp start_time = 3 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end_time = 4 [(buf.validate.field).required = true];
+}
+
+// GetOutcomeMetricsResponse is one series per metric and dimension.
+message GetOutcomeMetricsResponse {
+  google.protobuf.Timestamp as_of_time = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  int32 window_days = 4;
+  repeated OutcomeSeries series = 5;
+}
+
+// OutcomeMetricKind says what a metric's value is. There is no count kind.
+enum OutcomeMetricKind {
+  OUTCOME_METRIC_KIND_UNSPECIFIED = 0;
+  // A median and a 90th percentile, in seconds.
+  OUTCOME_METRIC_KIND_DURATION = 1;
+  // A share of the measured cases, from 0 to 1.
+  OUTCOME_METRIC_KIND_SHARE = 2;
+}
+
+// OutcomePointState says what a point holds.
+enum OutcomePointState {
+  OUTCOME_POINT_STATE_UNSPECIFIED = 0;
+  OUTCOME_POINT_STATE_COLLECTED = 1;
+  // Nothing could be measured; the reasons say why. Never 0.
+  OUTCOME_POINT_STATE_NOT_COLLECTED = 2;
+  // No rollup ran for this window.
+  OUTCOME_POINT_STATE_NO_SAMPLE = 3;
+  // The viewer may not read this metric's sources across the organization.
+  OUTCOME_POINT_STATE_RESTRICTED = 4;
+}
+
+// OutcomeSeries is one metric and dimension over the range.
+message OutcomeSeries {
+  // For example "containment.time".
+  string metric = 1;
+  // The F774 metric it belongs to, M1 to M6.
+  string group = 2;
+  // A breakdown key (an automation id, "policy", "automation"), or empty.
+  string dimension = 3;
+  OutcomeMetricKind kind = 4;
+  // What the series covers: "organization".
+  string scope = 5;
+  // Plain words for the metric.
+  string title = 6;
+  // How it is measured.
+  string measures = 7;
+  // The records it cannot see, stated with every read.
+  repeated string not_seen = 8;
+  // SIGNED_OFF: the founder signed the definition off (G17).
+  string definition_status = 9;
+  repeated OutcomePoint points = 10;
+}
+
+// OutcomePoint is one window.
+message OutcomePoint {
+  google.protobuf.Timestamp window_start_time = 1;
+  google.protobuf.Timestamp window_end_time = 2;
+  OutcomePointState state = 3;
+  // Set for a collected duration only.
+  optional double median_seconds = 4;
+  optional double p90_seconds = 5;
+  // Set for a collected share only.
+  optional double share = 6;
+  // The cases measured, the denominator of a share.
+  int64 measured_count = 7;
+  // The cases that could not be measured.
+  int64 unmeasured_count = 8;
+  repeated OutcomeUnmeasured unmeasured = 9;
+  // When the rollup computed this point.
+  google.protobuf.Timestamp as_of_time = 10;
+}
+
+// OutcomeUnmeasured is why some cases were not measured.
+message OutcomeUnmeasured {
+  // A stable code, for example "REQUESTED_NOT_CONFIRMED".
+  string code = 1;
+  int64 count = 2;
+  // How long the oldest open case has waited.
+  optional double oldest_age_seconds = 3;
+}
