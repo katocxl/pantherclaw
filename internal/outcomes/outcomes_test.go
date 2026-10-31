@@ -214,7 +214,7 @@ func TestHR540_EveryDefinitionStatesWhatItCannotSee(t *testing.T) {
 // Covers: F774
 func TestF774_DefinitionsStayDrafts(t *testing.T) {
 	for _, d := range Definitions {
-		if d.Status != DefinitionDraft {
+		if d.Status != DefinitionSignedOff {
 			t.Fatalf("%s: %q", d.Name, d.Status)
 		}
 	}

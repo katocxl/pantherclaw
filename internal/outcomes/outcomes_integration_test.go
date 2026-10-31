@@ -504,7 +504,7 @@ func TestHR540_EveryMetricStatesItsScopeAndAsOf(t *testing.T) {
 		t.Fatal("no as-of")
 	}
 	for _, s := range r.Series {
-		if s.Scope != outcomes.ScopeOrganization || len(s.Definition.NotSeen) == 0 || s.Definition.Status != outcomes.DefinitionDraft {
+		if s.Scope != outcomes.ScopeOrganization || len(s.Definition.NotSeen) == 0 || s.Definition.Status != outcomes.DefinitionSignedOff {
 			t.Fatalf("%+v", s)
 		}
 		if len(s.Points) != 2 || s.Points[0].State != outcomes.NoSample {

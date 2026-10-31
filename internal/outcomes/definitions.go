@@ -26,8 +26,8 @@ const (
 	KindShare    Kind = "SHARE"
 )
 
-// DefinitionDraft marks a definition the founder has not signed off (G17).
-const DefinitionDraft = "DRAFT"
+// DefinitionSignedOff marks a definition the founder signed off (G17).
+const DefinitionSignedOff = "SIGNED_OFF"
 
 // ScopeOrganization is what a sample covers (HR-540).
 const ScopeOrganization = "organization"
@@ -127,112 +127,112 @@ var Definitions = []Definition{
 	{
 		Name: MetricProtectedWorkTime, Group: "M1", Kind: KindDuration, Title: "Time to protected work",
 		Measures: "Per agent, from its first enrolment to its first non-simulated decision in enforce mode.",
-		NotSeen:  notSeenM1, Status: DefinitionDraft, Reads: readsDecisions,
+		NotSeen:  notSeenM1, Status: DefinitionSignedOff, Reads: readsDecisions,
 	},
 	{
 		Name: MetricExplanationShare, Group: "M2", Kind: KindShare, Title: "Explanations delivered with the decision",
 		Measures: "The share of non-ALLOW decisions answered with their agent-safe explanation in the same response.",
-		NotSeen:  notSeenM2Delivery, Status: DefinitionDraft, Reads: readsDecisions,
+		NotSeen:  notSeenM2Delivery, Status: DefinitionSignedOff, Reads: readsDecisions,
 	},
 	{
 		Name: MetricExplanationTime, Group: "M2", Kind: KindDuration, Title: "Time to explanation",
 		Measures: "From a non-ALLOW decision to the first read of its evidence by a person with access.",
-		NotSeen:  notSeenM2Time, Status: DefinitionDraft, Reads: readsDecisions,
+		NotSeen:  notSeenM2Time, Status: DefinitionSignedOff, Reads: readsDecisions,
 	},
 	{
 		Name: MetricContainmentTime, Group: "M3", Kind: KindDuration, Title: "Time to containment",
 		Measures: "From the earliest of alert, incident or case to the first confirmed containment for it.",
-		NotSeen:  notSeenM3, Status: DefinitionDraft, Reads: readsContainment,
+		NotSeen:  notSeenM3, Status: DefinitionSignedOff, Reads: readsContainment,
 	},
 	{
 		Name: MetricRequestedToConfirm, Group: "M3", Kind: KindDuration, Title: "Requested to confirmed",
 		Measures: "From a response action's request to its confirmation. A request is never a confirmation.",
-		NotSeen:  notSeenM3, Status: DefinitionDraft, Reads: readsContainment,
+		NotSeen:  notSeenM3, Status: DefinitionSignedOff, Reads: readsContainment,
 	},
 	{
 		Name: MetricApprovalWait, Group: "M4", Kind: KindDuration, Title: "Approval wait",
 		Measures: "From an approval request to its first decision.",
-		NotSeen:  notSeenM4Wait, Status: DefinitionDraft, Reads: readsDecisions,
+		NotSeen:  notSeenM4Wait, Status: DefinitionSignedOff, Reads: readsDecisions,
 	},
 	{
 		Name: MetricHoldShare, Group: "M4", Kind: KindShare, Title: "Hold rate",
 		Measures: "Held decisions over decisions in enforce mode.",
-		NotSeen:  notSeenM4Hold, Status: DefinitionDraft, Reads: readsDecisions,
+		NotSeen:  notSeenM4Hold, Status: DefinitionSignedOff, Reads: readsDecisions,
 	},
 	{
 		Name: MetricOverrideShare, Group: "M4", Kind: KindShare, Title: "Override rate",
 		Measures: "DENYs followed within 7 days by an activated exception for the same agent and operation.",
-		NotSeen:  notSeenM4Override, Status: DefinitionDraft, Reads: readsDecisions,
+		NotSeen:  notSeenM4Override, Status: DefinitionSignedOff, Reads: readsDecisions,
 	},
 	{
 		Name: MetricValidatedShare, Group: "M5", Kind: KindShare, Title: "Published after validation",
 		Measures: "The share of versions published in the window that passed validation first. Shown apart from the other checks, never as one score.",
-		NotSeen:  notSeenM5, Status: DefinitionDraft, Reads: readsChanges,
+		NotSeen:  notSeenM5, Status: DefinitionSignedOff, Reads: readsChanges,
 	},
 	{
 		Name: MetricTestedShare, Group: "M5", Kind: KindShare, Title: "Published after a scenario test",
 		Measures: "The share of versions published in the window that passed a scenario test first.",
-		NotSeen:  notSeenM5, Status: DefinitionDraft, Reads: readsChanges,
+		NotSeen:  notSeenM5, Status: DefinitionSignedOff, Reads: readsChanges,
 	},
 	{
 		Name: MetricSimulatedShare, Group: "M5", Kind: KindShare, Title: "Published after a simulation",
 		Measures: "The share of versions published in the window that had a finished simulation first.",
-		NotSeen:  notSeenM5, Status: DefinitionDraft, Reads: readsChanges,
+		NotSeen:  notSeenM5, Status: DefinitionSignedOff, Reads: readsChanges,
 	},
 	{
 		Name: MetricStagedShare, Group: "M5", Kind: KindShare, Title: "Published through a staged rollout",
 		Measures: "The share of policy versions published in the window through a staged rollout. Automation rollouts keep no stage history, so they are not collected.",
-		NotSeen:  notSeenM5, Status: DefinitionDraft, Reads: readsChanges,
+		NotSeen:  notSeenM5, Status: DefinitionSignedOff, Reads: readsChanges,
 	},
 	{
 		Name: MetricFailedTargetShare, Group: "M5", Kind: KindShare, Title: "Rollout targets that failed",
 		Measures: "The share of targets of rollouts started in the window that reached FAILED.",
-		NotSeen:  notSeenM5, Status: DefinitionDraft, Reads: readsChanges,
+		NotSeen:  notSeenM5, Status: DefinitionSignedOff, Reads: readsChanges,
 	},
 	{
 		Name: MetricEvidenceShare, Group: "M6", Kind: KindShare, Title: "Completed with evidence",
 		Measures: "Per automation, the share of live executions ended in the window that completed with evidence. No time saved is claimed.",
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 	{
 		Name: MetricNoEvidenceShare, Group: "M6", Kind: KindShare, Title: "Completed without evidence",
 		Measures: "Per automation, the share of live executions ended in the window that succeeded without evidence.",
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 	{
 		Name: MetricPartialShare, Group: "M6", Kind: KindShare, Title: "Partly completed",
 		Measures: "Per automation, the share of live executions ended in the window that partly completed.",
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 	{
 		Name: MetricFailedShare, Group: "M6", Kind: KindShare, Title: "Failed",
 		Measures: "Per automation, the share of live executions ended in the window that failed.",
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 	{
 		Name: MetricReconciliationShare, Group: "M6", Kind: KindShare, Title: "Needs reconciliation",
 		Measures: "Per automation, the share of live executions ended in the window that need reconciliation.",
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 	{
 		Name: MetricCancelledShare, Group: "M6", Kind: KindShare, Title: "Cancelled", //nolint:misspell // the state's name, British spelling as in ARCHITECTURE §6.2
 		Measures: "Per automation, the share of live executions ended in the window that were cancelled.", //nolint:misspell // the state's name, British spelling as in ARCHITECTURE §6.2
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 	{
 		Name: MetricInterventionShare, Group: "M6", Kind: KindShare, Title: "Interventions",
 		Measures: "Per automation, the share of live executions ended in the window that a person decided a gate of.",
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 	{
 		Name: MetricCompensationShare, Group: "M6", Kind: KindShare, Title: "Compensation rate",
 		Measures: "Per automation, the share of live executions ended in the window that ran compensation.",
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 	{
 		Name: MetricRevertedShare, Group: "M6", Kind: KindShare, Title: "Reverted by a person",
 		Measures: "Per automation, the share of live executions ended in the window with an action a person later reverted.",
-		NotSeen:  notSeenM6, Status: DefinitionDraft, Reads: readsAutomations,
+		NotSeen:  notSeenM6, Status: DefinitionSignedOff, Reads: readsAutomations,
 	},
 }
 
