@@ -357,6 +357,13 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			kc = &kindConfig{cfg: cfg, store: store}
 			set(conn.Kind, "current", "replaced", true)
 		}
+		// A connection never moves to a server the catalogue would refuse
+		// (HR-585); a held update checks again when it applies.
+		if in.Connector != nil || in.BaseURL != nil {
+			if err := s.checkCatalog(ctx, tx, createdTarget(conn.Kind, p.BaseUrl, spec)); err != nil {
+				return err
+			}
+		}
 		write := func(ctx context.Context) error {
 			if kc != nil {
 				// Saved at the revision the update makes, in its transaction; an
@@ -595,6 +602,15 @@ func (s *Service) transition(ctx context.Context, id ids.UUID, from []string, to
 		}
 		if !slices.Contains(from, conn.State) {
 			return ErrState
+		}
+		if to == StateActive {
+			target, err := currentTarget(ctx, q, conn)
+			if err != nil {
+				return err
+			}
+			if err := s.checkCatalog(ctx, tx, target); err != nil {
+				return err
+			}
 		}
 		p := params(c, conn)
 		p.State, p.QuarantineReason = to, reasonCode

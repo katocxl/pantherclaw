@@ -172,3 +172,47 @@ func (h *Handler) GetCatalogSettings(ctx context.Context, _ *pantherclawv1.GetCa
 	}
 	return &pantherclawv1.GetCatalogSettingsResponse{Settings: settings(r)}, nil
 }
+
+func modeFrom(m pantherclawv1.McpCatalogMode) domain.Mode {
+	for k, v := range modeOf {
+		if v == m {
+			return domain.Mode(k)
+		}
+	}
+	return ""
+}
+
+func connectionRef(c dbq.McpConnectionsRow) *pantherclawv1.McpConnectionRef {
+	return &pantherclawv1.McpConnectionRef{Id: c.ID.String(), Name: c.Name, Kind: c.Kind, State: c.State, GatewayId: c.GatewayID.String()}
+}
+
+// PreviewCatalogMode implements McpCatalogServiceHandler.
+func (h *Handler) PreviewCatalogMode(ctx context.Context, req *pantherclawv1.PreviewCatalogModeRequest) (*pantherclawv1.PreviewCatalogModeResponse, error) {
+	p, err := h.s.PreviewMode(ctx, modeFrom(req.GetMode()))
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.PreviewCatalogModeResponse{
+		FromMode: modeOf[string(p.From)], ToMode: modeOf[string(p.To)], NeedsSecondPerson: p.SecondPerson, PreviewDigest: p.Digest,
+	}
+	for _, c := range p.Quarantines {
+		out.Quarantines = append(out.Quarantines, connectionRef(c))
+	}
+	return out, nil
+}
+
+// SetCatalogMode implements McpCatalogServiceHandler.
+func (h *Handler) SetCatalogMode(ctx context.Context, req *pantherclawv1.SetCatalogModeRequest) (*pantherclawv1.SetCatalogModeResponse, error) {
+	r, err := h.s.SetMode(ctx, modeFrom(req.GetMode()), req.GetPreviewDigest(), req.GetReason())
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.SetCatalogModeResponse{Settings: settings(r.Settings)}
+	for _, id := range r.Quarantined {
+		out.QuarantinedConnectionIds = append(out.QuarantinedConnectionIds, id.String())
+	}
+	if r.Held != nil {
+		out.Change = &pantherclawv1.ProtectedChangeFiled{ProtectedChangeId: r.Held.Change.String(), ChangeRequestId: r.Held.Request.String()}
+	}
+	return out, nil
+}

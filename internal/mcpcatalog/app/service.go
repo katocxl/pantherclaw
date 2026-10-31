@@ -18,6 +18,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -40,6 +41,11 @@ type Editions interface {
 type Service struct {
 	Pool     *db.Pool
 	Editions Editions
+	// Connections quarantines on the switch to ENFORCE.
+	Connections Quarantiner
+	// Protect holds a change of mode out of ENFORCE (RegisterProtect, HR-586);
+	// nil refuses it.
+	Protect *protect.Gate
 }
 
 // caller reads who is calling and checks the permission at the org.

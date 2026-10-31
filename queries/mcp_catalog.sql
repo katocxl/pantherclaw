@@ -54,3 +54,22 @@ SELECT * FROM pc.mcp_catalog_settings WHERE org_id = sqlc.arg(org_id) FOR UPDATE
 UPDATE pc.mcp_catalog_settings SET mode = sqlc.arg(mode), updated_by = sqlc.arg(updated_by), updated_at = now()
 WHERE org_id = sqlc.arg(org_id)
 RETURNING *;
+
+-- McpConnections reads the org's connections that reach an MCP server, with
+-- a connector's current image.
+-- name: McpConnections :many
+SELECT c.id, c.name, c.kind, c.state, c.gateway_id, c.package, c.base_url, c.created_at,
+    coalesce((SELECT s.image FROM pc.connector_specs s WHERE s.org_id = c.org_id AND s.connection_id = c.id
+              ORDER BY s.revision DESC LIMIT 1), '')::text AS image
+FROM pc.connections c
+WHERE c.org_id = sqlc.arg(org_id) AND c.kind IN ('mcp', 'mcp_container') AND c.state <> 'RETIRED'
+ORDER BY c.id;
+
+-- McpScanServers reads the open local MCP servers scans found. The attributes
+-- are UNTRUSTED observations, and a name is shown as plain text.
+-- name: McpScanServers :many
+SELECT id, agent_id, first_seen_at, left(coalesce(observed->>'name', ''), 200)::text AS name,
+    coalesce(observed->>'url_host', '')::text AS url_host, coalesce(observed->>'package_ref', '')::text AS package_ref
+FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND observed->>'kind' = 'mcp_server'
+ORDER BY id;

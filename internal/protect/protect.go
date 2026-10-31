@@ -98,6 +98,10 @@ const (
 	// SurfaceTicketFieldOwner gives a field of an org's ticket sync to the
 	// ticket system (G0 M20 D264); taking one back applies directly.
 	SurfaceTicketFieldOwner Surface = "ticket.field_owner"
+	// SurfaceCatalogMode takes the MCP server catalogue out of ENFORCE (G0
+	// M24 D223, HR-586): always held for a second person, whatever the
+	// TOOL_MEANING mode (AlwaysProtected).
+	SurfaceCatalogMode Surface = "mcp.catalog.mode"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -125,6 +129,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermIdentityProviderManage
 	case SurfaceTicketFieldOwner:
 		return td.PermConnectionManage
+	case SurfaceCatalogMode:
+		return td.PermCatalogManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}
@@ -133,10 +139,12 @@ func (s Surface) Permission() td.Permission {
 
 // AlwaysProtected reports whether every change of the surface waits for a
 // second person, in every mode of its category, and can never be applied
-// as an emergency (G0 M17 D107, HR-453; G0 M18 D155, HR-481).
+// as an emergency (G0 M17 D107, HR-453; G0 M18 D155, HR-481; G0 M24 D223,
+// HR-586).
 func (s Surface) AlwaysProtected() bool {
 	return s == SurfaceConsequenceRule ||
-		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly
+		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly ||
+		s == SurfaceCatalogMode
 }
 
 // Change domains and kinds of internal/changes (D6).

@@ -10,6 +10,7 @@ package dbq
 
 import (
 	"context"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -265,6 +266,105 @@ func (q *Queries) LockMcpServer(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const mcpConnections = `-- name: McpConnections :many
+SELECT c.id, c.name, c.kind, c.state, c.gateway_id, c.package, c.base_url, c.created_at,
+    coalesce((SELECT s.image FROM pc.connector_specs s WHERE s.org_id = c.org_id AND s.connection_id = c.id
+              ORDER BY s.revision DESC LIMIT 1), '')::text AS image
+FROM pc.connections c
+WHERE c.org_id = $1 AND c.kind IN ('mcp', 'mcp_container') AND c.state <> 'RETIRED'
+ORDER BY c.id
+`
+
+type McpConnectionsRow struct {
+	ID        ids.UUID
+	Name      string
+	Kind      string
+	State     string
+	GatewayID ids.UUID
+	Package   string
+	BaseUrl   *string
+	CreatedAt time.Time
+	Image     string
+}
+
+// McpConnections reads the org's connections that reach an MCP server, with
+// a connector's current image.
+func (q *Queries) McpConnections(ctx context.Context, orgID ids.OrgID) ([]McpConnectionsRow, error) {
+	rows, err := q.db.Query(ctx, mcpConnections, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []McpConnectionsRow{}
+	for rows.Next() {
+		var i McpConnectionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Kind,
+			&i.State,
+			&i.GatewayID,
+			&i.Package,
+			&i.BaseUrl,
+			&i.CreatedAt,
+			&i.Image,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const mcpScanServers = `-- name: McpScanServers :many
+SELECT id, agent_id, first_seen_at, left(coalesce(observed->>'name', ''), 200)::text AS name,
+    coalesce(observed->>'url_host', '')::text AS url_host, coalesce(observed->>'package_ref', '')::text AS package_ref
+FROM pc.discoveries
+WHERE org_id = $1 AND state = 'OPEN' AND observed->>'kind' = 'mcp_server'
+ORDER BY id
+`
+
+type McpScanServersRow struct {
+	ID          ids.UUID
+	AgentID     ids.UUID
+	FirstSeenAt time.Time
+	Name        string
+	UrlHost     string
+	PackageRef  string
+}
+
+// McpScanServers reads the open local MCP servers scans found. The attributes
+// are UNTRUSTED observations, and a name is shown as plain text.
+func (q *Queries) McpScanServers(ctx context.Context, orgID ids.OrgID) ([]McpScanServersRow, error) {
+	rows, err := q.db.Query(ctx, mcpScanServers, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []McpScanServersRow{}
+	for rows.Next() {
+		var i McpScanServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.FirstSeenAt,
+			&i.Name,
+			&i.UrlHost,
+			&i.PackageRef,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const mcpServersIn = `-- name: McpServersIn :many
