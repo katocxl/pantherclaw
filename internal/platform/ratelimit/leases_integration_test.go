@@ -117,8 +117,8 @@ func TestHR491_AnExpiredLeaseFreesItsSlot(t *testing.T) {
 		t.Fatalf("after the dead replica's lease expired: %v", err)
 	}
 	// The live lease is renewed past its expiry by its heartbeats.
-	exec("UPDATE pc.stream_leases SET expires_at = now() + interval '200 milliseconds' WHERE id = $1", l.id)
-	time.Sleep(500 * time.Millisecond)
+	exec("UPDATE pc.stream_leases SET expires_at = now() + interval '1 second' WHERE id = $1", l.id)
+	time.Sleep(1300 * time.Millisecond)
 	select {
 	case <-l.Lost():
 		t.Fatal("a renewed lease was lost")
