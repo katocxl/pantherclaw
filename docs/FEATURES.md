@@ -757,7 +757,7 @@ Posture is ranked findings with fixes and no single measure (F797). Clean means 
 | F884 | Package references in scans | For `npx`, `uvx`, `bunx`, `pipx run` and `docker run`, a scan keeps the package or image token only, with no other arguments. | Next | Community | M24 | F015 |
 | F885 | Device scope | Scans carry a `device:<id>` scope, a salted hash stored locally, and the 200 finding cap applies per source and scope. Dropped findings are still reported. | Next | Team | M24 | new |
 | F886 | All-users scan | `pclaw scan --all-users` reads each home directory under SYSTEM or root, metadata only, and `PANTHERCLAW_API_KEY_FILE` supplies the key. | Next | Team | M24 | new |
-| F887 | Scanner role | A service-account role that can submit scans for its scope and do nothing else. | Next | Team | M24 | new |
+| F887 | Scanner role | A service-account role holding exactly `org.read` and `agent.scan.submit`, so it can submit scans for its scope and write nothing else. | Next | Team | M24 | new |
 | F888 | Scheduled device scans | `pclaw scan schedule` installs, removes and reports a scheduled task, launchd job or systemd timer; a runbook covers Intune and Jamf. | Next | Team | M24 | new |
 | F889 | Environment-secret signal | The `env_secret` recommendation signal works from real input, so that F343 keeps its promise. | Next | Team | M24 | F343 |
 

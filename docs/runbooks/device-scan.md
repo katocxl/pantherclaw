@@ -20,7 +20,7 @@ A scan never sends file contents or prompts. Tell the people whose devices you s
 
 ## 2. Create a scanner key
 
-1. Create a service account for scanning, with the role `Scanner`. It holds `agent.scan.submit`, which allows `SubmitScan` for its scope and nothing else. The role is for service accounts only.
+1. Create a service account for scanning, with the role `Scanner`. It holds exactly `org.read` and `agent.scan.submit`, so it can submit scans for its scope and write nothing else. The role is for service accounts only.
 2. Create an API key for it, and keep it out of device-management scripts and logs. Deliver it as a file readable only by SYSTEM or root.
 3. Point `PANTHERCLAW_API_KEY_FILE` at that file.
 

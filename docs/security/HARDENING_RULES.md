@@ -638,5 +638,5 @@
 | HR-586 | Weakening ENFORCE always waits for a second person: it goes through the protected surface `mcp.catalog.mode`, which is always protected and has no emergency path. Without a gate it fails `ErrUnavailable`. | T-253 | M24 |
 | HR-587 | A server revoke needs a preview digest and a person, stays inside one organization, and is lifted only by an independent second person. | T-253 | M24 |
 | HR-588 | A scan sends metadata only: no file content, no prompts and no arguments beyond the package or image token. | T-255 | M24 |
-| HR-589 | The Scanner role belongs to service accounts only and allows `SubmitScan` for its own scope and nothing else. | T-254 | M24 |
+| HR-589 | The Scanner role belongs to service accounts only and holds exactly `org.read` and `agent.scan.submit`. It can submit scans for its own scope; it holds no other write and no other read. | T-254 | M24 |
 | HR-590 | A failed signing never serves an invalid card signature: the gateway serves the rewritten card unsigned, as before, and logs it. | T-149 | M24 |
