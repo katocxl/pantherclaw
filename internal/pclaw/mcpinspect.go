@@ -194,7 +194,7 @@ func (l *mcpListing) talk(ctx context.Context, in io.Writer, out io.Reader) erro
 		{"resources/templates/list", "resourceTemplates", &l.templates},
 	} {
 		err := s.list(list.method, list.key, list.into)
-		failed, answered := errors.AsType[*inspectRefusal](err)
+		failed, answered := errors.AsType[*inspectRefusalError](err)
 		switch {
 		case err == nil, answered && failed.Code == methodNotFound:
 		case answered:
@@ -212,13 +212,13 @@ func (l *mcpListing) talk(ctx context.Context, in io.Writer, out io.Reader) erro
 // methodNotFound is JSON-RPC's code for a method a peer does not have.
 const methodNotFound = -32601
 
-// inspectRefusal is a JSON-RPC error from the server. Its text is the server's and
+// inspectRefusalError is a JSON-RPC error from the server. Its text is the server's and
 // is never shown.
-type inspectRefusal struct {
+type inspectRefusalError struct {
 	Code int `json:"code"`
 }
 
-func (e *inspectRefusal) Error() string {
+func (e *inspectRefusalError) Error() string {
 	return "the server answered with error " + strconv.Itoa(e.Code)
 }
 
@@ -256,10 +256,10 @@ func (s *mcpStdio) call(method string, params any) (jsontext.Value, error) {
 			return nil, err
 		}
 		var m struct {
-			ID     jsontext.Value  `json:"id"`
-			Method jsontext.Value  `json:"method"`
-			Result jsontext.Value  `json:"result"`
-			Error  *inspectRefusal `json:"error"`
+			ID     jsontext.Value       `json:"id"`
+			Method jsontext.Value       `json:"method"`
+			Result jsontext.Value       `json:"result"`
+			Error  *inspectRefusalError `json:"error"`
 		}
 		if json.Unmarshal(line, &m) != nil {
 			if err != nil {
@@ -298,17 +298,17 @@ func (s *mcpStdio) list(method, key string, into *[]jsontext.Value) error {
 		}
 		var page map[string]jsontext.Value
 		if err := json.Unmarshal(res, &page); err != nil {
-			return &inspectRefusal{}
+			return &inspectRefusalError{}
 		}
 		var items []jsontext.Value
 		if v, ok := page[key]; ok {
 			if err := json.Unmarshal(v, &items); err != nil {
-				return &inspectRefusal{}
+				return &inspectRefusalError{}
 			}
 		}
 		if len(*into)+len(items) > maxInspectItems {
 			*into = append(*into, items[:maxInspectItems-len(*into)]...)
-			return &inspectRefusal{}
+			return &inspectRefusalError{}
 		}
 		*into = append(*into, items...)
 		cursor = ""
@@ -319,7 +319,7 @@ func (s *mcpStdio) list(method, key string, into *[]jsontext.Value) error {
 			return nil
 		}
 	}
-	return &inspectRefusal{}
+	return &inspectRefusalError{}
 }
 
 // inspectReport is the result. Every string that came from the server is
