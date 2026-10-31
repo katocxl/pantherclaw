@@ -67,6 +67,9 @@ var twoWorkerAudit = map[string]string{
 	"evidence.security_log_org":                  "unique; attempt stamped before emitting",
 	"evidence.verify_dispatch":                   "fan-out",
 	"evidence.verify_org":                        "unique; LockLedgerHead",
+	"exports.push":                               "lock: one job per receipt; CAS QUEUED to PUSHING, the loser exits; writes need PUSHING",
+	"exports.sweep_dispatch":                     "fan-out",
+	"exports.sweep_org":                          "unique; aborts CAS on upload_id, removals and notices conditional",
 	"exposure.recompute_dispatch":                "fan-out",
 	"exposure.recompute_org":                     "unique",
 	"gateway_fleet.sweep":                        "fan-out",
@@ -122,6 +125,8 @@ var twoWorkerAudit = map[string]string{
 	"waitlist.observe":                           "unique; in-process metrics only",
 	"waitlist.route_dispatch":                    "fan-out",
 	"waitlist.route_org":                         "unique; EntryForRouting FOR UPDATE, dedupe keys",
+	"webhookkeys.expired_sweep_dispatch":         "fan-out",
+	"webhookkeys.expired_sweep_org":              "unique; LockKeystore in the job's transaction",
 }
 
 // TestHR498_EveryRiverJobIsAuditedForTwoWorkers: every job kind in the

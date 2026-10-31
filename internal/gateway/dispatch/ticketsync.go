@@ -62,7 +62,7 @@ func (e *Engine) ticketSync(ctx context.Context, conn *control.Connection, l Lea
 	if !e.ticketProjectInternal(ctx, conn, req.Target) {
 		return Observation{Fields: map[string]string{ticketRefused: ticketRefusedExternal}}, nil
 	}
-	res, ok := e.readWith(ctx, conn, def, req.Target, req.Params, "")
+	res, ok := e.sendReviewed(ctx, conn, def, req.Target, req.Params, "")
 	if !ok {
 		// The write may have reached the ticket system: the server records
 		// the status and never sends it again.

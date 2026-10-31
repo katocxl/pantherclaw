@@ -463,6 +463,15 @@ func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *d
 		e.log.WarnContext(ctx, "gateway.verification_not_built", slog.String("connection_id", conn.GetId()), pclog.Err(ErrNotReviewedRead))
 		return egress.Response{}, false
 	}
+	return e.sendReviewed(ctx, conn, read, target, params, token)
+}
+
+// sendReviewed builds a reviewed definition's request through the connection and
+// sends it. Only readWith, which holds the read rule (HR-190), and ticketSync,
+// which holds its own list of writes (D255), call it.
+func (e *Engine) sendReviewed(ctx context.Context, conn *control.Connection, read *defs.Definition, target actionir.Target,
+	params map[string]string, token string,
+) (egress.Response, bool) {
 	raw, err := json.Marshal(params, json.Deterministic(true))
 	if err != nil {
 		return egress.Response{}, false
