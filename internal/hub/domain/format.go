@@ -40,7 +40,7 @@ const (
 	MaxItems = 1000
 	// MaxIndexBytes bounds the compact signed index (D100a). It is the only
 	// value Verifier.WithMaxBytes is given.
-	MaxIndexBytes = 640 << 10
+	MaxIndexBytes = 624 << 10
 	// MaxValidity bounds how long an index stays valid.
 	MaxValidity = 180 * 24 * time.Hour
 	// MaxNameBytes bounds an item name.

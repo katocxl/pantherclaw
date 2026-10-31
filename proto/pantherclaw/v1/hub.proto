@@ -83,7 +83,7 @@ message InstallHubItemRequest {
   // index_jws is the signed index, compact JWS.
   string index_jws = 1 [(buf.validate.field).string = {
     min_len: 1
-    max_len: 655360
+    max_len: 638976
   }];
   // item is the exact bytes of items/<sha256>.json.
   bytes item = 2 [(buf.validate.field).bytes = {

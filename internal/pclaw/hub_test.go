@@ -267,7 +267,7 @@ func TestHubInstallRefusesARequestThatWouldNotFit(t *testing.T) {
 	env := hubEnv(t, h, f)
 	_, e := h.item("pc.big", "1.0.0", domain.KindDetectionRule, domain.DetectionRuleBody{Content: strings.Repeat("x", domain.MaxItemBytes-200)})
 	h.sign(1, e)
-	if code, _, errs := run(t, env, "hub", "install", "pc.big", "--set", "x="+strings.Repeat("v", domain.MaxIndexBytes), "--source", h.dir); code == 0 || !strings.Contains(errs, "one request takes") || f.got != nil {
+	if code, _, errs := run(t, env, "hub", "install", "pc.big", "--set", "x="+strings.Repeat("v", 1<<20), "--source", h.dir); code == 0 || !strings.Contains(errs, "one request takes") || f.got != nil {
 		t.Fatalf("oversized = %d %s", code, errs)
 	}
 	if code, out, errs := run(t, env, "hub", "install", "pc.big", "--source", h.dir); code != 0 || !strings.Contains(out, "installed-marker") {

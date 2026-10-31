@@ -63768,7 +63768,7 @@
           "indexJws": {
             "type": "string",
             "title": "index_jws",
-            "maxLength": 655360,
+            "maxLength": 638976,
             "minLength": 1,
             "description": "index_jws is the signed index, compact JWS."
           },
