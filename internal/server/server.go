@@ -471,6 +471,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			support:   sup,
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
+			model:     cfg.Model,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
 				cfg.Auth.PublicURL, limiter),
 			device:    device,
@@ -760,7 +761,9 @@ type apiDeps struct {
 	idps m18IdPs
 	pool *db.Pool
 	// cel are the configured CEL limits (cel).
-	cel       celenv.Limits
+	cel celenv.Limits
+	// model is optional model drafting (model).
+	model     ModelConfig
 	reg       *keys.Registry
 	log       *slog.Logger
 	authority *authority.Service
@@ -926,6 +929,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerSlackChannels(d)
 	registerTeamsChannels(d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
+	if err := registerM21Model(rs, d, autos); err != nil {
+		return nil, err
+	}
 	if err := registerAutomationAssurance(rs, d, autos); err != nil {
 		return nil, err
 	}

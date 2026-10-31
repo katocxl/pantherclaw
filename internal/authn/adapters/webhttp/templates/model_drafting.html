@@ -1,0 +1,27 @@
+{{template "head" .}}
+<h1>Model drafting</h1>
+<p>Model drafting is <strong>{{if .Enabled}}on{{else}}off{{end}}</strong> for this organization.{{if not .Available}} This server or edition does not offer it.{{end}}</p>
+<dl>
+<dt>Provider key</dt><dd>{{if .KeySet}}Stored{{with .KeySetAt}} since {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}. It can be replaced or cleared, never read back.{{else}}Not set.{{end}}</dd>
+<dt>Model</dt><dd><code>{{.Model}}</code></dd>
+<dt>Limits</dt><dd>{{.CallsPerMinute}} calls a minute, {{.TokensPerDay}} tokens a UTC day</dd>
+</dl>
+<p class="note">When drafting is on, the text people type to draft, and a list of names they may read, go to your organization's model provider under your own key. Records, payloads and evidence are never sent. What comes back is only ever a draft or a shown query: it never runs, publishes or enables anything. Every org admin is told when drafting is turned on or the key is set. Your provider may process data outside your PantherClaw region.</p>
+{{if .CanChange}}
+<h2>Provider key</h2>
+<p><label for="key">Key</label> <input type="password" id="key" autocomplete="off" spellcheck="false" maxlength="512"></p>
+<p><button type="button" id="set-key" data-path="/settings/model-drafting/key">Save with your security key</button></p>
+{{if and .KeySet (not .Enabled)}}
+<h2>Turn on</h2>
+<p><button type="button" class="danger" id="enable" data-path="/settings/model-drafting/enable">Turn on with your security key</button></p>
+{{end}}
+{{end}}
+{{if and .CanLeave (or .Enabled .KeySet)}}
+<h2>Turn off</h2>
+<p class="note">Neither of these needs your security key.</p>
+{{if .Enabled}}<p><button type="button" id="disable" data-path="/settings/model-drafting/disable">Turn off</button></p>{{end}}
+{{if .KeySet}}<p><button type="button" id="clear-key" data-path="/settings/model-drafting/key/clear">Clear the key and turn off</button></p>{{end}}
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/model_drafting.js"></script>
+{{template "foot" .}}

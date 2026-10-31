@@ -299,6 +299,10 @@ func (e Entitlements) SharedSignals() bool { return e.businessPlus() }
 // above.
 func (e Entitlements) ExternalPolicyChecks() bool { return e.businessPlus() }
 
+// ModelDrafting reports whether the edition offers optional, customer-keyed
+// model drafting (G16, F181, F304; G0 M21 D304): Business and above.
+func (e Entitlements) ModelDrafting() bool { return e.businessPlus() }
+
 func (e Entitlements) businessPlus() bool { return e.Edition == Business || e.Edition == Enterprise }
 
 // Governed automations and fleet governance (G0 M11 part 2 D12). The
