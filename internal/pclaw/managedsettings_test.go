@@ -80,6 +80,9 @@ func TestF850_ClaudeCodeKit(t *testing.T) {
 	if managedState([]claudeSettings{s}) != managedPresent {
 		t.Fatal("the kit's file is not present")
 	}
+	if !s.doc.get("allowManagedMcpServersOnly").bool() {
+		t.Fatalf("a user could broaden the allow list: %s", s.raw)
+	}
 	wantAllow := parsed(t, []byte(`[{"serverUrl":"https://mcp.example.test/docs"},
 		{"serverCommand":["npx","@playwright/mcp@1.2.3"]},{"serverCommand":["tickets-mcp"]}]`))
 	if got := parsed(t, s.raw).(map[string]any)["allowedMcpServers"]; !reflect.DeepEqual(got, wantAllow) {
@@ -115,6 +118,24 @@ func TestF850_CopilotKit(t *testing.T) {
 		{"serverCommand":["npx","@playwright/mcp@1.2.3"]},{"serverCommand":["tickets-mcp"]}],"deniedMcpServers":[]}`))
 	if got := parsed(t, []byte(stdout)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("stdout = %v", got)
+	}
+}
+
+// TestF850_UsersCannotBroadenTheAllowList: Claude Code's kit makes the
+// managed allow list the only one, with or without an allow file (D137).
+//
+// Covers: F850
+func TestF850_UsersCannotBroadenTheAllowList(t *testing.T) {
+	env, _ := kitEnv(t)
+	for _, extra := range [][]string{nil, {"--allow-file", writeAllow(t, kitAllow)}} {
+		out := filepath.Join(t.TempDir(), "kit")
+		args := append([]string{"managed-settings", "generate", "--client", "claude-code", "--out", out}, extra...)
+		if code, stdout, errs := run(t, env, args...); code != 0 {
+			t.Fatalf("generate = %d %q %q", code, stdout, errs)
+		}
+		if got := readJSON(t, filepath.Join(out, "managed-settings.json"))["allowManagedMcpServersOnly"]; got != true {
+			t.Fatalf("%v: allowManagedMcpServersOnly = %v, want true", extra, got)
+		}
 	}
 }
 

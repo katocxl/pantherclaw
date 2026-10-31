@@ -223,11 +223,14 @@ type kitFile struct {
 }
 
 // claudeCodeKit allows only managed hooks and runs PantherClaw's, which takes
-// its gateway, connection and key file from the environment (hook.go).
+// its gateway, connection and key file from the environment (hook.go). It
+// also makes the managed allow list the only one, so a user's settings
+// cannot broaden it (D137).
 func claudeCodeKit(servers []allowedServer) []kitFile {
 	hooks := jsonFields("PreToolUse", &jsonNode{kind: '[', items: []*jsonNode{hookGroup(claudeHookArgs)}})
 	return []kitFile{
-		{"managed-settings.json", jsonFields("allowManagedHooksOnly", true, "hooks", hooks, "allowedMcpServers", allowList(servers))},
+		{"managed-settings.json", jsonFields("allowManagedHooksOnly", true, "hooks", hooks,
+			"allowManagedMcpServersOnly", true, "allowedMcpServers", allowList(servers))},
 		{"managed-mcp.json", managedMCP(servers)},
 	}
 }
