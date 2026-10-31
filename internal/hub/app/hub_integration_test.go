@@ -25,6 +25,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
+	"github.com/katocxl/pantherclaw/internal/detection/engine"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/hub/adapters/drafts"
@@ -44,7 +45,6 @@ import (
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	reflexapp "github.com/katocxl/pantherclaw/internal/reflex/app"
-	"github.com/katocxl/pantherclaw/internal/detection/engine"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -196,9 +196,9 @@ func newWorld(t *testing.T, ed billing.Edition) *world {
 	dstore := &defspg.Store{Pool: p}
 	w.svc = &app.Service{
 		Store: &pghub.Store{Pool: p}, Roots: domain.Roots{w.signer.KeyID(): w.signer.Public()}, Clock: clock.System{},
-		Policies: &policyapp.Versions{
+		Policies: drafts.Policies{Pool: p, Versions: &policyapp.Versions{
 			Store: store, Facts: catalog{}, Definitions: definitions{ds}, Authz: grantsapp.SubjectAuthorizer{}, Limits: celenv.DefaultLimits,
-		},
+		}},
 		Detections:  drafts.Detections{Rules: &reflexapp.Detections{Pool: p, Env: env, Ents: edition{ed}}},
 		Automations: drafts.Automations{Pool: p, Svc: &autoapp.Service{Pool: p, Clock: clock.System{}, Editions: edition{ed}}},
 		Packages: drafts.Packages{Admin: &defsapp.Admin{
@@ -522,8 +522,10 @@ func TestT243_RollbackToABadVersion(t *testing.T) {
 	other := ids.New[ids.Org]()
 	w.exec2(other, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'other')", other)
 	octx := tapp.WithCaller(context.Background(), tapp.Caller{
-		Subject: td.Subject{Org: other, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
-			Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: other.UUID()}}}},
+		Subject: td.Subject{
+			Org: other, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
+			Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: other.UUID()}}},
+		},
 		Credential: tapp.CredBrowserSession,
 	})
 	if st, err := w.svc.State(octx); err != nil || st != nil {

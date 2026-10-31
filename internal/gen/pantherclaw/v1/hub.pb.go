@@ -339,7 +339,10 @@ type InstallHubItemResponse struct {
 	// already_installed: this digest was installed before; nothing changed.
 	AlreadyInstalled bool `protobuf:"varint,2,opt,name=already_installed,json=alreadyInstalled,proto3" json:"already_installed,omitempty"`
 	// skipped are per-agent rules a policy template left out.
-	Skipped       []string `protobuf:"bytes,3,rep,name=skipped,proto3" json:"skipped,omitempty"`
+	Skipped []string `protobuf:"bytes,3,rep,name=skipped,proto3" json:"skipped,omitempty"`
+	// replaced are the rule and test ids of the published policy this draft
+	// changes.
+	Replaced      []string `protobuf:"bytes,4,rep,name=replaced,proto3" json:"replaced,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -391,6 +394,13 @@ func (x *InstallHubItemResponse) GetAlreadyInstalled() bool {
 func (x *InstallHubItemResponse) GetSkipped() []string {
 	if x != nil {
 		return x.Skipped
+	}
+	return nil
+}
+
+func (x *InstallHubItemResponse) GetReplaced() []string {
+	if x != nil {
+		return x.Replaced
 	}
 	return nil
 }
@@ -633,11 +643,12 @@ const file_pantherclaw_v1_hub_proto_rawDesc = "" +
 	"\x06params\x18\x03 \x03(\v21.pantherclaw.v1.InstallHubItemRequest.ParamsEntryB(\xbaH%\x9a\x01\"\x10\x10\"\x17r\x152\x13^[a-z][a-z_]{0,31}$*\x05r\x03\x18\x80 R\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb1\x01\n" +
 	"\x16InstallHubItemResponse\x124\n" +
 	"\ainstall\x18\x01 \x01(\v2\x1a.pantherclaw.v1.HubInstallR\ainstall\x12+\n" +
 	"\x11already_installed\x18\x02 \x01(\bR\x10alreadyInstalled\x12\x18\n" +
-	"\askipped\x18\x03 \x03(\tR\askipped\"j\n" +
+	"\askipped\x18\x03 \x03(\tR\askipped\x12\x1a\n" +
+	"\breplaced\x18\x04 \x03(\tR\breplaced\"j\n" +
 	"\x16ListHubInstallsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12'\n" +

@@ -2407,6 +2407,7 @@ type PcHubInstall struct {
 	InstalledBy  string
 	InstalledAt  time.Time
 	Status       string
+	Claim        ids.UUID
 }
 
 type PcHubState struct {

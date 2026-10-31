@@ -44,8 +44,9 @@ const defaultHubSource = "https://raw.githubusercontent.com/katocxl/pantherclaw/
 // honoured for a directory or loopback source only (D101).
 const envHubDevKey = "PANTHERCLAW_HUB_DEV_KEY"
 
-// defaultScenarioDir is where `task range` reads scenarios from.
-const defaultScenarioDir = "redteam/scenarios"
+// defaultScenarioDir is a directory of customer-authored scenarios alone:
+// `pclaw redteam run` refuses one that mixes them with RT files (D132).
+const defaultScenarioDir = "./pantherclaw-scenarios"
 
 const hubMaxRedirects = 5
 

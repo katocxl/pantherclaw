@@ -59,11 +59,41 @@ func (q *Queries) EnvironmentIDsBySlug(ctx context.Context, orgID ids.OrgID, slu
 	return items, nil
 }
 
+const findHubAutomation = `-- name: FindHubAutomation :one
+SELECT a.id FROM pc.automations a
+JOIN pc.automation_versions v ON v.org_id = a.org_id AND v.automation_id = a.id
+WHERE a.org_id = $1 AND a.name = $2 AND v.digest = $3
+LIMIT 1
+`
+
+func (q *Queries) FindHubAutomation(ctx context.Context, orgID ids.OrgID, name string, digest []byte) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, findHubAutomation, orgID, name, digest)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const findHubCustomRule = `-- name: FindHubCustomRule :one
+
+SELECT id FROM pc.custom_detection_rules
+WHERE org_id = $1 AND content_digest = $2
+ORDER BY version DESC
+LIMIT 1
+`
+
+// A crashed install's draft, found by what the item would have made (D130).
+func (q *Queries) FindHubCustomRule(ctx context.Context, orgID ids.OrgID, contentDigest []byte) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, findHubCustomRule, orgID, contentDigest)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const finishHubInstall = `-- name: FinishHubInstall :one
 UPDATE pc.hub_installs
 SET status = $1, result_kind = $2, result_ref = $3, installed_at = now()
-WHERE org_id = $4 AND id = $5 AND status = 'PENDING'
-RETURNING org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status
+WHERE org_id = $4 AND id = $5 AND status = 'PENDING' AND claim = $6
+RETURNING org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status, claim
 `
 
 type FinishHubInstallParams struct {
@@ -72,6 +102,7 @@ type FinishHubInstallParams struct {
 	ResultRef  string
 	OrgID      ids.OrgID
 	ID         ids.UUID
+	Claim      ids.UUID
 }
 
 func (q *Queries) FinishHubInstall(ctx context.Context, arg FinishHubInstallParams) (PcHubInstall, error) {
@@ -81,6 +112,7 @@ func (q *Queries) FinishHubInstall(ctx context.Context, arg FinishHubInstallPara
 		arg.ResultRef,
 		arg.OrgID,
 		arg.ID,
+		arg.Claim,
 	)
 	var i PcHubInstall
 	err := row.Scan(
@@ -96,6 +128,7 @@ func (q *Queries) FinishHubInstall(ctx context.Context, arg FinishHubInstallPara
 		&i.InstalledBy,
 		&i.InstalledAt,
 		&i.Status,
+		&i.Claim,
 	)
 	return i, err
 }
@@ -121,10 +154,10 @@ func (q *Queries) GetHubState(ctx context.Context, orgID ids.OrgID) (PcHubState,
 }
 
 const insertHubInstall = `-- name: InsertHubInstall :one
-INSERT INTO pc.hub_installs (org_id, id, name, version, kind, item_sha256, index_version, installed_by)
+INSERT INTO pc.hub_installs (org_id, id, name, version, kind, item_sha256, index_version, installed_by, claim)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8)
-RETURNING org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status
+        $7, $8, $9)
+RETURNING org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status, claim
 `
 
 type InsertHubInstallParams struct {
@@ -136,6 +169,7 @@ type InsertHubInstallParams struct {
 	ItemSha256   string
 	IndexVersion int64
 	InstalledBy  string
+	Claim        ids.UUID
 }
 
 func (q *Queries) InsertHubInstall(ctx context.Context, arg InsertHubInstallParams) (PcHubInstall, error) {
@@ -148,6 +182,7 @@ func (q *Queries) InsertHubInstall(ctx context.Context, arg InsertHubInstallPara
 		arg.ItemSha256,
 		arg.IndexVersion,
 		arg.InstalledBy,
+		arg.Claim,
 	)
 	var i PcHubInstall
 	err := row.Scan(
@@ -163,12 +198,13 @@ func (q *Queries) InsertHubInstall(ctx context.Context, arg InsertHubInstallPara
 		&i.InstalledBy,
 		&i.InstalledAt,
 		&i.Status,
+		&i.Claim,
 	)
 	return i, err
 }
 
 const listHubInstalls = `-- name: ListHubInstalls :many
-SELECT org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status FROM pc.hub_installs
+SELECT org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status, claim FROM pc.hub_installs
 WHERE org_id = $1 AND ($2::uuid IS NULL OR id < $2::uuid)
 ORDER BY id DESC
 LIMIT $3
@@ -196,6 +232,7 @@ func (q *Queries) ListHubInstalls(ctx context.Context, orgID ids.OrgID, before *
 			&i.InstalledBy,
 			&i.InstalledAt,
 			&i.Status,
+			&i.Claim,
 		); err != nil {
 			return nil, err
 		}
@@ -207,8 +244,40 @@ func (q *Queries) ListHubInstalls(ctx context.Context, orgID ids.OrgID, before *
 	return items, nil
 }
 
+const listHubPolicyDrafts = `-- name: ListHubPolicyDrafts :many
+SELECT id, bundle FROM pc.policy_versions
+WHERE org_id = $1 AND state = 'DRAFT'
+ORDER BY version DESC
+LIMIT 50
+`
+
+type ListHubPolicyDraftsRow struct {
+	ID     ids.UUID
+	Bundle []byte
+}
+
+func (q *Queries) ListHubPolicyDrafts(ctx context.Context, orgID ids.OrgID) ([]ListHubPolicyDraftsRow, error) {
+	rows, err := q.db.Query(ctx, listHubPolicyDrafts, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHubPolicyDraftsRow{}
+	for rows.Next() {
+		var i ListHubPolicyDraftsRow
+		if err := rows.Scan(&i.ID, &i.Bundle); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockHubInstall = `-- name: LockHubInstall :one
-SELECT org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status, now() - installed_at > interval '5 minutes' AS stale
+SELECT org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status, claim, now() - installed_at > interval '5 minutes' AS stale
 FROM pc.hub_installs
 WHERE org_id = $1 AND name = $2 AND version = $3
 FOR UPDATE
@@ -227,6 +296,7 @@ type LockHubInstallRow struct {
 	InstalledBy  string
 	InstalledAt  time.Time
 	Status       string
+	Claim        ids.UUID
 	Stale        bool
 }
 
@@ -246,6 +316,7 @@ func (q *Queries) LockHubInstall(ctx context.Context, orgID ids.OrgID, name stri
 		&i.InstalledBy,
 		&i.InstalledAt,
 		&i.Status,
+		&i.Claim,
 		&i.Stale,
 	)
 	return i, err
@@ -269,14 +340,16 @@ func (q *Queries) LockHubState(ctx context.Context, orgID ids.OrgID) (PcHubState
 
 const reclaimHubInstall = `-- name: ReclaimHubInstall :one
 UPDATE pc.hub_installs
-SET status = 'PENDING', index_version = $1, installed_by = $2, installed_at = now()
-WHERE org_id = $3 AND id = $4
-RETURNING org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status
+SET status = 'PENDING', index_version = $1, installed_by = $2, installed_at = now(),
+    claim = $3
+WHERE org_id = $4 AND id = $5
+RETURNING org_id, id, name, version, kind, item_sha256, index_version, result_kind, result_ref, installed_by, installed_at, status, claim
 `
 
 type ReclaimHubInstallParams struct {
 	IndexVersion int64
 	InstalledBy  string
+	Claim        ids.UUID
 	OrgID        ids.OrgID
 	ID           ids.UUID
 }
@@ -285,6 +358,7 @@ func (q *Queries) ReclaimHubInstall(ctx context.Context, arg ReclaimHubInstallPa
 	row := q.db.QueryRow(ctx, reclaimHubInstall,
 		arg.IndexVersion,
 		arg.InstalledBy,
+		arg.Claim,
 		arg.OrgID,
 		arg.ID,
 	)
@@ -302,6 +376,7 @@ func (q *Queries) ReclaimHubInstall(ctx context.Context, arg ReclaimHubInstallPa
 		&i.InstalledBy,
 		&i.InstalledAt,
 		&i.Status,
+		&i.Claim,
 	)
 	return i, err
 }

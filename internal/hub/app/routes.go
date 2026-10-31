@@ -4,6 +4,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -28,16 +29,23 @@ type (
 	PolicyDrafts interface {
 		Published(ctx context.Context) (*policyapp.VersionInfo, error)
 		CreateExpectingWith(ctx context.Context, raw []byte, expected *ids.UUID, details map[string]string) (policyapp.VersionInfo, error)
+		// FindDraft returns a DRAFT version holding this bundle.
+		FindDraft(ctx context.Context, raw []byte) (string, bool, error)
 	}
 	// DetectionDrafts stores a DRAFT custom rule and returns its id
 	// (Business, as CreateCustomRule is).
 	DetectionDrafts interface {
 		CreateDraft(ctx context.Context, content string) (string, error)
+		// FindDraft returns a custom rule with exactly this content.
+		FindDraft(ctx context.Context, content string) (string, bool, error)
 	}
 	// AutomationDrafts creates a DRAFT automation with its first DRAFT
 	// version, owned by the caller, and returns its id.
 	AutomationDrafts interface {
 		CreateDraft(ctx context.Context, b domain.AutomationBody) (string, error)
+		// FindDraft returns the automation of this name with a version of
+		// exactly this definition.
+		FindDraft(ctx context.Context, b domain.AutomationBody) (string, bool, error)
 	}
 	// PackageImports is ImportPackage, unchanged: the package root's
 	// signature is checked, and the version starts REVIEWED.
@@ -50,48 +58,67 @@ type (
 type result struct {
 	kind, ref string
 	skipped   []string
+	replaced  []string
 }
 
-type route func(context.Context) (result, error)
+// draft is how an item reaches its kind's use case: create makes the draft,
+// and find, on a reclaimed install, looks for the one a crashed install left.
+type draft struct {
+	create func(context.Context) (result, error)
+	find func(context.Context) (result, bool, error)
+}
 
-// prepare checks what can be checked without writing, and returns the route
-// that makes the item's draft. No route activates, publishes or enables
-// anything (HR-561).
-func (s *Service) prepare(ctx context.Context, c tapp.Caller, e domain.Entry, it domain.Item, params map[string]string) (route, error) {
+// prepare checks what can be checked without writing, and returns what makes
+// the item's draft. Nothing here activates, publishes or enables anything
+// (HR-561).
+func (s *Service) prepare(ctx context.Context, c tapp.Caller, e domain.Entry, it domain.Item, params map[string]string) (draft, error) {
 	body, err := it.DecodeBody()
 	if err != nil {
-		return nil, err
+		return draft{}, err
 	}
 	details := map[string]string{"hub_item": e.Name + "@" + e.Version, "hub_item_sha256": e.SHA256}
 	switch b := body.(type) {
 	case domain.PolicyTemplateBody:
 		return s.policyRoute(ctx, c, it, b, params, details)
 	case domain.DetectionRuleBody:
-		return func(ctx context.Context) (result, error) {
-			id, err := s.Detections.CreateDraft(ctx, b.Content)
-			return result{kind: ResultCustomRule, ref: id}, err
+		return draft{
+			create: func(ctx context.Context) (result, error) {
+				id, err := s.Detections.CreateDraft(ctx, b.Content)
+				return result{kind: ResultCustomRule, ref: id}, err
+			},
+			find: func(ctx context.Context) (result, bool, error) {
+				id, ok, err := s.Detections.FindDraft(ctx, b.Content)
+				return result{kind: ResultCustomRule, ref: id}, ok, err
+			},
 		}, nil
 	case domain.AutomationBody:
-		return func(ctx context.Context) (result, error) {
-			id, err := s.Automations.CreateDraft(ctx, b)
-			return result{kind: ResultAutomation, ref: id}, err
+		return draft{
+			create: func(ctx context.Context) (result, error) {
+				id, err := s.Automations.CreateDraft(ctx, b)
+				return result{kind: ResultAutomation, ref: id}, err
+			},
+			find: func(ctx context.Context) (result, bool, error) {
+				id, ok, err := s.Automations.FindDraft(ctx, b)
+				return result{kind: ResultAutomation, ref: id}, ok, err
+			},
 		}, nil
 	case domain.ToolPackageBody:
 		raw := []byte(b.PackageYAML)
 		p, err := manifest.Decode(raw)
 		if err != nil {
-			return nil, fmt.Errorf("%w: package_yaml: %w", domain.ErrItem, err)
+			return draft{}, fmt.Errorf("%w: package_yaml: %w", domain.ErrItem, err)
 		}
 		// The index cannot list one thing and install another.
 		if p.Name != e.Name || p.Version != e.Version {
-			return nil, fmt.Errorf("%w: package_yaml is %s@%s, listed as %s@%s", domain.ErrItem, p.Name, p.Version, e.Name, e.Version)
+			return draft{}, fmt.Errorf("%w: package_yaml is %s@%s, listed as %s@%s", domain.ErrItem, p.Name, p.Version, e.Name, e.Version)
 		}
-		return func(ctx context.Context) (result, error) {
+		// No find: importing the same file again changes nothing.
+		return draft{create: func(ctx context.Context) (result, error) {
 			err := s.Packages.ImportPackage(ctx, p.Name, p.Version, b.TargetsJWS, raw)
 			return result{kind: ResultPackageVersion, ref: p.Name + "@" + p.Version}, err
-		}, nil
+		}}, nil
 	}
-	return nil, errors.New("hub: no route for this kind")
+	return draft{}, errors.New("hub: no route for this kind")
 }
 
 // maxBundleItems bounds the rules or tests of a bundle, as a pack's does.
@@ -101,7 +128,7 @@ const maxBundleItems = 512
 // tests into the published policy and stores the result as a new DRAFT
 // version. It goes through validation, tests and the publish gate like any
 // draft (HR-561).
-func (s *Service) policyRoute(ctx context.Context, c tapp.Caller, it domain.Item, b domain.PolicyTemplateBody, params, details map[string]string) (route, error) {
+func (s *Service) policyRoute(ctx context.Context, c tapp.Caller, it domain.Item, b domain.PolicyTemplateBody, params, details map[string]string) (draft, error) {
 	spec := make(map[string]render.Spec, len(b.Placeholders))
 	for k, v := range b.Placeholders {
 		spec[k] = render.Spec{Kind: v.Kind, Pattern: v.Pattern}
@@ -115,65 +142,95 @@ func (s *Service) policyRoute(ctx context.Context, c tapp.Caller, it domain.Item
 	delete(rest, "agent")
 	opts, err := packs.RenderOptions(it.Name, spec, rest)
 	if err != nil {
-		return nil, err
+		return draft{}, err
 	}
 	opts.Environment, opts.Agent = env, agent
 	if _, ok := spec[render.KindEnvironmentID]; ok && env != "" {
 		id, err := s.Store.EnvironmentID(ctx, c.Org, env)
 		if err != nil {
-			return nil, err
+			return draft{}, err
 		}
 		opts.EnvironmentID = id.String()
 	}
 	data, err := render.RenderItems(opts, spec, b.Rules, b.Tests)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", domain.ErrItem, err)
+		return draft{}, fmt.Errorf("%w: %w", domain.ErrItem, err)
 	}
-	return func(ctx context.Context) (result, error) {
+	// merged is the draft's bundle over the policy published now, with the
+	// ids it changes and the version it expects to replace.
+	merged := func(ctx context.Context) (raw []byte, replaced []string, expected ids.UUID, err error) {
 		pub, err := s.Policies.Published(ctx)
 		if err != nil {
-			return result{}, err
+			return nil, nil, expected, err
 		}
 		bundle := map[string]any{"id": "org-policy", "rules": []any{}}
-		expected := ids.UUID{}
 		if pub != nil {
 			if err := json.Unmarshal(pub.Bundle, &bundle); err != nil {
-				return result{}, err
+				return nil, nil, expected, err
 			}
 			expected = pub.ID
 		}
 		delete(bundle, "version")
-		if err := errors.Join(merge(bundle, "rules", data.Rules), merge(bundle, "tests", data.Tests)); err != nil {
-			return result{}, fmt.Errorf("%w: %w", domain.ErrItem, err)
+		rules, errRules := merge(bundle, "rules", data.Rules)
+		tests, errTests := merge(bundle, "tests", data.Tests)
+		if err := errors.Join(errRules, errTests); err != nil {
+			return nil, nil, expected, fmt.Errorf("%w: %w", domain.ErrItem, err)
 		}
-		raw, err := json.Marshal(bundle, json.Deterministic(true))
-		if err != nil {
-			return result{}, err
-		}
-		v, err := s.Policies.CreateExpectingWith(ctx, raw, &expected, details)
-		if err != nil {
-			return result{}, err
-		}
-		return result{kind: ResultPolicyVersion, ref: v.ID.String(), skipped: data.Skipped}, nil
+		raw, err = json.Marshal(bundle, json.Deterministic(true))
+		return raw, append(rules, tests...), expected, err
+	}
+	return draft{
+		create: func(ctx context.Context) (result, error) {
+			raw, replaced, expected, err := merged(ctx)
+			if err != nil {
+				return result{}, err
+			}
+			v, err := s.Policies.CreateExpectingWith(ctx, raw, &expected, details)
+			if err != nil {
+				return result{}, err
+			}
+			return result{kind: ResultPolicyVersion, ref: v.ID.String(), skipped: data.Skipped, replaced: replaced}, nil
+		},
+		find: func(ctx context.Context) (result, bool, error) {
+			raw, replaced, _, err := merged(ctx)
+			if err != nil {
+				return result{}, false, err
+			}
+			id, ok, err := s.Policies.FindDraft(ctx, raw)
+			return result{kind: ResultPolicyVersion, ref: id, skipped: data.Skipped, replaced: replaced}, ok, err
+		},
 	}, nil
 }
 
-// merge adds items to the bundle's list, replacing those with the same id.
-func merge(bundle map[string]any, key string, items []map[string]any) error {
+// merge adds items to the bundle's list, replacing those with the same id,
+// and returns the ids whose content changed.
+func merge(bundle map[string]any, key string, items []map[string]any) ([]string, error) {
 	list, _ := bundle[key].([]any)
+	var replaced []string
 	for _, item := range items {
 		i := slices.IndexFunc(list, func(x any) bool { m, _ := x.(map[string]any); return m["id"] == item["id"] })
 		if i < 0 {
 			list = append(list, item)
-		} else {
-			list[i] = item
+			continue
 		}
+		have, err := json.Marshal(list[i], json.Deterministic(true))
+		if err != nil {
+			return nil, err
+		}
+		want, err := json.Marshal(item, json.Deterministic(true))
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(have, want) {
+			replaced = append(replaced, fmt.Sprint(item["id"]))
+		}
+		list[i] = item
 	}
 	if len(list) > maxBundleItems {
-		return fmt.Errorf("the draft would hold more than %d %s", maxBundleItems, key)
+		return nil, fmt.Errorf("the draft would hold more than %d %s", maxBundleItems, key)
 	}
 	if len(list) > 0 || key == "rules" {
 		bundle[key] = list
 	}
-	return nil
+	return replaced, nil
 }

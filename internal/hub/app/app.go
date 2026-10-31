@@ -65,6 +65,12 @@ type Install struct {
 	InstalledBy   string
 	InstalledAt   time.Time
 	Status        Status
+	// Claim names the worker holding a PENDING install; only it can finish
+	// the install (D130).
+	Claim ids.UUID
+	// Reclaimed: Begin took over a FAILED or abandoned install, so its draft
+	// may exist already. Set by Begin only.
+	Reclaimed bool
 }
 
 // Begin is what recording an install needs.
@@ -77,9 +83,12 @@ type Begin struct {
 // Finish ends an install.
 type Finish struct {
 	ID         ids.UUID
+	Claim      ids.UUID
 	Status     Status
 	ResultKind string
 	ResultRef  string
+	// Replaced are the ids the draft changes; their count is audited.
+	Replaced []string
 }
 
 // State is the highest index an org accepted.
@@ -99,7 +108,8 @@ type Store interface {
 	// true. Another digest under the same name and version is
 	// domain.ErrDigest, and one still in progress ErrBusy.
 	Begin(ctx context.Context, org ids.OrgID, c tapp.Caller, b Begin) (Install, bool, error)
-	// Finish ends a PENDING install and audits it, in one transaction.
+	// Finish ends a PENDING install still holding f.Claim and audits it, in
+	// one transaction. A row another worker reclaimed is ErrBusy.
 	Finish(ctx context.Context, org ids.OrgID, c tapp.Caller, f Finish) (Install, error)
 	// List returns installs newest first, before an id when one is given.
 	List(ctx context.Context, org ids.OrgID, limit int, before *ids.UUID) ([]Install, error)
@@ -138,6 +148,9 @@ type Installed struct {
 	Already bool
 	// Skipped are per-agent rules a policy template left out.
 	Skipped []string
+	// Replaced are the rule and test ids of the published policy the draft
+	// changes (D135).
+	Replaced []string
 }
 
 // verifyError maps the verification errors to their stable codes (D105). The
@@ -191,7 +204,7 @@ func (s *Service) Install(ctx context.Context, in Input) (Installed, error) {
 	}
 	// What can be refused without writing is refused before the install is
 	// recorded.
-	run, err := s.prepare(ctx, c, e, it, in.Params)
+	d, err := s.prepare(ctx, c, e, it, in.Params)
 	if err != nil {
 		return Installed{}, verifyError(err)
 	}
@@ -202,20 +215,33 @@ func (s *Service) Install(ctx context.Context, in Input) (Installed, error) {
 	if already {
 		return Installed{Install: rec, Already: true}, nil
 	}
-	res, runErr := run(ctx)
+	// A crash can fall between the draft's commit and Finish: a retry finds
+	// that draft rather than making another (D130). What it can't find, it
+	// makes, and a refusal there leaves the install FAILED with its reason.
+	var res result
+	found := false
+	var runErr error
+	if rec.Reclaimed && d.find != nil {
+		res, found, runErr = d.find(ctx)
+	}
+	if runErr == nil && !found {
+		res, runErr = d.create(ctx)
+	}
 	// Recording the end outlives a caller that went away.
 	end := context.WithoutCancel(ctx)
 	if runErr != nil {
-		if _, err := s.Store.Finish(end, c.Org, c, Finish{ID: rec.ID, Status: StatusFailed}); err != nil {
+		if _, err := s.Store.Finish(end, c.Org, c, Finish{ID: rec.ID, Claim: rec.Claim, Status: StatusFailed}); err != nil {
 			return Installed{}, errors.Join(runErr, fmt.Errorf("hub: recording the failed install: %w", err))
 		}
 		return Installed{}, runErr
 	}
-	done, err := s.Store.Finish(end, c.Org, c, Finish{ID: rec.ID, Status: StatusInstalled, ResultKind: res.kind, ResultRef: res.ref})
+	done, err := s.Store.Finish(end, c.Org, c, Finish{
+		ID: rec.ID, Claim: rec.Claim, Status: StatusInstalled, ResultKind: res.kind, ResultRef: res.ref, Replaced: res.replaced,
+	})
 	if err != nil {
 		return Installed{}, err
 	}
-	return Installed{Install: done, Skipped: res.skipped}, nil
+	return Installed{Install: done, Skipped: res.skipped, Replaced: res.replaced}, nil
 }
 
 func reader(ctx context.Context) (tapp.Caller, error) {

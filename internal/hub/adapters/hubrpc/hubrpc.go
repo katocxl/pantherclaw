@@ -60,7 +60,7 @@ func (h *Handler) InstallHubItem(ctx context.Context, r *pantherclawv1.InstallHu
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.InstallHubItemResponse{Install: installPB(out.Install), AlreadyInstalled: out.Already, Skipped: out.Skipped}, nil
+	return &pantherclawv1.InstallHubItemResponse{Install: installPB(out.Install), AlreadyInstalled: out.Already, Skipped: out.Skipped, Replaced: out.Replaced}, nil
 }
 
 // ListHubInstalls implements HubServiceHandler. The page token is the last id

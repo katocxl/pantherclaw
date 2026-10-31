@@ -63836,6 +63836,14 @@
             },
             "title": "skipped",
             "description": "skipped are per-agent rules a policy template left out."
+          },
+          "replaced": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "replaced",
+            "description": "replaced are the rule and test ids of the published policy this draft\n changes."
           }
         },
         "title": "InstallHubItemResponse",

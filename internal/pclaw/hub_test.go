@@ -310,6 +310,26 @@ func TestHubScenarioStaysLocal(t *testing.T) {
 	}
 }
 
+// TestHubScenarioDefaultDirIsItsOwn: a CX file beside RT files would make
+// `pclaw redteam run` refuse the directory (D132).
+func TestHubScenarioDefaultDirIsItsOwn(t *testing.T) {
+	h := newHubSite(t)
+	env := hubEnv(t, h, nil)
+	_, e := h.item("pc.range.cx", "1.0.0", domain.KindRangeScenario, domain.RangeScenarioBody{FileName: "CX-90001-x.yaml", Scenario: "id: CX-90001\n"})
+	h.sign(1, e)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if code, _, errs := run(t, env, "hub", "install", "pc.range.cx", "--source", h.dir); code != 0 {
+		t.Fatal(errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "pantherclaw-scenarios", "CX-90001-x.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "redteam")); err == nil {
+		t.Fatal("wrote under redteam/")
+	}
+}
+
 func TestHubSourceRules(t *testing.T) {
 	h := newHubSite(t)
 	e := h.rule("1.0.0")

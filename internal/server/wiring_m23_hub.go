@@ -93,7 +93,7 @@ func registerM23Hub(rs *connect.Server, d apiDeps, core *automationsCore) error 
 	}
 	svc := &hubapp.Service{
 		Store: &pghub.Store{Pool: d.pool}, Roots: roots, Clock: clock.System{},
-		Policies:   newPolicyVersions(d.pool, notify, d.publicURL, d.cel),
+		Policies:   drafts.Policies{Versions: newPolicyVersions(d.pool, notify, d.publicURL, d.cel), Pool: d.pool},
 		Detections: drafts.Detections{Rules: det},
 		Packages: drafts.Packages{Admin: &defsapp.Admin{
 			Importer: &defsapp.Importer{Roots: packages, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs,

@@ -109,6 +109,9 @@ message InstallHubItemResponse {
   bool already_installed = 2;
   // skipped are per-agent rules a policy template left out.
   repeated string skipped = 3;
+  // replaced are the rule and test ids of the published policy this draft
+  // changes.
+  repeated string replaced = 4;
 }
 
 message ListHubInstallsRequest {

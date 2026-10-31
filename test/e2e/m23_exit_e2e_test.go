@@ -53,8 +53,10 @@ func (h *hubKit) build(version int) string {
 	h.t.Helper()
 	dir := filepath.Join(h.t.TempDir(), "site")
 	var out, errb bytes.Buffer
-	if code := admincli.Run([]string{"hub", "build", "--dir", "../../hub", "--out", dir, "--key", h.key,
-		"--version", strconv.Itoa(version), "--expires-days", "30"}, &out, &errb, time.Now); code != 0 {
+	if code := admincli.Run([]string{
+		"hub", "build", "--dir", "../../hub", "--out", dir, "--key", h.key,
+		"--version", strconv.Itoa(version), "--expires-days", "30",
+	}, &out, &errb, time.Now); code != 0 {
 		h.t.Fatalf("hub build: %d %s", code, errb.String())
 	}
 	return dir

@@ -28,6 +28,7 @@ func installOf(r dbq.PcHubInstall) app.Install {
 		ID: r.ID, Name: r.Name, Version: r.Version, Kind: domain.Kind(r.Kind), ItemSHA256: r.ItemSha256,
 		IndexVersion: uint64(r.IndexVersion), //nolint:gosec // G115: CHECK >= 1
 		ResultKind:   r.ResultKind, ResultRef: r.ResultRef, InstalledBy: r.InstalledBy, InstalledAt: r.InstalledAt, Status: app.Status(r.Status),
+		Claim: r.Claim,
 	}
 }
 
@@ -82,7 +83,7 @@ func (s *Store) Begin(ctx context.Context, org ids.OrgID, c tapp.Caller, b app.B
 		if db.IsNoRows(err) {
 			r, err := q.InsertHubInstall(ctx, dbq.InsertHubInstallParams{
 				OrgID: org, ID: ids.NewV7(), Name: b.Entry.Name, Version: b.Entry.Version, Kind: string(b.Entry.Kind),
-				ItemSha256: b.Entry.SHA256, IndexVersion: indexVersion, InstalledBy: b.InstalledBy,
+				ItemSha256: b.Entry.SHA256, IndexVersion: indexVersion, InstalledBy: b.InstalledBy, Claim: ids.NewV7(),
 			})
 			out = installOf(r)
 			return err
@@ -103,8 +104,9 @@ func (s *Store) Begin(ctx context.Context, org ids.OrgID, c tapp.Caller, b app.B
 		case cur.Status == string(app.StatusPending) && !cur.Stale:
 			return app.ErrBusy
 		}
-		r, err := q.ReclaimHubInstall(ctx, dbq.ReclaimHubInstallParams{OrgID: org, ID: cur.ID, IndexVersion: indexVersion, InstalledBy: b.InstalledBy})
+		r, err := q.ReclaimHubInstall(ctx, dbq.ReclaimHubInstallParams{OrgID: org, ID: cur.ID, IndexVersion: indexVersion, InstalledBy: b.InstalledBy, Claim: ids.NewV7()})
 		out = installOf(r)
+		out.Reclaimed = true
 		return err
 	})
 	if err != nil {
@@ -118,8 +120,12 @@ func (s *Store) Finish(ctx context.Context, org ids.OrgID, c tapp.Caller, f app.
 	var out app.Install
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		r, err := dbq.New(tx).FinishHubInstall(ctx, dbq.FinishHubInstallParams{
-			OrgID: org, ID: f.ID, Status: string(f.Status), ResultKind: f.ResultKind, ResultRef: f.ResultRef,
+			OrgID: org, ID: f.ID, Status: string(f.Status), ResultKind: f.ResultKind, ResultRef: f.ResultRef, Claim: f.Claim,
 		})
+		if db.IsNoRows(err) {
+			// Another worker reclaimed the row: the end of the install is its.
+			return app.ErrBusy
+		}
 		if err != nil {
 			return err
 		}
@@ -133,7 +139,7 @@ func (s *Store) Finish(ctx context.Context, org ids.OrgID, c tapp.Caller, f app.
 			Object: &audit.Object{Type: "hub_item", ID: r.Name + "@" + r.Version},
 			Details: map[string]string{
 				"kind": r.Kind, "item_sha256": r.ItemSha256, "index_version": fmt.Sprint(r.IndexVersion),
-				"result_kind": r.ResultKind, "result_ref": r.ResultRef,
+				"result_kind": r.ResultKind, "result_ref": r.ResultRef, "replaced": fmt.Sprint(len(f.Replaced)),
 			},
 		})
 		return err
