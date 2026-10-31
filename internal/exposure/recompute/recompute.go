@@ -103,7 +103,7 @@ func (s *Service) Run(ctx context.Context, org ids.OrgID) (Result, error) {
 	posture := false
 	if s.Ents != nil {
 		if e, err := s.Ents.Current(ctx); err == nil {
-			posture = e.PostureRemediation()
+			posture = e.PostureFindings() // computed on Team too (G0 M24 D201)
 		}
 	}
 	due := false

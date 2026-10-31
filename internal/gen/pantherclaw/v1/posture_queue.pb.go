@@ -194,7 +194,7 @@ type PostureFix struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,
 	// ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,
-	// REVIEW_SUGGESTION, CLAIM_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL or
+	// REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL or
 	// REVIEW_SERVER.
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// target_id is the record the fix acts on, as "<type>:<id>".

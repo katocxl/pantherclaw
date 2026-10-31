@@ -102,6 +102,20 @@ func TestIntRecomputeFollowsTheFeed(t *testing.T) {
 	}
 }
 
+// TestIntPostureComputedOnTeam: the ranked queue is Team, so a recomputation
+// on Team produces posture findings too (G0 M24 D201).
+func TestIntPostureComputedOnTeam(t *testing.T) {
+	o := exposuretest.New(t)
+	o.Grant(t, o.Agent, 0, "", "payments.*")
+	svc := &recompute.Service{Pool: o.P, Ents: edition(billing.Team), Failures: &failures.Sink{}}
+	if res, err := svc.Run(context.Background(), o.Org); err != nil || !res.Recomputed || res.Posture == nil {
+		t.Fatalf("first run: %+v %v", res, err)
+	}
+	if n := count(t, o, "SELECT count(*) FROM pc.posture_findings"); n == 0 {
+		t.Fatal("no posture findings on Team")
+	}
+}
+
 func TestMoves(t *testing.T) {
 	for kind, want := range map[string]bool{
 		"audit.grant.issued": true, "audit.grant_revoked": true, "audit.policy.published": true, "coverage.snapshot": true,

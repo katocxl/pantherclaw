@@ -74,7 +74,7 @@ const (
 	FixAddVerifier     FixKind = "ADD_VERIFIER"
 	FixReviewCoverage  FixKind = "REVIEW_COVERAGE"
 	FixReviewSuggested FixKind = "REVIEW_SUGGESTION"
-	FixClaimAgent      FixKind = "CLAIM_AGENT"
+	FixReviewAgent     FixKind = "REVIEW_AGENT"
 	FixConnect         FixKind = "CONNECT_INTEGRATION"
 	FixReviewTool      FixKind = "REVIEW_TOOL"
 	FixReviewServer    FixKind = "REVIEW_SERVER"
@@ -116,7 +116,7 @@ type Finding struct {
 	Fix   Fix
 	// ReachesProduction: its agent is in a production environment.
 	ReachesProduction bool
-	// Unowned: its agent has no owner, or it has no agent.
+	// Unowned: it has an agent, and that agent has no owner.
 	Unowned bool
 }
 

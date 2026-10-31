@@ -282,6 +282,15 @@ func (e Entitlements) CustomDetections() bool { return e.businessPlus() }
 // remediation queue and finding lifecycle (F265, F268): Business and above.
 func (e Entitlements) PostureRemediation() bool { return e.businessPlus() }
 
+// PostureFindings reports whether the edition computes posture findings and
+// offers the ranked posture queue (G0 M24 D201): Team and above. The
+// remediation lifecycle stays Business (PostureRemediation).
+func (e Entitlements) PostureFindings() bool { return e.Edition.Paid() }
+
+// PostureTrends reports whether the edition keeps the daily posture rollup
+// and shows its trends (G0 M24 D201): Business and above.
+func (e Entitlements) PostureTrends() bool { return e.businessPlus() }
+
 // SIEMExport reports whether the edition exports OCSF events (PN-018):
 // Business and above.
 func (e Entitlements) SIEMExport() bool { return e.businessPlus() }

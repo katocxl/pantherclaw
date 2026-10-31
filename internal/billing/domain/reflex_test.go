@@ -24,7 +24,7 @@ func TestReflexEditions(t *testing.T) {
 		{domain.Enterprise, true, true},
 	} {
 		e := domain.Entitlements{Edition: tc.ed}
-		for name, got := range map[string]bool{"ReflexTeam": e.ReflexTeam(), "Cases": e.Cases(), "BreachRadius": e.BreachRadius()} {
+		for name, got := range map[string]bool{"ReflexTeam": e.ReflexTeam(), "Cases": e.Cases(), "BreachRadius": e.BreachRadius(), "PostureFindings": e.PostureFindings()} {
 			if got != tc.team {
 				t.Errorf("%s %s = %v, want %v", tc.ed, name, got, tc.team)
 			}
@@ -32,7 +32,7 @@ func TestReflexEditions(t *testing.T) {
 		for name, got := range map[string]bool{
 			"AdvancedDetections": e.AdvancedDetections(), "CustomDetections": e.CustomDetections(),
 			"PostureRemediation": e.PostureRemediation(), "SIEMExport": e.SIEMExport(), "SOAR": e.SOAR(),
-			"SharedSignals": e.SharedSignals(),
+			"SharedSignals": e.SharedSignals(), "PostureTrends": e.PostureTrends(),
 		} {
 			if got != tc.business {
 				t.Errorf("%s %s = %v, want %v", tc.ed, name, got, tc.business)

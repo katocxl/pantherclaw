@@ -140,6 +140,26 @@ func (s *Service) List(ctx context.Context, includeDismissed bool) (Listing, err
 	return out, err
 }
 
+// Open returns the recommendations that apply and are not dismissed, for the
+// ranked posture queue (G0 M24 D204). vis is what the reader may see and
+// restricted says it lacks org scope; the queue resolves both itself, so its
+// daily rollup can read as the org.
+func Open(ctx context.Context, q *dbq.Queries, org ids.OrgID, vis exapp.Visible, restricted bool) ([]Item, error) {
+	facts, err := load(ctx, q, org, vis)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.ListRecommendationDismissals(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	dismissals := make(map[domain.ID]dbq.PcRecommendationDismissal, len(rows))
+	for _, r := range rows {
+		dismissals[domain.ID(r.RecommendationID)] = r
+	}
+	return evaluate(facts, dismissals, restricted, false), nil
+}
+
 // evaluate applies the catalog to facts.
 func evaluate(facts domain.Facts, dismissals map[domain.ID]dbq.PcRecommendationDismissal, restricted, includeDismissed bool) []Item {
 	var out []Item

@@ -607,6 +607,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM21OutcomeJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerPostureQueueJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerM11GovernJobs(evidenceJobs, jreg, pool, log); err != nil {
 			return err
 		}
@@ -917,6 +920,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerExposure(rs, d)
 	registerSuggestions(rs, d)
 	registerRecommendations(rs, d)
+	registerPostureQueue(rs, d)
 	edges, err := registerM10Edges(rs, d)
 	if err != nil {
 		return nil, err

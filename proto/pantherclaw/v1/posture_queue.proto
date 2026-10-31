@@ -48,7 +48,7 @@ enum PostureSeverityBasis {
 message PostureFix {
   // kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,
   // ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,
-  // REVIEW_SUGGESTION, CLAIM_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL or
+  // REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL or
   // REVIEW_SERVER.
   string kind = 1;
   // target_id is the record the fix acts on, as "<type>:<id>".

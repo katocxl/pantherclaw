@@ -3213,6 +3213,23 @@ type PcPostgresConnection struct {
 	UpdatedAt           time.Time
 }
 
+type PcPostureDaily struct {
+	OrgID       ids.OrgID
+	Day         pgtype.Date
+	Kind        string
+	Severity    string
+	TeamID      *ids.UUID
+	OpenCount   int32
+	ClosedCount *int32
+}
+
+type PcPostureDailyRun struct {
+	OrgID            ids.OrgID
+	Day              pgtype.Date
+	TruncatedSources []string
+	CollectedAt      time.Time
+}
+
 type PcPostureFinding struct {
 	OrgID                ids.OrgID
 	ID                   ids.UUID
