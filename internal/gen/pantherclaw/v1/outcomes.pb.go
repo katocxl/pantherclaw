@@ -305,7 +305,7 @@ type OutcomeSeries struct {
 	Measures string `protobuf:"bytes,7,opt,name=measures,proto3" json:"measures,omitempty"`
 	// The records it cannot see, stated with every read.
 	NotSeen []string `protobuf:"bytes,8,rep,name=not_seen,json=notSeen,proto3" json:"not_seen,omitempty"`
-	// DRAFT until the founder signs the definition off (G17).
+	// SIGNED_OFF: the founder signed the definition off (G17).
 	DefinitionStatus string          `protobuf:"bytes,9,opt,name=definition_status,json=definitionStatus,proto3" json:"definition_status,omitempty"`
 	Points           []*OutcomePoint `protobuf:"bytes,10,rep,name=points,proto3" json:"points,omitempty"`
 	unknownFields    protoimpl.UnknownFields
