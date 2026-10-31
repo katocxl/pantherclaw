@@ -1,0 +1,40 @@
+name: pc.detect.refund-cap-probing
+version: 1.0.0
+kind: detection_rule
+title: Refunds refused at the cap, repeatedly
+summary: >-
+  One agent had three or more refunds refused over the cap within an hour.
+  Looking for the limit by trying amounts looks like this.
+body:
+  content: |
+    id: org.hub.refund_cap_probing
+    version: "1"
+    title: Refunds refused at the cap, repeatedly
+    description: >-
+      One agent had three or more refunds refused over the cap within an hour.
+      Looking for the limit by trying amounts looks like this.
+    severity: MEDIUM
+    attention: ALERT
+    basis: INFERRED
+    owasp: [ASI02, ASI10]
+    edition: business
+    on: [receipt.decision]
+    match: event.decision == "DENY" && event.reason == "REFUND_OVER_CAP"
+    window:
+      duration: 1h
+      group_by: [subjects.agent]
+      count: 3
+    group: agent
+    tests:
+      - name: three refusals
+        fires: true
+        events:
+          - {kind: receipt.decision, decision: DENY, reason: REFUND_OVER_CAP, subjects: {agent: a1}}
+          - {kind: receipt.decision, decision: DENY, reason: REFUND_OVER_CAP, subjects: {agent: a1}, at: 1m}
+          - {kind: receipt.decision, decision: DENY, reason: REFUND_OVER_CAP, subjects: {agent: a1}, at: 2m}
+      - name: other refusals
+        fires: false
+        events:
+          - {kind: receipt.decision, decision: DENY, reason: TARGET_NOT_GRANTED, subjects: {agent: a1}}
+          - {kind: receipt.decision, decision: DENY, reason: TARGET_NOT_GRANTED, subjects: {agent: a1}, at: 1m}
+          - {kind: receipt.decision, decision: DENY, reason: TARGET_NOT_GRANTED, subjects: {agent: a1}, at: 2m}

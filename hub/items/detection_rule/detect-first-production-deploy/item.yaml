@@ -1,0 +1,37 @@
+name: pc.detect.first-production-deploy
+version: 1.0.0
+kind: detection_rule
+title: First deployment by an agent in 30 days
+summary: >-
+  An agent was allowed a deployment for the first time in 30 days. Worth a
+  look when the agent is new to releasing.
+body:
+  content: |
+    id: org.hub.first_production_deploy
+    version: "1"
+    title: First deployment by an agent in 30 days
+    description: >-
+      An agent was allowed a deployment for the first time in 30 days. Worth a
+      look when the agent is new to releasing.
+    severity: LOW
+    attention: ALERT
+    basis: OBSERVED
+    owasp: [ASI02]
+    edition: business
+    on: [receipt.decision]
+    match: >-
+      event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"]
+      && event.operation == "github.deployment.trigger"
+    first_seen:
+      keys: [subjects.agent, operation]
+      horizon: 720h
+    group: agent
+    tests:
+      - name: first deployment
+        fires: true
+        events:
+          - {kind: receipt.decision, decision: ALLOW, operation: github.deployment.trigger, subjects: {agent: a1}}
+      - name: refused deployment
+        fires: false
+        events:
+          - {kind: receipt.decision, decision: DENY, operation: github.deployment.trigger, subjects: {agent: a1}}

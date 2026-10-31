@@ -1,0 +1,41 @@
+- name: coverage_comes_back_and_launches_resume
+  kind: NORMAL
+  trigger:
+    params: {agent: 0192f000-0000-7000-8000-000000000101, connection: 0192f000-0000-7000-8000-000000000102, operation: tickets.update}
+  stubs:
+    assign: [{state: DONE, effect: CHANGED, refs: [owned_failure]}]
+    pause: [{state: DONE, effect: CHANGED, refs: [automation]}]
+    restored: [{state: WAITING}, {state: DONE, refs: [coverage]}]
+    resume: [{state: DONE, effect: CHANGED, refs: [automation]}]
+  expect:
+    state: SUCCEEDED
+    steps: {assign: DONE, pause: DONE, restored: DONE, resume: DONE}
+- name: the_pause_is_refused
+  kind: DENIED
+  trigger:
+    params: {agent: 0192f000-0000-7000-8000-000000000103, operation: tickets.update}
+  stubs:
+    pause: [{state: FAILED, reason: AUTHORITY_CHANGED}]
+  expect:
+    state: FAILED
+    reason: AUTHORITY_CHANGED
+    steps: {pause: FAILED}
+- name: coverage_does_not_come_back_in_time_and_launches_stay_paused
+  kind: TIMEOUT
+  trigger:
+    params: {agent: 0192f000-0000-7000-8000-000000000104, operation: tickets.update}
+  stubs:
+    pause: [{state: DONE, effect: CHANGED, refs: [automation]}]
+    restored: [{state: WAITING}, {state: FAILED, reason: TIMEOUT}]
+  expect:
+    state: PARTIALLY_COMPLETED
+    reason: TIMEOUT
+    steps: {pause: DONE, restored: FAILED}
+- name: the_same_loss_twice_starts_one_execution
+  kind: DUPLICATE
+  trigger:
+    params: {agent: 0192f000-0000-7000-8000-000000000105, connection: 0192f000-0000-7000-8000-000000000106, operation: tickets.update}
+  stubs:
+    restored: [{state: DONE, refs: [coverage]}]
+  expect:
+    state: SUCCEEDED

@@ -1,0 +1,6 @@
+tests:
+  - name: another run
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: REQUIRE_APPROVAL, operation: github.pull.merge, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: DENY, reason: SHELL_MERGE_OR_PUSH, subjects: {run: r2}, at: 5m}
