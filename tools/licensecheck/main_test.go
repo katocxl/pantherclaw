@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -33,6 +34,7 @@ func TestExpectedLicense(t *testing.T) {
 		"integrations/claude-code/hook.ts":                      spdxApache,
 		"integrations/claude-agent-sdk/typescript/src/index.ts": spdxApache,
 		"docs/protocol/example.go":                              spdxApache,
+		"hub/tools/x.sh":                                        spdxApache,
 		"sdkx/other.go":                                         spdxBUSL,
 	}
 	for p, want := range cases {
@@ -136,5 +138,75 @@ func TestRunExitCodes(t *testing.T) {
 	}
 	if code := run([]string{"-bogus"}, &stdout, &stderr); code != 2 {
 		t.Fatalf("usage code = %d, want 2", code)
+	}
+}
+
+const noticeHead = "PantherClaw\n\nSeparately Licensed Components\n----\nThe following:\n\n"
+
+// TestCheckListed (G0 M23 D111): every directory NOTICE lists has a LICENSE,
+// every integration is listed, and only the directories still to be built may
+// be absent.
+//
+// Covers: F848
+func TestCheckListed(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	write(t, root, "NOTICE", noticeHead+
+		"  sdk/go/   Go SDK\n  hub/   content\n  integrations/x/ x\n  integrations/github-action/ pending\n\nReference documents\n---\n  docs/reference/ not licensed separately\n")
+	write(t, root, "sdk/go/LICENSE", "apache")
+	write(t, root, "integrations/x/LICENSE", "apache")
+	got := CheckListed(os.DirFS(root))
+	if len(got) != 1 || got[0].Path != "hub/" || !strings.Contains(got[0].Reason, "no LICENSE") {
+		t.Fatalf("a listed directory without a LICENSE: %+v", got)
+	}
+	write(t, root, "hub/LICENSE", "apache")
+	if got := CheckListed(os.DirFS(root)); len(got) != 0 {
+		t.Fatalf("every listed directory is licensed: %+v", got)
+	}
+	write(t, root, "integrations/github-action/action.yml", "x")
+	if got := CheckListed(os.DirFS(root)); len(got) != 1 || got[0].Path != "integrations/github-action/" {
+		t.Fatalf("a built directory that was pending needs a LICENSE: %+v", got)
+	}
+	write(t, root, "integrations/github-action/LICENSE", "apache")
+	write(t, root, "integrations/y/LICENSE", "apache")
+	if got := CheckListed(os.DirFS(root)); len(got) != 1 || got[0].Path != "integrations/y/" || got[0].Reason != "not listed in NOTICE" {
+		t.Fatalf("an unlisted integration: %+v", got)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-root", root}, &stdout, &stderr); code != 1 || !strings.Contains(stdout.String(), "integrations/y/") {
+		t.Fatalf("run = %d, stdout %q", code, stdout.String())
+	}
+	write(t, root, "NOTICE", noticeHead+"  sdk/go/ x\n  sdk/gone/ x\n  integrations/x/ x\n  integrations/y/ x\n  integrations/github-action/ x\n")
+	if got := CheckListed(os.DirFS(root)); len(got) != 1 || got[0].Path != "sdk/gone/" {
+		t.Fatalf("a listed directory that does not exist: %+v", got)
+	}
+}
+
+// TestRepositoryNoticeIsChecked runs the listing check on this repository.
+//
+// Covers: F848
+func TestRepositoryNoticeIsChecked(t *testing.T) {
+	t.Parallel()
+
+	repo := os.DirFS(filepath.Join("..", ".."))
+	if got := CheckListed(repo); len(got) != 0 {
+		t.Fatalf("NOTICE: %+v", got)
+	}
+	notice, err := os.ReadFile(filepath.Join("..", "..", "NOTICE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirs := ListedDirs(notice)
+	for _, want := range []string{
+		"hub/", "integrations/crewai/", "integrations/langchain/", "integrations/mcp/", "integrations/openai-agents/", "integrations/vercel-ai/",
+		"integrations/github-action/", "integrations/gitlab/",
+	} {
+		if !slices.Contains(dirs, want) {
+			t.Errorf("NOTICE does not list %s: %v", want, dirs)
+		}
+	}
+	if slices.Contains(dirs, "docs/reference/") {
+		t.Errorf("the reference documents are not separately licensed: %v", dirs)
 	}
 }

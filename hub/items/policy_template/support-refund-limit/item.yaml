@@ -1,0 +1,53 @@
+name: pc.support.refund-limit
+version: 1.0.0
+kind: policy_template
+title: Support refund limits
+summary: >-
+  Support refunds above 50.00 USD wait for an independent approver and refunds
+  above 100.00 USD are refused. The thresholds are examples: change them in a
+  new policy version. Other currencies fail closed until you add rules for
+  them.
+body:
+  rules:
+    - id: rl-cap
+      per: org
+      kind: CONSTRAIN
+      summary: no single support refund above 100.00 USD
+      operations: [stripe.refund.create]
+      when: "true"
+      reason: REFUND_OVER_CAP
+      constraint: {kind: amount_max, param: amount, max: "100.00", currency: USD}
+    - id: rl-hold
+      per: org
+      kind: REQUIRE_APPROVAL
+      summary: an independent approver approves every support refund above 50.00 USD
+      operations: [stripe.refund.create]
+      when: "action.params.amount > money('50.00', 'USD')"
+      reason: REFUND_NEEDS_APPROVAL
+      approval: {role: approver, count: 1, independent: true}
+  tests:
+    - {"id": "rl-at-hold", "per": "org", "summary": "a refund of exactly 50.00 USD goes through without a hold",
+        "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"},
+          "params": {"amount": {"value": "50.00", "currency": "USD"}, "reason": "requested_by_customer"}},
+        "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
+    - {"id": "rl-below-hold", "per": "org", "summary": "a refund of 49.99 USD goes through without a hold",
+        "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"},
+          "params": {"amount": {"value": "49.99", "currency": "USD"}, "reason": "requested_by_customer"}},
+        "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
+    - {"id": "rl-over-hold", "per": "org", "summary": "a refund of 50.01 USD waits for an approver",
+        "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"},
+          "params": {"amount": {"value": "50.01", "currency": "USD"}, "reason": "requested_by_customer"}},
+        "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+        "expect": {"decision": "REQUIRE_APPROVAL", "reason": "REFUND_NEEDS_APPROVAL", "rule": "rl-hold"}}
+    - {"id": "rl-at-cap", "per": "org", "summary": "a refund of exactly 100.00 USD is under the cap and waits for an approver",
+        "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"},
+          "params": {"amount": {"value": "100.00", "currency": "USD"}, "reason": "requested_by_customer"}},
+        "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+        "expect": {"decision": "REQUIRE_APPROVAL", "reason": "REFUND_NEEDS_APPROVAL", "rule": "rl-hold"}}
+    - {"id": "rl-over-cap", "per": "org", "summary": "a refund of 100.01 USD is refused",
+        "action": {"operation": "stripe.refund.create", "target": {"type": "stripe.payment", "id": "pi_Support0001"},
+          "params": {"amount": {"value": "100.01", "currency": "USD"}, "reason": "requested_by_customer"}},
+        "given": {"facts": {"stripe.payment.refundable": {"value": {"object": {"livemode": false, "payment": "ch_Support0001", "remaining": {"value": "150.00", "currency": "USD"}}}, "age_seconds": 10}}},
+        "expect": {"decision": "DENY", "reason": "REFUND_OVER_CAP", "rule": "rl-cap"}}

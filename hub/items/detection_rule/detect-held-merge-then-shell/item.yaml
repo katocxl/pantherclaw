@@ -1,0 +1,42 @@
+name: pc.detect.held-merge-then-shell
+version: 1.0.0
+kind: detection_rule
+title: Shell merge tried after a held merge
+summary: >-
+  Within 30 minutes of a merge being held for a reviewer, the same run tried
+  to merge or push from the shell. The order suggests going around the hold;
+  the rule infers the link from order and run.
+body:
+  content: |
+    id: org.hub.held_merge_then_shell
+    version: "1"
+    title: Shell merge tried after a held merge
+    description: >-
+      Within 30 minutes of a merge being held for a reviewer, the same run
+      tried to merge or push from the shell. The order suggests going around
+      the hold; the rule infers the link from order and run.
+    severity: HIGH
+    attention: ALERT
+    basis: INFERRED
+    owasp: [ASI02, ASI10]
+    edition: business
+    sequence:
+      within: 30m
+      group_by: [subjects.run]
+      steps:
+        - on: [receipt.decision]
+          match: event.decision == "REQUIRE_APPROVAL" && event.operation == "github.pull.merge"
+        - on: [receipt.decision]
+          match: event.decision == "DENY" && event.reason == "SHELL_MERGE_OR_PUSH"
+    group: run
+    tests:
+      - name: held then shell
+        fires: true
+        events:
+          - {kind: receipt.decision, decision: REQUIRE_APPROVAL, operation: github.pull.merge, subjects: {run: r1}}
+          - {kind: receipt.decision, decision: DENY, reason: SHELL_MERGE_OR_PUSH, subjects: {run: r1}, at: 5m}
+      - name: too far apart
+        fires: false
+        events:
+          - {kind: receipt.decision, decision: REQUIRE_APPROVAL, operation: github.pull.merge, subjects: {run: r1}}
+          - {kind: receipt.decision, decision: DENY, reason: SHELL_MERGE_OR_PUSH, subjects: {run: r1}, at: 45m}
