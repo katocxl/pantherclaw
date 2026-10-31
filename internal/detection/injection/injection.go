@@ -72,7 +72,13 @@ type Result struct {
 	ExcerptNormalized string
 	// Digest is "sha256:<hex>" of the description.
 	Digest string
+	// Spans are the raw text's byte ranges of the first hit of each pattern
+	// (G0 M24 D210), in the order of Patterns.
+	Spans []Span
 }
+
+// Span is a byte range of the raw text: Start up to, not including, End.
+type Span struct{ Start, End int }
 
 // Scan checks one description.
 func Scan(desc string) Result {
@@ -86,6 +92,7 @@ func Scan(desc string) Result {
 			continue
 		}
 		r.Patterns = append(r.Patterns, p.name)
+		r.Spans = append(r.Spans, rawSpan(desc, at, loc))
 		if first < 0 || loc[0] < first {
 			first = loc[0]
 		}
@@ -97,6 +104,14 @@ func Scan(desc string) Result {
 	r.Excerpt = excerpt(desc, at[first])
 	r.ExcerptNormalized = excerpt(text, first)
 	return r
+}
+
+// rawSpan maps a hit of the normalised text back to the raw text; a hit ends
+// after the raw character its last byte came from.
+func rawSpan(desc string, at, loc []int) Span {
+	last := at[loc[1]-1]
+	_, n := utf8.DecodeRuneInString(desc[last:])
+	return Span{Start: at[loc[0]], End: last + n}
 }
 
 // excerpt returns up to MaxExcerpt bytes of clean text starting a little
