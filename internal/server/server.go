@@ -58,6 +58,7 @@ import (
 	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/grantsrpc"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	hubdomain "github.com/katocxl/pantherclaw/internal/hub/domain"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/identityrpc"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/issuerkeys"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/kube"
@@ -454,6 +455,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		trustedHub, err := hubRoots(ctx, cfg, log)
+		if err != nil {
+			return err
+		}
 		sessions, err := browserSessions(cfg, pool, idps, log)
 		if err != nil {
 			return err
@@ -478,6 +483,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects, identity: cfg.Identity,
 			logOrigin:    cfg.logOrigin(),
 			packageRoots: roots,
+			hubRoots:     trustedHub,
 			github:       cfg.GitHub,
 			web:          web,
 			m5:           m5,
@@ -786,6 +792,8 @@ type apiDeps struct {
 	subjects oidcrp.Subjects
 	// packageRoots are the trusted package roots (nil: the embedded ones).
 	packageRoots trust.Roots
+	// hubRoots are the trusted Hub keys (nil: the embedded ones, G0 M23 D101).
+	hubRoots hubdomain.Roots
 	// M5 part 1: browser pages, accounts, notifications.
 	web *webhttp.Handler
 	m5  *m5Services
@@ -930,6 +938,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerTeamsChannels(d)
 	autos = registerAutomationsCore(rs, d, grants, runs)
 	if err := registerM21Model(rs, d, autos); err != nil {
+		return nil, err
+	}
+	if err := registerM23Hub(rs, d, autos); err != nil {
 		return nil, err
 	}
 	if err := registerAutomationAssurance(rs, d, autos); err != nil {
