@@ -1,0 +1,39 @@
+apiVersion: automations.pantherclaw.dev/v1
+kind: Automation
+purpose: Weekly audit digest, approved by a person before delivery.
+work_kind: SECURITY_WORK
+review_by: "2026-12-01"
+when:
+  schedule:
+    cron: "0 7 * * 1"
+    timezone: Europe/Berlin
+    missed: CATCH_UP
+    catch_up_window: 2h
+    dst_gap: SHIFT
+    overlap: FORBID
+authority:
+  principal: self
+  platform:
+    - step: notify
+      scopes: [OWNER, CONFIRMERS]
+do:
+  - id: approve
+    step: gate
+    with:
+      approvers:
+        roles: [security_lead]
+      deadline: 24h
+      summary: Send the weekly digest
+  - id: tell
+    step: notify
+    with:
+      to: [OWNER]
+      message:
+        title: Weekly digest approved
+        body: The digest goes out now.
+finish_when:
+  - step: approve
+    condition: APPROVAL_RESOLVED
+paused_triggers: QUEUE
+queue_max: 10
+queue_ttl: 12h

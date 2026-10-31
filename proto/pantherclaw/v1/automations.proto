@@ -359,7 +359,7 @@ message GetVersionGraphRequest {
 // AutomationGraphNode is one node of a version graph.
 message AutomationGraphNode {
   string id = 1;
-  // TRIGGER, CONDITION, STEP, GATE or FINISH.
+  // TRIGGER, CONDITION, STEP, GATE, BRANCH, SWITCH, JOIN or FINISH.
   string type = 2;
   // The step kind or trigger kind.
   string kind = 3;
@@ -373,8 +373,12 @@ message AutomationGraphNode {
 message AutomationGraphEdge {
   string from = 1;
   string to = 2;
-  // NEXT, ON_FAILURE, COMPENSATE, FINISHES or USES.
+  // NEXT, BRANCH, ON_FAILURE, COMPENSATE or FINISHES.
   string type = 3;
+  // A BRANCH edge: which way it is ("then", "else", "case 0", "default").
+  string label = 4;
+  // A BRANCH edge: the guard that selects it; empty for else and default.
+  string guard = 5;
 }
 
 message GetVersionGraphResponse {

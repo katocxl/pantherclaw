@@ -635,14 +635,18 @@ type AutomationStepAttempt struct {
 	Compensation bool                   `protobuf:"varint,6,opt,name=compensation,proto3" json:"compensation,omitempty"`
 	State        AutomationStepState    `protobuf:"varint,7,opt,name=state,proto3,enum=pantherclaw.v1.AutomationStepState" json:"state,omitempty"`
 	// ALLOWED or REFUSED.
-	Decision      string                   `protobuf:"bytes,8,opt,name=decision,proto3" json:"decision,omitempty"`
-	Reason        string                   `protobuf:"bytes,9,opt,name=reason,proto3" json:"reason,omitempty"`
-	Output        map[string]string        `protobuf:"bytes,10,rep,name=output,proto3" json:"output,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Refs          []*AutomationEvidenceRef `protobuf:"bytes,11,rep,name=refs,proto3" json:"refs,omitempty"`
-	Effect        AutomationEffect         `protobuf:"varint,12,opt,name=effect,proto3,enum=pantherclaw.v1.AutomationEffect" json:"effect,omitempty"`
-	StartedAt     *timestamppb.Timestamp   `protobuf:"bytes,13,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	EndedAt       *timestamppb.Timestamp   `protobuf:"bytes,14,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
-	WakeAt        *timestamppb.Timestamp   `protobuf:"bytes,15,opt,name=wake_at,json=wakeAt,proto3" json:"wake_at,omitempty"`
+	Decision  string                   `protobuf:"bytes,8,opt,name=decision,proto3" json:"decision,omitempty"`
+	Reason    string                   `protobuf:"bytes,9,opt,name=reason,proto3" json:"reason,omitempty"`
+	Output    map[string]string        `protobuf:"bytes,10,rep,name=output,proto3" json:"output,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Refs      []*AutomationEvidenceRef `protobuf:"bytes,11,rep,name=refs,proto3" json:"refs,omitempty"`
+	Effect    AutomationEffect         `protobuf:"varint,12,opt,name=effect,proto3,enum=pantherclaw.v1.AutomationEffect" json:"effect,omitempty"`
+	StartedAt *timestamppb.Timestamp   `protobuf:"bytes,13,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	EndedAt   *timestamppb.Timestamp   `protobuf:"bytes,14,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	WakeAt    *timestamppb.Timestamp   `protobuf:"bytes,15,opt,name=wake_at,json=wakeAt,proto3" json:"wake_at,omitempty"`
+	// The node this attempt worked; a v1 attempt's is its step id.
+	NodeId string `protobuf:"bytes,16,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// How many times the node was entered.
+	Visit         int32 `protobuf:"varint,17,opt,name=visit,proto3" json:"visit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -780,6 +784,20 @@ func (x *AutomationStepAttempt) GetWakeAt() *timestamppb.Timestamp {
 		return x.WakeAt
 	}
 	return nil
+}
+
+func (x *AutomationStepAttempt) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *AutomationStepAttempt) GetVisit() int32 {
+	if x != nil {
+		return x.Visit
+	}
+	return 0
 }
 
 // AutomationFinishStatus is one finish condition and its evidence.
@@ -1054,8 +1072,12 @@ type AutomationExecution struct {
 	CancelReason      string                      `protobuf:"bytes,23,opt,name=cancel_reason,json=cancelReason,proto3" json:"cancel_reason,omitempty"`
 	CancelRequestedBy string                      `protobuf:"bytes,24,opt,name=cancel_requested_by,json=cancelRequestedBy,proto3" json:"cancel_requested_by,omitempty"`
 	Result            *AutomationExecutionResult  `protobuf:"bytes,25,opt,name=result,proto3" json:"result,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// A v2 execution: the node being worked and every node entered, in
+	// order. Empty on a v1 execution, which reports current_step.
+	CurrentNode   string   `protobuf:"bytes,26,opt,name=current_node,json=currentNode,proto3" json:"current_node,omitempty"`
+	Path          []string `protobuf:"bytes,27,rep,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AutomationExecution) Reset() {
@@ -1259,6 +1281,20 @@ func (x *AutomationExecution) GetCancelRequestedBy() string {
 func (x *AutomationExecution) GetResult() *AutomationExecutionResult {
 	if x != nil {
 		return x.Result
+	}
+	return nil
+}
+
+func (x *AutomationExecution) GetCurrentNode() string {
+	if x != nil {
+		return x.CurrentNode
+	}
+	return ""
+}
+
+func (x *AutomationExecution) GetPath() []string {
+	if x != nil {
+		return x.Path
 	}
 	return nil
 }
@@ -2927,7 +2963,7 @@ const file_pantherclaw_v1_automation_executions_proto_rawDesc = "" +
 	"\vapproved_by\x18\x02 \x03(\tR\n" +
 	"approvedBy\x127\n" +
 	"\treview_by\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\breviewBy\x12\x14\n" +
-	"\x05state\x18\x04 \x01(\tR\x05state\"\xc2\x05\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\"\xf1\x05\n" +
 	"\x15AutomationStepAttempt\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2946,7 +2982,9 @@ const file_pantherclaw_v1_automation_executions_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
 	"\bended_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x123\n" +
-	"\awake_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x06wakeAt\x1a9\n" +
+	"\awake_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x06wakeAt\x12\x17\n" +
+	"\anode_id\x18\x10 \x01(\tR\x06nodeId\x12\x14\n" +
+	"\x05visit\x18\x11 \x01(\x05R\x05visit\x1a9\n" +
 	"\vOutputEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x01\n" +
@@ -2970,7 +3008,7 @@ const file_pantherclaw_v1_automation_executions_proto_rawDesc = "" +
 	"\n" +
 	"unresolved\x18\b \x03(\v2$.pantherclaw.v1.AutomationUnresolvedR\n" +
 	"unresolved\x12?\n" +
-	"\acleanup\x18\t \x03(\v2%.pantherclaw.v1.AutomationEvidenceRefR\acleanup\"\x8c\t\n" +
+	"\acleanup\x18\t \x03(\v2%.pantherclaw.v1.AutomationEvidenceRefR\acleanup\"\xc3\t\n" +
 	"\x13AutomationExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rautomation_id\x18\x02 \x01(\tR\fautomationId\x12'\n" +
@@ -3001,7 +3039,9 @@ const file_pantherclaw_v1_automation_executions_proto_rawDesc = "" +
 	"\x0felapsed_seconds\x18\x16 \x01(\x03R\x0eelapsedSeconds\x12#\n" +
 	"\rcancel_reason\x18\x17 \x01(\tR\fcancelReason\x12.\n" +
 	"\x13cancel_requested_by\x18\x18 \x01(\tR\x11cancelRequestedBy\x12A\n" +
-	"\x06result\x18\x19 \x01(\v2).pantherclaw.v1.AutomationExecutionResultR\x06result\"\xda\x01\n" +
+	"\x06result\x18\x19 \x01(\v2).pantherclaw.v1.AutomationExecutionResultR\x06result\x12!\n" +
+	"\fcurrent_node\x18\x1a \x01(\tR\vcurrentNode\x12\x12\n" +
+	"\x04path\x18\x1b \x03(\tR\x04path\"\xda\x01\n" +
 	"\x18AutomationExecutionGrant\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x14\n" +

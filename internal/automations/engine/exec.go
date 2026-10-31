@@ -43,6 +43,15 @@ const (
 	ReasonUnsupported = "UNSUPPORTED_CAPABILITY"
 	// ReasonOutputInvalid: a step returned an output beyond its bounds.
 	ReasonOutputInvalid = "OUTPUT_INVALID"
+	// ReasonJoinUnmet: a path entered a join that does not admit it. The
+	// validator refuses such a graph, so this only fails closed.
+	ReasonJoinUnmet = "JOIN_UNMET"
+	// ReasonNodeInvalid: the execution points at a node its pinned version
+	// does not have (fail closed, HR-533).
+	ReasonNodeInvalid = "NODE_INVALID"
+	// ReasonTerminalOutcome: the path's terminal declares less than its
+	// evidence would allow.
+	ReasonTerminalOutcome = "TERMINAL_OUTCOME"
 )
 
 // OutputIrreversible is the output key a step sets to "true" when its
@@ -74,9 +83,17 @@ type Exec struct {
 	Reason       string
 	Current      int
 	Compensating bool
-	StartedAt    time.Time
-	DeadlineAt   time.Time
-	WakeAt       time.Time
+	// CurrentNode and Path are a v2 execution's pointer: the node being
+	// worked and every node entered, in order. Current then indexes Do at
+	// that node, or the compensation plan. A v1 execution leaves them empty
+	// and runs by Current alone (HR-530).
+	CurrentNode string
+	Path        []string
+	// Unevaluable lists nodes whose guard failed to evaluate in this round.
+	Unevaluable []string
+	StartedAt   time.Time
+	DeadlineAt  time.Time
+	WakeAt      time.Time
 	// CancelReason is set by CancelExecution or the kill switch; the
 	// Machine honors it at the next boundary (HR-283).
 	CancelReason string
@@ -91,6 +108,8 @@ type Attempt struct {
 	ID           ids.UUID
 	Index        int
 	StepID       string
+	NodeID       string
+	Visit        int
 	Number       int
 	Kind         string
 	Compensation bool
@@ -179,7 +198,68 @@ func (x *Exec) steps(compensation bool) []autodomain.StepSpec {
 	if x.Def.IfFails == nil {
 		return nil
 	}
+	if x.Def.IsV2() {
+		return x.compensationPlan()
+	}
 	return x.Def.IfFails.Compensate
+}
+
+// compensationPlan is what a v2 execution compensates (HR-534, D307): the
+// entries answering nodes on the taken path that ran, walking the path
+// backwards. A step is left out only if none of its attempts did anything.
+// The plan depends only on the path and the finished main attempts, so it
+// holds still while it runs.
+func (x *Exec) compensationPlan() []autodomain.StepSpec {
+	var out []autodomain.StepSpec
+	for _, id := range slices.Backward(x.Path) {
+		i := slices.IndexFunc(x.Def.Do, func(s autodomain.StepSpec) bool { return s.ID == id })
+		if i < 0 || !x.acted(i) {
+			continue
+		}
+		for _, c := range x.Def.IfFails.Compensate {
+			if c.Compensates == id {
+				out = append(out, c)
+			}
+		}
+	}
+	return out
+}
+
+// acted reports whether any attempt of a main step was neither skipped nor
+// refused: a retried step that changed something and was then refused still
+// changed it.
+func (x *Exec) acted(index int) bool {
+	return slices.ContainsFunc(x.Attempts, func(a *Attempt) bool {
+		return a.Index == index && !a.Compensation && a.State != autodomain.StepSkipped && !a.Refused
+	})
+}
+
+// enter moves a v2 execution to a node.
+func (x *Exec) enter(id string) {
+	x.CurrentNode = id
+	x.Path = append(x.Path, id)
+}
+
+// next moves past the step just worked.
+func (x *Exec) next() {
+	if !x.Def.IsV2() || x.Compensating {
+		x.Current++
+		return
+	}
+	if n := x.Def.Flow().Node(x.CurrentNode); n != nil {
+		x.enter(n.Next)
+	}
+}
+
+// terminal is the terminal node the execution reached, or nil.
+func (x *Exec) terminal() *autodomain.NodeSpec {
+	if !x.Def.IsV2() || x.Compensating {
+		return nil
+	}
+	if n := x.Def.Flow().Node(x.CurrentNode); n != nil && n.Kind() == autodomain.NodeKindTerminal {
+		return n
+	}
+	return nil
 }
 
 // outputs are the latest terminal outputs of the main steps by id.

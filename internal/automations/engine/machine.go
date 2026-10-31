@@ -163,6 +163,11 @@ func (m *Machine) step(ctx context.Context, tx pgx.Tx, x *Exec) error {
 	if !now.Before(x.DeadlineAt) {
 		return m.finish(ctx, tx, x, autodomain.ReasonDeadline, false)
 	}
+	if x.Def.IsV2() && !x.Compensating {
+		if ended, err := m.walk(ctx, tx, x); ended || err != nil {
+			return err
+		}
+	}
 	specs := x.steps(x.Compensating)
 	if x.Current >= len(specs) {
 		if x.Compensating {
@@ -181,7 +186,7 @@ func (m *Machine) step(ctx context.Context, tx pgx.Tx, x *Exec) error {
 		}
 		return m.poll(ctx, tx, x, spec, last)
 	case passed(last.State):
-		x.Current++
+		x.next()
 		x.State = autodomain.ExecRunning
 		return nil
 	default:
@@ -193,6 +198,84 @@ func (m *Machine) step(ctx context.Context, tx pgx.Tx, x *Exec) error {
 		}
 		return m.failed(ctx, tx, x, spec, last)
 	}
+}
+
+// walk moves a v2 execution over control nodes to the step it works next,
+// with x.Current at that step, or ends it at a terminal. It reports whether
+// the execution stopped walking. Guards fail closed (D301); the taken path
+// is recorded in x.Path, control nodes have no attempts.
+func (m *Machine) walk(ctx context.Context, tx pgx.Tx, x *Exec) (bool, error) {
+	f := x.Def.Flow()
+	if len(x.Path) == 0 {
+		x.enter(f.Entry)
+	}
+	for range len(f.Nodes) + 1 {
+		n := f.Node(x.CurrentNode)
+		if n == nil {
+			return true, m.stop(ctx, tx, x, ReasonNodeInvalid)
+		}
+		switch n.Kind() {
+		case autodomain.NodeKindStep:
+			i := slices.IndexFunc(x.Def.Do, func(s autodomain.StepSpec) bool { return s.ID == n.ID })
+			if i < 0 || f.Node(n.Next) == nil {
+				return true, m.stop(ctx, tx, x, ReasonNodeInvalid)
+			}
+			x.Current = i
+			return false, nil
+		case autodomain.NodeKindBranch, autodomain.NodeKindSwitch:
+			to, err := m.choose(ctx, x, n)
+			if err != nil {
+				x.Unevaluable = append(x.Unevaluable, n.ID)
+				return true, m.stop(ctx, tx, x, ReasonGuard)
+			}
+			if f.Node(to) == nil {
+				return true, m.stop(ctx, tx, x, ReasonNodeInvalid)
+			}
+			x.enter(to)
+		case autodomain.NodeKindJoin:
+			if !joined(x, n) {
+				return true, m.stop(ctx, tx, x, ReasonJoinUnmet)
+			}
+			if f.Node(n.Next) == nil {
+				return true, m.stop(ctx, tx, x, ReasonNodeInvalid)
+			}
+			x.enter(n.Next)
+		case autodomain.NodeKindTerminal:
+			return true, m.finish(ctx, tx, x, "", false)
+		default:
+			return true, m.stop(ctx, tx, x, ReasonNodeInvalid)
+		}
+	}
+	return true, m.stop(ctx, tx, x, ReasonNodeInvalid)
+}
+
+// choose evaluates a branch or switch: the first guard that holds, else the
+// way out without a guard.
+func (m *Machine) choose(ctx context.Context, x *Exec, n *autodomain.NodeSpec) (string, error) {
+	var other string
+	for _, e := range n.Edges() {
+		if e.Guard == "" {
+			other = e.To
+			continue
+		}
+		ok, err := m.guards.eval(ctx, e.Guard, x.View.Trigger, x.outputs())
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return e.To, nil
+		}
+	}
+	return other, nil
+}
+
+// joined re-checks a join at run time (D307): ANY admits a path coming from
+// a named node, ALL needs every named node on the path.
+func joined(x *Exec, n *autodomain.NodeSpec) bool {
+	if n.Join.Mode == autodomain.JoinAll {
+		return !slices.ContainsFunc(n.Join.From, func(id string) bool { return !slices.Contains(x.Path, id) })
+	}
+	return len(x.Path) >= 2 && slices.Contains(n.Join.From, x.Path[len(x.Path)-2])
 }
 
 // passed reports whether a terminal step state lets the execution go on.
@@ -253,8 +336,8 @@ func (m *Machine) context(x *Exec, spec autodomain.StepSpec, index, number int) 
 // start runs a new attempt of spec.
 func (m *Machine) start(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomain.StepSpec, number int) error {
 	a := &Attempt{
-		ID: ids.NewV7(), Index: x.Current, StepID: spec.ID, Number: number, Kind: spec.Step, Compensation: x.Compensating,
-		StartedAt: m.Now(), Effect: autodomain.EffectNone, New: true,
+		ID: ids.NewV7(), Index: x.Current, StepID: spec.ID, NodeID: spec.ID, Visit: 1, Number: number, Kind: spec.Step,
+		Compensation: x.Compensating, StartedAt: m.Now(), Effect: autodomain.EffectNone, New: true,
 	}
 	x.Attempts = append(x.Attempts, a)
 	x.State = autodomain.ExecRunning
@@ -487,7 +570,7 @@ func (m *Machine) failed(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomai
 	}
 	if x.Compensating {
 		// Compensation is best effort: record and go on.
-		x.Current++
+		x.next()
 		return nil
 	}
 	behavior := spec.OnFailure
@@ -496,7 +579,7 @@ func (m *Machine) failed(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomai
 	}
 	switch behavior {
 	case autodomain.OnFailureContinue:
-		x.Current++
+		x.next()
 		return nil
 	case autodomain.OnFailureEscalate:
 		if err := m.Hooks.Escalate(ctx, tx, x, FailureStepEscalated, a.StepID, reason); err != nil {
@@ -546,6 +629,7 @@ func (m *Machine) finish(ctx context.Context, tx pgx.Tx, x *Exec, reason string,
 	default:
 		res.State, res.Reason = autodomain.ExecFailed, cmpOr(reason, ReasonFinishNotMet)
 	}
+	capOutcome(x, &res)
 	if x.Mode == autodomain.ModeLive {
 		refs, err := m.Hooks.Cleanup(ctx, tx, x)
 		if err != nil {
@@ -563,6 +647,26 @@ func (m *Machine) finish(ctx context.Context, tx pgx.Tx, x *Exec, reason string,
 		x.WakeAt = m.Now().Add(ReconcileInterval)
 	}
 	return errStop
+}
+
+// capOutcome holds a final state to what the reached terminal declares
+// (D307): it never exceeds the outcome, and a change is never hidden under
+// FAILED. Evidence already capped it from the other side.
+func capOutcome(x *Exec, res *Result) {
+	t := x.terminal()
+	if t == nil || res.State != autodomain.ExecSucceeded {
+		return
+	}
+	switch t.Outcome {
+	case autodomain.OutcomePartiallyCompleted:
+		res.State, res.Reason = autodomain.ExecPartiallyCompleted, ReasonTerminalOutcome
+	case autodomain.OutcomeFailed:
+		res.State, res.Reason = autodomain.ExecFailed, ReasonTerminalOutcome
+		if len(res.Changed) > 0 {
+			res.State = autodomain.ExecPartiallyCompleted
+		}
+	case autodomain.OutcomeSucceeded:
+	}
 }
 
 // ReconcileInterval is how often NEEDS_RECONCILIATION is checked again.
@@ -588,6 +692,7 @@ func (m *Machine) recheck(ctx context.Context, tx pgx.Tx, x *Exec) error {
 	default:
 		res.State, res.Reason = autodomain.ExecFailed, x.Reason
 	}
+	capOutcome(x, &res)
 	if x.Result != nil {
 		res.Cleanup = x.Result.Cleanup
 	}
@@ -637,7 +742,11 @@ func (m *Machine) account(x *Exec) Result {
 			res.Unresolved = append(res.Unresolved, Unresolved{Step: a.StepID, Kind: "PENDING_GATE"})
 		}
 	}
-	for _, f := range x.Def.Finish {
+	finish := x.Def.Finish
+	if t := x.terminal(); t != nil {
+		finish = t.FinishWhen
+	}
+	for _, f := range finish {
 		st := FinishStatus{Step: f.Step, Condition: f.Condition}
 		for i, s := range x.Def.Do {
 			if s.ID != f.Step {

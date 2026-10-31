@@ -121,6 +121,7 @@ func execution(s pgengine.Summary) (*pantherclawv1.AutomationExecution, error) {
 		OwnerUserId: s.Owner.String(), VersionId: r.VersionID.String(), VersionNumber: s.VersionNumber,
 		VersionDigest: s.VersionDigest, VersionSummary: s.VersionSummary, Mode: modeOf(r.Mode), State: execState(r.State),
 		Reason: strp(r.Reason), CurrentStep: int32(r.CurrentStep), Compensating: r.Compensating,
+		CurrentNode: strp(r.CurrentNode), Path: r.Path,
 		ServiceAccountId: r.ServiceAccountID.String(), CreatedAt: ts(r.CreatedAt), StartedAt: tsp(r.StartedAt),
 		DeadlineAt: ts(r.DeadlineAt), EndedAt: tsp(r.EndedAt), CancelReason: strp(r.CancelReason),
 		CancelRequestedBy: strp(r.CancelRequestedBy), Result: result(s.Result),
@@ -168,9 +169,9 @@ func attempt(a engine.Attempt) *pantherclawv1.AutomationStepAttempt {
 	}
 	return &pantherclawv1.AutomationStepAttempt{
 		Id: a.ID.String(), StepIndex: int32(a.Index), StepId: a.StepID, Attempt: int32(a.Number), Kind: a.Kind, //nolint:gosec // ≤ 40, ≤ 5
-		Compensation: a.Compensation,
-		State:        pantherclawv1.AutomationStepState(pantherclawv1.AutomationStepState_value["AUTOMATION_STEP_STATE_"+string(a.State)]),
-		Decision:     decision, Reason: a.Reason, Output: a.Output, Refs: refs(a.Refs),
+		Compensation: a.Compensation, NodeId: a.NodeID, Visit: int32(a.Visit), //nolint:gosec // ≤ 40
+		State:    pantherclawv1.AutomationStepState(pantherclawv1.AutomationStepState_value["AUTOMATION_STEP_STATE_"+string(a.State)]),
+		Decision: decision, Reason: a.Reason, Output: a.Output, Refs: refs(a.Refs),
 		Effect:    pantherclawv1.AutomationEffect(pantherclawv1.AutomationEffect_value["AUTOMATION_EFFECT_"+string(a.Effect)]),
 		StartedAt: ts(a.StartedAt), EndedAt: ts(a.EndedAt), WakeAt: ts(a.WakeAt),
 	}

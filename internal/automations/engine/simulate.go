@@ -38,6 +38,11 @@ type Simulation struct {
 	Attempts []Attempt
 	// Elapsed is the simulated time from start to the final state.
 	Elapsed time.Duration
+	// Path is the nodes of a v2 definition the run entered; Unevaluable the
+	// branch or switch nodes whose guard could not be evaluated, where it
+	// stopped as a live execution would.
+	Path        []string
+	Unevaluable []string
 }
 
 // Simulate runs def's steps for trigger in TEST mode with the same Machine
@@ -84,7 +89,7 @@ func Simulate(ctx context.Context, def *autodomain.Definition, trigger autodomai
 	if x.Active() {
 		return Simulation{}, fmt.Errorf("%w: no final state after %d steps", ErrSimulation, MaxSimulationSteps)
 	}
-	out := Simulation{State: x.State, Reason: x.Reason, Elapsed: clk.Now().Sub(start)}
+	out := Simulation{State: x.State, Reason: x.Reason, Elapsed: clk.Now().Sub(start), Path: x.Path, Unevaluable: x.Unevaluable}
 	if x.Result != nil {
 		out.Result = *x.Result
 	}

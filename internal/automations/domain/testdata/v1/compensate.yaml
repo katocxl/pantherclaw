@@ -1,0 +1,76 @@
+apiVersion: automations.pantherclaw.dev/v1
+kind: Automation
+purpose: Refund, confirm the effect, and revoke on failure.
+work_kind: AGENT_WORK
+review_by: "2026-12-01"
+when:
+  inbound:
+    source: 0192f000-0000-7000-8000-000000000002
+    type: ticket.created
+    params:
+      ticket:
+        from: /ticket/id
+        type: string
+        pattern: "T-[0-9]{1,10}"
+authority:
+  principal: self
+  ceiling:
+    agents: [0192f000-0000-7000-8000-000000000003]
+    bounds:
+      operations: [payments.refund]
+    per_grant:
+      ttl: 1h
+    per_day:
+      grants: 5
+      runs: 5
+  platform:
+    - step: revoke_grant
+      scopes: [EXECUTION]
+    - step: notify
+      scopes: [OWNER]
+do:
+  - id: launch
+    step: launch_run
+    with:
+      agent: 0192f000-0000-7000-8000-000000000003
+      task_ref: "ticket {{params.ticket}}"
+    retry:
+      max_attempts: 3
+      backoff:
+        min: 10s
+        max: 1m
+  - id: wait
+    step: wait_run
+    with:
+      step: launch
+    timeout: 2h
+  - id: tell
+    step: notify
+    when: trigger.params.ticket != "T-0"
+    on_failure: CONTINUE
+    with:
+      to: [OWNER]
+      message:
+        title: "Refund ran for {{params.ticket}}"
+  - id: effect
+    step: wait_effect
+    with:
+      step: launch
+      operation: payments.refund
+    timeout: 1h
+if_fails:
+  default: ESCALATE
+  compensate:
+    - id: undo
+      step: revoke_grant
+      with:
+        scope: EXECUTION
+  notify: [OWNER]
+finish_when:
+  - step: wait
+    condition: RUN_ENDED
+  - step: effect
+    condition: EFFECT_CONFIRMED
+limits:
+  deadline: 1d
+  per_hour: 30

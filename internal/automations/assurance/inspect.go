@@ -55,6 +55,14 @@ type InspectedStep struct {
 type Inspection struct {
 	Steps []InspectedStep
 	Notes []string
+	// Paths are a v2 version's paths; every step of any path is in Steps.
+	Paths []InspectedPath
+}
+
+// InspectedPath is one path of a v2 version and its terminal's outcome.
+type InspectedPath struct {
+	Nodes   []string
+	Outcome string
 }
 
 // InspectVersion inspects a version (D59).
@@ -105,6 +113,17 @@ func Inspect(def *autodomain.Definition, in exdomain.Inputs) Inspection {
 		}
 		if st.Effectful || len(st.Operations) > 0 {
 			out.Steps = append(out.Steps, st)
+		}
+	}
+	if def.IsV2() {
+		f := def.Flow()
+		paths, _ := f.Paths(autodomain.MaxPaths)
+		for _, p := range paths {
+			ip := InspectedPath{Nodes: p}
+			if n := f.Node(p[len(p)-1]); n != nil {
+				ip.Outcome = string(n.Outcome)
+			}
+			out.Paths = append(out.Paths, ip)
 		}
 	}
 	return out
