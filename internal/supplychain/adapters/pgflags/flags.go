@@ -13,7 +13,7 @@ import (
 	"slices"
 
 	ddomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
-	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
+	"github.com/katocxl/pantherclaw/internal/gateway/sdk/builtin"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -40,7 +40,7 @@ func Detail(raw []byte) (string, []domain.Span) {
 }
 
 // BuiltIns are the names agents have built in.
-func BuiltIns() []string { return sdk.BuiltInNames() }
+func BuiltIns() []string { return builtin.Names() }
 
 // Item is the listed entry a result is about.
 type Item struct {

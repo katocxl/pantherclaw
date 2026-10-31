@@ -41,10 +41,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -53,6 +51,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	"github.com/katocxl/pantherclaw/internal/gateway/sdk/builtin"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -374,18 +373,7 @@ var (
 // mcpResourceTools; any other name that is not an MCP tool is unknown_tool,
 // so a client that obeys the face never runs an unmapped tool that is not
 // built in (HR-200).
-var builtIns = map[string]bool{
-	"Agent": true, "AskUserQuestion": true, "Bash": true, "CronCreate": true, "CronDelete": true, "CronList": true,
-	"Edit": true, "EnterPlanMode": true, "EnterWorktree": true, "ExitPlanMode": true, "ExitWorktree": true, "Glob": true,
-	"Grep": true, "ListMcpResourcesTool": true, "LSP": true, "Monitor": true, "NotebookEdit": true, "PowerShell": true,
-	"Read": true, "ReadMcpResourceTool": true, "Skill": true, "Task": true, "TaskCreate": true, "TaskGet": true,
-	"TaskList": true, "TaskOutput": true, "TaskStop": true, "TaskUpdate": true, "TodoWrite": true, "ToolSearch": true,
-	"WaitForMcpServers": true, "WebFetch": true, "WebSearch": true, "Write": true,
-}
-
-// BuiltInNames lists the built-in tools, sorted (G0 M24 D210: an MCP tool
-// with one of these names shadows it).
-func BuiltInNames() []string { return slices.Sorted(maps.Keys(builtIns)) }
+var builtIns = builtin.Set()
 
 // mcpResourceTools are the built-in tools that list or read an MCP server's
 // resources. A package maps a server's tools, never its resources, so the

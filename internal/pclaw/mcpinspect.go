@@ -18,7 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
+	"github.com/katocxl/pantherclaw/internal/gateway/sdk/builtin"
 	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -360,7 +360,7 @@ func newInspectReport(image string, l mcpListing, seen sandbox.Inspection) inspe
 	}
 	// Here nothing says what a server's tools ought to be: provenance needs a
 	// connection's pinned package, so it is left out, not guessed.
-	known := scdomain.Known{BuiltIns: sdk.BuiltInNames(), Provenance: true}
+	known := scdomain.Known{BuiltIns: builtin.Names(), Provenance: true}
 	check := func(t scdomain.Tool) inspectEntry {
 		res := scdomain.Check(t, known)
 		r.result.Flags = append(r.result.Flags, res.Flags...)

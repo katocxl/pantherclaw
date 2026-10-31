@@ -71,7 +71,7 @@ func readNode(d *jsontext.Decoder, raw []byte, key string, depth int) (*node, er
 		return nil, err
 	}
 	n := &node{kind: tok.Kind(), key: key, start: start}
-	switch n.kind {
+	switch n.kind { //nolint:exhaustive // the other kinds hold nothing to check
 	case '"':
 		n.str = tok.String()
 	case '{':

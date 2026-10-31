@@ -120,7 +120,7 @@ type hiddenTally struct {
 
 // scan adds what s hides, each hit's span from at(start, end).
 func (h *hiddenTally) scan(s string, at func(start, end int) Span) {
-	// A run of neighbouring characters is one span.
+	// A run of adjacent characters is one span.
 	runStart, runEnd := -1, -1
 	flush := func() {
 		if runStart >= 0 {
