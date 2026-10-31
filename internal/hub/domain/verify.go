@@ -114,7 +114,14 @@ func Sign(x Index, signer *jws.Signer) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("hub: %w", err)
 	}
-	return signer.Sign(JOSEType, payload)
+	doc, err := signer.Sign(JOSEType, payload)
+	if err != nil {
+		return "", err
+	}
+	if len(doc) > MaxIndexBytes {
+		return "", fmt.Errorf("hub: the signed index is %d bytes, more than the %d allowed", len(doc), MaxIndexBytes)
+	}
+	return doc, nil
 }
 
 // Verified is an index whose signature, shape and expiry checked out, with

@@ -626,10 +626,10 @@ const file_pantherclaw_v1_hub_proto_rawDesc = "" +
 	"\finstalled_by\x18\t \x01(\tR\vinstalledBy\x12=\n" +
 	"\finstalled_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\vinstalledAt\x128\n" +
-	"\x06status\x18\v \x01(\x0e2 .pantherclaw.v1.HubInstallStatusR\x06status\"\x93\x02\n" +
-	"\x15InstallHubItemRequest\x12)\n" +
-	"\tindex_jws\x18\x01 \x01(\tB\f\xbaH\tr\a\x10\x01\x18\x80\x80\x80\x01R\bindexJws\x12\x1f\n" +
-	"\x04item\x18\x02 \x01(\fB\v\xbaH\bz\x06\x10\x01\x18\x80\x80@R\x04item\x12s\n" +
+	"\x06status\x18\v \x01(\x0e2 .pantherclaw.v1.HubInstallStatusR\x06status\"\x92\x02\n" +
+	"\x15InstallHubItemRequest\x12(\n" +
+	"\tindex_jws\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x01\x18\x80\x80(R\bindexJws\x12\x1f\n" +
+	"\x04item\x18\x02 \x01(\fB\v\xbaH\bz\x06\x10\x01\x18\x80\x80\x18R\x04item\x12s\n" +
 	"\x06params\x18\x03 \x03(\v21.pantherclaw.v1.InstallHubItemRequest.ParamsEntryB(\xbaH%\x9a\x01\"\x10\x10\"\x17r\x152\x13^[a-z][a-z_]{0,31}$*\x05r\x03\x18\x80 R\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

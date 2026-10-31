@@ -31,12 +31,16 @@ const (
 	IndexSpec = "pantherclaw.hub.index/1"
 	// ItemSpec names the item format.
 	ItemSpec = "pantherclaw.hub.item/1"
-	// MaxItemBytes bounds one item file.
-	MaxItemBytes = 1 << 20
+	// MaxItemBytes bounds one item file (G0 M23 D100a). An index and an item
+	// travel in one InstallHubItem request, so this and MaxIndexBytes are
+	// sized together against rpc.MaxRequestBytes. hub.proto repeats both
+	// values.
+	MaxItemBytes = 384 << 10
 	// MaxItems bounds one index.
 	MaxItems = 1000
-	// MaxIndexBytes bounds the signed index file.
-	MaxIndexBytes = 2 << 20
+	// MaxIndexBytes bounds the compact signed index (D100a). It is the only
+	// value Verifier.WithMaxBytes is given.
+	MaxIndexBytes = 640 << 10
 	// MaxValidity bounds how long an index stays valid.
 	MaxValidity = 180 * 24 * time.Hour
 	// MaxNameBytes bounds an item name.

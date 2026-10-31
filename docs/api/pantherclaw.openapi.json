@@ -63768,14 +63768,14 @@
           "indexJws": {
             "type": "string",
             "title": "index_jws",
-            "maxLength": 2097152,
+            "maxLength": 655360,
             "minLength": 1,
             "description": "index_jws is the signed index, compact JWS."
           },
           "item": {
             "type": "string",
             "title": "item",
-            "maxLength": 1048576,
+            "maxLength": 393216,
             "minLength": 1,
             "format": "byte",
             "description": "item is the exact bytes of items/\u003csha256\u003e.json."

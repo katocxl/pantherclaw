@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/proto"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -45,10 +46,6 @@ const envHubDevKey = "PANTHERCLAW_HUB_DEV_KEY"
 
 // defaultScenarioDir is where `task range` reads scenarios from.
 const defaultScenarioDir = "redteam/scenarios"
-
-// hubRequestReserve leaves room for the rest of an InstallHubItem request
-// around the index and the item.
-const hubRequestReserve = 4 << 10
 
 const hubMaxRedirects = 5
 
@@ -259,10 +256,12 @@ func (a *app) hubLoad(ctx context.Context, source string) (*hubIndex, error) {
 	if err != nil {
 		return nil, err
 	}
-	doc, err := src.read(ctx, "index.jws", domain.MaxIndexBytes)
+	// One more byte for the newline `pclaw-admin hub build` ends the file with.
+	doc, err := src.read(ctx, "index.jws", domain.MaxIndexBytes+1)
 	if err != nil {
 		return nil, err
 	}
+	doc = bytes.TrimSpace(doc)
 	v, err := domain.Verify(string(doc), roots, time.Now())
 	if err != nil {
 		return nil, hubCode(err)
@@ -510,19 +509,20 @@ func hubInstall(ctx context.Context, a *app, args []string) error {
 	if b, ok := body.(domain.RangeScenarioBody); ok {
 		return a.hubWriteScenario(b, *scenarios, *dry)
 	}
+	// The whole request travels in one RPC, whose size is capped.
+	req := &pantherclawv1.InstallHubItemRequest{IndexJws: x.doc, Item: raw, Params: params}
+	if n := proto.Size(req); n > pcrpc.MaxRequestBytes {
+		return fmt.Errorf("hub: this install request is %d bytes; one request takes at most %d", n, pcrpc.MaxRequestBytes)
+	}
 	if *dry {
 		_, err := fmt.Fprintf(a.stdout, "%s@%s (%s) verifies against index version %d; it would be installed as an inert draft.\n", e.Name, e.Version, e.Kind, x.v.Version)
 		return err
-	}
-	// The whole request travels in one RPC, whose size is capped.
-	if n := len(x.doc) + len(raw); n > pcrpc.MaxRequestBytes-hubRequestReserve {
-		return fmt.Errorf("hub: index and item come to %d bytes; one install request takes at most %d", n, pcrpc.MaxRequestBytes-hubRequestReserve)
 	}
 	s, err := a.session()
 	if err != nil {
 		return err
 	}
-	res, err := hubClient(s).InstallHubItem(ctx, &pantherclawv1.InstallHubItemRequest{IndexJws: x.doc, Item: raw, Params: params})
+	res, err := hubClient(s).InstallHubItem(ctx, req)
 	if err != nil {
 		return err
 	}

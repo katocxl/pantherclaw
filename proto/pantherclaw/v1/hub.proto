@@ -83,12 +83,12 @@ message InstallHubItemRequest {
   // index_jws is the signed index, compact JWS.
   string index_jws = 1 [(buf.validate.field).string = {
     min_len: 1
-    max_len: 2097152
+    max_len: 655360
   }];
   // item is the exact bytes of items/<sha256>.json.
   bytes item = 2 [(buf.validate.field).bytes = {
     min_len: 1
-    max_len: 1048576
+    max_len: 393216
   }];
   // params fill a policy template's placeholders: repos, default_branch,
   // workspace, time_zone, payees, customers, slack_channels and environment.

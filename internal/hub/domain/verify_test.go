@@ -354,8 +354,34 @@ func TestHR563_IndexLimits(t *testing.T) {
 	if len(doc) <= jws.MaxCompactBytes {
 		t.Fatalf("index of %d bytes", len(doc))
 	}
+	if len(doc) > domain.MaxIndexBytes {
+		t.Fatalf("index of %d bytes is over the limit", len(doc))
+	}
 	if _, err := domain.Verify(doc, roots(key), now); err != nil {
 		t.Fatalf("largest index: %v", err)
+	}
+	// Too many bytes is refused at both ends, never cut short (D100a).
+	for i := range most {
+		most[i].Summary = strings.Repeat("s", domain.MaxSummaryBytes)
+	}
+	big := index(1, most...)
+	if _, err := domain.Sign(big, key); err == nil {
+		t.Fatal("Sign accepted an index over the byte limit")
+	}
+	big.Spec = domain.IndexSpec
+	payload, err := json.Marshal(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	over, err := key.Sign(domain.JOSEType, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(over) <= domain.MaxIndexBytes {
+		t.Fatalf("index of %d bytes", len(over))
+	}
+	if _, err := domain.Verify(over, roots(key), now); !errors.Is(err, domain.ErrSignature) {
+		t.Fatalf("Verify took an index over the byte limit: %v", err)
 	}
 }
 
