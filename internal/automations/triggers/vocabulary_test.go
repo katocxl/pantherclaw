@@ -6,9 +6,40 @@ package triggers
 import (
 	"strings"
 	"testing"
+	"time"
 
+	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 )
+
+// TestAReceiptOfAHoldIsAHeldAction reads each decision the way production does:
+// a ledger body of the fields finalize writes, through the feed.
+func TestAReceiptOfAHoldIsAHeldAction(t *testing.T) {
+	t.Parallel()
+	for decision, held := range map[adomain.Decision]bool{
+		adomain.RequireApproval: true, adomain.RequireStepUp: true,
+		adomain.Allow: false, adomain.AllowWithObligations: false, adomain.Deny: false, adomain.CannotAuthorize: false,
+	} {
+		body, err := evdomain.CanonicalBody(map[string]string{
+			"txn": "018f0000-0000-7000-8000-000000000001", "evaluation": "1", "decision": string(decision),
+			"act": "action-hash", "reason": "APPROVAL_REQUIRED", "receipt_sha256": strings.Repeat("0", 64),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := feed.Normalize(kindDecision, "gateway", "gateway-1", time.Now(), body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := Means(VocabActionHeld, e, Facts{}); got != held {
+			t.Errorf("%s held = %v, want %v", decision, got, held)
+		}
+		if !Means(VocabActionDecided, e, Facts{}) {
+			t.Errorf("%s is not a decided action", decision)
+		}
+	}
+}
 
 func TestVocabularyMeansItsFeedKinds(t *testing.T) {
 	t.Parallel()
@@ -20,7 +51,12 @@ func TestVocabularyMeansItsFeedKinds(t *testing.T) {
 	}{
 		{VocabActionDenied, feed.Event{Kind: "receipt.decision", Decision: "DENY"}, Facts{}, true},
 		{VocabActionDenied, feed.Event{Kind: "receipt.decision", Decision: "ALLOW"}, Facts{}, false},
-		{VocabActionHeld, feed.Event{Kind: "receipt.decision", Decision: "HOLD"}, Facts{}, true},
+		{VocabActionHeld, feed.Event{Kind: "receipt.decision", Decision: "REQUIRE_APPROVAL"}, Facts{}, true},
+		{VocabActionHeld, feed.Event{Kind: "receipt.decision", Decision: "REQUIRE_STEP_UP"}, Facts{}, true},
+		{VocabActionHeld, feed.Event{Kind: "receipt.decision", Decision: "ALLOW"}, Facts{}, false},
+		{VocabActionHeld, feed.Event{Kind: "receipt.decision", Decision: "DENY"}, Facts{}, false},
+		{VocabActionHeld, feed.Event{Kind: "receipt.decision", Decision: "HOLD"}, Facts{}, false},
+		{VocabActionHeld, feed.Event{Kind: "receipt.effect", Decision: "REQUIRE_APPROVAL"}, Facts{}, false},
 		{VocabActionDecided, feed.Event{Kind: "receipt.decision", Decision: "ALLOW"}, Facts{}, true},
 		{VocabAgentDiscovered, feed.Event{Kind: "audit.agent.discovered"}, Facts{}, true},
 		{VocabAgentDiscovered, feed.Event{Kind: "audit.agent.claimed"}, Facts{}, false},

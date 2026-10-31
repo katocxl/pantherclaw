@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 )
 
@@ -14,7 +15,8 @@ import (
 // threshold trigger may name, and the feed entries each one means.
 //
 //	action.decided     receipt.decision (any decision)
-//	action.held        receipt.decision with decision HOLD
+//	action.held        receipt.decision presented as a hold: a receipt holds
+//	                   REQUIRE_APPROVAL or REQUIRE_STEP_UP, never HOLD
 //	action.denied      receipt.decision with decision DENY
 //	effect.recorded    receipt.effect
 //	run.ended          audit.run.ended
@@ -88,7 +90,7 @@ func Means(name string, e feed.Event, f Facts) bool {
 	case VocabActionDecided:
 		return e.Kind == kindDecision && e.Decision != ""
 	case VocabActionHeld:
-		return e.Kind == kindDecision && e.Decision == "HOLD"
+		return e.Kind == kindDecision && adomain.Decision(e.Decision).Presentation() == adomain.PresentHold
 	case VocabActionDenied:
 		return e.Kind == kindDecision && e.Decision == "DENY"
 	case VocabEffectRecorded:
