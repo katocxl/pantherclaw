@@ -133,6 +133,22 @@ func (p *Private) HasToken(hosted ids.UUID) bool {
 	return err == nil
 }
 
+// List returns the hosted gateways with a private directory. Any other name
+// in the root is skipped.
+func (p *Private) List() ([]ids.UUID, error) {
+	entries, err := os.ReadDir(p.Root)
+	if err != nil {
+		return nil, err
+	}
+	var hosted []ids.UUID
+	for _, e := range entries {
+		if id, ok := profile.HostedOf(e.Name()); ok && e.IsDir() {
+			hosted = append(hosted, id)
+		}
+	}
+	return hosted, nil
+}
+
 // Remove deletes the hosted gateway's private directory.
 func (p *Private) Remove(hosted ids.UUID) error {
 	dir := p.Dir(hosted)

@@ -221,12 +221,15 @@ func rolloutTarget(reported string, minimum gwapp.Version) *string {
 // process, and frees its slug. Its gateway was revoked before (HR-503). The
 // release commits first and repeats harmlessly, so a retry finishes the
 // record, and a report for a record already finished still releases
-// (D228).
+// (D228). A deleted org's record stays as it is: DeleteOrg's removal takes
+// it, so the report is done and the agent stops repeating it (D231).
 func (s *Service) Stopped(ctx context.Context, id HostIdentity, org ids.OrgID, hosted ids.UUID) error {
 	var h dbq.PcHostedGateway
+	var orgState string
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
 		var err error
-		h, err = dbq.New(tx).GetHostedGateway(ctx, org, hosted)
+		h, err = q.GetHostedGateway(ctx, org, hosted)
 		if db.IsNoRows(err) {
 			return ErrNotAssigned
 		} else if err != nil {
@@ -235,7 +238,8 @@ func (s *Service) Stopped(ctx context.Context, id HostIdentity, org ids.OrgID, h
 		if h.HostID == nil || *h.HostID != id.Host || (h.State != domain.StateDeprovisioning && h.State != domain.StateDeprovisioned) {
 			return ErrNotAssigned
 		}
-		return nil
+		orgState, err = q.OrgState(ctx, org)
+		return err
 	}, db.ReadOnly())
 	if err != nil {
 		return err
@@ -243,7 +247,7 @@ func (s *Service) Stopped(ctx context.Context, id HostIdentity, org ids.OrgID, h
 	if err := s.release(ctx, h.Slug, hosted); err != nil {
 		return err
 	}
-	if h.State == domain.StateDeprovisioned {
+	if h.State == domain.StateDeprovisioned || orgState == "DELETED" {
 		return nil
 	}
 	return s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {

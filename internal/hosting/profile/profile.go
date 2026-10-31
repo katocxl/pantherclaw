@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
@@ -95,6 +96,20 @@ const LabelHosted = "io.pantherclaw.hosted"
 func NamesOf(hosted ids.UUID) Names {
 	h := hex32(hosted)
 	return Names{Container: "pc-hgc-" + h, Network: "pc-hgn-" + h, Volume: "pc-hgv-" + h}
+}
+
+// HostedOf reads a hosted gateway's id back from its container name, which
+// is also its private directory's. Any other name is not one of ours.
+func HostedOf(container string) (ids.UUID, bool) {
+	h, ok := strings.CutPrefix(container, "pc-hgc-")
+	if !ok || len(h) != 32 {
+		return ids.UUID{}, false
+	}
+	id, err := ids.ParseUUID(h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:])
+	if err != nil || NamesOf(id).Container != container {
+		return ids.UUID{}, false
+	}
+	return id, true
 }
 
 func hex32(id ids.UUID) string {
