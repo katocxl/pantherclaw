@@ -156,18 +156,12 @@ func allowCommand(v jsontext.Value) ([]string, error) {
 		return nil, nil
 	}
 	var argv []string
-	switch v.Kind() {
-	case '"':
-		var s string
-		if err := json.Unmarshal(v, &s); err != nil {
-			return nil, err
-		}
-		argv = []string{s}
-	case '[':
-		if err := json.Unmarshal(v, &argv); err != nil {
+	if v.Kind() == '"' {
+		argv = []string{""}
+		if err := json.Unmarshal(v, &argv[0]); err != nil {
 			return nil, errAllowCommand
 		}
-	default:
+	} else if v.Kind() != '[' || json.Unmarshal(v, &argv) != nil {
 		return nil, errAllowCommand
 	}
 	if slices.Contains(argv, "") {

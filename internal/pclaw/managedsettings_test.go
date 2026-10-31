@@ -56,7 +56,7 @@ func parsed(t *testing.T, b []byte) any {
 }
 
 // TestF850_ClaudeCodeKit: the files use the vendor's key names, and what they
-// hold is the hook init recognises, which managed settings allowing only
+// hold is the hook init recognizes, which managed settings allowing only
 // managed hooks leave running.
 //
 // Covers: F850
@@ -256,7 +256,7 @@ func TestHR567_NothingCoverageReadsTheManagedState(t *testing.T) {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".go") {
 			return err
 		}
-		b, err := os.ReadFile(p) //nolint:gosec // G304: a file of this repository
+		b, err := os.ReadFile(p)
 		if err != nil {
 			return err
 		}

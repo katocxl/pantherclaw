@@ -19,7 +19,7 @@ import (
 )
 
 // TestHR564_HubScenariosNeverEnterAttestedPacks: the Hub's range scenarios are
-// customer-authored. A range of them is labelled so, whatever origin and tier
+// customer-authored. A range of them is labeled so, whatever origin and tier
 // the runner declares; none is in the library an attested range runs; it
 // cannot be mixed into a library range; and its export is refused before any
 // pack exists (G0 M23 D112).
