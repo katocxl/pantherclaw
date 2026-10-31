@@ -396,7 +396,7 @@ func TestD204_BuiltInSources(t *testing.T) {
 		t.Errorf("coverage: %+v", c)
 	}
 	i, ok := byID(l, tool.String())
-	if !ok || i.Kind != domain.KindNewTool || i.SeverityBasis != domain.BasisByKind || i.Title != "New tool awaits review: read_file" {
+	if !ok || i.Kind != domain.KindNewTool || i.SeverityBasis != domain.BasisByKind || i.Title != "New tool awaits review" || i.Detail["name"] != "read_file" {
 		t.Errorf("inventory: %+v", i)
 	}
 	d, ok := byID(l, change.String())

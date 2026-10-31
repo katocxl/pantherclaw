@@ -77557,11 +77557,35 @@
             },
             "title": "rank_reasons",
             "description": "rank_reasons state, in order, which ordering keys applied."
+          },
+          "detail": {
+            "type": "object",
+            "title": "detail",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "detail is what the source observed, such as a tool's name. It is\n untrusted, HTML-escaped here, and never part of title."
           }
         },
         "title": "RankedFinding",
         "additionalProperties": false,
         "description": "RankedFinding is one finding in the queue."
+      },
+      "pantherclaw.v1.RankedFinding.DetailEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "DetailEntry",
+        "additionalProperties": false
       },
       "pantherclaw.v1.ApplyEmergencyProtectedChangeRequest": {
         "type": "object",

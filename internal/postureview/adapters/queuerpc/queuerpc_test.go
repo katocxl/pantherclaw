@@ -80,6 +80,27 @@ func TestFindingMapsEveryField(t *testing.T) {
 	}
 }
 
+// TestD273_DetailIsServedEscaped: an observed name reaches the client as
+// text, and no detail stays absent.
+// Covers: F861
+func TestD273_DetailIsServedEscaped(t *testing.T) {
+	f := domain.Rank([]domain.Finding{{
+		Source: domain.SourceInventory, SourceID: "id", Kind: domain.KindNewTool, Title: "New tool awaits review",
+		Detail: map[string]string{"name": `<img src=x onerror="a()">`},
+	}}, time.Now())[0]
+	got := finding(f)
+	if want := "&lt;img src=x onerror=&#34;a()&#34;&gt;"; got.GetDetail()["name"] != want {
+		t.Errorf("detail: %q", got.GetDetail()["name"])
+	}
+	if got.GetTitle() != "New tool awaits review" {
+		t.Errorf("title: %q", got.GetTitle())
+	}
+	f.Detail = nil
+	if d := finding(f).GetDetail(); d != nil {
+		t.Errorf("no detail: %v", d)
+	}
+}
+
 // TestParseID: empty is no filter; anything else must be a UUID.
 func TestParseID(t *testing.T) {
 	if id, err := parseID(""); id != nil || err != nil {

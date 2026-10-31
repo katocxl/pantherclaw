@@ -82,6 +82,9 @@ message RankedFinding {
   repeated string owasp = 15;
   // rank_reasons state, in order, which ordering keys applied.
   repeated string rank_reasons = 16;
+  // detail is what the source observed, such as a tool's name. It is
+  // untrusted, HTML-escaped here, and never part of title.
+  map<string, string> detail = 17;
 }
 
 // PostureSourceState is how a source answered.

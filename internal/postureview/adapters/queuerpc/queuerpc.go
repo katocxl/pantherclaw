@@ -9,6 +9,7 @@ package queuerpc
 
 import (
 	"context"
+	"html"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -67,11 +68,24 @@ func parseID(s string) (*ids.UUID, error) {
 	return &id, nil
 }
 
+// escaped serves what a source observed as text no client can render as
+// markup (D273).
+func escaped(detail map[string]string) map[string]string {
+	if len(detail) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(detail))
+	for k, v := range detail {
+		out[html.EscapeString(k)] = html.EscapeString(v)
+	}
+	return out
+}
+
 func finding(f domain.RankedFinding) *pb.RankedFinding {
 	out := &pb.RankedFinding{
 		Source: string(f.Source), SourceId: f.SourceID, Kind: f.Kind, RootCause: f.RootCause, AgentId: idOf(f.AgentID),
 		AgentLabel: f.AgentLabel, ConnectionId: idOf(f.ConnectionID), TeamId: idOf(f.TeamID), Title: f.Title,
-		Severity: string(f.Severity), SeverityBasis: bases[f.SeverityBasis], State: f.State,
+		Detail: escaped(f.Detail), Severity: string(f.Severity), SeverityBasis: bases[f.SeverityBasis], State: f.State,
 		Fix:   &pb.PostureFix{Kind: string(f.Fix.Kind), TargetId: f.Fix.TargetID, Label: f.Fix.Label, RequiresBusiness: f.Fix.RequiresBusiness},
 		Owasp: f.OWASP, RankReasons: f.RankReasons,
 	}

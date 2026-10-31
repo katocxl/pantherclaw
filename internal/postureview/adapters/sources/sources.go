@@ -307,8 +307,8 @@ var inventoryKinds = map[string]struct{ kind, label string }{
 }
 
 // Findings implements ports.Source. The name is listed by the upstream
-// server: it is cut and shown as plain text, and the description is never
-// read.
+// server: it is cut and goes in Detail, never Title (D260), and the
+// description is never read.
 func (s Inventory) Findings(ctx context.Context, v ports.Viewer, _ domain.Filter) ([]domain.Finding, bool, error) {
 	reach, err := both(ctx, v, td.PermConnectionRead)
 	if err != nil {
@@ -337,7 +337,7 @@ func (s Inventory) Findings(ctx context.Context, v ports.Viewer, _ domain.Filter
 		conn := r.ConnectionID
 		out = append(out, domain.Finding{
 			Source: domain.SourceInventory, SourceID: r.ID.String(), Kind: k.kind, RootCause: "connection:" + conn.String(),
-			ConnectionID: &conn, Title: "New " + k.label + " awaits review: " + string(name), State: "NEW", Since: r.FirstSeen,
+			ConnectionID: &conn, Title: "New " + k.label + " awaits review", Detail: map[string]string{"name": string(name)}, State: "NEW", Since: r.FirstSeen,
 			Fix: domain.Fix{Kind: domain.FixReviewTool, TargetID: "inventory:" + r.ID.String(), Label: "Review the " + k.label},
 		})
 	}

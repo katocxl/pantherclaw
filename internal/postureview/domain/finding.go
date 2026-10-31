@@ -110,7 +110,10 @@ type Finding struct {
 	ConnectionID *ids.UUID
 	TeamID       *ids.UUID
 	// Title is the source's text, shown as plain text.
-	Title         string
+	Title string
+	// Detail is what a source observed: UNTRUSTED, shown as escaped plain text
+	// and never put in Title.
+	Detail        map[string]string
 	Severity      Severity
 	SeverityBasis SeverityBasis
 	// State is the source's state.

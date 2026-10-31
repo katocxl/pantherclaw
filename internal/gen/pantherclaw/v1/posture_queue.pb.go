@@ -288,7 +288,10 @@ type RankedFinding struct {
 	// owasp lists the OWASP Top 10 for Agentic Applications risks of its kind.
 	Owasp []string `protobuf:"bytes,15,rep,name=owasp,proto3" json:"owasp,omitempty"`
 	// rank_reasons state, in order, which ordering keys applied.
-	RankReasons   []string `protobuf:"bytes,16,rep,name=rank_reasons,json=rankReasons,proto3" json:"rank_reasons,omitempty"`
+	RankReasons []string `protobuf:"bytes,16,rep,name=rank_reasons,json=rankReasons,proto3" json:"rank_reasons,omitempty"`
+	// detail is what the source observed, such as a tool's name. It is
+	// untrusted, HTML-escaped here, and never part of title.
+	Detail        map[string]string `protobuf:"bytes,17,rep,name=detail,proto3" json:"detail,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -431,6 +434,13 @@ func (x *RankedFinding) GetOwasp() []string {
 func (x *RankedFinding) GetRankReasons() []string {
 	if x != nil {
 		return x.RankReasons
+	}
+	return nil
+}
+
+func (x *RankedFinding) GetDetail() map[string]string {
+	if x != nil {
+		return x.Detail
 	}
 	return nil
 }
@@ -970,7 +980,7 @@ const file_pantherclaw_v1_posture_queue_proto_rawDesc = "" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1b\n" +
 	"\ttarget_id\x18\x02 \x01(\tR\btargetId\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12+\n" +
-	"\x11requires_business\x18\x04 \x01(\bR\x10requiresBusiness\"\x9f\x04\n" +
+	"\x11requires_business\x18\x04 \x01(\bR\x10requiresBusiness\"\x9d\x05\n" +
 	"\rRankedFinding\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\tR\bsourceId\x12\x12\n" +
@@ -990,7 +1000,11 @@ const file_pantherclaw_v1_posture_queue_proto_rawDesc = "" +
 	"\x05since\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12,\n" +
 	"\x03fix\x18\x0e \x01(\v2\x1a.pantherclaw.v1.PostureFixR\x03fix\x12\x14\n" +
 	"\x05owasp\x18\x0f \x03(\tR\x05owasp\x12!\n" +
-	"\frank_reasons\x18\x10 \x03(\tR\vrankReasons\"\x83\x01\n" +
+	"\frank_reasons\x18\x10 \x03(\tR\vrankReasons\x12A\n" +
+	"\x06detail\x18\x11 \x03(\v2).pantherclaw.v1.RankedFinding.DetailEntryR\x06detail\x1a9\n" +
+	"\vDetailEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x83\x01\n" +
 	"\x13PostureSourceStatus\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x128\n" +
 	"\x05state\x18\x02 \x01(\x0e2\".pantherclaw.v1.PostureSourceStateR\x05state\x12\x1a\n" +
@@ -1071,7 +1085,7 @@ func file_pantherclaw_v1_posture_queue_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_posture_queue_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_posture_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pantherclaw_v1_posture_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_pantherclaw_v1_posture_queue_proto_goTypes = []any{
 	(PostureSeverityBasis)(0),          // 0: pantherclaw.v1.PostureSeverityBasis
 	(PostureSourceState)(0),            // 1: pantherclaw.v1.PostureSourceState
@@ -1085,29 +1099,31 @@ var file_pantherclaw_v1_posture_queue_proto_goTypes = []any{
 	(*PostureTrendDay)(nil),            // 9: pantherclaw.v1.PostureTrendDay
 	(*GetPostureTrendsRequest)(nil),    // 10: pantherclaw.v1.GetPostureTrendsRequest
 	(*GetPostureTrendsResponse)(nil),   // 11: pantherclaw.v1.GetPostureTrendsResponse
-	(*timestamppb.Timestamp)(nil),      // 12: google.protobuf.Timestamp
+	nil,                                // 12: pantherclaw.v1.RankedFinding.DetailEntry
+	(*timestamppb.Timestamp)(nil),      // 13: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_posture_queue_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.RankedFinding.severity_basis:type_name -> pantherclaw.v1.PostureSeverityBasis
-	12, // 1: pantherclaw.v1.RankedFinding.since:type_name -> google.protobuf.Timestamp
+	13, // 1: pantherclaw.v1.RankedFinding.since:type_name -> google.protobuf.Timestamp
 	3,  // 2: pantherclaw.v1.RankedFinding.fix:type_name -> pantherclaw.v1.PostureFix
-	1,  // 3: pantherclaw.v1.PostureSourceStatus.state:type_name -> pantherclaw.v1.PostureSourceState
-	4,  // 4: pantherclaw.v1.ListRankedFindingsResponse.findings:type_name -> pantherclaw.v1.RankedFinding
-	5,  // 5: pantherclaw.v1.ListRankedFindingsResponse.sources:type_name -> pantherclaw.v1.PostureSourceStatus
-	12, // 6: pantherclaw.v1.ListRankedFindingsResponse.as_of:type_name -> google.protobuf.Timestamp
-	2,  // 7: pantherclaw.v1.PostureTrendDay.state:type_name -> pantherclaw.v1.PostureDayState
-	8,  // 8: pantherclaw.v1.PostureTrendDay.counts:type_name -> pantherclaw.v1.PostureTrendCount
-	9,  // 9: pantherclaw.v1.GetPostureTrendsResponse.days:type_name -> pantherclaw.v1.PostureTrendDay
-	12, // 10: pantherclaw.v1.GetPostureTrendsResponse.as_of:type_name -> google.protobuf.Timestamp
-	6,  // 11: pantherclaw.v1.PostureQueueService.ListRankedFindings:input_type -> pantherclaw.v1.ListRankedFindingsRequest
-	10, // 12: pantherclaw.v1.PostureQueueService.GetPostureTrends:input_type -> pantherclaw.v1.GetPostureTrendsRequest
-	7,  // 13: pantherclaw.v1.PostureQueueService.ListRankedFindings:output_type -> pantherclaw.v1.ListRankedFindingsResponse
-	11, // 14: pantherclaw.v1.PostureQueueService.GetPostureTrends:output_type -> pantherclaw.v1.GetPostureTrendsResponse
-	13, // [13:15] is the sub-list for method output_type
-	11, // [11:13] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	12, // 3: pantherclaw.v1.RankedFinding.detail:type_name -> pantherclaw.v1.RankedFinding.DetailEntry
+	1,  // 4: pantherclaw.v1.PostureSourceStatus.state:type_name -> pantherclaw.v1.PostureSourceState
+	4,  // 5: pantherclaw.v1.ListRankedFindingsResponse.findings:type_name -> pantherclaw.v1.RankedFinding
+	5,  // 6: pantherclaw.v1.ListRankedFindingsResponse.sources:type_name -> pantherclaw.v1.PostureSourceStatus
+	13, // 7: pantherclaw.v1.ListRankedFindingsResponse.as_of:type_name -> google.protobuf.Timestamp
+	2,  // 8: pantherclaw.v1.PostureTrendDay.state:type_name -> pantherclaw.v1.PostureDayState
+	8,  // 9: pantherclaw.v1.PostureTrendDay.counts:type_name -> pantherclaw.v1.PostureTrendCount
+	9,  // 10: pantherclaw.v1.GetPostureTrendsResponse.days:type_name -> pantherclaw.v1.PostureTrendDay
+	13, // 11: pantherclaw.v1.GetPostureTrendsResponse.as_of:type_name -> google.protobuf.Timestamp
+	6,  // 12: pantherclaw.v1.PostureQueueService.ListRankedFindings:input_type -> pantherclaw.v1.ListRankedFindingsRequest
+	10, // 13: pantherclaw.v1.PostureQueueService.GetPostureTrends:input_type -> pantherclaw.v1.GetPostureTrendsRequest
+	7,  // 14: pantherclaw.v1.PostureQueueService.ListRankedFindings:output_type -> pantherclaw.v1.ListRankedFindingsResponse
+	11, // 15: pantherclaw.v1.PostureQueueService.GetPostureTrends:output_type -> pantherclaw.v1.GetPostureTrendsResponse
+	14, // [14:16] is the sub-list for method output_type
+	12, // [12:14] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_posture_queue_proto_init() }
@@ -1122,7 +1138,7 @@ func file_pantherclaw_v1_posture_queue_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_posture_queue_proto_rawDesc), len(file_pantherclaw_v1_posture_queue_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
