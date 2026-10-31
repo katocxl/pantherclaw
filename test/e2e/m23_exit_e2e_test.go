@@ -62,7 +62,9 @@ func (h *hubKit) build(version int) string {
 
 // TestE2E_M23_HubAndCI is M23's exit journey (G0 M23 D108): a Hub built with
 // the development key installs to a draft on a real server; a tampered item
-// and a rolled-back index are refused by pclaw and by the server on its own.
+// and a rolled-back index are refused by pclaw and by the server on its own;
+// `task range` runs the Hub's scenarios (TestRange_ScenariosHubSeed). Then
+// `pclaw ci check`, with no server, reports a widening.
 //
 // Covers: F841, F844, F845, F846, F847
 func TestE2E_M23_HubAndCI(t *testing.T) {
@@ -186,4 +188,47 @@ func TestE2E_M23_HubAndCI(t *testing.T) {
 			t.Fatalf("installs: %d", n)
 		}
 	})
+
+	t.Run("pclaw ci check reports a widening, offline", func(t *testing.T) {
+		ci := func(args ...string) (int, string, string) {
+			t.Helper()
+			var o, e bytes.Buffer
+			noServer := func(string) (string, bool) { return "", false }
+			code := pclaw.Run(context.Background(), append([]string{"ci", "check"}, args...), &o, &e, noServer, pclaw.Options{})
+			return code, o.String(), e.String()
+		}
+		file := func(limit string) string {
+			t.Helper()
+			p := filepath.Join(t.TempDir(), "policy.json")
+			if err := os.WriteFile(p, []byte(strings.ReplaceAll(m23Policy, "MAXIMUM", limit)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			return p
+		}
+		base := file("500.00")
+		if code, o, e := ci("--policy", base); code != 0 {
+			t.Fatalf("base: %d\n%s\n%s", code, o, e)
+		}
+		if code, o, e := ci("--policy", file("100.00"), "--base", base); code != 0 {
+			t.Fatalf("tighter: %d\n%s\n%s", code, o, e)
+		}
+		if code, o, e := ci("--policy", file("900.00"), "--base", base); code != 1 || !strings.Contains(o, "LOOSER") {
+			t.Fatalf("wider: %d\n%s\n%s", code, o, e)
+		}
+	})
 }
+
+// m23Policy caps a refund at MAXIMUM.
+const m23Policy = `{"id": "refunds", "rules": [{
+  "id": "cap", "kind": "CONSTRAIN", "summary": "no refund above the cap",
+  "operations": ["payments.refund.create"], "when": "true", "reason": "REFUND_OVER_CAP",
+  "constraint": {"kind": "amount_max", "param": "amount", "max": "MAXIMUM", "currency": "USD"}}],
+ "tests": [
+  {"id": "under", "summary": "under", "action": {"operation": "payments.refund.create", "target": {"type": "payments.charge", "id": "ch_1"},
+    "params": {"amount": {"value": "10.00", "currency": "USD"}, "reason": "duplicate"}},
+   "given": {"facts": {"payments.charge.refundable": {"value": {"bool": true}, "age_seconds": 10}}},
+   "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}},
+  {"id": "over", "summary": "over", "action": {"operation": "payments.refund.create", "target": {"type": "payments.charge", "id": "ch_1"},
+    "params": {"amount": {"value": "9999.00", "currency": "USD"}, "reason": "duplicate"}},
+   "given": {"facts": {"payments.charge.refundable": {"value": {"bool": true}, "age_seconds": 10}}},
+   "expect": {"decision": "DENY", "reason": "REFUND_OVER_CAP", "rule": "cap"}}]}`
