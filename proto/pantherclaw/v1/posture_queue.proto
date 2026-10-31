@@ -1,0 +1,205 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// PostureQueueService is the ranked posture queue (G0 M24 D200-D207; F797;
+// HR-580, HR-581; Team edition, trends Business).
+//
+// It joins findings from every source into one list, each with a fix. There
+// is no single number for a finding's risk: the list is ordered by severity,
+// whether the agent is in production, whether it has an owner, age and a
+// stable id, and rank_reasons says which of those applied. A read covers only
+// what the viewer's posture.read reaches, resolved before anything is
+// ranked. A source that did not report, or reported only part of what it
+// has, is stated in sources: a missing source is never shown as nothing to
+// do. A finding clears when its source clears, and dismissing one goes to
+// its source: nothing here changes anything.
+service PostureQueueService {
+  // ListRankedFindings lists the findings the viewer may read, most urgent
+  // first.
+  // permission: posture.read
+  rpc ListRankedFindings(ListRankedFindingsRequest) returns (ListRankedFindingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetPostureTrends returns one entry per day of the daily rollup. A day the
+  // rollup did not run is NOT_COLLECTED, never zero.
+  // permission: posture.read
+  rpc GetPostureTrends(GetPostureTrendsRequest) returns (GetPostureTrendsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// PostureSeverityBasis says where a finding's severity came from.
+enum PostureSeverityBasis {
+  POSTURE_SEVERITY_BASIS_UNSPECIFIED = 0;
+  // The source stated it.
+  POSTURE_SEVERITY_BASIS_STATED = 1;
+  // The source has no severity: it comes from a fixed table by kind.
+  POSTURE_SEVERITY_BASIS_BY_KIND = 2;
+}
+
+// PostureFix says what would close a finding.
+message PostureFix {
+  // kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,
+  // ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,
+  // REVIEW_SUGGESTION, CLAIM_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL or
+  // REVIEW_SERVER.
+  string kind = 1;
+  // target_id is the record the fix acts on, as "<type>:<id>".
+  string target_id = 2;
+  string label = 3;
+}
+
+// RankedFinding is one finding in the queue.
+message RankedFinding {
+  // source: posture, coverage, suggestions, discovery, recommendations,
+  // inventory, supply_chain or catalog.
+  string source = 1;
+  string source_id = 2;
+  string kind = 3;
+  string root_cause = 4;
+  string agent_id = 5;
+  // agent_label is plain text, shown only for an agent the viewer may read.
+  string agent_label = 6;
+  string connection_id = 7;
+  string team_id = 8;
+  string title = 9;
+  // severity: INFO, LOW, MEDIUM, HIGH or CRITICAL.
+  string severity = 10;
+  PostureSeverityBasis severity_basis = 11;
+  string state = 12;
+  google.protobuf.Timestamp since = 13;
+  PostureFix fix = 14;
+  // owasp lists the OWASP Top 10 for Agentic Applications risks of its kind.
+  repeated string owasp = 15;
+  // rank_reasons state, in order, which ordering keys applied.
+  repeated string rank_reasons = 16;
+}
+
+// PostureSourceState is how a source answered.
+enum PostureSourceState {
+  POSTURE_SOURCE_STATE_UNSPECIFIED = 0;
+  // Everything the viewer may read from it is here.
+  POSTURE_SOURCE_STATE_COMPLETE = 1;
+  // It had more findings than the 1,000 it may return.
+  POSTURE_SOURCE_STATE_TRUNCATED = 2;
+  // It is outside the viewer's permissions.
+  POSTURE_SOURCE_STATE_RESTRICTED = 3;
+  // It is not in this edition.
+  POSTURE_SOURCE_STATE_NOT_IN_EDITION = 4;
+}
+
+// PostureSourceStatus reports one source of a read.
+message PostureSourceStatus {
+  string source = 1;
+  PostureSourceState state = 2;
+  // findings counts what it returned to this viewer.
+  int32 findings = 3;
+}
+
+message ListRankedFindingsRequest {
+  string source = 1 [(buf.validate.field).string = {
+    in: ["", "posture", "coverage", "suggestions", "discovery", "recommendations", "inventory", "supply_chain", "catalog"]
+  }];
+  string kind = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[a-zA-Z0-9_.]*$"
+  }];
+  string severity = 3 [(buf.validate.field).string = {
+    in: ["", "INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+  }];
+  string team_id = 4 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  string agent_id = 5 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  string connection_id = 6 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  int32 page_size = 7 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 8 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+message ListRankedFindingsResponse {
+  repeated RankedFinding findings = 1;
+  string next_page_token = 2;
+  // restricted: the viewer's scope is narrower than the org.
+  bool restricted = 3;
+  // sources states how each source answered.
+  repeated PostureSourceStatus sources = 4;
+  // total counts the findings across pages.
+  int32 total = 5;
+  google.protobuf.Timestamp as_of = 6;
+}
+
+// PostureDayState says whether the rollup ran for a day.
+enum PostureDayState {
+  POSTURE_DAY_STATE_UNSPECIFIED = 0;
+  POSTURE_DAY_STATE_COLLECTED = 1;
+  // The rollup did not run: this day has no counts, and is not zero.
+  POSTURE_DAY_STATE_NOT_COLLECTED = 2;
+}
+
+// PostureTrendCount is one row of a collected day.
+message PostureTrendCount {
+  string kind = 1;
+  string severity = 2;
+  // team_id is empty for findings with no team.
+  string team_id = 3;
+  int32 open_count = 4;
+  // closed_count is absent when the day before was not collected, so what
+  // closed cannot be known.
+  optional int32 closed_count = 5;
+}
+
+// PostureTrendDay is one day of the rollup.
+message PostureTrendDay {
+  // day is the UTC date, as YYYY-MM-DD.
+  string day = 1;
+  PostureDayState state = 2;
+  repeated PostureTrendCount counts = 3;
+  // truncated_sources are the sources that had more findings than they may
+  // return that day, so its counts are a lower bound.
+  repeated string truncated_sources = 4;
+}
+
+message GetPostureTrendsRequest {
+  // days is how many days back, today included; zero means 30.
+  int32 days = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 366
+  }];
+  string kind = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[a-zA-Z0-9_.]*$"
+  }];
+  string team_id = 3 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+}
+
+message GetPostureTrendsResponse {
+  // days runs oldest first, one entry for every day asked for.
+  repeated PostureTrendDay days = 1;
+  // restricted: the viewer's scope is narrower than the org, so only the
+  // teams it reaches are counted.
+  bool restricted = 2;
+  google.protobuf.Timestamp as_of = 3;
+}

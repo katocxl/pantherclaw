@@ -347,6 +347,8 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.PostureService/GetPostureFinding":                     entitlements.ClassRead,
 	"/pantherclaw.v1.PostureService/ListPostureFindings":                   entitlements.ClassRead,
 	"/pantherclaw.v1.PostureService/ListPostureRootCauses":                 entitlements.ClassRead,
+	"/pantherclaw.v1.PostureQueueService/ListRankedFindings":               entitlements.ClassRead,
+	"/pantherclaw.v1.PostureQueueService/GetPostureTrends":                 entitlements.ClassRead,
 	"/pantherclaw.v1.PostureService/MarkPostureEvidenceIncomplete":         entitlements.ClassSafety,
 	"/pantherclaw.v1.PostureService/ReopenPostureFinding":                  entitlements.ClassSafety,
 	"/pantherclaw.v1.PostureService/StartPostureTesting":                   entitlements.ClassChange,

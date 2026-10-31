@@ -23229,6 +23229,114 @@
         }
       }
     },
+    "/pantherclaw.v1.PostureQueueService/ListRankedFindings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PostureQueueService"
+        ],
+        "summary": "ListRankedFindings",
+        "description": "ListRankedFindings lists the findings the viewer may read, most urgent\n first.\n permission: posture.read",
+        "operationId": "pantherclaw.v1.PostureQueueService.ListRankedFindings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListRankedFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListRankedFindingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PostureQueueService/GetPostureTrends": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PostureQueueService"
+        ],
+        "summary": "GetPostureTrends",
+        "description": "GetPostureTrends returns one entry per day of the daily rollup. A day the\n rollup did not run is NOT_COLLECTED, never zero.\n permission: posture.read",
+        "operationId": "pantherclaw.v1.PostureQueueService.GetPostureTrends",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPostureTrendsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPostureTrendsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ProtectedChangeService/GetProtectedChangeSettings": {
       "post": {
         "tags": [
@@ -76979,6 +77087,477 @@
         "title": "StartPostureTestingResponse",
         "additionalProperties": false
       },
+      "pantherclaw.v1.PostureDayState": {
+        "type": "string",
+        "title": "PostureDayState",
+        "enum": [
+          "POSTURE_DAY_STATE_UNSPECIFIED",
+          "POSTURE_DAY_STATE_COLLECTED",
+          "POSTURE_DAY_STATE_NOT_COLLECTED"
+        ],
+        "description": "PostureDayState says whether the rollup ran for a day."
+      },
+      "pantherclaw.v1.PostureSeverityBasis": {
+        "type": "string",
+        "title": "PostureSeverityBasis",
+        "enum": [
+          "POSTURE_SEVERITY_BASIS_UNSPECIFIED",
+          "POSTURE_SEVERITY_BASIS_STATED",
+          "POSTURE_SEVERITY_BASIS_BY_KIND"
+        ],
+        "description": "PostureSeverityBasis says where a finding's severity came from."
+      },
+      "pantherclaw.v1.PostureSourceState": {
+        "type": "string",
+        "title": "PostureSourceState",
+        "enum": [
+          "POSTURE_SOURCE_STATE_UNSPECIFIED",
+          "POSTURE_SOURCE_STATE_COMPLETE",
+          "POSTURE_SOURCE_STATE_TRUNCATED",
+          "POSTURE_SOURCE_STATE_RESTRICTED",
+          "POSTURE_SOURCE_STATE_NOT_IN_EDITION"
+        ],
+        "description": "PostureSourceState is how a source answered."
+      },
+      "pantherclaw.v1.GetPostureTrendsRequest": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "days",
+            "maximum": 366,
+            "minimum": 0,
+            "format": "int32",
+            "description": "days is how many days back, today included; zero means 30."
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "kind",
+            "maxLength": 64,
+            "anyOf": [
+              {
+                "pattern": "^[a-zA-Z0-9_.]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "teamId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "team_id",
+            "maxLength": 36,
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f-]{36})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "GetPostureTrendsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetPostureTrendsResponse": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PostureTrendDay"
+            },
+            "title": "days",
+            "description": "days runs oldest first, one entry for every day asked for."
+          },
+          "restricted": {
+            "type": "boolean",
+            "title": "restricted",
+            "description": "restricted: the viewer's scope is narrower than the org, so only the\n teams it reaches are counted."
+          },
+          "asOf": {
+            "title": "as_of",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetPostureTrendsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListRankedFindingsRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "source",
+            "enum": [
+              "",
+              "posture",
+              "coverage",
+              "suggestions",
+              "discovery",
+              "recommendations",
+              "inventory",
+              "supply_chain",
+              "catalog",
+              null
+            ]
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "kind",
+            "maxLength": 64,
+            "anyOf": [
+              {
+                "pattern": "^[a-zA-Z0-9_.]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "severity",
+            "enum": [
+              "",
+              "INFO",
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL",
+              null
+            ]
+          },
+          "teamId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "team_id",
+            "maxLength": 36,
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f-]{36})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "agent_id",
+            "maxLength": 36,
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f-]{36})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "connectionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "connection_id",
+            "maxLength": 36,
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f-]{36})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListRankedFindingsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListRankedFindingsResponse": {
+        "type": "object",
+        "properties": {
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.RankedFinding"
+            },
+            "title": "findings"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          },
+          "restricted": {
+            "type": "boolean",
+            "title": "restricted",
+            "description": "restricted: the viewer's scope is narrower than the org."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PostureSourceStatus"
+            },
+            "title": "sources",
+            "description": "sources states how each source answered."
+          },
+          "total": {
+            "type": "integer",
+            "title": "total",
+            "format": "int32",
+            "description": "total counts the findings across pages."
+          },
+          "asOf": {
+            "title": "as_of",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ListRankedFindingsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.PostureFix": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,\n ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,\n REVIEW_SUGGESTION, CLAIM_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL or\n REVIEW_SERVER."
+          },
+          "targetId": {
+            "type": "string",
+            "title": "target_id",
+            "description": "target_id is the record the fix acts on, as \"\u003ctype\u003e:\u003cid\u003e\"."
+          },
+          "label": {
+            "type": "string",
+            "title": "label"
+          }
+        },
+        "title": "PostureFix",
+        "additionalProperties": false,
+        "description": "PostureFix says what would close a finding."
+      },
+      "pantherclaw.v1.PostureSourceStatus": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "source"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.PostureSourceState"
+          },
+          "findings": {
+            "type": "integer",
+            "title": "findings",
+            "format": "int32",
+            "description": "findings counts what it returned to this viewer."
+          }
+        },
+        "title": "PostureSourceStatus",
+        "additionalProperties": false,
+        "description": "PostureSourceStatus reports one source of a read."
+      },
+      "pantherclaw.v1.PostureTrendCount": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind"
+          },
+          "severity": {
+            "type": "string",
+            "title": "severity"
+          },
+          "teamId": {
+            "type": "string",
+            "title": "team_id",
+            "description": "team_id is empty for findings with no team."
+          },
+          "openCount": {
+            "type": "integer",
+            "title": "open_count",
+            "format": "int32"
+          },
+          "closedCount": {
+            "type": "integer",
+            "title": "closed_count",
+            "format": "int32",
+            "description": "closed_count is absent when the day before was not collected, so what\n closed cannot be known.",
+            "nullable": true
+          }
+        },
+        "title": "PostureTrendCount",
+        "additionalProperties": false,
+        "description": "PostureTrendCount is one row of a collected day."
+      },
+      "pantherclaw.v1.PostureTrendDay": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "day",
+            "description": "day is the UTC date, as YYYY-MM-DD."
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.PostureDayState"
+          },
+          "counts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PostureTrendCount"
+            },
+            "title": "counts"
+          },
+          "truncatedSources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "truncated_sources",
+            "description": "truncated_sources are the sources that had more findings than they may\n return that day, so its counts are a lower bound."
+          }
+        },
+        "title": "PostureTrendDay",
+        "additionalProperties": false,
+        "description": "PostureTrendDay is one day of the rollup."
+      },
+      "pantherclaw.v1.RankedFinding": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "source: posture, coverage, suggestions, discovery, recommendations,\n inventory, supply_chain or catalog."
+          },
+          "sourceId": {
+            "type": "string",
+            "title": "source_id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind"
+          },
+          "rootCause": {
+            "type": "string",
+            "title": "root_cause"
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id"
+          },
+          "agentLabel": {
+            "type": "string",
+            "title": "agent_label",
+            "description": "agent_label is plain text, shown only for an agent the viewer may read."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id"
+          },
+          "teamId": {
+            "type": "string",
+            "title": "team_id"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "severity": {
+            "type": "string",
+            "title": "severity",
+            "description": "severity: INFO, LOW, MEDIUM, HIGH or CRITICAL."
+          },
+          "severityBasis": {
+            "title": "severity_basis",
+            "$ref": "#/components/schemas/pantherclaw.v1.PostureSeverityBasis"
+          },
+          "state": {
+            "type": "string",
+            "title": "state"
+          },
+          "since": {
+            "title": "since",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "fix": {
+            "title": "fix",
+            "$ref": "#/components/schemas/pantherclaw.v1.PostureFix"
+          },
+          "owasp": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "owasp",
+            "description": "owasp lists the OWASP Top 10 for Agentic Applications risks of its kind."
+          },
+          "rankReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "rank_reasons",
+            "description": "rank_reasons state, in order, which ordering keys applied."
+          }
+        },
+        "title": "RankedFinding",
+        "additionalProperties": false,
+        "description": "RankedFinding is one finding in the queue."
+      },
       "pantherclaw.v1.ApplyEmergencyProtectedChangeRequest": {
         "type": "object",
         "properties": {
@@ -89998,6 +90577,10 @@
     {
       "name": "pantherclaw.v1.PostureService",
       "description": "PostureService is the posture remediation queue (G0 M10 D30; F265, F268;\n HR-255; Business edition).\n\n Findings come from each breach-radius recomputation: excessive grants,\n uncovered paths, unowned agents, unsafe delegation, stale credentials,\n unused authority, unverified sensitive tools and credential overreach,\n grouped by root cause. A finding moves OPEN -\u003e ASSIGNED -\u003e TESTING and is\n REMEDIATED only when a recomputation shows that none of its affected\n paths is reachable; no call here remediates. It may be accepted for at\n most 90 days with a reason, or marked evidence-incomplete. Every move is\n recorded in its history and the evidence ledger. Reads filter by the\n caller's posture.read where each finding's agent lives; a finding with no\n agent needs it at org scope."
+    },
+    {
+      "name": "pantherclaw.v1.PostureQueueService",
+      "description": "PostureQueueService is the ranked posture queue (G0 M24 D200-D207; F797;\n HR-580, HR-581; Team edition, trends Business).\n\n It joins findings from every source into one list, each with a fix. There\n is no single number for a finding's risk: the list is ordered by severity,\n whether the agent is in production, whether it has an owner, age and a\n stable id, and rank_reasons says which of those applied. A read covers only\n what the viewer's posture.read reaches, resolved before anything is\n ranked. A source that did not report, or reported only part of what it\n has, is stated in sources: a missing source is never shown as nothing to\n do. A finding clears when its source clears, and dismissing one goes to\n its source: nothing here changes anything."
     },
     {
       "name": "pantherclaw.v1.ProtectedChangeService",
