@@ -101,9 +101,13 @@ func (s *Service) Run(ctx context.Context, org ids.OrgID) (Result, error) {
 		return res, err
 	}
 	posture := false
+	var hook poapp.FindingHook
 	if s.Ents != nil {
 		if e, err := s.Ents.Current(ctx); err == nil {
 			posture = e.PostureFindings() // computed on Team too (G0 M24 D201)
+			if e.PostureRemediation() {   // suggestions stay Business+ (D201)
+				hook = s.Findings
+			}
 		}
 	}
 	due := false
@@ -182,7 +186,7 @@ func (s *Service) Run(ctx context.Context, org ids.OrgID) (Result, error) {
 		}
 		res.Recomputed = true
 		if posture {
-			if res.Posture, err = poapp.ReconcileWith(ctx, tx, rec, s.Findings); err != nil {
+			if res.Posture, err = poapp.ReconcileWith(ctx, tx, rec, hook); err != nil {
 				return err
 			}
 		}

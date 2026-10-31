@@ -156,6 +156,7 @@ func (s leaky) Findings(context.Context, ports.Viewer, domain.Filter) ([]domain.
 // findings, nothing with no agent, and is told it is restricted; even a
 // source that returns too much is held to the viewer before ranking; an org
 // viewer sees the whole list.
+// Covers: F860
 func TestHR580_QueueIsScopedBeforeRanking(t *testing.T) {
 	w := newWorld(t)
 	now := time.Now()
@@ -207,6 +208,7 @@ func TestHR580_QueueIsScopedBeforeRanking(t *testing.T) {
 // TestHR580_RankingUsesAgentFacts: production and the owner come from the
 // agent, severity is upper case with its basis, the label appears, and the
 // finding carries its fix, OWASP risks and reasons.
+// Covers: F862
 func TestHR580_RankingUsesAgentFacts(t *testing.T) {
 	w := newWorld(t)
 	now := time.Now()
@@ -254,6 +256,7 @@ func (s fixed) Findings(context.Context, ports.Viewer, domain.Filter) ([]domain.
 // TestD204_SourceStatesAreShownNeverSilent: truncation, a refused permission
 // and a refused edition each show as a state, and any other failure fails
 // the read.
+// Covers: F863
 func TestD204_SourceStatesAreShownNeverSilent(t *testing.T) {
 	w := newWorld(t)
 	s := w.service(billing.Team,
@@ -298,6 +301,7 @@ func TestD204_SourceStatesAreShownNeverSilent(t *testing.T) {
 }
 
 // TestD201_Editions: the queue is Team and above, trends Business and above.
+// Covers: F860, F865
 func TestD201_Editions(t *testing.T) {
 	w := newWorld(t)
 	if _, err := w.service(billing.Community).List(w.orgWide(), domain.Filter{}, 0, ""); !errors.Is(err, app.ErrEdition) {
@@ -317,6 +321,7 @@ func TestD201_Editions(t *testing.T) {
 // TestD204_BuiltInSources: each source reports what is open, an imported
 // coverage finding appears once, and one permission short of a source's own
 // read shows as restricted.
+// Covers: F863
 func TestD204_BuiltInSources(t *testing.T) {
 	w := newWorld(t)
 	now := time.Now()
@@ -368,6 +373,7 @@ func TestD204_BuiltInSources(t *testing.T) {
 
 // TestPagesCoverTheListOnce: pages walk the list without a repeat, and a
 // token this server did not make is refused.
+// Covers: F860
 func TestPagesCoverTheListOnce(t *testing.T) {
 	w := newWorld(t)
 	now := time.Now()
@@ -412,6 +418,7 @@ func dayOf(tr app.Trends, off int) app.TrendDay { return tr.Days[len(tr.Days)-1-
 // with no run is NOT_COLLECTED with no counts, while a collected day with
 // nothing open is COLLECTED; closed is absent after a gap and counted after a
 // collected day.
+// Covers: F865
 func TestHR581_MissingDaysAreNotCollected(t *testing.T) {
 	w := newWorld(t)
 	svc := w.service(billing.Business)

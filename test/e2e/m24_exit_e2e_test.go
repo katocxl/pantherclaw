@@ -36,6 +36,7 @@ import (
 // stack's server answers the ranked queue and its trends; on the stack's
 // database a finding shows with its fix, and a rescan after the fix clears
 // it, because a finding clears when its source clears.
+// Covers: F860, F861, F862, F866
 func TestE2E_M24_PostureAndSupplyChain(t *testing.T) {
 	p := inProcessIdP(t)
 	s := start(t, options{budget: "1000.00", billing: true, people: &p})
@@ -101,14 +102,14 @@ func (s *stack) m24Server(t *testing.T, p idp) {
 	}
 }
 
-// m24FixClears: on Team, a recomputation finds an unbounded grant and the
+// m24FixClears: on Team, a recomputation finds a grant unused for 30 days and the
 // queue shows it with a fix naming that grant. Revoking the grant is the fix:
 // the next recomputation remediates the finding and the queue no longer lists
 // it. Nothing in the queue moved it.
 func m24FixClears(t *testing.T, o *exposuretest.Org) {
 	ctx := context.Background()
 	o.Claim(t, o.Agent)
-	grant := o.Grant(t, o.Agent, 0, "", "payments.*")
+	grant := o.Grant(t, o.Agent, 0, "40 days", "payments.*")
 	ents := m21Edition(billing.Team)
 	scan := &recompute.Service{Pool: o.P, Ents: ents, Failures: &failures.Sink{}}
 	if res, err := scan.Run(ctx, o.Org); err != nil || !res.Recomputed {

@@ -40,6 +40,7 @@ func TestM24_PermissionsAndRoles(t *testing.T) {
 // which every role must (TestRoleCatalogIsWellFormed), and agent.scan.submit,
 // exactly: a key taken from a laptop lists no business units, teams or
 // environments (D236a). It binds only to service accounts.
+// Covers: F887
 func TestHR589_ScannerHoldsOnlyScanSubmit(t *testing.T) {
 	r, ok := domain.LookupRole(domain.RoleScanner)
 	if !ok {

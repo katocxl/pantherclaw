@@ -29,6 +29,7 @@ func keys(in []domain.RankedFinding) []string {
 // TestHR580_RankOrdersByTheTupleAndSaysWhich: severity beats production,
 // production beats ownership, ownership beats age, the stable id settles the
 // rest, and rank_reasons states which applied (D203).
+// Covers: F862
 func TestHR580_RankOrdersByTheTupleAndSaysWhich(t *testing.T) {
 	old := now.Add(-72 * time.Hour)
 	in := []domain.Finding{
@@ -58,6 +59,7 @@ func TestHR580_RankOrdersByTheTupleAndSaysWhich(t *testing.T) {
 
 // TestHR580_NoScoreField: no field of the finding, ranked or not, is a
 // score, a weight or a number for its risk (F797).
+// Covers: F862
 func TestHR580_NoScoreField(t *testing.T) {
 	for _, typ := range []reflect.Type{
 		reflect.TypeFor[domain.Finding](), reflect.TypeFor[domain.RankedFinding](), reflect.TypeFor[domain.Fix](),
@@ -76,6 +78,7 @@ func TestHR580_NoScoreField(t *testing.T) {
 
 // TestNormalizeStatesWhereSeverityCameFrom: a stated severity is kept in
 // upper case; none, or text that is no severity, comes from the table.
+// Covers: F861
 func TestNormalizeStatesWhereSeverityCameFrom(t *testing.T) {
 	f := domain.Finding{Kind: domain.KindNewTool, Severity: "high"}.Normalize()
 	if f.Severity != domain.SeverityHigh || f.SeverityBasis != domain.BasisStated {
@@ -94,6 +97,7 @@ func TestNormalizeStatesWhereSeverityCameFrom(t *testing.T) {
 
 // TestOWASPValuesAreKnown: D205, every value is on the rules' closed list,
 // and every posture kind is mapped.
+// Covers: F864
 func TestOWASPValuesAreKnown(t *testing.T) {
 	for _, k := range domain.OWASPKinds() {
 		vals := domain.OWASP(k)
@@ -121,6 +125,7 @@ func TestOWASPValuesAreKnown(t *testing.T) {
 
 // TestEveryPostureKindHasItsOwnFix: every finding has a fix, and a new
 // posture kind gets one here rather than the fallback.
+// Covers: F861
 func TestEveryPostureKindHasItsOwnFix(t *testing.T) {
 	for _, k := range pdomain.Kinds {
 		f := domain.PostureFix(string(k), "grant:x", "id")
@@ -134,6 +139,7 @@ func TestEveryPostureKindHasItsOwnFix(t *testing.T) {
 }
 
 // TestFilterMatches covers every field, an agentless finding included.
+// Covers: F860
 func TestFilterMatches(t *testing.T) {
 	a, b := ids.NewV7(), ids.NewV7()
 	f := domain.Finding{
@@ -165,6 +171,7 @@ func TestFilterMatches(t *testing.T) {
 // TestHR581_RollupClosedCounts: closed is what left since yesterday, a key
 // that emptied keeps a row, and with yesterday not collected closed is
 // absent, never zero.
+// Covers: F865
 func TestHR581_RollupClosedCounts(t *testing.T) {
 	day := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
 	team := ids.NewV7()

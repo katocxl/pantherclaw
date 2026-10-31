@@ -38,7 +38,8 @@ func walk(t *testing.T, ms protoreflect.MessageDescriptors) {
 }
 
 // TestHR580_NoScoreInTheProtoOrItsJSON: no field of the queue's messages is a
-// score, in the proto or its JSON (D203, F797).
+// score, in the proto or its JSON (D203).
+// Covers: F862
 func TestHR580_NoScoreInTheProtoOrItsJSON(t *testing.T) {
 	file := pb.File_pantherclaw_v1_posture_queue_proto
 	if file.Messages().Len() == 0 {
@@ -60,6 +61,7 @@ func TestHR580_NoScoreInTheProtoOrItsJSON(t *testing.T) {
 }
 
 // TestFindingMapsEveryField: the fix, the basis and the empty ids.
+// Covers: F861
 func TestFindingMapsEveryField(t *testing.T) {
 	f := domain.Rank([]domain.Finding{{
 		Source: domain.SourceInventory, SourceID: "id", Kind: domain.KindNewTool, Severity: domain.SeverityMedium,
