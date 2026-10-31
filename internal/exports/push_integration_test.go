@@ -591,6 +591,99 @@ func TestHR516_ALateAbortLeavesARetrysManifest(t *testing.T) {
 	}
 }
 
+// TestHR516_ALateAbortLeavesARetrysChunks: on an HTTPS PUT destination too,
+// a sweep that loaded a pending abort touches only the attempt it loaded:
+// the retry overlapping it delivers every chunk its index names, and its
+// manifest.
+// Covers: F517
+func TestHR516_ALateAbortLeavesARetrysChunks(t *testing.T) {
+	f := newPushFixture(t)
+	sim := &putSim{objects: map[string][]byte{}}
+	srv := httptest.NewTLSServer(sim) // the same test certificate as f's
+	t.Cleanup(srv.Close)
+	d, err := f.svc.Create(f.admin, NewDestination{
+		Name: "vault", DataClasses: []string{ClassOrgExports}, Credential: Credential{BearerToken: "token-1234"},
+		Target: Target{Kind: KindHTTPSPut, URL: srv.URL + "/in", Internal: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Activate(f.admin, d.ID, stepup.StepUp{Credential: f.key, At: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	request := ids.NewV7()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	f.d.AdminExec(t, `INSERT INTO pc.data_requests (org_id, id, kind, state, created_by, ready_at, expires_at, parts, total_size, manifest)
+		VALUES ($1, $2, 'EXPORT', 'READY', $3, $4, $4::timestamptz + interval '7 days', 1, 100, 'signed-manifest')`, f.org, request, f.user, now)
+	part := make([]byte, 100)
+	for i := range part {
+		part[i] = byte(i)
+	}
+	sum := sha256.Sum256(part)
+	f.d.AdminExec(t, `INSERT INTO pc.data_request_parts (org_id, request_id, number, content, sha256) VALUES ($1, $2, 1, $3, $4)`, f.org, request, part, sum[:])
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: d.ID, Class: ClassOrgExports, Artifact: request})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt 1 fails at chunk 2 and its abort is refused.
+	ctx := context.Background()
+	sim.failAfter, sim.failDeletesFrom = 2, 1
+	if err := f.svc.Run(ctx, f.org, r.ID, false); err == nil {
+		t.Fatal("a failed attempt reported success")
+	}
+	if got := f.receipt(t, r.ID); got.AbortState != "PENDING" {
+		t.Fatalf("receipt %+v", got)
+	}
+	// A sweep loads that abort.
+	late, err := f.svc.load(ctx, f.org, r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if late.uploadID == "" || late.parts != 2 {
+		t.Fatalf("nothing pending: %+v", late)
+	}
+
+	// The retry ends the abort and re-sends; the loaded abort runs under it.
+	sim.failAfter, sim.failDeletesFrom = 0, 0
+	ran := false
+	sim.onPut = func(key string) {
+		if !ran && strings.HasSuffix(key, "-000002") {
+			ran = true
+			if err := f.svc.abortUpload(ctx, late); err != nil {
+				t.Errorf("late abort: %v", err)
+			}
+		}
+	}
+	if err := f.svc.Run(ctx, f.org, r.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	got := f.receipt(t, r.ID)
+	if !ran || got.State != ReceiptDelivered || got.AbortState != "NONE" {
+		t.Fatalf("ran %v, receipt %+v", ran, got)
+	}
+	var index struct {
+		Chunks []chunkEntry `json:"chunks"`
+	}
+	if err := json.Unmarshal(sim.objects["in/"+got.ObjectKey], &index); err != nil {
+		t.Fatal(err)
+	}
+	var whole []byte
+	for _, c := range index.Chunks {
+		b, ok := sim.objects["in/"+c.Key]
+		if !ok {
+			t.Fatalf("the index lists %s and it is gone", c.Key)
+		}
+		whole = append(whole, b...)
+	}
+	if !bytes.Equal(whole, part) {
+		t.Fatalf("the chunks hold %d bytes", len(whole))
+	}
+	if string(sim.objects["in/"+got.ObjectKey+ManifestSuffix]) != "signed-manifest" {
+		t.Fatalf("objects %v", sim.objects)
+	}
+}
+
 // TestF517_AnExpiredArtifactNeverLeaves: past its expiry by the database
 // clock an artifact is gone, whether or not the expiry job has run yet, at
 // the request and again when the push starts.

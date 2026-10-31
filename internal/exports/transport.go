@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/sigv4"
 )
 
@@ -356,13 +357,18 @@ func (t *putTransport) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-func chunkKey(key string, number int) string { return fmt.Sprintf("%s.chunk-%06d", key, number) }
+func chunkKey(key, upload string, number int) string {
+	return fmt.Sprintf("%s.chunk-%s-%06d", key, upload, number)
+}
 
-// Begin needs nothing from the target: the receipt's id names the upload.
-func (t *putTransport) Begin(context.Context, string) (string, error) { return "chunks", nil }
+// Begin needs nothing from the target. Each attempt names its own chunks,
+// so an abort that outlives its attempt cannot reach a retry's (HR-516).
+func (t *putTransport) Begin(context.Context, string) (string, error) {
+	return ids.NewV7().String(), nil
+}
 
-func (t *putTransport) Part(ctx context.Context, key, _ string, number int, body []byte) (sent, error) {
-	s, err := t.Put(ctx, chunkKey(key, number), body)
+func (t *putTransport) Part(ctx context.Context, key, upload string, number int, body []byte) (sent, error) {
+	s, err := t.Put(ctx, chunkKey(key, upload, number), body)
 	s.Number = number
 	return s, err
 }
@@ -373,13 +379,13 @@ type chunkEntry struct {
 }
 
 // Complete writes the index at the object's own key.
-func (t *putTransport) Complete(ctx context.Context, key, _ string, parts []sent) (sent, error) {
+func (t *putTransport) Complete(ctx context.Context, key, upload string, parts []sent) (sent, error) {
 	index := struct {
 		Format string       `json:"format"`
 		Chunks []chunkEntry `json:"chunks"`
 	}{Format: "pantherclaw.chunks/v1"}
 	for _, p := range parts {
-		index.Chunks = append(index.Chunks, chunkEntry{Key: chunkKey(key, p.Number), SHA256: hex.EncodeToString(p.SHA256)})
+		index.Chunks = append(index.Chunks, chunkEntry{Key: chunkKey(key, upload, p.Number), SHA256: hex.EncodeToString(p.SHA256)})
 	}
 	body, err := json.Marshal(index)
 	if err != nil {
@@ -391,9 +397,9 @@ func (t *putTransport) Complete(ctx context.Context, key, _ string, parts []sent
 // Abort deletes every chunk begun. An earlier abort may have deleted some,
 // so a 404 says only that this chunk is gone, never that the rest are. A
 // target that refuses DELETE keeps them, and the abort stays pending.
-func (t *putTransport) Abort(ctx context.Context, key, _ string, parts int) error {
+func (t *putTransport) Abort(ctx context.Context, key, upload string, parts int) error {
 	for n := 1; n <= parts; n++ {
-		if err := t.Delete(ctx, chunkKey(key, n)); err != nil {
+		if err := t.Delete(ctx, chunkKey(key, upload, n)); err != nil {
 			return err
 		}
 	}
