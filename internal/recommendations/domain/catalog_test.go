@@ -86,7 +86,7 @@ func TestHR536_IntegrationStateNeedsOrgScope(t *testing.T) {
 			domain.ContextCI: group(1), domain.ContextKubernetes: group(1), domain.ContextService: group(1),
 		},
 		Secrets:    map[string]domain.Group{"aws_access_key_id": group(1), "openai_api_key": group(1)},
-		DataAgents: group(1), FirstDecision: &txn, FirstHold: &txn,
+		DataAgents: group(1), ManagedSettings: group(1), FirstDecision: &txn, FirstHold: &txn,
 	}
 	connected := bare
 	connected.Integrations = domain.Integrations{
@@ -264,6 +264,11 @@ func TestCatalogSignals(t *testing.T) {
 			domain.ModelKeys,
 			domain.Facts{Secrets: map[string]domain.Group{"openai_api_key": group(1)}},
 			func(f *domain.Facts) { f.Secrets = nil }, domain.RecordDiscovery,
+		},
+		{
+			domain.ManagedSettings,
+			domain.Facts{ManagedSettings: group(1)},
+			func(f *domain.Facts) { f.ManagedSettings = domain.Group{} }, domain.RecordDiscovery,
 		},
 	} {
 		e, ok := domain.Lookup(c.id)

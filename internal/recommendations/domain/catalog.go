@@ -32,6 +32,9 @@ const (
 	IncidentTicket ID = "incident.ticket_sync"
 	SIEMExport     ID = "export.siem"
 	ModelKeys      ID = "unsupported.model_provider_keys"
+	// ManagedSettings is managed_settings_missing of G0 M23 D114; a stored id
+	// has a category before a dot.
+	ManagedSettings ID = "unsupported.managed_settings_missing"
 )
 
 // Category is what kind of need an entry answers.
@@ -118,7 +121,10 @@ type Facts struct {
 	Agents       map[string]Group // per execution context
 	Secrets      map[string]Group // open scan discoveries per credential kind
 	DataAgents   Group
-	Integrations Integrations
+	// ManagedSettings are the open scan discoveries a scan found on a machine
+	// with no managed settings file (G0 M23 D114).
+	ManagedSettings Group
+	Integrations    Integrations
 	// FirstDecision and FirstHold are the onboarding records that show the
 	// org makes real decisions and holds real actions; nil until it does.
 	FirstDecision, FirstHold *ids.UUID
@@ -387,6 +393,19 @@ func Catalog() []Entry {
 			signal: func(f Facts) (Group, string, bool) {
 				g := secrets(f, modelSecrets)
 				return g, RecordDiscovery, g.Count > 0
+			},
+		},
+		{
+			ID: ManagedSettings, Category: Unsupported, Reach: AgentBacked, Source: FromDiscoveries, Link: linkAgents,
+			Title: "Managed settings are missing",
+			Detail: "A scan found agents on a machine with no managed settings file, so nothing there pins the PantherClaw hook or the allowed MCP servers. " +
+				"pclaw managed-settings generate writes the files for your own device management to install.",
+			StillUnsupported: []string{
+				"pclaw reads only the platform's managed settings file: registry, MDM and server-managed settings cannot be read, so a machine they manage still shows here.",
+				"A managed settings file is not coverage: generating or finding one changes no coverage state.",
+			},
+			signal: func(f Facts) (Group, string, bool) {
+				return f.ManagedSettings, RecordDiscovery, f.ManagedSettings.Count > 0
 			},
 		},
 	}
