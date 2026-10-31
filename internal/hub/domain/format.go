@@ -70,10 +70,17 @@ func (k Kind) Valid() bool { return slices.Contains(Kinds(), k) }
 var (
 	namePattern = regexp.MustCompile(`^pc\.[a-z0-9-]+(\.[a-z0-9-]+)*$`)
 	hexDigest   = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	// A scenario file is one plain name, so a signed item cannot write
+	// outside the directory it is installed into.
+	scenarioFile = regexp.MustCompile(`^CX-[0-9]+(-[a-z0-9-]+)?\.yaml$`)
 )
 
 // ValidName reports whether s is an item name.
 func ValidName(s string) bool { return len(s) <= MaxNameBytes && namePattern.MatchString(s) }
+
+// ValidScenarioFile reports whether s is a customer-authored scenario file
+// name.
+func ValidScenarioFile(s string) bool { return scenarioFile.MatchString(s) }
 
 // Entry lists one item in the index.
 type Entry struct {
@@ -297,8 +304,11 @@ func (it Item) DecodeBody() (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if b.FileName == "" || b.Scenario == "" {
-			return nil, itemErr("a range scenario needs its file name and scenario")
+		if !ValidScenarioFile(b.FileName) {
+			return nil, itemErr("%q is not a CX-….yaml scenario file name", b.FileName)
+		}
+		if b.Scenario == "" {
+			return nil, itemErr("a range scenario needs its scenario")
 		}
 		return b, nil
 	case KindToolPackage:

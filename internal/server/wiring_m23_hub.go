@@ -14,23 +14,20 @@ import (
 
 	"connectrpc.com/connect/v2"
 
-	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
-	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/hub"
+	"github.com/katocxl/pantherclaw/internal/hub/adapters/drafts"
 	"github.com/katocxl/pantherclaw/internal/hub/adapters/hubrpc"
 	"github.com/katocxl/pantherclaw/internal/hub/adapters/pghub"
 	hubapp "github.com/katocxl/pantherclaw/internal/hub/app"
 	hubdomain "github.com/katocxl/pantherclaw/internal/hub/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
-	"github.com/katocxl/pantherclaw/internal/platform/db"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	reflexapp "github.com/katocxl/pantherclaw/internal/reflex/app"
-	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
 
 // hubRoots returns the roots the API verifies a Hub index with: the embedded
@@ -67,48 +64,6 @@ func hubRoots(ctx context.Context, cfg *Config, log *slog.Logger) (hubdomain.Roo
 	return all, nil
 }
 
-// hubDetections installs a detection rule through CreateCustomRule.
-type hubDetections struct{ det *reflexapp.Detections }
-
-func (h hubDetections) CreateDraft(ctx context.Context, content string) (string, error) {
-	r, err := h.det.CreateCustomRule(ctx, content)
-	if err != nil {
-		return "", err
-	}
-	return r.Custom.ID.String(), nil
-}
-
-// hubAutomations installs an automation through CreateDraftTx: the automation
-// and its first version in one transaction, owned by the caller.
-type hubAutomations struct {
-	pool *db.Pool
-	svc  *autoapp.Service
-}
-
-func (h hubAutomations) CreateDraft(ctx context.Context, b hubdomain.AutomationBody) (string, error) {
-	c, err := tapp.CallerFrom(ctx)
-	if err != nil {
-		return "", err
-	}
-	var id string
-	err = h.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		a, _, err := h.svc.CreateDraftTx(ctx, tx, autoapp.Draft{
-			Name: b.AutomationName, Purpose: b.Purpose, Kind: autodomain.WorkKind(b.WorkKind), Owner: c.Principal.ID, Definition: []byte(b.Definition),
-		})
-		id = a.ID.String()
-		return err
-	})
-	return id, err
-}
-
-// hubPackages installs a tool package through ImportPackage's use case.
-type hubPackages struct{ admin *defsapp.Admin }
-
-func (h hubPackages) ImportPackage(ctx context.Context, name, version, targets string, raw []byte) error {
-	_, _, err := h.admin.Import(ctx, name, version, targets, raw)
-	return err
-}
-
 // registerM23Hub serves HubService. The server never fetches an index and has
 // no outbound call here (D107).
 func registerM23Hub(rs *connect.Server, d apiDeps, core *automationsCore) error {
@@ -139,14 +94,14 @@ func registerM23Hub(rs *connect.Server, d apiDeps, core *automationsCore) error 
 	svc := &hubapp.Service{
 		Store: &pghub.Store{Pool: d.pool}, Roots: roots, Clock: clock.System{},
 		Policies:   newPolicyVersions(d.pool, notify, d.publicURL, d.cel),
-		Detections: hubDetections{det},
-		Packages: hubPackages{&defsapp.Admin{
+		Detections: drafts.Detections{Rules: det},
+		Packages: drafts.Packages{Admin: &defsapp.Admin{
 			Importer: &defsapp.Importer{Roots: packages, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs,
 			Authz: grantsapp.SubjectAuthorizer{}, Ents: d.billing,
 		}},
 	}
 	if core != nil && core.svc != nil {
-		svc.Automations = hubAutomations{d.pool, core.svc}
+		svc.Automations = drafts.Automations{Pool: d.pool, Svc: core.svc}
 	}
 	pantherclawv1connect.RegisterHubServiceHandler(rs, hubrpc.New(svc))
 	return nil

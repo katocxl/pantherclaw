@@ -357,6 +357,20 @@ func TestHR563_IndexLimits(t *testing.T) {
 	}
 }
 
+// TestHR563_ScenarioFileIsOnePlainName: pclaw writes this name to disk.
+func TestHR563_ScenarioFileIsOnePlainName(t *testing.T) {
+	for _, bad := range []string{"", "../CX-1.yaml", "CX-1/../../x.yaml", `CX-1\x.yaml`, "x.yaml", "CX-1.sh", "CX-1.yaml/", "C:CX-1.yaml", "/etc/CX-1.yaml", "CX-1-A.yaml", "RT-001-x.yaml"} {
+		if domain.ValidScenarioFile(bad) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	for _, good := range []string{"CX-90001.yaml", "CX-90001-merge-without-review.yaml"} {
+		if !domain.ValidScenarioFile(good) {
+			t.Errorf("%q refused", good)
+		}
+	}
+}
+
 func TestMatch(t *testing.T) {
 	key := signer(t, rootkey.PurposeHub)
 	raw := sampleRaw(t)
