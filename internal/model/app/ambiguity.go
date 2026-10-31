@@ -46,7 +46,7 @@ var vagueTerm = regexp.MustCompile(`(?i)\b(a lot|lots of|too many|too much|large
 // (D321). The prompt asks a model to refuse what this does not catch. A word
 // used for something else, such as "the dev team", is refused too, by choice:
 // the reason says why, and a person rewords it (D324).
-var environmentTerm = regexp.MustCompile(`(?i)\b(prod\d*|prod_\w*|production|prd|preprod|nonprod|staging|stg|development|dev|qa|uat|sandboxes?|environments?|envs?)\b`)
+var environmentTerm = regexp.MustCompile(`(?i)\b(prod\d*|prod_\w*|production|prd|preprod|nonprod|staging|stg|development|dev|qa|uat|sandbox(es)?|environments?|envs?)\b`)
 
 // CheckEnvironment refuses a request about an environment, before any call.
 func CheckEnvironment(text string) error {
