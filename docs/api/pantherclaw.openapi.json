@@ -8484,6 +8484,60 @@
         }
       }
     },
+    "/pantherclaw.v1.ConnectionService/AddInventoryNote": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "AddInventoryNote",
+        "description": "AddInventoryNote records what an operator reported about an inventory\n item from `pclaw mcp inspect --submit` (G0 M24 D214). It is their\n machine's word, stored as UNTRUSTED text: the item's state, review and\n flags stay as they are (HR-582).\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.ConnectionService.AddInventoryNote",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AddInventoryNoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AddInventoryNoteResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ConsequenceRuleService/ProposeConsequenceRule": {
       "post": {
         "tags": [
@@ -27539,6 +27593,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.DraftFromSuggestionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SupplyChainService/ListSupplyChainFlags": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SupplyChainService"
+        ],
+        "summary": "ListSupplyChainFlags",
+        "description": "ListSupplyChainFlags lists flags, oldest first.\n permission: connection.read",
+        "operationId": "pantherclaw.v1.SupplyChainService.ListSupplyChainFlags",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListSupplyChainFlagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListSupplyChainFlagsResponse"
                 }
               }
             }
@@ -46637,6 +46745,43 @@
           "bounds"
         ]
       },
+      "pantherclaw.v1.AddInventoryNoteRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Item id."
+          },
+          "note": {
+            "type": "string",
+            "title": "note",
+            "minLength": 1,
+            "description": "UNTRUSTED: the report, at most 8 KiB. A later report replaces it."
+          }
+        },
+        "title": "AddInventoryNoteRequest",
+        "additionalProperties": false,
+        "description": "AddInventoryNoteRequest is an operator's report on an inventory item.",
+        "required": [
+          "id",
+          "note"
+        ]
+      },
+      "pantherclaw.v1.AddInventoryNoteResponse": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "title": "item",
+            "description": "The item.",
+            "$ref": "#/components/schemas/pantherclaw.v1.InventoryItem"
+          }
+        },
+        "title": "AddInventoryNoteResponse",
+        "additionalProperties": false,
+        "description": "AddInventoryNoteResponse is the item."
+      },
       "pantherclaw.v1.CapabilitySupport": {
         "type": "object",
         "properties": {
@@ -47891,7 +48036,7 @@
           "descriptionScan": {
             "type": "string",
             "title": "description_scan",
-            "description": "The injection scan of the description: clean, flagged, partial or\n not_scanned."
+            "description": "The injection scan of the description: clean, flagged, partial or\n not_scanned. clean means the patterns found nothing, \"no known flags\",\n and never that the item is safe (F801). Its supply-chain flags are in\n SupplyChainService."
           },
           "state": {
             "title": "state",
@@ -47932,6 +48077,36 @@
             "type": "boolean",
             "title": "display_truncated",
             "description": "Whether the gateway cut the display name or MIME type to 128 bytes."
+          },
+          "inputSchema": {
+            "type": "string",
+            "title": "input_schema",
+            "description": "UNTRUSTED: a tool's input schema as listed, at most 64 KiB (G0 M24 D211).\n Show it as text; it is never a served schema."
+          },
+          "inputSchemaDigest": {
+            "type": "string",
+            "title": "input_schema_digest",
+            "description": "sha256:\u003chex\u003e of the canonical input schema; empty when none was reported."
+          },
+          "inputSchemaTruncated": {
+            "type": "boolean",
+            "title": "input_schema_truncated",
+            "description": "Whether the schema was too long to report."
+          },
+          "operatorNote": {
+            "type": "string",
+            "title": "operator_note",
+            "description": "UNTRUSTED: what an operator reported (AddInventoryNote). PantherClaw\n did not check it."
+          },
+          "operatorNoteBy": {
+            "type": "string",
+            "title": "operator_note_by",
+            "description": "Who reported it."
+          },
+          "operatorNoteTime": {
+            "title": "operator_note_time",
+            "description": "When.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
           }
         },
         "title": "InventoryItem",
@@ -59455,6 +59630,38 @@
             ],
             "title": "description_truncated",
             "description": "Whether the gateway cut the description to 8 KiB."
+          },
+          "inputSchema": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "input_schema",
+            "description": "UNTRUSTED: its input schema as listed, at most 64 KiB (G0 M24 D211)."
+          },
+          "inputSchemaDigest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "input_schema_digest",
+            "description": "SHA-256 of the canonical input schema, also when the schema is too long\n to send.",
+            "anyOf": [
+              {
+                "pattern": "^(sha256:[0-9a-f]{64})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "inputSchemaTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "input_schema_truncated",
+            "description": "Whether the schema was too long to send; input_schema is then empty."
           }
         },
         "title": "InventoryTool",
@@ -84597,6 +84804,232 @@
         "additionalProperties": false,
         "description": "SuggestionRule is a proposed policy rule."
       },
+      "pantherclaw.v1.ListSupplyChainFlagsRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "connection_id",
+            "maxLength": 36,
+            "description": "Only this connection.",
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f-]{36})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "inventoryItemId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "inventory_item_id",
+            "maxLength": 36,
+            "description": "Only this inventory item.",
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f-]{36})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "packageVersionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "package_version_id",
+            "maxLength": 36,
+            "description": "Only this package version.",
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f-]{36})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "states": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxItems": 2,
+              "enum": [
+                "OPEN",
+                "CLEARED"
+              ]
+            },
+            "title": "states",
+            "maxItems": 2,
+            "description": "Only these states: OPEN, CLEARED (default all)."
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Page size (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "description": "Page token.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListSupplyChainFlagsRequest",
+        "additionalProperties": false,
+        "description": "ListSupplyChainFlagsRequest selects one page."
+      },
+      "pantherclaw.v1.ListSupplyChainFlagsResponse": {
+        "type": "object",
+        "properties": {
+          "flags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SupplyChainFlag"
+            },
+            "title": "flags",
+            "description": "Flags."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Next page, if any."
+          }
+        },
+        "title": "ListSupplyChainFlagsResponse",
+        "additionalProperties": false,
+        "description": "ListSupplyChainFlagsResponse is one page."
+      },
+      "pantherclaw.v1.SupplyChainFlag": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Flag id."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "The connection, for a listed entry."
+          },
+          "inventoryItemId": {
+            "type": "string",
+            "title": "inventory_item_id",
+            "description": "The inventory item, for a listed entry."
+          },
+          "packageVersionId": {
+            "type": "string",
+            "title": "package_version_id",
+            "description": "The package version, for a tool of an imported package."
+          },
+          "tool": {
+            "type": "string",
+            "title": "tool",
+            "description": "The pattern-checked tool name; empty for a resource or template."
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "description": "sha256:\u003chex\u003e of the entry checked."
+          },
+          "checkKind": {
+            "type": "string",
+            "title": "check_kind",
+            "description": "hidden_instruction, injection_pattern, tool_shadowing, overbroad_schema,\n rug_pull or provenance_unknown."
+          },
+          "severity": {
+            "type": "string",
+            "title": "severity",
+            "description": "LOW, MEDIUM or HIGH."
+          },
+          "note": {
+            "type": "string",
+            "title": "note",
+            "description": "PantherClaw's own note. It never holds listed text (HR-583)."
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SupplyChainFlagSpan"
+            },
+            "title": "spans",
+            "description": "Where it looked, at most 32 ranges."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "OPEN, or CLEARED once what it is on left review."
+          },
+          "firstSeenTime": {
+            "title": "first_seen_time",
+            "description": "First flagged.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastSeenTime": {
+            "title": "last_seen_time",
+            "description": "Last seen.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "SupplyChainFlag",
+        "additionalProperties": false,
+        "description": "SupplyChainFlag is one check's finding on one listed entry or package tool."
+      },
+      "pantherclaw.v1.SupplyChainFlagSpan": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "field",
+            "description": "description or input_schema."
+          },
+          "start": {
+            "type": "integer",
+            "title": "start",
+            "format": "int32",
+            "description": "First byte."
+          },
+          "end": {
+            "type": "integer",
+            "title": "end",
+            "format": "int32",
+            "description": "One past the last byte."
+          }
+        },
+        "title": "SupplyChainFlagSpan",
+        "additionalProperties": false,
+        "description": "SupplyChainFlagSpan says where a flag looked. It holds offsets, never the\n text they point at."
+      },
       "pantherclaw.v1.SupportGrantState": {
         "type": "string",
         "title": "SupportGrantState",
@@ -90625,6 +91058,10 @@
     {
       "name": "pantherclaw.v1.SuggestionService",
       "description": "SuggestionService serves evidence-backed policy suggestions (G0 M16\n D90–D92; F185; HR-442..445; Business edition).\n\n Each unused-authority posture finding gets a suggestion: a FORBID rule\n for the grant's agent over the operations it has not used, with the\n evidence behind it. A suggestion states its 30-day window, the\n operations the grant was used for, the routes that were not ENFORCED for\n the whole window (coverage limits) and how uncertain it is: LOW only when\n every route was ENFORCED or OBSERVE_ONLY throughout, MEDIUM when any was\n PARTIAL, HIGH when any was UNKNOWN or the window has gaps (HR-443). Its\n expected effect counts recorded transactions only; what was not collected\n is listed, never counted as zero (HR-445). A suggestion never changes\n policy: a person dismisses it, or drafts it into a policy DRAFT that only\n the publication gate can publish (HR-442). A suggestion is visible only to\n a caller who holds posture.read and grant.read where its agent lives\n (HR-444); one the caller cannot see is not found."
+    },
+    {
+      "name": "pantherclaw.v1.SupplyChainService",
+      "description": "SupplyChainService reads the supply-chain flags on what MCP servers list\n and what packages carry (G0 M24 D210-D214; F867-F871; HR-582, HR-583). A\n flag informs a person and decides nothing: it approves nothing and refuses\n nothing. No flags means \"no known flags\", never safe."
     },
     {
       "name": "pantherclaw.v1.SupportAccessService",

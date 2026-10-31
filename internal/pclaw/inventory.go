@@ -166,5 +166,5 @@ func escapeItem(it *pb.InventoryItem) {
 	}
 	it.Name, it.DisplayName, it.MimeType = escapeControls(it.Name), escapeControls(it.DisplayName), escapeControls(it.MimeType)
 	it.Description, it.DismissReason = escapeControls(it.Description), escapeControls(it.DismissReason)
-	it.InputSchema = escapeControls(it.InputSchema)
+	it.InputSchema, it.OperatorNote = escapeControls(it.InputSchema), escapeControls(it.OperatorNote)
 }

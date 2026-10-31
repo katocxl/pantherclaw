@@ -120,6 +120,12 @@ service ConnectionService {
   // server never signs it.
   // permission: package.import
   rpc DraftPackageFromInventory(DraftPackageFromInventoryRequest) returns (DraftPackageFromInventoryResponse);
+  // AddInventoryNote records what an operator reported about an inventory
+  // item from `pclaw mcp inspect --submit` (G0 M24 D214). It is their
+  // machine's word, stored as UNTRUSTED text: the item's state, review and
+  // flags stay as they are (HR-582).
+  // permission: connection.manage
+  rpc AddInventoryNote(AddInventoryNoteRequest) returns (AddInventoryNoteResponse);
 }
 
 // ConnectionKind is what a connection reaches.
@@ -1186,6 +1192,30 @@ message InventoryItem {
   string input_schema_digest = 19;
   // Whether the schema was too long to report.
   bool input_schema_truncated = 20;
+  // UNTRUSTED: what an operator reported (AddInventoryNote). PantherClaw
+  // did not check it.
+  string operator_note = 21;
+  // Who reported it.
+  string operator_note_by = 22;
+  // When.
+  google.protobuf.Timestamp operator_note_time = 23;
+}
+
+// AddInventoryNoteRequest is an operator's report on an inventory item.
+message AddInventoryNoteRequest {
+  // Item id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // UNTRUSTED: the report, at most 8 KiB. A later report replaces it.
+  string note = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 8192
+  }];
+}
+
+// AddInventoryNoteResponse is the item.
+message AddInventoryNoteResponse {
+  // The item.
+  InventoryItem item = 1;
 }
 
 // ListConnectionInventoryRequest selects one page.

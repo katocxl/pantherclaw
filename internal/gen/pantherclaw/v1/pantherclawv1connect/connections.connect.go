@@ -81,6 +81,9 @@ const (
 	// ConnectionServiceDraftPackageFromInventoryProcedure is the procedure name of the
 	// ConnectionService's DraftPackageFromInventory RPC.
 	ConnectionServiceDraftPackageFromInventoryProcedure = "/pantherclaw.v1.ConnectionService/DraftPackageFromInventory"
+	// ConnectionServiceAddInventoryNoteProcedure is the procedure name of the ConnectionService's
+	// AddInventoryNote RPC.
+	ConnectionServiceAddInventoryNoteProcedure = "/pantherclaw.v1.ConnectionService/AddInventoryNote"
 )
 
 var (
@@ -217,6 +220,13 @@ var (
 			Procedure:  ConnectionServiceDraftPackageFromInventoryProcedure,
 		}
 	})
+	connectionServiceAddInventoryNoteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("AddInventoryNote"),
+			Procedure:  ConnectionServiceAddInventoryNoteProcedure,
+		}
+	})
 )
 
 // ConnectionServiceClient is a client for the pantherclaw.v1.ConnectionService service.
@@ -308,6 +318,12 @@ type ConnectionServiceClient interface {
 	// server never signs it.
 	// permission: package.import
 	DraftPackageFromInventory(context.Context, *v1.DraftPackageFromInventoryRequest) (*v1.DraftPackageFromInventoryResponse, error)
+	// AddInventoryNote records what an operator reported about an inventory
+	// item from `pclaw mcp inspect --submit` (G0 M24 D214). It is their
+	// machine's word, stored as UNTRUSTED text: the item's state, review and
+	// flags stay as they are (HR-582).
+	// permission: connection.manage
+	AddInventoryNote(context.Context, *v1.AddInventoryNoteRequest) (*v1.AddInventoryNoteResponse, error)
 }
 
 // NewConnectionServiceClient constructs a client for the pantherclaw.v1.ConnectionService service.
@@ -405,6 +421,12 @@ type ConnectionServiceHandler interface {
 	// server never signs it.
 	// permission: package.import
 	DraftPackageFromInventory(context.Context, *v1.DraftPackageFromInventoryRequest) (*v1.DraftPackageFromInventoryResponse, error)
+	// AddInventoryNote records what an operator reported about an inventory
+	// item from `pclaw mcp inspect --submit` (G0 M24 D214). It is their
+	// machine's word, stored as UNTRUSTED text: the item's state, review and
+	// flags stay as they are (HR-582).
+	// permission: connection.manage
+	AddInventoryNote(context.Context, *v1.AddInventoryNoteRequest) (*v1.AddInventoryNoteResponse, error)
 }
 
 // RegisterConnectionServiceHandler registers svc as the pantherclaw.v1.ConnectionService
@@ -430,6 +452,7 @@ func RegisterConnectionServiceHandler(server *connect.Server, svc ConnectionServ
 		connect.Method{Spec: connectionServiceListConnectionInventorySpec(), Handler: adapter.listConnectionInventory},
 		connect.Method{Spec: connectionServiceDismissInventoryItemSpec(), Handler: adapter.dismissInventoryItem},
 		connect.Method{Spec: connectionServiceDraftPackageFromInventorySpec(), Handler: adapter.draftPackageFromInventory},
+		connect.Method{Spec: connectionServiceAddInventoryNoteSpec(), Handler: adapter.addInventoryNote},
 	)
 }
 
@@ -506,6 +529,10 @@ func (UnimplementedConnectionServiceHandler) DismissInventoryItem(context.Contex
 
 func (UnimplementedConnectionServiceHandler) DraftPackageFromInventory(context.Context, *v1.DraftPackageFromInventoryRequest) (*v1.DraftPackageFromInventoryResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.DraftPackageFromInventory is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) AddInventoryNote(context.Context, *v1.AddInventoryNoteRequest) (*v1.AddInventoryNoteResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.AddInventoryNote is not implemented")
 }
 
 type connectionServiceClient struct {
@@ -651,6 +678,14 @@ func (c *connectionServiceClient) DismissInventoryItem(ctx context.Context, req 
 func (c *connectionServiceClient) DraftPackageFromInventory(ctx context.Context, req *v1.DraftPackageFromInventoryRequest) (*v1.DraftPackageFromInventoryResponse, error) {
 	var res v1.DraftPackageFromInventoryResponse
 	if err := c.client.CallUnary(ctx, connectionServiceDraftPackageFromInventorySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) AddInventoryNote(ctx context.Context, req *v1.AddInventoryNoteRequest) (*v1.AddInventoryNoteResponse, error) {
+	var res v1.AddInventoryNoteResponse
+	if err := c.client.CallUnary(ctx, connectionServiceAddInventoryNoteSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -868,6 +903,18 @@ func (h connectionServiceHandler) draftPackageFromInventory(ctx context.Context,
 		return err
 	}
 	res, err := h.svc.DraftPackageFromInventory(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) addInventoryNote(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AddInventoryNoteRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AddInventoryNote(ctx, &req)
 	if err != nil {
 		return err
 	}

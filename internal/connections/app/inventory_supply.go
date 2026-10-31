@@ -6,13 +6,23 @@ package app
 import (
 	"context"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/supplychain/adapters/pgflags"
 	scdomain "github.com/katocxl/pantherclaw/internal/supplychain/domain"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
+
+// MaxInventoryNote bounds an operator's note, in bytes.
+const MaxInventoryNote = 8 << 10
+
+// ErrInventoryNote: a note is empty, too long or not UTF-8.
+var ErrInventoryNote = pcerr.New(pcerr.InvalidArgument, "INVENTORY_NOTE_INVALID", "a note is 1 byte to 8 KiB of UTF-8 text")
 
 // Supply-chain checks on what a server lists (G0 M24 D211, D212; HR-582).
 // They run on an item that is about to wait for review, and their flags go on
@@ -98,6 +108,43 @@ func flagItem(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcConnectio
 		return "", err
 	}
 	return scdomain.Summary(r), pgflags.RecordItem(ctx, tx, c.Org, item, r)
+}
+
+// AddInventoryNote records what an operator reported about an item from
+// `pclaw mcp inspect --submit` (G0 M24 D214): at most 8 KiB of UNTRUSTED text.
+// It is someone's word about their own machine, so it changes nothing else:
+// not the item's state, its review or its flags (HR-582).
+func (s *Service) AddInventoryNote(ctx context.Context, id ids.UUID, note string) (dbq.PcConnectionInventory, error) {
+	c, err := s.caller(ctx, td.PermConnectionManage)
+	if err != nil {
+		return dbq.PcConnectionInventory{}, err
+	}
+	if note == "" || len(note) > MaxInventoryNote || !utf8.ValidString(note) {
+		return dbq.PcConnectionInventory{}, ErrInventoryNote
+	}
+	var out dbq.PcConnectionInventory
+	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		row, err := q.LockInventoryItem(ctx, c.Org, id)
+		if db.IsNoRows(err) {
+			return ErrInventoryNotFound
+		} else if err != nil {
+			return err
+		}
+		if err := db.ExpectOneRow(q.SetInventoryNote(ctx, dbq.SetInventoryNoteParams{
+			OperatorNote: note, OperatorNoteBy: &c.By, OrgID: c.Org, ID: id,
+		})); err != nil {
+			return err
+		}
+		if err := record(ctx, tx, c, "connection.inventory_note_added", row.ConnectionID, map[string]string{
+			"item_id": id.String(), "kind": row.Kind, "name": row.Name, "digest": row.Digest,
+		}); err != nil {
+			return err
+		}
+		out, err = q.LockInventoryItem(ctx, c.Org, id)
+		return err
+	})
+	return out, err
 }
 
 // fillSchema gives a NEW item first listed without a schema the one a report

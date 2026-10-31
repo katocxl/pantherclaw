@@ -70,6 +70,11 @@ UPDATE pc.connection_inventory
 SET state = 'DISMISSED', dismissed_by = sqlc.arg(dismissed_by), dismiss_reason = sqlc.arg(dismiss_reason), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'NEW';
 
+-- name: SetInventoryNote :execresult
+UPDATE pc.connection_inventory
+SET operator_note = sqlc.arg(operator_note), operator_note_by = sqlc.arg(operator_note_by), operator_note_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
 -- name: GetInventoryItems :many
 SELECT * FROM pc.connection_inventory
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND id = ANY (sqlc.arg(ids)::uuid[])

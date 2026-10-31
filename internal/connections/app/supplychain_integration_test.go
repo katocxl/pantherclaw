@@ -337,9 +337,9 @@ func TestD204_FlagsReachTheQueueByViewer(t *testing.T) {
 		}
 	}
 	for name, v := range map[string]ports.Viewer{
-		"no org scope":         {Org: e.org, Posture: ports.Reach{All: true}, Under: under(all)},
-		"no connection.read":   {Org: e.org, Posture: all, Under: under(ports.Reach{})},
-		"read of agents only":  {Org: e.org, Posture: all, Under: under(ports.Reach{All: true})},
+		"no org scope":        {Org: e.org, Posture: ports.Reach{All: true}, Under: under(all)},
+		"no connection.read":  {Org: e.org, Posture: all, Under: under(ports.Reach{})},
+		"read of agents only": {Org: e.org, Posture: all, Under: under(ports.Reach{All: true})},
 	} {
 		t.Run(name, func(t *testing.T) {
 			fs, _, err := src.Findings(ctx, v, pvdomain.Filter{})

@@ -40,6 +40,9 @@ func inventoryItemOf(r dbq.PcConnectionInventory) *pb.InventoryItem {
 	if r.ReviewEntryID != nil {
 		out.ReviewEntryId = r.ReviewEntryID.String()
 	}
+	if r.OperatorNoteAt != nil {
+		out.OperatorNote, out.OperatorNoteBy, out.OperatorNoteTime = r.OperatorNote, deref(r.OperatorNoteBy), stamp(*r.OperatorNoteAt)
+	}
 	return out
 }
 
@@ -80,6 +83,19 @@ func (h *Handler) DismissInventoryItem(ctx context.Context, req *pb.DismissInven
 		return nil, err
 	}
 	return &pb.DismissInventoryItemResponse{Item: inventoryItemOf(r)}, nil
+}
+
+// AddInventoryNote implements ConnectionServiceHandler.
+func (h *Handler) AddInventoryNote(ctx context.Context, req *pb.AddInventoryNoteRequest) (*pb.AddInventoryNoteResponse, error) {
+	id, err := parseID(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	r, err := h.s.AddInventoryNote(ctx, id, req.GetNote())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.AddInventoryNoteResponse{Item: inventoryItemOf(r)}, nil
 }
 
 // DraftPackageFromInventory implements ConnectionServiceHandler.

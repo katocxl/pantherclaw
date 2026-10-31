@@ -393,6 +393,28 @@ func (q *Queries) SeeInventoryItem(ctx context.Context, orgID ids.OrgID, iD ids.
 	return err
 }
 
+const setInventoryNote = `-- name: SetInventoryNote :execresult
+UPDATE pc.connection_inventory
+SET operator_note = $1, operator_note_by = $2, operator_note_at = now()
+WHERE org_id = $3 AND id = $4
+`
+
+type SetInventoryNoteParams struct {
+	OperatorNote   string
+	OperatorNoteBy *string
+	OrgID          ids.OrgID
+	ID             ids.UUID
+}
+
+func (q *Queries) SetInventoryNote(ctx context.Context, arg SetInventoryNoteParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, setInventoryNote,
+		arg.OperatorNote,
+		arg.OperatorNoteBy,
+		arg.OrgID,
+		arg.ID,
+	)
+}
+
 const setInventorySchema = `-- name: SetInventorySchema :execresult
 UPDATE pc.connection_inventory
 SET input_schema = $1, input_schema_digest = $2,

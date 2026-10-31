@@ -116,6 +116,10 @@ type Options struct {
 	// variables hold: a header or query parameter carrying only it is
 	// dropped like any credential but not reported, since it is no secret.
 	Placeholder string
+	// Inspect, set for an MCP server inspection (G0 M24 D214, HR-584), makes
+	// an edge with no gateway and no hosts: it refuses and records every
+	// request, and holds nothing it could forward with.
+	Inspect bool
 }
 
 // Edge is one session's sidecar.
@@ -133,6 +137,9 @@ type Edge struct {
 
 // New returns an edge with a fresh session CA.
 func New(o Options) (*Edge, error) {
+	if o.Inspect {
+		return newInspecting(o)
+	}
 	u, err := url.Parse(strings.TrimSuffix(o.GatewayURL, "/"))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" {
 		return nil, fmt.Errorf("edge: gateway URL %q", o.GatewayURL)
@@ -210,6 +217,27 @@ func New(o Options) (*Edge, error) {
 			},
 		},
 	}, nil
+}
+
+// newInspecting returns the edge of an inspection: no route maps, so every
+// CONNECT is refused and the tunnel is never reached. Its CA signs nothing.
+func newInspecting(o Options) (*Edge, error) {
+	if len(o.Hosts) != 0 || o.GatewayURL != "" || o.Key != nil || o.Token != nil || o.Binding != nil {
+		return nil, errors.New("edge: an inspection's edge has no gateway, hosts, key, token or binding")
+	}
+	validity := o.CAValidity
+	if validity <= 0 {
+		validity = 24 * time.Hour
+	}
+	ca, err := newAuthority(nil, validity, time.Now)
+	if err != nil {
+		return nil, err
+	}
+	log := o.Log
+	if log == nil {
+		log = pclog.Discard()
+	}
+	return &Edge{session: o.Session, ca: ca, log: log}, nil
 }
 
 // gatewayTLS verifies an HTTPS gateway against the system roots, or, with
