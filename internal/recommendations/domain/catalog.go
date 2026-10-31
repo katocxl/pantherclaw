@@ -122,7 +122,7 @@ type Facts struct {
 	Secrets    map[string]Group // open scan discoveries per credential kind
 	DataAgents Group
 	// ManagedSettings are the open scan discoveries a scan found on a machine
-	// with no managed settings file (G0 M23 D114).
+	// where pclaw read no managed settings file (G0 M23 D114, D129).
 	ManagedSettings Group
 	Integrations    Integrations
 	// FirstDecision and FirstHold are the onboarding records that show the
@@ -397,11 +397,12 @@ func Catalog() []Entry {
 		},
 		{
 			ID: ManagedSettings, Category: Unsupported, Reach: AgentBacked, Source: FromDiscoveries, Link: linkAgents,
-			Title: "Managed settings are missing",
-			Detail: "A scan found agents on a machine with no managed settings file, so nothing there pins the PantherClaw hook or the allowed MCP servers. " +
-				"pclaw managed-settings generate writes the files for your own device management to install.",
+			Title: "No readable managed settings found",
+			Detail: "A scan found agents on a machine where pclaw found no managed settings file. Registry, MDM, server-managed and other clients' " +
+				"settings cannot be read here, so the machine may still be managed. If it is not, pclaw managed-settings generate writes the files " +
+				"for your own device management to install.",
 			StillUnsupported: []string{
-				"pclaw reads only the platform's managed settings file: registry, MDM and server-managed settings cannot be read, so a machine they manage still shows here.",
+				"pclaw reads only Claude Code's managed settings file on the machine: registry, MDM, server-managed and other clients' settings cannot be read, so a machine they manage still shows here.",
 				"A managed settings file is not coverage: generating or finding one changes no coverage state.",
 			},
 			signal: func(f Facts) (Group, string, bool) {
