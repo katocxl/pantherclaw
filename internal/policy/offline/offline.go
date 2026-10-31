@@ -169,7 +169,7 @@ func Check(ctx context.Context, o Options) (*Report, error) {
 		r.Validation.Findings = []pdomain.Finding{{Code: validate.CodeCompileError, Severity: pdomain.SeverityError, Detail: err.Error()}}
 		r.Scenarios.Error = scenario.ErrBundleInvalid
 		r.finish()
-		return r, nil
+		return r, nil //nolint:nilerr // a bundle that does not decode is a result, not a failure to check
 	}
 	r.Policy = next.ID
 	if base != nil {

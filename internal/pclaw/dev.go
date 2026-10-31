@@ -312,7 +312,7 @@ func loopback(addr string) bool {
 
 // listening reports whether something accepts connections on addr.
 func listening(addr string) bool {
-	c, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+	c, err := (&net.Dialer{Timeout: 500 * time.Millisecond}).DialContext(context.Background(), "tcp", addr)
 	if err != nil {
 		return false
 	}

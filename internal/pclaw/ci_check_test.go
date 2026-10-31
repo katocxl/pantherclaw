@@ -27,10 +27,10 @@ const ciPolicy = `{"id": "refunds", "rules": [{
    "given": {"facts": {"payments.charge.refundable": {"value": {"bool": true}, "age_seconds": 10}}},
    "expect": {"decision": "DENY", "reason": "REFUND_OVER_CAP", "rule": "cap"}}]}`
 
-func ciFile(t *testing.T, cap string) string {
+func ciFile(t *testing.T, limit string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "policy.json")
-	if err := os.WriteFile(p, []byte(strings.ReplaceAll(ciPolicy, "MAXIMUM", cap)), 0o600); err != nil {
+	if err := os.WriteFile(p, []byte(strings.ReplaceAll(ciPolicy, "MAXIMUM", limit)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return p

@@ -24,7 +24,7 @@ import (
 
 // bundle is a policy that passes the publish gate: a hard cap on refunds,
 // and cases that kill every mutant.
-func bundle(cap string) map[string]any {
+func bundle(limit string) map[string]any {
 	refund := func(id, amount, decision, reason, rule string) map[string]any {
 		c := map[string]any{
 			"id": id, "summary": "a refund of " + amount,
@@ -45,7 +45,7 @@ func bundle(cap string) map[string]any {
 		"rules": []map[string]any{{
 			"id": "cap", "kind": "CONSTRAIN", "summary": "no refund above the cap",
 			"operations": []string{"payments.refund.create"}, "when": "true", "reason": "REFUND_OVER_CAP",
-			"constraint": map[string]any{"kind": "amount_max", "param": "amount", "max": cap, "currency": "USD"},
+			"constraint": map[string]any{"kind": "amount_max", "param": "amount", "max": limit, "currency": "USD"},
 		}},
 		"tests": []map[string]any{
 			refund("under", "10.00", "ALLOW", "GRANT_COVERS", ""),

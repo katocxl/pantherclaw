@@ -56,4 +56,6 @@ Text from a policy file is untrusted: the Markdown report escapes it, so it cann
 
 Outcome samples are generated actions. The report says how many ran, because **an empty sample proves nothing**: samples can miss an action the two versions decide differently, and they show the policy engine alone, not grants, budgets, facts or holds. The rule diff is what decides `widen`; samples only add to it.
 
+The check runs on the pull request's own files, so a pull request can change its scenarios and packages along with the policy. Review those as closely as the policy.
+
 The check does not know who holds a role or which provider supplies a fact, because those are server records. The report names those checks as not made.
