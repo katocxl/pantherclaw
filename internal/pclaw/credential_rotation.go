@@ -35,16 +35,16 @@ func rotationPageHint(a *app, err error, args []string) error {
 	return err
 }
 
-// rotationRPC is rpc for CredentialRotationService.
-func rotationRPC(usage string, nargs int, setup func(fs *flag.FlagSet) rotationCall) command {
+// rotationRPC is rpc for CredentialRotationService: one id, then flags.
+func rotationRPC(usage string, setup func(fs *flag.FlagSet) rotationCall) command {
 	return command{usage: usage, run: func(ctx context.Context, a *app, args []string) error {
-		if len(args) < nargs {
+		if len(args) < 1 {
 			return errUsage
 		}
 		fs := flag.NewFlagSet(usage, flag.ContinueOnError)
 		fs.SetOutput(a.stderr)
 		fn := setup(fs)
-		if err := fs.Parse(args[nargs:]); err != nil {
+		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 0 {
@@ -54,7 +54,7 @@ func rotationRPC(usage string, nargs int, setup func(fs *flag.FlagSet) rotationC
 		if err != nil {
 			return err
 		}
-		res, err := fn(ctx, pantherclawv1connect.NewCredentialRotationServiceClient(s.connect()), args[:nargs])
+		res, err := fn(ctx, pantherclawv1connect.NewCredentialRotationServiceClient(s.connect()), args[:1])
 		if err != nil {
 			return rotationPageHint(a, err, args)
 		}
@@ -63,7 +63,7 @@ func rotationRPC(usage string, nargs int, setup func(fs *flag.FlagSet) rotationC
 }
 
 func init() {
-	commands["credential rotation request"] = rotationRPC("credential rotation request CONNECTION --preview-digest HEX", 1, func(fs *flag.FlagSet) rotationCall {
+	commands["credential rotation request"] = rotationRPC("credential rotation request CONNECTION --preview-digest HEX", func(fs *flag.FlagSet) rotationCall {
 		digest := fs.String("preview-digest", "", "the digest from the preview of who shares the active credential")
 		return func(ctx context.Context, c pantherclawv1connect.CredentialRotationServiceClient, a []string) (proto.Message, error) {
 			if *digest == "" {
@@ -76,39 +76,39 @@ func init() {
 		usage: "credential rotation seal ROTATION --connection ID --from-file FILE|- --github-app ID --installation N --account LOGIN [--fingerprint sha256:HEX]",
 		run:   rotationSeal,
 	}
-	commands["credential rotation test"] = rotationRPC("credential rotation test ROTATION", 1, func(*flag.FlagSet) rotationCall {
+	commands["credential rotation test"] = rotationRPC("credential rotation test ROTATION", func(*flag.FlagSet) rotationCall {
 		return func(ctx context.Context, c pantherclawv1connect.CredentialRotationServiceClient, a []string) (proto.Message, error) {
 			return c.TestRotation(ctx, &pb.TestRotationRequest{Id: a[0]})
 		}
 	})
-	commands["credential rotation activate"] = rotationRPC("credential rotation activate ROTATION", 1, func(*flag.FlagSet) rotationCall {
+	commands["credential rotation activate"] = rotationRPC("credential rotation activate ROTATION", func(*flag.FlagSet) rotationCall {
 		return func(ctx context.Context, c pantherclawv1connect.CredentialRotationServiceClient, a []string) (proto.Message, error) {
 			return c.ActivateRotation(ctx, &pb.ActivateRotationRequest{Id: a[0]})
 		}
 	})
-	commands["credential rotation rollback"] = rotationRPC("credential rotation rollback ROTATION --reason TEXT", 1, func(fs *flag.FlagSet) rotationCall {
+	commands["credential rotation rollback"] = rotationRPC("credential rotation rollback ROTATION --reason TEXT", func(fs *flag.FlagSet) rotationCall {
 		reason := fs.String("reason", "", "why the old key goes back")
 		return func(ctx context.Context, c pantherclawv1connect.CredentialRotationServiceClient, a []string) (proto.Message, error) {
 			return c.RollBackRotation(ctx, &pb.RollBackRotationRequest{Id: a[0], Reason: *reason})
 		}
 	})
-	commands["credential rotation confirm"] = rotationRPC("credential rotation confirm ROTATION", 1, func(*flag.FlagSet) rotationCall {
+	commands["credential rotation confirm"] = rotationRPC("credential rotation confirm ROTATION", func(*flag.FlagSet) rotationCall {
 		return func(ctx context.Context, c pantherclawv1connect.CredentialRotationServiceClient, a []string) (proto.Message, error) {
 			return c.ConfirmRotation(ctx, &pb.ConfirmRotationRequest{Id: a[0]})
 		}
 	})
-	commands["credential rotation cancel"] = rotationRPC("credential rotation cancel ROTATION --reason TEXT", 1, func(fs *flag.FlagSet) rotationCall {
+	commands["credential rotation cancel"] = rotationRPC("credential rotation cancel ROTATION --reason TEXT", func(fs *flag.FlagSet) rotationCall {
 		reason := fs.String("reason", "", "why the rotation ends")
 		return func(ctx context.Context, c pantherclawv1connect.CredentialRotationServiceClient, a []string) (proto.Message, error) {
 			return c.CancelRotation(ctx, &pb.CancelRotationRequest{Id: a[0], Reason: *reason})
 		}
 	})
-	commands["credential rotation get"] = rotationRPC("credential rotation get ROTATION", 1, func(*flag.FlagSet) rotationCall {
+	commands["credential rotation get"] = rotationRPC("credential rotation get ROTATION", func(*flag.FlagSet) rotationCall {
 		return func(ctx context.Context, c pantherclawv1connect.CredentialRotationServiceClient, a []string) (proto.Message, error) {
 			return c.GetRotation(ctx, &pb.GetRotationRequest{Id: a[0]})
 		}
 	})
-	commands["credential rotation list"] = rotationRPC("credential rotation list CONNECTION", 1, func(*flag.FlagSet) rotationCall {
+	commands["credential rotation list"] = rotationRPC("credential rotation list CONNECTION", func(*flag.FlagSet) rotationCall {
 		return func(ctx context.Context, c pantherclawv1connect.CredentialRotationServiceClient, a []string) (proto.Message, error) {
 			return c.ListRotations(ctx, &pb.ListRotationsRequest{ConnectionId: a[0]})
 		}

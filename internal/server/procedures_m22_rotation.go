@@ -26,7 +26,7 @@ var m22RotationProcedures = map[string]td.Permission{
 }
 
 // m22RotationClasses are its plan-gate classes: confirming removes the old
-// key and cancelling revokes a candidate, so a lapsed plan can always do them.
+// key and canceling revokes a candidate, so a lapsed plan can always do them.
 var m22RotationClasses = map[string]entitlements.Class{
 	pantherclawv1connect.CredentialRotationServiceRequestRotationProcedure:       entitlements.ClassChange,
 	pantherclawv1connect.CredentialRotationServiceSealRotationCandidateProcedure: entitlements.ClassChange,

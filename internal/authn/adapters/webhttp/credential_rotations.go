@@ -132,7 +132,7 @@ func (h *Handler) activateCredentialRotation(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	c, err := h.credentialRotations.ActivateRotation(callerContext(r, s), id, stepUpOfSession(s)) //nolint:contextcheck // callerContext derives from the request's context
+	c, err := h.credentialRotations.ActivateRotation(callerContext(r, s), id, stepUpOfSession(s))
 	h.rotationResult(w, r, c, err)
 }
 
@@ -156,6 +156,6 @@ func (h *Handler) rollBackCredentialRotation(w http.ResponseWriter, r *http.Requ
 		h.jsonError(w, http.StatusBadRequest, "rotation_reason")
 		return
 	}
-	c, err := h.credentialRotations.RollBackRotation(callerContext(r, s), id, body.Reason, stepUpOfSession(s)) //nolint:contextcheck // callerContext derives from the request's context
+	c, err := h.credentialRotations.RollBackRotation(callerContext(r, s), id, body.Reason, stepUpOfSession(s))
 	h.rotationResult(w, r, c, err)
 }
