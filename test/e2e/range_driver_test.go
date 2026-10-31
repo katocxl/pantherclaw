@@ -144,7 +144,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.postgres = pgtargettest.New(t)
 	}
 	var p idp
-	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) || needsBrowser(sc) ||
+	// CX-90002 is the Hub seed's customer-authored form of RT-009.
+	ownGrant := sc.ID == "RT-009" || sc.ID == "CX-90002"
+	if requires(sc, "person") || ownGrant || slackScenario(sc) || needsBrowser(sc) ||
 		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) {
 		p = inProcessIdP(t)
 		o.people = &p
@@ -202,7 +204,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if sc.ID == "RT-022" {
 		d.seedReal()
 	}
-	if sc.ID == "RT-009" {
+	if ownGrant {
 		d.ownGrant(`{"operations": ["github.contents.write"], "targets": {"github.branch": {"prefixes": ["acme/payments@"]}}}`, "")
 	}
 	if err := d.extra.setup(d); err != nil {
@@ -220,10 +222,14 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 // setupPayments makes the charges the scenarios refund refundable.
 func (d *rangeDriver) setupPayments() {
 	// The charges a scenario refunds are its own: ch_<nonce>rt<NNN>, with a
-	// letter or n<k> after it for more than one (D38).
-	num := strings.TrimPrefix(d.sc.ID, "RT-")
+	// letter or n<k> after it for more than one (D38). A Hub seed scenario's
+	// are ch_<nonce>cx<NNNNN>.
+	num := "rt" + strings.TrimPrefix(d.sc.ID, "RT-")
+	if n, ok := strings.CutPrefix(d.sc.ID, "CX-"); ok {
+		num = "cx" + n
+	}
 	var charges []string
-	for _, base := range []string{"ch_" + d.fix["nonce"] + "rt" + num} {
+	for _, base := range []string{"ch_" + d.fix["nonce"] + num} {
 		charges = append(charges, base)
 		for _, suf := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 			charges = append(charges, base+suf)

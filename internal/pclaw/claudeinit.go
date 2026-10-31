@@ -429,15 +429,19 @@ func (f initFlags) hookEntry() (*jsonNode, error) {
 	if f.run != "" {
 		args = append(args, "--run", f.run)
 	}
-	entry := jsonFields("type", "command", "command", "pclaw", "args", args, "timeout", 10, "onFailure", "block")
-	return jsonFields("matcher", strings.Join(shellTools, "|"), "hooks", &jsonNode{kind: '[', items: []*jsonNode{entry}}), nil
+	return hookGroup(args), nil
 }
 
-// hookBlocked says why the hook would not run: managed settings that allow
-// only managed hooks or disable every hook, a target file that disables
-// its scope's hooks, or another settings file that turns every hook off
-// and wins, because no file Claude Code prefers to it sets disableAllHooks.
-func hookBlocked(managed, settings []claudeSettings, target claudeSettings) error {
+// hookGroup is the hook group that runs `pclaw` with args before every tool
+// in shellTools: exec form, blocking when it cannot run.
+func hookGroup(args []string) *jsonNode {
+	entry := jsonFields("type", "command", "command", "pclaw", "args", args, "timeout", 10, "onFailure", "block")
+	return jsonFields("matcher", strings.Join(shellTools, "|"), "hooks", &jsonNode{kind: '[', items: []*jsonNode{entry}})
+}
+
+// managedBlocked says why managed settings keep the hook from running: they
+// allow only managed hooks without PantherClaw's, or disable every hook.
+func managedBlocked(managed []claudeSettings) error {
 	for _, m := range managed {
 		switch {
 		case m.doc.get("disableAllHooks").bool():
@@ -446,6 +450,57 @@ func hookBlocked(managed, settings []claudeSettings, target claudeSettings) erro
 			return fmt.Errorf("managed settings (%s) allow only managed hooks, so the PantherClaw hook would never run; "+
 				"ask your administrator to add it to managed settings", m.path)
 		}
+	}
+	return nil
+}
+
+// Managed states `pclaw init` and `pclaw scan` report (G0 M23 D114). They say
+// what a file on this machine holds, never that anything is covered (HR-567).
+const (
+	// managedNotFound: no managed settings file on this machine.
+	managedNotFound = "not_found"
+	// managedPresent: a file is there and does not keep the hook from running.
+	managedPresent = "present"
+	// managedConflict: a file keeps the hook from running, or cannot be read.
+	managedConflict = "conflict"
+)
+
+// managedLimits is what the managed state cannot say.
+const managedLimits = "registry, MDM and server-managed settings cannot be read here, and a file found here is not coverage"
+
+// managedState is the state of the managed settings files found.
+func managedState(managed []claudeSettings) string {
+	switch {
+	case len(managed) == 0:
+		return managedNotFound
+	case managedBlocked(managed) != nil:
+		return managedConflict
+	}
+	return managedPresent
+}
+
+// platformManagedState reads the platform's managed settings files.
+func platformManagedState() string {
+	var managed []claudeSettings
+	for _, p := range managedSettingsPaths() {
+		s, err := readSettings("managed", p)
+		if err != nil {
+			return managedConflict
+		}
+		if s.raw != nil {
+			managed = append(managed, s)
+		}
+	}
+	return managedState(managed)
+}
+
+// hookBlocked says why the hook would not run: managed settings that allow
+// only managed hooks or disable every hook, a target file that disables
+// its scope's hooks, or another settings file that turns every hook off
+// and wins, because no file Claude Code prefers to it sets disableAllHooks.
+func hookBlocked(managed, settings []claudeSettings, target claudeSettings) error {
+	if err := managedBlocked(managed); err != nil {
+		return err
 	}
 	if target.doc.get("disableAllHooks").bool() {
 		return fmt.Errorf("%s disables its hooks (disableAllHooks); pclaw init never changes that setting, so remove it yourself "+
@@ -495,9 +550,7 @@ func report(a *app, opts scan.Options, settings, managed []claudeSettings) []sca
 		}
 		_, _ = fmt.Fprintf(w, "  %-8s %s (%s)\n", s.scope, s.path, state)
 	}
-	if len(managed) == 0 {
-		_, _ = fmt.Fprintln(w, "  managed  none found in the platform's file (registry, MDM and server-managed settings are not read)")
-	}
+	_, _ = fmt.Fprintf(w, "  managed state: %s (%s)\n", managedState(managed), managedLimits)
 	findings := scan.Run(opts)
 	for _, f := range findings {
 		at := f.Attributes

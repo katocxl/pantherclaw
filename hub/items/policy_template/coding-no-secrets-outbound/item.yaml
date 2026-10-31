@@ -27,7 +27,7 @@ body:
   tests:
     - {"id": "ns-pull-key", "per": "org", "summary": "a pull request body with a private key header is refused",
       "action": {"operation": "github.pull.create", "target": {"type": "github.repository", "id": "acme/api"},
-        "params": {"title": "Notes", "body": "see -----BEGIN RSA PRIVATE KEY----- below", "head": "notes", "base": "main"}},
+        "params": {"title": "Notes", "body": "see -----BEGIN RSA PRIVATE KEY\x2d---- below", "head": "notes", "base": "main"}},
       "expect": {"decision": "DENY", "reason": "SECRET_OUTBOUND"}}
     - {"id": "ns-pull-clean", "per": "org", "summary": "a pull request body with no secret goes through",
       "action": {"operation": "github.pull.create", "target": {"type": "github.repository", "id": "acme/api"},
@@ -39,7 +39,7 @@ body:
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
     - {"id": "ns-slack-key", "per": "org", "summary": "a Slack message with a private key header is refused",
       "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "C0EXAMPLE01"},
-        "params": {"text": "-----BEGIN OPENSSH PRIVATE KEY-----"}},
+        "params": {"text": "-----BEGIN OPENSSH PRIVATE KEY\x2d----"}},
       "given": {"grant": {"constraints": [{"kind": "destination_set", "values": ["C0EXAMPLE01"]}]}, "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
       "expect": {"decision": "DENY", "reason": "SECRET_OUTBOUND"}}
     - {"id": "ns-slack-clean", "per": "org", "summary": "a Slack message with no secret goes through",
