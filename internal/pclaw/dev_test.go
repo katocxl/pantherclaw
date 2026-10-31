@@ -205,6 +205,141 @@ func TestD134_DevDownLeavesAProcessItCannotProveItsOwn(t *testing.T) {
 	}
 }
 
+// TestD143_DevDownKeepsWhatItLeftRunning: a process left running stays on
+// record, marked unproved, until it is gone.
+func TestD143_DevDownKeepsWhatItLeftRunning(t *testing.T) {
+	f := installFakeDev(t)
+	dir := t.TempDir()
+	if code, _, _ := devRun(t, "up", "--dir", dir); code != 0 {
+		t.Fatal("up")
+	}
+	s := devSims[0]
+	f.identity = func(pid int) (string, error) {
+		if pid == 101 { // the first simulator started
+			return "a later process", nil
+		}
+		return fakeStart(pid), nil
+	}
+	if code, _, stderr := devRun(t, "down", "--dir", dir); code != 0 {
+		t.Fatalf("down: %s", stderr)
+	}
+	st, err := loadDevState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Sims) != 1 || st.Sims[0].Name != s.Name || !st.Sims[0].Unproved {
+		t.Fatalf("state: %+v", st)
+	}
+	delete(f.live, s.Addr)
+	if code, _, stderr := devRun(t, "down", "--dir", dir); code != 0 {
+		t.Fatalf("second down: %s", stderr)
+	}
+	if st, err := loadDevState(dir); err != nil || len(st.Sims) != 0 {
+		t.Errorf("state after it went: %+v %v", st, err)
+	}
+}
+
+// TestD143_AForeignListenerIsNeverTakenForOurs: up, status and env read a
+// listener as dev down does: a recorded id that proves nothing, or no
+// record at all, is another process's port.
+func TestD143_AForeignListenerIsNeverTakenForOurs(t *testing.T) {
+	foreign := func(int) (string, error) { return "a later process", nil }
+	for name, tamper := range map[string]func(*fakeDev){
+		"recorded, another process has the id": func(f *fakeDev) { f.identity = foreign },
+		"recorded, identity unreadable": func(f *fakeDev) {
+			f.identity = func(int) (string, error) { return "", errors.New("no such process") }
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := installFakeDev(t)
+			dir := t.TempDir()
+			if code, _, _ := devRun(t, "up", "--dir", dir); code != 0 {
+				t.Fatal("up")
+			}
+			tamper(f)
+			started := len(f.started)
+			if code, _, stderr := devRun(t, "up", "--dir", dir); code == 0 || !strings.Contains(stderr, "in use by another process") {
+				t.Errorf("up: exit %d: %s", code, stderr)
+			}
+			if len(f.started) != started || len(f.stopped) != 0 {
+				t.Errorf("up started %v, stopped %v", f.started, f.stopped)
+			}
+			if _, out, _ := devRun(t, "status", "--dir", dir); !strings.Contains(out, "payments: in use by another process") {
+				t.Errorf("status:\n%s", out)
+			}
+			code, out, stderr := devRun(t, "env", "--dir", dir)
+			if code != 0 {
+				t.Fatalf("env: %s", stderr)
+			}
+			if strings.Contains(out, "PANTHERCLAW_SIM_") || !strings.Contains(stderr, "left out PANTHERCLAW_SIM_PAYMENTS") {
+				t.Errorf("env points at another process:\n%s\n%s", out, stderr)
+			}
+			if !strings.Contains(out, "PANTHERCLAW_SERVER=") {
+				t.Errorf("env lost the node's settings:\n%s", out)
+			}
+		})
+	}
+}
+
+// TestD143_AListenerWithNoRecordIsForeign: env still names a port nothing
+// holds, and leaves out one that pclaw did not start.
+func TestD143_AListenerWithNoRecordIsForeign(t *testing.T) {
+	f := installFakeDev(t)
+	dir := t.TempDir()
+	if code, _, _ := devRun(t, "up", "--dir", dir); code != 0 {
+		t.Fatal("up")
+	}
+	if err := saveDevState(dir, devState{}); err != nil {
+		t.Fatal(err)
+	}
+	delete(f.live, devSims[1].Addr)
+	_, out, _ := devRun(t, "env", "--dir", dir)
+	if strings.Contains(out, "PANTHERCLAW_SIM_PAYMENTS=") || !strings.Contains(out, "PANTHERCLAW_SIM_MCP=") {
+		t.Errorf("env:\n%s", out)
+	}
+}
+
+// TestD146_TheStartTimeComesFromProcStat: field 22 of a sample stat file,
+// on any system, whatever the program's name holds.
+func TestD146_TheStartTimeComesFromProcStat(t *testing.T) {
+	const tail = " S 1 4242 4242 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 1 0 987654 12345 67 18446744073709551615 1 1 0 0 0 0 0 0 0 0 0 0 17 3 0 0 0 0 0\n"
+	dir := t.TempDir()
+	sample := func(t *testing.T, content string) string {
+		t.Helper()
+		p := filepath.Join(dir, "stat")
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	for name, program := range map[string]string{
+		"plain":       "(pantherclaw-sim)",
+		"spaces":      "(a b c)",
+		"parentheses": "(a) (b) S 1)",
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := readProcStart(sample(t, "4242 "+program+tail))
+			if err != nil || got != "987654" {
+				t.Errorf("got %q, %v", got, err)
+			}
+		})
+	}
+	for name, content := range map[string]string{
+		"no name":     "4242 pantherclaw S 1",
+		"too short":   "4242 (x) S 1 2 3\n",
+		"not a count": strings.Replace("4242 (x)"+tail, "987654", "soon", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got, err := readProcStart(sample(t, content)); err == nil {
+				t.Errorf("read %q", got)
+			}
+		})
+	}
+	if got, err := readProcStart(filepath.Join(dir, "gone")); err == nil {
+		t.Errorf("read a missing file: %q", got)
+	}
+}
+
 // TestD134_ProcessIdentityTellsProcessesApart: read twice it stays the same,
 // and a process that has ended never reads as this one.
 func TestD134_ProcessIdentityTellsProcessesApart(t *testing.T) {
