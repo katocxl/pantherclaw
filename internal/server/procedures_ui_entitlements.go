@@ -26,8 +26,8 @@ func init() { maps.Copy(procedurePermissions, uiEntitlementProcedures) }
 // workload and public procedures, and the account procedures (orgs.create,
 // orgs.list_mine, invitations.accept), never reach the gate. Lapsed and
 // paused plans keep reads, safety actions and the allow list; a missing
-// plan keeps only the allow list. The private fixtures mirror this table,
-// so keep it one literal map keyed by procedure.
+// plan keeps only the allow list. Tools that mirror this table read
+// ProcedureMap, which includes the side maps (G0 M22 D9).
 func procedureClass(procedure string) entitlements.Class {
 	return procedureClasses[procedure] // a missing one is ClassUnknown: a change (fail closed)
 }
