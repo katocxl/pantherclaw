@@ -65,7 +65,7 @@ type result struct {
 // and find, on a reclaimed install, looks for the one a crashed install left.
 type draft struct {
 	create func(context.Context) (result, error)
-	find func(context.Context) (result, bool, error)
+	find   func(context.Context) (result, bool, error)
 }
 
 // prepare checks what can be checked without writing, and returns what makes
