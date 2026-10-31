@@ -146,3 +146,40 @@ func TestSignedCardCacheIsBounded(t *testing.T) {
 		t.Fatalf("%d entries", len(c.byID))
 	}
 }
+
+// TestD253_AFailureHoldsForAMinute: a card that failed to sign is served
+// unsigned for 60 seconds with no further call, then tried again; a reader
+// that hung up holds nothing back.
+// Covers: F882
+func TestD253_AFailureHoldsForAMinute(t *testing.T) {
+	calls := 0
+	h, _ := signedFace(func(context.Context, string, []byte) ([]byte, []byte, error) {
+		calls++
+		return nil, nil, errors.New("A2A_CARD_NO_PUBLIC_URL")
+	})
+	now := time.Now()
+	h.now = func() time.Time { return now }
+	ctx := context.Background()
+	for range 3 {
+		if got := h.signed(ctx, "conn", []byte(rewrittenCard)); !bytes.Equal(got, []byte(rewrittenCard)) {
+			t.Fatalf("served %s", got)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("%d calls within the minute", calls)
+	}
+	now = now.Add(signFailureTTL)
+	h.signed(ctx, "conn", []byte(rewrittenCard))
+	if calls != 2 {
+		t.Fatalf("%d calls after the minute", calls)
+	}
+
+	gone, cancel := context.WithCancel(ctx)
+	cancel()
+	now = now.Add(signFailureTTL)
+	h.signed(gone, "conn", []byte(rewrittenCard))
+	h.signed(ctx, "conn", []byte(rewrittenCard))
+	if calls != 4 {
+		t.Fatalf("%d calls: a reader's hang-up held the card back", calls)
+	}
+}

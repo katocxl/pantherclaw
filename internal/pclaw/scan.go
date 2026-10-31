@@ -20,7 +20,8 @@ import (
 
 func init() {
 	commands["scan"] = command{
-		"scan [--path DIR]... [--json] [--no-env] [--no-user-config] [--all-users] [--submit [--scope SCOPE [--complete] | --device]]\n" +
+		"scan [--path DIR]... [--json] [--no-env] [--no-user-config] [--all-users] [--server URL] [--key-file FILE] [--config-dir DIR]\n" +
+			"  [--submit [--scope SCOPE [--complete] | --device [--include-hostname]]]\n" +
 			"  scan schedule install|remove|status [--every 24h] [--all-users]",
 		scanCmd,
 	}
@@ -48,13 +49,20 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 	scope := fs.String("scope", "", "CI mode: the repository or host this scan covers; its findings are kept apart per scope (with --submit)")
 	complete := fs.Bool("complete", false, "CI mode: the scan read the whole --scope, so a discovery of the scope it no longer finds counts a missed scan")
 	device := fs.Bool("device", false, "fleet mode: submit under this machine's device scope (with --submit)")
+	includeHost := fs.Bool("include-hostname", false, "fleet mode: also send this machine's hostname (with --device)")
 	allUsers := fs.Bool("all-users", false, "read every home directory, as root or SYSTEM; the same metadata only")
+	server := fs.String("server", "", "the PantherClaw server, as PANTHERCLAW_SERVER (a Windows scheduled task cannot carry the environment)")
+	keyFile := fs.String("key-file", "", "the file holding the API key, as PANTHERCLAW_API_KEY_FILE")
+	configDir := fs.String("config-dir", "", "the pclaw configuration directory, as PANTHERCLAW_CONFIG_DIR")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 || ((*scope != "" || *complete || *device) && !*submit) || (*device && *scope != "") {
+	if fs.NArg() != 0 || ((*scope != "" || *complete || *device) && !*submit) || (*device && *scope != "") || (*includeHost && !*device) {
 		return errUsage
 	}
+	a.env = envWith(a.env, map[string]string{
+		"PANTHERCLAW_SERVER": *server, "PANTHERCLAW_API_KEY_FILE": *keyFile, "PANTHERCLAW_CONFIG_DIR": *configDir,
+	})
 	if *complete && *scope == "" && !*device {
 		return errCompleteScope
 	}
@@ -70,12 +78,20 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 	}
 	host, _ := os.Hostname()
 	var findings []scan.Finding
+	var homes []string
+	if own, err := os.UserHomeDir(); err == nil {
+		homes = append(homes, own)
+	}
 	if *allUsers {
 		if !privileged() {
 			return errAllUsersPrivilege
 		}
+		if !binaryProtected() {
+			return errBinaryWritable
+		}
 		roots, others := homeRoots()
-		findings = scanAllUsers(host, paths, append(userHomes(roots), others...))
+		homes = append(append(homes, userHomes(roots)...), others...)
+		findings = scanAllUsers(host, paths, homes)
 	} else {
 		if len(paths) == 0 {
 			paths = list{"."}
@@ -105,7 +121,10 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 	if !*submit {
 		return nil
 	}
-	return submitFindings(ctx, a, host, findings, *scope, *complete)
+	if *device && !*includeHost {
+		host = "" // A device scan names no machine unless it is asked to (D250).
+	}
+	return submitFindings(ctx, a, host, homes, findings, *scope, *complete)
 }
 
 var (
@@ -177,13 +196,14 @@ func describeFinding(f scan.Finding) string {
 
 // submission is a finding as it leaves the machine, ok false for one that
 // stays here. A closed kind sends only its named attributes (HR-588), and of
-// a credential only its kind, when the recommendations read it (D238).
-func submission(f scan.Finding) (*pantherclawv1.ScanFinding, bool) {
+// a credential only its kind, when the recommendations read it (D238). A home
+// directory becomes ~, so no user name leaves the machine (D250).
+func submission(f scan.Finding, homes []string) (*pantherclawv1.ScanFinding, bool) {
 	attrs := map[string]string{}
 	allowed, closed := domain.ScanAttributes(f.Kind)
 	for k, v := range f.Attributes {
 		if k != "host" && (!closed || slices.Contains(allowed, k)) {
-			attrs[k] = v
+			attrs[k] = tildeHome(v, homes)
 		}
 	}
 	if !domain.ScanAttributesOK(f.Kind, attrs) {
@@ -194,10 +214,10 @@ func submission(f scan.Finding) (*pantherclawv1.ScanFinding, bool) {
 
 // submitFindings sends the findings' metadata; credential values, file
 // contents, prompts and other arguments stay on the machine.
-func submitFindings(ctx context.Context, a *app, host string, findings []scan.Finding, scope string, complete bool) error {
+func submitFindings(ctx context.Context, a *app, host string, homes []string, findings []scan.Finding, scope string, complete bool) error {
 	var send []*pantherclawv1.ScanFinding
 	for _, f := range findings {
-		if s, ok := submission(f); ok {
+		if s, ok := submission(f, homes); ok {
 			send = append(send, s)
 		}
 	}
@@ -220,7 +240,7 @@ func submitFindings(ctx context.Context, a *app, host string, findings []scan.Fi
 	if err != nil {
 		return err
 	}
-	var created, counted, dropped, missed int32
+	var created, counted, dropped, droppedAttrs, missed int32
 	for start := 0; start < len(send); start += submitBatch {
 		res, err := c.agents.SubmitScanFindings(ctx, &pantherclawv1.SubmitScanFindingsRequest{
 			Findings: send[start:min(start+submitBatch, len(send))], Host: host, Scope: scope, Complete: complete,
@@ -229,9 +249,13 @@ func submitFindings(ctx context.Context, a *app, host string, findings []scan.Fi
 			return err
 		}
 		created, counted, dropped, missed = created+res.GetCreated(), counted+res.GetCounted(), dropped+res.GetDropped(), missed+res.GetMissed()
+		droppedAttrs += res.GetDroppedAttributes()
 	}
 	_, err = fmt.Fprintf(a.stdout, "submitted %d findings: %d new discovered agents, %d already known, %d dropped (limit reached); credential values were not sent\n",
 		len(send), created, counted, dropped)
+	if err == nil && droppedAttrs > 0 {
+		_, err = fmt.Fprintf(a.stdout, "the server did not keep %d attributes\n", droppedAttrs)
+	}
 	if err == nil && complete {
 		_, err = fmt.Fprintf(a.stdout, "complete scan of %s: %d known discoveries of the scope were not found (each counts a missed scan)\n", scope, missed)
 	}

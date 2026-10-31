@@ -31,7 +31,9 @@ const peerCard = `{"name":"peer","description":"d","version":"1","capabilities":
 func TestHR590_TheServerSignsOnlyThePinnedCard(t *testing.T) {
 	pool := dbtest.New(t).AppPool(t)
 	w := newWorld(t, pool, "https://peer.example/a2a")
+	const url = "https://gw.example/a2a/peer"
 	cfg := pinned(peerCard)
+	cfg.PublicUrl = url
 	w.tx(t, func(ctx context.Context, q *dbq.Queries, _ db.TenantTx) error {
 		id, err := a2astore.Propose(ctx, q, w.org, w.conn, cfg, "user:x")
 		if err != nil {
@@ -50,7 +52,6 @@ func TestHR590_TheServerSignsOnlyThePinnedCard(t *testing.T) {
 	}
 	s := &a2astore.CardSigner{Pool: pool, Keys: reg}
 	ctx := context.Background()
-	const url = "https://gw.example/a2a/peer"
 	card, err := wire.Rewrite([]byte(peerCard), "JSONRPC", url, []string{"refunds"})
 	if err != nil {
 		t.Fatal(err)
@@ -101,5 +102,70 @@ func TestHR590_TheServerSignsOnlyThePinnedCard(t *testing.T) {
 	})
 	if _, _, err := s.SignCard(ctx, w.org, w.gateway, w.conn, card); !errors.Is(err, a2astore.ErrCardDrifted) {
 		t.Errorf("a drifted pin: %v", err)
+	}
+}
+
+// TestD247_TheServerSignsOnlyTheStoredPublicURL: a gateway that serves the
+// pinned card under its own host gets no signature, and a connection nobody
+// gave a public URL gets none at all, so its card stays unsigned.
+// Covers: F882
+func TestD247_TheServerSignsOnlyTheStoredPublicURL(t *testing.T) {
+	pool := dbtest.New(t).AppPool(t)
+	pin := func(w world, public string) {
+		cfg := pinned(peerCard)
+		cfg.PublicUrl = public
+		w.tx(t, func(ctx context.Context, q *dbq.Queries, _ db.TenantTx) error {
+			id, err := a2astore.Propose(ctx, q, w.org, w.conn, cfg, "user:x")
+			if err != nil {
+				return err
+			}
+			_, err = a2astore.ActivateAsOperator(ctx, q, w.org, w.conn, id, "test")
+			return err
+		})
+	}
+	reg := keys.NewRegistry()
+	k, err := keys.GenerateSigningKey(keys.PurposeA2ACard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Put(k); err != nil {
+		t.Fatal(err)
+	}
+	s := &a2astore.CardSigner{Pool: pool, Keys: reg}
+	ctx := context.Background()
+	const stored = "https://gw.example/a2a/peer"
+
+	w := newWorld(t, pool, "https://peer.example/a2a")
+	pin(w, stored)
+	for _, host := range []string{"https://evil.example/a2a/peer", "https://gw.example.evil.example/a2a/peer"} {
+		card, err := wire.Rewrite([]byte(peerCard), "JSONRPC", host, []string{"refunds"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := s.SignCard(ctx, w.org, w.gateway, w.conn, card); !errors.Is(err, a2astore.ErrCardMismatch) {
+			t.Errorf("%s: %v", host, err)
+		}
+	}
+	got, err := func() (a2astore.Pin, error) {
+		var p a2astore.Pin
+		var err error
+		w.tx(t, func(ctx context.Context, q *dbq.Queries, _ db.TenantTx) error {
+			p, err = a2astore.Get(ctx, q, w.org, w.conn, a2astore.StateActive)
+			return err
+		})
+		return p, err
+	}()
+	if err != nil || got.Config.GetPublicUrl() != stored {
+		t.Fatalf("stored: %q, %v", got.Config.GetPublicUrl(), err)
+	}
+
+	bare := newWorld(t, pool, "https://peer.example/a2a")
+	pin(bare, "")
+	card, err := wire.Rewrite([]byte(peerCard), "JSONRPC", stored, []string{"refunds"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.SignCard(ctx, bare.org, bare.gateway, bare.conn, card); !errors.Is(err, a2astore.ErrCardNoPublicURL) {
+		t.Errorf("no public URL: %v", err)
 	}
 }

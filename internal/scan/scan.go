@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"io"
 	"io/fs"
 	"net/url"
 	"os"
@@ -206,14 +207,35 @@ func clientConfigs(o Options) []clientConfig {
 	return out
 }
 
-// readFile reads a regular file of at most MaxFileSize bytes, or returns nil.
-func readFile(path string) []byte {
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() > MaxFileSize {
+// afterCheck runs between a file's check and its read; tests replace it.
+var afterCheck = func() {}
+
+// openRegular opens path and checks the open file, or returns nil: what is
+// read is what was checked, whatever replaces the name meanwhile (G0 M24
+// D254). Opening does not wait, so a FIFO cannot hang the scan.
+func openRegular(path string) *os.File {
+	f, err := os.OpenFile(path, os.O_RDONLY|openNoWait, 0) //nolint:gosec // G304: scanning the user's own configuration
+	if err != nil {
 		return nil
 	}
-	b, err := os.ReadFile(path) //nolint:gosec // G304: scanning the user's own configuration
-	if err != nil {
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > MaxFileSize {
+		_ = f.Close()
+		return nil
+	}
+	return f
+}
+
+// readFile reads a regular file of at most MaxFileSize bytes, or returns nil.
+func readFile(path string) []byte {
+	f := openRegular(path)
+	if f == nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	afterCheck()
+	b, err := io.ReadAll(io.LimitReader(f, MaxFileSize+1))
+	if err != nil || len(b) > MaxFileSize {
 		return nil
 	}
 	return b
@@ -531,8 +553,8 @@ func packageJSON(path string) []string {
 // lineDeps finds framework names at the start of dependency lines
 // (requirements.txt, pyproject.toml, go.mod).
 func lineDeps(path string) []string {
-	f, err := os.Open(path) //nolint:gosec // G304: scanning the user's own project
-	if err != nil {
+	f := openRegular(path)
+	if f == nil {
 		return nil
 	}
 	defer func() { _ = f.Close() }()

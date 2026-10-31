@@ -2760,9 +2760,12 @@ type SubmitScanFindingsResponse struct {
 	// Discoveries of the scope a complete scan did not see, each counted a
 	// miss. A discovery missed by 3 complete scans in a row is announced as
 	// vanished; nothing changes the agent (HR-458).
-	Missed        int32 `protobuf:"varint,4,opt,name=missed,proto3" json:"missed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Missed int32 `protobuf:"varint,4,opt,name=missed,proto3" json:"missed,omitempty"`
+	// Attributes the server did not keep: a name the finding's kind does not
+	// have, or a value that is not plain text (G0 M24 D252).
+	DroppedAttributes int32 `protobuf:"varint,5,opt,name=dropped_attributes,json=droppedAttributes,proto3" json:"dropped_attributes,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *SubmitScanFindingsResponse) Reset() {
@@ -2819,6 +2822,13 @@ func (x *SubmitScanFindingsResponse) GetDropped() int32 {
 func (x *SubmitScanFindingsResponse) GetMissed() int32 {
 	if x != nil {
 		return x.Missed
+	}
+	return 0
+}
+
+func (x *SubmitScanFindingsResponse) GetDroppedAttributes() int32 {
+	if x != nil {
+		return x.DroppedAttributes
 	}
 	return 0
 }
@@ -3166,12 +3176,13 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\ascan_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x06scanId\x12\x1d\n" +
 	"\x05lease\x18\x04 \x01(\fB\a\xbaH\x04z\x02\x18@R\x05lease\x12\x1e\n" +
 	"\x05scope\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x05scope\x12\x1a\n" +
-	"\bcomplete\x18\x06 \x01(\bR\bcomplete\"\x82\x01\n" +
+	"\bcomplete\x18\x06 \x01(\bR\bcomplete\"\xb1\x01\n" +
 	"\x1aSubmitScanFindingsResponse\x12\x18\n" +
 	"\acreated\x18\x01 \x01(\x05R\acreated\x12\x18\n" +
 	"\acounted\x18\x02 \x01(\x05R\acounted\x12\x18\n" +
 	"\adropped\x18\x03 \x01(\x05R\adropped\x12\x16\n" +
-	"\x06missed\x18\x04 \x01(\x05R\x06missed\"^\n" +
+	"\x06missed\x18\x04 \x01(\x05R\x06missed\x12-\n" +
+	"\x12dropped_attributes\x18\x05 \x01(\x05R\x11droppedAttributes\"^\n" +
 	"\x1eRequestAgentRestorationRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\"\n" +
 	"\x06reason\x18\x02 \x01(\tB\n" +

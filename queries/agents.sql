@@ -222,6 +222,17 @@ WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND source = sqlc.arg(source)
 -- CountOpenDiscoveriesOfScope counts the open discoveries of one source and
 -- scan scope: a scan's cap is per (source, scope), so one device or repository
 -- cannot fill another's room (G0 M24 D234). No scope is its own bucket.
+-- name: DeviceScopeKnown :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.discoveries
+    WHERE org_id = sqlc.arg(org_id) AND source = 'ci_scan' AND scan_scope = sqlc.arg(scope)
+);
+
+-- name: CountOpenDeviceScopes :one
+SELECT count(DISTINCT scan_scope)
+FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND source = 'ci_scan' AND state = 'OPEN' AND scan_scope LIKE 'device:%';
+
 -- name: CountOpenDiscoveriesOfScope :one
 SELECT count(*)::int FROM pc.discoveries
 WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND source = sqlc.arg(source)

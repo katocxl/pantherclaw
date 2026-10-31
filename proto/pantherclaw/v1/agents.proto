@@ -684,6 +684,9 @@ message SubmitScanFindingsResponse {
   // miss. A discovery missed by 3 complete scans in a row is announced as
   // vanished; nothing changes the agent (HR-458).
   int32 missed = 4;
+  // Attributes the server did not keep: a name the finding's kind does not
+  // have, or a value that is not plain text (G0 M24 D252).
+  int32 dropped_attributes = 5;
 }
 
 // RequestAgentRestorationRequest asks to restore a suspended agent.

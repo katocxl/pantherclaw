@@ -58,3 +58,19 @@ func TestHR589_OnlyTheScanProcedureHasAnAlternate(t *testing.T) {
 		t.Error("the gateway listener's permission moved")
 	}
 }
+
+// TestD246_DeviceLimitsAreConfig: the defaults, and a limit below 1 refused.
+// Covers: F885
+func TestD246_DeviceLimitsAreConfig(t *testing.T) {
+	c := DefaultConfig()
+	if c.Limits.Scan.NewDeviceScopesPerKeyPerHour != 1000 || c.Limits.Scan.OpenDeviceScopesPerOrg != 20000 {
+		t.Fatalf("defaults: %+v", c.Limits.Scan)
+	}
+	if errs := c.validateLimits(); len(errs) != 0 {
+		t.Fatalf("defaults refused: %v", errs)
+	}
+	c.Limits.Scan.OpenDeviceScopesPerOrg = 0
+	if errs := c.validateLimits(); len(errs) != 1 {
+		t.Fatalf("zero limit: %v", errs)
+	}
+}

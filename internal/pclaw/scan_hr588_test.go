@@ -137,7 +137,7 @@ func TestHR588_ScanSendsMetadataOnly(t *testing.T) {
 
 // TestHR588_OtherCredentialKindsStayOnTheMachine: only the kinds the
 // recommendations read are reported as present, and the list is the
-// catalogue's, so a new catalogue kind cannot silently stay dark (D238).
+// catalog's, so a new catalog kind cannot silently stay dark (D238).
 // Covers: F343
 // Covers: F889
 func TestHR588_OtherCredentialKindsStayOnTheMachine(t *testing.T) {
@@ -146,7 +146,7 @@ func TestHR588_OtherCredentialKindsStayOnTheMachine(t *testing.T) {
 	got := slices.Clone(scanSecretKindsForTest())
 	slices.Sort(got)
 	if !slices.Equal(got, want) {
-		t.Fatalf("scan kinds %v, catalogue kinds %v", got, want)
+		t.Fatalf("scan kinds %v, catalog kinds %v", got, want)
 	}
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{".mcp.json": `{"mcpServers": {"s": {"command": "node",
@@ -190,9 +190,7 @@ func TestF343_ScanSubmitsTheSignalRecommendationsRead(t *testing.T) {
 // id; --device goes with --submit and without --scope or --complete.
 // Covers: F885
 func TestScanDeviceScope(t *testing.T) {
-	old := machineID
-	t.Cleanup(func() { machineID = old })
-	machineID = func() (string, error) { return "machine-1234", nil }
+	saltDirs(t, "") // No machine-wide directory: each configuration keeps its own.
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{".mcp.json": `{"mcpServers": {"s": {"command": "python"}}}`})
 	rec, _, env := scanServer(t)

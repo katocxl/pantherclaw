@@ -462,6 +462,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		sup := newSupport(cfg, pool, entsSvc, m5.notifications, log)
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
+			scanLimits: cfg.Limits.Scan,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
 				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),
 				cfg.APILimits(pool, log),
@@ -756,6 +757,8 @@ func publicProcedures() []string {
 // service accounts and API keys. Gateway procedures are refused here: gateways
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
+	// scanLimits bound device scans (G0 M24 D246).
+	scanLimits ScanLimitsConfig
 	// external is the external policy check service (G0 M16 D81).
 	external *externalchecks.Service
 	data     *datarequests.Service
@@ -853,7 +856,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
 	var autos *automationsCore
-	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing).WithNotify(d.m5.notifications)).
+	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing).WithNotify(d.m5.notifications).
+		WithDeviceLimits(d.scanLimits.NewDeviceScopesPerKeyPerHour, d.scanLimits.OpenDeviceScopesPerOrg)).
 		WithAutomations(func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error) {
 			return autos.identities(ctx)
 		})))

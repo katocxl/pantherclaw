@@ -52,6 +52,7 @@ type PcA2aPin struct {
 	DecidedAt           *time.Time
 	DriftedAt           *time.Time
 	ObservedDigest      []byte
+	PublicUrl           *string
 }
 
 type PcAccount struct {

@@ -1219,8 +1219,13 @@ type A2AConfig struct {
 	// Longest a relayed stream may run, in seconds (default 300, at most
 	// 3600).
 	MaxStreamSeconds int32 `protobuf:"varint,10,opt,name=max_stream_seconds,json=maxStreamSeconds,proto3" json:"max_stream_seconds,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The URL agents reach this connection at through its gateway, set by a
+	// person. The server signs the card only for exactly this URL, so a gateway
+	// cannot name its own host; without it the card stays unsigned (G0 M24
+	// D247).
+	PublicUrl     string `protobuf:"bytes,11,opt,name=public_url,json=publicUrl,proto3" json:"public_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *A2AConfig) Reset() {
@@ -1321,6 +1326,13 @@ func (x *A2AConfig) GetMaxStreamSeconds() int32 {
 		return x.MaxStreamSeconds
 	}
 	return 0
+}
+
+func (x *A2AConfig) GetPublicUrl() string {
+	if x != nil {
+		return x.PublicUrl
+	}
+	return ""
 }
 
 // A2AInterface is one interface of an agent card.
@@ -5168,7 +5180,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x0ePostgresColumn\x122\n" +
 	"\x04name\x18\x01 \x01(\tB\x1e\xbaH\x1br\x192\x17^[a-z_][a-z0-9_]{0,62}$R\x04name\x12T\n" +
 	"\x04type\x18\x02 \x01(\tB@\xbaH=r;R\x04textR\x03intR\x06bigintR\anumericR\x04boolR\x04dateR\vtimestamptzR\x04uuidR\x04type\x12:\n" +
-	"\x05class\x18\x03 \x01(\tB$\xbaH!r\x1fR\x06publicR\binternalR\x03piiR\x06secretR\x05class\"\xf9\x03\n" +
+	"\x05class\x18\x03 \x01(\tB$\xbaH!r\x1fR\x06publicR\binternalR\x03piiR\x06secretR\x05class\"\xa2\x04\n" +
 	"\tA2AConfig\x12%\n" +
 	"\bcard_url\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\t\x18\x80\x10R\acardUrl\x12*\n" +
@@ -5185,7 +5197,9 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x10max_answer_bytes\x18\t \x01(\x05B\f\xbaH\t\x1a\a\x18\x80\x80\x80\x04(\x00R\x0emaxAnswerBytes\x128\n" +
 	"\x12max_stream_seconds\x18\n" +
 	" \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\x90\x1c(\x00R\x10maxStreamSeconds\"c\n" +
+	"\xbaH\a\x1a\x05\x18\x90\x1c(\x00R\x10maxStreamSeconds\x12'\n" +
+	"\n" +
+	"public_url\x18\v \x01(\tB\b\xbaH\x05r\x03\x18\x80\x10R\tpublicUrl\"c\n" +
 	"\fA2AInterface\x125\n" +
 	"\bprotocol\x18\x01 \x01(\tB\x19\xbaH\x16r\x14R\aJSONRPCR\tHTTP+JSONR\bprotocol\x12\x1c\n" +
 	"\x03url\x18\x02 \x01(\tB\n" +

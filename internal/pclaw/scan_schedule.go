@@ -33,6 +33,9 @@ const (
 
 var errScheduleEvery = errors.New("--every is a whole number of minutes from 1h to 720h")
 
+// maxTaskCommand is the longest command schtasks /TR takes.
+const maxTaskCommand = 261
+
 // runScheduler runs a scheduler command; tests replace it.
 var runScheduler = func(ctx context.Context, name string, args ...string) (string, error) {
 	b, err := exec.CommandContext(ctx, name, args...).CombinedOutput() //nolint:gosec // G204: fixed tools, arguments built here
@@ -59,6 +62,11 @@ type scanSchedule struct {
 // it was installed in. PANTHERCLAW_API_KEY is left out on purpose: a key goes
 // in a file, never in a scheduler's definition.
 var scheduledEnv = []string{"PANTHERCLAW_API_KEY_FILE", "PANTHERCLAW_SERVER", "PANTHERCLAW_CONFIG_DIR"}
+
+// scheduledFlags are scheduledEnv as `pclaw scan` flags.
+var scheduledFlags = []struct{ env, flag string }{
+	{"PANTHERCLAW_API_KEY_FILE", "--key-file"}, {"PANTHERCLAW_SERVER", "--server"}, {"PANTHERCLAW_CONFIG_DIR", "--config-dir"},
+}
 
 // scanArgs are the scheduled command's arguments.
 func (s scanSchedule) scanArgs() []string {
@@ -93,6 +101,19 @@ func (s scanSchedule) schtasks() (scheduleSpec, error) {
 		return scheduleSpec{}, errors.New("on Windows, --every is under 24h or a whole number of days")
 	}
 	tr := `"` + s.exe + `" ` + strings.Join(s.scanArgs(), " ")
+	// A task carries no environment, so its settings are flags (D248). The key
+	// is never one of them: only the file that holds it.
+	for _, f := range scheduledFlags {
+		if v, ok := s.env[f.env]; ok {
+			if strings.Contains(v, `"`) {
+				return scheduleSpec{}, fmt.Errorf("%s holds a quotation mark", f.env)
+			}
+			tr += " " + f.flag + ` "` + v + `"`
+		}
+	}
+	if len(tr) > maxTaskCommand {
+		return scheduleSpec{}, fmt.Errorf("the task's command is over %d characters: use shorter paths", maxTaskCommand)
+	}
 	create := []string{"schtasks", "/Create", "/F", "/TN", scheduleName, "/SC", sc, "/MO", strconv.Itoa(mo), "/TR", tr}
 	if s.allUsers {
 		create = append(create, "/RU", "SYSTEM", "/RL", "HIGHEST")
@@ -202,7 +223,10 @@ func scanScheduleCmd(ctx context.Context, a *app, args []string) error {
 	if *allUsers && action != "status" && !privileged() {
 		return errAllUsersPrivilege
 	}
-	exe, err := os.Executable()
+	if *allUsers && action == "install" && !binaryProtected() {
+		return errBinaryWritable
+	}
+	exe, err := resolvedExecutable()
 	if err != nil {
 		return err
 	}

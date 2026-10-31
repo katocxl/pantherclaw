@@ -119,7 +119,7 @@ func (q *Queries) GetA2APeerRun(ctx context.Context, arg GetA2APeerRunParams) (G
 }
 
 const getA2APin = `-- name: GetA2APin :one
-SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_operator, confirmed_at, decided_at, drifted_at, observed_digest
+SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_operator, confirmed_at, decided_at, drifted_at, observed_digest, public_url
 FROM pc.a2a_pins
 WHERE org_id = $1 AND connection_id = $2 AND state = $3
 `
@@ -153,6 +153,7 @@ func (q *Queries) GetA2APin(ctx context.Context, orgID ids.OrgID, connectionID i
 		&i.DecidedAt,
 		&i.DriftedAt,
 		&i.ObservedDigest,
+		&i.PublicUrl,
 	)
 	return i, err
 }
@@ -187,11 +188,11 @@ func (q *Queries) InsertA2APeerRun(ctx context.Context, arg InsertA2APeerRunPara
 const insertA2APin = `-- name: InsertA2APin :exec
 INSERT INTO pc.a2a_pins (org_id, id, connection_id, card_url, binding, interface_url, pinned_card, card_digest,
                          card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes,
-                         max_stream_seconds, proposed_by)
+                         max_stream_seconds, proposed_by, public_url)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
         $11, $12, $13, $14,
-        $15, $16)
+        $15, $16, $17)
 `
 
 type InsertA2APinParams struct {
@@ -211,6 +212,7 @@ type InsertA2APinParams struct {
 	MaxAnswerBytes   int32
 	MaxStreamSeconds int32
 	ProposedBy       string
+	PublicUrl        *string
 }
 
 func (q *Queries) InsertA2APin(ctx context.Context, arg InsertA2APinParams) error {
@@ -231,6 +233,7 @@ func (q *Queries) InsertA2APin(ctx context.Context, arg InsertA2APinParams) erro
 		arg.MaxAnswerBytes,
 		arg.MaxStreamSeconds,
 		arg.ProposedBy,
+		arg.PublicUrl,
 	)
 	return err
 }
@@ -278,7 +281,7 @@ func (q *Queries) ListA2APeerRuns(ctx context.Context, orgID ids.OrgID, connecti
 }
 
 const lockA2AProposal = `-- name: LockA2AProposal :one
-SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_operator, confirmed_at, decided_at, drifted_at, observed_digest
+SELECT org_id, id, connection_id, state, card_url, binding, interface_url, pinned_card, card_digest, card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes, max_stream_seconds, proposed_by, proposed_at, confirmed_by, confirmed_credential, confirmed_operator, confirmed_at, decided_at, drifted_at, observed_digest, public_url
 FROM pc.a2a_pins
 WHERE org_id = $1 AND connection_id = $2 AND id = $3 AND state = 'PROPOSED'
 FOR UPDATE
@@ -313,6 +316,7 @@ func (q *Queries) LockA2AProposal(ctx context.Context, orgID ids.OrgID, connecti
 		&i.DecidedAt,
 		&i.DriftedAt,
 		&i.ObservedDigest,
+		&i.PublicUrl,
 	)
 	return i, err
 }

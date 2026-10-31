@@ -42,6 +42,27 @@ func a2aConfig() app.A2AConfig {
 // sslmode require without an internal database and a pinned CA, a
 // private address without internal, a scope key without its column and
 // limits out of range (G0 M14 D15).
+// TestD247_APublicURLIsAURL: the URL a person stores is checked like the other
+// two, and may be left out.
+// Covers: F882
+func TestD247_APublicURLIsAURL(t *testing.T) {
+	base := app.A2AConfig{CardURL: "https://peer.example/.well-known/agent-card.json", Interface: app.A2AInterface{Protocol: app.A2AJSONRPC, URL: "https://peer.example/a2a"}}
+	for u, ok := range map[string]bool{
+		"":                            true,
+		"https://gw.example/a2a/peer": true,
+		"http://gw.example/a2a/peer":  false,
+		"https://u:p@gw.example/a":    false,
+		"gw.example/a2a/peer":         false,
+	} {
+		c := base
+		c.PublicURL = u
+		got, err := c.Check(false)
+		if (err == nil) != ok || (err == nil && got.PublicURL != u) {
+			t.Errorf("%q: %+v, %v", u, got, err)
+		}
+	}
+}
+
 func TestPostgresConfigCheck(t *testing.T) {
 	got, err := pgConfig().Check()
 	if err != nil {

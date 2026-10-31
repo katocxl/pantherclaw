@@ -26,13 +26,15 @@ var errAllUsersPrivilege = errors.New("--all-users reads other people's home dir
 
 // Seams for tests: the platform's answers.
 var (
-	machineID  = platformMachineID
-	privileged = platformPrivileged
+	machineID       = platformMachineID
+	privileged      = platformPrivileged
+	machineSaltDir  = platformMachineDir
+	binaryProtected = checkBinaryProtected
 )
 
 // deviceScope is this machine's scan scope (G0 M24 D234): `device:` and the
-// first 16 hex digits of SHA-256 over the machine id and a salt kept in the
-// pclaw configuration directory, so the id means nothing off this machine.
+// first 16 hex digits of SHA-256 over the machine id and a local salt, so the
+// id means nothing off this machine.
 func deviceScope(env Env) (string, error) {
 	id, err := machineID()
 	if err != nil {
@@ -50,35 +52,60 @@ func deviceScope(env Env) (string, error) {
 	return "device:" + hex.EncodeToString(h.Sum(nil))[:16], nil
 }
 
-// deviceSalt reads the local salt, creating it on first use.
+// deviceSalt reads the local salt, creating it on first use. It lives in a
+// machine-wide directory when it can, so a run as SYSTEM or root and a
+// person's run give one device id (D251), and in the pclaw configuration
+// directory otherwise. It says nothing without the machine id, so everyone on
+// the machine may read it.
 func deviceSalt(env Env) ([]byte, error) {
+	if dir := machineSaltDir(); dir != "" {
+		if salt, err := readSalt(filepath.Join(dir, "device-salt"), 0o755, 0o644); err == nil {
+			return salt, nil
+		}
+	}
 	creds, err := credsPath(env)
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(filepath.Dir(creds), "device-salt")
-	b, err := os.ReadFile(path) //nolint:gosec // G304: the pclaw configuration directory
-	if err == nil {
-		salt, err := hex.DecodeString(strings.TrimSpace(string(b)))
-		if err != nil || len(salt) != 32 {
-			return nil, fmt.Errorf("pclaw: %s is not a device salt", path)
+	return readSalt(filepath.Join(filepath.Dir(creds), "device-salt"), 0o700, 0o600)
+}
+
+// readSalt reads the salt at path, or creates it. Two first runs agree: the
+// one that loses the race reads the other's.
+func readSalt(path string, dirMode, fileMode os.FileMode) ([]byte, error) {
+	for range 2 {
+		b, err := os.ReadFile(path) //nolint:gosec // G304: a directory of pclaw's own
+		if err == nil {
+			salt, err := hex.DecodeString(strings.TrimSpace(string(b)))
+			if err != nil || len(salt) != 32 {
+				return nil, fmt.Errorf("pclaw: %s is not a device salt", path)
+			}
+			return salt, nil
 		}
-		return salt, nil
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		salt := make([]byte, 32)
+		if _, err := rand.Read(salt); err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
+			return nil, err
+		}
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode) //nolint:gosec // G304: as above
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		_, err = f.WriteString(hex.EncodeToString(salt) + "\n")
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		return salt, err
 	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	salt := make([]byte, 32)
-	if _, err := rand.Read(salt); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(path, []byte(hex.EncodeToString(salt)+"\n"), 0o600); err != nil {
-		return nil, err
-	}
-	return salt, nil
+	return nil, fmt.Errorf("pclaw: %s keeps changing", path)
 }
 
 // homeSkips are profile directories no person owns.

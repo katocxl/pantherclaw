@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto"
 	"errors"
-	"strings"
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -29,6 +28,10 @@ var (
 	ErrCardMismatch = pcerr.New(pcerr.InvalidArgument, "A2A_CARD_MISMATCH", "the card is not this connection's pinned card")
 	// ErrCardDrifted refuses a pin whose card changed at the peer.
 	ErrCardDrifted = pcerr.New(pcerr.FailedPrecondition, "A2A_CARD_DRIFTED", "the pinned card has drifted")
+	// ErrCardNoPublicURL: no person stated where this connection's card is
+	// served, so the server signs nothing and the card stays unsigned (G0 M24
+	// D247).
+	ErrCardNoPublicURL = pcerr.New(pcerr.FailedPrecondition, "A2A_CARD_NO_PUBLIC_URL", "this connection has no public URL to sign a card for")
 )
 
 // CardSigner signs the rewritten cards gateways serve with the platform's
@@ -40,8 +43,9 @@ type CardSigner struct {
 
 // SignCard returns card with the platform's signature and the JWKS that
 // verifies it. A gateway presents the card it rewrote; the server rewrites
-// the connection's active pin itself and signs only an exact match, so a
-// compromised gateway can choose nothing but the path it serves under.
+// the connection's active pin itself for the public URL a person stored on
+// that pin and signs only an exact match, so a compromised gateway chooses
+// nothing, not even its host (D247).
 func (s *CardSigner) SignCard(ctx context.Context, org ids.OrgID, gateway, conn ids.UUID, card []byte) (signed, jwks []byte, err error) {
 	c, err := wire.ParseCard(card)
 	if err != nil || len(c.SupportedInterfaces) != 1 {
@@ -57,9 +61,6 @@ func (s *CardSigner) SignCard(ctx context.Context, org ids.OrgID, gateway, conn 
 		} else if err != nil {
 			return err
 		}
-		if !strings.HasSuffix(url, "/a2a/"+w.Name) {
-			return ErrCardMismatch
-		}
 		pin, err := Get(ctx, q, org, conn, StateActive)
 		if errors.Is(err, ErrNotFound) {
 			return ErrCardNotOurs
@@ -70,6 +71,12 @@ func (s *CardSigner) SignCard(ctx context.Context, org ids.OrgID, gateway, conn 
 			return ErrCardDrifted
 		}
 		cfg := pin.Config
+		if cfg.GetPublicUrl() == "" {
+			return ErrCardNoPublicURL
+		}
+		if url != cfg.GetPublicUrl() {
+			return ErrCardMismatch
+		}
 		want, err = wire.Rewrite(cfg.GetPinnedCard(), cfg.GetInterface().GetProtocol(), url, cfg.GetSkills())
 		return err
 	}, db.ReadOnly())

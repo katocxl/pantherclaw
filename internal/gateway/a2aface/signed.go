@@ -19,6 +19,9 @@ const (
 	// signedCardTTL is how long a signed card is served from the cache (G0
 	// M24 D232).
 	signedCardTTL = time.Hour
+	// signFailureTTL is how long a card that failed to sign is served
+	// unsigned before the gateway asks again (G0 M24 D253).
+	signFailureTTL = time.Minute
 	// maxSignedCards bounds the cache.
 	maxSignedCards = 1024
 	// signCardTimeout bounds the call that signs: a slow server costs a
@@ -40,6 +43,29 @@ type signedCard struct {
 type signedCards struct {
 	mu   sync.Mutex
 	byID map[[32]byte]signedCard
+	// failed holds when each failed card may be tried again.
+	failed map[[32]byte]time.Time
+}
+
+// failing reports whether card id failed to sign within signFailureTTL.
+func (s *signedCards) failing(id [32]byte, now time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	until, ok := s.failed[id]
+	if ok && !now.Before(until) {
+		delete(s.failed, id)
+		return false
+	}
+	return ok
+}
+
+func (s *signedCards) fail(id [32]byte, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failed == nil || len(s.failed) >= maxSignedCards {
+		s.failed = map[[32]byte]time.Time{}
+	}
+	s.failed[id] = now.Add(signFailureTTL)
 }
 
 func (s *signedCards) get(id [32]byte, now time.Time) ([]byte, bool) {
@@ -95,7 +121,9 @@ func checkSigned(card, signed, jwks []byte) error {
 
 // signed returns card with the server's signature, from the cache when it
 // can. Whatever goes wrong, it logs that and returns card as rewritten, with
-// no signature: never a signature that does not verify (HR-590).
+// no signature: never a signature that does not verify (HR-590). A failure
+// holds for signFailureTTL, so a card nobody can sign does not cost every
+// reader the call (D253); a reader that hung up says nothing about the card.
 func (h *Handler) signed(ctx context.Context, conn string, card []byte) []byte {
 	if h.signCard == nil {
 		return card
@@ -103,6 +131,9 @@ func (h *Handler) signed(ctx context.Context, conn string, card []byte) []byte {
 	id := sha256.Sum256(card)
 	if c, ok := h.cards.get(id, h.now()); ok {
 		return c
+	}
+	if h.cards.failing(id, h.now()) {
+		return card
 	}
 	sctx, cancel := context.WithTimeout(ctx, signCardTimeout)
 	defer cancel()
@@ -112,6 +143,9 @@ func (h *Handler) signed(ctx context.Context, conn string, card []byte) []byte {
 	}
 	if err != nil {
 		h.log.WarnContext(ctx, "gateway.a2a_card_unsigned", pclog.Err(err))
+		if ctx.Err() == nil {
+			h.cards.fail(id, h.now())
+		}
 		return card
 	}
 	h.cards.put(id, signed, h.now())

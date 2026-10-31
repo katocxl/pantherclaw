@@ -35312,6 +35312,12 @@
             "title": "missed",
             "format": "int32",
             "description": "Discoveries of the scope a complete scan did not see, each counted a\n miss. A discovery missed by 3 complete scans in a row is announced as\n vanished; nothing changes the agent (HR-458)."
+          },
+          "droppedAttributes": {
+            "type": "integer",
+            "title": "dropped_attributes",
+            "format": "int32",
+            "description": "Attributes the server did not keep: a name the finding's kind does not\n have, or a value that is not plain text (G0 M24 D252)."
           }
         },
         "title": "SubmitScanFindingsResponse",
@@ -46681,6 +46687,12 @@
             "minimum": 0,
             "format": "int32",
             "description": "Longest a relayed stream may run, in seconds (default 300, at most\n 3600)."
+          },
+          "publicUrl": {
+            "type": "string",
+            "title": "public_url",
+            "maxLength": 2048,
+            "description": "The URL agents reach this connection at through its gateway, set by a\n person. The server signs the card only for exactly this URL, so a gateway\n cannot name its own host; without it the card stays unsigned (G0 M24\n D247)."
           }
         },
         "title": "A2AConfig",
@@ -46805,6 +46817,15 @@
             "minimum": 0,
             "format": "int32",
             "description": "Longest a relayed stream may run, in seconds (default 300, at most\n 3600)."
+          },
+          "publicUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "public_url",
+            "maxLength": 2048,
+            "description": "The URL agents reach this connection at through its gateway, set by a\n person. The server signs the card only for exactly this URL, so a gateway\n cannot name its own host; without it the card stays unsigned (G0 M24\n D247)."
           }
         },
         "title": "A2AConfig",

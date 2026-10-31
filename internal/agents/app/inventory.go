@@ -23,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/ratelimit"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -55,11 +56,15 @@ type Inventory struct {
 	// notify announces discoveries that vanished or changed (PN-001.3); nil
 	// records them without a notice.
 	notify Notifier
+	// devices bounds device scans across an org (G0 M24 D246).
+	devices deviceLimits
 }
 
 // NewInventory returns the inventory use cases.
 func NewInventory(pool *db.Pool, ents Entitlements) *Inventory {
-	return &Inventory{pool: pool, ents: ents}
+	return &Inventory{pool: pool, ents: ents, devices: deviceLimits{
+		limiter: ratelimit.NewStore(pool), newPerKey: DefaultNewDeviceScopesPerKey, openPerOrg: DefaultOpenDeviceScopesPerOrg,
+	}}
 }
 
 // WithNotify sets who announces discoveries that vanished or changed.

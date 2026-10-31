@@ -223,15 +223,25 @@ func (q *Queries) CountGovernedAgents(ctx context.Context, orgID ids.OrgID) (int
 	return count, err
 }
 
+const countOpenDeviceScopes = `-- name: CountOpenDeviceScopes :one
+SELECT count(DISTINCT scan_scope)
+FROM pc.discoveries
+WHERE org_id = $1 AND source = 'ci_scan' AND state = 'OPEN' AND scan_scope LIKE 'device:%'
+`
+
+func (q *Queries) CountOpenDeviceScopes(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	row := q.db.QueryRow(ctx, countOpenDeviceScopes, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOpenDiscoveriesOfScope = `-- name: CountOpenDiscoveriesOfScope :one
 SELECT count(*)::int FROM pc.discoveries
 WHERE org_id = $1 AND state = 'OPEN' AND source = $2
   AND scan_scope IS NOT DISTINCT FROM $3
 `
 
-// CountOpenDiscoveriesOfScope counts the open discoveries of one source and
-// scan scope: a scan's cap is per (source, scope), so one device or repository
-// cannot fill another's room (G0 M24 D234). No scope is its own bucket.
 func (q *Queries) CountOpenDiscoveriesOfScope(ctx context.Context, orgID ids.OrgID, source string, scanScope *string) (int32, error) {
 	row := q.db.QueryRow(ctx, countOpenDiscoveriesOfScope, orgID, source, scanScope)
 	var column_1 int32
@@ -266,6 +276,23 @@ func (q *Queries) CountRangeAgents(ctx context.Context, orgID ids.OrgID) (int64,
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const deviceScopeKnown = `-- name: DeviceScopeKnown :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.discoveries
+    WHERE org_id = $1 AND source = 'ci_scan' AND scan_scope = $2
+)
+`
+
+// CountOpenDiscoveriesOfScope counts the open discoveries of one source and
+// scan scope: a scan's cap is per (source, scope), so one device or repository
+// cannot fill another's room (G0 M24 D234). No scope is its own bucket.
+func (q *Queries) DeviceScopeKnown(ctx context.Context, orgID ids.OrgID, scope *string) (bool, error) {
+	row := q.db.QueryRow(ctx, deviceScopeKnown, orgID, scope)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const discoveryNoticeAdmins = `-- name: DiscoveryNoticeAdmins :many

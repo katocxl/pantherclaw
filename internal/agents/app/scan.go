@@ -43,6 +43,9 @@ type ScanFinding struct {
 // ScanResult counts what a submission did.
 type ScanResult struct {
 	Created, Counted, Dropped int
+	// DroppedAttributes counts the attributes the server did not keep (G0 M24
+	// D252).
+	DroppedAttributes int
 	// Reopened counts the created that reopened a dismissed finding.
 	Reopened int
 	// Missed counts the discoveries of the scope a complete CI-mode scan
@@ -192,11 +195,20 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 	if err := mode.check(len(findings)); err != nil {
 		return ScanResult{}, err
 	}
+	if err := inv.checkDeviceScope(ctx, mode); err != nil {
+		return ScanResult{}, err
+	}
+	var droppedAttributes int
+	for i := range findings {
+		kept, dropped := domain.CleanScanAttributes(findings[i].Kind, findings[i].Attributes)
+		findings[i].Attributes = kept
+		droppedAttributes += dropped
+	}
 	source := "scan"
 	if mode.Scope != "" {
 		source = "ci_scan"
 	}
-	var res ScanResult
+	res := ScanResult{DroppedAttributes: droppedAttributes}
 	err := inOrg(ctx, inv.pool, func(ctx context.Context, c tenancy.Caller, q *dbq.Queries, tx db.TenantTx) error {
 		if err := mode.permitted(c); err != nil {
 			return err

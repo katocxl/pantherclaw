@@ -434,7 +434,8 @@ func findingsOf(req *pantherclawv1.SubmitScanFindingsRequest) ([]app.ScanFinding
 func scanResult(r app.ScanResult) *pantherclawv1.SubmitScanFindingsResponse {
 	return &pantherclawv1.SubmitScanFindingsResponse{
 		Created: int32(r.Created), Counted: int32(r.Counted), Dropped: int32(r.Dropped), //nolint:gosec // G115: at most 200
-		Missed: int32(r.Missed), //nolint:gosec // G115: bounded by the org's discoveries
+		Missed:            int32(r.Missed),            //nolint:gosec // G115: bounded by the org's discoveries
+		DroppedAttributes: int32(r.DroppedAttributes), //nolint:gosec // G115: bounded by one request
 	}
 }
 

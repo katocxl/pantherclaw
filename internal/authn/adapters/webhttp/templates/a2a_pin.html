@@ -9,6 +9,7 @@
 <dt>Interface</dt><dd><code>{{.Config.Interface.Protocol}}</code> at <code>{{.Config.Interface.Url}}</code></dd>
 <dt>Card keys</dt><dd>{{if .Config.CardKeys}}pinned; the card's signature is verified with them{{else}}none pinned; the card is not signed{{end}}</dd>
 <dt>Allowed skills</dt><dd>{{range $i, $s := .Config.Skills}}{{if $i}}, {{end}}<code>{{$s}}</code>{{else}}every skill of the card{{end}}</dd>
+<dt>Public URL</dt><dd>{{if .Config.PublicUrl}}<code>{{.Config.PublicUrl}}</code>: the only URL the server signs this card for{{else}}none; the card stays unsigned{{end}}</dd>
 <dt>Answer and stream caps</dt><dd>{{.Config.MaxAnswerBytes}} bytes, {{.Config.MaxStreamSeconds}} seconds</dd>
 {{if .Config.PeerAgentId}}
 <dt>Peer agent</dt><dd><code>{{.Config.PeerAgentId}}</code>: its runs for requests through this connection are delegated from the requester's grant</dd>

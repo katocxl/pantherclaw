@@ -416,6 +416,11 @@ message A2AConfig {
     gte: 0
     lte: 3600
   }];
+  // The URL agents reach this connection at through its gateway, set by a
+  // person. The server signs the card only for exactly this URL, so a gateway
+  // cannot name its own host; without it the card stays unsigned (G0 M24
+  // D247).
+  string public_url = 11 [(buf.validate.field).string.max_len = 2048];
 }
 
 // A2AInterface is one interface of an agent card.

@@ -85,11 +85,11 @@ func TestD231_CardShowsPurposeOwnerRiskAndPinnedTools(t *testing.T) {
 	inv := app.NewInventory(o.P, &fakeEnts{})
 	admin := as(o.Org, td.KindUser, bind(td.RoleOrgAdmin, td.ScopeOrg, o.Org.UUID()))
 	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
-		e, err := ledger.Append(ctx, tx, "coverage.snapshot", evdomain.Actor{Type: "system", ID: "test"}, []byte(`{}`))
-		if err != nil {
-			return err
-		}
 		for i, op := range []string{"payments.refund", "payments.capture", "payments.not_in_package"} {
+			e, err := ledger.Append(ctx, tx, "coverage.snapshot", evdomain.Actor{Type: "system", ID: "test"}, []byte(`{}`))
+			if err != nil {
+				return err
+			}
 			if _, err := tx.Exec(ctx, `INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, body,
 				body_sha256, ledger_entry_id) VALUES ($1, $2, $3, $4, $5, 'OBSERVE_ONLY', '{}', '{}', $6, $7)`,
 				o.Org, ids.NewV7(), o.Agent, o.Conn, op, make([]byte, 32), e.ID); err != nil {
@@ -122,9 +122,12 @@ func TestD231_CardShowsPurposeOwnerRiskAndPinnedTools(t *testing.T) {
 	if card, err = inv.Card(admin, o.Agent); err != nil || len(card.Tools) != 0 {
 		t.Fatalf("after quarantine: %+v, %v", card, err)
 	}
-	other := ids.NewV7()
-	_, err = inv.Card(as(o.Org, td.KindUser, bind(td.RoleViewer, td.ScopeTeam, other)), o.Agent)
-	wantCode(t, "out of scope", err, pcerr.NotFound, "")
+	// Out of scope, the card refuses exactly as reading the agent does.
+	other := as(o.Org, td.KindUser, bind(td.RoleViewer, td.ScopeTeam, ids.NewV7()))
+	_, err = inv.Card(other, o.Agent)
+	wantCode(t, "out of scope", err, pcerr.PermissionDenied, "")
+	_, getErr := inv.Get(other, o.Agent)
+	wantCode(t, "reading the agent", getErr, pcerr.CodeOf(err), pcerr.ReasonOf(err))
 }
 
 // TestHR588_ServerKeepsOnlyMetadata: the server refuses a closed-kind finding
@@ -274,5 +277,87 @@ func TestT254_ScanKeyStolenFromALaptop(t *testing.T) {
 	wantCode(t, "clearing a CI scope", err, pcerr.PermissionDenied, "SCANNER_SCOPE")
 	if n := w.count(t, `SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND source = 'ci_scan' AND state = 'OPEN'`, w.org); n != 1 {
 		t.Fatalf("open CI discoveries: %d", n)
+	}
+}
+
+// TestD246_DeviceScopesAreBoundedAcrossAnOrg: one key starts so many device
+// scopes an hour, an org holds so many open, known scopes go on, and each
+// limit leaves one audit record in its window.
+// Covers: F885
+func TestD246_DeviceScopesAreBoundedAcrossAnOrg(t *testing.T) {
+	w := newWorld(t)
+	w.inv.WithDeviceLimits(2, 100)
+	n := 0
+	submit := func(ctx context.Context, device int) error {
+		n++
+		_, err := w.inv.SubmitScan(ctx, "", []app.ScanFinding{{
+			Kind: "skill", Key: sha256.Sum256(fmt.Append(nil, n)),
+			Attributes: map[string]string{"name": "s", "path": "~/s"},
+		}}, app.ScanMode{Scope: fmt.Sprintf("device:%016x", device)})
+		return err
+	}
+	audits := func() int {
+		return w.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.agents.scan_device_limit'`, w.org)
+	}
+	key := w.scanner()
+	for _, d := range []int{1, 2} {
+		if err := submit(key, d); err != nil {
+			t.Fatalf("device %d: %v", d, err)
+		}
+	}
+	for _, d := range []int{3, 4, 5} {
+		wantCode(t, "past the key's limit", submit(key, d), pcerr.ResourceExhausted, "SCAN_DEVICE_LIMIT")
+	}
+	if got := audits(); got != 1 {
+		t.Fatalf("audit records: %d", got)
+	}
+	if err := submit(key, 1); err != nil {
+		t.Errorf("a known scope: %v", err)
+	}
+	if err := submit(w.scanner(), 6); err != nil {
+		t.Errorf("another key: %v", err)
+	}
+	w.inv.WithDeviceLimits(100, 3)
+	for _, d := range []int{7, 8} {
+		wantCode(t, "past the org's limit", submit(w.scanner(), d), pcerr.ResourceExhausted, "SCAN_DEVICE_LIMIT")
+	}
+	if got := audits(); got != 2 {
+		t.Fatalf("audit records with the org's limit: %d", got)
+	}
+	if err := submit(key, 2); err != nil {
+		t.Errorf("a known scope past the org's limit: %v", err)
+	}
+	// Other scopes are not device scans.
+	if _, err := w.inv.SubmitScan(w.teamOwner(), "", []app.ScanFinding{{
+		Kind: "skill", Key: sha256.Sum256([]byte("ci")),
+		Attributes: map[string]string{"name": "s", "path": "/s"},
+	}}, app.ScanMode{Scope: "ci/repo"}); err != nil {
+		t.Errorf("a CI scope: %v", err)
+	}
+}
+
+// TestD252_TheServerKeepsNamedPlainAttributes: every kind has closed names and
+// plain values; what falls outside is dropped and counted, and stored nowhere.
+// Covers: F883
+func TestD252_TheServerKeepsNamedPlainAttributes(t *testing.T) {
+	w := newWorld(t)
+	r, err := w.inv.SubmitScan(w.teamOwner(), "laptop", []app.ScanFinding{
+		{Kind: "mcp_server", Key: sha256.Sum256([]byte("m")), Attributes: map[string]string{
+			"name": "tickets", "client": "cursor", "args": "--token SEKRET", "command": "py\x1b[2Jthon", "config": "/x‮/y",
+		}},
+		{Kind: "agent_project", Key: sha256.Sum256([]byte("p")), Attributes: map[string]string{
+			"path": "~/p", "manifest": "go.mod", "readme": "SEKRET",
+		}},
+		{Kind: "hook", Key: sha256.Sum256([]byte("h")), Attributes: map[string]string{"event": "Stop", "executable": "a\nb"}},
+	}, app.ScanMode{})
+	if err != nil || r.Created != 3 || r.DroppedAttributes != 5 {
+		t.Fatalf("%+v, %v", r, err)
+	}
+	if n := w.count(t, `SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND observed->>'name' = 'tickets'
+		AND observed->>'client' = 'cursor' AND NOT observed ? 'args' AND NOT observed ? 'command' AND NOT observed ? 'config'`, w.org); n != 1 {
+		t.Fatalf("mcp_server row: %d", n)
+	}
+	if n := w.count(t, `SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND observed::text LIKE '%SEKRET%'`, w.org); n != 0 {
+		t.Fatalf("%d rows hold a dropped value", n)
 	}
 }
