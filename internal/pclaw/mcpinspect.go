@@ -411,6 +411,11 @@ func listedTool(raw jsontext.Value) (scdomain.Tool, bool) {
 	}
 	t := scdomain.Tool{Name: n.Name, IsTool: true, Digest: digest}
 	t.Description, t.DescriptionCut = listedText(n.Description)
+	if x := upstream.ListedExtra(raw); len(x) > scdomain.MaxListedExtra {
+		t.ExtraCut = true
+	} else {
+		t.Extra = x
+	}
 	switch {
 	case len(n.InputSchema) == 0:
 	case len(n.InputSchema) > scdomain.MaxInputSchema:

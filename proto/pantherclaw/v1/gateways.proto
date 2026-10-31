@@ -1130,6 +1130,14 @@ message InventoryTool {
   string input_schema_digest = 6 [(buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64})?$"];
   // Whether the schema was too long to send; input_schema is then empty.
   bool input_schema_truncated = 7;
+  // Whether the schema fit its own limit and not the report's 768 KiB;
+  // input_schema is then empty and the digest stands (G0 M24 D240).
+  bool schema_omitted = 8;
+  // UNTRUSTED: its title, annotations and output schema as one JSON object, at
+  // most 16 KiB.
+  string listed_extra = 9 [(buf.validate.field).string.max_bytes = 16384];
+  // Whether those fields did not fit; listed_extra is then empty.
+  bool listed_extra_truncated = 10;
 }
 
 // InventoryResource is one listed resource.

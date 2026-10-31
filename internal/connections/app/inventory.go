@@ -97,6 +97,12 @@ type InventoryEntry struct {
 	// (G0 M24 D211); InputSchemaCut: it was too long to report.
 	InputSchema, InputSchemaDigest string
 	InputSchemaCut                 bool
+	// SchemaOmitted: the schema fit its own limit and not the report's (D240).
+	SchemaOmitted bool
+	// ListedExtra is the tool's title, annotations and output schema as a JSON
+	// object, UNTRUSTED; ListedExtraCut: they were too long to report (D245).
+	ListedExtra    string
+	ListedExtraCut bool
 }
 
 // InventoryReport is a gateway's listing of one connection. Complete: every
@@ -120,6 +126,9 @@ func (r InventoryReport) check() error {
 			len(e.Description) > MaxInventoryDescription || !utf8.ValidString(e.Description),
 			!inventoryDigest.MatchString(e.Digest),
 			len(e.InputSchema) > scdomain.MaxInputSchema || !utf8.ValidString(e.InputSchema),
+			len(e.ListedExtra) > scdomain.MaxListedExtra || !utf8.ValidString(e.ListedExtra),
+			e.ListedExtra != "" && e.Kind != InventoryTool,
+			e.SchemaOmitted && (e.Kind != InventoryTool || e.InputSchema != "" || e.InputSchemaDigest == ""),
 			e.InputSchemaDigest != "" && !inventoryDigest.MatchString(e.InputSchemaDigest),
 			e.InputSchema != "" && (e.Kind != InventoryTool || e.InputSchemaDigest == ""):
 			return ErrInventory
@@ -236,7 +245,7 @@ func (s *Service) see(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcC
 		return row.ID, to == InventoryNew, record(ctx, tx, c, "connection.inventory_listed_again", conn.ID, map[string]string{
 			"item_id": row.ID.String(), "kind": e.Kind, "name": e.Name, "digest": e.Digest, "state": to,
 		})
-	case row.State == InventoryNew && row.InputSchemaDigest == "" && e.InputSchemaDigest != "":
+	case row.State == InventoryNew && fills(row, e):
 		if err := fillSchema(ctx, tx, c, conn, cov, row, e); err != nil {
 			return ids.UUID{}, false, err
 		}
@@ -264,7 +273,7 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 		OrgID: c.Org, ID: id, ConnectionID: conn.ID, Kind: e.Kind, Name: e.Name, DisplayName: e.DisplayName,
 		MimeType: e.MimeType, DisplayTruncated: e.DisplayTruncated, Digest: e.Digest, Description: e.Description,
 		DescriptionScan: scan, State: state, InputSchema: e.InputSchema, InputSchemaDigest: e.InputSchemaDigest,
-		InputSchemaTruncated: e.InputSchemaCut,
+		InputSchemaTruncated: e.InputSchemaCut, ListedExtra: e.ListedExtra,
 	}); err != nil {
 		return ids.UUID{}, false, err
 	}

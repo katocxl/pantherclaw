@@ -8484,6 +8484,60 @@
         }
       }
     },
+    "/pantherclaw.v1.ConnectionService/GetConnectionInventoryItem": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "GetConnectionInventoryItem",
+        "description": "GetConnectionInventoryItem reads one item with its input schema and other\n listed fields, which lists leave out (G0 M24 D241). All of it stays the\n upstream server's UNTRUSTED text.\n permission: connection.read",
+        "operationId": "pantherclaw.v1.ConnectionService.GetConnectionInventoryItem",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetConnectionInventoryItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetConnectionInventoryItemResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ConnectionService/AddInventoryNote": {
       "post": {
         "tags": [
@@ -47875,6 +47929,36 @@
         "additionalProperties": false,
         "description": "GetConnectionHealthResponse returns its health."
       },
+      "pantherclaw.v1.GetConnectionInventoryItemRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Item id."
+          }
+        },
+        "title": "GetConnectionInventoryItemRequest",
+        "additionalProperties": false,
+        "description": "GetConnectionInventoryItemRequest names an item.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetConnectionInventoryItemResponse": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "title": "item",
+            "description": "The item.",
+            "$ref": "#/components/schemas/pantherclaw.v1.InventoryItem"
+          }
+        },
+        "title": "GetConnectionInventoryItemResponse",
+        "additionalProperties": false,
+        "description": "GetConnectionInventoryItemResponse is the item in full."
+      },
       "pantherclaw.v1.GetConnectionRequest": {
         "type": "object",
         "properties": {
@@ -48081,7 +48165,7 @@
           "inputSchema": {
             "type": "string",
             "title": "input_schema",
-            "description": "UNTRUSTED: a tool's input schema as listed, at most 64 KiB (G0 M24 D211).\n Show it as text; it is never a served schema."
+            "description": "UNTRUSTED: a tool's input schema as listed, at most 64 KiB (G0 M24 D211).\n Only GetConnectionInventoryItem fills it (D241). Show it as text; it is\n never a served schema."
           },
           "inputSchemaDigest": {
             "type": "string",
@@ -48107,6 +48191,11 @@
             "title": "operator_note_time",
             "description": "When.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "listedExtra": {
+            "type": "string",
+            "title": "listed_extra",
+            "description": "UNTRUSTED: the tool's title, annotations and output schema as one JSON\n object. Only GetConnectionInventoryItem fills it."
           }
         },
         "title": "InventoryItem",
@@ -59662,6 +59751,30 @@
             ],
             "title": "input_schema_truncated",
             "description": "Whether the schema was too long to send; input_schema is then empty."
+          },
+          "schemaOmitted": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "schema_omitted",
+            "description": "Whether the schema fit its own limit and not the report's 768 KiB;\n input_schema is then empty and the digest stands (G0 M24 D240)."
+          },
+          "listedExtra": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "listed_extra",
+            "description": "UNTRUSTED: its title, annotations and output schema as one JSON object, at\n most 16 KiB."
+          },
+          "listedExtraTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "listed_extra_truncated",
+            "description": "Whether those fields did not fit; listed_extra is then empty."
           }
         },
         "title": "InventoryTool",

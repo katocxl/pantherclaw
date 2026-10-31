@@ -83,26 +83,46 @@ func ClearPackage(ctx context.Context, tx db.TenantTx, org ids.OrgID, version id
 	return dbq.New(tx).ClearPackageFlags(ctx, org, &version)
 }
 
-// reviewedTool is one MCP tool of a package, at its first mapping.
-type reviewedTool struct {
+// packageEntry is one thing a package tells an agent about: a mapping of an
+// MCP tool, or of a resource. Every mapping counts, also of a tool an earlier
+// one names, since each has its own description (D245).
+type packageEntry struct {
 	mapping ddomain.Mapping
-	digest  string
+	tool    domain.Tool
 }
 
-// reviewedTools lists a package's MCP tools.
-func reviewedTools(p *ddomain.Package) []reviewedTool {
-	var out []reviewedTool
-	seen := map[string]bool{}
+// packageEntries lists a package's mappings as listed entries. A tool's digest
+// is the upstream digest it pins, what other connections' approvals hold, so
+// the same tool is not shadowing itself (D244).
+func packageEntries(p *ddomain.Package) ([]packageEntry, error) {
+	var out []packageEntry
 	for _, d := range p.Definitions {
 		for _, m := range d.Mappings {
-			if m.Channel != ddomain.ChannelMCP || m.Tool == "" || seen[m.Tool] {
-				continue
+			switch {
+			case m.Channel == ddomain.ChannelMCP && m.Tool != "":
+				in := domain.Tool{Name: m.Tool, IsTool: true, Digest: toolDigest(d), Description: m.Description}
+				if m.InputSchema != nil {
+					var err error
+					if in.InputSchema, err = json.Marshal(m.InputSchema, json.Deterministic(true)); err != nil {
+						return nil, err
+					}
+				}
+				out = append(out, packageEntry{mapping: m, tool: in})
+			case m.Channel == ddomain.ChannelMCPResource:
+				out = append(out, packageEntry{mapping: m, tool: domain.Tool{Name: m.Resource, Digest: d.Digest, Description: m.Description}})
 			}
-			seen[m.Tool] = true
-			out = append(out, reviewedTool{mapping: m, digest: d.Digest})
 		}
 	}
-	return out
+	return out, nil
+}
+
+// toolDigest is what a definition pins of its upstream tool, or, when it pins
+// nothing, its own digest.
+func toolDigest(d ddomain.Definition) string {
+	if d.Dispatch != nil && d.Dispatch.MCP != nil && d.Dispatch.MCP.UpstreamDigest != "" {
+		return d.Dispatch.MCP.UpstreamDigest
+	}
+	return d.Digest
 }
 
 // CheckPackage runs the checks on an imported version's MCP tools (D212) and
@@ -112,15 +132,17 @@ func reviewedTools(p *ddomain.Package) []reviewedTool {
 // pull needs a version that stayed the same, and an import is always a new
 // version, so that check has nothing to compare here.
 func CheckPackage(ctx context.Context, tx db.TenantTx, org ids.OrgID, version ids.UUID, p *ddomain.Package, devKey bool) (domain.Result, error) {
-	tools := reviewedTools(p)
 	out := domain.Result{}
-	if len(tools) == 0 {
-		return out, nil
+	entries, err := packageEntries(p)
+	if err != nil || len(entries) == 0 {
+		return out, err
 	}
 	q := dbq.New(tx)
-	names := make([]string, 0, len(tools))
-	for _, t := range tools {
-		names = append(names, t.mapping.Tool)
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.tool.IsTool {
+			names = append(names, e.tool.Name)
+		}
 	}
 	rows, err := q.ApprovedToolsOutside(ctx, org, names, p.Name)
 	if err != nil {
@@ -131,13 +153,8 @@ func CheckPackage(ctx context.Context, tx db.TenantTx, org ids.OrgID, version id
 		approved = append(approved, domain.Approved{Name: r.Name, Digest: r.Digest})
 	}
 	k := domain.Known{BuiltIns: BuiltIns(), Approved: approved, Provenance: !devKey}
-	for _, t := range tools {
-		in := domain.Tool{Name: t.mapping.Tool, IsTool: true, Digest: t.digest, Description: t.mapping.Description}
-		if t.mapping.InputSchema != nil {
-			if in.InputSchema, err = json.Marshal(t.mapping.InputSchema, json.Deterministic(true)); err != nil {
-				return out, err
-			}
-		}
+	for _, e := range entries {
+		in := e.tool
 		r := domain.Check(in, k)
 		out.Partial = out.Partial || r.Partial
 		out.Flags = append(out.Flags, r.Flags...)

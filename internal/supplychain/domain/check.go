@@ -28,12 +28,16 @@ const (
 	KindOverbroadSchema   CheckKind = "overbroad_schema"
 	KindRugPull           CheckKind = "rug_pull"
 	KindProvenanceUnknown CheckKind = "provenance_unknown"
+	// KindSchemaUnavailable: the gateway left a schema out of a report at its
+	// size limit (D240), so a server cannot hide behind the size of its list.
+	KindSchemaUnavailable CheckKind = "schema_unavailable"
 )
 
 // Kinds lists every check.
 func Kinds() []CheckKind {
 	return []CheckKind{
 		KindHiddenInstruction, KindInjectionPattern, KindToolShadowing, KindOverbroadSchema, KindRugPull, KindProvenanceUnknown,
+		KindSchemaUnavailable,
 	}
 }
 
@@ -56,6 +60,9 @@ const (
 	// FieldInputSchema: offsets are into the input schema as listed, and cover
 	// the JSON token or member that held the hit.
 	FieldInputSchema Field = "input_schema"
+	// FieldListed: offsets are into the listed title, annotations and output
+	// schema, as the gateway reported them.
+	FieldListed Field = "listed_extra"
 )
 
 // Limits (D211).
@@ -63,6 +70,8 @@ const (
 	// MaxInputSchema is the most of an input schema that is reported: a
 	// longer schema is reported by digest alone.
 	MaxInputSchema = 64 << 10
+	// MaxListedExtra is the most of a tool's other listed fields reported.
+	MaxListedExtra = 16 << 10
 	// MaxSpans is how many spans one flag keeps.
 	MaxSpans = 32
 )
@@ -101,6 +110,12 @@ type Tool struct {
 	InputSchema       []byte
 	InputSchemaDigest string
 	InputSchemaCut    bool
+	// SchemaOmitted: the schema fit its own limit and not the report's.
+	SchemaOmitted bool
+	// Extra is a JSON object of the tool's other listed fields an agent reads:
+	// title, annotations and output schema. ExtraCut: it was too long to report.
+	Extra    []byte
+	ExtraCut bool
 	// Version is the version the entry is judged at: the connection's pinned
 	// package version.
 	Version string
@@ -146,15 +161,17 @@ type Result struct {
 // Check runs every check on one entry, in the order of Kinds. It never fails:
 // a schema it cannot read is itself a flag.
 func Check(t Tool, k Known) Result {
-	out := Result{Partial: t.DescriptionCut || t.InputSchemaCut || t.IsTool && len(t.InputSchema) == 0}
+	out := Result{Partial: t.DescriptionCut || t.InputSchemaCut || t.SchemaOmitted || t.ExtraCut || t.IsTool && len(t.InputSchema) == 0}
 	schema, schemaErr := parseSchema(t.InputSchema)
+	extra, extraErr := parseSchema(t.Extra)
+	docs := []document{documentOf(FieldInputSchema, t.InputSchema, schema, schemaErr), documentOf(FieldListed, t.Extra, extra, extraErr)}
 	add := func(f *Flag) {
 		if f != nil {
 			out.Flags = append(out.Flags, *f)
 		}
 	}
-	add(hidden(t, schema))
-	add(injected(t, schema))
+	add(hidden(t, docs))
+	add(injected(t, docs))
 	if t.IsTool {
 		add(shadowing(t, k))
 		add(overbroad(t, schema, schemaErr))
@@ -162,6 +179,9 @@ func Check(t Tool, k Known) Result {
 	}
 	if !k.Provenance {
 		add(&Flag{Kind: KindProvenanceUnknown, Severity: SeverityLow, Note: "No reviewed package names this entry."})
+	}
+	if t.IsTool && t.SchemaOmitted {
+		add(&Flag{Kind: KindSchemaUnavailable, Severity: SeverityMedium, Note: "The input schema did not fit the report and was not checked."})
 	}
 	return out
 }

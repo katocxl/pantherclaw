@@ -26,15 +26,16 @@ var (
 	inventoryStateOf = invert(inventoryStates)
 )
 
-// inventoryItemOf is an inventory row as the API shows it; the
-// description stays UNTRUSTED (HR-415).
+// inventoryItemOf is an inventory row as the API shows it in lists and answers
+// to changes: the input schema by its digest alone, which keeps a page of
+// items small (D241). The description stays UNTRUSTED (HR-415).
 func inventoryItemOf(r dbq.PcConnectionInventory) *pb.InventoryItem {
 	out := &pb.InventoryItem{
 		Id: r.ID.String(), ConnectionId: r.ConnectionID.String(), Kind: inventoryKindOf[r.Kind], Name: r.Name,
 		DisplayName: r.DisplayName, MimeType: r.MimeType, Digest: r.Digest, Description: r.Description,
 		DescriptionScan: r.DescriptionScan, State: inventoryStateOf[r.State], DismissedBy: deref(r.DismissedBy),
 		DismissReason: deref(r.DismissReason), FirstSeenTime: stamp(r.FirstSeen), LastSeenTime: stamp(r.LastSeen),
-		UpdateTime: stamp(r.UpdatedAt), DisplayTruncated: r.DisplayTruncated, InputSchema: r.InputSchema,
+		UpdateTime: stamp(r.UpdatedAt), DisplayTruncated: r.DisplayTruncated,
 		InputSchemaDigest: r.InputSchemaDigest, InputSchemaTruncated: r.InputSchemaTruncated,
 	}
 	if r.ReviewEntryID != nil {
@@ -83,6 +84,28 @@ func (h *Handler) DismissInventoryItem(ctx context.Context, req *pb.DismissInven
 		return nil, err
 	}
 	return &pb.DismissInventoryItemResponse{Item: inventoryItemOf(r)}, nil
+}
+
+// inventoryDetailOf is one item in full (D241).
+func inventoryDetailOf(r dbq.PcConnectionInventory) *pb.InventoryItem {
+	out := inventoryItemOf(r)
+	out.InputSchema, out.ListedExtra = r.InputSchema, r.ListedExtra
+	return out
+}
+
+// GetConnectionInventoryItem implements ConnectionServiceHandler.
+func (h *Handler) GetConnectionInventoryItem(ctx context.Context, req *pb.GetConnectionInventoryItemRequest) (
+	*pb.GetConnectionInventoryItemResponse, error,
+) {
+	id, err := parseID(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	r, err := h.s.GetInventoryItem(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.GetConnectionInventoryItemResponse{Item: inventoryDetailOf(r)}, nil
 }
 
 // AddInventoryNote implements ConnectionServiceHandler.

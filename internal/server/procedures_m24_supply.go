@@ -12,8 +12,9 @@ import (
 
 // m24SupplyProcedures are SupplyChainService's procedures (G0 M24 D212).
 var m24SupplyProcedures = map[string]td.Permission{
-	pantherclawv1connect.SupplyChainServiceListSupplyChainFlagsProcedure: td.PermConnectionRead,
-	pantherclawv1connect.ConnectionServiceAddInventoryNoteProcedure:      td.PermConnectionManage,
+	pantherclawv1connect.SupplyChainServiceListSupplyChainFlagsProcedure:      td.PermConnectionRead,
+	pantherclawv1connect.ConnectionServiceAddInventoryNoteProcedure:           td.PermConnectionManage,
+	pantherclawv1connect.ConnectionServiceGetConnectionInventoryItemProcedure: td.PermConnectionRead,
 }
 
 func init() { maps.Copy(procedurePermissions, m24SupplyProcedures) }

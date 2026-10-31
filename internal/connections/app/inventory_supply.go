@@ -97,7 +97,8 @@ func supplyCheck(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcConnec
 	}
 	return scdomain.Check(scdomain.Tool{
 		Name: e.Name, IsTool: e.Kind == InventoryTool, Digest: e.Digest, Description: e.Description, DescriptionCut: e.DescriptionTruncated,
-		InputSchema: []byte(e.InputSchema), InputSchemaDigest: e.InputSchemaDigest, InputSchemaCut: e.InputSchemaCut, Version: cov.version,
+		InputSchema: []byte(e.InputSchema), InputSchemaDigest: e.InputSchemaDigest, InputSchemaCut: e.InputSchemaCut, SchemaOmitted: e.SchemaOmitted,
+		Extra: []byte(e.ListedExtra), ExtraCut: e.ListedExtraCut, Version: cov.version,
 	}, k), nil
 }
 
@@ -147,13 +148,40 @@ func (s *Service) AddInventoryNote(ctx context.Context, id ids.UUID, note string
 	return out, err
 }
 
+// fills reports whether an entry brings text a NEW item has been waiting for:
+// its digest or schema, once a report has room (D240), or its other fields.
+func fills(row dbq.PcConnectionInventory, e InventoryEntry) bool {
+	return row.InputSchema == "" && (e.InputSchema != "" || row.InputSchemaDigest == "" && e.InputSchemaDigest != "") ||
+		row.ListedExtra == "" && e.ListedExtra != ""
+}
+
+// GetInventoryItem reads one item in full, schema included: the one read that
+// returns it (D241).
+func (s *Service) GetInventoryItem(ctx context.Context, id ids.UUID) (dbq.PcConnectionInventory, error) {
+	c, err := s.caller(ctx, td.PermConnectionRead)
+	if err != nil {
+		return dbq.PcConnectionInventory{}, err
+	}
+	var out dbq.PcConnectionInventory
+	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		row, err := dbq.New(tx).GetInventoryItemByID(ctx, c.Org, id)
+		if db.IsNoRows(err) {
+			return ErrInventoryNotFound
+		}
+		out = row
+		return err
+	}, db.ReadOnly())
+	return out, err
+}
+
 // fillSchema gives a NEW item first listed without a schema the one a report
 // now has, and checks it again. The item's review entry is already open and
 // its evidence does not change, so these flags show in the flag list and the
 // queue.
 func fillSchema(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcConnection, cov coverage, row dbq.PcConnectionInventory, e InventoryEntry) error {
 	if err := db.ExpectOneRow(dbq.New(tx).SetInventorySchema(ctx, dbq.SetInventorySchemaParams{
-		InputSchema: e.InputSchema, InputSchemaDigest: e.InputSchemaDigest, InputSchemaTruncated: e.InputSchemaCut, OrgID: c.Org, ID: row.ID,
+		InputSchema: e.InputSchema, InputSchemaDigest: e.InputSchemaDigest, InputSchemaTruncated: e.InputSchemaCut, ListedExtra: e.ListedExtra,
+		OrgID: c.Org, ID: row.ID,
 	})); err != nil {
 		return err
 	}

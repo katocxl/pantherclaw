@@ -120,6 +120,11 @@ service ConnectionService {
   // server never signs it.
   // permission: package.import
   rpc DraftPackageFromInventory(DraftPackageFromInventoryRequest) returns (DraftPackageFromInventoryResponse);
+  // GetConnectionInventoryItem reads one item with its input schema and other
+  // listed fields, which lists leave out (G0 M24 D241). All of it stays the
+  // upstream server's UNTRUSTED text.
+  // permission: connection.read
+  rpc GetConnectionInventoryItem(GetConnectionInventoryItemRequest) returns (GetConnectionInventoryItemResponse);
   // AddInventoryNote records what an operator reported about an inventory
   // item from `pclaw mcp inspect --submit` (G0 M24 D214). It is their
   // machine's word, stored as UNTRUSTED text: the item's state, review and
@@ -1186,7 +1191,8 @@ message InventoryItem {
   // Whether the gateway cut the display name or MIME type to 128 bytes.
   bool display_truncated = 17;
   // UNTRUSTED: a tool's input schema as listed, at most 64 KiB (G0 M24 D211).
-  // Show it as text; it is never a served schema.
+  // Only GetConnectionInventoryItem fills it (D241). Show it as text; it is
+  // never a served schema.
   string input_schema = 18;
   // sha256:<hex> of the canonical input schema; empty when none was reported.
   string input_schema_digest = 19;
@@ -1199,6 +1205,21 @@ message InventoryItem {
   string operator_note_by = 22;
   // When.
   google.protobuf.Timestamp operator_note_time = 23;
+  // UNTRUSTED: the tool's title, annotations and output schema as one JSON
+  // object. Only GetConnectionInventoryItem fills it.
+  string listed_extra = 24;
+}
+
+// GetConnectionInventoryItemRequest names an item.
+message GetConnectionInventoryItemRequest {
+  // Item id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetConnectionInventoryItemResponse is the item in full.
+message GetConnectionInventoryItemResponse {
+  // The item.
+  InventoryItem item = 1;
 }
 
 // AddInventoryNoteRequest is an operator's report on an inventory item.

@@ -7,12 +7,14 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
 	"github.com/katocxl/pantherclaw/internal/postureview/ports"
@@ -336,6 +338,8 @@ func TestD204_FlagsReachTheQueueByViewer(t *testing.T) {
 			t.Errorf("title carries listed text: %q", f.Title)
 		}
 	}
+	// Below the source's scope the answer is a refusal, which the queue shows
+	// as RESTRICTED, never an empty COMPLETE (D255).
 	for name, v := range map[string]ports.Viewer{
 		"no org scope":        {Org: e.org, Posture: ports.Reach{All: true}, Under: under(all)},
 		"no connection.read":  {Org: e.org, Posture: all, Under: under(ports.Reach{})},
@@ -343,10 +347,21 @@ func TestD204_FlagsReachTheQueueByViewer(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			fs, _, err := src.Findings(ctx, v, pvdomain.Filter{})
-			if err != nil || len(fs) != 0 {
+			pe, ok := errors.AsType[*pcerr.Error](err)
+			if !ok || pe.Code() != pcerr.PermissionDenied || len(fs) != 0 {
 				t.Fatalf("%d findings, %v", len(fs), err)
 			}
 		})
+	}
+	// A Responder without package.read still sees inventory flags (D245).
+	responder := ports.Viewer{Org: e.org, Posture: all, Under: func(_ context.Context, p td.Permission) (ports.Reach, error) {
+		if p == td.PermPackageRead {
+			return ports.Reach{}, pcerr.New(pcerr.PermissionDenied, "DENIED", "denied")
+		}
+		return all, nil
+	}}
+	if fs, _, err := src.Findings(ctx, responder, pvdomain.Filter{}); err != nil || len(fs) < 3 {
+		t.Fatalf("responder: %d findings, %v", len(fs), err)
 	}
 	if fs, _, err := src.Findings(ctx, ports.Viewer{Org: e.org, Posture: all, Under: under(all)}, pvdomain.Filter{Agent: &c.ID}); err != nil || len(fs) != 0 {
 		t.Fatalf("by agent: %d, %v", len(fs), err)

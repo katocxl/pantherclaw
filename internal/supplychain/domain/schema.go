@@ -120,17 +120,17 @@ func (n *node) get(name string) *node {
 	return nil
 }
 
-// eachString calls f with every string of the schema: member names
-// (isValue false, with a node covering the member) and string values.
-func (n *node) eachString(f func(s string, isValue bool, n *node)) {
+// eachString calls f with every string of the schema: member names, with a
+// node covering the member, and string values.
+func (n *node) eachString(f func(s string, n *node)) {
 	if n == nil {
 		return
 	}
 	if n.kind == '"' {
-		f(n.str, true, n)
+		f(n.str, n)
 	}
 	for _, m := range n.members {
-		f(m.name, false, &node{start: m.start, end: m.end})
+		f(m.name, &node{start: m.start, end: m.end})
 		m.value.eachString(f)
 	}
 	for _, it := range n.items {
@@ -348,7 +348,8 @@ func rugPull(t Tool, b *Baseline) *Flag {
 	case schema:
 		return &Flag{Kind: KindRugPull, Severity: SeverityHigh, Note: "The input schema changed after approval with no version change."}
 	}
-	return nil
+	// The digest covers more than these two, so a change is a change (D242).
+	return &Flag{Kind: KindRugPull, Severity: SeverityHigh, Note: "The definition changed after approval with no version change."}
 }
 
 // firstDiff points at where the description first differs from the approved

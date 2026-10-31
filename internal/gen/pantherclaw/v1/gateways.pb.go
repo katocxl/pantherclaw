@@ -4829,6 +4829,14 @@ type InventoryTool struct {
 	InputSchemaDigest string `protobuf:"bytes,6,opt,name=input_schema_digest,json=inputSchemaDigest,proto3" json:"input_schema_digest,omitempty"`
 	// Whether the schema was too long to send; input_schema is then empty.
 	InputSchemaTruncated bool `protobuf:"varint,7,opt,name=input_schema_truncated,json=inputSchemaTruncated,proto3" json:"input_schema_truncated,omitempty"`
+	// Whether the schema fit its own limit and not the report's 768 KiB;
+	// input_schema is then empty and the digest stands (G0 M24 D240).
+	SchemaOmitted bool `protobuf:"varint,8,opt,name=schema_omitted,json=schemaOmitted,proto3" json:"schema_omitted,omitempty"`
+	// UNTRUSTED: its title, annotations and output schema as one JSON object, at
+	// most 16 KiB.
+	ListedExtra string `protobuf:"bytes,9,opt,name=listed_extra,json=listedExtra,proto3" json:"listed_extra,omitempty"`
+	// Whether those fields did not fit; listed_extra is then empty.
+	ListedExtraTruncated bool `protobuf:"varint,10,opt,name=listed_extra_truncated,json=listedExtraTruncated,proto3" json:"listed_extra_truncated,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -4908,6 +4916,27 @@ func (x *InventoryTool) GetInputSchemaDigest() string {
 func (x *InventoryTool) GetInputSchemaTruncated() bool {
 	if x != nil {
 		return x.InputSchemaTruncated
+	}
+	return false
+}
+
+func (x *InventoryTool) GetSchemaOmitted() bool {
+	if x != nil {
+		return x.SchemaOmitted
+	}
+	return false
+}
+
+func (x *InventoryTool) GetListedExtra() string {
+	if x != nil {
+		return x.ListedExtra
+	}
+	return ""
+}
+
+func (x *InventoryTool) GetListedExtraTruncated() bool {
+	if x != nil {
+		return x.ListedExtraTruncated
 	}
 	return false
 }
@@ -6092,7 +6121,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\bcomplete\x18\x02 \x01(\bR\bcomplete\x12>\n" +
 	"\x05tools\x18\x03 \x03(\v2\x1d.pantherclaw.v1.InventoryToolB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x05tools\x12J\n" +
 	"\tresources\x18\x04 \x03(\v2!.pantherclaw.v1.InventoryResourceB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\tresources\x12c\n" +
-	"\x12resource_templates\x18\x05 \x03(\v2).pantherclaw.v1.InventoryResourceTemplateB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x11resourceTemplates\"\x8e\x03\n" +
+	"\x12resource_templates\x18\x05 \x03(\v2).pantherclaw.v1.InventoryResourceTemplateB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x11resourceTemplates\"\x99\x04\n" +
 	"\rInventoryTool\x121\n" +
 	"\x04name\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x01\x18\x80\x012\x11^[A-Za-z0-9_.-]+$R\x04name\x124\n" +
 	"\x06digest\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x06digest\x12*\n" +
@@ -6100,7 +6129,11 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x15description_truncated\x18\x04 \x01(\bR\x14descriptionTruncated\x12,\n" +
 	"\finput_schema\x18\x05 \x01(\tB\t\xbaH\x06r\x04(\x80\x80\x04R\vinputSchema\x12O\n" +
 	"\x13input_schema_digest\x18\x06 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x11inputSchemaDigest\x124\n" +
-	"\x16input_schema_truncated\x18\a \x01(\bR\x14inputSchemaTruncated\"\xe4\x02\n" +
+	"\x16input_schema_truncated\x18\a \x01(\bR\x14inputSchemaTruncated\x12%\n" +
+	"\x0eschema_omitted\x18\b \x01(\bR\rschemaOmitted\x12,\n" +
+	"\flisted_extra\x18\t \x01(\tB\t\xbaH\x06r\x04(\x80\x80\x01R\vlistedExtra\x124\n" +
+	"\x16listed_extra_truncated\x18\n" +
+	" \x01(\bR\x14listedExtraTruncated\"\xe4\x02\n" +
 	"\x11InventoryResource\x12\x1c\n" +
 	"\x03uri\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01(\x80\x10R\x03uri\x12\x1c\n" +

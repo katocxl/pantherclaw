@@ -621,6 +621,30 @@ func ToolDigest(tool jsontext.Value) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+// ListedExtra is the rest of a tool's listing an agent reads, beside its
+// description and input schema: a JSON object of its title, annotations and
+// output schema, empty when it lists none of them (G0 M24 D245). UNTRUSTED.
+func ListedExtra(tool jsontext.Value) jsontext.Value {
+	var m map[string]jsontext.Value
+	if json.Unmarshal(tool, &m) != nil {
+		return nil
+	}
+	keep := map[string]jsontext.Value{}
+	for _, k := range []string{"title", "annotations", "outputSchema"} {
+		if v, ok := m[k]; ok {
+			keep[k] = v
+		}
+	}
+	if len(keep) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(keep, json.Deterministic(true))
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
 // SchemaDigest is "sha256:<hex>" of a tool's canonical input schema (G0 M24
 // D211).
 func SchemaDigest(schema jsontext.Value) (string, error) {

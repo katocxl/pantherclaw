@@ -5,9 +5,11 @@ package pgflags
 
 import (
 	"context"
+	"errors"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
 	"github.com/katocxl/pantherclaw/internal/postureview/ports"
@@ -18,9 +20,15 @@ import (
 // Source feeds open flags to the ranked posture queue (G0 M24 D204, D212). A
 // flag has no agent, so it needs org scope. A flag on a listed entry also
 // needs connection.read and one on a package tool package.read, what reading
-// each directly needs. A finding clears when its flag does (D207); dismissing
-// the item or settling the version is what clears it.
+// each directly needs, each on its own: a viewer with one still sees those
+// flags (D245). A viewer with neither gets RESTRICTED, never an empty answer
+// that reads as nothing found (D255). A finding clears when its flag does
+// (D207); dismissing the item or settling the version is what clears it.
 type Source struct{ Pool *db.Pool }
+
+// errRestricted is the queue's RESTRICTED: the viewer is below this source's
+// scope.
+var errRestricted = pcerr.New(pcerr.PermissionDenied, "SUPPLY_CHAIN_RESTRICTED", "reading supply-chain flags needs org scope")
 
 var _ ports.Source = (*Source)(nil)
 
@@ -33,6 +41,9 @@ func under(ctx context.Context, v ports.Viewer, p td.Permission) (bool, error) {
 		return v.Posture.Has(nil), nil
 	}
 	r, err := v.Under(ctx, p)
+	if e, ok := errors.AsType[*pcerr.Error](err); ok && e.Code() == pcerr.PermissionDenied {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
@@ -42,7 +53,10 @@ func under(ctx context.Context, v ports.Viewer, p td.Permission) (bool, error) {
 // Findings implements ports.Source. It reads the worst first, so what a cap
 // drops is the least severe.
 func (s *Source) Findings(ctx context.Context, v ports.Viewer, f pvdomain.Filter) ([]pvdomain.Finding, bool, error) {
-	if !v.Posture.Has(nil) || f.Agent != nil || f.Team != nil {
+	if !v.Posture.Has(nil) {
+		return nil, false, errRestricted
+	}
+	if f.Agent != nil || f.Team != nil {
 		return []pvdomain.Finding{}, false, nil // a flag has no agent or team
 	}
 	conns, err := under(ctx, v, td.PermConnectionRead)
@@ -52,6 +66,9 @@ func (s *Source) Findings(ctx context.Context, v ports.Viewer, f pvdomain.Filter
 	pkgs, err := under(ctx, v, td.PermPackageRead)
 	if err != nil {
 		return nil, false, err
+	}
+	if !conns && !pkgs {
+		return nil, false, errRestricted
 	}
 	var rows []dbq.PcSupplychainFlag
 	err = s.Pool.InTenantTx(ctx, v.Org, func(ctx context.Context, tx db.TenantTx) error {
