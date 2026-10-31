@@ -772,7 +772,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **API gaps:** credential rotation over RPC and `pclaw`, agent scan state, ticket link and sync reads, model draft and usage reads with no prompts or responses, and a procedure map for clients.
 - **Graph evidence** ([ADR-0044](adr/0044-graph-evidence.md)): plain-text labels from readable names; a causal link only with its receipt, otherwise a gap; gaps in every mode that collapse never hides; before and after; coverage reasons and times; lane events; read class.
 - **Console** (private stream): the re-pin, an in-house SVG kit, every M15–M21 screen, and views V1–V6, each with an equivalent table and the edition of its data.
-- No migration planned (`00256`, `00257` held if a decision needs one).
+- Migration `00257` (`00256` held if a decision needs one; `00258`, `00259` spare).
 
 ### M23 — Easy to adopt
 

@@ -8,10 +8,11 @@
 1. **Labels** (HR-550). `GraphNode.label` is plain text of at most 200 characters, taken only from names the viewer may read, and empty otherwise. Hidden records stay excluded. A label is never markup, because agents can write names (HR-340).
 2. **No evidence, no link** (HR-551). CAUSAL gains the edge kinds `authorized`, `approved`, `custody`, `effect` and `triggered`. A new `evidence_ref` on GraphEdge names the receipt behind each. Where the evidence is missing the graph emits a `gap` edge rather than a link. `triggered` keeps predicted, authorized and confirmed apart, and observed never reads as possible.
 3. **Gaps are data** (HR-552). Every mode returns its gaps, and every edge carries its source, observed time and freshness. Collapsing merges repeated activity, never gaps. The explicit edge states of the catalog are added.
-4. **Change is shown as change.** `GraphEdge.change` (ADDED, REMOVED, KEPT) gives before and after for a restriction or incident scope.
+4. **Change is shown as change.** `GraphEdge.change` (ADDED, REMOVED, KEPT, CHANGED) gives before and after for a restriction or incident scope, and compares every authority field.
 5. **Additive only.** Proto changes are additive, and `buf breaking` stays clean.
 
 **Consequences.**
+- No per-dispatch credential lease record exists, so a `custody` edge is permit to transaction and does not name the credential version.
 - A view can draw only what has a source, so some real events show as gaps until their evidence exists; that is the intent.
 - Queries that build CAUSAL read receipts, so a graph costs more to build. D21's limit of 300 drawn nodes, with the table holding all rows, bounds the drawing, not the query.
 - Clients that ignore the new fields keep working, but must not treat a missing `label` as a missing node.

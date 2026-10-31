@@ -718,6 +718,8 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 
 The graph rows F272, F274, F277, F284, F289, F293 and F301 and the access row F424 keep their numbers; M22 closes their gaps ([G0 M22](g0/M22.md)).
 
+**Limits of those rows after M22 (D12a, D42).** F272: a custody edge does not name the credential version used, and hypotheses (catalog F280) stay on the case page, not in the graph. F293: fleet grouping by team and capability is a console table feature, and common cause is not delivered.
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
 | F831 | Rotation API and command line | `CredentialRotationService` and `pclaw credential rotation` expose each rotation step one to one, keeping the service's step-up, protected change and audit. Secrets enter through a server page; nothing returns one. | Next | Community | M22 | F424 |
