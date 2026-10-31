@@ -3226,6 +3226,14 @@ type PcRateCounter struct {
 	Count       int32
 }
 
+type PcRecommendationDismissal struct {
+	OrgID            ids.OrgID
+	RecommendationID string
+	DismissedBy      string
+	Reason           string
+	DismissedAt      time.Time
+}
+
 type PcReconciliationTask struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
