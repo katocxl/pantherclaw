@@ -273,6 +273,77 @@ func TestHR551_ALinkOnlyNamesARecordThatExists(t *testing.T) {
 	}
 }
 
+// TestHR551_AReceiptWithNoLinkConfirmsNoLink: a consequence transaction
+// whose effect is confirmed, with no link row to its cause, is a gap (D52).
+func TestHR551_AReceiptWithNoLinkConfirmsNoLink(t *testing.T) {
+	for _, e := range domain.CausalLinks([]domain.CausalEvidence{{
+		Activity: domain.Activity{Transaction: "t", Run: "r", Agent: "a", At: time.Now()},
+		Consequences: []domain.ConsequenceEvidence{{
+			Position: 0, Parent: -1, Transaction: "t2", State: "PREDICTED", Effect: "CONFIRMED", EffectSeq: 1, At: time.Now(),
+		}},
+	}}) {
+		if e.Kind == domain.EdgeTriggered {
+			t.Errorf("a triggered edge with no link: %+v", e)
+		}
+	}
+}
+
+// TestF276_EachHeldSubjectKeepsItsUnconfirmedGap: an unconfirmed action
+// leaves a gap per subject, in that subject's context, so hiding one subject
+// or filtering to the other cannot lose it (D50).
+// Covers: F276, F299
+func TestF276_EachHeldSubjectKeepsItsUnconfirmedGap(t *testing.T) {
+	at := time.Now()
+	a, b := domain.Node{Type: "agent", ID: "a"}, domain.Node{Type: "agent", ID: "b"}
+	edges := domain.ControlEdges([]domain.ControlChange{
+		{ID: "c1", Action: "x", Actor: "user:p", Subject: a, At: at},
+		{ID: "c2", Action: "x", Actor: "user:p", Subject: b, At: at},
+	})
+	hideA := func(n domain.Node) bool { return n != a }
+	for _, g := range []domain.Graph{
+		domain.Build(domain.ModeChange, edges, hideA, domain.GraphFilter{}, false, domain.DefaultLimits),
+		domain.Build(domain.ModeChange, edges, all, domain.GraphFilter{Agents: []string{"b"}}, false, domain.DefaultLimits),
+	} {
+		gaps := kinds(g.Edges, domain.EdgeGap)
+		if len(gaps) != 1 || gaps[0].To != b || !slices.Contains(gaps[0].Context, b) {
+			t.Errorf("gaps %+v", gaps)
+		}
+	}
+}
+
+// TestF276_AGapAboutNoRecordSurvivesFilters: a gap with no context concerns
+// the whole graph, so narrowing the graph keeps it (D51).
+// Covers: F276
+func TestF276_AGapAboutNoRecordSurvivesFilters(t *testing.T) {
+	self := domain.Node{Type: domain.ScopeRestriction, ID: "x"}
+	gap := domain.Edge{From: self, To: self, Kind: domain.EdgeGap, State: domain.EdgeHistorical, Provenance: domain.GapControlsUnread}
+	for _, f := range []domain.GraphFilter{{Agents: []string{"a"}}, {Runs: []string{"r"}}, {Principals: []string{"p"}}} {
+		g := domain.Build(domain.ModeChange, []domain.Edge{gap}, all, f, false, domain.DefaultLimits)
+		if len(g.Edges) != 1 {
+			t.Errorf("filter %+v dropped it", f)
+		}
+	}
+}
+
+// TestF272_AThenEdgeNeverJoinsAcrossAFilteredAction: order comes from the
+// whole run, so dropping the middle action drops both of its edges and
+// draws none between its neighbours, which the record does not show (D53).
+// Covers: F272
+func TestF272_AThenEdgeNeverJoinsAcrossAFilteredAction(t *testing.T) {
+	at := time.Now()
+	acts := []domain.Activity{
+		{Run: "r", Agent: "a", Transaction: "t1", Decision: "ALLOW", At: at},
+		{Run: "r", Agent: "a", Transaction: "t2", Decision: "DENY", At: at.Add(time.Second)},
+		{Run: "r", Agent: "a", Transaction: "t3", Decision: "ALLOW", At: at.Add(2 * time.Second)},
+		{Run: "r", Agent: "a", Transaction: "t4", Decision: "ALLOW", At: at.Add(3 * time.Second)},
+	}
+	kept := domain.FilterActivity(acts, domain.GraphFilter{Decisions: []string{"ALLOW"}})
+	then := kinds(domain.AmongActivity(domain.CausalEdges(acts), acts, kept), domain.EdgeThen)
+	if len(then) != 1 || then[0].From.ID != "t3" || then[0].To.ID != "t4" {
+		t.Errorf("then edges %+v", then)
+	}
+}
+
 // TestHR551_APredictionIsNeverAuthoritative: a rule's prediction names the
 // record of the rule's match, which proves the rule matched and nothing
 // about what happened (D29).
@@ -386,12 +457,13 @@ func TestF276_ChangesCompareBeforeAndAfter(t *testing.T) {
 // (HR-340: the console renders them as text).
 // Covers: F290, F298
 func TestHR550_LabelsArePlainTextAndBounded(t *testing.T) {
+	rlo, zwsp := string(rune(0x202e)), string(rune(0x200b))
 	for in, want := range map[string]string{
 		"payments agent":                       "payments agent",
 		"  spaced\n":                           "spaced",
 		"<img src=x onerror=alert(1)>":         "img src=x onerror=alert(1)",
-		"a‮b​c\x00d":                           "abc d",
-		"‮":                                    "",
+		"a" + rlo + "b" + zwsp + "c\x00d":      "abc d",
+		rlo:                                    "",
 		"<script>x</script>":                   "scriptx/script",
 		strings.Repeat("é", 2*domain.MaxLabel): strings.Repeat("é", domain.MaxLabel),
 	} {
@@ -410,7 +482,7 @@ func TestHR550_LabelsArePlainTextAndBounded(t *testing.T) {
 // effect nodes never reach the viewer (D8).
 // Covers: F298, F300
 func TestHR254_ABuiltGraphDropsEvidenceEdgesOfHiddenAgents(t *testing.T) {
-	hidden := func(n domain.Node) bool { return !(n.Type == "agent" && n.ID == "a") }
+	hidden := func(n domain.Node) bool { return n.Type != "agent" || n.ID != "a" }
 	g := domain.Build(domain.ModeCausal, domain.CausalLinks([]domain.CausalEvidence{evidenced()}), hidden, domain.GraphFilter{}, false, domain.DefaultLimits)
 	if len(g.Edges) != 0 || len(g.Nodes) != 0 {
 		t.Fatalf("hidden agent's evidence: %+v", g)

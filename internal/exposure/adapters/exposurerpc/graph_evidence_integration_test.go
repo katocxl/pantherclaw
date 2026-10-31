@@ -270,10 +270,18 @@ func TestT238_AGraphLabelNeverNamesAHiddenRecord(t *testing.T) {
 // Covers: F272, F281
 func TestHR551_AConsequenceCutIsReportedAsACut(t *testing.T) {
 	w := newWorld(t, billing.Team)
-	txn := w.o.Dispatch(t, "github.pull_request.merge")
-	w.o.D.AdminExec(t, `INSERT INTO pc.decision_consequences (org_id, transaction_id, evaluation, position, rule_id, operation, target_type,
-		target_id, state, facts_digest, "unknown") SELECT $1, $2, 1, n, 'rule', 'github.deployment.trigger', 'repo', 'r', 'PREDICTED', $3, '[]'::jsonb
-		FROM generate_series(0, 5000) n`, w.o.Org, txn, "sha256:"+strings.Repeat("0", 64))
+	// A decision holds at most 256 consequences, so 20 pass the read's bound.
+	for range 20 {
+		txn := w.o.Dispatch(t, "github.pull_request.merge")
+		entry := ids.NewV7()
+		w.o.Exec(t, `INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body)
+			VALUES ($1, $2, 'decision.test', 'test', 'test', '\x7b7d')`, w.o.Org, entry)
+		w.o.Exec(t, `INSERT INTO pc.decision_receipts (org_id, transaction_id, evaluation, receipt_jws, ledger_entry_id)
+			VALUES ($1, $2, 1, 'x.y.z', $3)`, w.o.Org, txn, entry)
+		w.o.D.AdminExec(t, `INSERT INTO pc.decision_consequences (org_id, transaction_id, evaluation, position, rule_id, operation, target_type,
+			target_id, state, facts_digest, "unknown") SELECT $1, $2, 1, n, 'rule', 'github.deployment.trigger', 'repo', 'r', 'PREDICTED', $3, '[]'::jsonb
+			FROM generate_series(0, 255) n`, w.o.Org, txn, "sha256:"+strings.Repeat("0", 64))
+	}
 	g, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{
 		Mode: pb.GraphMode_GRAPH_MODE_CAUSAL, Scope: &pb.GraphScope{Type: "run", Id: w.o.Run.String()},
 		Filter: &pb.GraphFilter{Operations: []string{"github.pull_request.merge"}},
@@ -315,6 +323,30 @@ func TestHR551_AFilteredActionLeavesNoEdgeBehind(t *testing.T) {
 	for _, kind := range []string{"authorized", "custody", "effect", "triggered"} {
 		if len(edgesOf(g, kind)) == 0 {
 			t.Errorf("the matching action lost its %s edge: %v", kind, g.GetEdges())
+		}
+	}
+}
+
+// TestF272_AFilterDrawsNoOrderTheRecordDoesNotHold: filtering out the
+// action between two others leaves no then edge across it (D53).
+// Covers: F272
+func TestF272_AFilterDrawsNoOrderTheRecordDoesNotHold(t *testing.T) {
+	w := newWorld(t, billing.Team)
+	first := w.o.Dispatch(t, "github.pull_request.merge")
+	middle := w.o.Dispatch(t, "github.pull_request.merge")
+	last := w.o.Dispatch(t, "github.pull_request.merge")
+	w.o.D.AdminExec(t, `UPDATE pc.transactions SET created_at = now() + (CASE id WHEN $1 THEN 1 WHEN $2 THEN 2 ELSE 3 END) * interval '1 millisecond',
+		decision = CASE id WHEN $2 THEN 'DENY' ELSE decision END WHERE id IN ($1, $2, $3)`, first, middle, last)
+	g, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{
+		Mode: pb.GraphMode_GRAPH_MODE_CAUSAL, Scope: &pb.GraphScope{Type: "run", Id: w.o.Run.String()},
+		Filter: &pb.GraphFilter{Decisions: []string{"ALLOW"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range edgesOf(g, "then") {
+		if e.GetFrom().GetId() == first.String() && e.GetTo().GetId() == last.String() {
+			t.Errorf("an order the record does not hold: %v", e)
 		}
 	}
 }
@@ -377,7 +409,12 @@ func TestF276_TheChangeGraphShowsWhatResponseChanged(t *testing.T) {
 	incident := ids.NewV7()
 	_, held := respond(t, w, incident, "CONTAIN", "CONFIRMED", true)
 	_, lifted := respond(t, w, incident, "CONTAIN", "CONFIRMED", true)
-	o.D.AdminExec(t, `UPDATE pc.containment_controls SET lifted_at = now(), lifted_by = 'user:other' WHERE id = $1`, lifted)
+	// A control is lifted only by a decided restoration plan that lists it.
+	plan := ids.NewV7()
+	o.D.AdminExec(t, `INSERT INTO pc.restoration_plans (org_id, id, reason, state, requested_by) VALUES ($1, $2, 'test', 'STAGING', 'user:requester')`,
+		o.Org, plan)
+	o.D.AdminExec(t, `INSERT INTO pc.restoration_plan_controls (org_id, plan_id, control_id) VALUES ($1, $2, $3)`, o.Org, plan, lifted)
+	o.D.AdminExec(t, `UPDATE pc.containment_controls SET lifted_at = now(), lifted_by = 'user:reviewer', restoration_id = $2 WHERE id = $1`, lifted, plan)
 	partial, open := respond(t, w, incident, "CONTAIN", "PARTIAL", true)
 	revoked, _ := respond(t, w, incident, "REVOKE", "CONFIRMED", false)
 	failed, _ := respond(t, w, incident, "REVOKE", "FAILED", false)
@@ -443,6 +480,22 @@ func TestF276_TheChangeGraphShowsWhatResponseChanged(t *testing.T) {
 			t.Errorf("%v, viewer without containment.read: %v", scope, g.GetEdges())
 		}
 	}
+	// In every mode, and whatever the graph is narrowed to (D51, D54).
+	for _, mode := range []pb.GraphMode{
+		pb.GraphMode_GRAPH_MODE_ACTIVITY, pb.GraphMode_GRAPH_MODE_CAUSAL, pb.GraphMode_GRAPH_MODE_CHANGE,
+		pb.GraphMode_GRAPH_MODE_AUTHORITY, pb.GraphMode_GRAPH_MODE_EXPOSURE,
+	} {
+		g, err := w.g.GetGraph(w.team, &pb.GetGraphRequest{
+			Mode: mode, Scope: &pb.GraphScope{Type: "restriction", Id: partial.String()},
+			Filter: &pb.GraphFilter{AgentIds: []string{o.Agent.String()}},
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", mode, err)
+		}
+		if !gapNamed(g, "CONTROLS_NOT_READABLE") {
+			t.Errorf("%s, viewer without containment.read: %v", mode, g.GetEdges())
+		}
+	}
 }
 
 // TestF282_TheAuthorityGraphShowsGrantDelegation: a child grant links to the
@@ -454,7 +507,7 @@ func TestF282_TheAuthorityGraphShowsGrantDelegation(t *testing.T) {
 	o := w.o
 	parent := o.Grant(t, o.Other, 1, "", "wiki.page.read")
 	child := o.Grant(t, o.Agent, 0, "", "wiki.page.read")
-	o.D.AdminExec(t, `UPDATE pc.grants SET parent_id = $2 WHERE id = $1`, child, parent)
+	o.D.AdminExec(t, `UPDATE pc.grants SET parent_id = $2, depth = 1 WHERE id = $1`, child, parent)
 	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := app.Recompute(ctx, tx, "manual", 0)
 		return err

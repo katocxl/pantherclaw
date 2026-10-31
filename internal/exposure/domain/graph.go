@@ -120,12 +120,15 @@ func (f GraphFilter) match(e Edge) bool {
 	if e.At != nil && ((f.Start != nil && e.At.Before(*f.Start)) || (f.End != nil && e.At.After(*f.End))) {
 		return false
 	}
+	// A gap about no one record concerns the whole graph, whoever it is
+	// narrowed to (D51).
+	whole := e.Kind == EdgeGap && len(e.Context) == 0
 	ns := e.nodes()
 	for _, c := range []struct {
 		typ  string
 		list []string
 	}{{"run", f.Runs}, {"agent", f.Agents}, {"user", f.Principals}} {
-		if len(c.list) > 0 && !slices.ContainsFunc(ns, func(n Node) bool { return n.Type == c.typ && slices.Contains(c.list, n.ID) }) {
+		if !whole && len(c.list) > 0 && !slices.ContainsFunc(ns, func(n Node) bool { return n.Type == c.typ && slices.Contains(c.list, n.ID) }) {
 			return false
 		}
 	}
@@ -463,6 +466,23 @@ func CausalEdges(acts []Activity) []Edge {
 		}
 	}
 	return out
+}
+
+// AmongActivity keeps the edges with both ends still present once all has
+// been filtered to kept (D53). An end that was never an activity, such as a
+// parent run outside the read, was not filtered.
+func AmongActivity(edges []Edge, all, kept []Activity) []Edge {
+	seen := func(acts []Activity) map[Node]bool {
+		out := make(map[Node]bool, 2*len(acts))
+		for _, a := range acts {
+			out[Node{Type: "run", ID: a.Run}], out[Node{Type: "transaction", ID: a.Transaction}] = true, true
+		}
+		return out
+	}
+	was, is := seen(all), seen(kept)
+	return slices.DeleteFunc(slices.Clone(edges), func(e Edge) bool {
+		return (was[e.From] && !is[e.From]) || (was[e.To] && !is[e.To])
+	})
 }
 
 // ChangeRecord is one authority change for the change graph.

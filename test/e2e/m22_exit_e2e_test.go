@@ -130,9 +130,11 @@ func (s *stack) m22Timeline(t *testing.T, rc *connect.Client, txn string) {
 	}
 	// A child run of its own, with one action.
 	child, inner := ids.NewV7().String(), ids.NewV7().String()
-	s.db.AdminExec(t, `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_user_id, launcher_instance_id, principal_user_id,
-		principal_source, parent_run_id, depth, expires_at) SELECT org_id, $2, agent_id, environment_id, launcher_user_id, launcher_instance_id,
-		principal_user_id, principal_source, id, depth + 1, expires_at FROM pc.runs WHERE id = $1`, run, child)
+	instance := s.row(t, `SELECT i.id::text FROM pc.agent_instances i JOIN pc.runs r ON r.org_id = i.org_id AND r.agent_id = i.agent_id
+		WHERE r.id = $1 AND i.state = 'ADMITTED' LIMIT 1`, run)
+	s.db.AdminExec(t, `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_instance_id, principal_user_id, principal_sa_id,
+		principal_source, parent_run_id, depth, expires_at) SELECT org_id, $2, agent_id, environment_id, $3, principal_user_id, principal_sa_id,
+		'parent_run', id, depth + 1, now() + interval '1 hour' FROM pc.runs WHERE id = $1`, run, child, instance)
 	s.db.AdminExec(t, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
 		gateway_id, connection_id, mode) SELECT org_id, $3, $2, $4, action_hash, operation, 'ALLOW', 'OK', gateway_id, connection_id, mode
 		FROM pc.transactions WHERE id = $1`, txn, child, inner, ids.NewV7())

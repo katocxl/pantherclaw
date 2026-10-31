@@ -464,14 +464,16 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 				if acts, cut, err = r.activity(ctx, run, vis, start, end); err != nil {
 					return err
 				}
-				// A filtered transaction leaves no edge behind it (D39).
-				acts = domain.FilterActivity(acts, f)
+				// A filtered transaction leaves no edge behind it (D39). Order is
+				// read from the whole run: an edge between what stays is one the
+				// record holds, never a join across what was filtered (D53).
+				kept := domain.FilterActivity(acts, f)
 				if mode == domain.ModeActivity {
-					edges = domain.ActivityEdges(acts)
+					edges = domain.ActivityEdges(kept)
 				} else {
 					var evidence []domain.CausalEvidence
-					if evidence, over, err = r.causal(ctx, acts); err == nil {
-						edges = append(domain.CausalEdges(acts), domain.CausalLinks(evidence)...)
+					if evidence, over, err = r.causal(ctx, kept); err == nil {
+						edges = append(domain.AmongActivity(domain.CausalEdges(acts), acts, kept), domain.CausalLinks(evidence)...)
 					}
 				}
 			}
@@ -481,6 +483,15 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 			cut = cut || over
 		default:
 			return ErrScope
+		}
+		// A scope whose records this viewer may not read says so in every mode,
+		// never with an empty graph (D38, D54).
+		if unread := !r.containmentRead(); unread && (scope.Type == domain.ScopeRestriction || (scope.Type == "incident" && mode == domain.ModeChange)) {
+			self := domain.Node{Type: scope.Type, ID: scope.ID}
+			edges = append(edges, domain.Edge{
+				From: self, To: self, Kind: domain.EdgeGap, State: domain.EdgeHistorical, Basis: "OBSERVED",
+				Provenance: domain.GapControlsUnread,
+			})
 		}
 		for i := range edges {
 			edges[i].Freshness = fresh
@@ -583,7 +594,7 @@ func (r *reader) containmentRead() bool {
 
 // containment reads the controls of an incident or restriction scope, so a
 // change graph shows what response changed (D38). A viewer who may not read
-// them gets a gap, never an empty answer that reads as nothing changed.
+// them gets Graph's gap instead.
 func (r *reader) containment(ctx context.Context, s GraphScope, now time.Time) ([]domain.Edge, bool, error) {
 	if s.Type != "incident" && s.Type != domain.ScopeRestriction {
 		return nil, false, nil
@@ -593,11 +604,7 @@ func (r *reader) containment(ctx context.Context, s GraphScope, now time.Time) (
 		return nil, false, ErrScope
 	}
 	if !r.containmentRead() {
-		self := domain.Node{Type: s.Type, ID: s.ID}
-		return []domain.Edge{{
-			From: self, To: self, Kind: domain.EdgeGap, State: domain.EdgeHistorical, Basis: "OBSERVED",
-			Provenance: domain.GapControlsUnread,
-		}}, false, nil
+		return nil, false, nil
 	}
 	p := dbq.GraphContainmentParams{OrgID: r.c.Org, MaxRows: maxActivity}
 	if s.Type == "incident" {
@@ -757,9 +764,10 @@ func (r *reader) changes(ctx context.Context, vis Visible, start, end time.Time)
 			Ref: "grant_revision:" + x.GrantID.String() + "/" + strconv.Itoa(int(x.Revision)),
 		}
 		after, okAfter := boundsOf(x.Bounds)
-		before, okBefore := gdomain.Bounds{}, true
+		okBefore := true
 		b.After = operationsIn(after)
 		if x.Revision > 1 {
+			var before gdomain.Bounds
 			before, okBefore = boundsOf(x.BeforeBounds)
 			b.Before = operationsIn(before)
 			b.Differs = !sameLimits(before, after)

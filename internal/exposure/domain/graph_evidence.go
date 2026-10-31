@@ -394,12 +394,13 @@ func triggered(c CausalEvidence, ctx []Node) []Edge {
 		case x.Transaction == "":
 			// Nothing shows it happened: a possible consequence, by rule.
 			e.Stage, e.State, e.Basis, e.EvidenceRef, e.Status = StagePredicted, EdgePossible, "RULE_MATCH", ref, StatusUnknown
+		case x.Linked == "":
+			// An opened transaction no link ties to its cause proves no link,
+			// whatever its own receipt says (D52).
+			e.Kind, e.Basis, e.Provenance, e.Effect = EdgeGap, "OBSERVED", GapNoLink, x.Effect
 		case x.Effect == "CONFIRMED" && x.EffectSeq > 0:
 			e.Stage, e.Basis, e.Effect, e.Provenance = StageConfirmed, "OBSERVED", x.Effect, "effect_receipt"
 			e.EvidenceRef = "effect_receipt:" + x.Transaction + "/" + strconv.Itoa(x.EffectSeq)
-		case x.Linked == "":
-			// An opened transaction no link ties to its cause proves no link.
-			e.Kind, e.Basis, e.Provenance, e.Effect = EdgeGap, "OBSERVED", GapNoLink, x.Effect
 		default:
 			e.Stage, e.Basis, e.Effect, e.Provenance = StageAuthorized, "OBSERVED", x.Effect, "transaction_link"
 			e.EvidenceRef = "transaction_link:" + from.ID + "/" + x.Transaction
@@ -422,7 +423,7 @@ func ReachGaps(rights []Right) []Edge {
 		if r.View == Observed || !stateOf(r).Current() {
 			continue
 		}
-		missing := ""
+		var missing string
 		switch {
 		case r.Label == Uncertain:
 			missing = GapReachUnknown
@@ -529,7 +530,7 @@ type ControlChange struct {
 // every path also leaves a gap, so it never reads as closure (F299).
 func ControlEdges(cs []ControlChange) []Edge {
 	var out []Edge
-	unconfirmed := map[string]bool{}
+	unconfirmed := map[Node]map[string]bool{}
 	for _, c := range cs {
 		at := c.At
 		provenance, ref := "containment_control", c.ID
@@ -548,11 +549,16 @@ func ControlEdges(cs []ControlChange) []Edge {
 			out = append(out, removed)
 		case c.Confirmed:
 			e.Status = StatusEnforced
-		case !unconfirmed[c.Action]:
-			unconfirmed[c.Action] = true
+		case !unconfirmed[c.Subject][c.Action]:
+			// One per action and subject, in that subject's context: a viewer of
+			// any one of them, or a filter on it, keeps its gap (D50).
+			if unconfirmed[c.Subject] == nil {
+				unconfirmed[c.Subject] = map[string]bool{}
+			}
+			unconfirmed[c.Subject][c.Action] = true
 			out = append(out, Edge{
-				From: Node{Type: "response_action", ID: c.Action}, To: c.Subject, Kind: EdgeGap, State: EdgeHistorical, Basis: "OBSERVED",
-				At: &at, Provenance: GapUnconfirmed,
+				From: Node{Type: "response_action", ID: c.Action}, To: c.Subject, Context: []Node{c.Subject}, Kind: EdgeGap,
+				State: EdgeHistorical, Basis: "OBSERVED", At: &at, Provenance: GapUnconfirmed,
 			})
 		}
 		// An unconfirmed action that placed no control changed nothing yet.
