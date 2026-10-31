@@ -106,7 +106,7 @@ func (q *Queries) ListMetricSamples(ctx context.Context, arg ListMetricSamplesPa
 const metricAutomationOutcomes = `-- name: MetricAutomationOutcomes :many
 SELECT x.automation_id, x.outcome, count(*)::bigint AS n FROM (
   SELECT e.automation_id,
-         CASE WHEN e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
+         (CASE WHEN e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
                    AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
                                    WHERE NOT coalesce((f ->> 'met')::boolean, false)
                                       OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0) THEN 'completed_with_evidence'
@@ -114,9 +114,11 @@ SELECT x.automation_id, x.outcome, count(*)::bigint AS n FROM (
               WHEN e.state = 'PARTIALLY_COMPLETED' THEN 'partial'
               WHEN e.state = 'FAILED' THEN 'failed'
               WHEN e.state = 'NEEDS_RECONCILIATION' THEN 'needs_reconciliation'
-              ELSE 'cancelled' END AS outcome
+              WHEN e.state = 'CANCELLED' THEN 'cancelled' END)::text AS outcome
   FROM pc.automation_executions e
   WHERE e.org_id = $1 AND e.mode = 'LIVE'
+    -- Only an ended state has an outcome; none folds into another (F774 M6).
+    AND e.state IN ('SUCCEEDED', 'PARTIALLY_COMPLETED', 'FAILED', 'NEEDS_RECONCILIATION', 'CANCELLED')
     -- Each execution counts once, in its ended_at hour, with its current
     -- state (D94 S8).
     AND e.ended_at >= $2::timestamptz AND e.ended_at < $3::timestamptz
@@ -144,8 +146,8 @@ type MetricAutomationOutcomesRow struct {
 
 // Automation outcomes in an hour, per automation (G0 M11 D38): LIVE
 // executions that ended SUCCEEDED with completion evidence, PARTIALLY_
-// COMPLETED, FAILED, entered NEEDS_RECONCILIATION; interventions (gates
-// decided and automation exceptions resolved); refused triggers.
+// COMPLETED, FAILED, entered NEEDS_RECONCILIATION, CANCELLED; interventions
+// (gates decided and automation exceptions resolved); refused triggers.
 func (q *Queries) MetricAutomationOutcomes(ctx context.Context, orgID ids.OrgID, startAt time.Time, endAt time.Time) ([]MetricAutomationOutcomesRow, error) {
 	rows, err := q.db.Query(ctx, metricAutomationOutcomes, orgID, startAt, endAt)
 	if err != nil {

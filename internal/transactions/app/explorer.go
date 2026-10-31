@@ -267,6 +267,19 @@ func (e *Explorer) ListTransactions(ctx context.Context, pr page.Request, f Filt
 	return out, err
 }
 
+// NoteExplanationView records a person's first read of a non-ALLOW
+// decision's evidence, once per transaction (G0 M21 D303, F774 M2). Call it
+// after TransactionEvidence, which checked the access.
+func (e *Explorer) NoteExplanationView(ctx context.Context, id ids.UUID) error {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil || !c.Human() {
+		return err
+	}
+	return e.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		return dbq.New(tx).RecordExplanationView(ctx, c.Org, id)
+	})
+}
+
 // TransactionEvidence returns everything recorded about one transaction
 // (evidence.read where its run's agent lives). Links to a transaction the
 // caller may not read are left out.

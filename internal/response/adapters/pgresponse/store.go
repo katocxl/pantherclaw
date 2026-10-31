@@ -41,6 +41,8 @@ type Action struct {
 	IncidentID *ids.UUID
 	Actor      string
 	Source     string
+	// Execution is the automation execution that caused it (F774 M6).
+	Execution *ids.UUID
 	// PreviewDigest is the preview the requester confirmed (D23); a skip
 	// records its reason and the step-up behind it.
 	PreviewDigest []byte
@@ -75,7 +77,7 @@ func InsertAction(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action) 
 		OrgID: org, ID: a.ID, Kind: a.Kind, ScopeType: a.ScopeType, ScopeID: a.ScopeID, Control: opt(a.Control),
 		Operation: opt(a.Operation), Reason: a.Reason, CaseID: a.CaseID, IncidentID: a.IncidentID, Actor: a.Actor,
 		Source: a.Source, PreviewDigest: a.PreviewDigest, PreviewSummary: summaryOrEmpty(a.PreviewSummary), SkipPreview: a.SkipReason != "", SkipReason: opt(a.SkipReason),
-		SkipStepUpAt: a.SkipStepUpAt, IdempotencyKey: opt(a.IdempotencyKey), RequestDigest: a.RequestDigest,
+		SkipStepUpAt: a.SkipStepUpAt, IdempotencyKey: opt(a.IdempotencyKey), RequestDigest: a.RequestDigest, ExecutionID: a.Execution,
 	})
 }
 
