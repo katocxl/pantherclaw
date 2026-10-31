@@ -321,7 +321,7 @@ func TestHR563_IndexLimits(t *testing.T) {
 		}(),
 		"not utc":    func() domain.Index { x := index(1, mk(0)); x.ExpiresAt = "2026-11-01T00:00:00+01:00"; return x }(),
 		"escape":     func() domain.Index { e := mk(0); e.Title = "ok\x1b[2J"; return index(1, e) }(),
-		"bidi":       func() domain.Index { e := mk(0); e.Summary = "ok‮evil"; return index(1, e) }(),
+		"bidi":       func() domain.Index { e := mk(0); e.Summary = "ok" + string(rune(0x202e)) + "evil"; return index(1, e) }(),
 		"oversize":   func() domain.Index { e := mk(0); e.Size = domain.MaxItemBytes + 1; return index(1, e) }(),
 		"bad digest": func() domain.Index { e := mk(0); e.SHA256 = "ABC"; return index(1, e) }(),
 		"bad kind":   func() domain.Index { e := mk(0); e.Kind = "binary"; return index(1, e) }(),
