@@ -5,7 +5,8 @@ package app
 
 import (
 	"context"
-	"math/rand/v2"
+	"crypto/rand"
+	"math/big"
 	"slices"
 	"time"
 
@@ -34,9 +35,19 @@ func Resubmit(ctx context.Context, retryOn string, call func(attempt int) (domai
 		select {
 		case <-ctx.Done():
 			return o, ctx.Err()
-		case <-time.After(rand.N(time.Duration(attempt+1) * resubmitWait)): //nolint:gosec // G404: jitter
+		case <-time.After(jitter(time.Duration(attempt+1) * resubmitWait)):
 		}
 	}
+}
+
+// jitter is a random wait of at most most, so calls that lost together do not
+// meet again.
+func jitter(most time.Duration) time.Duration {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(most)))
+	if err != nil {
+		return most
+	}
+	return time.Duration(n.Int64())
 }
 
 func answered(o domain.Observation, reason string) bool {
