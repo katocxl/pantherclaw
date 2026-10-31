@@ -1,0 +1,23 @@
+# ADR-0046 — The MCP server catalogue
+
+**Status:** Accepted (2026-10-31; G0 M24 design decisions D220–D226, founder decision H3; the [G0 M24](../g0/M24.md) brief records them).
+
+**Context.** Developers install any MCP server they find, and security teams cannot say which are allowed. M15 reviews tools and resources per connection, but there is no organization-level record of a server, no server identity and no way to revoke one across connections. Clients already give admins allow and deny lists through managed settings, so a list alone is table stakes; its value here is a record that drives connections, quarantine and evidence, and feeds the M23 settings kit. Enforcement must not make the decision path depend on a new table, and a wrong match or a quiet switch-off would read as protection that is not there.
+
+**Decision.**
+1. **One list per organization** (D220, D222). `pc.mcp_servers` with PROPOSED, APPROVED, DENIED and REVOKED, and a mode of OFF, WATCH or ENFORCE, default WATCH (H3). Team edition. Mode and revoke need a person and a step-up.
+2. **Exact matching** (D221, HR-585). URL host and path prefix, image digest, or package reference. Nothing fuzzy, because a near match is how an unapproved server would pass.
+3. **Outside the decision path** (D223). The catalogue acts when a connection is activated or quarantined, so the pipeline version does not change. ENFORCE refuses to activate a connection to an unapproved server (`SERVER_NOT_APPROVED`). Turning it on shows a preview, then quarantines non-matching connections in one transaction with an epoch bump.
+4. **Weakening always waits** (HR-586). Leaving ENFORCE goes through the protected surface `mcp.catalog.mode`, category `TOOL_MEANING`, in `AlwaysProtected()`: always a second person, no emergency path, and `ErrUnavailable` without a gate.
+5. **A person revokes, inside one organization** (D224, HR-587). `PreviewServerRevoke` gives a digest, and `RevokeServer` takes it with a reason, then quarantines every matching connection and package-bound version through the response service with a new subject `mcp_server` expanded at execution. An independent second person lifts it. A server seen only by scans comes back as `not_stoppable_here` with a deny-list hint.
+6. **Export, not a new endpoint** (D225). `pclaw mcp catalog export` writes the allow file of the settings kit or a static file in the official registry's shape.
+7. **A finding only when it means something** (D226). `UNAPPROVED_SERVER` appears once the catalogue holds at least one approved server.
+
+**Consequences.**
+- A connection already running while the catalogue is in WATCH keeps running; WATCH reports and stops nothing.
+- A server can move, so an exact match can miss it and quarantine a good connection under ENFORCE. The preview shows this first, and fixing it means a new catalogue entry.
+- Local servers PantherClaw only sees through scans stay outside its reach, and it says so. Stopping them is the job of managed settings.
+- Package-bound versions join the response service's subjects, so its expansion has one more kind to keep correct.
+- Sharing a bad-server signal across organizations is a separate decision (H3).
+
+**Alternatives.** Enforced by default (blocks teams on day one; H3 chose Watching); enforcing in the decision pipeline (a new input on every decision and a version change); pattern or name matching (lets near matches through); a revoke across organizations (H3); automatic revoke on a flag (a flag never approves or acts, HR-582, F800); an HTTP registry endpoint now (the registry API is still young, and a static file does the job).
