@@ -20049,7 +20049,7 @@
           "pantherclaw.v1.OperationsService"
         ],
         "summary": "GetMetrics",
-        "description": "GetMetrics returns hourly operating metrics (Team): consequential\n outcomes, coverage, bypass routes, exposure by resource group and the\n reconciliation backlog, each point with its drill-down search. Each\n metric needs its source's read permission across the organization,\n else it reads RESTRICTED. They are\n organization-wide, so they need operations.read across the\n organization.\n permission: operations.read",
+        "description": "GetMetrics returns hourly operating metrics (Team): consequential\n outcomes, coverage and its staleness, bypass routes with their owners,\n exposure by resource group and the reconciliation backlog, each point\n with its drill-down search or no_drill. Each\n metric needs its source's read permission across the organization,\n else it reads RESTRICTED. They are\n organization-wide, so they need operations.read across the\n organization.\n permission: operations.read",
         "operationId": "pantherclaw.v1.OperationsService.GetMetrics",
         "parameters": [
           {
@@ -50112,6 +50112,21 @@
             "type": "string",
             "title": "to",
             "description": "To node id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why the scope's coverage record reads as it does (F278): the cause of\n its latest computation. Empty when none is recorded."
+          },
+          "lastCheckedAt": {
+            "title": "last_checked_at",
+            "description": "When the scope's record was last computed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "expiresAt": {
+            "title": "expires_at",
+            "description": "When that record stops holding; unset when it does not lapse.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
           }
         },
         "title": "CoverageGraphEdge",
@@ -50155,6 +50170,11 @@
             "type": "string",
             "title": "closure_id",
             "description": "For a closed route: the closure that closed it."
+          },
+          "effectGroup": {
+            "type": "string",
+            "title": "effect_group",
+            "description": "For a scope or route: the effect it can produce. Routes with the same\n group reach the same effect (F277)."
           }
         },
         "title": "CoverageGraphNode",
@@ -55850,6 +55870,17 @@
           "EXPOSURE_VIEW_ISSUANCE_CEILING"
         ]
       },
+      "pantherclaw.v1.GraphEdgeChange": {
+        "type": "string",
+        "title": "GraphEdgeChange",
+        "enum": [
+          "GRAPH_EDGE_CHANGE_UNSPECIFIED",
+          "GRAPH_EDGE_CHANGE_ADDED",
+          "GRAPH_EDGE_CHANGE_REMOVED",
+          "GRAPH_EDGE_CHANGE_KEPT"
+        ],
+        "description": "GraphEdgeChange says what a change-mode edge did between two revisions\n (F276)."
+      },
       "pantherclaw.v1.GraphEdgeState": {
         "type": "string",
         "title": "GraphEdgeState",
@@ -55860,6 +55891,26 @@
           "GRAPH_EDGE_STATE_EXPIRED",
           "GRAPH_EDGE_STATE_POSSIBLE"
         ]
+      },
+      "pantherclaw.v1.GraphEdgeStatus": {
+        "type": "string",
+        "title": "GraphEdgeStatus",
+        "enum": [
+          "GRAPH_EDGE_STATUS_UNSPECIFIED",
+          "GRAPH_EDGE_STATUS_ENFORCED",
+          "GRAPH_EDGE_STATUS_ALLOWED",
+          "GRAPH_EDGE_STATUS_APPROVAL_REQUIRED",
+          "GRAPH_EDGE_STATUS_DENIED",
+          "GRAPH_EDGE_STATUS_OBSERVED",
+          "GRAPH_EDGE_STATUS_POSSIBLE_BYPASS",
+          "GRAPH_EDGE_STATUS_UNKNOWN",
+          "GRAPH_EDGE_STATUS_STALE",
+          "GRAPH_EDGE_STATUS_EFFECT_PARTIAL",
+          "GRAPH_EDGE_STATUS_EFFECT_PENDING",
+          "GRAPH_EDGE_STATUS_EFFECT_CONFLICTING",
+          "GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE"
+        ],
+        "description": "GraphEdgeStatus is what an edge's evidence says about it (F291), apart\n from whether it still counts as current (GraphEdgeState)."
       },
       "pantherclaw.v1.GraphMode": {
         "type": "string",
@@ -55872,6 +55923,17 @@
           "GRAPH_MODE_EXPOSURE",
           "GRAPH_MODE_CHANGE"
         ]
+      },
+      "pantherclaw.v1.GraphTriggerStage": {
+        "type": "string",
+        "title": "GraphTriggerStage",
+        "enum": [
+          "GRAPH_TRIGGER_STAGE_UNSPECIFIED",
+          "GRAPH_TRIGGER_STAGE_PREDICTED",
+          "GRAPH_TRIGGER_STAGE_AUTHORIZED",
+          "GRAPH_TRIGGER_STAGE_CONFIRMED"
+        ],
+        "description": "GraphTriggerStage is how far a triggered edge has been shown (F280, F281).\n Each stage is its own claim: a prediction is never a confirmation."
       },
       "pantherclaw.v1.CredentialWorkload": {
         "type": "object",
@@ -56374,7 +56436,7 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "description": "kind: holds, allows, reaches, through, acted, touched, delegated,\n then, changed or gap."
+            "description": "kind: holds, allows, reaches, through, acted, touched, delegated,\n then, changed, authorized, approved, custody, effect, triggered or gap."
           },
           "verb": {
             "title": "verb",
@@ -56428,12 +56490,48 @@
           },
           "provenance": {
             "type": "string",
-            "title": "provenance"
+            "title": "provenance",
+            "description": "provenance is the edge's source; on a gap edge, what is missing."
           },
           "count": {
             "type": "integer",
             "title": "count",
             "format": "int32"
+          },
+          "evidenceRef": {
+            "type": "string",
+            "title": "evidence_ref",
+            "description": "evidence_ref names the record behind a causal edge,\n \"\u003ckind\u003e:\u003cid\u003e\" such as \"decision_receipt:\u003ctransaction id\u003e\" (HR-551).\n Empty on a gap edge: no evidence, no link."
+          },
+          "change": {
+            "title": "change",
+            "description": "change is set on change-mode edges that compare two revisions.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GraphEdgeChange"
+          },
+          "status": {
+            "title": "status",
+            "description": "status is the F291 state of the edge.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GraphEdgeStatus"
+          },
+          "triggerStage": {
+            "title": "trigger_stage",
+            "description": "trigger_stage is set on triggered edges.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GraphTriggerStage"
+          },
+          "observeTime": {
+            "title": "observe_time",
+            "description": "observe_time is when the edge's source was last read or recorded; it\n is always set, where time is only set for an event.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "assurance": {
+            "type": "string",
+            "title": "assurance",
+            "description": "assurance: AUTHORITATIVE, TESTED, DECLARED, INFERRED or UNVERIFIED\n (F297). Staleness is in freshness."
+          },
+          "downstreamState": {
+            "type": "string",
+            "title": "downstream_state",
+            "description": "downstream_state is the state of an action's predicted consequences:\n PENDING, CONFIRMED, UNCONFIRMED or NOT_VERIFIABLE; empty when nothing\n was predicted (F281)."
           }
         },
         "title": "GraphEdge",
@@ -56557,6 +56655,11 @@
           "id": {
             "type": "string",
             "title": "id"
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "label is plain text of at most 200 characters, built only from names\n the viewer may read, else empty (HR-550). It is never markup."
           }
         },
         "title": "GraphNode",
@@ -68043,6 +68146,11 @@
             "type": "string",
             "title": "detail",
             "description": "Decision, state, outcome or change."
+          },
+          "readClass": {
+            "type": "string",
+            "title": "read_class",
+            "description": "The class of the data a read returned, such as \"pii\" or \"secret\"\n (F285); empty when the action records none. It marks a read and claims\n nothing about what followed."
           }
         },
         "title": "TimelineEvent",
@@ -68099,6 +68207,19 @@
             "title": "end_time",
             "description": "When it ended; unset while active.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TimelineEvent"
+            },
+            "title": "events",
+            "description": "Its events, oldest first (F284)."
+          },
+          "eventsTruncated": {
+            "type": "boolean",
+            "title": "events_truncated",
+            "description": "The lane has more events than one lane holds."
           }
         },
         "title": "TimelineLane",
@@ -72249,6 +72370,11 @@
           "drillBuiltin": {
             "title": "drill_builtin",
             "$ref": "#/components/schemas/pantherclaw.v1.BuiltinQuery"
+          },
+          "noDrill": {
+            "type": "boolean",
+            "title": "no_drill",
+            "description": "No search opens this point's records (F302)."
           }
         },
         "title": "MetricPoint",
@@ -72265,7 +72391,7 @@
           "dimension": {
             "type": "string",
             "title": "dimension",
-            "description": "A breakdown key (a resource group), empty for the whole organization."
+            "description": "A breakdown key (a resource group, or for bypass.routes_by_owner the\n owner's user id or \"unowned\"), empty for the whole organization."
           },
           "points": {
             "type": "array",

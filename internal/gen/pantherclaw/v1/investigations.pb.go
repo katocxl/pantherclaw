@@ -816,7 +816,11 @@ type TimelineEvent struct {
 	// The connection; empty when none.
 	ConnectionId string `protobuf:"bytes,8,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	// Decision, state, outcome or change.
-	Detail        string `protobuf:"bytes,9,opt,name=detail,proto3" json:"detail,omitempty"`
+	Detail string `protobuf:"bytes,9,opt,name=detail,proto3" json:"detail,omitempty"`
+	// The class of the data a read returned, such as "pii" or "secret"
+	// (F285); empty when the action records none. It marks a read and claims
+	// nothing about what followed.
+	ReadClass     string `protobuf:"bytes,10,opt,name=read_class,json=readClass,proto3" json:"read_class,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -914,6 +918,13 @@ func (x *TimelineEvent) GetDetail() string {
 	return ""
 }
 
+func (x *TimelineEvent) GetReadClass() string {
+	if x != nil {
+		return x.ReadClass
+	}
+	return ""
+}
+
 // TimelineGap is evidence the timeline expected and did not find.
 type TimelineGap struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -990,9 +1001,13 @@ type TimelineLane struct {
 	// When it started.
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// When it ended; unset while active.
-	EndTime       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	EndTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	// Its events, oldest first (F284).
+	Events []*TimelineEvent `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`
+	// The lane has more events than one lane holds.
+	EventsTruncated bool `protobuf:"varint,7,opt,name=events_truncated,json=eventsTruncated,proto3" json:"events_truncated,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *TimelineLane) Reset() {
@@ -1058,6 +1073,20 @@ func (x *TimelineLane) GetEndTime() *timestamppb.Timestamp {
 		return x.EndTime
 	}
 	return nil
+}
+
+func (x *TimelineLane) GetEvents() []*TimelineEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *TimelineLane) GetEventsTruncated() bool {
+	if x != nil {
+		return x.EventsTruncated
+	}
+	return false
 }
 
 // TimelinePhase is a stretch of actions, inferred from their order.
@@ -2891,7 +2920,7 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\bgrant_id\x18\x05 \x01(\tR\agrantId\x12\x14\n" +
 	"\x05depth\x18\x06 \x01(\x05R\x05depth\"8\n" +
 	"\x15GetRunTimelineRequest\x12\x1f\n" +
-	"\x06run_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\"\xa8\x02\n" +
+	"\x06run_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\"\xc7\x02\n" +
 	"\rTimelineEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12%\n" +
@@ -2902,18 +2931,23 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\x06run_id\x18\x06 \x01(\tR\x05runId\x12\x1c\n" +
 	"\toperation\x18\a \x01(\tR\toperation\x12#\n" +
 	"\rconnection_id\x18\b \x01(\tR\fconnectionId\x12\x16\n" +
-	"\x06detail\x18\t \x01(\tR\x06detail\"x\n" +
+	"\x06detail\x18\t \x01(\tR\x06detail\x12\x1d\n" +
+	"\n" +
+	"read_class\x18\n" +
+	" \x01(\tR\treadClass\"x\n" +
 	"\vTimelineGap\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12.\n" +
-	"\x04time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\xca\x01\n" +
+	"\x04time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\xac\x02\n" +
 	"\fTimelineLane\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05state\x18\x03 \x01(\tR\x05state\x12;\n" +
 	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x125\n" +
-	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\"\xf6\x01\n" +
+	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x125\n" +
+	"\x06events\x18\x06 \x03(\v2\x1d.pantherclaw.v1.TimelineEventR\x06events\x12)\n" +
+	"\x10events_truncated\x18\a \x01(\bR\x0feventsTruncated\"\xf6\x01\n" +
 	"\rTimelinePhase\x129\n" +
 	"\n" +
 	"start_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
@@ -3165,63 +3199,64 @@ var file_pantherclaw_v1_investigations_proto_depIdxs = []int32{
 	28, // 16: pantherclaw.v1.TimelineGap.time:type_name -> google.protobuf.Timestamp
 	28, // 17: pantherclaw.v1.TimelineLane.create_time:type_name -> google.protobuf.Timestamp
 	28, // 18: pantherclaw.v1.TimelineLane.end_time:type_name -> google.protobuf.Timestamp
-	28, // 19: pantherclaw.v1.TimelinePhase.start_time:type_name -> google.protobuf.Timestamp
-	28, // 20: pantherclaw.v1.TimelinePhase.end_time:type_name -> google.protobuf.Timestamp
-	28, // 21: pantherclaw.v1.GetRunTimelineResponse.start_time:type_name -> google.protobuf.Timestamp
-	28, // 22: pantherclaw.v1.GetRunTimelineResponse.end_time:type_name -> google.protobuf.Timestamp
-	8,  // 23: pantherclaw.v1.GetRunTimelineResponse.events:type_name -> pantherclaw.v1.TimelineEvent
-	9,  // 24: pantherclaw.v1.GetRunTimelineResponse.gaps:type_name -> pantherclaw.v1.TimelineGap
-	10, // 25: pantherclaw.v1.GetRunTimelineResponse.lanes:type_name -> pantherclaw.v1.TimelineLane
-	11, // 26: pantherclaw.v1.GetRunTimelineResponse.phases:type_name -> pantherclaw.v1.TimelinePhase
-	28, // 27: pantherclaw.v1.GetPrecedingContextRequest.start_time:type_name -> google.protobuf.Timestamp
-	28, // 28: pantherclaw.v1.GetPrecedingContextRequest.end_time:type_name -> google.protobuf.Timestamp
-	28, // 29: pantherclaw.v1.ContextItem.time:type_name -> google.protobuf.Timestamp
-	28, // 30: pantherclaw.v1.GetPrecedingContextResponse.start_time:type_name -> google.protobuf.Timestamp
-	28, // 31: pantherclaw.v1.GetPrecedingContextResponse.end_time:type_name -> google.protobuf.Timestamp
-	14, // 32: pantherclaw.v1.GetPrecedingContextResponse.items:type_name -> pantherclaw.v1.ContextItem
-	28, // 33: pantherclaw.v1.CompareRunRequest.start_time:type_name -> google.protobuf.Timestamp
-	28, // 34: pantherclaw.v1.CompareRunRequest.end_time:type_name -> google.protobuf.Timestamp
-	28, // 35: pantherclaw.v1.CompareRunResponse.start_time:type_name -> google.protobuf.Timestamp
-	28, // 36: pantherclaw.v1.CompareRunResponse.end_time:type_name -> google.protobuf.Timestamp
-	17, // 37: pantherclaw.v1.CompareRunResponse.new_destinations:type_name -> pantherclaw.v1.CompareDestination
-	0,  // 38: pantherclaw.v1.InspectRunRequest.include:type_name -> pantherclaw.v1.InspectSection
-	1,  // 39: pantherclaw.v1.RunSummary.launcher:type_name -> pantherclaw.v1.InvestigationParty
-	1,  // 40: pantherclaw.v1.RunSummary.principal:type_name -> pantherclaw.v1.InvestigationParty
-	28, // 41: pantherclaw.v1.RunSummary.start_time:type_name -> google.protobuf.Timestamp
-	28, // 42: pantherclaw.v1.RunSummary.end_time:type_name -> google.protobuf.Timestamp
-	28, // 43: pantherclaw.v1.RunExecutionLink.create_time:type_name -> google.protobuf.Timestamp
-	28, // 44: pantherclaw.v1.RunExecutionLink.end_time:type_name -> google.protobuf.Timestamp
-	6,  // 45: pantherclaw.v1.RunLineage.parents:type_name -> pantherclaw.v1.InvestigationDelegation
-	10, // 46: pantherclaw.v1.RunLineage.children:type_name -> pantherclaw.v1.TimelineLane
-	21, // 47: pantherclaw.v1.RunLineage.upstream_execution:type_name -> pantherclaw.v1.RunExecutionLink
-	21, // 48: pantherclaw.v1.RunLineage.downstream_executions:type_name -> pantherclaw.v1.RunExecutionLink
-	8,  // 49: pantherclaw.v1.RunTimeline.events:type_name -> pantherclaw.v1.TimelineEvent
-	11, // 50: pantherclaw.v1.RunTimeline.phases:type_name -> pantherclaw.v1.TimelinePhase
-	28, // 51: pantherclaw.v1.RunRouteCoverage.computed_at:type_name -> google.protobuf.Timestamp
-	28, // 52: pantherclaw.v1.RunGap.time:type_name -> google.protobuf.Timestamp
-	20, // 53: pantherclaw.v1.InspectRunResponse.run:type_name -> pantherclaw.v1.RunSummary
-	22, // 54: pantherclaw.v1.InspectRunResponse.lineage:type_name -> pantherclaw.v1.RunLineage
-	23, // 55: pantherclaw.v1.InspectRunResponse.timeline:type_name -> pantherclaw.v1.RunTimeline
-	24, // 56: pantherclaw.v1.InspectRunResponse.budget:type_name -> pantherclaw.v1.RunBudgetLine
-	2,  // 57: pantherclaw.v1.InspectRunResponse.approvals:type_name -> pantherclaw.v1.InvestigationApproval
-	25, // 58: pantherclaw.v1.InspectRunResponse.coverage:type_name -> pantherclaw.v1.RunRouteCoverage
-	26, // 59: pantherclaw.v1.InspectRunResponse.gaps:type_name -> pantherclaw.v1.RunGap
-	0,  // 60: pantherclaw.v1.InspectRunResponse.omitted_sections:type_name -> pantherclaw.v1.InspectSection
-	3,  // 61: pantherclaw.v1.InvestigationService.WhatHappened:input_type -> pantherclaw.v1.WhatHappenedRequest
-	7,  // 62: pantherclaw.v1.InvestigationService.GetRunTimeline:input_type -> pantherclaw.v1.GetRunTimelineRequest
-	13, // 63: pantherclaw.v1.InvestigationService.GetPrecedingContext:input_type -> pantherclaw.v1.GetPrecedingContextRequest
-	16, // 64: pantherclaw.v1.InvestigationService.CompareRun:input_type -> pantherclaw.v1.CompareRunRequest
-	19, // 65: pantherclaw.v1.InvestigationService.InspectRun:input_type -> pantherclaw.v1.InspectRunRequest
-	4,  // 66: pantherclaw.v1.InvestigationService.WhatHappened:output_type -> pantherclaw.v1.WhatHappenedResponse
-	12, // 67: pantherclaw.v1.InvestigationService.GetRunTimeline:output_type -> pantherclaw.v1.GetRunTimelineResponse
-	15, // 68: pantherclaw.v1.InvestigationService.GetPrecedingContext:output_type -> pantherclaw.v1.GetPrecedingContextResponse
-	18, // 69: pantherclaw.v1.InvestigationService.CompareRun:output_type -> pantherclaw.v1.CompareRunResponse
-	27, // 70: pantherclaw.v1.InvestigationService.InspectRun:output_type -> pantherclaw.v1.InspectRunResponse
-	66, // [66:71] is the sub-list for method output_type
-	61, // [61:66] is the sub-list for method input_type
-	61, // [61:61] is the sub-list for extension type_name
-	61, // [61:61] is the sub-list for extension extendee
-	0,  // [0:61] is the sub-list for field type_name
+	8,  // 19: pantherclaw.v1.TimelineLane.events:type_name -> pantherclaw.v1.TimelineEvent
+	28, // 20: pantherclaw.v1.TimelinePhase.start_time:type_name -> google.protobuf.Timestamp
+	28, // 21: pantherclaw.v1.TimelinePhase.end_time:type_name -> google.protobuf.Timestamp
+	28, // 22: pantherclaw.v1.GetRunTimelineResponse.start_time:type_name -> google.protobuf.Timestamp
+	28, // 23: pantherclaw.v1.GetRunTimelineResponse.end_time:type_name -> google.protobuf.Timestamp
+	8,  // 24: pantherclaw.v1.GetRunTimelineResponse.events:type_name -> pantherclaw.v1.TimelineEvent
+	9,  // 25: pantherclaw.v1.GetRunTimelineResponse.gaps:type_name -> pantherclaw.v1.TimelineGap
+	10, // 26: pantherclaw.v1.GetRunTimelineResponse.lanes:type_name -> pantherclaw.v1.TimelineLane
+	11, // 27: pantherclaw.v1.GetRunTimelineResponse.phases:type_name -> pantherclaw.v1.TimelinePhase
+	28, // 28: pantherclaw.v1.GetPrecedingContextRequest.start_time:type_name -> google.protobuf.Timestamp
+	28, // 29: pantherclaw.v1.GetPrecedingContextRequest.end_time:type_name -> google.protobuf.Timestamp
+	28, // 30: pantherclaw.v1.ContextItem.time:type_name -> google.protobuf.Timestamp
+	28, // 31: pantherclaw.v1.GetPrecedingContextResponse.start_time:type_name -> google.protobuf.Timestamp
+	28, // 32: pantherclaw.v1.GetPrecedingContextResponse.end_time:type_name -> google.protobuf.Timestamp
+	14, // 33: pantherclaw.v1.GetPrecedingContextResponse.items:type_name -> pantherclaw.v1.ContextItem
+	28, // 34: pantherclaw.v1.CompareRunRequest.start_time:type_name -> google.protobuf.Timestamp
+	28, // 35: pantherclaw.v1.CompareRunRequest.end_time:type_name -> google.protobuf.Timestamp
+	28, // 36: pantherclaw.v1.CompareRunResponse.start_time:type_name -> google.protobuf.Timestamp
+	28, // 37: pantherclaw.v1.CompareRunResponse.end_time:type_name -> google.protobuf.Timestamp
+	17, // 38: pantherclaw.v1.CompareRunResponse.new_destinations:type_name -> pantherclaw.v1.CompareDestination
+	0,  // 39: pantherclaw.v1.InspectRunRequest.include:type_name -> pantherclaw.v1.InspectSection
+	1,  // 40: pantherclaw.v1.RunSummary.launcher:type_name -> pantherclaw.v1.InvestigationParty
+	1,  // 41: pantherclaw.v1.RunSummary.principal:type_name -> pantherclaw.v1.InvestigationParty
+	28, // 42: pantherclaw.v1.RunSummary.start_time:type_name -> google.protobuf.Timestamp
+	28, // 43: pantherclaw.v1.RunSummary.end_time:type_name -> google.protobuf.Timestamp
+	28, // 44: pantherclaw.v1.RunExecutionLink.create_time:type_name -> google.protobuf.Timestamp
+	28, // 45: pantherclaw.v1.RunExecutionLink.end_time:type_name -> google.protobuf.Timestamp
+	6,  // 46: pantherclaw.v1.RunLineage.parents:type_name -> pantherclaw.v1.InvestigationDelegation
+	10, // 47: pantherclaw.v1.RunLineage.children:type_name -> pantherclaw.v1.TimelineLane
+	21, // 48: pantherclaw.v1.RunLineage.upstream_execution:type_name -> pantherclaw.v1.RunExecutionLink
+	21, // 49: pantherclaw.v1.RunLineage.downstream_executions:type_name -> pantherclaw.v1.RunExecutionLink
+	8,  // 50: pantherclaw.v1.RunTimeline.events:type_name -> pantherclaw.v1.TimelineEvent
+	11, // 51: pantherclaw.v1.RunTimeline.phases:type_name -> pantherclaw.v1.TimelinePhase
+	28, // 52: pantherclaw.v1.RunRouteCoverage.computed_at:type_name -> google.protobuf.Timestamp
+	28, // 53: pantherclaw.v1.RunGap.time:type_name -> google.protobuf.Timestamp
+	20, // 54: pantherclaw.v1.InspectRunResponse.run:type_name -> pantherclaw.v1.RunSummary
+	22, // 55: pantherclaw.v1.InspectRunResponse.lineage:type_name -> pantherclaw.v1.RunLineage
+	23, // 56: pantherclaw.v1.InspectRunResponse.timeline:type_name -> pantherclaw.v1.RunTimeline
+	24, // 57: pantherclaw.v1.InspectRunResponse.budget:type_name -> pantherclaw.v1.RunBudgetLine
+	2,  // 58: pantherclaw.v1.InspectRunResponse.approvals:type_name -> pantherclaw.v1.InvestigationApproval
+	25, // 59: pantherclaw.v1.InspectRunResponse.coverage:type_name -> pantherclaw.v1.RunRouteCoverage
+	26, // 60: pantherclaw.v1.InspectRunResponse.gaps:type_name -> pantherclaw.v1.RunGap
+	0,  // 61: pantherclaw.v1.InspectRunResponse.omitted_sections:type_name -> pantherclaw.v1.InspectSection
+	3,  // 62: pantherclaw.v1.InvestigationService.WhatHappened:input_type -> pantherclaw.v1.WhatHappenedRequest
+	7,  // 63: pantherclaw.v1.InvestigationService.GetRunTimeline:input_type -> pantherclaw.v1.GetRunTimelineRequest
+	13, // 64: pantherclaw.v1.InvestigationService.GetPrecedingContext:input_type -> pantherclaw.v1.GetPrecedingContextRequest
+	16, // 65: pantherclaw.v1.InvestigationService.CompareRun:input_type -> pantherclaw.v1.CompareRunRequest
+	19, // 66: pantherclaw.v1.InvestigationService.InspectRun:input_type -> pantherclaw.v1.InspectRunRequest
+	4,  // 67: pantherclaw.v1.InvestigationService.WhatHappened:output_type -> pantherclaw.v1.WhatHappenedResponse
+	12, // 68: pantherclaw.v1.InvestigationService.GetRunTimeline:output_type -> pantherclaw.v1.GetRunTimelineResponse
+	15, // 69: pantherclaw.v1.InvestigationService.GetPrecedingContext:output_type -> pantherclaw.v1.GetPrecedingContextResponse
+	18, // 70: pantherclaw.v1.InvestigationService.CompareRun:output_type -> pantherclaw.v1.CompareRunResponse
+	27, // 71: pantherclaw.v1.InvestigationService.InspectRun:output_type -> pantherclaw.v1.InspectRunResponse
+	67, // [67:72] is the sub-list for method output_type
+	62, // [62:67] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_investigations_proto_init() }

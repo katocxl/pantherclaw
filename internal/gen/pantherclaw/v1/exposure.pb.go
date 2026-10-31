@@ -313,6 +313,202 @@ func (GraphEdgeState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{4}
 }
 
+// GraphEdgeStatus is what an edge's evidence says about it (F291), apart
+// from whether it still counts as current (GraphEdgeState).
+type GraphEdgeStatus int32
+
+const (
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_UNSPECIFIED GraphEdgeStatus = 0
+	// A control in enforce mode stands on the edge.
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_ENFORCED          GraphEdgeStatus = 1
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_ALLOWED           GraphEdgeStatus = 2
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_APPROVAL_REQUIRED GraphEdgeStatus = 3
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_DENIED            GraphEdgeStatus = 4
+	// Seen happening, with nothing deciding it.
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_OBSERVED GraphEdgeStatus = 5
+	// A way around the controls that nothing has tested.
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_POSSIBLE_BYPASS GraphEdgeStatus = 6
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_UNKNOWN         GraphEdgeStatus = 7
+	// Read from a snapshot that predates a recorded change.
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_STALE               GraphEdgeStatus = 8
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_PARTIAL      GraphEdgeStatus = 9
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_PENDING      GraphEdgeStatus = 10
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_CONFLICTING  GraphEdgeStatus = 11
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE GraphEdgeStatus = 12
+)
+
+// Enum value maps for GraphEdgeStatus.
+var (
+	GraphEdgeStatus_name = map[int32]string{
+		0:  "GRAPH_EDGE_STATUS_UNSPECIFIED",
+		1:  "GRAPH_EDGE_STATUS_ENFORCED",
+		2:  "GRAPH_EDGE_STATUS_ALLOWED",
+		3:  "GRAPH_EDGE_STATUS_APPROVAL_REQUIRED",
+		4:  "GRAPH_EDGE_STATUS_DENIED",
+		5:  "GRAPH_EDGE_STATUS_OBSERVED",
+		6:  "GRAPH_EDGE_STATUS_POSSIBLE_BYPASS",
+		7:  "GRAPH_EDGE_STATUS_UNKNOWN",
+		8:  "GRAPH_EDGE_STATUS_STALE",
+		9:  "GRAPH_EDGE_STATUS_EFFECT_PARTIAL",
+		10: "GRAPH_EDGE_STATUS_EFFECT_PENDING",
+		11: "GRAPH_EDGE_STATUS_EFFECT_CONFLICTING",
+		12: "GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE",
+	}
+	GraphEdgeStatus_value = map[string]int32{
+		"GRAPH_EDGE_STATUS_UNSPECIFIED":         0,
+		"GRAPH_EDGE_STATUS_ENFORCED":            1,
+		"GRAPH_EDGE_STATUS_ALLOWED":             2,
+		"GRAPH_EDGE_STATUS_APPROVAL_REQUIRED":   3,
+		"GRAPH_EDGE_STATUS_DENIED":              4,
+		"GRAPH_EDGE_STATUS_OBSERVED":            5,
+		"GRAPH_EDGE_STATUS_POSSIBLE_BYPASS":     6,
+		"GRAPH_EDGE_STATUS_UNKNOWN":             7,
+		"GRAPH_EDGE_STATUS_STALE":               8,
+		"GRAPH_EDGE_STATUS_EFFECT_PARTIAL":      9,
+		"GRAPH_EDGE_STATUS_EFFECT_PENDING":      10,
+		"GRAPH_EDGE_STATUS_EFFECT_CONFLICTING":  11,
+		"GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE": 12,
+	}
+)
+
+func (x GraphEdgeStatus) Enum() *GraphEdgeStatus {
+	p := new(GraphEdgeStatus)
+	*p = x
+	return p
+}
+
+func (x GraphEdgeStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GraphEdgeStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_exposure_proto_enumTypes[5].Descriptor()
+}
+
+func (GraphEdgeStatus) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_exposure_proto_enumTypes[5]
+}
+
+func (x GraphEdgeStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GraphEdgeStatus.Descriptor instead.
+func (GraphEdgeStatus) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{5}
+}
+
+// GraphEdgeChange says what a change-mode edge did between two revisions
+// (F276).
+type GraphEdgeChange int32
+
+const (
+	GraphEdgeChange_GRAPH_EDGE_CHANGE_UNSPECIFIED GraphEdgeChange = 0
+	GraphEdgeChange_GRAPH_EDGE_CHANGE_ADDED       GraphEdgeChange = 1
+	GraphEdgeChange_GRAPH_EDGE_CHANGE_REMOVED     GraphEdgeChange = 2
+	GraphEdgeChange_GRAPH_EDGE_CHANGE_KEPT        GraphEdgeChange = 3
+)
+
+// Enum value maps for GraphEdgeChange.
+var (
+	GraphEdgeChange_name = map[int32]string{
+		0: "GRAPH_EDGE_CHANGE_UNSPECIFIED",
+		1: "GRAPH_EDGE_CHANGE_ADDED",
+		2: "GRAPH_EDGE_CHANGE_REMOVED",
+		3: "GRAPH_EDGE_CHANGE_KEPT",
+	}
+	GraphEdgeChange_value = map[string]int32{
+		"GRAPH_EDGE_CHANGE_UNSPECIFIED": 0,
+		"GRAPH_EDGE_CHANGE_ADDED":       1,
+		"GRAPH_EDGE_CHANGE_REMOVED":     2,
+		"GRAPH_EDGE_CHANGE_KEPT":        3,
+	}
+)
+
+func (x GraphEdgeChange) Enum() *GraphEdgeChange {
+	p := new(GraphEdgeChange)
+	*p = x
+	return p
+}
+
+func (x GraphEdgeChange) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GraphEdgeChange) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_exposure_proto_enumTypes[6].Descriptor()
+}
+
+func (GraphEdgeChange) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_exposure_proto_enumTypes[6]
+}
+
+func (x GraphEdgeChange) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GraphEdgeChange.Descriptor instead.
+func (GraphEdgeChange) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{6}
+}
+
+// GraphTriggerStage is how far a triggered edge has been shown (F280, F281).
+// Each stage is its own claim: a prediction is never a confirmation.
+type GraphTriggerStage int32
+
+const (
+	GraphTriggerStage_GRAPH_TRIGGER_STAGE_UNSPECIFIED GraphTriggerStage = 0
+	// A reviewed rule predicted the consequence; nothing shows it happened.
+	GraphTriggerStage_GRAPH_TRIGGER_STAGE_PREDICTED GraphTriggerStage = 1
+	// A consequence transaction was opened and decided.
+	GraphTriggerStage_GRAPH_TRIGGER_STAGE_AUTHORIZED GraphTriggerStage = 2
+	// An effect receipt confirms the consequence.
+	GraphTriggerStage_GRAPH_TRIGGER_STAGE_CONFIRMED GraphTriggerStage = 3
+)
+
+// Enum value maps for GraphTriggerStage.
+var (
+	GraphTriggerStage_name = map[int32]string{
+		0: "GRAPH_TRIGGER_STAGE_UNSPECIFIED",
+		1: "GRAPH_TRIGGER_STAGE_PREDICTED",
+		2: "GRAPH_TRIGGER_STAGE_AUTHORIZED",
+		3: "GRAPH_TRIGGER_STAGE_CONFIRMED",
+	}
+	GraphTriggerStage_value = map[string]int32{
+		"GRAPH_TRIGGER_STAGE_UNSPECIFIED": 0,
+		"GRAPH_TRIGGER_STAGE_PREDICTED":   1,
+		"GRAPH_TRIGGER_STAGE_AUTHORIZED":  2,
+		"GRAPH_TRIGGER_STAGE_CONFIRMED":   3,
+	}
+)
+
+func (x GraphTriggerStage) Enum() *GraphTriggerStage {
+	p := new(GraphTriggerStage)
+	*p = x
+	return p
+}
+
+func (x GraphTriggerStage) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GraphTriggerStage) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_exposure_proto_enumTypes[7].Descriptor()
+}
+
+func (GraphTriggerStage) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_exposure_proto_enumTypes[7]
+}
+
+func (x GraphTriggerStage) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GraphTriggerStage.Descriptor instead.
+func (GraphTriggerStage) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_exposure_proto_rawDescGZIP(), []int{7}
+}
+
 // ExposureSnapshot says which computation a read comes from.
 type ExposureSnapshot struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -1839,9 +2035,12 @@ func (x *PreviewReductionResponse) GetTruncated() bool {
 }
 
 type GraphNode struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Id    string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// label is plain text of at most 200 characters, built only from names
+	// the viewer may read, else empty (HR-550). It is never markup.
+	Label         string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1890,12 +2089,19 @@ func (x *GraphNode) GetId() string {
 	return ""
 }
 
+func (x *GraphNode) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
 type GraphEdge struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	From  *GraphNode             `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
 	To    *GraphNode             `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
 	// kind: holds, allows, reaches, through, acted, touched, delegated,
-	// then, changed or gap.
+	// then, changed, authorized, approved, custody, effect, triggered or gap.
 	Kind      string         `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
 	Verb      ExposureVerb   `protobuf:"varint,4,opt,name=verb,proto3,enum=pantherclaw.v1.ExposureVerb" json:"verb,omitempty"`
 	Operation string         `protobuf:"bytes,5,opt,name=operation,proto3" json:"operation,omitempty"`
@@ -1905,15 +2111,36 @@ type GraphEdge struct {
 	Execution string         `protobuf:"bytes,9,opt,name=execution,proto3" json:"execution,omitempty"`
 	Effect    string         `protobuf:"bytes,10,opt,name=effect,proto3" json:"effect,omitempty"`
 	// basis: OBSERVED, RULE_MATCH, INFERRED or HYPOTHESIS.
-	Basis         string                 `protobuf:"bytes,11,opt,name=basis,proto3" json:"basis,omitempty"`
-	Revision      int32                  `protobuf:"varint,12,opt,name=revision,proto3" json:"revision,omitempty"`
-	Time          *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=time,proto3" json:"time,omitempty"`
-	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
-	Freshness     string                 `protobuf:"bytes,15,opt,name=freshness,proto3" json:"freshness,omitempty"`
-	Provenance    string                 `protobuf:"bytes,16,opt,name=provenance,proto3" json:"provenance,omitempty"`
-	Count         int32                  `protobuf:"varint,17,opt,name=count,proto3" json:"count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Basis      string                 `protobuf:"bytes,11,opt,name=basis,proto3" json:"basis,omitempty"`
+	Revision   int32                  `protobuf:"varint,12,opt,name=revision,proto3" json:"revision,omitempty"`
+	Time       *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=time,proto3" json:"time,omitempty"`
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	Freshness  string                 `protobuf:"bytes,15,opt,name=freshness,proto3" json:"freshness,omitempty"`
+	// provenance is the edge's source; on a gap edge, what is missing.
+	Provenance string `protobuf:"bytes,16,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	Count      int32  `protobuf:"varint,17,opt,name=count,proto3" json:"count,omitempty"`
+	// evidence_ref names the record behind a causal edge,
+	// "<kind>:<id>" such as "decision_receipt:<transaction id>" (HR-551).
+	// Empty on a gap edge: no evidence, no link.
+	EvidenceRef string `protobuf:"bytes,18,opt,name=evidence_ref,json=evidenceRef,proto3" json:"evidence_ref,omitempty"`
+	// change is set on change-mode edges that compare two revisions.
+	Change GraphEdgeChange `protobuf:"varint,19,opt,name=change,proto3,enum=pantherclaw.v1.GraphEdgeChange" json:"change,omitempty"`
+	// status is the F291 state of the edge.
+	Status GraphEdgeStatus `protobuf:"varint,20,opt,name=status,proto3,enum=pantherclaw.v1.GraphEdgeStatus" json:"status,omitempty"`
+	// trigger_stage is set on triggered edges.
+	TriggerStage GraphTriggerStage `protobuf:"varint,21,opt,name=trigger_stage,json=triggerStage,proto3,enum=pantherclaw.v1.GraphTriggerStage" json:"trigger_stage,omitempty"`
+	// observe_time is when the edge's source was last read or recorded; it
+	// is always set, where time is only set for an event.
+	ObserveTime *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=observe_time,json=observeTime,proto3" json:"observe_time,omitempty"`
+	// assurance: AUTHORITATIVE, TESTED, DECLARED, INFERRED or UNVERIFIED
+	// (F297). Staleness is in freshness.
+	Assurance string `protobuf:"bytes,23,opt,name=assurance,proto3" json:"assurance,omitempty"`
+	// downstream_state is the state of an action's predicted consequences:
+	// PENDING, CONFIRMED, UNCONFIRMED or NOT_VERIFIABLE; empty when nothing
+	// was predicted (F281).
+	DownstreamState string `protobuf:"bytes,24,opt,name=downstream_state,json=downstreamState,proto3" json:"downstream_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GraphEdge) Reset() {
@@ -2063,6 +2290,55 @@ func (x *GraphEdge) GetCount() int32 {
 		return x.Count
 	}
 	return 0
+}
+
+func (x *GraphEdge) GetEvidenceRef() string {
+	if x != nil {
+		return x.EvidenceRef
+	}
+	return ""
+}
+
+func (x *GraphEdge) GetChange() GraphEdgeChange {
+	if x != nil {
+		return x.Change
+	}
+	return GraphEdgeChange_GRAPH_EDGE_CHANGE_UNSPECIFIED
+}
+
+func (x *GraphEdge) GetStatus() GraphEdgeStatus {
+	if x != nil {
+		return x.Status
+	}
+	return GraphEdgeStatus_GRAPH_EDGE_STATUS_UNSPECIFIED
+}
+
+func (x *GraphEdge) GetTriggerStage() GraphTriggerStage {
+	if x != nil {
+		return x.TriggerStage
+	}
+	return GraphTriggerStage_GRAPH_TRIGGER_STAGE_UNSPECIFIED
+}
+
+func (x *GraphEdge) GetObserveTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObserveTime
+	}
+	return nil
+}
+
+func (x *GraphEdge) GetAssurance() string {
+	if x != nil {
+		return x.Assurance
+	}
+	return ""
+}
+
+func (x *GraphEdge) GetDownstreamState() string {
+	if x != nil {
+		return x.DownstreamState
+	}
+	return ""
 }
 
 // GraphScope is where a graph starts (F293).
@@ -2705,10 +2981,11 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"disruption\x18\x06 \x03(\v2\x1d.pantherclaw.v1.ExposureRightR\n" +
 	"disruption\x12\x12\n" +
 	"\x04note\x18\a \x01(\tR\x04note\x12\x1c\n" +
-	"\ttruncated\x18\b \x01(\bR\ttruncated\"/\n" +
+	"\ttruncated\x18\b \x01(\bR\ttruncated\"E\n" +
 	"\tGraphNode\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xe0\x04\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\"\xc5\a\n" +
 	"\tGraphEdge\x12-\n" +
 	"\x04from\x18\x01 \x01(\v2\x19.pantherclaw.v1.GraphNodeR\x04from\x12)\n" +
 	"\x02to\x18\x02 \x01(\v2\x19.pantherclaw.v1.GraphNodeR\x02to\x12\x12\n" +
@@ -2730,7 +3007,14 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\n" +
 	"provenance\x18\x10 \x01(\tR\n" +
 	"provenance\x12\x14\n" +
-	"\x05count\x18\x11 \x01(\x05R\x05count\"o\n" +
+	"\x05count\x18\x11 \x01(\x05R\x05count\x12!\n" +
+	"\fevidence_ref\x18\x12 \x01(\tR\vevidenceRef\x127\n" +
+	"\x06change\x18\x13 \x01(\x0e2\x1f.pantherclaw.v1.GraphEdgeChangeR\x06change\x127\n" +
+	"\x06status\x18\x14 \x01(\x0e2\x1f.pantherclaw.v1.GraphEdgeStatusR\x06status\x12F\n" +
+	"\rtrigger_stage\x18\x15 \x01(\x0e2!.pantherclaw.v1.GraphTriggerStageR\ftriggerStage\x12=\n" +
+	"\fobserve_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\vobserveTime\x12\x1c\n" +
+	"\tassurance\x18\x17 \x01(\tR\tassurance\x12)\n" +
+	"\x10downstream_state\x18\x18 \x01(\tR\x0fdownstreamState\"o\n" +
 	"\n" +
 	"GraphScope\x12E\n" +
 	"\x04type\x18\x01 \x01(\tB1\xbaH.r,R\x03runR\x05agentR\bincidentR\bresourceR\n" +
@@ -2822,7 +3106,32 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\x17GRAPH_EDGE_STATE_ACTIVE\x10\x01\x12\x1f\n" +
 	"\x1bGRAPH_EDGE_STATE_HISTORICAL\x10\x02\x12\x1c\n" +
 	"\x18GRAPH_EDGE_STATE_EXPIRED\x10\x03\x12\x1d\n" +
-	"\x19GRAPH_EDGE_STATE_POSSIBLE\x10\x042\xa5\x04\n" +
+	"\x19GRAPH_EDGE_STATE_POSSIBLE\x10\x04*\xde\x03\n" +
+	"\x0fGraphEdgeStatus\x12!\n" +
+	"\x1dGRAPH_EDGE_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aGRAPH_EDGE_STATUS_ENFORCED\x10\x01\x12\x1d\n" +
+	"\x19GRAPH_EDGE_STATUS_ALLOWED\x10\x02\x12'\n" +
+	"#GRAPH_EDGE_STATUS_APPROVAL_REQUIRED\x10\x03\x12\x1c\n" +
+	"\x18GRAPH_EDGE_STATUS_DENIED\x10\x04\x12\x1e\n" +
+	"\x1aGRAPH_EDGE_STATUS_OBSERVED\x10\x05\x12%\n" +
+	"!GRAPH_EDGE_STATUS_POSSIBLE_BYPASS\x10\x06\x12\x1d\n" +
+	"\x19GRAPH_EDGE_STATUS_UNKNOWN\x10\a\x12\x1b\n" +
+	"\x17GRAPH_EDGE_STATUS_STALE\x10\b\x12$\n" +
+	" GRAPH_EDGE_STATUS_EFFECT_PARTIAL\x10\t\x12$\n" +
+	" GRAPH_EDGE_STATUS_EFFECT_PENDING\x10\n" +
+	"\x12(\n" +
+	"$GRAPH_EDGE_STATUS_EFFECT_CONFLICTING\x10\v\x12)\n" +
+	"%GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE\x10\f*\x8c\x01\n" +
+	"\x0fGraphEdgeChange\x12!\n" +
+	"\x1dGRAPH_EDGE_CHANGE_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17GRAPH_EDGE_CHANGE_ADDED\x10\x01\x12\x1d\n" +
+	"\x19GRAPH_EDGE_CHANGE_REMOVED\x10\x02\x12\x1a\n" +
+	"\x16GRAPH_EDGE_CHANGE_KEPT\x10\x03*\xa2\x01\n" +
+	"\x11GraphTriggerStage\x12#\n" +
+	"\x1fGRAPH_TRIGGER_STAGE_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dGRAPH_TRIGGER_STAGE_PREDICTED\x10\x01\x12\"\n" +
+	"\x1eGRAPH_TRIGGER_STAGE_AUTHORIZED\x10\x02\x12!\n" +
+	"\x1dGRAPH_TRIGGER_STAGE_CONFIRMED\x10\x032\xa5\x04\n" +
 	"\x0fExposureService\x12[\n" +
 	"\vGetExposure\x12\".pantherclaw.v1.GetExposureRequest\x1a#.pantherclaw.v1.GetExposureResponse\"\x03\x90\x02\x01\x12d\n" +
 	"\x0eGetReachMatrix\x12%.pantherclaw.v1.GetReachMatrixRequest\x1a&.pantherclaw.v1.GetReachMatrixResponse\"\x03\x90\x02\x01\x12^\n" +
@@ -2846,7 +3155,7 @@ func file_pantherclaw_v1_exposure_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_exposure_proto_rawDescData
 }
 
-var file_pantherclaw_v1_exposure_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_pantherclaw_v1_exposure_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
 var file_pantherclaw_v1_exposure_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_pantherclaw_v1_exposure_proto_goTypes = []any{
 	(ExposureView)(0),                        // 0: pantherclaw.v1.ExposureView
@@ -2854,111 +3163,118 @@ var file_pantherclaw_v1_exposure_proto_goTypes = []any{
 	(ExposureVerb)(0),                        // 2: pantherclaw.v1.ExposureVerb
 	(GraphMode)(0),                           // 3: pantherclaw.v1.GraphMode
 	(GraphEdgeState)(0),                      // 4: pantherclaw.v1.GraphEdgeState
-	(*ExposureSnapshot)(nil),                 // 5: pantherclaw.v1.ExposureSnapshot
-	(*ExposureRight)(nil),                    // 6: pantherclaw.v1.ExposureRight
-	(*GetExposureRequest)(nil),               // 7: pantherclaw.v1.GetExposureRequest
-	(*GetExposureResponse)(nil),              // 8: pantherclaw.v1.GetExposureResponse
-	(*ReachCell)(nil),                        // 9: pantherclaw.v1.ReachCell
-	(*GetReachMatrixRequest)(nil),            // 10: pantherclaw.v1.GetReachMatrixRequest
-	(*GetReachMatrixResponse)(nil),           // 11: pantherclaw.v1.GetReachMatrixResponse
-	(*RankKeys)(nil),                         // 12: pantherclaw.v1.RankKeys
-	(*RankedAgent)(nil),                      // 13: pantherclaw.v1.RankedAgent
-	(*RankExposureRequest)(nil),              // 14: pantherclaw.v1.RankExposureRequest
-	(*RankedAutomation)(nil),                 // 15: pantherclaw.v1.RankedAutomation
-	(*RankExposureResponse)(nil),             // 16: pantherclaw.v1.RankExposureResponse
-	(*CredentialWorkload)(nil),               // 17: pantherclaw.v1.CredentialWorkload
-	(*ListCredentialDependentsRequest)(nil),  // 18: pantherclaw.v1.ListCredentialDependentsRequest
-	(*ListCredentialDependentsResponse)(nil), // 19: pantherclaw.v1.ListCredentialDependentsResponse
-	(*ReductionSubject)(nil),                 // 20: pantherclaw.v1.ReductionSubject
-	(*PreviewReductionRequest)(nil),          // 21: pantherclaw.v1.PreviewReductionRequest
-	(*ReachCount)(nil),                       // 22: pantherclaw.v1.ReachCount
-	(*PreviewReductionResponse)(nil),         // 23: pantherclaw.v1.PreviewReductionResponse
-	(*GraphNode)(nil),                        // 24: pantherclaw.v1.GraphNode
-	(*GraphEdge)(nil),                        // 25: pantherclaw.v1.GraphEdge
-	(*GraphScope)(nil),                       // 26: pantherclaw.v1.GraphScope
-	(*GraphFilter)(nil),                      // 27: pantherclaw.v1.GraphFilter
-	(*GetGraphRequest)(nil),                  // 28: pantherclaw.v1.GetGraphRequest
-	(*GetGraphResponse)(nil),                 // 29: pantherclaw.v1.GetGraphResponse
-	(*ListGraphEdgesRequest)(nil),            // 30: pantherclaw.v1.ListGraphEdgesRequest
-	(*ListGraphEdgesResponse)(nil),           // 31: pantherclaw.v1.ListGraphEdgesResponse
-	nil,                                      // 32: pantherclaw.v1.GetGraphResponse.CurrentEntry
-	(*timestamppb.Timestamp)(nil),            // 33: google.protobuf.Timestamp
+	(GraphEdgeStatus)(0),                     // 5: pantherclaw.v1.GraphEdgeStatus
+	(GraphEdgeChange)(0),                     // 6: pantherclaw.v1.GraphEdgeChange
+	(GraphTriggerStage)(0),                   // 7: pantherclaw.v1.GraphTriggerStage
+	(*ExposureSnapshot)(nil),                 // 8: pantherclaw.v1.ExposureSnapshot
+	(*ExposureRight)(nil),                    // 9: pantherclaw.v1.ExposureRight
+	(*GetExposureRequest)(nil),               // 10: pantherclaw.v1.GetExposureRequest
+	(*GetExposureResponse)(nil),              // 11: pantherclaw.v1.GetExposureResponse
+	(*ReachCell)(nil),                        // 12: pantherclaw.v1.ReachCell
+	(*GetReachMatrixRequest)(nil),            // 13: pantherclaw.v1.GetReachMatrixRequest
+	(*GetReachMatrixResponse)(nil),           // 14: pantherclaw.v1.GetReachMatrixResponse
+	(*RankKeys)(nil),                         // 15: pantherclaw.v1.RankKeys
+	(*RankedAgent)(nil),                      // 16: pantherclaw.v1.RankedAgent
+	(*RankExposureRequest)(nil),              // 17: pantherclaw.v1.RankExposureRequest
+	(*RankedAutomation)(nil),                 // 18: pantherclaw.v1.RankedAutomation
+	(*RankExposureResponse)(nil),             // 19: pantherclaw.v1.RankExposureResponse
+	(*CredentialWorkload)(nil),               // 20: pantherclaw.v1.CredentialWorkload
+	(*ListCredentialDependentsRequest)(nil),  // 21: pantherclaw.v1.ListCredentialDependentsRequest
+	(*ListCredentialDependentsResponse)(nil), // 22: pantherclaw.v1.ListCredentialDependentsResponse
+	(*ReductionSubject)(nil),                 // 23: pantherclaw.v1.ReductionSubject
+	(*PreviewReductionRequest)(nil),          // 24: pantherclaw.v1.PreviewReductionRequest
+	(*ReachCount)(nil),                       // 25: pantherclaw.v1.ReachCount
+	(*PreviewReductionResponse)(nil),         // 26: pantherclaw.v1.PreviewReductionResponse
+	(*GraphNode)(nil),                        // 27: pantherclaw.v1.GraphNode
+	(*GraphEdge)(nil),                        // 28: pantherclaw.v1.GraphEdge
+	(*GraphScope)(nil),                       // 29: pantherclaw.v1.GraphScope
+	(*GraphFilter)(nil),                      // 30: pantherclaw.v1.GraphFilter
+	(*GetGraphRequest)(nil),                  // 31: pantherclaw.v1.GetGraphRequest
+	(*GetGraphResponse)(nil),                 // 32: pantherclaw.v1.GetGraphResponse
+	(*ListGraphEdgesRequest)(nil),            // 33: pantherclaw.v1.ListGraphEdgesRequest
+	(*ListGraphEdgesResponse)(nil),           // 34: pantherclaw.v1.ListGraphEdgesResponse
+	nil,                                      // 35: pantherclaw.v1.GetGraphResponse.CurrentEntry
+	(*timestamppb.Timestamp)(nil),            // 36: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_exposure_proto_depIdxs = []int32{
-	33, // 0: pantherclaw.v1.ExposureSnapshot.compute_time:type_name -> google.protobuf.Timestamp
-	33, // 1: pantherclaw.v1.ExposureSnapshot.change_time:type_name -> google.protobuf.Timestamp
+	36, // 0: pantherclaw.v1.ExposureSnapshot.compute_time:type_name -> google.protobuf.Timestamp
+	36, // 1: pantherclaw.v1.ExposureSnapshot.change_time:type_name -> google.protobuf.Timestamp
 	0,  // 2: pantherclaw.v1.ExposureRight.view:type_name -> pantherclaw.v1.ExposureView
 	1,  // 3: pantherclaw.v1.ExposureRight.label:type_name -> pantherclaw.v1.ExposureLabel
 	2,  // 4: pantherclaw.v1.ExposureRight.verb:type_name -> pantherclaw.v1.ExposureVerb
-	33, // 5: pantherclaw.v1.ExposureRight.expire_time:type_name -> google.protobuf.Timestamp
-	33, // 6: pantherclaw.v1.ExposureRight.observe_time:type_name -> google.protobuf.Timestamp
+	36, // 5: pantherclaw.v1.ExposureRight.expire_time:type_name -> google.protobuf.Timestamp
+	36, // 6: pantherclaw.v1.ExposureRight.observe_time:type_name -> google.protobuf.Timestamp
 	0,  // 7: pantherclaw.v1.GetExposureRequest.view:type_name -> pantherclaw.v1.ExposureView
-	5,  // 8: pantherclaw.v1.GetExposureResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
-	6,  // 9: pantherclaw.v1.GetExposureResponse.rights:type_name -> pantherclaw.v1.ExposureRight
+	8,  // 8: pantherclaw.v1.GetExposureResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
+	9,  // 9: pantherclaw.v1.GetExposureResponse.rights:type_name -> pantherclaw.v1.ExposureRight
 	2,  // 10: pantherclaw.v1.ReachCell.verb:type_name -> pantherclaw.v1.ExposureVerb
 	0,  // 11: pantherclaw.v1.ReachCell.view:type_name -> pantherclaw.v1.ExposureView
 	1,  // 12: pantherclaw.v1.ReachCell.label:type_name -> pantherclaw.v1.ExposureLabel
-	5,  // 13: pantherclaw.v1.GetReachMatrixResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
-	9,  // 14: pantherclaw.v1.GetReachMatrixResponse.cells:type_name -> pantherclaw.v1.ReachCell
+	8,  // 13: pantherclaw.v1.GetReachMatrixResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
+	12, // 14: pantherclaw.v1.GetReachMatrixResponse.cells:type_name -> pantherclaw.v1.ReachCell
 	2,  // 15: pantherclaw.v1.RankKeys.consequence:type_name -> pantherclaw.v1.ExposureVerb
 	1,  // 16: pantherclaw.v1.RankKeys.usability:type_name -> pantherclaw.v1.ExposureLabel
-	12, // 17: pantherclaw.v1.RankedAgent.keys:type_name -> pantherclaw.v1.RankKeys
-	12, // 18: pantherclaw.v1.RankedAutomation.ceiling_keys:type_name -> pantherclaw.v1.RankKeys
-	5,  // 19: pantherclaw.v1.RankExposureResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
-	13, // 20: pantherclaw.v1.RankExposureResponse.agents:type_name -> pantherclaw.v1.RankedAgent
-	15, // 21: pantherclaw.v1.RankExposureResponse.automations:type_name -> pantherclaw.v1.RankedAutomation
+	15, // 17: pantherclaw.v1.RankedAgent.keys:type_name -> pantherclaw.v1.RankKeys
+	15, // 18: pantherclaw.v1.RankedAutomation.ceiling_keys:type_name -> pantherclaw.v1.RankKeys
+	8,  // 19: pantherclaw.v1.RankExposureResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
+	16, // 20: pantherclaw.v1.RankExposureResponse.agents:type_name -> pantherclaw.v1.RankedAgent
+	18, // 21: pantherclaw.v1.RankExposureResponse.automations:type_name -> pantherclaw.v1.RankedAutomation
 	0,  // 22: pantherclaw.v1.CredentialWorkload.views:type_name -> pantherclaw.v1.ExposureView
-	33, // 23: pantherclaw.v1.CredentialWorkload.last_use_time:type_name -> google.protobuf.Timestamp
-	5,  // 24: pantherclaw.v1.ListCredentialDependentsResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
-	17, // 25: pantherclaw.v1.ListCredentialDependentsResponse.workloads:type_name -> pantherclaw.v1.CredentialWorkload
-	20, // 26: pantherclaw.v1.PreviewReductionRequest.subjects:type_name -> pantherclaw.v1.ReductionSubject
+	36, // 23: pantherclaw.v1.CredentialWorkload.last_use_time:type_name -> google.protobuf.Timestamp
+	8,  // 24: pantherclaw.v1.ListCredentialDependentsResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
+	20, // 25: pantherclaw.v1.ListCredentialDependentsResponse.workloads:type_name -> pantherclaw.v1.CredentialWorkload
+	23, // 26: pantherclaw.v1.PreviewReductionRequest.subjects:type_name -> pantherclaw.v1.ReductionSubject
 	0,  // 27: pantherclaw.v1.ReachCount.view:type_name -> pantherclaw.v1.ExposureView
-	22, // 28: pantherclaw.v1.PreviewReductionResponse.before:type_name -> pantherclaw.v1.ReachCount
-	22, // 29: pantherclaw.v1.PreviewReductionResponse.after:type_name -> pantherclaw.v1.ReachCount
-	6,  // 30: pantherclaw.v1.PreviewReductionResponse.removed:type_name -> pantherclaw.v1.ExposureRight
-	6,  // 31: pantherclaw.v1.PreviewReductionResponse.weakened:type_name -> pantherclaw.v1.ExposureRight
-	6,  // 32: pantherclaw.v1.PreviewReductionResponse.remaining:type_name -> pantherclaw.v1.ExposureRight
-	6,  // 33: pantherclaw.v1.PreviewReductionResponse.disruption:type_name -> pantherclaw.v1.ExposureRight
-	24, // 34: pantherclaw.v1.GraphEdge.from:type_name -> pantherclaw.v1.GraphNode
-	24, // 35: pantherclaw.v1.GraphEdge.to:type_name -> pantherclaw.v1.GraphNode
+	25, // 28: pantherclaw.v1.PreviewReductionResponse.before:type_name -> pantherclaw.v1.ReachCount
+	25, // 29: pantherclaw.v1.PreviewReductionResponse.after:type_name -> pantherclaw.v1.ReachCount
+	9,  // 30: pantherclaw.v1.PreviewReductionResponse.removed:type_name -> pantherclaw.v1.ExposureRight
+	9,  // 31: pantherclaw.v1.PreviewReductionResponse.weakened:type_name -> pantherclaw.v1.ExposureRight
+	9,  // 32: pantherclaw.v1.PreviewReductionResponse.remaining:type_name -> pantherclaw.v1.ExposureRight
+	9,  // 33: pantherclaw.v1.PreviewReductionResponse.disruption:type_name -> pantherclaw.v1.ExposureRight
+	27, // 34: pantherclaw.v1.GraphEdge.from:type_name -> pantherclaw.v1.GraphNode
+	27, // 35: pantherclaw.v1.GraphEdge.to:type_name -> pantherclaw.v1.GraphNode
 	2,  // 36: pantherclaw.v1.GraphEdge.verb:type_name -> pantherclaw.v1.ExposureVerb
 	4,  // 37: pantherclaw.v1.GraphEdge.state:type_name -> pantherclaw.v1.GraphEdgeState
-	33, // 38: pantherclaw.v1.GraphEdge.time:type_name -> google.protobuf.Timestamp
-	33, // 39: pantherclaw.v1.GraphEdge.expire_time:type_name -> google.protobuf.Timestamp
-	33, // 40: pantherclaw.v1.GraphFilter.start_time:type_name -> google.protobuf.Timestamp
-	33, // 41: pantherclaw.v1.GraphFilter.end_time:type_name -> google.protobuf.Timestamp
-	3,  // 42: pantherclaw.v1.GetGraphRequest.mode:type_name -> pantherclaw.v1.GraphMode
-	26, // 43: pantherclaw.v1.GetGraphRequest.scope:type_name -> pantherclaw.v1.GraphScope
-	27, // 44: pantherclaw.v1.GetGraphRequest.filter:type_name -> pantherclaw.v1.GraphFilter
-	3,  // 45: pantherclaw.v1.GetGraphResponse.mode:type_name -> pantherclaw.v1.GraphMode
-	24, // 46: pantherclaw.v1.GetGraphResponse.nodes:type_name -> pantherclaw.v1.GraphNode
-	25, // 47: pantherclaw.v1.GetGraphResponse.edges:type_name -> pantherclaw.v1.GraphEdge
-	32, // 48: pantherclaw.v1.GetGraphResponse.current:type_name -> pantherclaw.v1.GetGraphResponse.CurrentEntry
-	33, // 49: pantherclaw.v1.GetGraphResponse.as_of:type_name -> google.protobuf.Timestamp
-	5,  // 50: pantherclaw.v1.GetGraphResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
-	3,  // 51: pantherclaw.v1.ListGraphEdgesRequest.mode:type_name -> pantherclaw.v1.GraphMode
-	26, // 52: pantherclaw.v1.ListGraphEdgesRequest.scope:type_name -> pantherclaw.v1.GraphScope
-	27, // 53: pantherclaw.v1.ListGraphEdgesRequest.filter:type_name -> pantherclaw.v1.GraphFilter
-	25, // 54: pantherclaw.v1.ListGraphEdgesResponse.edges:type_name -> pantherclaw.v1.GraphEdge
-	7,  // 55: pantherclaw.v1.ExposureService.GetExposure:input_type -> pantherclaw.v1.GetExposureRequest
-	10, // 56: pantherclaw.v1.ExposureService.GetReachMatrix:input_type -> pantherclaw.v1.GetReachMatrixRequest
-	14, // 57: pantherclaw.v1.ExposureService.RankExposure:input_type -> pantherclaw.v1.RankExposureRequest
-	18, // 58: pantherclaw.v1.ExposureService.ListCredentialDependents:input_type -> pantherclaw.v1.ListCredentialDependentsRequest
-	21, // 59: pantherclaw.v1.ExposureService.PreviewReduction:input_type -> pantherclaw.v1.PreviewReductionRequest
-	28, // 60: pantherclaw.v1.GraphService.GetGraph:input_type -> pantherclaw.v1.GetGraphRequest
-	30, // 61: pantherclaw.v1.GraphService.ListGraphEdges:input_type -> pantherclaw.v1.ListGraphEdgesRequest
-	8,  // 62: pantherclaw.v1.ExposureService.GetExposure:output_type -> pantherclaw.v1.GetExposureResponse
-	11, // 63: pantherclaw.v1.ExposureService.GetReachMatrix:output_type -> pantherclaw.v1.GetReachMatrixResponse
-	16, // 64: pantherclaw.v1.ExposureService.RankExposure:output_type -> pantherclaw.v1.RankExposureResponse
-	19, // 65: pantherclaw.v1.ExposureService.ListCredentialDependents:output_type -> pantherclaw.v1.ListCredentialDependentsResponse
-	23, // 66: pantherclaw.v1.ExposureService.PreviewReduction:output_type -> pantherclaw.v1.PreviewReductionResponse
-	29, // 67: pantherclaw.v1.GraphService.GetGraph:output_type -> pantherclaw.v1.GetGraphResponse
-	31, // 68: pantherclaw.v1.GraphService.ListGraphEdges:output_type -> pantherclaw.v1.ListGraphEdgesResponse
-	62, // [62:69] is the sub-list for method output_type
-	55, // [55:62] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	36, // 38: pantherclaw.v1.GraphEdge.time:type_name -> google.protobuf.Timestamp
+	36, // 39: pantherclaw.v1.GraphEdge.expire_time:type_name -> google.protobuf.Timestamp
+	6,  // 40: pantherclaw.v1.GraphEdge.change:type_name -> pantherclaw.v1.GraphEdgeChange
+	5,  // 41: pantherclaw.v1.GraphEdge.status:type_name -> pantherclaw.v1.GraphEdgeStatus
+	7,  // 42: pantherclaw.v1.GraphEdge.trigger_stage:type_name -> pantherclaw.v1.GraphTriggerStage
+	36, // 43: pantherclaw.v1.GraphEdge.observe_time:type_name -> google.protobuf.Timestamp
+	36, // 44: pantherclaw.v1.GraphFilter.start_time:type_name -> google.protobuf.Timestamp
+	36, // 45: pantherclaw.v1.GraphFilter.end_time:type_name -> google.protobuf.Timestamp
+	3,  // 46: pantherclaw.v1.GetGraphRequest.mode:type_name -> pantherclaw.v1.GraphMode
+	29, // 47: pantherclaw.v1.GetGraphRequest.scope:type_name -> pantherclaw.v1.GraphScope
+	30, // 48: pantherclaw.v1.GetGraphRequest.filter:type_name -> pantherclaw.v1.GraphFilter
+	3,  // 49: pantherclaw.v1.GetGraphResponse.mode:type_name -> pantherclaw.v1.GraphMode
+	27, // 50: pantherclaw.v1.GetGraphResponse.nodes:type_name -> pantherclaw.v1.GraphNode
+	28, // 51: pantherclaw.v1.GetGraphResponse.edges:type_name -> pantherclaw.v1.GraphEdge
+	35, // 52: pantherclaw.v1.GetGraphResponse.current:type_name -> pantherclaw.v1.GetGraphResponse.CurrentEntry
+	36, // 53: pantherclaw.v1.GetGraphResponse.as_of:type_name -> google.protobuf.Timestamp
+	8,  // 54: pantherclaw.v1.GetGraphResponse.snapshot:type_name -> pantherclaw.v1.ExposureSnapshot
+	3,  // 55: pantherclaw.v1.ListGraphEdgesRequest.mode:type_name -> pantherclaw.v1.GraphMode
+	29, // 56: pantherclaw.v1.ListGraphEdgesRequest.scope:type_name -> pantherclaw.v1.GraphScope
+	30, // 57: pantherclaw.v1.ListGraphEdgesRequest.filter:type_name -> pantherclaw.v1.GraphFilter
+	28, // 58: pantherclaw.v1.ListGraphEdgesResponse.edges:type_name -> pantherclaw.v1.GraphEdge
+	10, // 59: pantherclaw.v1.ExposureService.GetExposure:input_type -> pantherclaw.v1.GetExposureRequest
+	13, // 60: pantherclaw.v1.ExposureService.GetReachMatrix:input_type -> pantherclaw.v1.GetReachMatrixRequest
+	17, // 61: pantherclaw.v1.ExposureService.RankExposure:input_type -> pantherclaw.v1.RankExposureRequest
+	21, // 62: pantherclaw.v1.ExposureService.ListCredentialDependents:input_type -> pantherclaw.v1.ListCredentialDependentsRequest
+	24, // 63: pantherclaw.v1.ExposureService.PreviewReduction:input_type -> pantherclaw.v1.PreviewReductionRequest
+	31, // 64: pantherclaw.v1.GraphService.GetGraph:input_type -> pantherclaw.v1.GetGraphRequest
+	33, // 65: pantherclaw.v1.GraphService.ListGraphEdges:input_type -> pantherclaw.v1.ListGraphEdgesRequest
+	11, // 66: pantherclaw.v1.ExposureService.GetExposure:output_type -> pantherclaw.v1.GetExposureResponse
+	14, // 67: pantherclaw.v1.ExposureService.GetReachMatrix:output_type -> pantherclaw.v1.GetReachMatrixResponse
+	19, // 68: pantherclaw.v1.ExposureService.RankExposure:output_type -> pantherclaw.v1.RankExposureResponse
+	22, // 69: pantherclaw.v1.ExposureService.ListCredentialDependents:output_type -> pantherclaw.v1.ListCredentialDependentsResponse
+	26, // 70: pantherclaw.v1.ExposureService.PreviewReduction:output_type -> pantherclaw.v1.PreviewReductionResponse
+	32, // 71: pantherclaw.v1.GraphService.GetGraph:output_type -> pantherclaw.v1.GetGraphResponse
+	34, // 72: pantherclaw.v1.GraphService.ListGraphEdges:output_type -> pantherclaw.v1.ListGraphEdgesResponse
+	66, // [66:73] is the sub-list for method output_type
+	59, // [59:66] is the sub-list for method input_type
+	59, // [59:59] is the sub-list for extension type_name
+	59, // [59:59] is the sub-list for extension extendee
+	0,  // [0:59] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_exposure_proto_init() }
@@ -2971,7 +3287,7 @@ func file_pantherclaw_v1_exposure_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_exposure_proto_rawDesc), len(file_pantherclaw_v1_exposure_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      8,
 			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   2,

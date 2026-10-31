@@ -903,6 +903,9 @@ message CoverageGraphNode {
   string control = 6;
   // For a closed route: the closure that closed it.
   string closure_id = 7;
+  // For a scope or route: the effect it can produce. Routes with the same
+  // group reach the same effect (F277).
+  string effect_group = 8;
 }
 
 // CoverageGraphEdge joins two nodes: agent to scope, scope to route, route
@@ -912,6 +915,13 @@ message CoverageGraphEdge {
   string from = 1;
   // To node id.
   string to = 2;
+  // Why the scope's coverage record reads as it does (F278): the cause of
+  // its latest computation. Empty when none is recorded.
+  string reason = 3;
+  // When the scope's record was last computed.
+  google.protobuf.Timestamp last_checked_at = 4;
+  // When that record stops holding; unset when it does not lapse.
+  google.protobuf.Timestamp expires_at = 5;
 }
 
 // GetCoverageGraphResponse is the graph.

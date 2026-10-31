@@ -680,8 +680,10 @@ type MetricPoint struct {
 	// Set when COLLECTED.
 	Value float64 `protobuf:"fixed64,3,opt,name=value,proto3" json:"value,omitempty"`
 	// The search behind the point (drill-down); one of query and builtin.
-	DrillQuery    *Query        `protobuf:"bytes,4,opt,name=drill_query,json=drillQuery,proto3" json:"drill_query,omitempty"`
-	DrillBuiltin  *BuiltinQuery `protobuf:"bytes,5,opt,name=drill_builtin,json=drillBuiltin,proto3" json:"drill_builtin,omitempty"`
+	DrillQuery   *Query        `protobuf:"bytes,4,opt,name=drill_query,json=drillQuery,proto3" json:"drill_query,omitempty"`
+	DrillBuiltin *BuiltinQuery `protobuf:"bytes,5,opt,name=drill_builtin,json=drillBuiltin,proto3" json:"drill_builtin,omitempty"`
+	// No search opens this point's records (F302).
+	NoDrill       bool `protobuf:"varint,6,opt,name=no_drill,json=noDrill,proto3" json:"no_drill,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -751,11 +753,19 @@ func (x *MetricPoint) GetDrillBuiltin() *BuiltinQuery {
 	return nil
 }
 
+func (x *MetricPoint) GetNoDrill() bool {
+	if x != nil {
+		return x.NoDrill
+	}
+	return false
+}
+
 // MetricSeries is one metric and dimension over the range.
 type MetricSeries struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Metric string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
-	// A breakdown key (a resource group), empty for the whole organization.
+	// A breakdown key (a resource group, or for bypass.routes_by_owner the
+	// owner's user id or "unowned"), empty for the whole organization.
 	Dimension     string         `protobuf:"bytes,2,opt,name=dimension,proto3" json:"dimension,omitempty"`
 	Points        []*MetricPoint `protobuf:"bytes,3,rep,name=points,proto3" json:"points,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1006,7 +1016,7 @@ const file_pantherclaw_v1_operations_proto_rawDesc = "" +
 	"\x19GetEvidenceStatusResponse\x128\n" +
 	"\n" +
 	"as_of_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\basOfTime\x126\n" +
-	"\asources\x18\x02 \x03(\v2\x1c.pantherclaw.v1.SourceStatusR\asources\"\xf1\x01\n" +
+	"\asources\x18\x02 \x03(\v2\x1c.pantherclaw.v1.SourceStatusR\asources\"\x8c\x02\n" +
 	"\vMetricPoint\x12;\n" +
 	"\vbucket_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"bucketTime\x12\x14\n" +
@@ -1014,7 +1024,8 @@ const file_pantherclaw_v1_operations_proto_rawDesc = "" +
 	"\x05value\x18\x03 \x01(\x01R\x05value\x126\n" +
 	"\vdrill_query\x18\x04 \x01(\v2\x15.pantherclaw.v1.QueryR\n" +
 	"drillQuery\x12A\n" +
-	"\rdrill_builtin\x18\x05 \x01(\v2\x1c.pantherclaw.v1.BuiltinQueryR\fdrillBuiltin\"y\n" +
+	"\rdrill_builtin\x18\x05 \x01(\v2\x1c.pantherclaw.v1.BuiltinQueryR\fdrillBuiltin\x12\x19\n" +
+	"\bno_drill\x18\x06 \x01(\bR\anoDrill\"y\n" +
 	"\fMetricSeries\x12\x16\n" +
 	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x1c\n" +
 	"\tdimension\x18\x02 \x01(\tR\tdimension\x123\n" +
