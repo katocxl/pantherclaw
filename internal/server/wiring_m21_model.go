@@ -23,11 +23,16 @@ import (
 	"github.com/katocxl/pantherclaw/internal/search"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
+	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
+	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
+	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
+	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
+	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
 )
 
 // newModel builds model drafting's service (G0 M21 D304, D309). Without the
@@ -51,7 +56,8 @@ func newModel(d apiDeps) *modelapp.Service {
 // told of (D316, D321).
 func builtinPackages() ([]*defsdomain.Package, error) {
 	raws := [][]byte{
-		mockpayments.Package, pca2a.Package, pcgithub.Package, pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package,
+		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
+		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package,
 	}
 	pkgs := make([]*defsdomain.Package, 0, len(raws))
 	for _, raw := range raws {

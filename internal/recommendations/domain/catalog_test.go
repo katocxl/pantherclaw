@@ -152,7 +152,7 @@ func TestCatalogTargets(t *testing.T) {
 func TestCatalogPackagesExist(t *testing.T) {
 	for dir, name := range map[string]string{
 		"pc-gitlab": domain.PackageGitLab, "pc-jira": domain.PackageJira,
-		"pc-teams": domain.PackageTeams, "pc-aws": domain.PackageAWS,
+		"pc-teams": domain.PackageTeams, "pc-aws": domain.PackageAWS, "pc-aws-ecs": domain.PackageAWSECS,
 	} {
 		raw, err := os.ReadFile(filepath.Join("..", "..", "..", "packages", dir, "package.yaml"))
 		if err != nil {
@@ -234,6 +234,11 @@ func TestCatalogSignals(t *testing.T) {
 			domain.AWSKeys,
 			domain.Facts{Secrets: map[string]domain.Group{"aws_access_key_id": group(1)}},
 			func(f *domain.Facts) { f.Integrations.Packages = []string{domain.PackageAWS} }, domain.RecordDiscovery,
+		},
+		{
+			domain.AWSKeys,
+			domain.Facts{Secrets: map[string]domain.Group{"aws_access_key_id": group(1)}},
+			func(f *domain.Facts) { f.Integrations.Packages = []string{domain.PackageAWSECS} }, domain.RecordDiscovery,
 		},
 		{
 			domain.DataClasses,

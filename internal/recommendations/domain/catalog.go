@@ -176,6 +176,8 @@ const (
 	PackageJira   = "pc.jira"
 	PackageTeams  = "pc.teams"
 	PackageAWS    = "pc.aws"
+	// PackageAWSECS is an AWS connection too (D284: one host per connection).
+	PackageAWSECS = "pc.aws.ecs"
 )
 
 // Procedures that list evidence.
@@ -311,7 +313,7 @@ func Catalog() []Entry {
 			},
 			signal: func(f Facts) (Group, string, bool) {
 				g := secrets(f, awsSecrets)
-				return g, RecordDiscovery, g.Count > 0 && !slices.Contains(f.Integrations.Packages, PackageAWS)
+				return g, RecordDiscovery, g.Count > 0 && !anyOf(f.Integrations.Packages, PackageAWS, PackageAWSECS)
 			},
 		},
 		{
