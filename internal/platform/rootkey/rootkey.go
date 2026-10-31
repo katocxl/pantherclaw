@@ -49,15 +49,22 @@ const (
 	// by `pantherclaw-server dev seed`. It is not a root either: only a
 	// server whose listeners are all on loopback trusts it.
 	PurposeDevPackages Purpose = "packages-dev"
+	// PurposeHub is the offline root that signs the PantherClaw Hub index
+	// (G0 M23 D101, HR-560). It is separate from the package root: a Hub
+	// document never verifies as a package document, or the reverse.
+	PurposeHub Purpose = "hub"
+	// PurposeDevHub is the development Hub key. It is not a root: only a
+	// server or a source on loopback trusts it (D101).
+	PurposeDevHub Purpose = "hub-dev"
 )
 
 // Valid reports whether p is a known purpose.
 func (p Purpose) Valid() bool {
-	return slices.Contains([]Purpose{PurposeLicence, PurposePackages, PurposeOrgPackages, PurposeDevPackages}, p)
+	return slices.Contains([]Purpose{PurposeLicence, PurposePackages, PurposeOrgPackages, PurposeDevPackages, PurposeHub, PurposeDevHub}, p)
 }
 
 // Root reports whether p is one of PantherClaw's offline roots.
-func (p Purpose) Root() bool { return p == PurposeLicence || p == PurposePackages }
+func (p Purpose) Root() bool { return p == PurposeLicence || p == PurposePackages || p == PurposeHub }
 
 const (
 	plainType     = "PANTHERCLAW ROOT PRIVATE KEY"
@@ -72,10 +79,11 @@ var ErrKeyFile = errors.New("rootkey: invalid key file")
 
 // KID derives the kid of a root public key: "<purpose>-root-<thumbprint>",
 // or "org-packages-<thumbprint>" for an org package-signing key (equal to
-// trust.OrgKID) and "packages-dev-<thumbprint>" for the development
-// package key (equal to trust.DevKID).
+// trust.OrgKID), "packages-dev-<thumbprint>" for the development package
+// key (equal to trust.DevKID) and "hub-dev-<thumbprint>" for the development
+// Hub key.
 func KID(p Purpose, pub ed25519.PublicKey) string {
-	if p == PurposeOrgPackages || p == PurposeDevPackages {
+	if p == PurposeOrgPackages || p == PurposeDevPackages || p == PurposeDevHub {
 		return string(p) + "-" + jws.Thumbprint(pub)[:22]
 	}
 	return string(p) + "-root-" + jws.Thumbprint(pub)[:22]
