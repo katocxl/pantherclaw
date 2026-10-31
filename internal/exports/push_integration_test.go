@@ -18,12 +18,15 @@ import (
 	"testing"
 	"time"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -1003,5 +1006,39 @@ func TestF517_AStoredExportPushesPartByPart(t *testing.T) {
 	}
 	if got := f.receipt(t, waiting.ID); got.State != ReceiptFailed || got.FailureCode != "no_export_started" {
 		t.Fatalf("waiting = %+v", got)
+	}
+}
+
+// orgEdition is a hosted server's billing: an org on Business, and a
+// Community licence for a context that names no org.
+type orgEdition struct{ org ids.OrgID }
+
+func (e orgEdition) Current(ctx context.Context) (billing.Entitlements, error) {
+	x := billing.CommunityEntitlements()
+	if c, err := tenancy.CallerFrom(ctx); err == nil && c.Org == e.org {
+		x.Edition = billing.Business
+	} else if org, ok := tenantctx.Org(ctx); ok && org == e.org {
+		x.Edition = billing.Business
+	}
+	return x, nil
+}
+
+// TestHR514_AWorkerReadsTheOrgsEdition: the push's worker has no caller, so
+// it names the org: on a hosted server the licence alone is Community, and
+// a Business org's push must still go out.
+// Covers: F517
+func TestHR514_AWorkerReadsTheOrgsEdition(t *testing.T) {
+	f := newPushFixture(t)
+	f.svc.WithEditions(orgEdition{org: f.org})
+	dest := f.destination(t, "vault", ClassEvidencePacks)
+	r, err := f.svc.Push(f.admin, PushRequest{Destination: dest, Class: ClassEvidencePacks, Artifact: f.pack(t, packBody, false)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Run(context.Background(), f.org, r.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.receipt(t, r.ID); got.State != ReceiptDelivered {
+		t.Fatalf("receipt %+v", got)
 	}
 }

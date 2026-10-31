@@ -36,6 +36,7 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	"github.com/katocxl/pantherclaw/internal/platform/sigv4"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -603,7 +604,8 @@ func (s *Service) gate(ctx context.Context, p *push) (tenancy.Caller, error) {
 	if err := CheckTarget(p.target, s.ownHost, s.cfg.AllowedPrivateRanges); err != nil {
 		return tenancy.Caller{}, final("target_refused")
 	}
-	if err := s.business(ctx); err != nil {
+	// A worker has no caller: the org names the edition on a hosted server.
+	if err := s.business(tenantctx.WithOrg(ctx, p.org)); err != nil {
 		return tenancy.Caller{}, final("edition_lapsed")
 	}
 	var c tenancy.Caller

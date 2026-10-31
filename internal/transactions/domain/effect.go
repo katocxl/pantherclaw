@@ -141,6 +141,7 @@ func Downstream(cs []Consequence, capped bool) DownstreamState {
 		return DownstreamPending
 	}
 }
+
 // Rotation reports whether p is a rotation lease's purpose.
 func (p Purpose) Rotation() bool { return p == PurposeRotationTest || p == PurposeRotationConfirm }
 

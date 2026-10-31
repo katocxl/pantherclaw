@@ -34,6 +34,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -428,7 +429,8 @@ func (s *Service) Inbound(ctx context.Context, org ids.OrgID, config ids.UUID, d
 	if len(body) > domain.MaxWebhookBytes || !domain.ValidDeliveryID(delivery) {
 		return "", ErrWebhook
 	}
-	if err := s.business(ctx); err != nil {
+	// A webhook has no caller: the org names the edition on a hosted server.
+	if err := s.business(tenantctx.WithOrg(ctx, org)); err != nil {
 		return "", err
 	}
 	outcome := ""
