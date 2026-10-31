@@ -194,14 +194,16 @@ type PostureFix struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,
 	// ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,
-	// REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL or
-	// REVIEW_SERVER.
+	// REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL,
+	// REVIEW_SERVER or NONE. NONE: this edition has nowhere to act on it.
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
-	// target_id is the record the fix acts on, as "<type>:<id>".
-	TargetId      string `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	Label         string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// target_id is the record the fix acts on, as "<type>:<id>"; empty for NONE.
+	TargetId string `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Label    string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	// requires_business: the only place to act needs the Business edition.
+	RequiresBusiness bool `protobuf:"varint,4,opt,name=requires_business,json=requiresBusiness,proto3" json:"requires_business,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PostureFix) Reset() {
@@ -253,6 +255,13 @@ func (x *PostureFix) GetLabel() string {
 		return x.Label
 	}
 	return ""
+}
+
+func (x *PostureFix) GetRequiresBusiness() bool {
+	if x != nil {
+		return x.RequiresBusiness
+	}
+	return false
 }
 
 // RankedFinding is one finding in the queue.
@@ -683,8 +692,8 @@ type PostureTrendCount struct {
 	// team_id is empty for findings with no team.
 	TeamId    string `protobuf:"bytes,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	OpenCount int32  `protobuf:"varint,4,opt,name=open_count,json=openCount,proto3" json:"open_count,omitempty"`
-	// closed_count is absent when the day before was not collected, so what
-	// closed cannot be known.
+	// closed_count is absent when what closed cannot be known: the day before
+	// was not collected, or a source truncated that day or the day before.
 	ClosedCount   *int32 `protobuf:"varint,5,opt,name=closed_count,json=closedCount,proto3,oneof" json:"closed_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -955,12 +964,13 @@ var File_pantherclaw_v1_posture_queue_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_posture_queue_proto_rawDesc = "" +
 	"\n" +
-	"\"pantherclaw/v1/posture_queue.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"S\n" +
+	"\"pantherclaw/v1/posture_queue.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x80\x01\n" +
 	"\n" +
 	"PostureFix\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1b\n" +
 	"\ttarget_id\x18\x02 \x01(\tR\btargetId\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05label\"\x9f\x04\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12+\n" +
+	"\x11requires_business\x18\x04 \x01(\bR\x10requiresBusiness\"\x9f\x04\n" +
 	"\rRankedFinding\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x1b\n" +
 	"\tsource_id\x18\x02 \x01(\tR\bsourceId\x12\x12\n" +

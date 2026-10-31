@@ -72,7 +72,7 @@ func finding(f domain.RankedFinding) *pb.RankedFinding {
 		Source: string(f.Source), SourceId: f.SourceID, Kind: f.Kind, RootCause: f.RootCause, AgentId: idOf(f.AgentID),
 		AgentLabel: f.AgentLabel, ConnectionId: idOf(f.ConnectionID), TeamId: idOf(f.TeamID), Title: f.Title,
 		Severity: string(f.Severity), SeverityBasis: bases[f.SeverityBasis], State: f.State,
-		Fix:   &pb.PostureFix{Kind: string(f.Fix.Kind), TargetId: f.Fix.TargetID, Label: f.Fix.Label},
+		Fix:   &pb.PostureFix{Kind: string(f.Fix.Kind), TargetId: f.Fix.TargetID, Label: f.Fix.Label, RequiresBusiness: f.Fix.RequiresBusiness},
 		Owasp: f.OWASP, RankReasons: f.RankReasons,
 	}
 	if !f.Since.IsZero() {

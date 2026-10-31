@@ -16,6 +16,7 @@ const (
 	ReasonReachesProduction = "reaches_production"
 	ReasonUnowned           = "unowned"
 	ReasonAgePrefix         = "age_days:"
+	ReasonAgeUnknown        = "age_unknown"
 )
 
 func boolRank(b bool) int {
@@ -23,6 +24,12 @@ func boolRank(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// byAge orders the oldest first, and a finding of unknown age after every
+// known age (D256).
+func byAge(a, b time.Time) int {
+	return cmp.Or(cmp.Compare(boolRank(a.IsZero()), boolRank(b.IsZero())), a.Compare(b))
 }
 
 // compare orders the more urgent first (D203): severity, reaching
@@ -33,7 +40,7 @@ func compare(a, b Finding) int {
 		-cmp.Compare(a.Severity.Rank(), b.Severity.Rank()),
 		-cmp.Compare(boolRank(a.ReachesProduction), boolRank(b.ReachesProduction)),
 		-cmp.Compare(boolRank(a.Unowned), boolRank(b.Unowned)),
-		a.Since.Compare(b.Since),
+		byAge(a.Since, b.Since),
 		cmp.Compare(a.Key(), b.Key()),
 	)
 }
@@ -58,7 +65,10 @@ func reasons(f Finding, now time.Time) []string {
 	if f.Unowned {
 		out = append(out, ReasonUnowned)
 	}
-	if !f.Since.IsZero() && now.After(f.Since) {
+	switch {
+	case f.Since.IsZero():
+		out = append(out, ReasonAgeUnknown)
+	case now.After(f.Since):
 		out = append(out, ReasonAgePrefix+strconv.Itoa(int(now.Sub(f.Since).Hours()/24)))
 	}
 	return out

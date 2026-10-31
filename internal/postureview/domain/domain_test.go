@@ -140,6 +140,45 @@ func TestEveryPostureKindHasItsOwnFix(t *testing.T) {
 
 // TestFilterMatches covers every field, an agentless finding included.
 // Covers: F860
+// TestD256_UnknownAgeSortsLastAndSaysSo: within equal keys a finding with no
+// known age follows every known age, and its reasons state that.
+// Covers: F862
+func TestD256_UnknownAgeSortsLastAndSaysSo(t *testing.T) {
+	got := domain.Rank([]domain.Finding{
+		{SourceID: "a-unknown", Severity: domain.SeverityHigh},
+		{SourceID: "young", Severity: domain.SeverityHigh, Since: now.Add(-time.Hour)},
+		{SourceID: "old", Severity: domain.SeverityHigh, Since: now.Add(-72 * time.Hour)},
+		{SourceID: "low", Severity: domain.SeverityLow, Since: now.Add(-72 * time.Hour)},
+	}, now)
+	if want := []string{"old", "young", "a-unknown", "low"}; !slices.Equal(keys(got), want) {
+		t.Fatalf("order %v, want %v", keys(got), want)
+	}
+	if r := got[2].RankReasons; !slices.Equal(r, []string{"severity:HIGH", domain.ReasonAgeUnknown}) {
+		t.Errorf("reasons: %v", r)
+	}
+}
+
+// TestD258_FixWithoutRemediation: a fix pointing at a source page stays, and
+// one that could only reach a page that refuses has no target and says why.
+// Covers: F861
+func TestD258_FixWithoutRemediation(t *testing.T) {
+	for _, k := range pdomain.Kinds {
+		f := domain.PostureFix(string(k), "grant:x", "id")
+		if got := f.WithoutRemediation(); got != f {
+			t.Errorf("%s changed: %+v", k, got)
+		}
+	}
+	for _, f := range []domain.Fix{
+		domain.PostureFix("new_kind", "", "id"),
+		{Kind: domain.FixReviewSuggested, TargetID: "suggestion:s", Label: "L"},
+	} {
+		got := f.WithoutRemediation()
+		if got.Kind != domain.FixNone || !got.RequiresBusiness || got.TargetID != "" || got.Label == "" {
+			t.Errorf("%+v: %+v", f, got)
+		}
+	}
+}
+
 func TestFilterMatches(t *testing.T) {
 	a, b := ids.NewV7(), ids.NewV7()
 	f := domain.Finding{

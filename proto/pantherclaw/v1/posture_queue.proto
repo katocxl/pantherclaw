@@ -8,7 +8,7 @@ package pantherclaw.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 
-// PostureQueueService is the ranked posture queue (G0 M24 D200-D207; F797;
+// PostureQueueService is the ranked posture queue (G0 M24 D200-D207; F860;
 // HR-580, HR-581; Team edition, trends Business).
 //
 // It joins findings from every source into one list, each with a fix. There
@@ -48,12 +48,14 @@ enum PostureSeverityBasis {
 message PostureFix {
   // kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,
   // ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,
-  // REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL or
-  // REVIEW_SERVER.
+  // REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL,
+  // REVIEW_SERVER or NONE. NONE: this edition has nowhere to act on it.
   string kind = 1;
-  // target_id is the record the fix acts on, as "<type>:<id>".
+  // target_id is the record the fix acts on, as "<type>:<id>"; empty for NONE.
   string target_id = 2;
   string label = 3;
+  // requires_business: the only place to act needs the Business edition.
+  bool requires_business = 4;
 }
 
 // RankedFinding is one finding in the queue.
@@ -163,8 +165,8 @@ message PostureTrendCount {
   // team_id is empty for findings with no team.
   string team_id = 3;
   int32 open_count = 4;
-  // closed_count is absent when the day before was not collected, so what
-  // closed cannot be known.
+  // closed_count is absent when what closed cannot be known: the day before
+  // was not collected, or a source truncated that day or the day before.
   optional int32 closed_count = 5;
 }
 

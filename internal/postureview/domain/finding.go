@@ -3,7 +3,7 @@
 
 // Package domain holds the ranked posture queue (G0 M24 D200-D205; HR-580):
 // findings from every source joined into one list, each with a fix. The
-// queue has no number of any kind for a finding's risk (D203, F797): it is
+// queue has no number of any kind for a finding's risk (D203): it is
 // ordered by a tuple of plain facts and says which of them applied. A finding
 // belongs to its source: it clears when its source clears, and dismissing it
 // goes to the source (D207). Everything here is pure.
@@ -78,14 +78,18 @@ const (
 	FixConnect         FixKind = "CONNECT_INTEGRATION"
 	FixReviewTool      FixKind = "REVIEW_TOOL"
 	FixReviewServer    FixKind = "REVIEW_SERVER"
+	// FixNone: the edition has nowhere to act on it (D258).
+	FixNone FixKind = "NONE"
 )
 
 // Fix says what would close a finding: every finding has one (D202).
 // TargetID names the record the fix acts on, in "<type>:<id>" form.
+// RequiresBusiness says the only place to act needs the Business edition.
 type Fix struct {
-	Kind     FixKind
-	TargetID string
-	Label    string
+	Kind             FixKind
+	TargetID         string
+	Label            string
+	RequiresBusiness bool
 }
 
 // Finding is one finding as a source reports it. A source fills what it

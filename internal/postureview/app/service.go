@@ -285,6 +285,10 @@ func (s *Service) List(ctx context.Context, f domain.Filter, size int32, token s
 	if err := s.entitled(ctx, billing.Entitlements.PostureFindings, ErrEdition); err != nil {
 		return Listing{}, err
 	}
+	e, err := s.Ents.Current(ctx)
+	if err != nil {
+		return Listing{}, err
+	}
 	offset, err := parseOffset(token)
 	if err != nil {
 		return Listing{}, err
@@ -298,6 +302,11 @@ func (s *Service) List(ctx context.Context, f domain.Filter, size int32, token s
 		return Listing{}, err
 	}
 	ranked := domain.Rank(fs, now)
+	if !e.PostureRemediation() {
+		for i := range ranked {
+			ranked[i].Fix = ranked[i].Fix.WithoutRemediation()
+		}
+	}
 	out := Listing{Restricted: !v.Posture.Org, Sources: statuses, Total: len(ranked), AsOf: now}
 	if size <= 0 {
 		size = defaultPageSize

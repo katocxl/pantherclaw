@@ -74,6 +74,10 @@ func TestFindingMapsEveryField(t *testing.T) {
 	if got.GetAgentId() != "" || got.GetSince() != nil || len(got.GetOwasp()) == 0 {
 		t.Errorf("%+v", got)
 	}
+	f.Fix = domain.Fix{Kind: domain.FixNone, Label: "L", RequiresBusiness: true}
+	if fix := finding(f).GetFix(); fix.GetKind() != "NONE" || !fix.GetRequiresBusiness() || fix.GetTargetId() != "" {
+		t.Errorf("%+v", fix)
+	}
 }
 
 // TestParseID: empty is no filter; anything else must be a UUID.

@@ -47,13 +47,19 @@ func (r Reader) read(ctx context.Context, org ids.OrgID, fn func(context.Context
 	}, db.ReadOnly())
 }
 
-// both is what posture.read and p reach together.
+// both is what posture.read and p reach together. Holding p only where
+// posture.read reaches nothing is below the source's scope: RESTRICTED, not
+// an empty answer (D255).
 func both(ctx context.Context, v ports.Viewer, p td.Permission) (ports.Reach, error) {
 	o, err := v.Under(ctx, p)
 	if err != nil {
 		return ports.Reach{}, err
 	}
-	return v.Posture.Intersect(o), nil
+	r := v.Posture.Intersect(o)
+	if r.Empty() && !v.Posture.Empty() {
+		return ports.Reach{}, td.ErrPermissionDenied(p)
+	}
+	return r, nil
 }
 
 func agentIDs(r ports.Reach) []ids.UUID {
@@ -264,7 +270,7 @@ func (Recommendations) Name() domain.Source { return domain.SourceRecommendation
 // Findings implements ports.Source.
 func (s Recommendations) Findings(ctx context.Context, v ports.Viewer, _ domain.Filter) ([]domain.Finding, bool, error) {
 	if !v.Posture.Org {
-		return nil, false, nil
+		return nil, false, td.ErrPermissionDenied(td.PermPostureRead) // RESTRICTED, never empty (D255)
 	}
 	var items []recapp.Item
 	err := s.read(ctx, v.Org, func(ctx context.Context, q *dbq.Queries) error {

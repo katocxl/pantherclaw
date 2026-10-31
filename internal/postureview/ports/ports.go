@@ -30,6 +30,9 @@ func (r Reach) Has(agent *ids.UUID) bool {
 	return r.All || slices.Contains(r.Agents, *agent)
 }
 
+// Empty reports whether the reach covers nothing at all.
+func (r Reach) Empty() bool { return !r.All && !r.Org && len(r.Agents) == 0 }
+
 // Intersect is what both reaches cover.
 func (r Reach) Intersect(o Reach) Reach {
 	out := Reach{All: r.All && o.All, Org: r.Org && o.Org}

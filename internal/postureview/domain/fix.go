@@ -3,6 +3,25 @@
 
 package domain
 
+import (
+	"slices"
+	"strings"
+)
+
+// remediationTargets are the records whose pages only an edition with
+// posture remediation serves.
+var remediationTargets = []string{"posture_finding:", "suggestion:"}
+
+// WithoutRemediation is the fix on an edition with no posture remediation
+// (D258): a fix that points at a source page stays, and one that could only
+// lead to a page that refuses says so and carries no target.
+func (f Fix) WithoutRemediation() Fix {
+	if slices.ContainsFunc(remediationTargets, func(p string) bool { return strings.HasPrefix(f.TargetID, p) }) {
+		return Fix{Kind: FixNone, Label: "Fixing this needs the Business edition", RequiresBusiness: true}
+	}
+	return f
+}
+
 // postureFixes are the fixes of the posture kinds. The target is the
 // finding's root cause, the record its fix acts on.
 var postureFixes = map[string]Fix{

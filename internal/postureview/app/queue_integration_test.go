@@ -300,6 +300,51 @@ func TestD204_SourceStatesAreShownNeverSilent(t *testing.T) {
 	}
 }
 
+// TestD255_RecommendationsRestrictedBelowTheOrg: a team viewer is told the
+// source is restricted, and reads nothing from it.
+// Covers: F863
+func TestD255_RecommendationsRestrictedBelowTheOrg(t *testing.T) {
+	w := newWorld(t)
+	team := w.as(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: w.teamA})
+	l, err := w.service(billing.Team).List(team, domain.Filter{}, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stateOf(l, domain.SourceRecommendations); got != app.SourceRestricted {
+		t.Errorf("recommendations for a team viewer: %s", got)
+	}
+}
+
+// TestD258_FixOnTeamNeverRefuses: on Team a fix at a source page stays, and
+// one whose only page is remediation says it needs Business; on Business the
+// same fix is left as it is.
+// Covers: F861
+func TestD258_FixOnTeamNeverRefuses(t *testing.T) {
+	w := newWorld(t)
+	posture := w.finding(t, "excessive_grant", "high", &w.Agent, time.Now()).String()
+	only := domain.Fix{Kind: domain.FixReviewFinding, TargetID: "posture_finding:x", Label: "L"}
+	src := fixed{name: domain.SourceCatalog, out: []domain.Finding{{SourceID: "r", Kind: "k", Fix: only}}}
+
+	l, err := w.service(billing.Team, src).List(w.orgWide(), domain.Filter{}, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, ok := byID(l, "r"); !ok || f.Fix.Kind != domain.FixNone || !f.Fix.RequiresBusiness || f.Fix.TargetID != "" {
+		t.Errorf("remediation only, on Team: %+v", f.Fix)
+	}
+	if f, ok := byID(l, posture); !ok || f.Fix.Kind != domain.FixReviewGrant || f.Fix.RequiresBusiness || f.Fix.TargetID == "" {
+		t.Errorf("a source page, on Team: %+v", f.Fix)
+	}
+
+	l, err = w.service(billing.Business, src).List(w.orgWide(), domain.Filter{}, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, ok := byID(l, "r"); !ok || f.Fix != only {
+		t.Errorf("on Business: %+v", f.Fix)
+	}
+}
+
 // TestD201_Editions: the queue is Team and above, trends Business and above.
 // Covers: F860, F865
 func TestD201_Editions(t *testing.T) {
@@ -496,6 +541,29 @@ func TestHR581_MissingDaysAreNotCollected(t *testing.T) {
 	}
 	if tr, err = svc.Trends(w.orgWide(), 1, "", nil); err != nil || !slices.Equal(tr.Days[0].TruncatedSources, []string{"catalog"}) {
 		t.Errorf("truncated sources: %+v %v", tr, err)
+	}
+
+	// With a source truncated, today or the day before, closed cannot be
+	// known even though yesterday was collected (D257).
+	yesterday := func(truncated []string) {
+		w.resetDays(t)
+		w.D.AdminExec(t, `INSERT INTO pc.posture_daily_runs (org_id, day, truncated_sources) VALUES ($1, $2, $3)`, w.Org.Org, y, truncated)
+		w.D.AdminExec(t, `INSERT INTO pc.posture_daily (org_id, day, kind, severity, team_id, open_count)
+			VALUES ($1, $2, 'excessive_grant', 'HIGH', $3, 3)`, w.Org.Org, y, w.teamA)
+	}
+	yesterday([]string{})
+	if _, err := cut.Run(ctx, w.Org.Org); err != nil {
+		t.Fatal(err)
+	}
+	if c = w.today(t, svc, w.orgWide()); len(c) != 1 || c[0].Open != 1 || c[0].Closed != nil {
+		t.Errorf("a source truncated today: %+v", c)
+	}
+	yesterday([]string{"catalog"})
+	if _, err := roll.Run(ctx, w.Org.Org); err != nil {
+		t.Fatal(err)
+	}
+	if c = w.today(t, svc, w.orgWide()); len(c) != 1 || c[0].Open != 1 || c[0].Closed != nil {
+		t.Errorf("a source truncated yesterday: %+v", c)
 	}
 
 	// A lapsed edition stops quietly and records one failure.

@@ -228,11 +228,11 @@ func (r *Rollup) Run(ctx context.Context, org ids.OrgID) (bool, error) {
 			return err
 		}
 		wrote = true
-		prev, collected, err := previous(ctx, q, org, today.AddDate(0, 0, -1))
+		prev, whole, err := previous(ctx, q, org, today.AddDate(0, 0, -1))
 		if err != nil {
 			return err
 		}
-		for _, c := range domain.Rollup(found, today, prev, collected) {
+		for _, c := range domain.Rollup(found, today, prev, whole && len(truncated) == 0) { // D257
 			row := dbq.InsertPostureDailyParams{
 				OrgID: org, Day: date(today), Kind: c.Kind, Severity: string(c.Severity), OpenCount: int32(c.Open), //nolint:gosec // G115: bounded by the sources' caps
 			}
@@ -253,10 +253,11 @@ func (r *Rollup) Run(ctx context.Context, org ids.OrgID) (bool, error) {
 	return wrote, err
 }
 
-// previous reads a day's counts and whether it was collected.
+// previous reads a day's counts and whether they are whole: it was collected
+// and no source truncated, so a count taken against it means what it says.
 func previous(ctx context.Context, q *dbq.Queries, org ids.OrgID, day time.Time) ([]domain.DayCount, bool, error) {
 	runs, err := q.ListPostureDailyRuns(ctx, org, date(day), date(day))
-	if err != nil || len(runs) == 0 {
+	if err != nil || len(runs) == 0 || len(runs[0].TruncatedSources) > 0 {
 		return nil, false, err
 	}
 	rows, err := q.ListPostureDaily(ctx, org, date(day), date(day))
