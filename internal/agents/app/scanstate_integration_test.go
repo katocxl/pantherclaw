@@ -72,8 +72,8 @@ func TestF832_AnAgentsScanStateSumsItsFindings(t *testing.T) {
 
 	other := ids.NewV7()
 	w.exec(t, w.org, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key)
-		VALUES ($1, $2, $3, 'ci_scan', sha256('other'::bytea))`, w.org, other, found)
-	want("seen by another source", 0, false)
+		VALUES ($1, $2, $3, 'scan', sha256('other'::bytea))`, w.org, other, found)
+	want("seen by another finding", 0, false)
 
 	w.exec(t, w.org, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE org_id = $1 AND id = $2", w.org, other)
 	want("that finding dismissed", 3, true)
