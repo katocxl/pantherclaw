@@ -293,8 +293,8 @@ var roles = []Role{
 	},
 	{
 		Name: RoleScanner, Title: "Scanner", Scopes: anyScope, ServiceOnly: true,
-		Description: "For the service account of a device scan: submits scan findings for its scope and nothing else (HR-589). Beyond the hierarchy every role can read, a key taken from a laptop shows nothing. Bound only to service accounts.",
-		Permissions: with(basicReads, []Permission{PermAgentScanSubmit}),
+		Description: "For the service account of a device scan: submits scan findings for its scope and nothing else (HR-589). Beyond its own org, a key taken from a laptop reads nothing: not business units, teams or environments. Bound only to service accounts.",
+		Permissions: []Permission{PermOrgRead, PermAgentScanSubmit},
 	},
 }
 

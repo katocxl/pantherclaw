@@ -36,17 +36,16 @@ func TestM24_PermissionsAndRoles(t *testing.T) {
 	}
 }
 
-// TestM24_ScannerRole: beyond the hierarchy reads every role holds
-// (TestRoleCatalogIsWellFormed), the Scanner role holds agent.scan.submit
-// alone, and binds only to service accounts.
-func TestM24_ScannerRole(t *testing.T) {
+// TestHR589_ScannerHoldsOnlyScanSubmit: the Scanner role holds org.read,
+// which every role must (TestRoleCatalogIsWellFormed), and agent.scan.submit,
+// exactly: a key taken from a laptop lists no business units, teams or
+// environments (D236a). It binds only to service accounts.
+func TestHR589_ScannerHoldsOnlyScanSubmit(t *testing.T) {
 	r, ok := domain.LookupRole(domain.RoleScanner)
 	if !ok {
 		t.Fatal("no Scanner role")
 	}
-	want := []domain.Permission{
-		domain.PermOrgRead, domain.PermBusinessUnitRead, domain.PermTeamRead, domain.PermEnvironmentRead, domain.PermAgentScanSubmit,
-	}
+	want := []domain.Permission{domain.PermOrgRead, domain.PermAgentScanSubmit}
 	if !slices.Equal(r.Permissions, want) {
 		t.Errorf("Scanner holds %v", r.Permissions)
 	}
