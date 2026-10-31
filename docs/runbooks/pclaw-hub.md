@@ -13,7 +13,7 @@ Hub is a static directory of signed content published by PantherClaw: policy tem
 | `pclaw hub search` | Searches the index |
 | `pclaw hub show` | Shows one item |
 | `pclaw hub install` | Installs an item; the server verifies it again |
-| `pclaw hub update` | Installs newer versions of installed items |
+| `pclaw hub update` | Reports newer versions of installed items; it installs nothing |
 | `pclaw hub status` | Shows the accepted index and whether updates exist |
 
 | Flag | Meaning |
@@ -21,8 +21,11 @@ Hub is a static directory of signed content published by PantherClaw: policy tem
 | `--source URL\|DIR` | Where to read the index: HTTPS only except loopback, no cross-host redirects, or a directory |
 | `--set k=v` | Sets a parameter of the item |
 | `--dry-run` | Shows what would happen and changes nothing |
+| `--scenario-dir` | Where a range scenario is written locally |
 
-Installing needs the permission `hub.install`, which only a person can hold; reading needs `hub.read`. Installing is in every edition, but a detection rule keeps its Business gate.
+Installing needs the permission `hub.install`, which only a person can hold; reading needs `hub.read`. OrgAdmin, SecurityAdmin, PolicyAuthor and AutomationAuthor hold both, and Auditor holds `hub.read`. Each kind's own gate still applies. Installing is in every edition, but a detection rule keeps its Business gate.
+
+An item is at most 384 KiB and a compact index at most 640 KiB, with at most 1,000 items. Anything larger is refused, never cut short.
 
 ## What each kind becomes
 
@@ -31,7 +34,7 @@ Installing needs the permission `hub.install`, which only a person can hold; rea
 | `policy_template` | A DRAFT policy version |
 | `detection_rule` | A draft custom rule (Business) |
 | `automation` | A draft automation |
-| `tool_package` | A package import, the same as importing it yourself |
+| `tool_package` | A package import, the same as importing it yourself: it advances package anti-rollback, and the version stays REVIEWED and decides nothing until activated |
 | `range_scenario` | A local file; the server refuses it with `KIND_LOCAL_ONLY`. Reports label it customer-authored, and it never enters an attested pack |
 
 ## Refusals
@@ -43,6 +46,9 @@ Installing needs the permission `hub.install`, which only a person can hold; rea
 | `HUB_ROLLBACK` | A lower index version, or the same version with another digest |
 | `HUB_DIGEST` | The item does not match the digest in the index |
 | `HUB_NO_ROOT` | No root is configured and the source is not loopback |
+| `HUB_ITEM_INVALID` | The item is not valid |
+| `HUB_ENVIRONMENT` | The environment does not allow this install |
+| `HUB_INSTALL_BUSY` | The same install is already in progress |
 
 Installing the same digest again is idempotent. The server never fetches the index: `pclaw` carries it, and keeps its own rollback state and cache in its config directory.
 

@@ -725,13 +725,13 @@ Hub is a part of Root, not a new component. It publishes PantherClaw's own conte
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| F840 | Hub directory format | A static directory: a signed `index.jws` and `items/<sha256>.json`, no archives. Kinds are closed and hold no code; items are at most 1 MiB, with at most 1,000 in an index. | Next | Community | M23 | new |
+| F840 | Hub directory format | A static directory: a signed `index.jws` and `items/<sha256>.json`, no archives. Kinds are closed and hold no code. An item is at most 384 KiB, a compact index 640 KiB with 1,000 items; oversize is refused. | Next | Community | M23 | new |
 | F841 | Hub trust root | Hub documents verify under their own root and purpose, never as package documents or the reverse. The development key works on loopback only; empty roots elsewhere refuse with `HUB_NO_ROOT`. | Next | Community | M23 | new |
 | F842 | Hub state and install records | Per organization, the last accepted index version and digest, and one record per installed item, its result and who installed it. | Next | Community | M23 | new |
-| F843 | Hub API | `HubService` installs an item and lists installs and state. Reading needs `hub.read`; installing needs `hub.install`, a person only. | Next | Community | M23 | new |
-| F844 | Inert Hub install | The server verifies again, then each item lands as a draft or goes through package import. Nothing is activated, published, enabled or pinned; a detection rule keeps its Business gate. | Next | Community | M23 | new |
+| F843 | Hub API | `HubService` installs an item and lists installs and state. Reading needs `hub.read`; installing needs `hub.install`, a person only, and each kind's own gate still applies. | Next | Community | M23 | new |
+| F844 | Inert Hub install | The server verifies again, then each item lands as a draft or goes through package import. Nothing is activated, published or enabled, no agent's pins change, and a detection rule keeps its Business gate. | Next | Community | M23 | new |
 | F845 | Hub refusals and rollback | Stable refusals for signature, expiry, digest, missing root and rollback. A lower version, or the same version with another digest, is refused; the same digest again is idempotent. | Next | Community | M23 | new |
-| F846 | `pclaw hub` | Search, show, install, update and status from a URL or directory, HTTPS only except loopback, with no cross-host redirects. The CLI keeps rollback state and reports updates; the server never fetches. | Next | Community | M23 | new |
+| F846 | `pclaw hub` | Search, show, install, update and status from a URL or directory, HTTPS only except loopback, with no cross-host redirects. The CLI keeps rollback state; `update` reports and installs nothing; the server never fetches. | Next | Community | M23 | new |
 | F847 | Hub build command | `pclaw-admin hub build` signs a directory into an index and items, with a version and expiry. | Next | Community | M23 | new |
 | F848 | Open Hub content | The `hub/` directory holds items with their tests, Apache-2.0, listed in NOTICE and LICENSE and checked by `tools/licensecheck`. | Next | Community | M23 | new |
 | F849 | Seed Hub content | Six policy templates, eight alert-only detection rules, five range scenarios and three automations; `task hub:check` runs the real validators in `task check`. | Next | Community | M23 | new |
