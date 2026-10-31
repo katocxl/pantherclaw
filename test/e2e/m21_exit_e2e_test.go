@@ -74,8 +74,10 @@ func TestE2E_M21_BranchingRecommendationsMetricsDrafts(t *testing.T) {
 
 // m21Server: each service answers its path and refuses an anonymous caller,
 // where an unmounted one would answer 404. Then a signed-in admin reads each
-// one, which proves its permission, edition and org wiring on a Business
-// plan, and a draft is refused with drafting off.
+// one on a Business plan. That proves permission, edition and org wiring for
+// recommendations and outcomes. ModelService's reads prove routing and
+// permission only: with the server's switch off, entitled returns before it
+// reads the edition. A draft is refused with drafting off.
 func (s *stack) m21Server(t *testing.T, p idp) {
 	for _, path := range []string{
 		"/pantherclaw.v1.RecommendationService/ListRecommendations",
