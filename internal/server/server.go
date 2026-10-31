@@ -948,6 +948,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM11Protect(rs, d, autos)
 	registerM17Rules(rs, d)
 	registerM18IdPs(rs, d)
+	registerM24Catalog(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)

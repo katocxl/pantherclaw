@@ -2589,6 +2589,30 @@ type PcLoginRequest struct {
 	ConsumedAt   *time.Time
 }
 
+type PcMcpCatalogSetting struct {
+	OrgID     ids.OrgID
+	Mode      string
+	UpdatedBy *string
+	UpdatedAt time.Time
+}
+
+type PcMcpServer struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Name          string
+	Title         string
+	Status        string
+	Transport     string
+	PackageRef    *string
+	UrlHost       *string
+	UrlPathPrefix *string
+	ImageDigest   *string
+	Notes         string
+	DecidedBy     *string
+	DecidedAt     *time.Time
+	CreatedAt     time.Time
+}
+
 type PcMembership struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID

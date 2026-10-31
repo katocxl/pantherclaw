@@ -1,0 +1,325 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/identity_providers.proto";
+
+// McpCatalogService is the org's approved MCP server catalogue (G0 M24
+// D220-D226; F872-F879; HR-585, HR-586, HR-587; Team edition).
+//
+// A server names what it matches, and matching is exact: a URL host with an
+// optional path prefix, an image digest or a package reference, never a
+// similar name. The catalogue starts in WATCH, which reports unapproved
+// servers and stops nothing. ENFORCE is opt-in: it refuses to activate a
+// connection to an unapproved server, and switching to it quarantines the
+// connections that match no approved server, after a preview. Leaving ENFORCE
+// always waits for a second person. Being in the catalogue never adds to what
+// an agent may do: the Authority decides as it always did.
+//
+// Revoking a server stops every connection that matches it inside one org.
+// A person does it, against the digest of a current preview, and an
+// independent second person lifts it. A local server that only a scan saw is
+// not stoppable from here: the preview says so and gives a deny-list hint.
+service McpCatalogService {
+  // ProposeServer adds a PROPOSED server.
+  // permission: catalog.manage
+  rpc ProposeServer(ProposeServerRequest) returns (ProposeServerResponse);
+  // ApproveServer moves a PROPOSED or DENIED server to APPROVED.
+  // permission: catalog.manage
+  rpc ApproveServer(ApproveServerRequest) returns (ApproveServerResponse);
+  // DenyServer moves a PROPOSED server to DENIED.
+  // permission: catalog.manage
+  rpc DenyServer(DenyServerRequest) returns (DenyServerResponse);
+  // ListServers lists the catalogue.
+  // permission: catalog.read
+  rpc ListServers(ListServersRequest) returns (ListServersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetServer reads one server.
+  // permission: catalog.read
+  rpc GetServer(GetServerRequest) returns (GetServerResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetCatalogSettings reads the catalogue's mode.
+  // permission: catalog.read
+  rpc GetCatalogSettings(GetCatalogSettingsRequest) returns (GetCatalogSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // PreviewCatalogMode says what switching to a mode would do, and gives the
+  // digest a switch to ENFORCE must be confirmed against.
+  // permission: catalog.read
+  rpc PreviewCatalogMode(PreviewCatalogModeRequest) returns (PreviewCatalogModeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetCatalogMode changes the mode (a person with a fresh security-key
+  // step-up). A switch to ENFORCE needs preview_digest and quarantines the
+  // non-matching connections in one transaction. Leaving ENFORCE files a
+  // protected change and returns it: nothing changes until a second person
+  // confirms it.
+  // permission: catalog.manage
+  rpc SetCatalogMode(SetCatalogModeRequest) returns (SetCatalogModeResponse);
+  // PreviewServerRevoke says what revoking a server would do and gives the
+  // digest a revoke must be confirmed against.
+  // permission: catalog.read
+  rpc PreviewServerRevoke(PreviewServerRevokeRequest) returns (PreviewServerRevokeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RevokeServer moves a server to REVOKED and stops every matching
+  // connection in the org (a person with a fresh security-key step-up,
+  // against the digest of a current preview). An independent second person
+  // lifts it through ResponseService's restoration.
+  // permission: catalog.manage
+  rpc RevokeServer(RevokeServerRequest) returns (RevokeServerResponse);
+}
+
+// McpServerStatus is where a server stands in the catalogue.
+enum McpServerStatus {
+  MCP_SERVER_STATUS_UNSPECIFIED = 0;
+  MCP_SERVER_STATUS_PROPOSED = 1;
+  MCP_SERVER_STATUS_APPROVED = 2;
+  MCP_SERVER_STATUS_DENIED = 3;
+  MCP_SERVER_STATUS_REVOKED = 4;
+}
+
+// McpCatalogMode is what the catalogue does (D220).
+enum McpCatalogMode {
+  MCP_CATALOG_MODE_UNSPECIFIED = 0;
+  // The catalogue reports nothing and stops nothing.
+  MCP_CATALOG_MODE_OFF = 1;
+  // The default: unapproved servers are reported and keep running.
+  MCP_CATALOG_MODE_WATCH = 2;
+  // Connections to unapproved servers are refused and quarantined.
+  MCP_CATALOG_MODE_ENFORCE = 3;
+}
+
+// McpServerTransport is how the server is reached.
+enum McpServerTransport {
+  MCP_SERVER_TRANSPORT_UNSPECIFIED = 0;
+  MCP_SERVER_TRANSPORT_HTTP = 1;
+  MCP_SERVER_TRANSPORT_STDIO = 2;
+  MCP_SERVER_TRANSPORT_CONTAINER = 3;
+}
+
+// McpServer is one catalogue entry.
+message McpServer {
+  string id = 1;
+  string name = 2;
+  string title = 3;
+  McpServerStatus status = 4;
+  McpServerTransport transport = 5;
+  // What it matches, exactly (HR-585). At least one of package_ref, url_host
+  // and image_digest is set.
+  string package_ref = 6;
+  string url_host = 7;
+  string url_path_prefix = 8;
+  string image_digest = 9;
+  // UNTRUSTED: the proposer's text, plain text only.
+  string notes = 10;
+  string decided_by = 11;
+  google.protobuf.Timestamp decide_time = 12;
+  google.protobuf.Timestamp create_time = 13;
+}
+
+// ProposeServerRequest is a new entry.
+message ProposeServerRequest {
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  string title = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  McpServerTransport transport = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string package_ref = 4 [(buf.validate.field).string.max_len = 256];
+  // A host name or IP literal with an optional port: no wildcard.
+  string url_host = 5 [(buf.validate.field).string.max_len = 261];
+  string url_path_prefix = 6 [(buf.validate.field).string.max_len = 512];
+  string image_digest = 7 [(buf.validate.field).string.max_len = 71];
+  string notes = 8 [(buf.validate.field).string.max_len = 2000];
+}
+
+// ProposeServerResponse holds the new entry.
+message ProposeServerResponse {
+  McpServer server = 1;
+}
+
+// ApproveServerRequest names a server.
+message ApproveServerRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ApproveServerResponse holds the entry.
+message ApproveServerResponse {
+  McpServer server = 1;
+}
+
+// DenyServerRequest names a server.
+message DenyServerRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DenyServerResponse holds the entry.
+message DenyServerResponse {
+  McpServer server = 1;
+}
+
+// ListServersRequest pages the catalogue, optionally of some statuses.
+message ListServersRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2;
+  repeated McpServerStatus statuses = 3 [(buf.validate.field).repeated.max_items = 4];
+}
+
+// ListServersResponse is one page.
+message ListServersResponse {
+  repeated McpServer servers = 1;
+  string next_page_token = 2;
+}
+
+// GetServerRequest names a server.
+message GetServerRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetServerResponse holds the entry.
+message GetServerResponse {
+  McpServer server = 1;
+}
+
+// McpCatalogSettings is the catalogue's mode.
+message McpCatalogSettings {
+  McpCatalogMode mode = 1;
+  // Empty until the mode was first changed.
+  string updated_by = 2;
+  google.protobuf.Timestamp update_time = 3;
+}
+
+// GetCatalogSettingsRequest is empty.
+message GetCatalogSettingsRequest {}
+
+// GetCatalogSettingsResponse holds the settings.
+message GetCatalogSettingsResponse {
+  McpCatalogSettings settings = 1;
+}
+
+// McpConnectionRef is a connection a catalogue change would touch.
+message McpConnectionRef {
+  string id = 1;
+  string name = 2;
+  string kind = 3;
+  string state = 4;
+  string gateway_id = 5;
+}
+
+// McpLocalServerRef is a local server only a scan saw, as a discovery. It runs
+// on someone's machine outside any connection, so nothing here can stop it.
+message McpLocalServerRef {
+  string discovery_id = 1;
+  // UNTRUSTED: what the scan reported, plain text only.
+  string name = 2;
+  // Always "not_stoppable_here".
+  string state = 3;
+  // What to add to a managed deny list instead (D113).
+  string deny_list_hint = 4;
+}
+
+// PreviewCatalogModeRequest names the mode to switch to.
+message PreviewCatalogModeRequest {
+  McpCatalogMode mode = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+// PreviewCatalogModeResponse is what the switch would do.
+message PreviewCatalogModeResponse {
+  McpCatalogMode from_mode = 1;
+  McpCatalogMode to_mode = 2;
+  // The active connections a switch to ENFORCE quarantines.
+  repeated McpConnectionRef quarantines = 3;
+  // Whether leaving ENFORCE waits for a second person.
+  bool needs_second_person = 4;
+  // The SHA-256 a switch to ENFORCE is confirmed against.
+  bytes preview_digest = 5;
+}
+
+// SetCatalogModeRequest changes the mode.
+message SetCatalogModeRequest {
+  McpCatalogMode mode = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Required for ENFORCE.
+  bytes preview_digest = 2 [(buf.validate.field).bytes.max_len = 32];
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// SetCatalogModeResponse is what happened.
+message SetCatalogModeResponse {
+  McpCatalogSettings settings = 1;
+  // The connections the switch quarantined.
+  repeated string quarantined_connection_ids = 2;
+  // Set when the change waits for a second person: settings are unchanged.
+  ProtectedChangeFiled change = 3;
+}
+
+// McpPackageVersionRef is a package version tied to a server.
+message McpPackageVersionRef {
+  string package = 1;
+  string version = 2;
+  string state = 3;
+}
+
+// PreviewServerRevokeRequest names a server.
+message PreviewServerRevokeRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// PreviewServerRevokeResponse is what a revoke would do.
+message PreviewServerRevokeResponse {
+  McpServer server = 1;
+  // The connections it stops.
+  repeated McpConnectionRef connections = 2;
+  // The package versions it quarantines.
+  repeated McpPackageVersionRef package_versions = 3;
+  // Local servers a scan saw: stated, and not stopped.
+  repeated McpLocalServerRef not_stoppable_here = 4;
+  // The SHA-256 RevokeServer is confirmed against (HR-252).
+  bytes preview_digest = 5;
+}
+
+// RevokeServerRequest confirms a preview.
+message RevokeServerRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  bytes preview_digest = 2 [(buf.validate.field).bytes.len = 32];
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+}
+
+// RevokeServerResponse is what happened.
+message RevokeServerResponse {
+  McpServer server = 1;
+  // The response action; its paths say how far the revoke reached.
+  string response_action_id = 2;
+  // The containment controls, one per connection, a restoration lifts.
+  repeated string control_ids = 3;
+  repeated McpPackageVersionRef quarantined_versions = 4;
+  repeated McpLocalServerRef not_stoppable_here = 5;
+}
