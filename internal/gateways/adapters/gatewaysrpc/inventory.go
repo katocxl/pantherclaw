@@ -45,7 +45,8 @@ func (h *GatewayHandler) ReportInventory(ctx context.Context, req *pb.ReportInve
 	for _, t := range req.GetTools() {
 		r.Entries = append(r.Entries, connapp.InventoryEntry{
 			Kind: connapp.InventoryTool, Name: t.GetName(), Digest: t.GetDigest(), Description: t.GetDescription(),
-			DescriptionTruncated: t.GetDescriptionTruncated(),
+			DescriptionTruncated: t.GetDescriptionTruncated(), InputSchema: t.GetInputSchema(),
+			InputSchemaDigest: t.GetInputSchemaDigest(), InputSchemaCut: t.GetInputSchemaTruncated(),
 		})
 	}
 	for _, x := range req.GetResources() {

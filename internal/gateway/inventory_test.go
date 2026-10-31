@@ -13,6 +13,38 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
 )
 
+// TestD211_GatewayReportsInputSchemas: a tool's schema goes up with its
+// digest, its digest ignores formatting, and a schema over 64 KiB goes up by
+// digest alone, marked, with the report still complete. A cut schema is not
+// JSON, so it is never sent.
+// Covers: F868
+func TestD211_GatewayReportsInputSchemas(t *testing.T) {
+	big := `{"type":"object","description":"` + strings.Repeat("x", 64<<10) + `"}`
+	tools := []jsontext.Value{
+		jsontext.Value(`{"name":"a","inputSchema":{"type":"object","b":1}}`),
+		jsontext.Value(`{"name":"b","inputSchema":{ "b":1, "type":"object" }}`),
+		jsontext.Value(`{"name":"big","inputSchema":` + big + `}`),
+		jsontext.Value(`{"name":"none"}`),
+	}
+	req := inventoryRequest("c", dispatch.Inventory{Complete: true, Tools: upstream.Listing{Items: tools}})
+	got := req.GetTools()
+	if !req.GetComplete() || len(got) != 4 {
+		t.Fatalf("complete %v, %d tools", req.GetComplete(), len(got))
+	}
+	if got[0].GetInputSchema() != `{"type":"object","b":1}` || got[0].GetInputSchemaDigest() == "" || got[0].GetInputSchemaTruncated() {
+		t.Errorf("a: %v", got[0])
+	}
+	if got[1].GetInputSchemaDigest() != got[0].GetInputSchemaDigest() {
+		t.Error("formatting changed the digest")
+	}
+	if got[2].GetInputSchema() != "" || got[2].GetInputSchemaDigest() == "" || !got[2].GetInputSchemaTruncated() {
+		t.Errorf("big: schema %d bytes, digest %q, cut %v", len(got[2].GetInputSchema()), got[2].GetInputSchemaDigest(), got[2].GetInputSchemaTruncated())
+	}
+	if got[3].GetInputSchema() != "" || got[3].GetInputSchemaDigest() != "" || got[3].GetInputSchemaTruncated() {
+		t.Errorf("none: %v", got[3])
+	}
+}
+
 // TestHR418_GatewayInventoryReportsStayWithinBounds: descriptions are cut
 // to 8 KiB and marked; entries the report cannot carry (a bad tool name, a
 // URI over 2,048 bytes, a non-object) are left out and the report is then

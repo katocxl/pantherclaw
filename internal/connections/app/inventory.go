@@ -22,6 +22,8 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
+	"github.com/katocxl/pantherclaw/internal/supplychain/adapters/pgflags"
+	scdomain "github.com/katocxl/pantherclaw/internal/supplychain/domain"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 	wdomain "github.com/katocxl/pantherclaw/internal/waitlist/domain"
@@ -91,6 +93,10 @@ type InventoryEntry struct {
 	DescriptionTruncated                      bool
 	// DisplayTruncated: the gateway cut DisplayName or MimeType to 128 bytes.
 	DisplayTruncated bool
+	// InputSchema is a tool's listed input schema, UNTRUSTED, with its digest
+	// (G0 M24 D211); InputSchemaCut: it was too long to report.
+	InputSchema, InputSchemaDigest string
+	InputSchemaCut                 bool
 }
 
 // InventoryReport is a gateway's listing of one connection. Complete: every
@@ -112,7 +118,10 @@ func (r InventoryReport) check() error {
 			e.Kind == InventoryTool && !inventoryTool.MatchString(e.Name),
 			len(e.DisplayName) > maxInventoryDisplay || len(e.MimeType) > maxInventoryDisplay,
 			len(e.Description) > MaxInventoryDescription || !utf8.ValidString(e.Description),
-			!inventoryDigest.MatchString(e.Digest):
+			!inventoryDigest.MatchString(e.Digest),
+			len(e.InputSchema) > scdomain.MaxInputSchema || !utf8.ValidString(e.InputSchema),
+			e.InputSchemaDigest != "" && !inventoryDigest.MatchString(e.InputSchemaDigest),
+			e.InputSchema != "" && (e.Kind != InventoryTool || e.InputSchemaDigest == ""):
 			return ErrInventory
 		}
 	}
@@ -158,6 +167,9 @@ func (s *Service) ReportInventory(ctx context.Context, org ids.OrgID, gateway id
 				added++
 			}
 		}
+		if err := q.TouchInventoryFlags(ctx, org, seen); err != nil {
+			return err
+		}
 		if err := recheck(ctx, tx, c, conn.ID, cov); err != nil {
 			return err
 		}
@@ -170,6 +182,9 @@ func (s *Service) ReportInventory(ctx context.Context, org ids.OrgID, gateway id
 		}
 		for _, g := range gone {
 			if err := pgwaitlist.CloseInventoryReview(ctx, tx, org, g.ID, wdomain.StateExpired, c.By, "VANISHED"); err != nil {
+				return err
+			}
+			if err := pgflags.ClearItem(ctx, tx, org, g.ID); err != nil {
 				return err
 			}
 			if err := record(ctx, tx, c, "connection.inventory_vanished", conn.ID, map[string]string{
@@ -210,13 +225,21 @@ func (s *Service) see(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcC
 			return ids.UUID{}, false, err
 		}
 		if to == InventoryNew {
-			if err := s.openReview(ctx, tx, c, row.ID, e); err != nil {
+			flags, err := flagItem(ctx, tx, c, conn, cov, pgflags.Item{Connection: conn.ID, Inventory: row.ID, Name: e.Name, Digest: e.Digest}, e)
+			if err != nil {
+				return ids.UUID{}, false, err
+			}
+			if err := s.openReview(ctx, tx, c, row.ID, e, flags); err != nil {
 				return ids.UUID{}, false, err
 			}
 		}
 		return row.ID, to == InventoryNew, record(ctx, tx, c, "connection.inventory_listed_again", conn.ID, map[string]string{
 			"item_id": row.ID.String(), "kind": e.Kind, "name": e.Name, "digest": e.Digest, "state": to,
 		})
+	case row.State == InventoryNew && row.InputSchemaDigest == "" && e.InputSchemaDigest != "":
+		if err := fillSchema(ctx, tx, c, conn, cov, row, e); err != nil {
+			return ids.UUID{}, false, err
+		}
 	}
 	return row.ID, false, q.SeeInventoryItem(ctx, c.Org, row.ID)
 }
@@ -240,7 +263,8 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 	if err := dbq.New(tx).InsertInventoryItem(ctx, dbq.InsertInventoryItemParams{
 		OrgID: c.Org, ID: id, ConnectionID: conn.ID, Kind: e.Kind, Name: e.Name, DisplayName: e.DisplayName,
 		MimeType: e.MimeType, DisplayTruncated: e.DisplayTruncated, Digest: e.Digest, Description: e.Description,
-		DescriptionScan: scan, State: state,
+		DescriptionScan: scan, State: state, InputSchema: e.InputSchema, InputSchemaDigest: e.InputSchemaDigest,
+		InputSchemaTruncated: e.InputSchemaCut,
 	}); err != nil {
 		return ids.UUID{}, false, err
 	}
@@ -251,19 +275,28 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 			return ids.UUID{}, false, err
 		}
 	}
+	details := map[string]string{
+		"item_id": id.String(), "kind": e.Kind, "name": e.Name, "digest": e.Digest, "description_scan": scan, "state": state,
+	}
 	if state == InventoryNew {
-		if err := s.openReview(ctx, tx, c, id, e); err != nil {
+		// The checks run first so the review entry opens with their flags
+		// (G0 M24 D212). They inform the review and decide nothing (HR-582).
+		flags, err := flagItem(ctx, tx, c, conn, cov, pgflags.Item{Connection: conn.ID, Inventory: id, Name: e.Name, Digest: e.Digest}, e)
+		if err != nil {
+			return ids.UUID{}, false, err
+		}
+		details["supply_chain_flags"] = flags
+		if err := s.openReview(ctx, tx, c, id, e, flags); err != nil {
 			return ids.UUID{}, false, err
 		}
 	}
-	return id, state == InventoryNew, record(ctx, tx, c, "connection.inventory_discovered", conn.ID, map[string]string{
-		"item_id": id.String(), "kind": e.Kind, "name": e.Name, "digest": e.Digest, "description_scan": scan, "state": state,
-	})
+	return id, state == InventoryNew, record(ctx, tx, c, "connection.inventory_discovered", conn.ID, details)
 }
 
-// openReview opens a NEW item's TOOL_REVIEW entry and links it.
-func (s *Service) openReview(ctx context.Context, tx db.TenantTx, c actor, item ids.UUID, e InventoryEntry) error {
-	entry, err := pgwaitlist.OpenInventoryReview(ctx, tx, c.Org, item, e.Kind, e.Name, e.Kind == InventoryTool, c.Audit)
+// openReview opens a NEW item's TOOL_REVIEW entry, with the checks' flags in
+// words, and links it.
+func (s *Service) openReview(ctx context.Context, tx db.TenantTx, c actor, item ids.UUID, e InventoryEntry, flags string) error {
+	entry, err := pgwaitlist.OpenInventoryReview(ctx, tx, c.Org, item, e.Kind, e.Name, e.Kind == InventoryTool, flags, c.Audit)
 	if err != nil {
 		return err
 	}
@@ -282,6 +315,9 @@ func cover(ctx context.Context, tx db.TenantTx, c actor, conn ids.UUID, row dbq.
 	if err := pgwaitlist.CloseInventoryReview(ctx, tx, c.Org, row.ID, wdomain.StateApproved, c.By, "COVERED"); err != nil {
 		return err
 	}
+	if err := pgflags.ClearItem(ctx, tx, c.Org, row.ID); err != nil {
+		return err
+	}
 	return record(ctx, tx, c, "connection.inventory_covered", conn, map[string]string{
 		"item_id": row.ID.String(), "kind": row.Kind, "name": row.Name, "digest": row.Digest,
 	})
@@ -295,6 +331,11 @@ func cover(ctx context.Context, tx db.TenantTx, c actor, conn ids.UUID, row dbq.
 type coverage struct {
 	defs      []domain.Definition
 	templates []string
+	// version is the pinned version; named is what it reviewed, in any state;
+	// approved is that again when a person let the version into use (G0 M24
+	// D210: what a rug pull is measured against). They never cover anything.
+	version         string
+	named, approved []domain.Definition
 }
 
 func (c coverage) covers(kind, name, digest string) bool {
@@ -319,14 +360,19 @@ func pinnedCoverage(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg stri
 	} else if err != nil {
 		return coverage{}, err
 	}
-	if domain.State(pin.State) != domain.StateActive {
-		return coverage{}, nil
-	}
 	p, err := manifest.Decode(pin.Raw)
 	if err != nil {
 		return coverage{}, nil //nolint:nilerr // an undecodable version covers nothing (fail closed)
 	}
-	return coverage{defs: p.Definitions, templates: reviewedTemplates(p.Definitions)}, nil
+	cov := coverage{version: pin.Version, named: p.Definitions}
+	if wasApproved(domain.State(pin.State)) {
+		cov.approved = p.Definitions
+	}
+	if domain.State(pin.State) != domain.StateActive {
+		return cov, nil
+	}
+	cov.defs, cov.templates = p.Definitions, reviewedTemplates(p.Definitions)
+	return cov, nil
 }
 
 // reviewedTemplates are the URI templates of a package's mcp_resource
@@ -432,6 +478,9 @@ func (s *Service) DismissInventory(ctx context.Context, id ids.UUID, reason stri
 			return err
 		}
 		if err := pgwaitlist.CloseInventoryReview(ctx, tx, c.Org, id, wdomain.StateRejected, c.By, reason); err != nil {
+			return err
+		}
+		if err := pgflags.ClearItem(ctx, tx, c.Org, id); err != nil {
 			return err
 		}
 		if err := record(ctx, tx, c, "connection.inventory_dismissed", row.ConnectionID, map[string]string{

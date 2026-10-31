@@ -111,6 +111,15 @@ func OpenToolReview(ctx context.Context, tx db.TenantTx, org ids.OrgID, version 
 	}, actor)
 }
 
+// OpenFlaggedToolReview is OpenToolReview with what the supply-chain checks
+// found at import (G0 M24 D212), in PantherClaw's own words.
+func OpenFlaggedToolReview(ctx context.Context, tx db.TenantTx, org ids.OrgID, version ids.UUID, pkg, ver, flags string, actor evdomain.Actor) (ids.UUID, error) {
+	return open(ctx, tx, org, entry{
+		kind: wdomain.KindToolReview, subjectType: "package_version", subject: version,
+		trusted: map[string]string{"package": pkg, "version": ver, TrustedFlags: flags},
+	}, actor)
+}
+
 // CloseToolReview settles a version's TOOL_REVIEW entry when it moves:
 // APPROVED when it becomes active, REJECTED when it is quarantined or
 // retired. Any other move leaves the entry open.

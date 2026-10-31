@@ -29,6 +29,8 @@ import (
 const (
 	maxInventoryURI  = 2048
 	maxInventoryName = 128
+	// maxInventorySchema caps a tool's input schema (G0 M24 D211).
+	maxInventorySchema = 64 << 10
 )
 
 var inventoryTool = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
@@ -57,6 +59,7 @@ func inventoryRequest(conn string, inv dispatch.Inventory) *pb.ReportInventoryRe
 		var n struct {
 			Name        string         `json:"name"`
 			Description jsontext.Value `json:"description"`
+			InputSchema jsontext.Value `json:"inputSchema"`
 		}
 		d, err := upstream.ToolDigest(t)
 		if err != nil || json.Unmarshal(t, &n) != nil || !inventoryTool.MatchString(n.Name) {
@@ -64,7 +67,11 @@ func inventoryRequest(conn string, inv dispatch.Inventory) *pb.ReportInventoryRe
 			continue
 		}
 		desc, cut := description(n.Description)
-		req.Tools = append(req.Tools, &pb.InventoryTool{Name: n.Name, Digest: d, Description: desc, DescriptionTruncated: cut})
+		schema, schemaDigest, schemaCut := inputSchema(n.InputSchema)
+		req.Tools = append(req.Tools, &pb.InventoryTool{
+			Name: n.Name, Digest: d, Description: desc, DescriptionTruncated: cut,
+			InputSchema: schema, InputSchemaDigest: schemaDigest, InputSchemaTruncated: schemaCut,
+		})
 	}
 	for _, r := range inv.Resources.Items {
 		e, ok := resourceEntry(r, "uri")
@@ -89,6 +96,24 @@ func inventoryRequest(conn string, inv dispatch.Inventory) *pb.ReportInventoryRe
 		})
 	}
 	return req
+}
+
+// inputSchema is a tool's listed schema as reported (G0 M24 D211): its text
+// and digest, or only the digest when it is over 64 KiB, since a cut schema
+// is not JSON. A schema that cannot be sent or digested is reported as cut,
+// so the server knows it was not checked.
+func inputSchema(v jsontext.Value) (string, string, bool) {
+	if len(v) == 0 {
+		return "", "", false
+	}
+	digest, err := upstream.SchemaDigest(v)
+	if err != nil || !utf8.Valid(v) {
+		return "", "", true
+	}
+	if len(v) > maxInventorySchema {
+		return "", digest, true
+	}
+	return string(v), digest, false
 }
 
 // listed is one resource or template as reported.

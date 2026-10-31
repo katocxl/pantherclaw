@@ -907,6 +907,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerReleases(rs, pool, d.m11protect)
 	registerPolicyExceptions(rs, d)
 	registerM21Outcomes(rs, d)
+	registerM24Supply(rs, d)
 	mountM10Ops, err := registerM10Ops(rs, d)
 	if err != nil {
 		return nil, err

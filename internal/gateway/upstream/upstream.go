@@ -620,3 +620,14 @@ func ToolDigest(tool jsontext.Value) (string, error) {
 	sum := sha256.Sum256(v)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
+
+// SchemaDigest is "sha256:<hex>" of a tool's canonical input schema (G0 M24
+// D211).
+func SchemaDigest(schema jsontext.Value) (string, error) {
+	v := schema.Clone()
+	if err := v.Canonicalize(); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(v)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}

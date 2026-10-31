@@ -221,6 +221,9 @@ func TestD210_OverbroadSchema(t *testing.T) {
 //
 // Covers: F867, F870.
 func TestHR582_SchemaThatWasNotCheckedIsNeverClean(t *testing.T) {
+	if r := Check(tool("A tool.", ""), known()); !r.Partial || Summary(r) != "no known flags in the part checked" {
+		t.Fatalf("a tool with no schema reported: %+v", r)
+	}
 	in := tool("A tool.", "")
 	in.InputSchemaCut = true
 	r := Check(in, known())
@@ -346,6 +349,9 @@ func TestD210_BenignToolsAreNotFlagged(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			if c.schema == "" {
+				c.schema = `{"type":"object"}`
+			}
 			r := Check(tool(c.desc, c.schema), known())
 			if len(r.Flags) != 0 {
 				t.Fatalf("flags = %+v", r.Flags)

@@ -34,7 +34,8 @@ func inventoryItemOf(r dbq.PcConnectionInventory) *pb.InventoryItem {
 		DisplayName: r.DisplayName, MimeType: r.MimeType, Digest: r.Digest, Description: r.Description,
 		DescriptionScan: r.DescriptionScan, State: inventoryStateOf[r.State], DismissedBy: deref(r.DismissedBy),
 		DismissReason: deref(r.DismissReason), FirstSeenTime: stamp(r.FirstSeen), LastSeenTime: stamp(r.LastSeen),
-		UpdateTime: stamp(r.UpdatedAt), DisplayTruncated: r.DisplayTruncated,
+		UpdateTime: stamp(r.UpdatedAt), DisplayTruncated: r.DisplayTruncated, InputSchema: r.InputSchema,
+		InputSchemaDigest: r.InputSchemaDigest, InputSchemaTruncated: r.InputSchemaTruncated,
 	}
 	if r.ReviewEntryID != nil {
 		out.ReviewEntryId = r.ReviewEntryID.String()

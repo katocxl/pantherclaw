@@ -32,7 +32,8 @@ import (
 // rule reads it).
 const AuditName = "connection.tool_description_flagged"
 
-// Scan outcomes recorded beside a drift report (D47).
+// Scan outcomes recorded beside a drift report (D47). ScanClean means these
+// patterns found nothing: no known flags, never safe (G0 M24 D213, F801).
 const (
 	ScanFlagged    = "flagged"
 	ScanClean      = "clean"

@@ -13,10 +13,20 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND 
 
 -- name: InsertInventoryItem :exec
 INSERT INTO pc.connection_inventory (org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest,
-                                     description, description_scan, state)
+                                     description, description_scan, state, input_schema, input_schema_digest,
+                                     input_schema_truncated)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind), sqlc.arg(name), sqlc.arg(display_name),
         sqlc.arg(mime_type), sqlc.arg(display_truncated), sqlc.arg(digest), sqlc.arg(description), sqlc.arg(description_scan),
-        sqlc.arg(state));
+        sqlc.arg(state), sqlc.arg(input_schema), sqlc.arg(input_schema_digest), sqlc.arg(input_schema_truncated));
+
+-- SetInventorySchema fills in the schema of an item first listed by a gateway
+-- that did not report one (G0 M24 D211). The digest of the item covers it, so
+-- this adds nothing the item did not already say.
+-- name: SetInventorySchema :execresult
+UPDATE pc.connection_inventory
+SET input_schema = sqlc.arg(input_schema), input_schema_digest = sqlc.arg(input_schema_digest),
+    input_schema_truncated = sqlc.arg(input_schema_truncated), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND input_schema_digest = '';
 
 -- name: SeeInventoryItem :exec
 UPDATE pc.connection_inventory SET last_seen = now()

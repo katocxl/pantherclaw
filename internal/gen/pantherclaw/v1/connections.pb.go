@@ -4595,8 +4595,15 @@ type InventoryItem struct {
 	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
 	// Whether the gateway cut the display name or MIME type to 128 bytes.
 	DisplayTruncated bool `protobuf:"varint,17,opt,name=display_truncated,json=displayTruncated,proto3" json:"display_truncated,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// UNTRUSTED: a tool's input schema as listed, at most 64 KiB (G0 M24 D211).
+	// Show it as text; it is never a served schema.
+	InputSchema string `protobuf:"bytes,18,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	// sha256:<hex> of the canonical input schema; empty when none was reported.
+	InputSchemaDigest string `protobuf:"bytes,19,opt,name=input_schema_digest,json=inputSchemaDigest,proto3" json:"input_schema_digest,omitempty"`
+	// Whether the schema was too long to report.
+	InputSchemaTruncated bool `protobuf:"varint,20,opt,name=input_schema_truncated,json=inputSchemaTruncated,proto3" json:"input_schema_truncated,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *InventoryItem) Reset() {
@@ -4744,6 +4751,27 @@ func (x *InventoryItem) GetUpdateTime() *timestamppb.Timestamp {
 func (x *InventoryItem) GetDisplayTruncated() bool {
 	if x != nil {
 		return x.DisplayTruncated
+	}
+	return false
+}
+
+func (x *InventoryItem) GetInputSchema() string {
+	if x != nil {
+		return x.InputSchema
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetInputSchemaDigest() string {
+	if x != nil {
+		return x.InputSchemaDigest
+	}
+	return ""
+}
+
+func (x *InventoryItem) GetInputSchemaTruncated() bool {
+	if x != nil {
+		return x.InputSchemaTruncated
 	}
 	return false
 }
@@ -5469,7 +5497,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x1aGetConnectionHealthRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"W\n" +
 	"\x1bGetConnectionHealthResponse\x128\n" +
-	"\x06health\x18\x01 \x01(\v2 .pantherclaw.v1.ConnectionHealthR\x06health\"\xd0\x05\n" +
+	"\x06health\x18\x01 \x01(\v2 .pantherclaw.v1.ConnectionHealthR\x06health\"\xd9\x06\n" +
 	"\rInventoryItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x125\n" +
@@ -5489,7 +5517,10 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x0elast_seen_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12;\n" +
 	"\vupdate_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\x12+\n" +
-	"\x11display_truncated\x18\x11 \x01(\bR\x10displayTruncated\"\xcd\x02\n" +
+	"\x11display_truncated\x18\x11 \x01(\bR\x10displayTruncated\x12!\n" +
+	"\finput_schema\x18\x12 \x01(\tR\vinputSchema\x12.\n" +
+	"\x13input_schema_digest\x18\x13 \x01(\tR\x11inputSchemaDigest\x124\n" +
+	"\x16input_schema_truncated\x18\x14 \x01(\bR\x14inputSchemaTruncated\"\xcd\x02\n" +
 	"\x1eListConnectionInventoryRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12M\n" +
 	"\x06states\x18\x02 \x03(\x0e2\".pantherclaw.v1.InventoryItemStateB\x11\xbaH\x0e\x92\x01\v\x10\x04\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12J\n" +

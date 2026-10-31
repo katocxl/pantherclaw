@@ -12,7 +12,10 @@
 // heuristics over text a server chose. Everything here is pure.
 package domain
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // CheckKind names a check.
 type CheckKind string
@@ -143,7 +146,7 @@ type Result struct {
 // Check runs every check on one entry, in the order of Kinds. It never fails:
 // a schema it cannot read is itself a flag.
 func Check(t Tool, k Known) Result {
-	out := Result{Partial: t.DescriptionCut || t.InputSchemaCut}
+	out := Result{Partial: t.DescriptionCut || t.InputSchemaCut || t.IsTool && len(t.InputSchema) == 0}
 	schema, schemaErr := parseSchema(t.InputSchema)
 	add := func(f *Flag) {
 		if f != nil {
@@ -174,7 +177,9 @@ func Summary(r Result) string {
 	}
 	kinds := make([]string, 0, len(r.Flags))
 	for _, f := range r.Flags {
-		kinds = append(kinds, string(f.Kind))
+		if !slices.Contains(kinds, string(f.Kind)) {
+			kinds = append(kinds, string(f.Kind))
+		}
 	}
 	return strings.Join(kinds, ",")
 }

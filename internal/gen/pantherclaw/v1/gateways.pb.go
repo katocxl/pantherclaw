@@ -4822,6 +4822,13 @@ type InventoryTool struct {
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	// Whether the gateway cut the description to 8 KiB.
 	DescriptionTruncated bool `protobuf:"varint,4,opt,name=description_truncated,json=descriptionTruncated,proto3" json:"description_truncated,omitempty"`
+	// UNTRUSTED: its input schema as listed, at most 64 KiB (G0 M24 D211).
+	InputSchema string `protobuf:"bytes,5,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	// SHA-256 of the canonical input schema, also when the schema is too long
+	// to send.
+	InputSchemaDigest string `protobuf:"bytes,6,opt,name=input_schema_digest,json=inputSchemaDigest,proto3" json:"input_schema_digest,omitempty"`
+	// Whether the schema was too long to send; input_schema is then empty.
+	InputSchemaTruncated bool `protobuf:"varint,7,opt,name=input_schema_truncated,json=inputSchemaTruncated,proto3" json:"input_schema_truncated,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -4880,6 +4887,27 @@ func (x *InventoryTool) GetDescription() string {
 func (x *InventoryTool) GetDescriptionTruncated() bool {
 	if x != nil {
 		return x.DescriptionTruncated
+	}
+	return false
+}
+
+func (x *InventoryTool) GetInputSchema() string {
+	if x != nil {
+		return x.InputSchema
+	}
+	return ""
+}
+
+func (x *InventoryTool) GetInputSchemaDigest() string {
+	if x != nil {
+		return x.InputSchemaDigest
+	}
+	return ""
+}
+
+func (x *InventoryTool) GetInputSchemaTruncated() bool {
+	if x != nil {
+		return x.InputSchemaTruncated
 	}
 	return false
 }
@@ -6064,12 +6092,15 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\bcomplete\x18\x02 \x01(\bR\bcomplete\x12>\n" +
 	"\x05tools\x18\x03 \x03(\v2\x1d.pantherclaw.v1.InventoryToolB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x05tools\x12J\n" +
 	"\tresources\x18\x04 \x03(\v2!.pantherclaw.v1.InventoryResourceB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\tresources\x12c\n" +
-	"\x12resource_templates\x18\x05 \x03(\v2).pantherclaw.v1.InventoryResourceTemplateB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x11resourceTemplates\"\xd9\x01\n" +
+	"\x12resource_templates\x18\x05 \x03(\v2).pantherclaw.v1.InventoryResourceTemplateB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x11resourceTemplates\"\x8e\x03\n" +
 	"\rInventoryTool\x121\n" +
 	"\x04name\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x01\x18\x80\x012\x11^[A-Za-z0-9_.-]+$R\x04name\x124\n" +
 	"\x06digest\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x06digest\x12*\n" +
 	"\vdescription\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80@R\vdescription\x123\n" +
-	"\x15description_truncated\x18\x04 \x01(\bR\x14descriptionTruncated\"\xe4\x02\n" +
+	"\x15description_truncated\x18\x04 \x01(\bR\x14descriptionTruncated\x12,\n" +
+	"\finput_schema\x18\x05 \x01(\tB\t\xbaH\x06r\x04(\x80\x80\x04R\vinputSchema\x12O\n" +
+	"\x13input_schema_digest\x18\x06 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x11inputSchemaDigest\x124\n" +
+	"\x16input_schema_truncated\x18\a \x01(\bR\x14inputSchemaTruncated\"\xe4\x02\n" +
 	"\x11InventoryResource\x12\x1c\n" +
 	"\x03uri\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01(\x80\x10R\x03uri\x12\x1c\n" +

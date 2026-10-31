@@ -1123,6 +1123,13 @@ message InventoryTool {
   string description = 3 [(buf.validate.field).string.max_bytes = 8192];
   // Whether the gateway cut the description to 8 KiB.
   bool description_truncated = 4;
+  // UNTRUSTED: its input schema as listed, at most 64 KiB (G0 M24 D211).
+  string input_schema = 5 [(buf.validate.field).string.max_bytes = 65536];
+  // SHA-256 of the canonical input schema, also when the schema is too long
+  // to send.
+  string input_schema_digest = 6 [(buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64})?$"];
+  // Whether the schema was too long to send; input_schema is then empty.
+  bool input_schema_truncated = 7;
 }
 
 // InventoryResource is one listed resource.

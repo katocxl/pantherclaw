@@ -1159,7 +1159,9 @@ message InventoryItem {
   // it is never a served description (HR-415).
   string description = 8;
   // The injection scan of the description: clean, flagged, partial or
-  // not_scanned.
+  // not_scanned. clean means the patterns found nothing, "no known flags",
+  // and never that the item is safe (F801). Its supply-chain flags are in
+  // SupplyChainService.
   string description_scan = 9;
   // State.
   InventoryItemState state = 10;
@@ -1177,6 +1179,13 @@ message InventoryItem {
   google.protobuf.Timestamp update_time = 16;
   // Whether the gateway cut the display name or MIME type to 128 bytes.
   bool display_truncated = 17;
+  // UNTRUSTED: a tool's input schema as listed, at most 64 KiB (G0 M24 D211).
+  // Show it as text; it is never a served schema.
+  string input_schema = 18;
+  // sha256:<hex> of the canonical input schema; empty when none was reported.
+  string input_schema_digest = 19;
+  // Whether the schema was too long to report.
+  bool input_schema_truncated = 20;
 }
 
 // ListConnectionInventoryRequest selects one page.

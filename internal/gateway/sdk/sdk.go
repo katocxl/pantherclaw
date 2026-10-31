@@ -38,6 +38,8 @@ import (
 	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"maps"
+	"slices"
 	"errors"
 	"io"
 	"log/slog"
@@ -380,6 +382,10 @@ var builtIns = map[string]bool{
 	"TaskList": true, "TaskOutput": true, "TaskStop": true, "TaskUpdate": true, "TodoWrite": true, "ToolSearch": true,
 	"WaitForMcpServers": true, "WebFetch": true, "WebSearch": true, "Write": true,
 }
+
+// BuiltInNames lists the built-in tools, sorted (G0 M24 D210: an MCP tool
+// with one of these names shadows it).
+func BuiltInNames() []string { return slices.Sorted(maps.Keys(builtIns)) }
 
 // mcpResourceTools are the built-in tools that list or read an MCP server's
 // resources. A package maps a server's tools, never its resources, so the
