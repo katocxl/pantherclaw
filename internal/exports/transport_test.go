@@ -162,9 +162,17 @@ type putSim struct {
 	requests  int
 	// failDeletesFrom answers 503 to DELETEs from this request on; 0 never.
 	failDeletesFrom int
+	// onPut sees each PUT before it lands, outside the lock.
+	onPut func(key string)
 }
 
 func (s *putSim) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	hook := s.onPut
+	s.mu.Unlock()
+	if hook != nil && r.Method == http.MethodPut {
+		hook(strings.TrimPrefix(r.URL.Path, "/"))
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.requests++
@@ -227,7 +235,7 @@ func TestChunkedPutsWriteTheIndexLast(t *testing.T) {
 	if _, err := u.finish(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if string(sim.objects["in/k/big.chunk-000002"]) != "efgh" || !bytes.Contains(sim.objects["in/k/big"], []byte("pantherclaw.chunks/v1")) {
+	if string(sim.objects["in/k/big.chunk-"+u.id+"-000002"]) != "efgh" || !bytes.Contains(sim.objects["in/k/big"], []byte("pantherclaw.chunks/v1")) {
 		t.Fatalf("objects %v", sim.objects)
 	}
 	for _, a := range sim.auth {
@@ -265,24 +273,59 @@ func TestHR516_AResumedChunkAbortReachesEveryChunk(t *testing.T) {
 	tr := newPutTransport(t, sim)
 	ctx := context.Background()
 	const chunks = 6
+	upload, err := tr.Begin(ctx, "k/big")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for n := 1; n <= chunks; n++ {
-		if _, err := tr.Part(ctx, "k/big", "chunks", n, []byte("chunk")); err != nil {
+		if _, err := tr.Part(ctx, "k/big", upload, n, []byte("chunk")); err != nil {
 			t.Fatal(err)
 		}
 	}
 	sim.failDeletesFrom = sim.requests + 3
-	if err := tr.Abort(ctx, "k/big", "chunks", chunks); err == nil {
+	if err := tr.Abort(ctx, "k/big", upload, chunks); err == nil {
 		t.Fatal("a failed abort reported success")
 	}
 	if len(sim.objects) != chunks-2 {
 		t.Fatalf("after the first abort: %d left", len(sim.objects))
 	}
 	sim.failDeletesFrom = 0
-	if err := tr.Abort(ctx, "k/big", "chunks", chunks); err != nil {
+	if err := tr.Abort(ctx, "k/big", upload, chunks); err != nil {
 		t.Fatal(err)
 	}
 	if len(sim.objects) != 0 {
 		t.Fatalf("chunks left behind: %v", sim.objects)
+	}
+}
+
+// TestHR516_EachChunkedAttemptHasItsOwnChunks: two attempts at one object
+// share no chunk, so aborting one leaves the other whole.
+// Covers: F517
+func TestHR516_EachChunkedAttemptHasItsOwnChunks(t *testing.T) {
+	sim := &putSim{objects: map[string][]byte{}}
+	tr := newPutTransport(t, sim)
+	ctx := context.Background()
+	first, err := tr.Begin(ctx, "k/big")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := tr.Begin(ctx, "k/big")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatalf("both attempts are %q", first)
+	}
+	for _, upload := range []string{first, second} {
+		if _, err := tr.Part(ctx, "k/big", upload, 1, []byte(upload)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tr.Abort(ctx, "k/big", first, 1); err != nil {
+		t.Fatal(err)
+	}
+	if len(sim.objects) != 1 || string(sim.objects["in/"+chunkKey("k/big", second, 1)]) != second {
+		t.Fatalf("left %v", sim.objects)
 	}
 }
 
