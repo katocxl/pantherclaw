@@ -915,13 +915,19 @@ message CoverageGraphEdge {
   string from = 1;
   // To node id.
   string to = 2;
-  // Why the scope's coverage record reads as it does (F278): the cause of
-  // its latest computation. Empty when none is recorded.
+  // Why the scope's coverage record reads as it does (F278): its first
+  // reason, as a reason code. Empty when none is recorded.
   string reason = 3;
   // When the scope's record was last computed.
   google.protobuf.Timestamp last_checked_at = 4;
   // When that record stops holding; unset when it does not lapse.
   google.protobuf.Timestamp expires_at = 5;
+  // The invalidation that asked for the latest computation (F290); empty
+  // when none did.
+  string invalidated_by = 6;
+  // When closure evidence last validated the scope (F290); unset when the
+  // record rests on no closure.
+  google.protobuf.Timestamp validated_at = 7;
 }
 
 // GetCoverageGraphResponse is the graph.

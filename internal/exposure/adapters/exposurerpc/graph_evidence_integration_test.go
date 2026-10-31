@@ -6,12 +6,17 @@
 package exposurerpc_test
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect/v2"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	"github.com/katocxl/pantherclaw/internal/exposure/app"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -256,5 +261,219 @@ func TestT238_AGraphLabelNeverNamesAHiddenRecord(t *testing.T) {
 	}
 	if got := label(org, o.Agent.String()); strings.ContainsAny(got, "<>") {
 		t.Errorf("markup in a label: %q", got)
+	}
+}
+
+// TestHR551_AConsequenceCutIsReportedAsACut: consequences past the read's
+// bound leave the graph marked truncated, even when a filter leaves the
+// graph far under its own limits (D32).
+// Covers: F272, F281
+func TestHR551_AConsequenceCutIsReportedAsACut(t *testing.T) {
+	w := newWorld(t, billing.Team)
+	txn := w.o.Dispatch(t, "github.pull_request.merge")
+	w.o.D.AdminExec(t, `INSERT INTO pc.decision_consequences (org_id, transaction_id, evaluation, position, rule_id, operation, target_type,
+		target_id, state, facts_digest, "unknown") SELECT $1, $2, 1, n, 'rule', 'github.deployment.trigger', 'repo', 'r', 'PREDICTED', $3, '[]'::jsonb
+		FROM generate_series(0, 5000) n`, w.o.Org, txn, "sha256:"+strings.Repeat("0", 64))
+	g, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{
+		Mode: pb.GraphMode_GRAPH_MODE_CAUSAL, Scope: &pb.GraphScope{Type: "run", Id: w.o.Run.String()},
+		Filter: &pb.GraphFilter{Operations: []string{"github.pull_request.merge"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !g.GetTruncated() || len(g.GetEdges()) >= 2000 {
+		t.Errorf("truncated %v with %d edges", g.GetTruncated(), len(g.GetEdges()))
+	}
+}
+
+// TestHR551_AFilteredActionLeavesNoEdgeBehind: a decision or outcome filter
+// applies to the transaction, so its receipts and consequences go with it.
+// Covers: F272
+func TestHR551_AFilteredActionLeavesNoEdgeBehind(t *testing.T) {
+	w := newWorld(t, billing.Team)
+	txn := w.o.Dispatch(t, "github.pull_request.merge")
+	receipted(t, w, txn, w.o.Grant(t, w.o.Agent, 0, "", "github.*"))
+	consequence(t, w, txn, 0, "PREDICTED", false)
+	read := func(f *pb.GraphFilter) *pb.GetGraphResponse {
+		t.Helper()
+		g, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{
+			Mode: pb.GraphMode_GRAPH_MODE_CAUSAL, Scope: &pb.GraphScope{Type: "run", Id: w.o.Run.String()}, Filter: f,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+	for _, f := range []*pb.GraphFilter{{Decisions: []string{"DENY"}}, {Outcomes: []string{"NONE_CONFIRMED"}}} {
+		for _, e := range read(f).GetEdges() {
+			if strings.Contains(e.GetFrom().GetId()+e.GetTo().GetId(), txn.String()) {
+				t.Errorf("filter %v kept %v", f, e)
+			}
+		}
+	}
+	g := read(&pb.GraphFilter{Decisions: []string{"ALLOW"}, Outcomes: []string{"CONFIRMED"}})
+	for _, kind := range []string{"authorized", "custody", "effect", "triggered"} {
+		if len(edgesOf(g, kind)) == 0 {
+			t.Errorf("the matching action lost its %s edge: %v", kind, g.GetEdges())
+		}
+	}
+}
+
+// TestF276_AnOperationUnderOtherBoundsReadsAsChanged: a revision that keeps
+// an operation and narrows anything else does not read as KEPT (D37).
+// Covers: F276
+func TestF276_AnOperationUnderOtherBoundsReadsAsChanged(t *testing.T) {
+	w := newWorld(t, billing.Team)
+	grant := w.o.Grant(t, w.o.Agent, 0, "", "payments.refund.get")
+	w.o.Exec(t, `INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, not_before, expires_at, bounds, requirements, limits,
+		delegation_depth, max_children, min_attestation, widens, created_by) VALUES ($1, $2, $3, 2, now() - interval '1 hour',
+		now() + interval '1 day', $4, '\x7b7d', '\x7b7d', 0, 0, 0, false, 'test')`,
+		w.o.Org, ids.NewV7(), grant, []byte(`{"operations":["payments.refund.get"],"accounts":{"ids":["a1"]}}`))
+	w.o.D.AdminExec(t, `UPDATE pc.grants SET current_revision = 2 WHERE id = $1`, grant)
+	g, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{
+		Mode: pb.GraphMode_GRAPH_MODE_CHANGE, Scope: &pb.GraphScope{Type: "agent", Id: w.o.Agent.String()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(edgesOf(g, "allows"), func(e *pb.GraphEdge) bool {
+		return e.GetFrom().GetId() == grant.String() && e.GetRevision() == 2 && e.GetChange() == pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_CHANGED
+	}) {
+		t.Errorf("no CHANGED edge in %v", g.GetEdges())
+	}
+}
+
+// respond records a response action and, when control is set, its control
+// on the agent.
+func respond(t *testing.T, w *world, incident ids.UUID, kind, status string, control bool) (action, placed ids.UUID) {
+	t.Helper()
+	o := w.o
+	action, placed = ids.NewV7(), ids.NewV7()
+	mode, settled := any(nil), any(nil)
+	if kind == "CONTAIN" {
+		mode = "DENY_ALL"
+	}
+	if status != "REQUESTED" && status != "PARTIAL" {
+		settled = "now"
+	}
+	o.D.AdminExec(t, `INSERT INTO pc.response_actions (org_id, id, kind, scope_type, scope_id, control, reason, incident_id, actor, source, status, settled_at)
+		VALUES ($1, $2, $3, 'agent', $4, $5, 'test', $6, 'user:test', 'PERSON', $7, CASE WHEN $8::text IS NULL THEN NULL ELSE now() END)`,
+		o.Org, action, kind, o.Agent.String(), mode, incident, status, settled)
+	if control {
+		o.D.AdminExec(t, `INSERT INTO pc.containment_controls (org_id, id, action_id, scope_type, scope_id, control, reason, incident_id, created_by)
+			VALUES ($1, $2, $3, 'agent', $4, 'DENY_ALL', 'test', $5, 'user:test')`, o.Org, placed, action, o.Agent.String(), incident)
+	}
+	return action, placed
+}
+
+// TestF276_TheChangeGraphShowsWhatResponseChanged: an incident and a
+// restriction show their controls as before and after, an unconfirmed one
+// says so, and a viewer who may not read them gets a gap whether the record
+// exists or not, never an empty "nothing changed" (D38).
+// Covers: F276, F299
+func TestF276_TheChangeGraphShowsWhatResponseChanged(t *testing.T) {
+	w := newWorld(t, billing.Team)
+	o := w.o
+	incident := ids.NewV7()
+	_, held := respond(t, w, incident, "CONTAIN", "CONFIRMED", true)
+	_, lifted := respond(t, w, incident, "CONTAIN", "CONFIRMED", true)
+	o.D.AdminExec(t, `UPDATE pc.containment_controls SET lifted_at = now(), lifted_by = 'user:other' WHERE id = $1`, lifted)
+	partial, open := respond(t, w, incident, "CONTAIN", "PARTIAL", true)
+	revoked, _ := respond(t, w, incident, "REVOKE", "CONFIRMED", false)
+	failed, _ := respond(t, w, incident, "REVOKE", "FAILED", false)
+
+	graph := func(ctx context.Context, typ, id string) (*pb.GetGraphResponse, error) {
+		return w.g.GetGraph(ctx, &pb.GetGraphRequest{Mode: pb.GraphMode_GRAPH_MODE_CHANGE, Scope: &pb.GraphScope{Type: typ, Id: id}})
+	}
+	g, err := graph(w.org, "incident", incident.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	edge := func(ref string, change pb.GraphEdgeChange, status pb.GraphEdgeStatus) {
+		t.Helper()
+		if !slices.ContainsFunc(edgesOf(g, "changed"), func(e *pb.GraphEdge) bool {
+			return e.GetEvidenceRef() == ref && e.GetChange() == change && e.GetStatus() == status && e.GetTo().GetId() == o.Agent.String()
+		}) {
+			t.Errorf("no %s %s %s in %v", ref, change, status, g.GetEdges())
+		}
+	}
+	added, removed := pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_ADDED, pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_REMOVED
+	none := pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_UNSPECIFIED
+	enforced := pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_ENFORCED
+	edge("containment_control:"+held.String(), added, enforced)
+	edge("containment_control:"+lifted.String(), added, none)
+	edge("containment_control:"+lifted.String(), removed, none)
+	edge("containment_control:"+open.String(), added, none)
+	edge("response_action:"+revoked.String(), added, enforced)
+	unconfirmed := func(action ids.UUID) bool {
+		return slices.ContainsFunc(edgesOf(g, "gap"), func(e *pb.GraphEdge) bool {
+			return e.GetProvenance() == "CONTAINMENT_UNCONFIRMED" && e.GetFrom().GetId() == action.String()
+		})
+	}
+	if !unconfirmed(partial) || !unconfirmed(failed) {
+		t.Errorf("an unconfirmed action is no gap: %v", g.GetEdges())
+	}
+	for _, e := range edgesOf(g, "changed") {
+		if e.GetEvidenceRef() == "response_action:"+failed.String() {
+			t.Errorf("a failed action reads as a change: %v", e)
+		}
+	}
+
+	g, err = graph(w.org, "restriction", partial.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	edge("containment_control:"+open.String(), added, none)
+	if len(edgesOf(g, "changed")) != 1 {
+		t.Errorf("a restriction shows another's controls: %v", g.GetEdges())
+	}
+	if _, err := graph(w.org, "restriction", ids.NewV7().String()); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("an unknown restriction: %v", err)
+	}
+
+	// The same answer for a record that exists and one that does not.
+	for _, scope := range [][2]string{
+		{"incident", incident.String()}, {"restriction", partial.String()}, {"restriction", ids.NewV7().String()},
+	} {
+		g, err := graph(w.team, scope[0], scope[1])
+		if err != nil {
+			t.Fatalf("%v: %v", scope, err)
+		}
+		if !gapNamed(g, "CONTROLS_NOT_READABLE") || len(edgesOf(g, "changed")) != 0 {
+			t.Errorf("%v, viewer without containment.read: %v", scope, g.GetEdges())
+		}
+	}
+}
+
+// TestF282_TheAuthorityGraphShowsGrantDelegation: a child grant links to the
+// parent it narrows, and a viewer who may not see the parent's agent sees
+// neither the link nor the parent.
+// Covers: F282
+func TestF282_TheAuthorityGraphShowsGrantDelegation(t *testing.T) {
+	w := newWorld(t, billing.Team)
+	o := w.o
+	parent := o.Grant(t, o.Other, 1, "", "wiki.page.read")
+	child := o.Grant(t, o.Agent, 0, "", "wiki.page.read")
+	o.D.AdminExec(t, `UPDATE pc.grants SET parent_id = $2 WHERE id = $1`, child, parent)
+	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := app.Recompute(ctx, tx, "manual", 0)
+		return err
+	})
+	scope := &pb.GraphScope{Type: "agent", Id: o.Agent.String()}
+	g, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{Mode: pb.GraphMode_GRAPH_MODE_AUTHORITY, Scope: scope})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(edgesOf(g, "delegated"), func(e *pb.GraphEdge) bool {
+		return e.GetFrom().GetId() == parent.String() && e.GetTo().GetId() == child.String() && e.GetEvidenceRef() == "grant:"+child.String()
+	}) {
+		t.Errorf("no delegation in %v", g.GetEdges())
+	}
+	g, err = w.g.GetGraph(w.team, &pb.GetGraphRequest{Mode: pb.GraphMode_GRAPH_MODE_AUTHORITY, Scope: scope})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(edgesOf(g, "delegated")) != 0 || slices.ContainsFunc(g.GetNodes(), func(n *pb.GraphNode) bool { return n.GetId() == parent.String() }) {
+		t.Errorf("a hidden parent reached the viewer: %v", g.GetEdges())
 	}
 }

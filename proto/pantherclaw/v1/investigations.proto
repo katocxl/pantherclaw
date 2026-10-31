@@ -234,6 +234,9 @@ message TimelineLane {
   bool events_truncated = 7;
   // Its missing evidence.
   repeated TimelineGap gaps = 8;
+  // This read does not load lane events (a lineage section): events and
+  // gaps being empty says nothing about the run.
+  bool events_not_loaded = 9;
 }
 
 // TimelinePhase is a stretch of actions, inferred from their order.

@@ -50116,7 +50116,7 @@
           "reason": {
             "type": "string",
             "title": "reason",
-            "description": "Why the scope's coverage record reads as it does (F278): the cause of\n its latest computation. Empty when none is recorded."
+            "description": "Why the scope's coverage record reads as it does (F278): its first\n reason, as a reason code. Empty when none is recorded."
           },
           "lastCheckedAt": {
             "title": "last_checked_at",
@@ -50126,6 +50126,16 @@
           "expiresAt": {
             "title": "expires_at",
             "description": "When that record stops holding; unset when it does not lapse.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "invalidatedBy": {
+            "type": "string",
+            "title": "invalidated_by",
+            "description": "The invalidation that asked for the latest computation (F290); empty\n when none did."
+          },
+          "validatedAt": {
+            "title": "validated_at",
+            "description": "When closure evidence last validated the scope (F290); unset when the\n record rests on no closure.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
           }
         },
@@ -55877,7 +55887,8 @@
           "GRAPH_EDGE_CHANGE_UNSPECIFIED",
           "GRAPH_EDGE_CHANGE_ADDED",
           "GRAPH_EDGE_CHANGE_REMOVED",
-          "GRAPH_EDGE_CHANGE_KEPT"
+          "GRAPH_EDGE_CHANGE_KEPT",
+          "GRAPH_EDGE_CHANGE_CHANGED"
         ],
         "description": "GraphEdgeChange says what a change-mode edge did between two revisions\n (F276)."
       },
@@ -55908,7 +55919,10 @@
           "GRAPH_EDGE_STATUS_EFFECT_PARTIAL",
           "GRAPH_EDGE_STATUS_EFFECT_PENDING",
           "GRAPH_EDGE_STATUS_EFFECT_CONFLICTING",
-          "GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE"
+          "GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE",
+          "GRAPH_EDGE_STATUS_NO_EFFECT",
+          "GRAPH_EDGE_STATUS_COMPENSATED",
+          "GRAPH_EDGE_STATUS_POSSIBLE"
         ],
         "description": "GraphEdgeStatus is what an edge's evidence says about it (F291), apart\n from whether it still counts as current (GraphEdgeState)."
       },
@@ -56676,9 +56690,10 @@
               "agent",
               "incident",
               "resource",
-              "automation"
+              "automation",
+              "restriction"
             ],
-            "description": "type: run (a task), agent, incident, resource (a resource group) or\n automation (its issued grants and, when asked, its ceiling; authority\n and exposure modes, needs automation.read)."
+            "description": "type: run (a task), agent, incident, resource (a resource group),\n automation (its issued grants and, when asked, its ceiling; authority\n and exposure modes, needs automation.read) or restriction (a response\n action, by its id)."
           },
           "id": {
             "type": "string",
@@ -68228,6 +68243,11 @@
             },
             "title": "gaps",
             "description": "Its missing evidence."
+          },
+          "eventsNotLoaded": {
+            "type": "boolean",
+            "title": "events_not_loaded",
+            "description": "This read does not load lane events (a lineage section): events and\n gaps being empty says nothing about the run."
           }
         },
         "title": "TimelineLane",
@@ -72382,7 +72402,7 @@
           "noDrill": {
             "type": "boolean",
             "title": "no_drill",
-            "description": "No search opens this point's records (F302)."
+            "description": "No search opens this point's records (F302). Unset on a RESTRICTED point:\n the viewer may not read its source, which says nothing about a search."
           }
         },
         "title": "MetricPoint",
@@ -72399,7 +72419,7 @@
           "dimension": {
             "type": "string",
             "title": "dimension",
-            "description": "A breakdown key (a resource group, or for bypass.routes_by_owner the\n owner's user id or \"unowned\"), empty for the whole organization."
+            "description": "A breakdown key (a resource group, or for bypass.routes_by_owner the\n owner's user id, \"unowned\", or \"other\" for the routes of owners past the\n 200 named), empty for the whole organization."
           },
           "points": {
             "type": "array",

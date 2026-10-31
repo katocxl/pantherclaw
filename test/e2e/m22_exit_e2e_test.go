@@ -21,6 +21,7 @@ import (
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/investigations"
 	"github.com/katocxl/pantherclaw/internal/operations"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -127,12 +128,31 @@ func (s *stack) m22Timeline(t *testing.T, rc *connect.Client, txn string) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// A child run of its own, with one action.
+	child, inner := ids.NewV7().String(), ids.NewV7().String()
+	s.db.AdminExec(t, `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_user_id, launcher_instance_id, principal_user_id,
+		principal_source, parent_run_id, depth, expires_at) SELECT org_id, $2, agent_id, environment_id, launcher_user_id, launcher_instance_id,
+		principal_user_id, principal_source, id, depth + 1, expires_at FROM pc.runs WHERE id = $1`, run, child)
+	s.db.AdminExec(t, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
+		gateway_id, connection_id, mode) SELECT org_id, $3, $2, $4, action_hash, operation, 'ALLOW', 'OK', gateway_id, connection_id, mode
+		FROM pc.transactions WHERE id = $1`, txn, child, inner, ids.NewV7())
 	tl, err := pantherclawv1connect.NewInvestigationServiceClient(rc).GetRunTimeline(ctx, &pantherclawv1.GetRunTimelineRequest{RunId: run})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.ContainsFunc(tl.GetEvents(), func(e *pantherclawv1.TimelineEvent) bool { return e.GetReadClass() == "pii" }) {
 		t.Errorf("no read class: %v", tl.GetEvents())
+	}
+	lane := func(tl *pantherclawv1.GetRunTimelineResponse) bool {
+		return slices.ContainsFunc(tl.GetLanes(), func(l *pantherclawv1.TimelineLane) bool {
+			return l.GetRunId() == child && !l.GetEventsNotLoaded() && !l.GetEventsTruncated() && slices.ContainsFunc(l.GetEvents(),
+				func(e *pantherclawv1.TimelineEvent) bool {
+					return e.GetTransactionId() == inner && e.GetKind() == investigations.EventDecision
+				})
+		})
+	}
+	if !lane(tl) {
+		t.Errorf("no lane of the child with its action: %v", tl.GetLanes())
 	}
 }
 
@@ -180,7 +200,8 @@ func (s *stack) m22Metrics(t *testing.T, rc *connect.Client) {
 	for _, series := range m.GetSeries() {
 		seen[series.GetMetric()] = true
 		for _, p := range series.GetPoints() {
-			if p.GetNoDrill() != (p.GetDrillQuery() == nil && p.GetDrillBuiltin() == nil) {
+			// A restricted point says restricted, not that no search exists.
+			if p.GetNoDrill() != (p.GetState() != string(operations.PointRestricted) && p.GetDrillQuery() == nil && p.GetDrillBuiltin() == nil) {
 				t.Errorf("%s/%s: %v", series.GetMetric(), series.GetDimension(), p)
 			}
 		}

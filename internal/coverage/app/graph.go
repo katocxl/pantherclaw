@@ -80,6 +80,9 @@ type GraphEdge struct {
 	Reason    string
 	CheckedAt *time.Time
 	ExpiresAt *time.Time
+	// InvalidatedBy and ValidatedAt are GraphScope's (F290).
+	InvalidatedBy string
+	ValidatedAt   *time.Time
 }
 
 // Graph is an agent's coverage as a graph (F277).
@@ -106,6 +109,10 @@ type GraphScope struct {
 	Reason    string
 	CheckedAt *time.Time
 	ExpiresAt *time.Time
+	// InvalidatedBy is the invalidation that asked for the computation;
+	// ValidatedAt when closure evidence last validated the scope (F290).
+	InvalidatedBy string
+	ValidatedAt   *time.Time
 }
 
 // AssembleGraph builds an agent's graph from its scopes. Scopes the caller
@@ -135,7 +142,10 @@ func AssembleGraph(agent ids.UUID, scopes []GraphScope, readable func(domain.Sco
 		scope := "scope:" + sc.Scope.Connection.String() + "/" + sc.Scope.Operation
 		node(GraphNode{ID: scope, Kind: NodeScope, Label: sc.Scope.Operation, EffectGroup: sc.Scope.Operation})
 		edge := func(from, to string) GraphEdge {
-			return GraphEdge{From: from, To: to, Reason: sc.Reason, CheckedAt: sc.CheckedAt, ExpiresAt: sc.ExpiresAt}
+			return GraphEdge{
+				From: from, To: to, Reason: sc.Reason, CheckedAt: sc.CheckedAt, ExpiresAt: sc.ExpiresAt,
+				InvalidatedBy: sc.InvalidatedBy, ValidatedAt: sc.ValidatedAt,
+			}
 		}
 		g.Edges = append(g.Edges, edge(root, scope))
 		target := "target:" + sc.Target.ID
@@ -214,7 +224,7 @@ func (s *Service) GetCoverageGraph(ctx context.Context, agent ids.UUID, f GraphF
 				readable[row.AgentID] = ok
 			}
 		}
-		pkgs, now, targets := packages{}, s.now(), map[ids.UUID]GraphTarget{}
+		pkgs, now, targets, closures := packages{}, s.now(), map[ids.UUID]GraphTarget{}, map[ids.UUID]time.Time{}
 		var scopes []GraphScope
 		for i := range rows {
 			row := rows[i]
@@ -239,9 +249,22 @@ func (s *Service) GetCoverageGraph(ctx context.Context, agent ids.UUID, f GraphF
 				targets[sc.Connection] = target
 			}
 			checked, expires := row.ComputedAt, row.ExpiresAt
+			var validated *time.Time
+			if row.ClosureID != nil {
+				at, ok := closures[*row.ClosureID]
+				if !ok {
+					closure, err := r.q.GetCoverageClosure(ctx, r.c.Org, *row.ClosureID)
+					if err != nil {
+						return err
+					}
+					at = closure.ObservedAt
+					closures[*row.ClosureID] = at
+				}
+				validated = &at
+			}
 			scopes = append(scopes, GraphScope{
 				Scope: sc, State: rec.State, Excluded: len(rec.Body.Exclusions) > 0, Routes: routes, Target: target,
-				Reason: recordReason(rec), CheckedAt: &checked, ExpiresAt: expires,
+				Reason: recordReason(rec), CheckedAt: &checked, ExpiresAt: expires, InvalidatedBy: rec.Body.Cause, ValidatedAt: validated,
 			})
 		}
 		out = AssembleGraph(agent, scopes, func(sc domain.Scope) bool { return readable[sc.Agent] }, cut)
@@ -250,16 +273,11 @@ func (s *Service) GetCoverageGraph(ctx context.Context, agent ids.UUID, f GraphF
 	return out, err
 }
 
-// recordReason is why a record reads as it does: why it lapsed, else the
-// cause of its computation, else its first reason.
+// recordReason is why a record reads as it does: its first reason, the
+// lapse when it lapsed.
 func recordReason(rec Record) string {
-	switch {
-	case rec.Lapse != "":
-		return rec.Lapse
-	case rec.Body.Cause != "":
-		return rec.Body.Cause
-	case len(rec.Body.Reasons) > 0:
-		return rec.Body.Reasons[0]
+	if len(rec.Reasons) > 0 {
+		return rec.Reasons[0]
 	}
 	return ""
 }

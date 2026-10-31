@@ -3908,13 +3908,19 @@ type CoverageGraphEdge struct {
 	From string `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
 	// To node id.
 	To string `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
-	// Why the scope's coverage record reads as it does (F278): the cause of
-	// its latest computation. Empty when none is recorded.
+	// Why the scope's coverage record reads as it does (F278): its first
+	// reason, as a reason code. Empty when none is recorded.
 	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	// When the scope's record was last computed.
 	LastCheckedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_checked_at,json=lastCheckedAt,proto3" json:"last_checked_at,omitempty"`
 	// When that record stops holding; unset when it does not lapse.
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// The invalidation that asked for the latest computation (F290); empty
+	// when none did.
+	InvalidatedBy string `protobuf:"bytes,6,opt,name=invalidated_by,json=invalidatedBy,proto3" json:"invalidated_by,omitempty"`
+	// When closure evidence last validated the scope (F290); unset when the
+	// record rests on no closure.
+	ValidatedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=validated_at,json=validatedAt,proto3" json:"validated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3980,6 +3986,20 @@ func (x *CoverageGraphEdge) GetLastCheckedAt() *timestamppb.Timestamp {
 func (x *CoverageGraphEdge) GetExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *CoverageGraphEdge) GetInvalidatedBy() string {
+	if x != nil {
+		return x.InvalidatedBy
+	}
+	return ""
+}
+
+func (x *CoverageGraphEdge) GetValidatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ValidatedAt
 	}
 	return nil
 }
@@ -4394,14 +4414,16 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"\acontrol\x18\x06 \x01(\tR\acontrol\x12\x1d\n" +
 	"\n" +
 	"closure_id\x18\a \x01(\tR\tclosureId\x12!\n" +
-	"\feffect_group\x18\b \x01(\tR\veffectGroup\"\xce\x01\n" +
+	"\feffect_group\x18\b \x01(\tR\veffectGroup\"\xb4\x02\n" +
 	"\x11CoverageGraphEdge\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x02 \x01(\tR\x02to\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12B\n" +
 	"\x0flast_checked_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rlastCheckedAt\x129\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xd8\x01\n" +
+	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12%\n" +
+	"\x0einvalidated_by\x18\x06 \x01(\tR\rinvalidatedBy\x12=\n" +
+	"\fvalidated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vvalidatedAt\"\xd8\x01\n" +
 	"\x18GetCoverageGraphResponse\x127\n" +
 	"\x05nodes\x18\x01 \x03(\v2!.pantherclaw.v1.CoverageGraphNodeR\x05nodes\x127\n" +
 	"\x05edges\x18\x02 \x03(\v2!.pantherclaw.v1.CoverageGraphEdgeR\x05edges\x12%\n" +
@@ -4595,45 +4617,46 @@ var file_pantherclaw_v1_coverage_records_proto_depIdxs = []int32{
 	42, // 59: pantherclaw.v1.ListSnapshotsResponse.snapshots:type_name -> pantherclaw.v1.CoverageSnapshot
 	51, // 60: pantherclaw.v1.CoverageGraphEdge.last_checked_at:type_name -> google.protobuf.Timestamp
 	51, // 61: pantherclaw.v1.CoverageGraphEdge.expires_at:type_name -> google.protobuf.Timestamp
-	48, // 62: pantherclaw.v1.GetCoverageGraphResponse.nodes:type_name -> pantherclaw.v1.CoverageGraphNode
-	49, // 63: pantherclaw.v1.GetCoverageGraphResponse.edges:type_name -> pantherclaw.v1.CoverageGraphEdge
-	9,  // 64: pantherclaw.v1.CoverageService.GetCoverage:input_type -> pantherclaw.v1.GetCoverageRequest
-	11, // 65: pantherclaw.v1.CoverageService.ListCoverage:input_type -> pantherclaw.v1.ListCoverageRequest
-	13, // 66: pantherclaw.v1.CoverageService.ListRoutes:input_type -> pantherclaw.v1.ListRoutesRequest
-	18, // 67: pantherclaw.v1.CoverageService.GetClosure:input_type -> pantherclaw.v1.GetClosureRequest
-	20, // 68: pantherclaw.v1.CoverageService.ListClosures:input_type -> pantherclaw.v1.ListClosuresRequest
-	22, // 69: pantherclaw.v1.CoverageService.GetFreshnessContract:input_type -> pantherclaw.v1.GetFreshnessContractRequest
-	43, // 70: pantherclaw.v1.CoverageService.GetSnapshot:input_type -> pantherclaw.v1.GetSnapshotRequest
-	45, // 71: pantherclaw.v1.CoverageService.ListSnapshots:input_type -> pantherclaw.v1.ListSnapshotsRequest
-	24, // 72: pantherclaw.v1.CoverageService.Reassess:input_type -> pantherclaw.v1.ReassessRequest
-	27, // 73: pantherclaw.v1.CoverageService.CreateExclusion:input_type -> pantherclaw.v1.CreateExclusionRequest
-	29, // 74: pantherclaw.v1.CoverageService.RevokeExclusion:input_type -> pantherclaw.v1.RevokeExclusionRequest
-	31, // 75: pantherclaw.v1.CoverageService.ListExclusions:input_type -> pantherclaw.v1.ListExclusionsRequest
-	33, // 76: pantherclaw.v1.CoverageService.GetAccessDetail:input_type -> pantherclaw.v1.GetAccessDetailRequest
-	38, // 77: pantherclaw.v1.CoverageService.ListFindings:input_type -> pantherclaw.v1.ListFindingsRequest
-	40, // 78: pantherclaw.v1.CoverageService.AcknowledgeFinding:input_type -> pantherclaw.v1.AcknowledgeFindingRequest
-	47, // 79: pantherclaw.v1.CoverageService.GetCoverageGraph:input_type -> pantherclaw.v1.GetCoverageGraphRequest
-	10, // 80: pantherclaw.v1.CoverageService.GetCoverage:output_type -> pantherclaw.v1.GetCoverageResponse
-	12, // 81: pantherclaw.v1.CoverageService.ListCoverage:output_type -> pantherclaw.v1.ListCoverageResponse
-	14, // 82: pantherclaw.v1.CoverageService.ListRoutes:output_type -> pantherclaw.v1.ListRoutesResponse
-	19, // 83: pantherclaw.v1.CoverageService.GetClosure:output_type -> pantherclaw.v1.GetClosureResponse
-	21, // 84: pantherclaw.v1.CoverageService.ListClosures:output_type -> pantherclaw.v1.ListClosuresResponse
-	23, // 85: pantherclaw.v1.CoverageService.GetFreshnessContract:output_type -> pantherclaw.v1.GetFreshnessContractResponse
-	44, // 86: pantherclaw.v1.CoverageService.GetSnapshot:output_type -> pantherclaw.v1.GetSnapshotResponse
-	46, // 87: pantherclaw.v1.CoverageService.ListSnapshots:output_type -> pantherclaw.v1.ListSnapshotsResponse
-	25, // 88: pantherclaw.v1.CoverageService.Reassess:output_type -> pantherclaw.v1.ReassessResponse
-	28, // 89: pantherclaw.v1.CoverageService.CreateExclusion:output_type -> pantherclaw.v1.CreateExclusionResponse
-	30, // 90: pantherclaw.v1.CoverageService.RevokeExclusion:output_type -> pantherclaw.v1.RevokeExclusionResponse
-	32, // 91: pantherclaw.v1.CoverageService.ListExclusions:output_type -> pantherclaw.v1.ListExclusionsResponse
-	36, // 92: pantherclaw.v1.CoverageService.GetAccessDetail:output_type -> pantherclaw.v1.GetAccessDetailResponse
-	39, // 93: pantherclaw.v1.CoverageService.ListFindings:output_type -> pantherclaw.v1.ListFindingsResponse
-	41, // 94: pantherclaw.v1.CoverageService.AcknowledgeFinding:output_type -> pantherclaw.v1.AcknowledgeFindingResponse
-	50, // 95: pantherclaw.v1.CoverageService.GetCoverageGraph:output_type -> pantherclaw.v1.GetCoverageGraphResponse
-	80, // [80:96] is the sub-list for method output_type
-	64, // [64:80] is the sub-list for method input_type
-	64, // [64:64] is the sub-list for extension type_name
-	64, // [64:64] is the sub-list for extension extendee
-	0,  // [0:64] is the sub-list for field type_name
+	51, // 62: pantherclaw.v1.CoverageGraphEdge.validated_at:type_name -> google.protobuf.Timestamp
+	48, // 63: pantherclaw.v1.GetCoverageGraphResponse.nodes:type_name -> pantherclaw.v1.CoverageGraphNode
+	49, // 64: pantherclaw.v1.GetCoverageGraphResponse.edges:type_name -> pantherclaw.v1.CoverageGraphEdge
+	9,  // 65: pantherclaw.v1.CoverageService.GetCoverage:input_type -> pantherclaw.v1.GetCoverageRequest
+	11, // 66: pantherclaw.v1.CoverageService.ListCoverage:input_type -> pantherclaw.v1.ListCoverageRequest
+	13, // 67: pantherclaw.v1.CoverageService.ListRoutes:input_type -> pantherclaw.v1.ListRoutesRequest
+	18, // 68: pantherclaw.v1.CoverageService.GetClosure:input_type -> pantherclaw.v1.GetClosureRequest
+	20, // 69: pantherclaw.v1.CoverageService.ListClosures:input_type -> pantherclaw.v1.ListClosuresRequest
+	22, // 70: pantherclaw.v1.CoverageService.GetFreshnessContract:input_type -> pantherclaw.v1.GetFreshnessContractRequest
+	43, // 71: pantherclaw.v1.CoverageService.GetSnapshot:input_type -> pantherclaw.v1.GetSnapshotRequest
+	45, // 72: pantherclaw.v1.CoverageService.ListSnapshots:input_type -> pantherclaw.v1.ListSnapshotsRequest
+	24, // 73: pantherclaw.v1.CoverageService.Reassess:input_type -> pantherclaw.v1.ReassessRequest
+	27, // 74: pantherclaw.v1.CoverageService.CreateExclusion:input_type -> pantherclaw.v1.CreateExclusionRequest
+	29, // 75: pantherclaw.v1.CoverageService.RevokeExclusion:input_type -> pantherclaw.v1.RevokeExclusionRequest
+	31, // 76: pantherclaw.v1.CoverageService.ListExclusions:input_type -> pantherclaw.v1.ListExclusionsRequest
+	33, // 77: pantherclaw.v1.CoverageService.GetAccessDetail:input_type -> pantherclaw.v1.GetAccessDetailRequest
+	38, // 78: pantherclaw.v1.CoverageService.ListFindings:input_type -> pantherclaw.v1.ListFindingsRequest
+	40, // 79: pantherclaw.v1.CoverageService.AcknowledgeFinding:input_type -> pantherclaw.v1.AcknowledgeFindingRequest
+	47, // 80: pantherclaw.v1.CoverageService.GetCoverageGraph:input_type -> pantherclaw.v1.GetCoverageGraphRequest
+	10, // 81: pantherclaw.v1.CoverageService.GetCoverage:output_type -> pantherclaw.v1.GetCoverageResponse
+	12, // 82: pantherclaw.v1.CoverageService.ListCoverage:output_type -> pantherclaw.v1.ListCoverageResponse
+	14, // 83: pantherclaw.v1.CoverageService.ListRoutes:output_type -> pantherclaw.v1.ListRoutesResponse
+	19, // 84: pantherclaw.v1.CoverageService.GetClosure:output_type -> pantherclaw.v1.GetClosureResponse
+	21, // 85: pantherclaw.v1.CoverageService.ListClosures:output_type -> pantherclaw.v1.ListClosuresResponse
+	23, // 86: pantherclaw.v1.CoverageService.GetFreshnessContract:output_type -> pantherclaw.v1.GetFreshnessContractResponse
+	44, // 87: pantherclaw.v1.CoverageService.GetSnapshot:output_type -> pantherclaw.v1.GetSnapshotResponse
+	46, // 88: pantherclaw.v1.CoverageService.ListSnapshots:output_type -> pantherclaw.v1.ListSnapshotsResponse
+	25, // 89: pantherclaw.v1.CoverageService.Reassess:output_type -> pantherclaw.v1.ReassessResponse
+	28, // 90: pantherclaw.v1.CoverageService.CreateExclusion:output_type -> pantherclaw.v1.CreateExclusionResponse
+	30, // 91: pantherclaw.v1.CoverageService.RevokeExclusion:output_type -> pantherclaw.v1.RevokeExclusionResponse
+	32, // 92: pantherclaw.v1.CoverageService.ListExclusions:output_type -> pantherclaw.v1.ListExclusionsResponse
+	36, // 93: pantherclaw.v1.CoverageService.GetAccessDetail:output_type -> pantherclaw.v1.GetAccessDetailResponse
+	39, // 94: pantherclaw.v1.CoverageService.ListFindings:output_type -> pantherclaw.v1.ListFindingsResponse
+	41, // 95: pantherclaw.v1.CoverageService.AcknowledgeFinding:output_type -> pantherclaw.v1.AcknowledgeFindingResponse
+	50, // 96: pantherclaw.v1.CoverageService.GetCoverageGraph:output_type -> pantherclaw.v1.GetCoverageGraphResponse
+	81, // [81:97] is the sub-list for method output_type
+	65, // [65:81] is the sub-list for method input_type
+	65, // [65:65] is the sub-list for extension type_name
+	65, // [65:65] is the sub-list for extension extendee
+	0,  // [0:65] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_coverage_records_proto_init() }

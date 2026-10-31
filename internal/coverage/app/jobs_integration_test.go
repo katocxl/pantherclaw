@@ -8,11 +8,14 @@ package app_test
 import (
 	"context"
 	"testing"
+	"time"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 func (f *fixture) reassessOrg(t *testing.T) app.Reassessed {
@@ -54,11 +57,23 @@ func TestHR211_TheReassessJobFollowsEveryChange(t *testing.T) {
 	if r := f.reassessOrg(t); r.Scopes != 1 || r.Snapshots != 1 {
 		t.Fatalf("first run %+v", r)
 	}
-	if row, _, _ := f.current(t, op); row.State != "ENFORCED" {
+	row, _, _ := f.current(t, op)
+	if row.State != "ENFORCED" {
 		t.Fatalf("state %s", row.State)
 	}
 	if n := f.pending(t); n != 0 {
 		t.Fatalf("%d invalidations pending after the run", n)
+	}
+	var observed time.Time
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		c, err := dbq.New(tx).GetCoverageClosure(ctx, f.org, *row.ClosureID)
+		observed = c.ObservedAt
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if e := f.graphEdge(t); e.ValidatedAt == nil || !e.ValidatedAt.Equal(observed) || e.InvalidatedBy != "" {
+		t.Fatalf("a validated scope, want validated at %v: %+v", observed, e)
 	}
 	f.exec(t, `UPDATE pc.connections SET access_mode = 'agent_held' WHERE id = $1`, f.conn)
 	if r := f.reassessOrg(t); r.Snapshots != 1 {
@@ -68,6 +83,11 @@ func TestHR211_TheReassessJobFollowsEveryChange(t *testing.T) {
 	if row.State != "PARTIAL" || row.InvalidationID == nil || s.Cause != row.InvalidationID.String() ||
 		row.LastValidID == nil {
 		t.Fatalf("after a connection change: %s cause %v last valid %v", row.State, row.InvalidationID, row.LastValidID)
+	}
+	// The reason is a reason code and the invalidation has its own field,
+	// never one in the other's place (D36).
+	if e := f.graphEdge(t); len(s.Reasons) == 0 || e.Reason != s.Reasons[0] || e.InvalidatedBy != row.InvalidationID.String() {
+		t.Fatalf("reasons %v, invalidation %v: %+v", s.Reasons, row.InvalidationID, e)
 	}
 	if n := f.pending(t); n != 0 {
 		t.Fatalf("%d invalidations pending after the run", n)
@@ -91,6 +111,29 @@ func TestHR211_TheReassessJobFollowsEveryChange(t *testing.T) {
 	if n := f.staleMetric(t); n != 0 {
 		t.Fatalf("the staleness metric reads %d after reassessment", n)
 	}
+	// A change the record did not see lapses it as well (L7).
+	f.exec(t, `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id) VALUES ($1, $2, 'connection', $3)`,
+		f.org, ids.NewV7(), f.conn)
+	if n := f.staleMetric(t); n != 1 {
+		t.Fatalf("the staleness metric reads %d with one record lapsed on an unseen change", n)
+	}
+	if r := f.reassessOrg(t); r.Snapshots != 1 {
+		t.Fatalf("after an unseen change %+v", r)
+	}
+	if n := f.staleMetric(t); n != 0 {
+		t.Fatalf("the staleness metric reads %d after the change was seen", n)
+	}
+}
+
+// graphEdge is the edge into the agent's first scope.
+func (f *fixture) graphEdge(t *testing.T) app.GraphEdge {
+	t.Helper()
+	f.svc.Ents = edition(billing.Team)
+	g, err := f.svc.GetCoverageGraph(f.as(td.RoleAuditor), f.agent, app.GraphFilter{Connection: &f.conn})
+	if err != nil || len(g.Edges) == 0 {
+		t.Fatalf("graph %+v (%v)", g, err)
+	}
+	return g.Edges[0]
 }
 
 // staleMetric is the staleness metric's source (F301).

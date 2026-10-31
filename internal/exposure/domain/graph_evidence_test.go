@@ -225,6 +225,116 @@ func TestF291_EdgesCarryTheirExplicitState(t *testing.T) {
 	}
 }
 
+func built(es []domain.Edge) []domain.Edge {
+	return domain.Build(domain.ModeCausal, es, all, domain.GraphFilter{}, false, domain.DefaultLimits).Edges
+}
+
+// TestHR551_APredictionIsNeverCurrentAndYieldsAtTheCap: a prediction shows
+// nothing happened, so it stays out of the current counts, and at the cap
+// what is confirmed outranks it (L1).
+func TestHR551_APredictionIsNeverCurrentAndYieldsAtTheCap(t *testing.T) {
+	root := domain.Node{Type: "transaction", ID: "t"}
+	predicted := domain.Edge{
+		From: root, To: domain.Node{Type: "consequence", ID: "t/0"}, Kind: domain.EdgeTriggered, State: domain.EdgePossible,
+		Stage: domain.StagePredicted,
+	}
+	confirmed := domain.Edge{
+		From: root, To: domain.Node{Type: "transaction", ID: "t2"}, Kind: domain.EdgeTriggered, State: domain.EdgeHistorical,
+		Stage: domain.StageConfirmed,
+	}
+	active := confirmed
+	active.State = domain.EdgeActive
+	g := domain.Build(domain.ModeCausal, []domain.Edge{predicted, active}, all, domain.GraphFilter{}, false, domain.Limits{Nodes: 10, Edges: 10})
+	if g.Current[domain.EdgeTriggered] != 1 {
+		t.Errorf("current counts %v", g.Current)
+	}
+	// Historical and confirmed still outranks predicted, which is current.
+	g = domain.Build(domain.ModeCausal, []domain.Edge{predicted, confirmed}, all, domain.GraphFilter{}, false, domain.Limits{Nodes: 10, Edges: 1})
+	if len(g.Edges) != 1 || g.Edges[0].Stage != domain.StageConfirmed || !g.Truncated {
+		t.Errorf("at the cap: %+v", g.Edges)
+	}
+}
+
+// TestHR551_ALinkOnlyNamesARecordThatExists: an opened consequence with no
+// transaction link is a gap, never a reference to nothing (L2).
+func TestHR551_ALinkOnlyNamesARecordThatExists(t *testing.T) {
+	gap := false
+	for _, e := range domain.CausalLinks([]domain.CausalEvidence{{
+		Activity:     domain.Activity{Transaction: "t", Run: "r", Agent: "a", At: time.Now()},
+		Consequences: []domain.ConsequenceEvidence{{Position: 0, Parent: -1, Transaction: "t2", State: "PREDICTED", At: time.Now()}},
+	}}) {
+		if strings.HasPrefix(e.EvidenceRef, "transaction_link:") {
+			t.Errorf("a link with no record: %+v", e)
+		}
+		gap = gap || (e.To.ID == "t2" && e.Kind == domain.EdgeGap && e.Provenance == domain.GapNoLink)
+	}
+	if !gap {
+		t.Error("no gap for the missing link")
+	}
+}
+
+// TestHR551_APredictionIsNeverAuthoritative: a rule's prediction names the
+// record of the rule's match, which proves the rule matched and nothing
+// about what happened (D29).
+// Covers: F279, F280, F297
+func TestHR551_APredictionIsNeverAuthoritative(t *testing.T) {
+	ev := evidenced()
+	ev.Consequences = []domain.ConsequenceEvidence{{Evaluation: 1, Position: 0, Parent: -1, State: "PREDICTED", At: now}}
+	got := kinds(built(domain.CausalLinks([]domain.CausalEvidence{ev})), domain.EdgeTriggered)
+	if len(got) != 1 {
+		t.Fatalf("triggered: %+v", got)
+	}
+	if e := got[0]; e.Status != domain.StatusUnknown || e.Assurance != domain.AssuranceDeclared || e.EvidenceRef == "" {
+		t.Errorf("predicted: %s %s", e.Status, e.Assurance)
+	}
+}
+
+// TestHR551_NoEffectAndCompensatedNeverReadAsObserved: a receipt that says
+// nothing happened, or that it was undone, keeps its own status on the
+// effect edge and on an authorized consequence (D30). A consequence opened
+// with no effect yet was allowed, not seen to happen.
+// Covers: F273, F279, F291
+func TestHR551_NoEffectAndCompensatedNeverReadAsObserved(t *testing.T) {
+	for state, want := range map[string]string{"NONE_CONFIRMED": "NO_EFFECT", "COMPENSATED": "COMPENSATED"} {
+		ev := evidenced()
+		ev.EffectState = state
+		ev.Consequences = []domain.ConsequenceEvidence{{Evaluation: 1, Position: 0, Parent: -1, State: "PREDICTED", Transaction: "c", Linked: "t", Effect: state, At: now}}
+		es := built(domain.CausalLinks([]domain.CausalEvidence{ev}))
+		for _, kind := range []string{domain.EdgeEffect, domain.EdgeTriggered} {
+			e := kinds(es, kind)[0]
+			if string(e.Status) != want || e.Assurance != domain.AssuranceAuthoritative {
+				t.Errorf("%s %s: %s %s, want %s from its record", state, kind, e.Status, e.Assurance, want)
+			}
+		}
+	}
+	ev := evidenced()
+	ev.Consequences = []domain.ConsequenceEvidence{{Evaluation: 1, Position: 0, Parent: -1, State: "PREDICTED", Transaction: "c", Linked: "t", At: now}}
+	if e := kinds(built(domain.CausalLinks([]domain.CausalEvidence{ev})), domain.EdgeTriggered)[0]; e.Status != domain.StatusAllowed {
+		t.Errorf("an opened consequence with no effect reads %s", e.Status)
+	}
+}
+
+// TestHR551_ARightNobodyUsedIsNeverObserved: a right on observe-only
+// coverage stays possible, with its coverage shown; only a record of use
+// reads as observed (D31, F273).
+// Covers: F272, F273, F291
+func TestHR551_ARightNobodyUsedIsNeverObserved(t *testing.T) {
+	agent, conn := ids.NewV7(), ids.NewV7()
+	unused := domain.Right{View: domain.Effective, Label: domain.Usable, Agent: &agent, Connection: &conn, ResourceGroup: "g", Coverage: domain.CoverageObserveOnly}
+	for _, e := range built(domain.ExposureEdges([]domain.Right{unused})) {
+		if string(e.Status) != "POSSIBLE" || e.Assurance != domain.AssuranceDeclared || e.Coverage != domain.CoverageObserveOnly {
+			t.Errorf("%s: %s %s coverage %s", e.Kind, e.Status, e.Assurance, e.Coverage)
+		}
+	}
+	used := unused
+	used.View = domain.Observed
+	for _, e := range built(domain.ExposureEdges([]domain.Right{used})) {
+		if e.Status != domain.StatusObserved {
+			t.Errorf("a used right reads %s", e.Status)
+		}
+	}
+}
+
 // TestF293_EveryEdgeNamesItsSource: no mode builds an edge without one.
 // Covers: F293, F297
 func TestF293_EveryEdgeNamesItsSource(t *testing.T) {

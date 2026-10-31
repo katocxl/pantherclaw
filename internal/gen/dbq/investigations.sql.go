@@ -268,6 +268,159 @@ func (q *Queries) InvGrantChanges(ctx context.Context, arg InvGrantChangesParams
 	return items, nil
 }
 
+const invLaneApprovals = `-- name: InvLaneApprovals :many
+SELECT q.id, q.run_id::uuid AS run_id, q.transaction_id, q.operation, q.state, q.created_at, q.approved_at, q.ended_at
+FROM pc.approval_requests q
+WHERE q.org_id = $1 AND q.subject_kind = 'ACTION' AND q.run_id = ANY ($2::uuid[])
+ORDER BY q.created_at, q.id
+LIMIT $3
+`
+
+type InvLaneApprovalsRow struct {
+	ID            ids.UUID
+	RunID         ids.UUID
+	TransactionID *ids.UUID
+	Operation     string
+	State         string
+	CreatedAt     time.Time
+	ApprovedAt    *time.Time
+	EndedAt       *time.Time
+}
+
+// The approval requests of several child runs in one read (F284).
+func (q *Queries) InvLaneApprovals(ctx context.Context, orgID ids.OrgID, runIds []ids.UUID, maxRows int32) ([]InvLaneApprovalsRow, error) {
+	rows, err := q.db.Query(ctx, invLaneApprovals, orgID, runIds, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvLaneApprovalsRow{}
+	for rows.Next() {
+		var i InvLaneApprovalsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.TransactionID,
+			&i.Operation,
+			&i.State,
+			&i.CreatedAt,
+			&i.ApprovedAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const invLaneTransactions = `-- name: InvLaneTransactions :many
+SELECT x.run_id, x.round, x.id, x.operation, x.decision, x.reason_code, x.mode, x.channel, x.connection_id, x.target_type, x.target_id,
+       x.grant_id, x.effect_state, x.read_class, x.created_at, x.permit_state, x.dispatching_at, x.outcome, x.outcome_at, x.has_receipt,
+       x.destination_class
+FROM unnest($1::uuid[]) AS lane(id)
+CROSS JOIN LATERAL (
+    SELECT t.run_id, (row_number() OVER (ORDER BY t.created_at, t.id))::bigint AS round, t.id, t.operation, t.decision, t.reason_code,
+           t.mode, t.channel, t.connection_id, t.target_type, t.target_id, t.grant_id, t.effect_state, t.read_class, t.created_at,
+           p.state AS permit_state, p.dispatching_at, a.outcome, a.recorded_at AS outcome_at,
+           EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt,
+           c.destination_class
+    FROM pc.transactions t
+    LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+    LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
+    LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+    WHERE t.org_id = $2 AND t.run_id = lane.id
+    ORDER BY t.created_at, t.id
+    LIMIT $3
+) x
+ORDER BY x.round, x.run_id
+LIMIT $4
+`
+
+type InvLaneTransactionsParams struct {
+	RunIds   []ids.UUID
+	OrgID    ids.OrgID
+	LaneRows int32
+	MaxRows  int32
+}
+
+type InvLaneTransactionsRow struct {
+	RunID            ids.UUID
+	Round            int64
+	ID               ids.UUID
+	Operation        string
+	Decision         string
+	ReasonCode       string
+	Mode             string
+	Channel          *string
+	ConnectionID     *ids.UUID
+	TargetType       *string
+	TargetID         *string
+	GrantID          *ids.UUID
+	EffectState      *string
+	ReadClass        *string
+	CreatedAt        time.Time
+	PermitState      *string
+	DispatchingAt    *time.Time
+	Outcome          *string
+	OutcomeAt        *time.Time
+	HasReceipt       bool
+	DestinationClass *string
+}
+
+// The first transactions of several child runs in one read (F284): at most
+// lane_rows each, in rounds so a cut at max_rows shares out evenly. The
+// columns are InvRunTransactions' with the run and the round.
+func (q *Queries) InvLaneTransactions(ctx context.Context, arg InvLaneTransactionsParams) ([]InvLaneTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, invLaneTransactions,
+		arg.RunIds,
+		arg.OrgID,
+		arg.LaneRows,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvLaneTransactionsRow{}
+	for rows.Next() {
+		var i InvLaneTransactionsRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.Round,
+			&i.ID,
+			&i.Operation,
+			&i.Decision,
+			&i.ReasonCode,
+			&i.Mode,
+			&i.Channel,
+			&i.ConnectionID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.GrantID,
+			&i.EffectState,
+			&i.ReadClass,
+			&i.CreatedAt,
+			&i.PermitState,
+			&i.DispatchingAt,
+			&i.Outcome,
+			&i.OutcomeAt,
+			&i.HasReceipt,
+			&i.DestinationClass,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const invOrgAgents = `-- name: InvOrgAgents :many
 SELECT id FROM pc.agents WHERE org_id = $1 ORDER BY id LIMIT 10001
 `

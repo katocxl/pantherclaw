@@ -318,3 +318,72 @@ func TestF284_LanesCarryTheirEventsAndReadsTheirClass(t *testing.T) {
 		return nil
 	})
 }
+
+// TestF284_LanesReadTogetherAndSayWhenCutOrNotLoaded: lanes hold their own
+// actions up to their bound and flag a cut, one lane's length costs another
+// nothing, and a lineage section says its lanes' events were not read (D35).
+// Covers: F284
+func TestF284_LanesReadTogetherAndSayWhenCutOrNotLoaded(t *testing.T) {
+	f := newFixture(t)
+	s := scope{f.agent: true}
+	start := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	run := f.run(t, f.agent)
+	f.children(t, run, f.agent, 2, start)
+	var kids []ids.UUID
+	f.read(t, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := tx.Query(ctx, "SELECT id FROM pc.runs WHERE parent_run_id = $1 ORDER BY created_at, id", run)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id ids.UUID
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			kids = append(kids, id)
+		}
+		return rows.Err()
+	})
+	if len(kids) != 2 {
+		t.Fatalf("children: %v", kids)
+	}
+	for range investigations.MaxLaneActions + 1 {
+		f.txn(t, kids[0], f.internal, "wiki.page.read", "ALLOW")
+	}
+	f.txn(t, kids[1], f.internal, "wiki.page.read", "ALLOW")
+	decisions := func(l investigations.Lane) int {
+		n := 0
+		for _, e := range l.Events {
+			if e.Kind == investigations.EventDecision {
+				n++
+			}
+		}
+		return n
+	}
+	f.read(t, func(ctx context.Context, tx db.TenantTx) error {
+		tl, err := investigations.RunTimeline(ctx, tx, s, run, false)
+		if err != nil {
+			return err
+		}
+		if len(tl.Lanes) != 2 {
+			t.Fatalf("lanes = %+v", tl.Lanes)
+		}
+		long, short := tl.Lanes[0], tl.Lanes[1]
+		if long.Run != kids[0] || decisions(long) != investigations.MaxLaneActions || !long.EventsTruncated || long.EventsNotLoaded {
+			t.Errorf("the long lane: %d decisions, truncated %v, not loaded %v", decisions(long), long.EventsTruncated, long.EventsNotLoaded)
+		}
+		if decisions(short) != 1 || short.EventsTruncated || short.EventsNotLoaded {
+			t.Errorf("the short lane: %d decisions, truncated %v, not loaded %v", decisions(short), short.EventsTruncated, short.EventsNotLoaded)
+		}
+		return nil
+	})
+	svc := &investigations.Service{Pool: f.p}
+	in, err := svc.InspectRun(f.as(td.RoleAuditor), run, investigations.InspectOptions{Sections: []investigations.Section{investigations.SectionLineage}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.Lineage == nil || len(in.Lineage.Children) != 2 || !in.Lineage.Children[0].EventsNotLoaded {
+		t.Errorf("lineage: %+v", in.Lineage)
+	}
+}

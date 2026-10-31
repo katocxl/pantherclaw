@@ -6,7 +6,6 @@ package operations
 import (
 	"context"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -59,6 +58,10 @@ const (
 	maxMetricRange = 30 * 24 * time.Hour
 	// MaxCollectLag is how many past hours one collection fills in.
 	MaxCollectLag = 24
+	// MaxOwners caps the owners bypass.routes_by_owner names; the routes of
+	// the rest are sampled together as OwnersOther.
+	MaxOwners   = 200
+	OwnersOther = "other"
 )
 
 // Entitlements reads the org's licence.
@@ -74,6 +77,24 @@ var ErrEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "operat
 // narrower scope (D8).
 var ErrMetricsScope = pcerr.New(pcerr.PermissionDenied, "PERMISSION_DENIED",
 	"operating metrics need operations.read across the organization")
+
+// ownerSamples samples routes by owner. The rows hold "unowned" first, then
+// the largest, so a cut keeps them; what it dropped is still counted.
+func ownerSamples(owners []dbq.MetricBypassRoutesByOwnerRow, total int64) []sample {
+	if len(owners) == 0 {
+		return []sample{{metric: MetricBypassByOwner, value: 0, collected: true}}
+	}
+	var out []sample
+	shown := int64(0)
+	for _, o := range owners[:min(len(owners), MaxOwners)] {
+		shown += o.N
+		out = append(out, sample{metric: MetricBypassByOwner, dimension: o.Owner, value: float64(o.N), collected: true})
+	}
+	if len(owners) > MaxOwners {
+		out = append(out, sample{metric: MetricBypassByOwner, dimension: OwnersOther, value: float64(total - shown), collected: true})
+	}
+	return out
+}
 
 // sample is one value to record; collected false means "not collected".
 type sample struct {
@@ -230,12 +251,7 @@ func sampleHour(ctx context.Context, q *dbq.Queries, org ids.OrgID, bucket time.
 	if err != nil {
 		return nil, err
 	}
-	for _, o := range owners {
-		out = append(out, sample{metric: MetricBypassByOwner, dimension: o.Owner, value: float64(o.N), collected: true})
-	}
-	if len(owners) == 0 {
-		out = append(out, sample{metric: MetricBypassByOwner, value: 0, collected: true})
-	}
+	out = append(out, ownerSamples(owners, by.N)...)
 	backlog, err := q.MetricReconciliationBacklog(ctx, org)
 	if err != nil {
 		return nil, err
@@ -425,8 +441,7 @@ func drill(metric, dim string, bucket time.Time) *search.Spec {
 		return tx(search.Filters{Modes: []string{"monitor"}})
 	case MetricEffectsConfirmed:
 		return tx(search.Filters{EffectStates: []string{"CONFIRMED"}})
-	case MetricCoverageEnforced, MetricCoverageNotEnforced, MetricCoverageStale, MetricBypassRoutes, MetricBypassOldestHours,
-		MetricBypassByOwner:
+	case MetricCoverageEnforced, MetricCoverageNotEnforced, MetricBypassRoutes, MetricBypassOldestHours:
 		return &search.Spec{Query: &search.Query{Entity: search.EntityConnections}}
 	case MetricExposureUsable:
 		if dim == "" {
@@ -435,22 +450,14 @@ func drill(metric, dim string, bucket time.Time) *search.Spec {
 		return &search.Spec{Builtin: &search.BuiltinQuery{Name: search.BuiltinWhoCanWrite, Params: search.Params{Resource: dim}}}
 	case MetricReconciliationBacklog:
 		return &search.Spec{Query: &search.Query{Entity: search.EntityTransactions, Filters: search.Filters{
-			Modes: []string{"enforce"}, EffectStates: []string{"UNKNOWN", "PROPAGATION_PENDING", "CONFLICTING"},
+			EffectStates: []string{"UNKNOWN", "PROPAGATION_PENDING", "CONFLICTING"},
 		}}}
-	case MetricAutomationOutcomes:
-		f := search.Filters{Start: &start, End: &end}
-		if id, _, ok := strings.Cut(dim, "/"); ok {
-			if a, err := ids.ParseUUID(id); err == nil {
-				f.Automation = &a
-			}
-		}
-		// The interventions dimension names no automation: its failures are
-		// org-wide and no search lists them (no_drill, F302).
-		if f.Automation == nil {
-			return nil
-		}
-		return &search.Spec{Query: &search.Query{Entity: search.EntityExecutions, Filters: f}}
 	default:
+		// No search lists these points' records, so none opens a wider list
+		// and calls it the same number (no_drill, F302): coverage.stale and
+		// bypass.routes_by_owner have no filter, and automation.outcomes
+		// counts an execution in the hour it ended where search ranges by the
+		// hour it was created.
 		return nil
 	}
 }

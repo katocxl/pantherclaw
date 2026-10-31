@@ -335,6 +335,13 @@ const (
 	GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_PENDING      GraphEdgeStatus = 10
 	GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_CONFLICTING  GraphEdgeStatus = 11
 	GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE GraphEdgeStatus = 12
+	// A receipt says no effect happened. Never drawn as something that did.
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_NO_EFFECT GraphEdgeStatus = 13
+	// A receipt says the effect was undone. Never drawn as one that stands.
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_COMPENSATED GraphEdgeStatus = 14
+	// Nothing shows it happened, or that it is stopped: a right on observe-only
+	// coverage that nobody used.
+	GraphEdgeStatus_GRAPH_EDGE_STATUS_POSSIBLE GraphEdgeStatus = 15
 )
 
 // Enum value maps for GraphEdgeStatus.
@@ -353,6 +360,9 @@ var (
 		10: "GRAPH_EDGE_STATUS_EFFECT_PENDING",
 		11: "GRAPH_EDGE_STATUS_EFFECT_CONFLICTING",
 		12: "GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE",
+		13: "GRAPH_EDGE_STATUS_NO_EFFECT",
+		14: "GRAPH_EDGE_STATUS_COMPENSATED",
+		15: "GRAPH_EDGE_STATUS_POSSIBLE",
 	}
 	GraphEdgeStatus_value = map[string]int32{
 		"GRAPH_EDGE_STATUS_UNSPECIFIED":         0,
@@ -368,6 +378,9 @@ var (
 		"GRAPH_EDGE_STATUS_EFFECT_PENDING":      10,
 		"GRAPH_EDGE_STATUS_EFFECT_CONFLICTING":  11,
 		"GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE": 12,
+		"GRAPH_EDGE_STATUS_NO_EFFECT":           13,
+		"GRAPH_EDGE_STATUS_COMPENSATED":         14,
+		"GRAPH_EDGE_STATUS_POSSIBLE":            15,
 	}
 )
 
@@ -407,6 +420,8 @@ const (
 	GraphEdgeChange_GRAPH_EDGE_CHANGE_ADDED       GraphEdgeChange = 1
 	GraphEdgeChange_GRAPH_EDGE_CHANGE_REMOVED     GraphEdgeChange = 2
 	GraphEdgeChange_GRAPH_EDGE_CHANGE_KEPT        GraphEdgeChange = 3
+	// The same operation, under different bounds.
+	GraphEdgeChange_GRAPH_EDGE_CHANGE_CHANGED GraphEdgeChange = 4
 )
 
 // Enum value maps for GraphEdgeChange.
@@ -416,12 +431,14 @@ var (
 		1: "GRAPH_EDGE_CHANGE_ADDED",
 		2: "GRAPH_EDGE_CHANGE_REMOVED",
 		3: "GRAPH_EDGE_CHANGE_KEPT",
+		4: "GRAPH_EDGE_CHANGE_CHANGED",
 	}
 	GraphEdgeChange_value = map[string]int32{
 		"GRAPH_EDGE_CHANGE_UNSPECIFIED": 0,
 		"GRAPH_EDGE_CHANGE_ADDED":       1,
 		"GRAPH_EDGE_CHANGE_REMOVED":     2,
 		"GRAPH_EDGE_CHANGE_KEPT":        3,
+		"GRAPH_EDGE_CHANGE_CHANGED":     4,
 	}
 )
 
@@ -2344,9 +2361,10 @@ func (x *GraphEdge) GetDownstreamState() string {
 // GraphScope is where a graph starts (F293).
 type GraphScope struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// type: run (a task), agent, incident, resource (a resource group) or
+	// type: run (a task), agent, incident, resource (a resource group),
 	// automation (its issued grants and, when asked, its ceiling; authority
-	// and exposure modes, needs automation.read).
+	// and exposure modes, needs automation.read) or restriction (a response
+	// action, by its id).
 	Type          string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	Id            string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3014,11 +3032,11 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\rtrigger_stage\x18\x15 \x01(\x0e2!.pantherclaw.v1.GraphTriggerStageR\ftriggerStage\x12=\n" +
 	"\fobserve_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\vobserveTime\x12\x1c\n" +
 	"\tassurance\x18\x17 \x01(\tR\tassurance\x12)\n" +
-	"\x10downstream_state\x18\x18 \x01(\tR\x0fdownstreamState\"o\n" +
+	"\x10downstream_state\x18\x18 \x01(\tR\x0fdownstreamState\"|\n" +
 	"\n" +
-	"GraphScope\x12E\n" +
-	"\x04type\x18\x01 \x01(\tB1\xbaH.r,R\x03runR\x05agentR\bincidentR\bresourceR\n" +
-	"automationR\x04type\x12\x1a\n" +
+	"GraphScope\x12R\n" +
+	"\x04type\x18\x01 \x01(\tB>\xbaH;r9R\x03runR\x05agentR\bincidentR\bresourceR\n" +
+	"automationR\vrestrictionR\x04type\x12\x1a\n" +
 	"\x02id\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x02id\"\x98\x03\n" +
 	"\vGraphFilter\x129\n" +
@@ -3106,7 +3124,7 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	"\x17GRAPH_EDGE_STATE_ACTIVE\x10\x01\x12\x1f\n" +
 	"\x1bGRAPH_EDGE_STATE_HISTORICAL\x10\x02\x12\x1c\n" +
 	"\x18GRAPH_EDGE_STATE_EXPIRED\x10\x03\x12\x1d\n" +
-	"\x19GRAPH_EDGE_STATE_POSSIBLE\x10\x04*\xde\x03\n" +
+	"\x19GRAPH_EDGE_STATE_POSSIBLE\x10\x04*\xc2\x04\n" +
 	"\x0fGraphEdgeStatus\x12!\n" +
 	"\x1dGRAPH_EDGE_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aGRAPH_EDGE_STATUS_ENFORCED\x10\x01\x12\x1d\n" +
@@ -3121,12 +3139,16 @@ const file_pantherclaw_v1_exposure_proto_rawDesc = "" +
 	" GRAPH_EDGE_STATUS_EFFECT_PENDING\x10\n" +
 	"\x12(\n" +
 	"$GRAPH_EDGE_STATUS_EFFECT_CONFLICTING\x10\v\x12)\n" +
-	"%GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE\x10\f*\x8c\x01\n" +
+	"%GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE\x10\f\x12\x1f\n" +
+	"\x1bGRAPH_EDGE_STATUS_NO_EFFECT\x10\r\x12!\n" +
+	"\x1dGRAPH_EDGE_STATUS_COMPENSATED\x10\x0e\x12\x1e\n" +
+	"\x1aGRAPH_EDGE_STATUS_POSSIBLE\x10\x0f*\xab\x01\n" +
 	"\x0fGraphEdgeChange\x12!\n" +
 	"\x1dGRAPH_EDGE_CHANGE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17GRAPH_EDGE_CHANGE_ADDED\x10\x01\x12\x1d\n" +
 	"\x19GRAPH_EDGE_CHANGE_REMOVED\x10\x02\x12\x1a\n" +
-	"\x16GRAPH_EDGE_CHANGE_KEPT\x10\x03*\xa2\x01\n" +
+	"\x16GRAPH_EDGE_CHANGE_KEPT\x10\x03\x12\x1d\n" +
+	"\x19GRAPH_EDGE_CHANGE_CHANGED\x10\x04*\xa2\x01\n" +
 	"\x11GraphTriggerStage\x12#\n" +
 	"\x1fGRAPH_TRIGGER_STAGE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dGRAPH_TRIGGER_STAGE_PREDICTED\x10\x01\x12\"\n" +

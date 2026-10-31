@@ -136,11 +136,17 @@ func TestF301_StalenessAndBypassOwnersAreSampledAndEveryPointDrillsOrSaysSo(t *t
 		t.Fatalf("no series %s %q in %+v", metric, dim, m.Series)
 		return operations.Point{}
 	}
-	if p := value(operations.MetricCoverageStale, ""); p.State != operations.Collected || p.Value != 0 || p.Drill == nil {
+	// No search filters these, so neither opens a wider list under the same
+	// number (D40).
+	if p := value(operations.MetricCoverageStale, ""); p.State != operations.Collected || p.Value != 0 || p.Drill != nil {
 		t.Errorf("stale: %+v", p)
 	}
-	if p := value(operations.MetricBypassByOwner, f.user.String()); p.Value != 1 || p.Drill == nil {
+	if p := value(operations.MetricBypassByOwner, f.user.String()); p.Value != 1 || p.Drill != nil {
 		t.Errorf("owned: %+v", p)
+	}
+	// The backlog counts every mode, so its drill does too (L6).
+	if p := value(operations.MetricReconciliationBacklog, ""); p.Drill == nil || p.Drill.Query == nil || len(p.Drill.Query.Filters.Modes) != 0 {
+		t.Errorf("backlog drill: %+v", p)
 	}
 	if p := value(operations.MetricBypassByOwner, "unowned"); p.Value != 1 {
 		t.Errorf("unowned: %+v", p)

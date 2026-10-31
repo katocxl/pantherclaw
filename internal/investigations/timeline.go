@@ -74,6 +74,9 @@ type Lane struct {
 	Events          []Event
 	Gaps            []Gap
 	EventsTruncated bool
+	// EventsNotLoaded: this read did not load the lane's events, so their
+	// being empty says nothing about the run.
+	EventsNotLoaded bool
 }
 
 // Phase is a stretch of the run's actions. Phases are inferred from the
@@ -108,6 +111,12 @@ type Timeline struct {
 // RunTimeline assembles run's timeline; phases are filled when withPhases
 // (Team, F232).
 func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, withPhases bool) (Timeline, error) {
+	return runTimeline(ctx, tx, s, run, withPhases, true)
+}
+
+// runTimeline assembles the timeline; lanes without laneEvents keep their
+// state and leave their events unread, for a reader of the run's own gaps.
+func runTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, withPhases, laneEvents bool) (Timeline, error) {
 	q := dbq.New(tx)
 	r, err := q.InvRun(ctx, tx.OrgID(), run)
 	if db.IsNoRows(err) {
@@ -161,7 +170,9 @@ func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, wit
 		l := &lanes[i]
 		id := l.Run
 		tl.Events = append(tl.Events, Event{At: l.Created, Kind: EventLane, Run: &id, Detail: l.State})
-		if err := fillLane(ctx, q, tx.OrgID(), l); err != nil {
+	}
+	if laneEvents {
+		if err := fillLanes(ctx, q, tx.OrgID(), lanes); err != nil {
 			return Timeline{}, err
 		}
 	}
@@ -179,25 +190,66 @@ func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, wit
 // MaxLaneActions bounds the actions one lane of a timeline holds.
 const MaxLaneActions = 100
 
-// fillLane reads a child run's own events and gaps. The caller may read
-// the child: hidden children never become lanes (HR-401), and a lane holds
-// no lanes of its own, so nothing below it is shown unchecked.
-func fillLane(ctx context.Context, q *dbq.Queries, org ids.OrgID, l *Lane) error {
-	txns, err := runTransactions(ctx, q, org, l.Run, MaxLaneActions+1)
+// fillLanes reads the child runs' own events and gaps in one read, however
+// many lanes there are (D35), within the timeline's bound on actions. The
+// caller may read the children: hidden children never become lanes
+// (HR-401), and a lane holds no lanes of its own, so nothing below it is
+// shown unchecked.
+func fillLanes(ctx context.Context, q *dbq.Queries, org ids.OrgID, lanes []Lane) error {
+	if len(lanes) == 0 {
+		return nil
+	}
+	runs := make([]ids.UUID, 0, len(lanes))
+	for _, l := range lanes {
+		runs = append(runs, l.Run)
+	}
+	rows, err := q.InvLaneTransactions(ctx, dbq.InvLaneTransactionsParams{
+		OrgID: org, RunIds: runs, LaneRows: MaxLaneActions + 1, MaxRows: MaxTimelineActions,
+	})
 	if err != nil {
 		return err
 	}
-	if len(txns) > MaxLaneActions {
-		txns, l.EventsTruncated = txns[:MaxLaneActions], true
-	}
-	l.Events, l.Gaps = actionEvents(txns, l.Ended)
-	holds, err := approvalEvents(ctx, q, org, l.Run)
+	aps, err := q.InvLaneApprovals(ctx, org, runs, MaxTimelineActions)
 	if err != nil {
 		return err
 	}
-	l.Events = append(l.Events, holds...)
-	slices.SortStableFunc(l.Events, func(a, b Event) int { return a.At.Compare(b.At) })
+	txns := map[ids.UUID][]dbq.InvRunTransactionsRow{}
+	over := map[ids.UUID]bool{}
+	for _, x := range rows {
+		if x.Round > MaxLaneActions {
+			over[x.RunID] = true
+			continue
+		}
+		txns[x.RunID] = append(txns[x.RunID], laneTransaction(x))
+	}
+	holds := map[ids.UUID][]Event{}
+	for _, a := range aps {
+		holds[a.RunID] = append(holds[a.RunID], holdEvents(a.ID, a.TransactionID, a.Operation, a.State, a.CreatedAt, a.ApprovedAt, a.EndedAt)...)
+	}
+	// Rows come a round at a time, so the bound cuts every lane still going
+	// at its last round, or one short of it.
+	reached := int64(MaxLaneActions + 1)
+	if len(rows) == MaxTimelineActions {
+		reached = rows[len(rows)-1].Round - 1
+	}
+	for i := range lanes {
+		l := &lanes[i]
+		l.EventsNotLoaded = false
+		l.EventsTruncated = over[l.Run] || int64(len(txns[l.Run])) >= reached || len(aps) == MaxTimelineActions
+		l.Events, l.Gaps = actionEvents(txns[l.Run], l.Ended)
+		l.Events = append(l.Events, holds[l.Run]...)
+		slices.SortStableFunc(l.Events, func(a, b Event) int { return a.At.Compare(b.At) })
+	}
 	return nil
+}
+
+func laneTransaction(x dbq.InvLaneTransactionsRow) dbq.InvRunTransactionsRow {
+	return dbq.InvRunTransactionsRow{
+		ID: x.ID, Operation: x.Operation, Decision: x.Decision, ReasonCode: x.ReasonCode, Mode: x.Mode, Channel: x.Channel,
+		ConnectionID: x.ConnectionID, TargetType: x.TargetType, TargetID: x.TargetID, GrantID: x.GrantID, EffectState: x.EffectState,
+		ReadClass: x.ReadClass, CreatedAt: x.CreatedAt, PermitState: x.PermitState, DispatchingAt: x.DispatchingAt, Outcome: x.Outcome,
+		OutcomeAt: x.OutcomeAt, HasReceipt: x.HasReceipt, DestinationClass: x.DestinationClass,
+	}
 }
 
 // actionEvents are the decisions, dispatches and results of a run's
@@ -247,19 +299,18 @@ func approvalEvents(ctx context.Context, q *dbq.Queries, org ids.OrgID, run ids.
 	}
 	var events []Event
 	for _, a := range aps {
-		id := a.ID
-		events = append(events, Event{
-			At: a.CreatedAt, Kind: EventHold, Approval: &id, Transaction: a.TransactionID,
-			Operation: a.Operation, Detail: "PENDING",
-		})
-		if end := firstTime(a.ApprovedAt, a.EndedAt); end != nil {
-			events = append(events, Event{
-				At: *end, Kind: EventApproval, Approval: &id, Transaction: a.TransactionID,
-				Operation: a.Operation, Detail: a.State,
-			})
-		}
+		events = append(events, holdEvents(a.ID, a.TransactionID, a.Operation, a.State, a.CreatedAt, a.ApprovedAt, a.EndedAt)...)
 	}
 	return events, nil
+}
+
+// holdEvents are one approval request's hold and how it ended.
+func holdEvents(id ids.UUID, txn *ids.UUID, operation, state string, created time.Time, approved, ended *time.Time) []Event {
+	events := []Event{{At: created, Kind: EventHold, Approval: &id, Transaction: txn, Operation: operation, Detail: "PENDING"}}
+	if end := firstTime(approved, ended); end != nil {
+		events = append(events, Event{At: *end, Kind: EventApproval, Approval: &id, Transaction: txn, Operation: operation, Detail: state})
+	}
+	return events
 }
 
 func authorityDetail(c dbq.InvGrantChangesRow) string {

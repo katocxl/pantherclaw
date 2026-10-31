@@ -170,23 +170,31 @@ WHERE r.org_id = $1 AND r.kind <> 'channel' AND r.observation = 'observed' AND r
 
 -- name: MetricBypassRoutesByOwner :many
 -- The same routes by who owns their agent; a route of no agent, or of an
--- agent with no owner, is "unowned" (G0 M22 D17, F301).
+-- agent with no owner, is "unowned" (G0 M22 D17, F301). Unowned sorts first
+-- and the largest follow, so a cut drops the smallest; one row past the cap
+-- says there was a cut.
 SELECT coalesce(a.owner_user_id::text, 'unowned')::text AS owner, count(*)::bigint AS n
 FROM pc.coverage_routes r
 LEFT JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
 WHERE r.org_id = $1 AND r.kind <> 'channel' AND r.observation = 'observed' AND r.last_seen_at >= now() - interval '7 days'
 GROUP BY 1
-ORDER BY 1
-LIMIT 200;
+ORDER BY (coalesce(a.owner_user_id::text, 'unowned') = 'unowned') DESC, n DESC, 1
+LIMIT 201;
 
 -- name: MetricCoverageStale :one
--- Coverage records whose current snapshot has expired (D17, F301).
+-- Coverage records whose current snapshot no longer holds (D17, F301): it
+-- expired, or a change it did not see arrived, as coverage.Lapsed reads it.
 SELECT count(*)::bigint AS n
-FROM (SELECT DISTINCT ON (c.agent_id, c.connection_id, c.operation) c.expires_at
+FROM (SELECT DISTINCT ON (c.agent_id, c.connection_id, c.operation)
+             c.org_id, c.agent_id, c.connection_id, c.expires_at, c.computed_at, c.body
       FROM pc.coverage_snapshots c
       WHERE c.org_id = $1
       ORDER BY c.agent_id, c.connection_id, c.operation, c.id DESC) s
-WHERE s.expires_at <= now();
+WHERE s.expires_at <= now()
+   OR EXISTS (SELECT 1 FROM pc.coverage_invalidations i
+              WHERE i.org_id = s.org_id AND i.connection_id = s.connection_id
+                AND (i.agent_id IS NULL OR i.agent_id = s.agent_id) AND i.reassessed_at IS NULL
+                AND NOT (i.occurred_at < s.computed_at AND coalesce(jsonb_exists(s.body -> 'seen', i.id::text), false)));
 
 -- name: MetricExposureByGroup :many
 -- Usable effective rights per resource group in the latest snapshot.

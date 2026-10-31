@@ -40,6 +40,13 @@ const (
 	GapReachUnknown  = "REACH_UNCERTAIN"
 	GapCoverage      = "COVERAGE_UNKNOWN"
 	GapBoundsUnknown = "BOUNDS_UNREADABLE"
+	GapNoLink        = "NO_CONSEQUENCE_LINK"
+	// GapControlsUnread: the viewer may not read containment controls, so
+	// the change graph cannot say whether any applied (D38).
+	GapControlsUnread = "CONTROLS_NOT_READABLE"
+	// GapUnconfirmed: a control is recorded and its action is not confirmed
+	// on every path; a recorded control alone proves no closure (F299).
+	GapUnconfirmed = "CONTAINMENT_UNCONFIRMED"
 )
 
 // EdgeStatus is what an edge's evidence says about it (F291), apart from
@@ -60,6 +67,13 @@ const (
 	StatusEffectPending      EdgeStatus = "EFFECT_PENDING"
 	StatusEffectConflicting  EdgeStatus = "EFFECT_CONFLICTING"
 	StatusEffectUnverifiable EdgeStatus = "EFFECT_UNVERIFIABLE"
+	// StatusNoEffect: a receipt says no effect happened (D30).
+	StatusNoEffect EdgeStatus = "NO_EFFECT"
+	// StatusCompensated: a receipt says the effect was undone (D30).
+	StatusCompensated EdgeStatus = "COMPENSATED"
+	// StatusPossible: nothing shows it happened or that it is stopped: a
+	// right on observe-only coverage nobody used (D31).
+	StatusPossible EdgeStatus = "POSSIBLE"
 )
 
 // ChangeKind says what a change edge did between two revisions (F276).
@@ -70,6 +84,8 @@ const (
 	ChangeAdded   ChangeKind = "ADDED"
 	ChangeRemoved ChangeKind = "REMOVED"
 	ChangeKept    ChangeKind = "KEPT"
+	// ChangeChanged: the same operation, under other bounds (D37).
+	ChangeChanged ChangeKind = "CHANGED"
 )
 
 // TriggerStage is how far a triggered edge has been shown (D12).
@@ -123,6 +139,10 @@ func effectStatus(s string) EdgeStatus {
 		return StatusEffectUnverifiable
 	case "UNKNOWN":
 		return StatusUnknown
+	case "NONE_CONFIRMED":
+		return StatusNoEffect
+	case "COMPENSATED":
+		return StatusCompensated
 	default:
 		return ""
 	}
@@ -162,12 +182,14 @@ func statusOf(e Edge) EdgeStatus {
 		return StatusObserved
 	case e.Provenance == string(Credential) && e.Coverage != CoverageEnforced:
 		return StatusPossibleBypass
+	case e.Coverage == CoverageObserveOnly:
+		// Watching a route shows nobody used it; only a record of use reads
+		// as observed (D31).
+		return StatusPossible
 	case e.State == EdgePossible, e.Coverage == CoverageUnknown:
 		return StatusUnknown
 	case e.Coverage == CoverageEnforced:
 		return StatusEnforced
-	case e.Coverage == CoverageObserveOnly:
-		return StatusObserved
 	case e.Basis == "RULE_MATCH":
 		return StatusAllowed
 	default:
@@ -182,7 +204,10 @@ func assuranceOf(e Edge) string {
 		return AssuranceUnverified
 	case e.Basis == "INFERRED":
 		return AssuranceInferred
-	case e.Basis == "OBSERVED", e.EvidenceRef != "":
+	case e.Stage == StagePredicted:
+		// Its record proves the rule matched, not that anything happened.
+		return AssuranceDeclared
+	case e.Basis == "OBSERVED":
 		return AssuranceAuthoritative
 	case e.Provenance == string(Credential):
 		return AssuranceDeclared
@@ -190,6 +215,8 @@ func assuranceOf(e Edge) string {
 		return AssuranceTested
 	case e.Basis == "RULE_MATCH":
 		return AssuranceDeclared
+	case e.EvidenceRef != "":
+		return AssuranceAuthoritative
 	default:
 		return AssuranceUnverified
 	}
@@ -370,9 +397,15 @@ func triggered(c CausalEvidence, ctx []Node) []Edge {
 		case x.Effect == "CONFIRMED" && x.EffectSeq > 0:
 			e.Stage, e.Basis, e.Effect, e.Provenance = StageConfirmed, "OBSERVED", x.Effect, "effect_receipt"
 			e.EvidenceRef = "effect_receipt:" + x.Transaction + "/" + strconv.Itoa(x.EffectSeq)
+		case x.Linked == "":
+			// An opened transaction no link ties to its cause proves no link.
+			e.Kind, e.Basis, e.Provenance, e.Effect = EdgeGap, "OBSERVED", GapNoLink, x.Effect
 		default:
 			e.Stage, e.Basis, e.Effect, e.Provenance = StageAuthorized, "OBSERVED", x.Effect, "transaction_link"
 			e.EvidenceRef = "transaction_link:" + from.ID + "/" + x.Transaction
+			if e.Status = effectStatus(x.Effect); e.Status == "" {
+				e.Status = StatusAllowed // opened, and nothing yet shows it happened
+			}
 		}
 		out = append(out, e)
 	}
@@ -424,12 +457,15 @@ type BoundsChange struct {
 	After    []string
 	// Unreadable: a side could not be read, so nothing is compared.
 	Unreadable bool
+	// Differs: the bounds differ in something other than their operations
+	// (D37), so an operation on both sides did not stay the same.
+	Differs bool
 	// Ref names the record of the change.
 	Ref string
 }
 
 // CompareEdges are the before and after of grant changes (F276): one edge
-// per operation, ADDED, REMOVED or KEPT. An unreadable side is a gap, never
+// per operation, ADDED, REMOVED, KEPT or CHANGED. An unreadable side is a gap, never
 // a comparison (D13).
 func CompareEdges(cs []BoundsChange) []Edge {
 	var out []Edge
@@ -453,10 +489,13 @@ func CompareEdges(cs []BoundsChange) []Edge {
 			})
 		}
 		for _, op := range c.After {
-			if slices.Contains(c.Before, op) {
-				add(op, ChangeKept)
-			} else {
+			switch {
+			case !slices.Contains(c.Before, op):
 				add(op, ChangeAdded)
+			case c.Differs:
+				add(op, ChangeChanged)
+			default:
+				add(op, ChangeKept)
 			}
 		}
 		for _, op := range c.Before {
@@ -464,6 +503,89 @@ func CompareEdges(cs []BoundsChange) []Edge {
 				add(op, ChangeRemoved)
 			}
 		}
+	}
+	return out
+}
+
+// ScopeRestriction is a graph scope naming one response action (D38).
+const ScopeRestriction = "restriction"
+
+// ControlChange is one containment control a change graph shows, or a
+// response action that placed none (empty ID), such as a revocation (D38).
+type ControlChange struct {
+	ID, Actor, Action string
+	// Subject is what the control holds.
+	Subject   Node
+	Operation string
+	At        time.Time
+	// Ended is when it was lifted or expired; nil while it holds.
+	Ended *time.Time
+	// Confirmed: its action is confirmed on every material path.
+	Confirmed bool
+}
+
+// ControlEdges are containment's before and after: a control ADDED, and
+// REMOVED once it ends. A holding control whose action is not confirmed on
+// every path also leaves a gap, so it never reads as closure (F299).
+func ControlEdges(cs []ControlChange) []Edge {
+	var out []Edge
+	unconfirmed := map[string]bool{}
+	for _, c := range cs {
+		at := c.At
+		provenance, ref := "containment_control", c.ID
+		if c.ID == "" {
+			provenance, ref = "response_action", c.Action
+		}
+		e := Edge{
+			From: Node{Type: "actor", ID: c.Actor}, To: c.Subject, Kind: EdgeChanged, State: EdgeActive, Basis: "OBSERVED", At: &at,
+			Operation: c.Operation, Provenance: provenance, EvidenceRef: provenance + ":" + ref, Change: ChangeAdded,
+		}
+		switch {
+		case c.Ended != nil:
+			e.State = EdgeHistorical
+			removed := e
+			removed.At, removed.Change = c.Ended, ChangeRemoved
+			out = append(out, removed)
+		case c.Confirmed:
+			e.Status = StatusEnforced
+		case !unconfirmed[c.Action]:
+			unconfirmed[c.Action] = true
+			out = append(out, Edge{
+				From: Node{Type: "response_action", ID: c.Action}, To: c.Subject, Kind: EdgeGap, State: EdgeHistorical, Basis: "OBSERVED",
+				At: &at, Provenance: GapUnconfirmed,
+			})
+		}
+		// An unconfirmed action that placed no control changed nothing yet.
+		if c.ID == "" && !c.Confirmed {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// GrantDelegation is a child grant and the parent it narrows (F282).
+type GrantDelegation struct {
+	Parent, Child           string
+	ParentAgent, ChildAgent string
+	At                      time.Time
+	Current                 bool
+}
+
+// DelegationEdges are grant-level delegations. Each belongs to both agents,
+// so a viewer who may not see the parent's agent never sees the parent.
+func DelegationEdges(ds []GrantDelegation) []Edge {
+	out := make([]Edge, 0, len(ds))
+	for _, d := range ds {
+		at, st := d.At, EdgeHistorical
+		if d.Current {
+			st = EdgeActive
+		}
+		out = append(out, Edge{
+			From: Node{Type: "grant", ID: d.Parent}, To: Node{Type: "grant", ID: d.Child},
+			Context: []Node{{Type: "agent", ID: d.ParentAgent}, {Type: "agent", ID: d.ChildAgent}}, Kind: EdgeDelegated, State: st,
+			Basis: "OBSERVED", At: &at, Provenance: "grant", EvidenceRef: "grant:" + d.Child, Status: StatusAllowed,
+		})
 	}
 	return out
 }

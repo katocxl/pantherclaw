@@ -682,7 +682,8 @@ type MetricPoint struct {
 	// The search behind the point (drill-down); one of query and builtin.
 	DrillQuery   *Query        `protobuf:"bytes,4,opt,name=drill_query,json=drillQuery,proto3" json:"drill_query,omitempty"`
 	DrillBuiltin *BuiltinQuery `protobuf:"bytes,5,opt,name=drill_builtin,json=drillBuiltin,proto3" json:"drill_builtin,omitempty"`
-	// No search opens this point's records (F302).
+	// No search opens this point's records (F302). Unset on a RESTRICTED point:
+	// the viewer may not read its source, which says nothing about a search.
 	NoDrill       bool `protobuf:"varint,6,opt,name=no_drill,json=noDrill,proto3" json:"no_drill,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -765,7 +766,8 @@ type MetricSeries struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Metric string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
 	// A breakdown key (a resource group, or for bypass.routes_by_owner the
-	// owner's user id or "unowned"), empty for the whole organization.
+	// owner's user id, "unowned", or "other" for the routes of owners past the
+	// 200 named), empty for the whole organization.
 	Dimension     string         `protobuf:"bytes,2,opt,name=dimension,proto3" json:"dimension,omitempty"`
 	Points        []*MetricPoint `protobuf:"bytes,3,rep,name=points,proto3" json:"points,omitempty"`
 	unknownFields protoimpl.UnknownFields

@@ -135,6 +135,16 @@ func (f GraphFilter) match(e Edge) bool {
 	return (e.Decision == "" || in(f.Decisions, e.Decision)) && (e.Effect == "" || in(f.Outcomes, e.Effect))
 }
 
+// FilterActivity keeps the transactions the decision and outcome filters
+// allow, before any edge is built (D39): an action filtered out takes every
+// edge of its evidence with it. As on an edge, a transaction with no effect
+// yet is not filtered by outcome.
+func FilterActivity(acts []Activity, f GraphFilter) []Activity {
+	return slices.DeleteFunc(slices.Clone(acts), func(a Activity) bool {
+		return !in(f.Decisions, a.Decision) || (a.Effect != "" && !in(f.Outcomes, a.Effect))
+	})
+}
+
 // Limits cap a graph (D29).
 type Limits struct {
 	Nodes, Edges int
@@ -197,7 +207,8 @@ func Build(mode Mode, edges []Edge, visible Visible, f GraphFilter, collapse boo
 		}
 		nodes[e.From], nodes[e.To] = true, true
 		g.Edges = append(g.Edges, e)
-		if e.State.Current() {
+		// A prediction is possible and shows nothing happened: never current.
+		if e.State.Current() && e.Stage != StagePredicted {
 			g.Current[e.Kind] += e.Count
 		}
 	}
@@ -237,12 +248,15 @@ func collapseEdges(edges []Edge) []Edge {
 }
 
 // compareEdges orders current edges first (so a cap cuts history before
-// authority), gaps with them, then by time and key.
+// authority), gaps with them, then what happened, then predictions, and
+// within each by time and key.
 func compareEdges(a, b Edge) int {
 	rank := func(e Edge) int {
 		switch {
 		case e.Kind == EdgeGap:
 			return 0
+		case e.Stage == StagePredicted:
+			return 3
 		case e.State.Current():
 			return 1
 		default:

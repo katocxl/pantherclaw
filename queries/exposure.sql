@@ -275,6 +275,34 @@ WHERE d.org_id = sqlc.arg(org_id) AND d.transaction_id = ANY (sqlc.arg(ids)::uui
 ORDER BY d.transaction_id, d.position
 LIMIT sqlc.arg(max_rows);
 
+-- GraphGrantDelegations reads the parents of child grants (F282).
+-- name: GraphGrantDelegations :many
+SELECT g.id AS child_id, g.parent_id::uuid AS parent_id, g.agent_id AS child_agent_id, p.agent_id AS parent_agent_id, g.created_at,
+    (g.state = 'ACTIVE')::boolean AS current
+FROM pc.grants g
+JOIN pc.grants p ON p.org_id = g.org_id AND p.id = g.parent_id
+WHERE g.org_id = sqlc.arg(org_id) AND g.id = ANY (sqlc.arg(ids)::uuid[]);
+
+-- GraphContainment reads the response actions of an incident, or one action,
+-- with their controls (D38); an action that placed none has one row.
+-- name: GraphContainment :many
+SELECT a.id AS action_id, a.status AS action_status, a.scope_type AS action_scope_type, a.scope_id AS action_scope_id,
+    a.operation AS action_operation, a.actor, a.requested_at,
+    c.id AS control_id, c.scope_type, c.scope_id, c.operation, c.created_by, c.created_at, c.expires_at, c.lifted_at
+FROM pc.response_actions a
+LEFT JOIN pc.containment_controls c ON c.org_id = a.org_id AND c.action_id = a.id
+WHERE a.org_id = sqlc.arg(org_id)
+  AND (a.incident_id = sqlc.narg(incident_id)::uuid OR a.id = sqlc.narg(action_id)::uuid)
+ORDER BY a.requested_at, a.id, c.id
+LIMIT sqlc.arg(max_rows);
+
+-- RestrictionAgents lists the agents a response action's controls hold.
+-- name: RestrictionAgents :many
+SELECT a.id, coalesce(c.scope_id, '')::text AS agent_id
+FROM pc.response_actions a
+LEFT JOIN pc.containment_controls c ON c.org_id = a.org_id AND c.action_id = a.id AND c.scope_type = 'agent'
+WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.arg(action_id);
+
 -- GraphGrantRevocations lists the grants of agents revoked in a window,
 -- with the revision they ended on (F276).
 -- name: GraphGrantRevocations :many

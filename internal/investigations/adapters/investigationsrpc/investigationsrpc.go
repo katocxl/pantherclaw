@@ -310,7 +310,7 @@ func delegations(ds []investigations.Delegation) []*pantherclawv1.InvestigationD
 func lane(l investigations.Lane) *pantherclawv1.TimelineLane {
 	out := &pantherclawv1.TimelineLane{
 		RunId: l.Run.String(), AgentId: l.Agent.String(), State: l.State, CreateTime: timestamppb.New(l.Created), EndTime: ts(l.Ended),
-		EventsTruncated: l.EventsTruncated,
+		EventsTruncated: l.EventsTruncated, EventsNotLoaded: l.EventsNotLoaded,
 	}
 	for _, e := range l.Events {
 		out.Events = append(out.Events, event(e))

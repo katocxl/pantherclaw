@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"maps"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -412,7 +414,11 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 			base = v.Snapshot.ComputedAt
 			gaps := domain.ReachGaps(held)
 			if mode == domain.ModeAuthority {
-				edges = append(domain.AuthorityEdges(held), autoEdges...)
+				delegations, err := r.delegations(ctx, held)
+				if err != nil {
+					return err
+				}
+				edges = slices.Concat(domain.AuthorityEdges(held), autoEdges, domain.DelegationEdges(delegations))
 			} else {
 				// The exposure graph shows what is reached: the ceiling, not
 				// which grants an automation issued.
@@ -445,24 +451,34 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 			if f.End != nil {
 				end = *f.End
 			}
+			var over bool
 			if mode == domain.ModeChange {
-				edges, cut, err = r.changes(ctx, vis, start, end)
+				var held []domain.Edge
+				if edges, cut, err = r.changes(ctx, vis, start, end); err == nil {
+					if held, over, err = r.containment(ctx, scope, now); err == nil {
+						edges = append(edges, held...)
+					}
+				}
 			} else {
 				var acts []domain.Activity
-				if acts, cut, err = r.activity(ctx, run, vis, start, end); err == nil {
-					if mode == domain.ModeActivity {
-						edges = domain.ActivityEdges(acts)
-					} else {
-						var evidence []domain.CausalEvidence
-						if evidence, err = r.causal(ctx, acts); err == nil {
-							edges = append(domain.CausalEdges(acts), domain.CausalLinks(evidence)...)
-						}
+				if acts, cut, err = r.activity(ctx, run, vis, start, end); err != nil {
+					return err
+				}
+				// A filtered transaction leaves no edge behind it (D39).
+				acts = domain.FilterActivity(acts, f)
+				if mode == domain.ModeActivity {
+					edges = domain.ActivityEdges(acts)
+				} else {
+					var evidence []domain.CausalEvidence
+					if evidence, over, err = r.causal(ctx, acts); err == nil {
+						edges = append(domain.CausalEdges(acts), domain.CausalLinks(evidence)...)
 					}
 				}
 			}
 			if err != nil {
 				return err
 			}
+			cut = cut || over
 		default:
 			return ErrScope
 		}
@@ -533,8 +549,123 @@ func (r *reader) scopeAgents(ctx context.Context, s GraphScope) ([]ids.UUID, *id
 			}
 		}
 		return out, nil, nil
+	case domain.ScopeRestriction:
+		id, err := ids.ParseUUID(s.ID)
+		if err != nil {
+			return nil, nil, ErrScope
+		}
+		// Without containment.read the scope covers no agent and answers the
+		// same whether the action exists or not (D38).
+		if !r.containmentRead() {
+			return []ids.UUID{}, nil, nil
+		}
+		rows, err := r.q.RestrictionAgents(ctx, r.c.Org, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(rows) == 0 {
+			return nil, nil, ErrNotFound
+		}
+		out := []ids.UUID{}
+		for _, x := range rows {
+			if a, err := ids.ParseUUID(x.AgentID); err == nil {
+				out = append(out, a)
+			}
+		}
+		return out, nil, nil
 	}
 	return nil, nil, ErrScope
+}
+
+func (r *reader) containmentRead() bool {
+	return r.c.Can(td.PermContainmentRead, td.OrgPath(r.c.Org))
+}
+
+// containment reads the controls of an incident or restriction scope, so a
+// change graph shows what response changed (D38). A viewer who may not read
+// them gets a gap, never an empty answer that reads as nothing changed.
+func (r *reader) containment(ctx context.Context, s GraphScope, now time.Time) ([]domain.Edge, bool, error) {
+	if s.Type != "incident" && s.Type != domain.ScopeRestriction {
+		return nil, false, nil
+	}
+	id, err := ids.ParseUUID(s.ID)
+	if err != nil {
+		return nil, false, ErrScope
+	}
+	if !r.containmentRead() {
+		self := domain.Node{Type: s.Type, ID: s.ID}
+		return []domain.Edge{{
+			From: self, To: self, Kind: domain.EdgeGap, State: domain.EdgeHistorical, Basis: "OBSERVED",
+			Provenance: domain.GapControlsUnread,
+		}}, false, nil
+	}
+	p := dbq.GraphContainmentParams{OrgID: r.c.Org, MaxRows: maxActivity}
+	if s.Type == "incident" {
+		p.IncidentID = &id
+	} else {
+		p.ActionID = &id
+	}
+	rows, err := r.q.GraphContainment(ctx, p)
+	if err != nil {
+		return nil, false, err
+	}
+	cs := make([]domain.ControlChange, 0, len(rows))
+	for _, x := range rows {
+		c := domain.ControlChange{
+			Action: x.ActionID.String(), Actor: x.Actor, Subject: controlSubject(x.ActionScopeType, x.ActionScopeID), At: x.RequestedAt,
+			Confirmed: x.ActionStatus == "CONFIRMED",
+		}
+		if x.ActionOperation != nil {
+			c.Operation = *x.ActionOperation
+		}
+		if x.ControlID != nil {
+			c.ID, c.Actor, c.Subject = x.ControlID.String(), *x.CreatedBy, controlSubject(*x.ScopeType, *x.ScopeID)
+			c.At, c.Operation = *x.CreatedAt, ""
+			if x.Operation != nil {
+				c.Operation = *x.Operation
+			}
+			c.Ended = x.LiftedAt
+			if c.Ended == nil && x.ExpiresAt != nil && !x.ExpiresAt.After(now) {
+				c.Ended = x.ExpiresAt
+			}
+		}
+		cs = append(cs, c)
+	}
+	return domain.ControlEdges(cs), len(rows) == maxActivity, nil
+}
+
+// controlSubject is the node of what a response action or control holds. A
+// principal's id is "user:<id>" or "service_account:<id>".
+func controlSubject(scopeType, id string) domain.Node {
+	if t, rest, ok := strings.Cut(id, ":"); ok && scopeType == "principal" {
+		return domain.Node{Type: t, ID: rest}
+	}
+	return domain.Node{Type: scopeType, ID: id}
+}
+
+// delegations reads the parents of the grants the rights rest on (F282).
+func (r *reader) delegations(ctx context.Context, rights []domain.Right) ([]domain.GrantDelegation, error) {
+	grants := map[ids.UUID]bool{}
+	for _, x := range rights {
+		if x.View == domain.Effective && x.Grant != nil {
+			grants[*x.Grant] = true
+		}
+	}
+	if len(grants) == 0 {
+		return nil, nil
+	}
+	rows, err := r.q.GraphGrantDelegations(ctx, r.c.Org, slices.Collect(maps.Keys(grants)))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.GrantDelegation, 0, len(rows))
+	for _, x := range rows {
+		out = append(out, domain.GrantDelegation{
+			Parent: x.ParentID.String(), Child: x.ChildID.String(), ParentAgent: x.ParentAgentID.String(), ChildAgent: x.ChildAgentID.String(),
+			At: x.CreatedAt, Current: x.Current,
+		})
+	}
+	return out, nil
 }
 
 func scoped(rights []domain.Right, s GraphScope, agents []ids.UUID) []domain.Right {
@@ -625,11 +756,13 @@ func (r *reader) changes(ctx context.Context, vis Visible, start, end time.Time)
 			Grant: grant, Revision: int(x.Revision), At: x.CreatedAt, Context: ctx, Current: x.Current,
 			Ref: "grant_revision:" + x.GrantID.String() + "/" + strconv.Itoa(int(x.Revision)),
 		}
-		var okAfter bool
-		b.After, okAfter = operationsOf(x.Bounds)
-		okBefore := true
+		after, okAfter := boundsOf(x.Bounds)
+		before, okBefore := gdomain.Bounds{}, true
+		b.After = operationsIn(after)
 		if x.Revision > 1 {
-			b.Before, okBefore = operationsOf(x.BeforeBounds)
+			before, okBefore = boundsOf(x.BeforeBounds)
+			b.Before = operationsIn(before)
+			b.Differs = !sameLimits(before, after)
 		}
 		b.Unreadable = !okAfter || !okBefore
 		compared = append(compared, b)
@@ -646,55 +779,67 @@ func (r *reader) changes(ctx context.Context, vis Visible, start, end time.Time)
 			Context: []domain.Node{{Type: "agent", ID: x.AgentID.String()}},
 			Ref:     "grant_revocation:" + x.GrantID.String(),
 		}
-		var ok bool
-		b.Before, ok = operationsOf(x.Bounds)
-		b.Unreadable = !ok
+		before, ok := boundsOf(x.Bounds)
+		b.Before, b.Unreadable = operationsIn(before), !ok
 		compared = append(compared, b)
 	}
 	return append(domain.ChangeEdges(cs), domain.CompareEdges(compared)...), len(rows) == maxActivity || len(revoked) == maxActivity, nil
 }
 
-// operationsOf reads the operations a bounds document allows: "*" when it
-// does not limit them. An unreadable document is reported, never read as
-// allowing nothing.
-func operationsOf(raw []byte) ([]string, bool) {
+// boundsOf reads a bounds document. An unreadable one is reported, never
+// read as allowing nothing.
+func boundsOf(raw []byte) (gdomain.Bounds, bool) {
 	var b gdomain.Bounds
-	if err := json.Unmarshal(raw, &b); err != nil {
-		return nil, false
-	}
+	return b, json.Unmarshal(raw, &b) == nil
+}
+
+// operationsIn lists the operations bounds allow: "*" when they do not limit
+// them.
+func operationsIn(b gdomain.Bounds) []string {
 	if b.Operations == nil {
-		return []string{"*"}, true
+		return []string{"*"}
 	}
-	return []string(*b.Operations), true
+	return []string(*b.Operations)
+}
+
+// sameLimits compares every limit of two bounds but their operations, which
+// are compared one by one (D37).
+func sameLimits(a, b gdomain.Bounds) bool {
+	a.Operations, b.Operations = nil, nil
+	return reflect.DeepEqual(a, b)
 }
 
 // causal reads the records the activity's causal links need (D12). The
 // transactions are the viewer's already: they were read for the agents the
-// viewer may see.
-func (r *reader) causal(ctx context.Context, acts []domain.Activity) ([]domain.CausalEvidence, error) {
+// viewer may see. The bool says the consequences were cut.
+func (r *reader) causal(ctx context.Context, acts []domain.Activity) ([]domain.CausalEvidence, bool, error) {
 	if len(acts) == 0 {
-		return nil, nil
+		return nil, false, nil
 	}
 	txns := make([]ids.UUID, 0, len(acts))
 	for _, a := range acts {
 		id, err := ids.ParseUUID(a.Transaction)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		txns = append(txns, id)
 	}
 	org := r.c.Org
 	facts, err := r.q.GraphCausalFacts(ctx, org, txns)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	approvals, err := r.q.GraphApprovals(ctx, org, txns)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	consequences, err := r.q.GraphConsequences(ctx, org, txns, maxActivity)
+	consequences, err := r.q.GraphConsequences(ctx, org, txns, maxActivity+1)
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	cut := len(consequences) > maxActivity
+	if cut {
+		consequences = consequences[:maxActivity]
 	}
 	receipts := slices.Clone(txns)
 	for _, c := range consequences {
@@ -704,7 +849,7 @@ func (r *reader) causal(ctx context.Context, acts []domain.Activity) ([]domain.C
 	}
 	effects, err := r.q.GraphEffectReceipts(ctx, org, receipts)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	effectOf := make(map[ids.UUID]dbq.GraphEffectReceiptsRow, len(effects))
 	for _, e := range effects {
@@ -762,7 +907,7 @@ func (r *reader) causal(ctx context.Context, acts []domain.Activity) ([]domain.C
 		}
 		out = append(out, c)
 	}
-	return out, nil
+	return out, cut, nil
 }
 
 // labels are the graph's node labels (D11, HR-550): an agent's name where
@@ -790,16 +935,22 @@ func (r *reader) labels(ctx context.Context, g domain.Graph) (map[domain.Node]st
 	}
 	org := td.OrgPath(r.c.Org)
 	if list := byType["agent"]; len(list) > 0 {
-		scope := tapp.NewAgentScope(r.c, r.q, td.PermAgentRead)
-		rows, err := r.q.GraphAgentNames(ctx, r.c.Org, list)
-		if err != nil {
+		// One read of what the viewer may see, never one per agent (D34). An
+		// org too large to resolve leaves agents unlabelled: a label is never
+		// worth failing the graph, and a missing one shows nothing hidden.
+		all, visible, err := tapp.NewAgentScope(r.c, r.q, td.PermAgentRead).Visible(ctx)
+		if err != nil && !errors.Is(err, tapp.ErrTooManyAgents) {
 			return nil, err
 		}
-		for _, x := range rows {
-			if ok, err := scope.Can(ctx, x.ID); err != nil {
+		if err == nil {
+			rows, err := r.q.GraphAgentNames(ctx, r.c.Org, list)
+			if err != nil {
 				return nil, err
-			} else if ok {
-				set(domain.Node{Type: "agent", ID: x.ID.String()}, x.Name)
+			}
+			for _, x := range rows {
+				if all || slices.Contains(visible, x.ID.String()) {
+					set(domain.Node{Type: "agent", ID: x.ID.String()}, x.Name)
+				}
 			}
 		}
 	}

@@ -34,7 +34,10 @@ func (h *Handler) GetCoverageGraph(ctx context.Context, req *pantherclawv1.GetCo
 		})
 	}
 	for _, e := range g.Edges {
-		x := &pantherclawv1.CoverageGraphEdge{From: e.From, To: e.To, Reason: e.Reason}
+		x := &pantherclawv1.CoverageGraphEdge{From: e.From, To: e.To, Reason: e.Reason, InvalidatedBy: e.InvalidatedBy}
+		if e.ValidatedAt != nil {
+			x.ValidatedAt = timestamppb.New(*e.ValidatedAt)
+		}
 		if e.CheckedAt != nil {
 			x.LastCheckedAt = timestamppb.New(*e.CheckedAt)
 		}

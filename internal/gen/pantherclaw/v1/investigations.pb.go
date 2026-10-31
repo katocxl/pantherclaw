@@ -1007,9 +1007,12 @@ type TimelineLane struct {
 	// The lane has more events than one lane holds.
 	EventsTruncated bool `protobuf:"varint,7,opt,name=events_truncated,json=eventsTruncated,proto3" json:"events_truncated,omitempty"`
 	// Its missing evidence.
-	Gaps          []*TimelineGap `protobuf:"bytes,8,rep,name=gaps,proto3" json:"gaps,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Gaps []*TimelineGap `protobuf:"bytes,8,rep,name=gaps,proto3" json:"gaps,omitempty"`
+	// This read does not load lane events (a lineage section): events and
+	// gaps being empty says nothing about the run.
+	EventsNotLoaded bool `protobuf:"varint,9,opt,name=events_not_loaded,json=eventsNotLoaded,proto3" json:"events_not_loaded,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *TimelineLane) Reset() {
@@ -1096,6 +1099,13 @@ func (x *TimelineLane) GetGaps() []*TimelineGap {
 		return x.Gaps
 	}
 	return nil
+}
+
+func (x *TimelineLane) GetEventsNotLoaded() bool {
+	if x != nil {
+		return x.EventsNotLoaded
+	}
+	return false
 }
 
 // TimelinePhase is a stretch of actions, inferred from their order.
@@ -2947,7 +2957,7 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\vTimelineGap\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12.\n" +
-	"\x04time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\xdd\x02\n" +
+	"\x04time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\x89\x03\n" +
 	"\fTimelineLane\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x14\n" +
@@ -2957,7 +2967,8 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x125\n" +
 	"\x06events\x18\x06 \x03(\v2\x1d.pantherclaw.v1.TimelineEventR\x06events\x12)\n" +
 	"\x10events_truncated\x18\a \x01(\bR\x0feventsTruncated\x12/\n" +
-	"\x04gaps\x18\b \x03(\v2\x1b.pantherclaw.v1.TimelineGapR\x04gaps\"\xf6\x01\n" +
+	"\x04gaps\x18\b \x03(\v2\x1b.pantherclaw.v1.TimelineGapR\x04gaps\x12*\n" +
+	"\x11events_not_loaded\x18\t \x01(\bR\x0feventsNotLoaded\"\xf6\x01\n" +
 	"\rTimelinePhase\x129\n" +
 	"\n" +
 	"start_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +

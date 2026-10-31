@@ -381,6 +381,13 @@ enum GraphEdgeStatus {
   GRAPH_EDGE_STATUS_EFFECT_PENDING = 10;
   GRAPH_EDGE_STATUS_EFFECT_CONFLICTING = 11;
   GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE = 12;
+  // A receipt says no effect happened. Never drawn as something that did.
+  GRAPH_EDGE_STATUS_NO_EFFECT = 13;
+  // A receipt says the effect was undone. Never drawn as one that stands.
+  GRAPH_EDGE_STATUS_COMPENSATED = 14;
+  // Nothing shows it happened, or that it is stopped: a right on observe-only
+  // coverage that nobody used.
+  GRAPH_EDGE_STATUS_POSSIBLE = 15;
 }
 
 // GraphEdgeChange says what a change-mode edge did between two revisions
@@ -390,6 +397,8 @@ enum GraphEdgeChange {
   GRAPH_EDGE_CHANGE_ADDED = 1;
   GRAPH_EDGE_CHANGE_REMOVED = 2;
   GRAPH_EDGE_CHANGE_KEPT = 3;
+  // The same operation, under different bounds.
+  GRAPH_EDGE_CHANGE_CHANGED = 4;
 }
 
 // GraphTriggerStage is how far a triggered edge has been shown (F280, F281).
@@ -458,11 +467,12 @@ message GraphEdge {
 
 // GraphScope is where a graph starts (F293).
 message GraphScope {
-  // type: run (a task), agent, incident, resource (a resource group) or
+  // type: run (a task), agent, incident, resource (a resource group),
   // automation (its issued grants and, when asked, its ceiling; authority
-  // and exposure modes, needs automation.read).
+  // and exposure modes, needs automation.read) or restriction (a response
+  // action, by its id).
   string type = 1 [(buf.validate.field).string = {
-    in: ["run", "agent", "incident", "resource", "automation"]
+    in: ["run", "agent", "incident", "resource", "automation", "restriction"]
   }];
   string id = 2 [(buf.validate.field).string = {
     min_len: 1

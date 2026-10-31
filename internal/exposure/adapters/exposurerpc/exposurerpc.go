@@ -69,10 +69,13 @@ var (
 		domain.StatusEffectPartial: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_PARTIAL, domain.StatusEffectPending: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_PENDING,
 		domain.StatusEffectConflicting:  pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_CONFLICTING,
 		domain.StatusEffectUnverifiable: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE,
+		domain.StatusNoEffect:           pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_NO_EFFECT,
+		domain.StatusCompensated:        pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_COMPENSATED,
+		domain.StatusPossible:           pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_POSSIBLE,
 	}
 	edgeChanges = map[domain.ChangeKind]pb.GraphEdgeChange{
 		domain.ChangeAdded: pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_ADDED, domain.ChangeRemoved: pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_REMOVED,
-		domain.ChangeKept: pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_KEPT,
+		domain.ChangeKept: pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_KEPT, domain.ChangeChanged: pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_CHANGED,
 	}
 	triggerStages = map[domain.TriggerStage]pb.GraphTriggerStage{
 		domain.StagePredicted: pb.GraphTriggerStage_GRAPH_TRIGGER_STAGE_PREDICTED, domain.StageAuthorized: pb.GraphTriggerStage_GRAPH_TRIGGER_STAGE_AUTHORIZED,
