@@ -135,7 +135,7 @@ func userConfigDirOf(goos, home string) string {
 // The scan stays inside each home and follows no link: its owner controls
 // what is there, and this runs as root or SYSTEM. Each person's own
 // environment is not read.
-func scanAllUsers(host string, paths []string, homes []string) []scan.Finding {
+func scanAllUsers(host string, paths, homes []string) []scan.Finding {
 	out := scan.Run(scan.Options{Host: host, Paths: paths})
 	for _, home := range homes {
 		out = append(out, scan.Run(scan.Options{Host: host, Home: home, ConfigDir: userConfigDirOf(runtime.GOOS, home), Contained: true})...)

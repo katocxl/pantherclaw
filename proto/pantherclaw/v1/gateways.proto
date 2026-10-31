@@ -186,6 +186,11 @@ service GatewayService {
   // accepted only for connections the gateway serves (HR-418).
   // permission: gateway.observe
   rpc ReportInventory(ReportInventoryRequest) returns (ReportInventoryResponse);
+  // SignAgentCard signs a rewritten A2A card the calling gateway serves, with
+  // the platform's a2a_card key (G0 M24 D232). The server rewrites the
+  // connection's active pin itself and signs only an exact match.
+  // permission: gateway.sync
+  rpc SignAgentCard(SignAgentCardRequest) returns (SignAgentCardResponse);
 }
 
 // GatewayState is whether a gateway may act.
@@ -836,6 +841,25 @@ message VerificationLease {
 message ClaimVerificationsResponse {
   // Leases.
   repeated VerificationLease leases = 1;
+}
+
+// SignAgentCardRequest carries a card as the gateway rewrote it.
+message SignAgentCardRequest {
+  // The a2a connection.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // The rewritten card.
+  bytes card = 2 [(buf.validate.field).bytes = {
+    min_len: 2
+    max_len: 262144
+  }];
+}
+
+// SignAgentCardResponse carries the signed card.
+message SignAgentCardResponse {
+  // The card with the platform's signature.
+  bytes signed_card = 1;
+  // The JWKS holding the signing key, also published in the platform JWKS.
+  bytes keys = 2;
 }
 
 // MintTestActionTokensRequest names a leased target_verifier test.

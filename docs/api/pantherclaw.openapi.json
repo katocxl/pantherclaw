@@ -14643,6 +14643,60 @@
         }
       }
     },
+    "/pantherclaw.v1.GatewayService/SignAgentCard": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "SignAgentCard",
+        "description": "SignAgentCard signs a rewritten A2A card the calling gateway serves, with\n the platform's a2a_card key (G0 M24 D232). The server rewrites the\n connection's active pin itself and signs only an exact match.\n permission: gateway.sync",
+        "operationId": "pantherclaw.v1.GatewayService.SignAgentCard",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SignAgentCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SignAgentCardResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.RunService/StartRun": {
       "post": {
         "tags": [
@@ -61153,6 +61207,52 @@
         "title": "SetFleetPolicyResponse",
         "additionalProperties": false,
         "description": "SetFleetPolicyResponse is the policy as stored."
+      },
+      "pantherclaw.v1.SignAgentCardRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "The a2a connection."
+          },
+          "card": {
+            "type": "string",
+            "title": "card",
+            "maxLength": 262144,
+            "minLength": 2,
+            "format": "byte",
+            "description": "The rewritten card."
+          }
+        },
+        "title": "SignAgentCardRequest",
+        "additionalProperties": false,
+        "description": "SignAgentCardRequest carries a card as the gateway rewrote it.",
+        "required": [
+          "connectionId",
+          "card"
+        ]
+      },
+      "pantherclaw.v1.SignAgentCardResponse": {
+        "type": "object",
+        "properties": {
+          "signedCard": {
+            "type": "string",
+            "title": "signed_card",
+            "format": "byte",
+            "description": "The card with the platform's signature."
+          },
+          "keys": {
+            "type": "string",
+            "title": "keys",
+            "format": "byte",
+            "description": "The JWKS holding the signing key, also published in the platform JWKS."
+          }
+        },
+        "title": "SignAgentCardResponse",
+        "additionalProperties": false,
+        "description": "SignAgentCardResponse carries the signed card."
       },
       "pantherclaw.v1.TargetLogItem": {
         "type": "object",

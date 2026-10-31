@@ -19,6 +19,37 @@ type Inventories interface {
 	ReportInventory(ctx context.Context, org ids.OrgID, gateway ids.UUID, r connapp.InventoryReport) (int32, error)
 }
 
+// CardSigner signs the A2A cards a gateway serves (G0 M24 D232).
+type CardSigner interface {
+	SignCard(ctx context.Context, org ids.OrgID, gateway, conn ids.UUID, card []byte) (signed, jwks []byte, err error)
+}
+
+// WithCardSigner serves SignAgentCard from s.
+func (h *GatewayHandler) WithCardSigner(s CardSigner) *GatewayHandler {
+	h.cards = s
+	return h
+}
+
+// SignAgentCard implements GatewayServiceHandler, on the mTLS listener only.
+func (h *GatewayHandler) SignAgentCard(ctx context.Context, req *pb.SignAgentCardRequest) (*pb.SignAgentCardResponse, error) {
+	id, err := identity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if h.cards == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, "card signing is not served here")
+	}
+	conn, err := ids.ParseUUID(req.GetConnectionId())
+	if err != nil {
+		return nil, errInvalidID
+	}
+	signed, jwks, err := h.cards.SignCard(ctx, id.Org, id.Gateway, conn, req.GetCard())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.SignAgentCardResponse{SignedCard: signed, Keys: jwks}, nil
+}
+
 // WithInventories serves ReportInventory from i.
 func (h *GatewayHandler) WithInventories(i Inventories) *GatewayHandler {
 	h.inventories = i

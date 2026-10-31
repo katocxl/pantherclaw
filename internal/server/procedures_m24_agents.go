@@ -11,10 +11,11 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// m24AgentProcedures is the agent card (G0 M24 D231): the same permission as
-// reading the agent.
+// m24AgentProcedures are the agent card (G0 M24 D231), with the same
+// permission as reading the agent, and the gateway's card signing (D232).
 var m24AgentProcedures = map[string]td.Permission{
-	pantherclawv1connect.AgentServiceGetAgentCardProcedure: td.PermAgentRead,
+	pantherclawv1connect.AgentServiceGetAgentCardProcedure:    td.PermAgentRead,
+	pantherclawv1connect.GatewayServiceSignAgentCardProcedure: td.PermGatewaySync,
 }
 
 var m24AgentClasses = map[string]entitlements.Class{

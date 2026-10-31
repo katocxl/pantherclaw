@@ -372,6 +372,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	wireM20Rotation(pool, m6, verification, bill, log)
 	m6.facts = gatewayFacts(pool)
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill).WithNotify(m5.notifications))
+	m6.cards = newCardSigner(pool, reg)
 
 	g, ctx := errgroup.WithContext(ctx)
 	// The private admin listener, in every role (HR-382).
