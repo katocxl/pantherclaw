@@ -98,9 +98,14 @@ func scanned(t *testing.T, o *exposuretest.Org, agent ids.UUID, source, state st
 	id := ids.NewV7()
 	key := make([]byte, 32)
 	copy(key, id[:])
-	o.Exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
-		VALUES ($1, $2, $3, $4, $5, jsonb_build_object('kind', 'mcp_server', 'managed_settings', $6::text))`,
-		o.Org, id, agent, source, key, state)
+	var scope, principal *string
+	if source == "ci_scan" {
+		s := "acme/payments"
+		scope, principal = &s, &s
+	}
+	o.Exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, scan_scope, scan_principal, observed)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, jsonb_build_object('kind', 'mcp_server', 'managed_settings', $8::text))`,
+		o.Org, id, agent, source, key, scope, principal, state)
 	return id
 }
 
