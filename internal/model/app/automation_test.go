@@ -203,7 +203,7 @@ func TestHR543_NoConditionCanNameAnEnvironment(t *testing.T) {
 	}
 	refused := []string{
 		"forbid refunds in production", "if prod, wait for approval", "only on Staging", "any environment", "when env is dev", "not in QA",
-		"only on prod1", "in preprod", "for nonprod", "on stg", "in the sandbox",
+		"only on prod1", "in preprod", "for nonprod", "on stg", "in the sandbox", "across sandboxes", "only prod_eu",
 	}
 	for _, text := range refused {
 		if err := CheckEnvironment(text); !errors.Is(err, ErrEnvironmentCondition) {
@@ -235,7 +235,9 @@ func TestHR543_AGuardReadsOnlyWhatItsEventFills(t *testing.T) {
 	}
 	for _, c := range [][3]string{
 		{"alert.raised", "outcome", "OPEN"},
-		{"action.held", "decision", "HOLD"},
+		{"action.held", "decision", "REQUIRE_APPROVAL"},
+		{"action.held", "decision", "REQUIRE_STEP_UP"},
+		{"agent.discovered", "actor_type", "gateway"},
 		{"action.denied", "operation", "payments.refund.create"},
 		{"effect.recorded", "outcome", "CONFIRMED"},
 		{"coverage.lost", "actor_type", "system"},
@@ -287,6 +289,10 @@ func TestHR543_AGuardValueIsOneItsEventCanHold(t *testing.T) {
 		{"action.decided", "decision", "denied"},
 		{"action.decided", "decision", "BLOCK"},
 		{"action.decided", "decision", "HOLD"},
+		{"case.closed", "actor_type", "system"},
+		{"action.held", "decision", "HOLD"},
+		{"run.ended", "actor_type", "support"},
+		{"case.closed", "actor_type", "support"},
 		{"action.denied", "decision", "ALLOW"},
 		{"action.decided", "mode", "production"},
 		{"action.decided", "mode", "live"},

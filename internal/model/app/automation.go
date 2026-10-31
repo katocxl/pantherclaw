@@ -208,7 +208,7 @@ func texts[S ~string](values ...S) []string {
 // `operation` has no list here: it is checked against the built-in operations.
 var eventFields = func() map[string]map[string][]string {
 	gateway, system := texts(reflexdomain.SubjectGateway), texts(reflexdomain.SubjectSystem)
-	callers := texts(td.KindUser, td.KindServiceAccount, td.KindSupport)
+	callers := texts(td.KindUser, td.KindServiceAccount)
 	modes := []string{strings.ToUpper(pipeline.ModeEnforce), strings.ToUpper(pipeline.ModeMonitor)}
 	action := func(decisions ...string) map[string][]string {
 		return map[string][]string{fieldActorType: gateway, fieldDecision: decisions, fieldMode: modes, fieldOperation: nil}
@@ -220,8 +220,7 @@ var eventFields = func() map[string]map[string][]string {
 		triggers.VocabActionDecided: action(texts(
 			adomain.Allow, adomain.AllowWithObligations, adomain.RequireApproval, adomain.RequireStepUp, adomain.Deny, adomain.CannotAuthorize,
 		)...),
-		// What triggers.Means reads for each.
-		triggers.VocabActionHeld:   action(texts(adomain.PresentHold)...),
+		triggers.VocabActionHeld:   action(texts(adomain.RequireApproval, adomain.RequireStepUp)...),
 		triggers.VocabActionDenied: action(texts(adomain.Deny)...),
 		triggers.VocabEffectRecorded: {
 			fieldActorType: slices.Concat(gateway, system, texts(td.KindUser)), fieldMode: modes, fieldOperation: nil,
@@ -230,7 +229,7 @@ var eventFields = func() map[string]map[string][]string {
 		triggers.VocabRunEnded:        actors(callers),
 		triggers.VocabGrantIssued:     actors(callers),
 		triggers.VocabGrantRevoked:    actors(callers),
-		triggers.VocabAgentDiscovered: actors(callers),
+		triggers.VocabAgentDiscovered: actors(callers, gateway),
 		triggers.VocabApprovalExpired: actors(gateway, system),
 		triggers.VocabAutomationFinished: {
 			fieldActorType: texts(td.KindServiceAccount), fieldOutcome: texts(audit.Success, audit.Failure),
@@ -239,7 +238,7 @@ var eventFields = func() map[string]map[string][]string {
 		triggers.VocabIncidentOpened: {fieldActorType: {alerts.Actor.Type}},
 		// coverage.lost's entries fill different fields, and case.closed's none.
 		triggers.VocabCoverageLost: actors(callers, system),
-		triggers.VocabCaseClosed:   actors(callers, system),
+		triggers.VocabCaseClosed:   actors(texts(td.KindUser)),
 	}
 }()
 
