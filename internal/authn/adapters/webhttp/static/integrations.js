@@ -42,6 +42,11 @@ const messages = {
   not_found: "It does not exist, or you cannot see it.",
   not_pending: "It is no longer waiting for activation. Reload the page.",
   url_refused: "The destination's URL is no longer allowed. Create a new destination.",
+  protected_change_pending: "Your organization protects this change: it now waits for a second person.",
+  rotation_untested: "The new key has not passed its test at GitHub.",
+  rotation_state: "The rotation has moved on. Reload the page.",
+  rollback_closed: "The rollback window is closed.",
+  rotation_reason: "Give a reason of 1 to 500 characters.",
 };
 
 function explain(e) { return messages[e.code] || ("Something went wrong (" + e.message + ")."); }
@@ -103,3 +108,21 @@ async function activate(path) {
 
 const activateButton = document.getElementById("activate");
 if (activateButton) { activateButton.addEventListener("click", () => activate(activateButton.dataset.path)); }
+
+// rollBack is activate with the person's reason (G0 M22 D5).
+async function rollBack(path, reason) {
+  try {
+    say("Waiting for your security key…");
+    await stepUp();
+    await post(path, { reason: reason });
+    say("Rolled back.");
+    window.location.reload();
+  } catch (e) {
+    say(e instanceof APIError ? explain(e) : "The security key did not answer (" + e.message + ").");
+  }
+}
+
+const rollbackButton = document.getElementById("rollback");
+if (rollbackButton) {
+  rollbackButton.addEventListener("click", () => rollBack(rollbackButton.dataset.path, document.getElementById("reason").value));
+}

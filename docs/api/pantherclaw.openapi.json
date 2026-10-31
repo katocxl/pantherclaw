@@ -9618,6 +9618,492 @@
         }
       }
     },
+    "/pantherclaw.v1.CredentialRotationService/RequestRotation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "RequestRotation",
+        "description": "RequestRotation opens a rotation, after the preview of who shares the\n active credential (PreviewCredentialChange): its digest must match.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.CredentialRotationService.RequestRotation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RequestRotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RequestRotationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.CredentialRotationService/SealRotationCandidate": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "SealRotationCandidate",
+        "description": "SealRotationCandidate stores the new key, sealed on the caller's machine\n to the gateway's broker key, as a CANDIDATE no gateway configuration\n carries.\n permission: credential.seal",
+        "operationId": "pantherclaw.v1.CredentialRotationService.SealRotationCandidate",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SealRotationCandidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SealRotationCandidateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.CredentialRotationService/TestRotation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "TestRotation",
+        "description": "TestRotation asks the connection's gateway to test the candidate at\n GitHub.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.CredentialRotationService.TestRotation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.TestRotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.TestRotationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.CredentialRotationService/ActivateRotation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "ActivateRotation",
+        "description": "ActivateRotation activates a tested candidate. It needs a person's\n security-key step-up, so over this API it is refused with\n STEP_UP_REQUIRED; the server page activates.\n permission: credential.seal",
+        "operationId": "pantherclaw.v1.CredentialRotationService.ActivateRotation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ActivateRotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ActivateRotationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.CredentialRotationService/RollBackRotation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "RollBackRotation",
+        "description": "RollBackRotation restores the old key while the rollback window is open.\n It needs a person's security-key step-up, so over this API it is refused\n with STEP_UP_REQUIRED; the server page rolls back.\n permission: credential.seal",
+        "operationId": "pantherclaw.v1.CredentialRotationService.RollBackRotation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RollBackRotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RollBackRotationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.CredentialRotationService/ConfirmRotation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "ConfirmRotation",
+        "description": "ConfirmRotation asks the connection's gateway to confirm that GitHub\n refuses the old key, which is revoked only then.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.CredentialRotationService.ConfirmRotation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ConfirmRotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ConfirmRotationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.CredentialRotationService/CancelRotation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "CancelRotation",
+        "description": "CancelRotation ends a rotation before activation and revokes its\n candidate.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.CredentialRotationService.CancelRotation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CancelRotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CancelRotationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.CredentialRotationService/GetRotation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "GetRotation",
+        "description": "GetRotation returns a rotation.\n permission: connection.read",
+        "operationId": "pantherclaw.v1.CredentialRotationService.GetRotation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetRotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetRotationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.CredentialRotationService/ListRotations": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.CredentialRotationService"
+        ],
+        "summary": "ListRotations",
+        "description": "ListRotations lists a connection's rotations, newest first.\n permission: connection.read",
+        "operationId": "pantherclaw.v1.CredentialRotationService.ListRotations",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListRotationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListRotationsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.DataRequestService/CreateExport": {
       "post": {
         "tags": [
@@ -19115,6 +19601,114 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetModelDraftResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ModelService/ListModelDrafts": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ModelService"
+        ],
+        "summary": "ListModelDrafts",
+        "description": "ListModelDrafts lists stored drafts, newest first: only the kinds the\n caller may read (policy.read, automation.read). Never a prompt or a\n response (HR-554). Business, as drafting is.\n permission: org.read",
+        "operationId": "pantherclaw.v1.ModelService.ListModelDrafts",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListModelDraftsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListModelDraftsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ModelService/GetModelUsage": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ModelService"
+        ],
+        "summary": "GetModelUsage",
+        "description": "GetModelUsage sums the organization's model calls: counts and tokens by\n task and outcome, never a prompt or a response (HR-554). Business, as\n drafting is.\n permission: org.read",
+        "operationId": "pantherclaw.v1.ModelService.GetModelUsage",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetModelUsageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetModelUsageResponse"
                 }
               }
             }
@@ -30033,6 +30627,114 @@
         }
       }
     },
+    "/pantherclaw.v1.TicketSyncService/ListTicketRefs": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "ListTicketRefs",
+        "description": "ListTicketRefs lists the tickets linked to one case or one incident. For\n an incident the caller also needs incident.read.\n permission: case.read",
+        "operationId": "pantherclaw.v1.TicketSyncService.ListTicketRefs",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListTicketRefsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListTicketRefsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.TicketSyncService/ListTicketSyncEvents": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.TicketSyncService"
+        ],
+        "summary": "ListTicketSyncEvents",
+        "description": "ListTicketSyncEvents lists a configuration's sync log, newest first:\n inbound deliveries and outbound calls, without bodies or secrets.\n permission: connection.read",
+        "operationId": "pantherclaw.v1.TicketSyncService.ListTicketSyncEvents",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListTicketSyncEventsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListTicketSyncEventsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.TransactionService/ListTransactions": {
       "post": {
         "tags": [
@@ -34100,6 +34802,11 @@
             "type": "boolean",
             "title": "range_agent",
             "description": "A range agent (G0 M12, HR-220): marked at creation, never changed; all\n its runs are simulated and it may use only simulated connections."
+          },
+          "scanState": {
+            "title": "scan_state",
+            "description": "What continuous discovery saw of it (G0 M22 D6); unset for an agent no\n scan found.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentScanState"
           }
         },
         "title": "Agent",
@@ -34167,6 +34874,30 @@
         },
         "title": "DetailsEntry",
         "additionalProperties": false
+      },
+      "pantherclaw.v1.AgentScanState": {
+        "type": "object",
+        "properties": {
+          "missedScans": {
+            "type": "integer",
+            "title": "missed_scans",
+            "format": "int32",
+            "description": "Complete scans in a row that did not see it: the fewest of any finding."
+          },
+          "lastSeenTime": {
+            "title": "last_seen_time",
+            "description": "When a scan last saw it.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "vanished": {
+            "type": "boolean",
+            "title": "vanished",
+            "description": "Every finding reached the vanish threshold and people were told."
+          }
+        },
+        "title": "AgentScanState",
+        "additionalProperties": false,
+        "description": "AgentScanState sums up the scan findings of one agent that were not\n dismissed, across scan sources."
       },
       "pantherclaw.v1.AgentSummary": {
         "type": "object",
@@ -46209,7 +46940,8 @@
           "SEALED_CREDENTIAL_STATE_UNSPECIFIED",
           "SEALED_CREDENTIAL_STATE_ACTIVE",
           "SEALED_CREDENTIAL_STATE_SUPERSEDED",
-          "SEALED_CREDENTIAL_STATE_REVOKED"
+          "SEALED_CREDENTIAL_STATE_REVOKED",
+          "SEALED_CREDENTIAL_STATE_CANDIDATE"
         ],
         "description": "SealedCredentialState is whether a credential version is used."
       },
@@ -51434,6 +52166,401 @@
         "title": "VerifiedOperation",
         "additionalProperties": false,
         "description": "VerifiedOperation is when the latest passing target-verifier test of one\n operation ran."
+      },
+      "pantherclaw.v1.ActivateRotationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Rotation id."
+          }
+        },
+        "title": "ActivateRotationRequest",
+        "additionalProperties": false,
+        "description": "ActivateRotationRequest names a rotation.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ActivateRotationResponse": {
+        "type": "object",
+        "properties": {
+          "rotation": {
+            "title": "rotation",
+            "description": "The rotation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CredentialRotation"
+          }
+        },
+        "title": "ActivateRotationResponse",
+        "additionalProperties": false,
+        "description": "ActivateRotationResponse is the rotation."
+      },
+      "pantherclaw.v1.CancelRotationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Rotation id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Why."
+          }
+        },
+        "title": "CancelRotationRequest",
+        "additionalProperties": false,
+        "description": "CancelRotationRequest names a rotation.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.CancelRotationResponse": {
+        "type": "object",
+        "properties": {
+          "rotation": {
+            "title": "rotation",
+            "description": "The rotation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CredentialRotation"
+          }
+        },
+        "title": "CancelRotationResponse",
+        "additionalProperties": false,
+        "description": "CancelRotationResponse is the rotation."
+      },
+      "pantherclaw.v1.ConfirmRotationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Rotation id."
+          }
+        },
+        "title": "ConfirmRotationRequest",
+        "additionalProperties": false,
+        "description": "ConfirmRotationRequest names a rotation.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ConfirmRotationResponse": {
+        "type": "object",
+        "properties": {
+          "rotation": {
+            "title": "rotation",
+            "description": "The rotation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CredentialRotation"
+          }
+        },
+        "title": "ConfirmRotationResponse",
+        "additionalProperties": false,
+        "description": "ConfirmRotationResponse is the rotation."
+      },
+      "pantherclaw.v1.CredentialRotation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Rotation id."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "The connection."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "REQUESTED, CANDIDATE_SEALED, TESTING, ACTIVATING, AWAITING_OLD_REMOVAL,\n CONFIRMING, CONFIRMED, FAILED or ROLLED_BACK."
+          },
+          "oldCredentialId": {
+            "type": "string",
+            "title": "old_credential_id",
+            "description": "The credential version id that was ACTIVE when it was requested."
+          },
+          "candidateCredentialId": {
+            "type": "string",
+            "title": "candidate_credential_id",
+            "description": "The sealed new key's credential version id, once sealed."
+          },
+          "previewDigest": {
+            "type": "string",
+            "title": "preview_digest",
+            "description": "Digest of the preview the requester confirmed."
+          },
+          "requestedBy": {
+            "type": "string",
+            "title": "requested_by",
+            "description": "Who requested it."
+          },
+          "testPassTime": {
+            "title": "test_pass_time",
+            "description": "When the candidate passed its test.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activatedBy": {
+            "type": "string",
+            "title": "activated_by",
+            "description": "Who activated it."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "rollbackUntil": {
+            "title": "rollback_until",
+            "description": "When the rollback window ends.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmTime": {
+            "title": "confirm_time",
+            "description": "When GitHub's refusal of the old key was confirmed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "awaitingSince": {
+            "title": "awaiting_since",
+            "description": "Since when it waits for the old key's removal.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endReason": {
+            "type": "string",
+            "title": "end_reason",
+            "description": "Why it ended, when it failed or was rolled back."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "Created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "Last changed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "finishTime": {
+            "title": "finish_time",
+            "description": "Finished.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "CredentialRotation",
+        "additionalProperties": false,
+        "description": "CredentialRotation is one rotation: ids, states and times, never a key."
+      },
+      "pantherclaw.v1.GetRotationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Rotation id."
+          }
+        },
+        "title": "GetRotationRequest",
+        "additionalProperties": false,
+        "description": "GetRotationRequest names a rotation.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetRotationResponse": {
+        "type": "object",
+        "properties": {
+          "rotation": {
+            "title": "rotation",
+            "description": "The rotation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CredentialRotation"
+          }
+        },
+        "title": "GetRotationResponse",
+        "additionalProperties": false,
+        "description": "GetRotationResponse is the rotation."
+      },
+      "pantherclaw.v1.ListRotationsRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          }
+        },
+        "title": "ListRotationsRequest",
+        "additionalProperties": false,
+        "description": "ListRotationsRequest names a connection.",
+        "required": [
+          "connectionId"
+        ]
+      },
+      "pantherclaw.v1.ListRotationsResponse": {
+        "type": "object",
+        "properties": {
+          "rotations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CredentialRotation"
+            },
+            "title": "rotations",
+            "description": "The rotations."
+          }
+        },
+        "title": "ListRotationsResponse",
+        "additionalProperties": false,
+        "description": "ListRotationsResponse is the connection's rotations, newest first."
+      },
+      "pantherclaw.v1.RequestRotationRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "previewDigest": {
+            "type": "string",
+            "title": "preview_digest",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "PreviewCredentialChange's digest for the active credential."
+          }
+        },
+        "title": "RequestRotationRequest",
+        "additionalProperties": false,
+        "description": "RequestRotationRequest opens a rotation.",
+        "required": [
+          "connectionId",
+          "previewDigest"
+        ]
+      },
+      "pantherclaw.v1.RequestRotationResponse": {
+        "type": "object",
+        "properties": {
+          "rotation": {
+            "title": "rotation",
+            "description": "The rotation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CredentialRotation"
+          }
+        },
+        "title": "RequestRotationResponse",
+        "additionalProperties": false,
+        "description": "RequestRotationResponse is the rotation."
+      },
+      "pantherclaw.v1.RollBackRotationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Rotation id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Why."
+          }
+        },
+        "title": "RollBackRotationRequest",
+        "additionalProperties": false,
+        "description": "RollBackRotationRequest names a rotation.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RollBackRotationResponse": {
+        "type": "object",
+        "properties": {
+          "rotation": {
+            "title": "rotation",
+            "description": "The rotation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CredentialRotation"
+          }
+        },
+        "title": "RollBackRotationResponse",
+        "additionalProperties": false,
+        "description": "RollBackRotationResponse is the rotation."
+      },
+      "pantherclaw.v1.SealRotationCandidateRequest": {
+        "type": "object",
+        "properties": {
+          "rotationId": {
+            "type": "string",
+            "title": "rotation_id",
+            "format": "uuid",
+            "description": "Rotation id."
+          },
+          "credential": {
+            "title": "credential",
+            "description": "The stored credential, bound like any upload; kind github_app.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PutCredentialRequest"
+          }
+        },
+        "title": "SealRotationCandidateRequest",
+        "required": [
+          "credential",
+          "rotationId"
+        ],
+        "additionalProperties": false,
+        "description": "SealRotationCandidateRequest stores a sealed key, as PutCredential does."
+      },
+      "pantherclaw.v1.SealRotationCandidateResponse": {
+        "type": "object",
+        "properties": {
+          "credential": {
+            "title": "credential",
+            "description": "The candidate.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ConnectionCredential"
+          }
+        },
+        "title": "SealRotationCandidateResponse",
+        "additionalProperties": false,
+        "description": "SealRotationCandidateResponse is the stored metadata: no sealed bytes."
+      },
+      "pantherclaw.v1.TestRotationRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Rotation id."
+          }
+        },
+        "title": "TestRotationRequest",
+        "additionalProperties": false,
+        "description": "TestRotationRequest names a rotation.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.TestRotationResponse": {
+        "type": "object",
+        "properties": {
+          "rotation": {
+            "title": "rotation",
+            "description": "The rotation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CredentialRotation"
+          }
+        },
+        "title": "TestRotationResponse",
+        "additionalProperties": false,
+        "description": "TestRotationResponse is the rotation."
       },
       "pantherclaw.v1.DataRequestKind": {
         "type": "string",
@@ -70642,6 +71769,95 @@
         "additionalProperties": false,
         "description": "GetModelSettingsResponse carries the settings."
       },
+      "pantherclaw.v1.GetModelUsageRequest": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "days",
+            "maximum": 90,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Days back from now, 1 to 90; 0 means 30."
+          }
+        },
+        "title": "GetModelUsageRequest",
+        "additionalProperties": false,
+        "description": "GetModelUsageRequest names a period."
+      },
+      "pantherclaw.v1.GetModelUsageResponse": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "title": "since",
+            "description": "Where the period starts.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ModelUsageRow"
+            },
+            "title": "rows",
+            "description": "One row per task and outcome."
+          }
+        },
+        "title": "GetModelUsageResponse",
+        "additionalProperties": false,
+        "description": "GetModelUsageResponse is the period's usage."
+      },
+      "pantherclaw.v1.ListModelDraftsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Page size."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 512,
+            "description": "Page token."
+          }
+        },
+        "title": "ListModelDraftsRequest",
+        "additionalProperties": false,
+        "description": "ListModelDraftsRequest is one page."
+      },
+      "pantherclaw.v1.ListModelDraftsResponse": {
+        "type": "object",
+        "properties": {
+          "drafts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ModelDraft"
+            },
+            "title": "drafts",
+            "description": "The drafts."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "The next page, if any."
+          }
+        },
+        "title": "ListModelDraftsResponse",
+        "additionalProperties": false,
+        "description": "ListModelDraftsResponse is a page of drafts."
+      },
       "pantherclaw.v1.ModelDraft": {
         "type": "object",
         "properties": {
@@ -70745,6 +71961,60 @@
         "title": "ModelSettings",
         "additionalProperties": false,
         "description": "ModelSettings is an organization's settings, without its key."
+      },
+      "pantherclaw.v1.ModelUsageRow": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "title": "task",
+            "description": "SEARCH_QUERY, POLICY_DRAFT or AUTOMATION_DRAFT."
+          },
+          "outcome": {
+            "type": "string",
+            "title": "outcome",
+            "description": "PENDING, OK or the refusing reason code."
+          },
+          "calls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "calls",
+            "format": "int64",
+            "description": "How many calls."
+          },
+          "inputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "input_tokens",
+            "format": "int64",
+            "description": "Input tokens used."
+          },
+          "outputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "output_tokens",
+            "format": "int64",
+            "description": "Output tokens used."
+          },
+          "reservedTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "reserved_tokens",
+            "format": "int64",
+            "description": "Tokens still held for calls that gave no usage."
+          }
+        },
+        "title": "ModelUsageRow",
+        "additionalProperties": false,
+        "description": "ModelUsageRow is the calls of one task with one outcome."
       },
       "pantherclaw.v1.UpdateModelSettingsRequest": {
         "type": "object",
@@ -86306,6 +87576,58 @@
         "title": "LinkIncidentTicketResponse",
         "additionalProperties": false
       },
+      "pantherclaw.v1.ListTicketRefsRequest": {
+        "type": "object",
+        "oneOf": [
+          {
+            "properties": {
+              "caseId": {
+                "type": "string",
+                "title": "case_id",
+                "format": "uuid",
+                "description": "Case id."
+              }
+            },
+            "title": "case_id",
+            "required": [
+              "caseId"
+            ]
+          },
+          {
+            "properties": {
+              "incidentId": {
+                "type": "string",
+                "title": "incident_id",
+                "format": "uuid",
+                "description": "Incident id."
+              }
+            },
+            "title": "incident_id",
+            "required": [
+              "incidentId"
+            ]
+          }
+        ],
+        "title": "ListTicketRefsRequest",
+        "additionalProperties": false,
+        "description": "ListTicketRefsRequest names one case or one incident."
+      },
+      "pantherclaw.v1.ListTicketRefsResponse": {
+        "type": "object",
+        "properties": {
+          "refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TicketRef"
+            },
+            "title": "refs",
+            "description": "The links."
+          }
+        },
+        "title": "ListTicketRefsResponse",
+        "additionalProperties": false,
+        "description": "ListTicketRefsResponse is the linked tickets."
+      },
       "pantherclaw.v1.ListTicketSyncConfigsRequest": {
         "type": "object",
         "title": "ListTicketSyncConfigsRequest",
@@ -86324,6 +87646,64 @@
         },
         "title": "ListTicketSyncConfigsResponse",
         "additionalProperties": false
+      },
+      "pantherclaw.v1.ListTicketSyncEventsRequest": {
+        "type": "object",
+        "properties": {
+          "configId": {
+            "type": "string",
+            "title": "config_id",
+            "format": "uuid",
+            "description": "Configuration id."
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Page size."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 512,
+            "description": "Page token."
+          }
+        },
+        "title": "ListTicketSyncEventsRequest",
+        "additionalProperties": false,
+        "description": "ListTicketSyncEventsRequest is one page of a configuration's log.",
+        "required": [
+          "configId"
+        ]
+      },
+      "pantherclaw.v1.ListTicketSyncEventsResponse": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TicketSyncEvent"
+            },
+            "title": "events",
+            "description": "The events."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "The next page, if any."
+          }
+        },
+        "title": "ListTicketSyncEventsResponse",
+        "additionalProperties": false,
+        "description": "ListTicketSyncEventsResponse is a page of the log."
       },
       "pantherclaw.v1.OpenCaseTicketRequest": {
         "type": "object",
@@ -86570,6 +87950,59 @@
         "title": "TicketSyncConfig",
         "additionalProperties": false,
         "description": "TicketSyncConfig is a sync configuration, without its secrets."
+      },
+      "pantherclaw.v1.TicketSyncEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Event id."
+          },
+          "direction": {
+            "type": "string",
+            "title": "direction",
+            "description": "INBOUND or OUTBOUND."
+          },
+          "occurTime": {
+            "title": "occur_time",
+            "description": "When it was received or queued.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "title": "status",
+            "description": "Inbound: APPLIED, IGNORED, NOTED, STALE or UNLINKED. Outbound: PENDING,\n DONE or FAILED."
+          },
+          "issueKey": {
+            "type": "string",
+            "title": "issue_key",
+            "description": "Inbound: the ticket key, when the delivery named one."
+          },
+          "action": {
+            "type": "string",
+            "title": "action",
+            "description": "Outbound: CREATE or COMMENT."
+          },
+          "caseId": {
+            "type": "string",
+            "title": "case_id",
+            "description": "Outbound: the case, if any."
+          },
+          "incidentId": {
+            "type": "string",
+            "title": "incident_id",
+            "description": "Outbound: the incident, if any."
+          },
+          "resultCode": {
+            "type": "string",
+            "title": "result_code",
+            "description": "Outbound: the result code, once finished."
+          }
+        },
+        "title": "TicketSyncEvent",
+        "additionalProperties": false,
+        "description": "TicketSyncEvent is one entry of the sync log."
       },
       "pantherclaw.v1.DownstreamState": {
         "type": "string",
@@ -89854,6 +91287,10 @@
     {
       "name": "pantherclaw.v1.CoverageService",
       "description": "CoverageService answers the question coverage exists for: can this agent\n produce this effect through another usable route without authorization\n (G0 M9 track A; F433–F460, F021, PN-008.2; HR-210, HR-211, HR-212)?\n\n A coverage record is scoped to one agent, connection and operation. Its\n state is UNKNOWN, OBSERVE_ONLY, PARTIAL or ENFORCED, computed only from\n evidence: observed traffic, the route inventory and sandbox closure\n evidence. A setting alone never yields a state (F460). Cooperative\n channels (SDK, hook, AuthZEN) are capped at PARTIAL unless the target verifies\n action tokens (HR-024), and routes through opaque MCP servers unless\n their egress is mediated (HR-086). ENFORCED expires (24 hours by\n default) and every invalidating change drops it at once; a record read\n after that is recomputed from current evidence, reads at most PARTIAL and\n keeps the last valid record (HR-211, F442).\n\n Closure evidence is never written through this service: the sandbox\n records it after verifying the signed probe results (HR-215).\n Exclusions are weakening changes that only a person holding\n coverage.manage makes, with a written reason and an expiry (HR-212).\n Reads follow the caller's coverage.read scope over the agent."
+    },
+    {
+      "name": "pantherclaw.v1.CredentialRotationService",
+      "description": "CredentialRotationService rotates a connection's GitHub App key with\n confirmation at the target (G0 M20 D253, D259; G0 M22 D5, HR-517..520,\n HR-553). It is one-to-one over the rotation use cases, which keep their own\n permissions, protected change and audit. No response carries a key.\n Activating and rolling back need a security-key step-up, which only a\n browser session has: over this API they are refused with\n STEP_UP_REQUIRED, and a person uses the server page\n /integrations/credential-rotations/{id}."
     },
     {
       "name": "pantherclaw.v1.DataRequestService",

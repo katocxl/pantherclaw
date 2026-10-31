@@ -105,6 +105,8 @@ type Handler struct {
 	// not mounted.
 	integrations       Integrations
 	exportDestinations ExportDestinations
+	// credentialRotations serves the rotation page (G0 M22 D5); nil without it.
+	credentialRotations CredentialRotations
 	// modelDrafting is the model drafting settings page (G0 M21 D309); nil
 	// when not mounted.
 	modelDrafting ModelDrafting
@@ -170,6 +172,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountPolicyChanges(mux)
 	h.mountIntegrations(mux)
 	h.mountExportDestinations(mux)
+	h.mountCredentialRotations(mux)
 	h.mountModelDrafting(mux)
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)

@@ -543,6 +543,8 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.TicketSyncService/OpenCaseTicket":         entitlements.ClassChange,
 	"/pantherclaw.v1.TicketSyncService/OpenIncidentTicket":     entitlements.ClassChange,
 	"/pantherclaw.v1.TicketSyncService/GetTicketFieldOwners":   entitlements.ClassRead,
+	"/pantherclaw.v1.TicketSyncService/ListTicketRefs":         entitlements.ClassRead,
+	"/pantherclaw.v1.TicketSyncService/ListTicketSyncEvents":   entitlements.ClassRead,
 	"/pantherclaw.v1.TicketSyncService/SetTicketFieldOwner":    entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/ProposeSlackLink":     entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/ConfirmChatLink":      entitlements.ClassChange,

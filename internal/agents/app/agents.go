@@ -35,6 +35,42 @@ type Agent struct {
 	RetiredAt         *time.Time
 	// RangeAgent: all its runs are simulated (G0 M12, HR-220); immutable.
 	RangeAgent bool
+	// ScanState is what continuous discovery saw of it; nil when no scan
+	// found it (G0 M22 D6).
+	ScanState *ScanState
+}
+
+// ScanState sums up an agent's scan findings that were not dismissed.
+type ScanState struct {
+	// MissedScans is the fewest complete scans in a row that missed a finding.
+	MissedScans int32
+	LastSeenAt  time.Time
+	// Vanished: every finding reached the vanish threshold.
+	Vanished bool
+}
+
+// withScanStates fills in the scan states of agents, which the caller may
+// already read.
+func withScanStates(ctx context.Context, q *dbq.Queries, org ids.OrgID, agents []Agent) error {
+	if len(agents) == 0 {
+		return nil
+	}
+	list := make([]ids.UUID, len(agents))
+	for i := range agents {
+		list[i] = agents[i].ID
+	}
+	rows, err := q.AgentScanStates(ctx, org, list)
+	if err != nil {
+		return err
+	}
+	states := make(map[ids.UUID]*ScanState, len(rows))
+	for _, r := range rows {
+		states[r.AgentID] = &ScanState{MissedScans: r.MissedScans, LastSeenAt: r.LastSeenAt, Vanished: r.Vanished}
+	}
+	for i := range agents {
+		agents[i].ScanState = states[agents[i].ID]
+	}
+	return nil
 }
 
 // Discovery is what was observed about a discovered agent. Observed holds
@@ -179,7 +215,11 @@ func (inv *Inventory) Get(ctx context.Context, id ids.UUID) (Summary, error) {
 		if err != nil {
 			return err
 		}
-		a := agentView(r)
+		one := []Agent{agentView(r)}
+		if err := withScanStates(ctx, q, c.Org, one); err != nil {
+			return err
+		}
+		a := one[0]
 		out = Summary{
 			Agent: a, NextAction: a.State.NextAction(),
 			Activity:         domain.Activity(n.EverAdmitted > 0, observed(a.State, a.SuspendedFrom)),
@@ -260,6 +300,9 @@ func (inv *Inventory) List(ctx context.Context, pr page.Request, states []domain
 			if c.Can(td.PermAgentRead, path) {
 				out.Items = append(out.Items, agentView(r))
 			}
+		}
+		if err := withScanStates(ctx, q, c.Org, out.Items); err != nil {
+			return err
 		}
 		if len(out.Items) == 0 && pr.After.IsZero() {
 			has, err := q.OrgHasAgents(ctx, c.Org)

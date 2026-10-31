@@ -7,6 +7,7 @@ package modelrpc
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/model/app"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/page"
 	"github.com/katocxl/pantherclaw/internal/search"
 	"github.com/katocxl/pantherclaw/internal/search/adapters/searchrpc"
 )
@@ -131,10 +133,55 @@ func (h *Handler) GetModelDraft(ctx context.Context, r *pantherclawv1.GetModelDr
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.GetModelDraftResponse{Draft: &pantherclawv1.ModelDraft{
+	return &pantherclawv1.GetModelDraftResponse{Draft: draftProto(d)}, nil
+}
+
+func draftProto(d app.StoredDraft) *pantherclawv1.ModelDraft {
+	return &pantherclawv1.ModelDraft{
 		VersionId: d.Version.String(), Kind: d.Kind, Origin: d.Origin, Ambiguities: ambiguities(d.Ambiguities),
 		CallId: d.Call.String(), CreatedAt: timestamppb.New(d.CreatedAt),
-	}}, nil
+	}
+}
+
+// ListModelDrafts implements ModelServiceHandler.
+func (h *Handler) ListModelDrafts(ctx context.Context, r *pantherclawv1.ListModelDraftsRequest) (*pantherclawv1.ListModelDraftsResponse, error) {
+	pr, err := page.Parse(r.GetPageSize(), r.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	drafts, next, err := h.svc.ListDrafts(ctx, pr)
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.ListModelDraftsResponse{NextPageToken: next}
+	for _, d := range drafts {
+		out.Drafts = append(out.Drafts, draftProto(d))
+	}
+	return out, nil
+}
+
+// defaultUsageDays is the period GetModelUsage reads when none is named.
+const defaultUsageDays = 30
+
+// GetModelUsage implements ModelServiceHandler.
+func (h *Handler) GetModelUsage(ctx context.Context, r *pantherclawv1.GetModelUsageRequest) (*pantherclawv1.GetModelUsageResponse, error) {
+	days := r.GetDays()
+	if days == 0 {
+		days = defaultUsageDays
+	}
+	since := time.Now().UTC().AddDate(0, 0, -int(days))
+	rows, err := h.svc.Usage(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.GetModelUsageResponse{Since: timestamppb.New(since)}
+	for _, u := range rows {
+		out.Rows = append(out.Rows, &pantherclawv1.ModelUsageRow{
+			Task: u.Task, Outcome: u.Outcome, Calls: u.Calls, InputTokens: u.InputTokens, OutputTokens: u.OutputTokens,
+			ReservedTokens: u.ReservedTokens,
+		})
+	}
+	return out, nil
 }
 
 // DraftPolicy implements ModelServiceHandler. It stores a DRAFT and publishes
