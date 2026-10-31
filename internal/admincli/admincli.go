@@ -44,6 +44,7 @@ Usage:
   pclaw-admin licence verify --roots FILE --in FILE
   pclaw-admin packages sign --key FILE [--passphrase-file FILE] --version N [--expires-days 180] --out FILE PACKAGE.yaml...
   pclaw-admin packages verify --roots FILE --targets FILE PACKAGE.yaml...
+  pclaw-admin hub build --dir hub --out DIR --key FILE [--passphrase-file FILE] --version N [--expires-days 180]
   pclaw-admin version
 
 Flags come before the package files.
@@ -70,6 +71,8 @@ func Run(args []string, stdout, stderr io.Writer, now func() time.Time) int {
 		err = signPackages(args[2:], stdout, stderr, now)
 	case args[0] == "packages" && len(args) > 1 && args[1] == "verify":
 		err = verifyPackages(args[2:], stdout, stderr, now)
+	case args[0] == "hub" && len(args) > 1 && args[1] == "build":
+		err = hubBuild(args[2:], stdout, stderr, now)
 	default:
 		_, _ = fmt.Fprint(stderr, usage)
 		return exitUsage

@@ -82,7 +82,7 @@ type world struct {
 }
 
 const shellRule = `{"id":"hub-no-rm","per":"org","kind":"FORBID","summary":"no rm in {{environment}}",
-	"operations":["shell.command.run"],"when":"action.params.command.startsWith('rm') && environment.id == {{environment_id}}","reason":"NO_RM"}`
+	"operations":["shell.command.run"],"environments":["{{environment_id}}"],"when":"action.params.command.startsWith('rm')","reason":"NO_RM"}`
 
 const customRule = `id: org.hub_watch
 version: "1"
@@ -321,10 +321,9 @@ func TestHR561_InstallIsInert(t *testing.T) {
 	if err != nil || pub == nil || pub.ID != w.base {
 		t.Fatalf("published after install: %v %v", pub, err)
 	}
-	if n := w.count("SELECT count(*) FROM pc.policy_versions WHERE id = $1 AND bundle::text LIKE '%no-root%' AND bundle::text LIKE '%hub-no-rm%' AND bundle::text LIKE '%''production''%'", res.Install.ResultRef); n != 1 {
-		// environment.id is compared to a quoted literal, and the published
-		// rule stays in the draft.
-		t.Logf("bundle check: %d", n)
+	// The template's rule joins the published one in the draft.
+	if n := w.count("SELECT count(*) FROM pc.policy_versions WHERE id = $1 AND bundle::text LIKE '%no-root%' AND bundle::text LIKE '%hub-no-rm%'", res.Install.ResultRef); n != 1 {
+		t.Fatalf("draft bundle: %d", n)
 	}
 
 	res, err = w.svc.Install(ctx, app.Input{IndexJWS: doc, Item: rule})
@@ -372,8 +371,8 @@ func TestHR561_InstallIsInert(t *testing.T) {
 	if w.count("SELECT count(*) FROM pc.custom_detection_rules") != before {
 		t.Fatal("reinstalling made a second rule")
 	}
-	if n := w.count("SELECT count(*) FROM pc.audit_events WHERE event_name = 'hub.item_installed'"); n != 4 {
-		t.Logf("audit: %d", n)
+	if n := w.count("SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.hub.item_installed'"); n != 4 {
+		t.Fatalf("audit entries: %d", n)
 	}
 	list, err := w.svc.List(ctx, 10, nil)
 	if err != nil || len(list) != 4 {
