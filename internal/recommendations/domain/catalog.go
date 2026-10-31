@@ -118,9 +118,9 @@ type Integrations struct {
 // only what the viewer may see; Integrations and the onboarding fields are
 // the org's.
 type Facts struct {
-	Agents       map[string]Group // per execution context
-	Secrets      map[string]Group // open scan discoveries per credential kind
-	DataAgents   Group
+	Agents     map[string]Group // per execution context
+	Secrets    map[string]Group // open scan discoveries per credential kind
+	DataAgents Group
 	// ManagedSettings are the open scan discoveries a scan found on a machine
 	// with no managed settings file (G0 M23 D114).
 	ManagedSettings Group
