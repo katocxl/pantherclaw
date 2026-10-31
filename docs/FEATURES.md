@@ -721,8 +721,30 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 
 ### M23 rows: Easy to adopt
 
+Hub is a part of Root, not a new component. It publishes PantherClaw's own content, Apache-2.0, with no third-party code ([G0 M23](g0/M23.md)).
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
+| F840 | Hub directory format | A static directory: a signed `index.jws` and `items/<sha256>.json`, no archives. Kinds are closed and hold no code; items are at most 1 MiB, with at most 1,000 in an index. | Next | Community | M23 | new |
+| F841 | Hub trust root | Hub documents verify under their own root and purpose, never as package documents or the reverse. The development key works on loopback only; empty roots elsewhere refuse with `HUB_NO_ROOT`. | Next | Community | M23 | new |
+| F842 | Hub state and install records | Per organization, the last accepted index version and digest, and one record per installed item, its result and who installed it. | Next | Community | M23 | new |
+| F843 | Hub API | `HubService` installs an item and lists installs and state. Reading needs `hub.read`; installing needs `hub.install`, a person only. | Next | Community | M23 | new |
+| F844 | Inert Hub install | The server verifies again, then each item lands as a draft or goes through package import. Nothing is activated, published, enabled or pinned; a detection rule keeps its Business gate. | Next | Community | M23 | new |
+| F845 | Hub refusals and rollback | Stable refusals for signature, expiry, digest, missing root and rollback. A lower version, or the same version with another digest, is refused; the same digest again is idempotent. | Next | Community | M23 | new |
+| F846 | `pclaw hub` | Search, show, install, update and status from a URL or directory, HTTPS only except loopback, with no cross-host redirects. The CLI keeps rollback state and reports updates; the server never fetches. | Next | Community | M23 | new |
+| F847 | Hub build command | `pclaw-admin hub build` signs a directory into an index and items, with a version and expiry. | Next | Community | M23 | new |
+| F848 | Open Hub content | The `hub/` directory holds items with their tests, Apache-2.0, listed in NOTICE and LICENSE and checked by `tools/licensecheck`. | Next | Community | M23 | new |
+| F849 | Seed Hub content | Six policy templates, eight alert-only detection rules, five range scenarios and three automations; `task hub:check` runs the real validators in `task check`. | Next | Community | M23 | new |
+| F850 | Managed-settings kit | `pclaw managed-settings generate` writes Claude Code or Copilot admin files to a chosen directory or stdout, never to a managed location. It raises no coverage. | Next | Community | M23 | new |
+| F851 | Managed state in `pclaw init` | Reports managed settings as not found, present or in conflict, and says that registry, device-management and server-managed settings cannot be read here. | Next | Community | M23 | new |
+| F852 | Managed-settings signals | Scan adds a `managed_settings` attribute to existing findings, and a recommendation says when settings are missing. No coverage state changes. | Next | Community | M23 | F801 |
+| F853 | Offline policy checks | Validation, scenarios, policy comparison and simulation run from files, with no server and no network. | Next | Community | M23 | new |
+| F854 | `pclaw ci check` | Checks a policy file and reports validation, scenarios and rule changes by direction, as text, JSON or Markdown, with exit codes for pass, failed check and usage. | Next | Community | M23 | new |
+| F855 | Simulation samples in CI | The check adds outcome samples and says how many were sampled and that an empty sample proves nothing. | Next | Team | M23 | new |
+| F856 | Safe CI report output | Markdown output escapes all policy-file text and is capped at 60 KiB, so a policy cannot mention a person or render markup. | Next | Community | M23 | new |
+| F857 | GitHub Action | A composite action, Apache-2.0, pinned by SHA, that checksum-verifies `pclaw` and needs no secrets. Documented for `pull_request` only; comments are skipped on forks. | Next | Community | M23 | new |
+| F858 | GitLab component | A CI component with a README and licence, Apache-2.0, that runs the same check. | Next | Community | M23 | new |
+| F859 | `pclaw dev` | Starts, stops and reports a loopback development node with the simulators. `pclaw dev env` prints connection settings and never a secret value. | Next | Community | M23 | new |
 
 ### M24 rows: Agent Posture
 
