@@ -614,3 +614,18 @@
 | HR-543 | Only strictly parsed structured output is accepted. | T-235 | M21 |
 | HR-544 | Model output never executes; it is a draft or a shown query. | T-235 | M21 |
 | HR-545 | Every call is audited, and the key is write-only. | T-234 | M21 |
+
+## See it: graph evidence and M15–M21 API gaps (G0 M22)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+
+## Easy to adopt: Hub, CI checks and the settings kit (G0 M23)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+
+## Agent Posture: findings, supply chain, catalogue and device scans (G0 M24)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
