@@ -204,6 +204,60 @@ func (q *Queries) MetricBypassRoutes(ctx context.Context, orgID ids.OrgID) (Metr
 	return i, err
 }
 
+const metricBypassRoutesByOwner = `-- name: MetricBypassRoutesByOwner :many
+SELECT coalesce(a.owner_user_id::text, 'unowned')::text AS owner, count(*)::bigint AS n
+FROM pc.coverage_routes r
+LEFT JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
+WHERE r.org_id = $1 AND r.kind <> 'channel' AND r.observation = 'observed' AND r.last_seen_at >= now() - interval '7 days'
+GROUP BY 1
+ORDER BY 1
+LIMIT 200
+`
+
+type MetricBypassRoutesByOwnerRow struct {
+	Owner string
+	N     int64
+}
+
+// The same routes by who owns their agent; a route of no agent, or of an
+// agent with no owner, is "unowned" (G0 M22 D17, F301).
+func (q *Queries) MetricBypassRoutesByOwner(ctx context.Context, orgID ids.OrgID) ([]MetricBypassRoutesByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, metricBypassRoutesByOwner, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MetricBypassRoutesByOwnerRow{}
+	for rows.Next() {
+		var i MetricBypassRoutesByOwnerRow
+		if err := rows.Scan(&i.Owner, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const metricCoverageStale = `-- name: MetricCoverageStale :one
+SELECT count(*)::bigint AS n
+FROM (SELECT DISTINCT ON (c.agent_id, c.connection_id, c.operation) c.expires_at
+      FROM pc.coverage_snapshots c
+      WHERE c.org_id = $1
+      ORDER BY c.agent_id, c.connection_id, c.operation, c.id DESC) s
+WHERE s.expires_at <= now()
+`
+
+// Coverage records whose current snapshot has expired (D17, F301).
+func (q *Queries) MetricCoverageStale(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	row := q.db.QueryRow(ctx, metricCoverageStale, orgID)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
+}
+
 const metricCoverageStates = `-- name: MetricCoverageStates :many
 SELECT s.state, count(*)::bigint AS n
 FROM (SELECT DISTINCT ON (c.agent_id, c.connection_id, c.operation) c.state

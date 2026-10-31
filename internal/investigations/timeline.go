@@ -46,6 +46,9 @@ type Event struct {
 	// Detail is the decision, approval state, outcome, authority change or
 	// lane state.
 	Detail string
+	// ReadClass is the class of the data the transaction read (F285); it
+	// marks the read and claims nothing about what followed.
+	ReadClass string
 }
 
 // Gap is missing evidence on the timeline. Transaction is zero for a
@@ -66,6 +69,11 @@ type Lane struct {
 	State   string
 	Created time.Time
 	Ended   *time.Time
+	// Events and Gaps are the child's own, for a timeline (F284); a lane
+	// holds at most MaxLaneActions actions, and EventsTruncated says so.
+	Events          []Event
+	Gaps            []Gap
+	EventsTruncated bool
 }
 
 // Phase is a stretch of the run's actions. Phases are inferred from the
@@ -121,54 +129,12 @@ func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, wit
 	if len(txns) > MaxTimelineActions {
 		txns, tl.Truncated = txns[:MaxTimelineActions], true
 	}
-	for _, t := range txns {
-		id := t.ID
-		tl.Events = append(tl.Events, Event{
-			At: t.CreatedAt, Kind: EventDecision, Transaction: &id, Operation: t.Operation,
-			Connection: t.ConnectionID, Detail: t.Decision,
-		})
-		if !t.HasReceipt {
-			tl.Gaps = append(tl.Gaps, Gap{Kind: GapNoDecisionReceipt, Transaction: id, At: t.CreatedAt})
-		}
-		if t.DispatchingAt != nil {
-			tl.Events = append(tl.Events, Event{
-				At: *t.DispatchingAt, Kind: EventDispatch, Transaction: &id,
-				Operation: t.Operation, Connection: t.ConnectionID,
-			})
-		}
-		switch {
-		case t.Outcome != nil && t.OutcomeAt != nil:
-			tl.Events = append(tl.Events, Event{
-				At: *t.OutcomeAt, Kind: EventResult, Transaction: &id,
-				Operation: t.Operation, Connection: t.ConnectionID, Detail: *t.Outcome,
-			})
-			if *t.Outcome == "unknown" {
-				tl.Gaps = append(tl.Gaps, Gap{Kind: GapOutcomeUnknown, Transaction: id, At: *t.OutcomeAt})
-			}
-		case t.DispatchingAt != nil && t.PermitState != nil && *t.PermitState == "UNKNOWN":
-			tl.Gaps = append(tl.Gaps, Gap{Kind: GapOutcomeUnknown, Transaction: id, At: *t.DispatchingAt})
-		case t.DispatchingAt != nil && r.EndedAt != nil:
-			tl.Gaps = append(tl.Gaps, Gap{Kind: GapNoOutcome, Transaction: id, At: *t.DispatchingAt})
-		}
-	}
-
-	aps, err := q.InvApprovals(ctx, dbq.InvApprovalsParams{OrgID: tx.OrgID(), RunID: &run, MaxRows: MaxApprovals})
+	tl.Events, tl.Gaps = actionEvents(txns, r.EndedAt)
+	holds, err := approvalEvents(ctx, q, tx.OrgID(), run)
 	if err != nil {
 		return Timeline{}, err
 	}
-	for _, a := range aps {
-		id := a.ID
-		tl.Events = append(tl.Events, Event{
-			At: a.CreatedAt, Kind: EventHold, Approval: &id, Transaction: a.TransactionID,
-			Operation: a.Operation, Detail: "PENDING",
-		})
-		if end := firstTime(a.ApprovedAt, a.EndedAt); end != nil {
-			tl.Events = append(tl.Events, Event{
-				At: *end, Kind: EventApproval, Approval: &id, Transaction: a.TransactionID,
-				Operation: a.Operation, Detail: a.State,
-			})
-		}
-	}
+	tl.Events = append(tl.Events, holds...)
 
 	until := time.Now()
 	if r.EndedAt != nil {
@@ -191,11 +157,15 @@ func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, wit
 	if err != nil {
 		return Timeline{}, err
 	}
-	tl.Lanes = lanes
-	for _, l := range lanes {
+	for i := range lanes {
+		l := &lanes[i]
 		id := l.Run
 		tl.Events = append(tl.Events, Event{At: l.Created, Kind: EventLane, Run: &id, Detail: l.State})
+		if err := fillLane(ctx, q, tx.OrgID(), l); err != nil {
+			return Timeline{}, err
+		}
 	}
+	tl.Lanes = lanes
 	if r.EndedAt != nil {
 		tl.Events = append(tl.Events, Event{At: *r.EndedAt, Kind: EventRunEnd, Detail: str(r.EndReason)})
 	}
@@ -204,6 +174,92 @@ func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, wit
 		tl.Phases = phases(txns)
 	}
 	return tl, nil
+}
+
+// MaxLaneActions bounds the actions one lane of a timeline holds.
+const MaxLaneActions = 100
+
+// fillLane reads a child run's own events and gaps. The caller may read
+// the child: hidden children never become lanes (HR-401), and a lane holds
+// no lanes of its own, so nothing below it is shown unchecked.
+func fillLane(ctx context.Context, q *dbq.Queries, org ids.OrgID, l *Lane) error {
+	txns, err := runTransactions(ctx, q, org, l.Run, MaxLaneActions+1)
+	if err != nil {
+		return err
+	}
+	if len(txns) > MaxLaneActions {
+		txns, l.EventsTruncated = txns[:MaxLaneActions], true
+	}
+	l.Events, l.Gaps = actionEvents(txns, l.Ended)
+	holds, err := approvalEvents(ctx, q, org, l.Run)
+	if err != nil {
+		return err
+	}
+	l.Events = append(l.Events, holds...)
+	slices.SortStableFunc(l.Events, func(a, b Event) int { return a.At.Compare(b.At) })
+	return nil
+}
+
+// actionEvents are the decisions, dispatches and results of a run's
+// actions, and the evidence they lack. ended is when the run ended.
+func actionEvents(txns []dbq.InvRunTransactionsRow, ended *time.Time) ([]Event, []Gap) {
+	var events []Event
+	var gaps []Gap
+	for _, t := range txns {
+		id := t.ID
+		class := str(t.ReadClass)
+		events = append(events, Event{
+			At: t.CreatedAt, Kind: EventDecision, Transaction: &id, Operation: t.Operation,
+			Connection: t.ConnectionID, Detail: t.Decision, ReadClass: class,
+		})
+		if !t.HasReceipt {
+			gaps = append(gaps, Gap{Kind: GapNoDecisionReceipt, Transaction: id, At: t.CreatedAt})
+		}
+		if t.DispatchingAt != nil {
+			events = append(events, Event{
+				At: *t.DispatchingAt, Kind: EventDispatch, Transaction: &id,
+				Operation: t.Operation, Connection: t.ConnectionID, ReadClass: class,
+			})
+		}
+		switch {
+		case t.Outcome != nil && t.OutcomeAt != nil:
+			events = append(events, Event{
+				At: *t.OutcomeAt, Kind: EventResult, Transaction: &id,
+				Operation: t.Operation, Connection: t.ConnectionID, Detail: *t.Outcome, ReadClass: class,
+			})
+			if *t.Outcome == "unknown" {
+				gaps = append(gaps, Gap{Kind: GapOutcomeUnknown, Transaction: id, At: *t.OutcomeAt})
+			}
+		case t.DispatchingAt != nil && t.PermitState != nil && *t.PermitState == "UNKNOWN":
+			gaps = append(gaps, Gap{Kind: GapOutcomeUnknown, Transaction: id, At: *t.DispatchingAt})
+		case t.DispatchingAt != nil && ended != nil:
+			gaps = append(gaps, Gap{Kind: GapNoOutcome, Transaction: id, At: *t.DispatchingAt})
+		}
+	}
+	return events, gaps
+}
+
+// approvalEvents are a run's holds and how they ended.
+func approvalEvents(ctx context.Context, q *dbq.Queries, org ids.OrgID, run ids.UUID) ([]Event, error) {
+	aps, err := q.InvApprovals(ctx, dbq.InvApprovalsParams{OrgID: org, RunID: &run, MaxRows: MaxApprovals})
+	if err != nil {
+		return nil, err
+	}
+	var events []Event
+	for _, a := range aps {
+		id := a.ID
+		events = append(events, Event{
+			At: a.CreatedAt, Kind: EventHold, Approval: &id, Transaction: a.TransactionID,
+			Operation: a.Operation, Detail: "PENDING",
+		})
+		if end := firstTime(a.ApprovedAt, a.EndedAt); end != nil {
+			events = append(events, Event{
+				At: *end, Kind: EventApproval, Approval: &id, Transaction: a.TransactionID,
+				Operation: a.Operation, Detail: a.State,
+			})
+		}
+	}
+	return events, nil
 }
 
 func authorityDetail(c dbq.InvGrantChangesRow) string {

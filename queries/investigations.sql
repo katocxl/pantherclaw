@@ -68,7 +68,7 @@ LIMIT sqlc.arg(max_rows);
 -- The run's transactions, oldest first (F284).
 -- name: InvRunTransactions :many
 SELECT t.id, t.operation, t.decision, t.reason_code, t.mode, t.channel, t.connection_id, t.target_type, t.target_id,
-       t.grant_id, t.effect_state, t.created_at,
+       t.grant_id, t.effect_state, t.read_class, t.created_at,
        p.state AS permit_state, p.dispatching_at, a.outcome, a.recorded_at AS outcome_at,
        EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt,
        c.destination_class

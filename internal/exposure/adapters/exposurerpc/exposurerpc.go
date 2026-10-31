@@ -61,6 +61,23 @@ var (
 		domain.EdgeActive: pb.GraphEdgeState_GRAPH_EDGE_STATE_ACTIVE, domain.EdgeHistorical: pb.GraphEdgeState_GRAPH_EDGE_STATE_HISTORICAL,
 		domain.EdgeExpired: pb.GraphEdgeState_GRAPH_EDGE_STATE_EXPIRED, domain.EdgePossible: pb.GraphEdgeState_GRAPH_EDGE_STATE_POSSIBLE,
 	}
+	edgeStatuses = map[domain.EdgeStatus]pb.GraphEdgeStatus{
+		domain.StatusEnforced: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_ENFORCED, domain.StatusAllowed: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_ALLOWED,
+		domain.StatusApprovalRequired: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_APPROVAL_REQUIRED, domain.StatusDenied: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_DENIED,
+		domain.StatusObserved: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_OBSERVED, domain.StatusPossibleBypass: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_POSSIBLE_BYPASS,
+		domain.StatusUnknown: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_UNKNOWN, domain.StatusStale: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_STALE,
+		domain.StatusEffectPartial: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_PARTIAL, domain.StatusEffectPending: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_PENDING,
+		domain.StatusEffectConflicting:  pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_CONFLICTING,
+		domain.StatusEffectUnverifiable: pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE,
+	}
+	edgeChanges = map[domain.ChangeKind]pb.GraphEdgeChange{
+		domain.ChangeAdded: pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_ADDED, domain.ChangeRemoved: pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_REMOVED,
+		domain.ChangeKept: pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_KEPT,
+	}
+	triggerStages = map[domain.TriggerStage]pb.GraphTriggerStage{
+		domain.StagePredicted: pb.GraphTriggerStage_GRAPH_TRIGGER_STAGE_PREDICTED, domain.StageAuthorized: pb.GraphTriggerStage_GRAPH_TRIGGER_STAGE_AUTHORIZED,
+		domain.StageConfirmed: pb.GraphTriggerStage_GRAPH_TRIGGER_STAGE_CONFIRMED,
+	}
 )
 
 var errPage = pcerr.New(pcerr.InvalidArgument, "PAGE_TOKEN_INVALID", "the page token is not valid")
@@ -311,12 +328,18 @@ func filterOf(f *pb.GraphFilter) domain.GraphFilter {
 	return out
 }
 
-func edgePB(e domain.Edge) *pb.GraphEdge {
+func nodePB(n domain.Node, labels map[domain.Node]string) *pb.GraphNode {
+	return &pb.GraphNode{Type: n.Type, Id: n.ID, Label: labels[n]}
+}
+
+func edgePB(e domain.Edge, labels map[domain.Node]string) *pb.GraphEdge {
 	return &pb.GraphEdge{
-		From: &pb.GraphNode{Type: e.From.Type, Id: e.From.ID}, To: &pb.GraphNode{Type: e.To.Type, Id: e.To.ID}, Kind: e.Kind,
+		From: nodePB(e.From, labels), To: nodePB(e.To, labels), Kind: e.Kind,
 		Verb: verbs[e.Verb], Operation: e.Operation, State: edgeStates[e.State], Decision: e.Decision, Coverage: string(e.Coverage),
 		Execution: e.Execution, Effect: e.Effect, Basis: e.Basis, Revision: int32(e.Revision), Time: ts(e.At), //nolint:gosec // G115: revisions are small
 		ExpireTime: ts(e.ExpiresAt), Freshness: e.Freshness, Provenance: e.Provenance, Count: int32(min(e.Count, 1<<30)), //nolint:gosec // G115: bounded
+		EvidenceRef: e.EvidenceRef, Change: edgeChanges[e.Change], Status: edgeStatuses[e.Status], TriggerStage: triggerStages[e.Stage],
+		ObserveTime: ts(e.ObservedAt), Assurance: e.Assurance, DownstreamState: e.Downstream,
 	}
 }
 
@@ -342,10 +365,10 @@ func (g *Graphs) GetGraph(ctx context.Context, req *pb.GetGraphRequest) (*pb.Get
 		out.Snapshot = snapshotPB(*r.Snapshot)
 	}
 	for _, n := range r.Graph.Nodes {
-		out.Nodes = append(out.Nodes, &pb.GraphNode{Type: n.Type, Id: n.ID})
+		out.Nodes = append(out.Nodes, nodePB(n, r.Graph.Labels))
 	}
 	for _, e := range r.Graph.Edges {
-		out.Edges = append(out.Edges, edgePB(e))
+		out.Edges = append(out.Edges, edgePB(e, r.Graph.Labels))
 	}
 	for k, v := range r.Graph.Current {
 		out.Current[k] = int32(min(v, 1<<30)) //nolint:gosec // G115: bounded
@@ -366,7 +389,7 @@ func (g *Graphs) ListGraphEdges(ctx context.Context, req *pb.ListGraphEdgesReque
 	es := r.Graph.Edges
 	out := &pb.ListGraphEdgesResponse{Truncated: r.Graph.Truncated, Restricted: r.Restricted, NextPageToken: next(start, n, len(es))}
 	for _, e := range es[min(start, len(es)):min(start+n, len(es))] {
-		out.Edges = append(out.Edges, edgePB(e))
+		out.Edges = append(out.Edges, edgePB(e, r.Graph.Labels))
 	}
 	return out, nil
 }

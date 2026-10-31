@@ -871,7 +871,7 @@ func (q *Queries) InvRunProfile(ctx context.Context, orgID ids.OrgID, runIds []i
 
 const invRunTransactions = `-- name: InvRunTransactions :many
 SELECT t.id, t.operation, t.decision, t.reason_code, t.mode, t.channel, t.connection_id, t.target_type, t.target_id,
-       t.grant_id, t.effect_state, t.created_at,
+       t.grant_id, t.effect_state, t.read_class, t.created_at,
        p.state AS permit_state, p.dispatching_at, a.outcome, a.recorded_at AS outcome_at,
        EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt,
        c.destination_class
@@ -905,6 +905,7 @@ type InvRunTransactionsRow struct {
 	TargetID         *string
 	GrantID          *ids.UUID
 	EffectState      *string
+	ReadClass        *string
 	CreatedAt        time.Time
 	PermitState      *string
 	DispatchingAt    *time.Time
@@ -942,6 +943,7 @@ func (q *Queries) InvRunTransactions(ctx context.Context, arg InvRunTransactions
 			&i.TargetID,
 			&i.GrantID,
 			&i.EffectState,
+			&i.ReadClass,
 			&i.CreatedAt,
 			&i.PermitState,
 			&i.DispatchingAt,

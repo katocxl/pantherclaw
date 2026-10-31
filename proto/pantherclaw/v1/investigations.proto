@@ -232,6 +232,8 @@ message TimelineLane {
   repeated TimelineEvent events = 6;
   // The lane has more events than one lane holds.
   bool events_truncated = 7;
+  // Its missing evidence.
+  repeated TimelineGap gaps = 8;
 }
 
 // TimelinePhase is a stretch of actions, inferred from their order.

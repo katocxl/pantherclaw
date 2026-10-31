@@ -81,6 +81,20 @@ type Edge struct {
 	Provenance string
 	// Count is how many edges collapsing merged into this one.
 	Count int
+	// EvidenceRef names the record behind a causal edge (HR-551).
+	EvidenceRef string
+	// Change is set on an edge that compares two revisions (F276).
+	Change ChangeKind
+	// Status is the edge's F291 state; Build fills in what is left empty.
+	Status EdgeStatus
+	// Stage is set on triggered edges.
+	Stage TriggerStage
+	// ObservedAt is when the edge's source was last read or recorded.
+	ObservedAt *time.Time
+	// Assurance is how far the edge is established (F297); Build fills it.
+	Assurance string
+	// Downstream is the state of an action's predicted consequences.
+	Downstream string
 }
 
 // GraphFilter narrows a graph (F293); empty fields do not filter.
@@ -139,6 +153,9 @@ type Graph struct {
 	// Current counts the current edges by kind; historical and expired
 	// edges are never in it.
 	Current map[string]int
+	// Labels are the nodes' plain-text labels, only from names the viewer
+	// may read (HR-550); a node without one has none here.
+	Labels map[Node]string
 }
 
 // Visible decides whether the viewer may see a node (D8): the caller's
@@ -159,6 +176,7 @@ func Build(mode Mode, edges []Edge, visible Visible, f GraphFilter, collapse boo
 		if e.Count == 0 {
 			e.Count = 1
 		}
+		e.annotate()
 		kept = append(kept, e)
 	}
 	if collapse {
@@ -192,7 +210,8 @@ func Build(mode Mode, edges []Edge, visible Visible, f GraphFilter, collapse boo
 
 func edgeKey(e Edge) string {
 	return e.From.Type + ":" + e.From.ID + ">" + e.To.Type + ":" + e.To.ID + "|" + e.Kind + "|" + string(e.Verb) + "|" +
-		string(e.State) + "|" + e.Decision + "|" + e.Effect + "|" + e.Provenance
+		string(e.State) + "|" + e.Decision + "|" + e.Effect + "|" + e.Provenance + "|" + e.EvidenceRef + "|" + string(e.Change) + "|" +
+		string(e.Status) + "|" + string(e.Stage)
 }
 
 func collapseEdges(edges []Edge) []Edge {
@@ -299,8 +318,10 @@ func ExposureEdges(rights []Right) []Edge {
 		switch r.View {
 		case Observed:
 			basis = "OBSERVED"
-			if st == EdgeActive {
-				st = EdgeHistorical // what happened, shown beside what can happen
+			// What happened, shown beside what can happen: observed never
+			// reads as possible (D12), however uncertain the reach is now.
+			if st == EdgeActive || st == EdgePossible {
+				st = EdgeHistorical
 			}
 		case Credential:
 			if r.Label == Uncertain {
@@ -339,6 +360,9 @@ type Activity struct {
 	// Missing marks a transaction whose evidence has a gap (no decision
 	// receipt, an unknown effect).
 	Missing string
+	// Monitor marks a transaction decided in monitor mode: nothing was
+	// prevented, so its decision only records what was seen (HR-184).
+	Monitor bool
 }
 
 // context is what an activity's edges belong to: its agent, run and
@@ -361,17 +385,18 @@ func ActivityEdges(acts []Activity) []Edge {
 		run, txn := Node{Type: "run", ID: a.Run}, Node{Type: "transaction", ID: a.Transaction}
 		out = append(out, Edge{
 			From: Node{Type: "agent", ID: a.Agent}, To: run, Context: ctx, Kind: EdgeActed, State: EdgeHistorical,
-			Basis: "OBSERVED", At: &at,
+			Basis: "OBSERVED", At: &at, Provenance: "run",
 		})
 		out = append(out, Edge{
 			From: run, To: txn, Context: ctx, Kind: EdgeActed, State: EdgeHistorical, Decision: a.Decision,
 			Execution: a.Execution, Effect: a.Effect, Basis: "OBSERVED", At: &at, Operation: a.Operation, Provenance: "transaction",
+			Status: a.status(),
 		})
 		if a.Resource != "" {
 			out = append(out, Edge{
 				From: txn, To: Node{Type: "resource", ID: a.Resource}, Context: ctx, Kind: EdgeTouched,
 				State: EdgeHistorical, Decision: a.Decision, Execution: a.Execution, Effect: a.Effect, Basis: "OBSERVED",
-				At: &at, Operation: a.Operation, Provenance: "transaction",
+				At: &at, Operation: a.Operation, Provenance: "transaction", Status: a.status(),
 			})
 		}
 		if a.Missing != "" {
@@ -408,7 +433,7 @@ func CausalEdges(acts []Activity) []Edge {
 			}
 			out = append(out, Edge{
 				From: Node{Type: "run", ID: p.ParentRun}, To: Node{Type: "run", ID: r}, Context: ctx, Kind: EdgeDelegated,
-				State: EdgeHistorical, Basis: "OBSERVED",
+				State: EdgeHistorical, Basis: "OBSERVED", Provenance: "run",
 			})
 		}
 		slices.SortFunc(list, func(a, b Activity) int {
@@ -419,7 +444,7 @@ func CausalEdges(acts []Activity) []Edge {
 			out = append(out, Edge{
 				From: Node{Type: "transaction", ID: list[i-1].Transaction}, To: Node{Type: "transaction", ID: list[i].Transaction},
 				Context: list[i].context(), Kind: EdgeThen, State: EdgeHistorical, Basis: "INFERRED", At: &at,
-				Operation: list[i].Operation,
+				Operation: list[i].Operation, Provenance: "transaction_order",
 			})
 		}
 	}

@@ -6,6 +6,7 @@ package operations
 import (
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -37,8 +38,10 @@ const (
 	MetricEffectsConfirmed      = "effects.confirmed"
 	MetricCoverageEnforced      = "coverage.enforced"
 	MetricCoverageNotEnforced   = "coverage.not_enforced"
+	MetricCoverageStale         = "coverage.stale"
 	MetricBypassRoutes          = "bypass.routes"
 	MetricBypassOldestHours     = "bypass.oldest_age_hours"
+	MetricBypassByOwner         = "bypass.routes_by_owner"
 	MetricExposureUsable        = "exposure.usable_rights"
 	MetricReconciliationBacklog = "reconciliation.backlog"
 	MetricAutomationOutcomes    = "automation.outcomes"
@@ -47,8 +50,8 @@ const (
 // Metrics lists every metric, in display order.
 var Metrics = []string{
 	MetricDecisionsAllowed, MetricDecisionsDenied, MetricDecisionsHeld, MetricDecisionsShadow, MetricEffectsConfirmed,
-	MetricCoverageEnforced, MetricCoverageNotEnforced, MetricBypassRoutes, MetricBypassOldestHours,
-	MetricExposureUsable, MetricReconciliationBacklog, MetricAutomationOutcomes,
+	MetricCoverageEnforced, MetricCoverageNotEnforced, MetricCoverageStale, MetricBypassRoutes, MetricBypassOldestHours,
+	MetricBypassByOwner, MetricExposureUsable, MetricReconciliationBacklog, MetricAutomationOutcomes,
 }
 
 // Limits on a metrics read.
@@ -218,6 +221,21 @@ func sampleHour(ctx context.Context, q *dbq.Queries, org ids.OrgID, bucket time.
 	}
 	out = append(out, sample{metric: MetricBypassRoutes, value: float64(by.N), collected: true},
 		sample{metric: MetricBypassOldestHours, value: by.OldestHours, collected: true})
+	stale, err := q.MetricCoverageStale(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, sample{metric: MetricCoverageStale, value: float64(stale), collected: true})
+	owners, err := q.MetricBypassRoutesByOwner(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range owners {
+		out = append(out, sample{metric: MetricBypassByOwner, dimension: o.Owner, value: float64(o.N), collected: true})
+	}
+	if len(owners) == 0 {
+		out = append(out, sample{metric: MetricBypassByOwner, value: 0, collected: true})
+	}
 	backlog, err := q.MetricReconciliationBacklog(ctx, org)
 	if err != nil {
 		return nil, err
@@ -406,8 +424,9 @@ func drill(metric, dim string, bucket time.Time) *search.Spec {
 	case MetricDecisionsShadow:
 		return tx(search.Filters{Modes: []string{"monitor"}})
 	case MetricEffectsConfirmed:
-		return tx(search.Filters{})
-	case MetricCoverageEnforced, MetricCoverageNotEnforced, MetricBypassRoutes, MetricBypassOldestHours:
+		return tx(search.Filters{EffectStates: []string{"CONFIRMED"}})
+	case MetricCoverageEnforced, MetricCoverageNotEnforced, MetricCoverageStale, MetricBypassRoutes, MetricBypassOldestHours,
+		MetricBypassByOwner:
 		return &search.Spec{Query: &search.Query{Entity: search.EntityConnections}}
 	case MetricExposureUsable:
 		if dim == "" {
@@ -415,7 +434,22 @@ func drill(metric, dim string, bucket time.Time) *search.Spec {
 		}
 		return &search.Spec{Builtin: &search.BuiltinQuery{Name: search.BuiltinWhoCanWrite, Params: search.Params{Resource: dim}}}
 	case MetricReconciliationBacklog:
-		return &search.Spec{Query: &search.Query{Entity: search.EntityTransactions, Filters: search.Filters{Modes: []string{"enforce"}}}}
+		return &search.Spec{Query: &search.Query{Entity: search.EntityTransactions, Filters: search.Filters{
+			Modes: []string{"enforce"}, EffectStates: []string{"UNKNOWN", "PROPAGATION_PENDING", "CONFLICTING"},
+		}}}
+	case MetricAutomationOutcomes:
+		f := search.Filters{Start: &start, End: &end}
+		if id, _, ok := strings.Cut(dim, "/"); ok {
+			if a, err := ids.ParseUUID(id); err == nil {
+				f.Automation = &a
+			}
+		}
+		// The interventions dimension names no automation: its failures are
+		// org-wide and no search lists them (no_drill, F302).
+		if f.Automation == nil {
+			return nil
+		}
+		return &search.Spec{Query: &search.Query{Entity: search.EntityExecutions, Filters: f}}
 	default:
 		return nil
 	}
@@ -433,8 +467,10 @@ var metricPerm = map[string]td.Permission{
 	MetricReconciliationBacklog: td.PermEvidenceRead,
 	MetricCoverageEnforced:      td.PermCoverageRead,
 	MetricCoverageNotEnforced:   td.PermCoverageRead,
+	MetricCoverageStale:         td.PermCoverageRead,
 	MetricBypassRoutes:          td.PermCoverageRead,
 	MetricBypassOldestHours:     td.PermCoverageRead,
+	MetricBypassByOwner:         td.PermCoverageRead,
 	MetricExposureUsable:        td.PermExposureRead,
 	MetricAutomationOutcomes:    td.PermAutomationRead,
 }

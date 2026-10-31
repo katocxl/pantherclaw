@@ -175,7 +175,7 @@ ORDER BY id;
 -- outcome and whether a decision receipt was recorded.
 -- name: GraphActivity :many
 SELECT t.id, t.run_id, r.agent_id, r.parent_run_id, p.agent_id AS parent_agent_id, r.principal_user_id, t.operation::text AS operation,
-    COALESCE(t.target_type, '')::text AS target_type, t.decision, t.effect_state, t.created_at,
+    COALESCE(t.target_type, '')::text AS target_type, t.decision, t.mode, t.effect_state, t.created_at,
     COALESCE((SELECT a.outcome FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id
      ORDER BY a.id DESC LIMIT 1), '')::text AS outcome,
     EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt
@@ -189,12 +189,14 @@ WHERE t.org_id = sqlc.arg(org_id)
 ORDER BY t.created_at, t.id
 LIMIT sqlc.arg(max_rows);
 
--- GraphGrantChanges lists the revisions of agents' grants in a window.
+-- GraphGrantChanges lists the revisions of agents' grants in a window,
+-- with the bounds before and after each (F276).
 -- name: GraphGrantChanges :many
-SELECT g.id AS grant_id, g.agent_id, r.revision, r.created_by, r.created_at,
+SELECT g.id AS grant_id, g.agent_id, r.revision, r.created_by, r.created_at, r.bounds, b.bounds AS before_bounds,
     (r.revision = g.current_revision AND g.state = 'ACTIVE')::boolean AS current
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id
+LEFT JOIN pc.grant_revisions b ON b.org_id = r.org_id AND b.grant_id = r.grant_id AND b.revision = r.revision - 1
 WHERE g.org_id = sqlc.arg(org_id)
   AND (sqlc.arg(all_agents)::boolean OR g.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
   AND r.created_at >= sqlc.arg(start_time) AND r.created_at <= sqlc.arg(end_time)
@@ -229,3 +231,73 @@ JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.rev
 WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE'
 ORDER BY g.id
 LIMIT 10000;
+
+-- Causal evidence (G0 M22 D12, HR-551): the records a causal link needs,
+-- for transactions already filtered to what the viewer may see.
+
+-- GraphCausalFacts reads each transaction's grant, permit and execution
+-- receipt.
+-- name: GraphCausalFacts :many
+SELECT t.id, t.grant_id, t.downstream_state, (t.consequence_root IS NOT NULL)::boolean AS is_consequence,
+    p.id AS permit_id, p.dispatching_at, a.id AS attempt_id, a.recorded_at AS attempted_at,
+    (r.attempt_id IS NOT NULL)::boolean AS has_execution_receipt
+FROM pc.transactions t
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
+LEFT JOIN pc.execution_receipts r ON r.org_id = a.org_id AND r.attempt_id = a.id
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = ANY (sqlc.arg(ids)::uuid[]);
+
+-- GraphEffectReceipts reads the latest effect receipt of each transaction.
+-- name: GraphEffectReceipts :many
+SELECT DISTINCT ON (e.transaction_id) e.transaction_id, e.seq, e.state, e.basis, e.created_at
+FROM pc.effect_receipts e
+WHERE e.org_id = sqlc.arg(org_id) AND e.transaction_id = ANY (sqlc.arg(ids)::uuid[])
+ORDER BY e.transaction_id, e.seq DESC;
+
+-- GraphApprovals reads the approved requests of the transactions.
+-- name: GraphApprovals :many
+SELECT r.id, r.transaction_id::uuid AS transaction_id, r.approved_at
+FROM pc.approval_requests r
+WHERE r.org_id = sqlc.arg(org_id) AND r.transaction_id = ANY (sqlc.arg(ids)::uuid[]) AND r.state IN ('APPROVED', 'CONSUMED')
+ORDER BY r.id;
+
+-- GraphConsequences reads what each transaction's latest evaluation said
+-- of its consequences, with the transaction opened for each.
+-- name: GraphConsequences :many
+SELECT d.transaction_id, d.evaluation, d.position, d.parent_position, d.operation, d.state, d.created_at,
+    c.id AS consequence_id, COALESCE(c.effect_state, '')::text AS effect_state, l.from_transaction_id AS linked_from
+FROM pc.decision_consequences d
+LEFT JOIN pc.transactions c ON c.org_id = d.org_id AND c.consequence_root = d.transaction_id AND c.consequence_position = d.position
+LEFT JOIN pc.transaction_links l ON l.org_id = c.org_id AND l.to_transaction_id = c.id AND l.kind = 'consequence'
+WHERE d.org_id = sqlc.arg(org_id) AND d.transaction_id = ANY (sqlc.arg(ids)::uuid[]) AND d.state <> 'NOT_TRIGGERED'
+  AND d.evaluation = (SELECT max(x.evaluation) FROM pc.decision_consequences x
+                      WHERE x.org_id = d.org_id AND x.transaction_id = d.transaction_id)
+ORDER BY d.transaction_id, d.position
+LIMIT sqlc.arg(max_rows);
+
+-- GraphGrantRevocations lists the grants of agents revoked in a window,
+-- with the revision they ended on (F276).
+-- name: GraphGrantRevocations :many
+SELECT g.id AS grant_id, g.agent_id, g.current_revision, g.revoked_at::timestamptz AS revoked_at, r.bounds
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id)
+  AND (sqlc.arg(all_agents)::boolean OR g.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
+  AND g.revoked_at >= sqlc.arg(start_time) AND g.revoked_at <= sqlc.arg(end_time)
+ORDER BY g.revoked_at, g.id
+LIMIT sqlc.arg(max_rows);
+
+-- Graph node names (D11, HR-550): read only for the node types the caller
+-- may read names of, and only for nodes already in the viewer's graph.
+
+-- name: GraphAgentNames :many
+SELECT id, name FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(ids)::uuid[]);
+
+-- name: GraphConnectionNames :many
+SELECT id, name FROM pc.connections WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(ids)::uuid[]);
+
+-- name: GraphAutomationNames :many
+SELECT id, name FROM pc.automations WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(ids)::uuid[]);
+
+-- name: GraphUserNames :many
+SELECT id, display_name FROM pc.users WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(ids)::uuid[]);

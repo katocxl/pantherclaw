@@ -68220,6 +68220,14 @@
             "type": "boolean",
             "title": "events_truncated",
             "description": "The lane has more events than one lane holds."
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TimelineGap"
+            },
+            "title": "gaps",
+            "description": "Its missing evidence."
           }
         },
         "title": "TimelineLane",

@@ -79,12 +79,32 @@ func TestHR211_TheReassessJobFollowsEveryChange(t *testing.T) {
 		SELECT org_id, $2, agent_id, connection_id, operation, 'ENFORCED', '{}', $3, body, body_sha256, $4,
 		       now() - interval '2 days', now() - interval '1 day'
 		FROM pc.coverage_snapshots WHERE org_id = $1 ORDER BY id DESC LIMIT 1`, f.org, ids.NewV7(), closure, f.ledgerEntry(t))
+	if n := f.staleMetric(t); n != 1 {
+		t.Fatalf("the staleness metric reads %d with one lapsed record", n)
+	}
 	if r := f.reassessOrg(t); r.Scopes != 1 || r.Snapshots != 1 {
 		t.Fatalf("a lapsed ENFORCED snapshot: %+v", r)
 	}
 	if row, _, _ := f.current(t, op); row.State != "PARTIAL" {
 		t.Fatalf("after the lapse: %s", row.State)
 	}
+	if n := f.staleMetric(t); n != 0 {
+		t.Fatalf("the staleness metric reads %d after reassessment", n)
+	}
+}
+
+// staleMetric is the staleness metric's source (F301).
+func (f *fixture) staleMetric(t *testing.T) int64 {
+	t.Helper()
+	var n int64
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		n, err = dbq.New(tx).MetricCoverageStale(ctx, f.org)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 func (f *fixture) closureID(t *testing.T) ids.UUID {

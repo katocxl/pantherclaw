@@ -4,14 +4,18 @@
 package app
 
 import (
+	"cmp"
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/exposure/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -372,7 +376,7 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 		}
 		var edges []domain.Edge
 		var cut bool
-		fresh := FreshLive
+		fresh, base := FreshLive, now
 		switch mode {
 		case domain.ModeAuthority, domain.ModeExposure:
 			af := domain.Filter{WithCeiling: scope.IncludeCeiling}
@@ -405,6 +409,8 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 				issued = scopedIssued(issued, scope, agents)
 			}
 			autoEdges := domain.AutomationEdges(rights, issued, scope.IncludeCeiling, now)
+			base = v.Snapshot.ComputedAt
+			gaps := domain.ReachGaps(held)
 			if mode == domain.ModeAuthority {
 				edges = append(domain.AuthorityEdges(held), autoEdges...)
 			} else {
@@ -417,6 +423,7 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 					}
 				}
 			}
+			edges = append(edges, gaps...)
 		case domain.ModeActivity, domain.ModeCausal, domain.ModeChange:
 			if scope.Type == "resource" || scope.Type == domain.NodeAutomation {
 				return ErrScope
@@ -446,7 +453,10 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 					if mode == domain.ModeActivity {
 						edges = domain.ActivityEdges(acts)
 					} else {
-						edges = domain.CausalEdges(acts)
+						var evidence []domain.CausalEvidence
+						if evidence, err = r.causal(ctx, acts); err == nil {
+							edges = append(domain.CausalEdges(acts), domain.CausalLinks(evidence)...)
+						}
 					}
 				}
 			}
@@ -458,11 +468,20 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 		}
 		for i := range edges {
 			edges[i].Freshness = fresh
+			if edges[i].ObservedAt == nil {
+				edges[i].ObservedAt = cmp.Or(edges[i].At, &base)
+			}
 		}
 		visible, failed := r.view.visible(ctx)
 		out.Graph = domain.Build(mode, edges, visible, f, collapse, lim)
 		out.Graph.Truncated = out.Graph.Truncated || cut
-		return *failed
+		if *failed != nil {
+			return *failed
+		}
+		// Labels are built last, from what survived the viewer's filter
+		// (HR-550): a hidden record has no node to label.
+		out.Graph.Labels, err = r.labels(ctx, out.Graph)
+		return err
 	})
 	return out, err
 }
@@ -569,6 +588,7 @@ func (r *reader) activity(ctx context.Context, run *ids.UUID, vis Visible, start
 		if !x.HasReceipt {
 			a.Missing = "NO_DECISION_RECEIPT"
 		}
+		a.Monitor = x.Mode == "monitor"
 		out = append(out, a)
 	}
 	return out, len(rows) == maxActivity, nil
@@ -592,14 +612,230 @@ func (r *reader) changes(ctx context.Context, vis Visible, start, end time.Time)
 		return nil, false, err
 	}
 	cs := make([]domain.ChangeRecord, 0, len(rows))
+	compared := make([]domain.BoundsChange, 0, len(rows))
 	for _, x := range rows {
+		ctx := []domain.Node{{Type: "agent", ID: x.AgentID.String()}}
+		grant := domain.Node{Type: "grant", ID: x.GrantID.String()}
 		cs = append(cs, domain.ChangeRecord{
-			Actor: domain.Node{Type: "actor", ID: x.CreatedBy}, Subject: domain.Node{Type: "grant", ID: x.GrantID.String()},
-			Context: []domain.Node{{Type: "agent", ID: x.AgentID.String()}}, Revision: int(x.Revision), What: "grant_revision",
+			Actor: domain.Node{Type: "actor", ID: x.CreatedBy}, Subject: grant,
+			Context: ctx, Revision: int(x.Revision), What: "grant_revision",
 			At: x.CreatedAt, Current: x.Current,
 		})
+		b := domain.BoundsChange{
+			Grant: grant, Revision: int(x.Revision), At: x.CreatedAt, Context: ctx, Current: x.Current,
+			Ref: "grant_revision:" + x.GrantID.String() + "/" + strconv.Itoa(int(x.Revision)),
+		}
+		var okAfter bool
+		b.After, okAfter = operationsOf(x.Bounds)
+		okBefore := true
+		if x.Revision > 1 {
+			b.Before, okBefore = operationsOf(x.BeforeBounds)
+		}
+		b.Unreadable = !okAfter || !okBefore
+		compared = append(compared, b)
 	}
-	return domain.ChangeEdges(cs), len(rows) == maxActivity, nil
+	revoked, err := r.q.GraphGrantRevocations(ctx, dbq.GraphGrantRevocationsParams{
+		OrgID: r.c.Org, AllAgents: vis.All, AgentIds: orEmpty(vis.IDs), StartTime: &start, EndTime: &end, MaxRows: maxActivity,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	for _, x := range revoked {
+		b := domain.BoundsChange{
+			Grant: domain.Node{Type: "grant", ID: x.GrantID.String()}, Revision: int(x.CurrentRevision), At: x.RevokedAt,
+			Context: []domain.Node{{Type: "agent", ID: x.AgentID.String()}},
+			Ref:     "grant_revocation:" + x.GrantID.String(),
+		}
+		var ok bool
+		b.Before, ok = operationsOf(x.Bounds)
+		b.Unreadable = !ok
+		compared = append(compared, b)
+	}
+	return append(domain.ChangeEdges(cs), domain.CompareEdges(compared)...), len(rows) == maxActivity || len(revoked) == maxActivity, nil
+}
+
+// operationsOf reads the operations a bounds document allows: "*" when it
+// does not limit them. An unreadable document is reported, never read as
+// allowing nothing.
+func operationsOf(raw []byte) ([]string, bool) {
+	var b gdomain.Bounds
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return nil, false
+	}
+	if b.Operations == nil {
+		return []string{"*"}, true
+	}
+	return []string(*b.Operations), true
+}
+
+// causal reads the records the activity's causal links need (D12). The
+// transactions are the viewer's already: they were read for the agents the
+// viewer may see.
+func (r *reader) causal(ctx context.Context, acts []domain.Activity) ([]domain.CausalEvidence, error) {
+	if len(acts) == 0 {
+		return nil, nil
+	}
+	txns := make([]ids.UUID, 0, len(acts))
+	for _, a := range acts {
+		id, err := ids.ParseUUID(a.Transaction)
+		if err != nil {
+			return nil, err
+		}
+		txns = append(txns, id)
+	}
+	org := r.c.Org
+	facts, err := r.q.GraphCausalFacts(ctx, org, txns)
+	if err != nil {
+		return nil, err
+	}
+	approvals, err := r.q.GraphApprovals(ctx, org, txns)
+	if err != nil {
+		return nil, err
+	}
+	consequences, err := r.q.GraphConsequences(ctx, org, txns, maxActivity)
+	if err != nil {
+		return nil, err
+	}
+	receipts := slices.Clone(txns)
+	for _, c := range consequences {
+		if c.ConsequenceID != nil {
+			receipts = append(receipts, *c.ConsequenceID)
+		}
+	}
+	effects, err := r.q.GraphEffectReceipts(ctx, org, receipts)
+	if err != nil {
+		return nil, err
+	}
+	effectOf := make(map[ids.UUID]dbq.GraphEffectReceiptsRow, len(effects))
+	for _, e := range effects {
+		effectOf[e.TransactionID] = e
+	}
+	factOf := make(map[ids.UUID]dbq.GraphCausalFactsRow, len(facts))
+	for _, x := range facts {
+		factOf[x.ID] = x
+	}
+	approvedOf := map[ids.UUID][]domain.ApprovalEvidence{}
+	for _, a := range approvals {
+		approvedOf[a.TransactionID] = append(approvedOf[a.TransactionID], domain.ApprovalEvidence{ID: a.ID.String(), At: a.ApprovedAt})
+	}
+	consequencesOf := map[ids.UUID][]domain.ConsequenceEvidence{}
+	for _, c := range consequences {
+		x := domain.ConsequenceEvidence{
+			Evaluation: int(c.Evaluation), Position: int(c.Position), Parent: -1, Operation: c.Operation, State: c.State, At: c.CreatedAt,
+			Effect: c.EffectState,
+		}
+		if c.ParentPosition.Valid {
+			x.Parent = int(c.ParentPosition.Int16)
+		}
+		if c.ConsequenceID != nil {
+			x.Transaction = c.ConsequenceID.String()
+			x.EffectSeq = int(effectOf[*c.ConsequenceID].Seq)
+		}
+		if c.LinkedFrom != nil {
+			x.Linked = c.LinkedFrom.String()
+		}
+		consequencesOf[c.TransactionID] = append(consequencesOf[c.TransactionID], x)
+	}
+	out := make([]domain.CausalEvidence, 0, len(acts))
+	for i, a := range acts {
+		id := txns[i]
+		f := factOf[id]
+		c := domain.CausalEvidence{
+			Activity: a, Consequence: f.IsConsequence, Approvals: approvedOf[id], Dispatched: f.DispatchingAt, AttemptAt: f.AttemptedAt,
+			ExecutionReceipt: f.HasExecutionReceipt, Consequences: consequencesOf[id],
+		}
+		if f.GrantID != nil {
+			c.Grant = f.GrantID.String()
+		}
+		if f.PermitID != nil {
+			c.Permit = f.PermitID.String()
+		}
+		if f.AttemptID != nil {
+			c.Attempt = f.AttemptID.String()
+		}
+		if f.DownstreamState != nil {
+			c.Downstream = *f.DownstreamState
+		}
+		if e, ok := effectOf[id]; ok {
+			at := e.CreatedAt
+			c.EffectSeq, c.EffectState, c.EffectBasis, c.EffectAt = int(e.Seq), e.State, e.Basis, &at
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// labels are the graph's node labels (D11, HR-550): an agent's name where
+// the caller holds agent.read over it, a connection's, automation's or
+// person's name where the caller reads those across the organization, a
+// resource group's and an operation's own name, which the graph already
+// shows. Everything else has no label.
+func (r *reader) labels(ctx context.Context, g domain.Graph) (map[domain.Node]string, error) {
+	byType := map[string][]ids.UUID{}
+	out := map[domain.Node]string{}
+	set := func(n domain.Node, name string) {
+		if l := domain.PlainLabel(name); l != "" {
+			out[n] = l
+		}
+	}
+	for _, n := range g.Nodes {
+		switch n.Type {
+		case "resource", domain.NodeOperation:
+			set(n, n.ID)
+		case "agent", "connection", domain.CredentialHolder, domain.NodeAutomation, "user":
+			if id, err := ids.ParseUUID(n.ID); err == nil {
+				byType[n.Type] = append(byType[n.Type], id)
+			}
+		}
+	}
+	org := td.OrgPath(r.c.Org)
+	if list := byType["agent"]; len(list) > 0 {
+		scope := tapp.NewAgentScope(r.c, r.q, td.PermAgentRead)
+		rows, err := r.q.GraphAgentNames(ctx, r.c.Org, list)
+		if err != nil {
+			return nil, err
+		}
+		for _, x := range rows {
+			if ok, err := scope.Can(ctx, x.ID); err != nil {
+				return nil, err
+			} else if ok {
+				set(domain.Node{Type: "agent", ID: x.ID.String()}, x.Name)
+			}
+		}
+	}
+	if conns := slices.Concat(byType["connection"], byType[domain.CredentialHolder]); len(conns) > 0 && r.c.Can(td.PermConnectionRead, org) {
+		rows, err := r.q.GraphConnectionNames(ctx, r.c.Org, conns)
+		if err != nil {
+			return nil, err
+		}
+		for _, x := range rows {
+			if slices.Contains(byType["connection"], x.ID) {
+				set(domain.Node{Type: "connection", ID: x.ID.String()}, x.Name)
+			}
+			if slices.Contains(byType[domain.CredentialHolder], x.ID) {
+				set(domain.Node{Type: domain.CredentialHolder, ID: x.ID.String()}, x.Name)
+			}
+		}
+	}
+	if list := byType[domain.NodeAutomation]; len(list) > 0 && r.c.Can(td.PermAutomationRead, org) {
+		rows, err := r.q.GraphAutomationNames(ctx, r.c.Org, list)
+		if err != nil {
+			return nil, err
+		}
+		for _, x := range rows {
+			set(domain.Node{Type: domain.NodeAutomation, ID: x.ID.String()}, x.Name)
+		}
+	}
+	if list := byType["user"]; len(list) > 0 && r.c.Can(td.PermUserRead, org) {
+		rows, err := r.q.GraphUserNames(ctx, r.c.Org, list)
+		if err != nil {
+			return nil, err
+		}
+		for _, x := range rows {
+			set(domain.Node{Type: "user", ID: x.ID.String()}, x.DisplayName)
+		}
+	}
+	return out, nil
 }
 
 // scopedIssued keeps the issued grants a graph scope covers: an

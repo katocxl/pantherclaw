@@ -259,3 +259,62 @@ func TestRunTimelineLanesSkipHiddenChildren(t *testing.T) {
 		return nil
 	})
 }
+
+// TestF284_LanesCarryTheirEventsAndReadsTheirClass: a child's lane holds
+// its own decisions, results and gaps, a hidden child stays out, and an
+// event of a sensitive read names its class (D16, F285).
+// Covers: F284, F285
+func TestF284_LanesCarryTheirEventsAndReadsTheirClass(t *testing.T) {
+	f := newFixture(t)
+	s := scope{f.agent: true}
+	start := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	run := f.run(t, f.agent)
+	read := f.txn(t, run, f.internal, "wiki.page.read", "ALLOW")
+	f.exec(t, "UPDATE pc.transactions SET read_class = 'secret' WHERE id = $1", read)
+	f.children(t, run, f.other, 1, start)
+	f.children(t, run, f.agent, 1, start.Add(time.Minute))
+
+	var child, hidden ids.UUID
+	f.read(t, func(ctx context.Context, tx db.TenantTx) error {
+		if err := tx.QueryRow(ctx, "SELECT id FROM pc.runs WHERE parent_run_id = $1 AND agent_id = $2", run, f.other).Scan(&hidden); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, "SELECT id FROM pc.runs WHERE parent_run_id = $1 AND agent_id = $2", run, f.agent).Scan(&child)
+	})
+	inner := f.txn(t, child, f.internal, "wiki.page.read", "ALLOW")
+	f.exec(t, "UPDATE pc.transactions SET read_class = 'pii' WHERE id = $1", inner)
+	f.txn(t, hidden, f.internal, "secret.thing.read", "ALLOW")
+
+	f.read(t, func(ctx context.Context, tx db.TenantTx) error {
+		tl, err := investigations.RunTimeline(ctx, tx, s, run, false)
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(tl.Events, func(e investigations.Event) bool {
+			return e.Kind == investigations.EventDecision && e.ReadClass == "secret"
+		}) {
+			t.Errorf("no read class on the run's read: %+v", tl.Events)
+		}
+		if len(tl.Lanes) != 1 || tl.Lanes[0].Run != child {
+			t.Fatalf("lanes = %+v", tl.Lanes)
+		}
+		l := tl.Lanes[0]
+		if len(l.Events) == 0 || l.EventsTruncated {
+			t.Fatalf("lane: %+v", l)
+		}
+		for _, e := range l.Events {
+			if e.Operation == "secret.thing.read" {
+				t.Errorf("a hidden child's action in a lane: %+v", e)
+			}
+		}
+		if !slices.ContainsFunc(l.Events, func(e investigations.Event) bool {
+			return e.Kind == investigations.EventDecision && e.ReadClass == "pii"
+		}) {
+			t.Errorf("lane events: %+v", l.Events)
+		}
+		if !slices.ContainsFunc(l.Gaps, func(g investigations.Gap) bool { return g.Kind == investigations.GapNoDecisionReceipt }) {
+			t.Errorf("lane gaps: %+v", l.Gaps)
+		}
+		return nil
+	})
+}

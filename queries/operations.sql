@@ -168,6 +168,26 @@ SELECT count(*)::bigint AS n,
 FROM pc.coverage_routes r
 WHERE r.org_id = $1 AND r.kind <> 'channel' AND r.observation = 'observed' AND r.last_seen_at >= now() - interval '7 days';
 
+-- name: MetricBypassRoutesByOwner :many
+-- The same routes by who owns their agent; a route of no agent, or of an
+-- agent with no owner, is "unowned" (G0 M22 D17, F301).
+SELECT coalesce(a.owner_user_id::text, 'unowned')::text AS owner, count(*)::bigint AS n
+FROM pc.coverage_routes r
+LEFT JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
+WHERE r.org_id = $1 AND r.kind <> 'channel' AND r.observation = 'observed' AND r.last_seen_at >= now() - interval '7 days'
+GROUP BY 1
+ORDER BY 1
+LIMIT 200;
+
+-- name: MetricCoverageStale :one
+-- Coverage records whose current snapshot has expired (D17, F301).
+SELECT count(*)::bigint AS n
+FROM (SELECT DISTINCT ON (c.agent_id, c.connection_id, c.operation) c.expires_at
+      FROM pc.coverage_snapshots c
+      WHERE c.org_id = $1
+      ORDER BY c.agent_id, c.connection_id, c.operation, c.id DESC) s
+WHERE s.expires_at <= now();
+
 -- name: MetricExposureByGroup :many
 -- Usable effective rights per resource group in the latest snapshot.
 SELECT r.resource_group, count(*)::bigint AS n

@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"net/url"
+	"time"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
@@ -68,10 +69,18 @@ func RouteControl(status string) string {
 type GraphNode struct {
 	ID, Kind, Label                          string
 	RouteKind, RouteStatus, Control, Closure string
+	// EffectGroup is the effect a scope or route can produce: routes of one
+	// operation reach the same effect, on any connection (F277).
+	EffectGroup string
 }
 
-// GraphEdge joins two nodes.
-type GraphEdge struct{ From, To string }
+// GraphEdge joins two nodes, with what its scope's record says (F278).
+type GraphEdge struct {
+	From, To  string
+	Reason    string
+	CheckedAt *time.Time
+	ExpiresAt *time.Time
+}
 
 // Graph is an agent's coverage as a graph (F277).
 type Graph struct {
@@ -92,6 +101,11 @@ type GraphScope struct {
 	Excluded bool
 	Routes   []SnapshotRoute
 	Target   GraphTarget
+	// Reason is why the record reads as it does; CheckedAt when it was
+	// computed; ExpiresAt when it stops holding (F278).
+	Reason    string
+	CheckedAt *time.Time
+	ExpiresAt *time.Time
 }
 
 // AssembleGraph builds an agent's graph from its scopes. Scopes the caller
@@ -119,8 +133,11 @@ func AssembleGraph(agent ids.UUID, scopes []GraphScope, readable func(domain.Sco
 	for _, sc := range shown {
 		states, excluded = append(states, sc.State), append(excluded, sc.Excluded)
 		scope := "scope:" + sc.Scope.Connection.String() + "/" + sc.Scope.Operation
-		node(GraphNode{ID: scope, Kind: NodeScope, Label: sc.Scope.Operation})
-		g.Edges = append(g.Edges, GraphEdge{From: root, To: scope})
+		node(GraphNode{ID: scope, Kind: NodeScope, Label: sc.Scope.Operation, EffectGroup: sc.Scope.Operation})
+		edge := func(from, to string) GraphEdge {
+			return GraphEdge{From: from, To: to, Reason: sc.Reason, CheckedAt: sc.CheckedAt, ExpiresAt: sc.ExpiresAt}
+		}
+		g.Edges = append(g.Edges, edge(root, scope))
 		target := "target:" + sc.Target.ID
 		node(GraphNode{ID: target, Kind: NodeTarget, Label: sc.Target.Label})
 		for _, rt := range sc.Routes {
@@ -135,9 +152,9 @@ func AssembleGraph(agent ids.UUID, scopes []GraphScope, readable func(domain.Sco
 			}
 			node(GraphNode{
 				ID: id, Kind: NodeRoute, Label: label, RouteKind: rt.Kind, RouteStatus: rt.Status,
-				Control: RouteControl(rt.Status), Closure: rt.Closure,
+				Control: RouteControl(rt.Status), Closure: rt.Closure, EffectGroup: sc.Scope.Operation,
 			})
-			g.Edges = append(g.Edges, GraphEdge{From: scope, To: id}, GraphEdge{From: id, To: target})
+			g.Edges = append(g.Edges, edge(scope, id), edge(id, target))
 		}
 	}
 	g.BoundaryState = string(Protection(states, excluded))
@@ -221,14 +238,30 @@ func (s *Service) GetCoverageGraph(ctx context.Context, agent ids.UUID, f GraphF
 				}
 				targets[sc.Connection] = target
 			}
+			checked, expires := row.ComputedAt, row.ExpiresAt
 			scopes = append(scopes, GraphScope{
 				Scope: sc, State: rec.State, Excluded: len(rec.Body.Exclusions) > 0, Routes: routes, Target: target,
+				Reason: recordReason(rec), CheckedAt: &checked, ExpiresAt: expires,
 			})
 		}
 		out = AssembleGraph(agent, scopes, func(sc domain.Scope) bool { return readable[sc.Agent] }, cut)
 		return nil
 	})
 	return out, err
+}
+
+// recordReason is why a record reads as it does: why it lapsed, else the
+// cause of its computation, else its first reason.
+func recordReason(rec Record) string {
+	switch {
+	case rec.Lapse != "":
+		return rec.Lapse
+	case rec.Body.Cause != "":
+		return rec.Body.Cause
+	case len(rec.Body.Reasons) > 0:
+		return rec.Body.Reasons[0]
+	}
+	return ""
 }
 
 // graphTarget is a connection's target: its base URL's host, or the
