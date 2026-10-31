@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Joshua Kato
+#
+# PantherClaw policy check, as a GitLab CI component (G0 M23 D124). It reads
+# files only: no PantherClaw server, no API key, no secret. Inputs reach the
+# script through variables, so a value is never parsed as shell.
+spec:
+  inputs:
+    policy:
+      description: Path of the policy bundle (JSON), relative to the repository root.
+    pclaw-version:
+      description: The pclaw release to run, such as 1.0.0. There is no latest, so a run stays reproducible.
+    base-ref:
+      description: Commit or branch to compare with. Default, the merge request's diff base.
+      default: ""
+    scenarios:
+      description: Directory of scenario fixtures, relative to the repository root.
+      default: ""
+    packages:
+      description: Directory of package.yaml files, relative to the repository root. Default, the packages built into pclaw.
+      default: ""
+    stage:
+      description: The stage of the job.
+      default: test
+---
+pantherclaw-check:
+  stage: $[[ inputs.stage ]]
+  image: golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "1"
+    PC_POLICY: "$[[ inputs.policy ]]"
+    PC_VERSION: "$[[ inputs.pclaw-version ]]"
+    PC_BASE_REF: "$[[ inputs.base-ref ]]"
+    PC_SCENARIOS: "$[[ inputs.scenarios ]]"
+    PC_PACKAGES: "$[[ inputs.packages ]]"
+  script:
+    - |
+      set -eu
+      if ! printf '%s' "$PC_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+        echo "pantherclaw: pclaw-version must be a release number" >&2
+        exit 2
+      fi
+      case "$(uname -m)" in
+        x86_64) arch=amd64 ;;
+        aarch64 | arm64) arch=arm64 ;;
+        *) echo "pantherclaw: no pclaw for $(uname -m)" >&2; exit 2 ;;
+      esac
+      dir="$(mktemp -d)"
+      name="pantherclaw_${PC_VERSION}_linux_${arch}.tar.gz"
+      url="https://github.com/katocxl/pantherclaw/releases/download/v${PC_VERSION}"
+      curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o "$dir/$name" "$url/$name"
+      curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o "$dir/checksums.txt" "$url/checksums.txt"
+      grep -F "  $name" "$dir/checksums.txt" > "$dir/expected.txt"
+      if [ "$(wc -l < "$dir/expected.txt")" -ne 1 ]; then
+        echo "pantherclaw: checksums.txt has no single entry for $name" >&2
+        exit 2
+      fi
+      (cd "$dir" && sha256sum --check --strict expected.txt)
+      tar -xzf "$dir/$name" -C "$dir" pclaw
+
+      set -- ci check --policy "$PC_POLICY"
+      base="${PC_BASE_REF:-${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}}"
+      if [ -n "$base" ] && git fetch --quiet --depth=1 origin "$base" && git show "FETCH_HEAD:$PC_POLICY" > "$dir/base.json" 2> /dev/null; then
+        set -- "$@" --base "$dir/base.json"
+      fi
+      if [ -n "$PC_SCENARIOS" ]; then set -- "$@" --scenarios "$PC_SCENARIOS"; fi
+      if [ -n "$PC_PACKAGES" ]; then set -- "$@" --packages "$PC_PACKAGES"; fi
+      set +e
+      "$dir/pclaw" "$@" --format markdown > pantherclaw-report.md 2> /dev/null
+      "$dir/pclaw" "$@" --format text
+      exit $?
+  artifacts:
+    when: always
+    expose_as: PantherClaw policy report
+    paths:
+      - pantherclaw-report.md
