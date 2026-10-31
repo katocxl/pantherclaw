@@ -132,6 +132,33 @@ func TestT229_ANewProjectIsReadForItsPipelineConfiguration(t *testing.T) {
 	}
 }
 
+// TestT229_AQuotedEscapeIsNotReadAsNoDeployment: an escape can spell a word
+// the text check looks for, so a double-quoted scalar holding a backslash is
+// unread, and a plain file with neither word stays none (D294, T-229).
+//
+// Covers: F756
+func TestT229_AQuotedEscapeIsNotReadAsNoDeployment(t *testing.T) {
+	for name, body := range map[string]string{
+		"an escaped key":   `"environ\x6dent": production` + "\n",
+		"an escaped value": `deploy: {script: "echo \"hi\""}` + "\n",
+		"inc\\x6cude":      `"inc\x6cude": ci.yml` + "\n",
+	} {
+		if got := NoEnvironments(200, []byte(body)); got["unread"] == nil {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+	for name, body := range map[string]string{
+		"plain":                "test:\n  script: go test\n",
+		"quoted":               "\"test\":\n  script: \"go test\"\n",
+		"a backslash unquoted": `test: {script: go\test}` + "\n",
+		"a quote on each line": "a: \"b\"\nc: d\\e\n",
+	} {
+		if got := NoEnvironments(200, []byte(body)); got["state"] != "none" {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+}
+
 // TestHR521_GitLabFactsNeverGuess: a pipeline passed only when it succeeded
 // at the merge request's own head, approvals count only when none are left,
 // a branch without a rule is unprotected, and anything GitLab did not

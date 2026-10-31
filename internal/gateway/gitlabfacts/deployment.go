@@ -23,6 +23,10 @@ const CIConfigFile = ".gitlab-ci.yml"
 
 var environmentRe = regexp.MustCompile(`^[A-Za-z0-9_.-][A-Za-z0-9 _./-]{0,254}$`)
 
+// quotedEscapeRe finds a backslash in a double-quoted YAML scalar, where an
+// escape can spell a word a text check looks for (D294).
+var quotedEscapeRe = regexp.MustCompile(`"[^"\n]*\\`)
+
 // Environments parses GET /projects/:id/environments, stopped ones included:
 // a job that deploys restarts a stopped environment. Its second result says
 // why the answer could not be read, "" when it could.
@@ -95,9 +99,12 @@ func ProjectCI(status int, body []byte, project int) string {
 // no environment yet, which its first deployment creates, from GET
 // /projects/:id/repository/files/.gitlab-ci.yml/raw at the head (D287). No
 // file deploys nothing (state none). A file that mentions environment or
-// include may deploy, and one that could not be read may too: both are
-// unread, so the merge is held. This is a text check, not a YAML parse: a
-// comment that mentions either word holds a merge too.
+// include may deploy, a double-quoted scalar holding a backslash may spell
+// either (D294), and one that could not be read may too: all are unread, so
+// the merge is held. This is a text check, not a YAML parse: a comment that
+// mentions either word, or a script with an escape, holds a merge too. It
+// reads the source head only, so a deploy job on the target branch that is
+// not at the head is not seen.
 func NoEnvironments(status int, body []byte) map[string]any {
 	none := map[string]any{"state": "none", "environments": []any{}}
 	if status == 404 {
@@ -107,7 +114,7 @@ func NoEnvironments(status int, body []byte) map[string]any {
 		return Unread(why)
 	}
 	text := strings.ToLower(string(body))
-	if strings.Contains(text, "environment") || strings.Contains(text, "include") {
+	if strings.Contains(text, "environment") || strings.Contains(text, "include") || quotedEscapeRe.MatchString(text) {
 		return Unread("the pipeline configuration may deploy to a new environment")
 	}
 	return none

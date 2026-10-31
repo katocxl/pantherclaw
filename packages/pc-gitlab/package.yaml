@@ -294,6 +294,9 @@ definitions:
         name that does not exist yet, in a project that already has others,
         is not predicted, and a compliance pipeline cannot be read, so a
         project with no environment can deploy through one unpredicted.
+        For such a project the pipeline configuration is read at the source
+        head only, so a deploy job on the target branch that is not at the
+        head is not seen.
     approval:
       title: Release a deployment from GitLab project {target.id}
       fields: [target.id]
