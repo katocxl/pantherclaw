@@ -77,7 +77,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | Core firewall: PAP/1 identity, grants, CEL policy, gateway, waitlist, WebAuthn approvals, kill switch, signed receipts, `pclaw verify` | Yes | Yes | Yes | Yes |
 | Discovery | Local `pclaw scan` | + GitHub organisation scan | + GitHub organisation scan | + GitHub organisation scan |
 | Policy simulation, shadow & pilot rollout; governed automations | — | Yes | Yes | Yes |
-| Investigation cases & breach radius | Search & evidence explorer | Cases, breach radius | + posture queue, automation exposure | + posture queue, automation exposure |
+| Investigation cases & breach radius | Search & evidence explorer | Cases, breach radius, posture findings | + posture trends and remediation, automation exposure | + posture trends and remediation, automation exposure |
 | Transparency anchoring (Rekor v2 + RFC 3161) | — | Yes | Yes | Yes |
 | SIEM export (OCSF 1.9) & SOAR response requests | — | — | Yes | Yes |
 | Threat detections | Core built-ins | Core built-ins | Advanced built-ins + custom rules | Advanced built-ins + custom rules |
@@ -726,8 +726,40 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 
 ### M24 rows: Agent Posture
 
+Posture is ranked findings with fixes and no single measure (F797). Clean means "no known flags", never "safe" (F801) ([G0 M24](g0/M24.md)).
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
+| F860 | Posture queue | `PostureQueueService` lists findings ranked by consequence, joined from what already exists, scoped to the viewer before ranking. | Next | Team | M24 | F797 |
+| F861 | Finding record | Each finding names its source, kind, root cause, agent, connection, team, severity and its basis, state, age, a concrete fix and the reasons for its rank. | Next | Team | M24 | new |
+| F862 | Explained ranking | Findings sort by severity, reach to production, missing owner, age and a stable id. Each states which applied; sources without a severity use a fixed table. | Next | Team | M24 | F797 |
+| F863 | Joined finding sources | Posture, coverage, suggestions, open agent changes, recommendations, new inventory, supply-chain flags and unapproved servers, capped at 1,000 per source. Truncation is shown, never silent. | Next | Team | M24 | F801 |
+| F864 | OWASP ASI mapping | Each finding kind maps to OWASP Agentic Top 10 entries through a pure table. | Next | Team | M24 | new |
+| F865 | Posture trends | Daily open and closed counts by kind, severity and team. A missing day is `NOT_COLLECTED`, never zero. | Next | Business | M24 | F301 |
+| F866 | Findings clear at the source | A finding clears when its source clears, and dismissal goes to the source, so the queue holds no state of its own to drift. | Next | Team | M24 | new |
+| F867 | MCP supply-chain checks | Pure checks for hidden instructions, injection patterns, tool shadowing, over-broad schemas, changes after approval and unknown provenance, each with severity and offsets. Flagged text stays untrusted. | Next | Team | M24 | F388 |
+| F868 | Tool schema reporting | The gateway reports each tool's input schema, capped at 64 KiB, and its digest, stored with the inventory and its flags. | Next | Team | M24 | new |
+| F869 | Flags in tool review | Checks run in discovery before a tool review opens and at package import. Flags appear on the review item and feed posture; drift quarantine is unchanged. | Next | Team | M24 | new |
+| F870 | Flag wording | Every string says "no known flags" for a clean result and never "safe"; a flag never approves anything. | Next | Team | M24 | F801 |
+| F871 | `pclaw mcp inspect` | Runs a server in the sandbox with no credentials and egress denied, lists its tools and resources, records egress attempts and runs the checks. Customer machine only. | Next | Team | M24 | new |
+| F872 | Private MCP catalogue | One list of an organization's servers, proposed, approved, denied or revoked, with `OFF`, `WATCH` or `ENFORCE` mode; the default is `WATCH`. Mode and revoke need a person and a step-up. | Next | Team | M24 | new |
+| F873 | Exact server matching | A connection matches a catalogue entry only on URL host and path prefix, image digest or package reference, with no fuzzy matching. | Next | Team | M24 | new |
+| F874 | Opt-in catalogue enforcement | `ENFORCE` refuses to activate a connection to an unapproved server, and turning it on previews, then quarantines non-matching connections. Leaving it always waits for a second person. | Next | Team | M24 | new |
+| F875 | Server revoke | A person revokes a server inside one organization with a preview digest and a reason; matching connections and package-bound versions are quarantined through the response service. | Next | Team | M24 | new |
+| F876 | Revoke lift | An independent second person lifts a server revoke, following the restoration rules. | Next | Team | M24 | F563 |
+| F877 | Scan-only servers | A local server seen only by scans comes back as `not_stoppable_here`, with a deny-list hint, so a revoke never claims to have stopped it. | Next | Team | M24 | F801 |
+| F878 | `pclaw mcp catalog` | List, propose, approve, deny, set the mode, revoke and export, as a managed-settings allow file or a static file in the official registry's shape. No new HTTP endpoint. | Next | Team | M24 | new |
+| F879 | Unapproved server finding | A posture finding for connections to unapproved servers, raised only once the catalogue holds at least one approved server. | Next | Team | M24 | new |
+| F880 | Agent risk and AI Act fields | Risk tier, data classes, EU AI Act role and risk class on the existing agent record; set values are audited and recorded as changes. | Next | Team | M24 | new |
+| F881 | Agent card | `GetAgentCard` shows purpose, owner, those fields and approved tools from pins, under the same permission as reading the agent. | Next | Team | M24 | new |
+| F882 | Signed A2A cards | The server signs A2A agent cards with an `a2a_card` key published in JWKS, and the gateway caches by digest for an hour. If signing fails, the card is served unsigned and logged. | Next | Team | M24 | new |
+| F883 | Hook and skill findings | `pclaw scan` reports hooks by event and executable basename and skills by name and path, and nothing more. | Next | Community | M24 | F015 |
+| F884 | Package references in scans | For `npx`, `uvx`, `bunx`, `pipx run` and `docker run`, a scan keeps the package or image token only, with no other arguments. | Next | Community | M24 | F015 |
+| F885 | Device scope | Scans carry a `device:<id>` scope, a salted hash stored locally, and the 200 finding cap applies per source and scope. Dropped findings are still reported. | Next | Team | M24 | new |
+| F886 | All-users scan | `pclaw scan --all-users` reads each home directory under SYSTEM or root, metadata only, and `PANTHERCLAW_API_KEY_FILE` supplies the key. | Next | Team | M24 | new |
+| F887 | Scanner role | A service-account role that can submit scans for its scope and do nothing else. | Next | Team | M24 | new |
+| F888 | Scheduled device scans | `pclaw scan schedule` installs, removes and reports a scheduled task, launchd job or systemd timer; a runbook covers Intune and Jamf. | Next | Team | M24 | new |
+| F889 | Environment-secret signal | The `env_secret` recommendation signal works from real input, so that F343 keeps its promise. | Next | Team | M24 | F343 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
