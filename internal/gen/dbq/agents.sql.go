@@ -63,6 +63,58 @@ func (q *Queries) AgentSummaryCounts(ctx context.Context, orgID ids.OrgID, agent
 	return i, err
 }
 
+const approvedToolsOfAgent = `-- name: ApprovedToolsOfAgent :many
+SELECT DISTINCT c.id AS connection_id, c.name AS connection_name, tp.name AS package, p.version, d.operation
+FROM pc.coverage_snapshots s
+JOIN pc.connections c ON c.org_id = s.org_id AND c.id = s.connection_id
+JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
+JOIN pc.package_pins p ON p.org_id = tp.org_id AND p.package_id = tp.id
+JOIN pc.package_versions v ON v.org_id = p.org_id AND v.id = p.version_id
+JOIN pc.action_definitions d ON d.org_id = p.org_id AND d.version_id = p.version_id AND d.operation = s.operation
+WHERE s.org_id = $1 AND s.agent_id = $2 AND c.state = 'ACTIVE' AND NOT c.simulated
+  AND v.state IN ('ACTIVE', 'STALE')
+ORDER BY c.name, d.operation, c.id, tp.name, p.version
+LIMIT $3
+`
+
+type ApprovedToolsOfAgentRow struct {
+	ConnectionID   ids.UUID
+	ConnectionName string
+	Package        string
+	Version        string
+	Operation      string
+}
+
+// ApprovedToolsOfAgent is what an agent's card lists (G0 M24 D231): the
+// operations coverage records for the agent that a usable pinned package
+// version defines, on its active connections. Simulated connections are left
+// out. One row more than the card shows says the list was cut.
+func (q *Queries) ApprovedToolsOfAgent(ctx context.Context, orgID ids.OrgID, agentID ids.UUID, maxRows int32) ([]ApprovedToolsOfAgentRow, error) {
+	rows, err := q.db.Query(ctx, approvedToolsOfAgent, orgID, agentID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApprovedToolsOfAgentRow{}
+	for rows.Next() {
+		var i ApprovedToolsOfAgentRow
+		if err := rows.Scan(
+			&i.ConnectionID,
+			&i.ConnectionName,
+			&i.Package,
+			&i.Version,
+			&i.Operation,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimDiscoveredAgent = `-- name: ClaimDiscoveredAgent :one
 UPDATE pc.agents
 SET name = $1, purpose = $2, team_id = $3,
@@ -70,7 +122,7 @@ SET name = $1, purpose = $2, team_id = $3,
     backup_owner_user_id = $6, execution_context = $7,
     state = 'CLAIMED', claimed_at = now(), updated_at = now()
 WHERE org_id = $8 AND id = $9 AND state = 'DISCOVERED'
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk
 `
 
 type ClaimDiscoveredAgentParams struct {
@@ -117,6 +169,10 @@ func (q *Queries) ClaimDiscoveredAgent(ctx context.Context, arg ClaimDiscoveredA
 		&i.RetiredAt,
 		&i.RangeAgent,
 		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
 	)
 	return i, err
 }
@@ -165,6 +221,22 @@ func (q *Queries) CountGovernedAgents(ctx context.Context, orgID ids.OrgID) (int
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countOpenDiscoveriesOfScope = `-- name: CountOpenDiscoveriesOfScope :one
+SELECT count(*)::int FROM pc.discoveries
+WHERE org_id = $1 AND state = 'OPEN' AND source = $2
+  AND scan_scope IS NOT DISTINCT FROM $3
+`
+
+// CountOpenDiscoveriesOfScope counts the open discoveries of one source and
+// scan scope: a scan's cap is per (source, scope), so one device or repository
+// cannot fill another's room (G0 M24 D234). No scope is its own bucket.
+func (q *Queries) CountOpenDiscoveriesOfScope(ctx context.Context, orgID ids.OrgID, source string, scanScope *string) (int32, error) {
+	row := q.db.QueryRow(ctx, countOpenDiscoveriesOfScope, orgID, source, scanScope)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const countOpenDiscoveriesOfSource = `-- name: CountOpenDiscoveriesOfSource :one
@@ -255,7 +327,7 @@ func (q *Queries) DiscoveryNoticeOwners(ctx context.Context, orgID ids.OrgID, ag
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type FROM pc.agents WHERE org_id = $1 AND id = $2
+SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk FROM pc.agents WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgent, error) {
@@ -280,6 +352,10 @@ func (q *Queries) GetAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (P
 		&i.RetiredAt,
 		&i.RangeAgent,
 		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
 	)
 	return i, err
 }
@@ -392,7 +468,7 @@ INSERT INTO pc.agents (org_id, id, name, purpose, team_id, environment_id, owner
 VALUES ($1, $2, $3, $4, $5, $6,
     $7, $8, $9, 'CLAIMED',
     $10, now(), $11)
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk
 `
 
 type InsertAgentParams struct {
@@ -450,6 +526,10 @@ func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (PcAge
 		&i.RetiredAt,
 		&i.RangeAgent,
 		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
 	)
 	return i, err
 }
@@ -486,7 +566,7 @@ func (q *Queries) InsertAgentChange(ctx context.Context, arg InsertAgentChangePa
 const insertDiscoveredAgent = `-- name: InsertDiscoveredAgent :one
 INSERT INTO pc.agents (org_id, id, name, state, created_by)
 VALUES ($1, $2, $3, 'DISCOVERED', $4)
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk
 `
 
 type InsertDiscoveredAgentParams struct {
@@ -523,6 +603,10 @@ func (q *Queries) InsertDiscoveredAgent(ctx context.Context, arg InsertDiscovere
 		&i.RetiredAt,
 		&i.RangeAgent,
 		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
 	)
 	return i, err
 }
@@ -633,7 +717,7 @@ func (q *Queries) ListAgentChanges(ctx context.Context, arg ListAgentChangesPara
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type FROM pc.agents
+SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk FROM pc.agents
 WHERE org_id = $1 AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
   AND (cardinality($3::text[]) = 0 OR state = ANY ($3::text[]))
   AND ($4::uuid IS NULL OR team_id = $4::uuid)
@@ -683,6 +767,10 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]PcAge
 			&i.RetiredAt,
 			&i.RangeAgent,
 			&i.TaskType,
+			&i.RiskTier,
+			&i.DataClasses,
+			&i.AiActRole,
+			&i.AiActRisk,
 		); err != nil {
 			return nil, err
 		}
@@ -695,7 +783,7 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]PcAge
 }
 
 const lockAgent = `-- name: LockAgent :one
-SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type FROM pc.agents WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk FROM pc.agents WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgent, error) {
@@ -720,6 +808,10 @@ func (q *Queries) LockAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (
 		&i.RetiredAt,
 		&i.RangeAgent,
 		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
 	)
 	return i, err
 }
@@ -1003,7 +1095,7 @@ UPDATE pc.agents
 SET state = $1, suspended_from = $2, updated_at = now(),
     retired_at = CASE WHEN $1::text = 'RETIRED' THEN now() ELSE retired_at END
 WHERE org_id = $3 AND id = $4 AND state = $5
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk
 `
 
 type SetAgentStateParams struct {
@@ -1042,6 +1134,10 @@ func (q *Queries) SetAgentState(ctx context.Context, arg SetAgentStateParams) (P
 		&i.RetiredAt,
 		&i.RangeAgent,
 		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
 	)
 	return i, err
 }
@@ -1085,7 +1181,7 @@ const transferAgentOwnership = `-- name: TransferAgentOwnership :one
 UPDATE pc.agents
 SET owner_user_id = $1, backup_owner_user_id = $2, updated_at = now()
 WHERE org_id = $3 AND id = $4 AND claimed_at IS NOT NULL AND state <> 'RETIRED'
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk
 `
 
 type TransferAgentOwnershipParams struct {
@@ -1122,6 +1218,66 @@ func (q *Queries) TransferAgentOwnership(ctx context.Context, arg TransferAgentO
 		&i.RetiredAt,
 		&i.RangeAgent,
 		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
+	)
+	return i, err
+}
+
+const updateAgentRisk = `-- name: UpdateAgentRisk :one
+UPDATE pc.agents
+SET risk_tier = coalesce($1, risk_tier), data_classes = coalesce($2::text[], data_classes),
+    ai_act_role = coalesce($3, ai_act_role), ai_act_risk = coalesce($4, ai_act_risk),
+    updated_at = now()
+WHERE org_id = $5 AND id = $6 AND state <> 'RETIRED'
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk
+`
+
+type UpdateAgentRiskParams struct {
+	RiskTier    *string
+	DataClasses []string
+	AiActRole   *string
+	AiActRisk   *string
+	OrgID       ids.OrgID
+	ID          ids.UUID
+}
+
+// UpdateAgentRisk sets what a person states about an agent (G0 M24 D230).
+func (q *Queries) UpdateAgentRisk(ctx context.Context, arg UpdateAgentRiskParams) (PcAgent, error) {
+	row := q.db.QueryRow(ctx, updateAgentRisk,
+		arg.RiskTier,
+		arg.DataClasses,
+		arg.AiActRole,
+		arg.AiActRisk,
+		arg.OrgID,
+		arg.ID,
+	)
+	var i PcAgent
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Name,
+		&i.Purpose,
+		&i.TeamID,
+		&i.EnvironmentID,
+		&i.OwnerUserID,
+		&i.BackupOwnerUserID,
+		&i.ExecutionContext,
+		&i.State,
+		&i.SuspendedFrom,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClaimedAt,
+		&i.RetiredAt,
+		&i.RangeAgent,
+		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
 	)
 	return i, err
 }
@@ -1130,7 +1286,7 @@ const updateAgentText = `-- name: UpdateAgentText :one
 UPDATE pc.agents
 SET name = coalesce($1, name), purpose = coalesce($2, purpose), updated_at = now()
 WHERE org_id = $3 AND id = $4 AND state <> 'RETIRED'
-RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type
+RETURNING org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id, execution_context, state, suspended_from, created_by, created_at, updated_at, claimed_at, retired_at, range_agent, task_type, risk_tier, data_classes, ai_act_role, ai_act_risk
 `
 
 type UpdateAgentTextParams struct {
@@ -1167,6 +1323,10 @@ func (q *Queries) UpdateAgentText(ctx context.Context, arg UpdateAgentTextParams
 		&i.RetiredAt,
 		&i.RangeAgent,
 		&i.TaskType,
+		&i.RiskTier,
+		&i.DataClasses,
+		&i.AiActRole,
+		&i.AiActRisk,
 	)
 	return i, err
 }

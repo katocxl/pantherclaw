@@ -47,6 +47,8 @@ const (
 	// AgentServiceListAgentChangesProcedure is the procedure name of the AgentService's
 	// ListAgentChanges RPC.
 	AgentServiceListAgentChangesProcedure = "/pantherclaw.v1.AgentService/ListAgentChanges"
+	// AgentServiceGetAgentCardProcedure is the procedure name of the AgentService's GetAgentCard RPC.
+	AgentServiceGetAgentCardProcedure = "/pantherclaw.v1.AgentService/GetAgentCard"
 	// AgentServiceSubmitScanFindingsProcedure is the procedure name of the AgentService's
 	// SubmitScanFindings RPC.
 	AgentServiceSubmitScanFindingsProcedure = "/pantherclaw.v1.AgentService/SubmitScanFindings"
@@ -122,6 +124,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	agentServiceGetAgentCardSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_agents_proto.Services().ByName("AgentService").Methods().ByName("GetAgentCard"),
+			Procedure:        AgentServiceGetAgentCardProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 	agentServiceSubmitScanFindingsSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -175,11 +185,15 @@ type AgentServiceClient interface {
 	// ListAgentChanges returns an agent's append-only change history (F024).
 	// permission: agent.read
 	ListAgentChanges(context.Context, *v1.ListAgentChangesRequest) (*v1.ListAgentChangesResponse, error)
+	// GetAgentCard returns an agent's purpose, owner, stated risk fields and
+	// approved tools from pinned packages (G0 M24 D231).
+	// permission: agent.read
+	GetAgentCard(context.Context, *v1.GetAgentCardRequest) (*v1.GetAgentCardResponse, error)
 	// SubmitScanFindings records the findings of a local `pclaw scan` as
 	// DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding
 	// submitted before is only counted. Findings are UNTRUSTED observations
-	// and grant nothing; credentials never leave the scanning machine. It is
-	// also served on the gateway listener, where a gateway holding an
+	// and grant nothing; credential values never leave the scanning machine,
+	// only the kind of a key that is present (G0 M24 D238). It is also served on the gateway listener, where a gateway holding an
 	// organization scan's org_scan lease submits that scan's findings and
 	// needs gateway.scan.submit instead (G0 M8, HR-209).
 	// permission: agent.manage
@@ -236,11 +250,15 @@ type AgentServiceHandler interface {
 	// ListAgentChanges returns an agent's append-only change history (F024).
 	// permission: agent.read
 	ListAgentChanges(context.Context, *v1.ListAgentChangesRequest) (*v1.ListAgentChangesResponse, error)
+	// GetAgentCard returns an agent's purpose, owner, stated risk fields and
+	// approved tools from pinned packages (G0 M24 D231).
+	// permission: agent.read
+	GetAgentCard(context.Context, *v1.GetAgentCardRequest) (*v1.GetAgentCardResponse, error)
 	// SubmitScanFindings records the findings of a local `pclaw scan` as
 	// DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding
 	// submitted before is only counted. Findings are UNTRUSTED observations
-	// and grant nothing; credentials never leave the scanning machine. It is
-	// also served on the gateway listener, where a gateway holding an
+	// and grant nothing; credential values never leave the scanning machine,
+	// only the kind of a key that is present (G0 M24 D238). It is also served on the gateway listener, where a gateway holding an
 	// organization scan's org_scan lease submits that scan's findings and
 	// needs gateway.scan.submit instead (G0 M8, HR-209).
 	// permission: agent.manage
@@ -268,6 +286,7 @@ func RegisterAgentServiceHandler(server *connect.Server, svc AgentServiceHandler
 		connect.Method{Spec: agentServiceSuspendAgentSpec(), Handler: adapter.suspendAgent},
 		connect.Method{Spec: agentServiceRetireAgentSpec(), Handler: adapter.retireAgent},
 		connect.Method{Spec: agentServiceListAgentChangesSpec(), Handler: adapter.listAgentChanges},
+		connect.Method{Spec: agentServiceGetAgentCardSpec(), Handler: adapter.getAgentCard},
 		connect.Method{Spec: agentServiceSubmitScanFindingsSpec(), Handler: adapter.submitScanFindings},
 		connect.Method{Spec: agentServiceRequestAgentRestorationSpec(), Handler: adapter.requestAgentRestoration},
 	)
@@ -310,6 +329,10 @@ func (UnimplementedAgentServiceHandler) RetireAgent(context.Context, *v1.RetireA
 
 func (UnimplementedAgentServiceHandler) ListAgentChanges(context.Context, *v1.ListAgentChangesRequest) (*v1.ListAgentChangesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AgentService.ListAgentChanges is not implemented")
+}
+
+func (UnimplementedAgentServiceHandler) GetAgentCard(context.Context, *v1.GetAgentCardRequest) (*v1.GetAgentCardResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AgentService.GetAgentCard is not implemented")
 }
 
 func (UnimplementedAgentServiceHandler) SubmitScanFindings(context.Context, *v1.SubmitScanFindingsRequest) (*v1.SubmitScanFindingsResponse, error) {
@@ -391,6 +414,14 @@ func (c *agentServiceClient) RetireAgent(ctx context.Context, req *v1.RetireAgen
 func (c *agentServiceClient) ListAgentChanges(ctx context.Context, req *v1.ListAgentChangesRequest) (*v1.ListAgentChangesResponse, error) {
 	var res v1.ListAgentChangesResponse
 	if err := c.client.CallUnary(ctx, agentServiceListAgentChangesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) GetAgentCard(ctx context.Context, req *v1.GetAgentCardRequest) (*v1.GetAgentCardResponse, error) {
+	var res v1.GetAgentCardResponse
+	if err := c.client.CallUnary(ctx, agentServiceGetAgentCardSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -516,6 +547,18 @@ func (h agentServiceHandler) listAgentChanges(ctx context.Context, _ connect.Spe
 		return err
 	}
 	res, err := h.svc.ListAgentChanges(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) getAgentCard(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetAgentCardRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetAgentCard(ctx, &req)
 	if err != nil {
 		return err
 	}

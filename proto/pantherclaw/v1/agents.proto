@@ -56,11 +56,17 @@ service AgentService {
   rpc ListAgentChanges(ListAgentChangesRequest) returns (ListAgentChangesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetAgentCard returns an agent's purpose, owner, stated risk fields and
+  // approved tools from pinned packages (G0 M24 D231).
+  // permission: agent.read
+  rpc GetAgentCard(GetAgentCardRequest) returns (GetAgentCardResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // SubmitScanFindings records the findings of a local `pclaw scan` as
   // DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding
   // submitted before is only counted. Findings are UNTRUSTED observations
-  // and grant nothing; credentials never leave the scanning machine. It is
-  // also served on the gateway listener, where a gateway holding an
+  // and grant nothing; credential values never leave the scanning machine,
+  // only the kind of a key that is present (G0 M24 D238). It is also served on the gateway listener, where a gateway holding an
   // organization scan's org_scan lease submits that scan's findings and
   // needs gateway.scan.submit instead (G0 M8, HR-209).
   // permission: agent.manage
@@ -120,6 +126,47 @@ enum ActivityStatus {
   ACTIVITY_STATUS_ACTIVE = 3;
 }
 
+// AgentRiskTier is the risk tier people state for an agent (G0 M24 D230).
+enum AgentRiskTier {
+  AGENT_RISK_TIER_UNSPECIFIED = 0;
+  // Nobody has stated a tier.
+  AGENT_RISK_TIER_UNSET = 1;
+  // Low.
+  AGENT_RISK_TIER_LOW = 2;
+  // Medium.
+  AGENT_RISK_TIER_MEDIUM = 3;
+  // High.
+  AGENT_RISK_TIER_HIGH = 4;
+  // Critical.
+  AGENT_RISK_TIER_CRITICAL = 5;
+}
+
+// AgentAiActRole is the EU AI Act role people state for an agent (D230).
+enum AgentAiActRole {
+  AGENT_AI_ACT_ROLE_UNSPECIFIED = 0;
+  // Nobody has stated a role.
+  AGENT_AI_ACT_ROLE_UNSET = 1;
+  // Provider.
+  AGENT_AI_ACT_ROLE_PROVIDER = 2;
+  // Deployer.
+  AGENT_AI_ACT_ROLE_DEPLOYER = 3;
+  // The Act does not apply.
+  AGENT_AI_ACT_ROLE_NOT_APPLICABLE = 4;
+}
+
+// AgentAiActRisk is the EU AI Act risk class people state for an agent (D230).
+enum AgentAiActRisk {
+  AGENT_AI_ACT_RISK_UNSPECIFIED = 0;
+  // Nobody has stated a class.
+  AGENT_AI_ACT_RISK_UNSET = 1;
+  // Minimal.
+  AGENT_AI_ACT_RISK_MINIMAL = 2;
+  // Limited.
+  AGENT_AI_ACT_RISK_LIMITED = 3;
+  // High.
+  AGENT_AI_ACT_RISK_HIGH = 4;
+}
+
 // Agent is one accountable agent record.
 message Agent {
   // Agent id.
@@ -155,6 +202,14 @@ message Agent {
   // A range agent (G0 M12, HR-220): marked at creation, never changed; all
   // its runs are simulated and it may use only simulated connections.
   bool range_agent = 16;
+  // Risk tier a person stated (G0 M24 D230). It grants nothing.
+  AgentRiskTier risk_tier = 17;
+  // Data classes a person stated, from public, internal, pii and secret.
+  repeated string data_classes = 18;
+  // EU AI Act role a person stated.
+  AgentAiActRole ai_act_role = 19;
+  // EU AI Act risk class a person stated.
+  AgentAiActRisk ai_act_risk = 20;
 }
 
 // Discovery is what a gateway or scan observed about a discovered agent.
@@ -332,6 +387,85 @@ message UpdateAgentRequest {
   }];
   // New purpose.
   optional string purpose = 3 [(buf.validate.field).string.max_len = 2000];
+  // New risk tier (D230).
+  optional AgentRiskTier risk_tier = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // New data classes (D230); an empty list clears them.
+  AgentDataClasses data_classes = 5;
+  // New EU AI Act role (D230).
+  optional AgentAiActRole ai_act_role = 6 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // New EU AI Act risk class (D230).
+  optional AgentAiActRisk ai_act_risk = 7 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+// AgentDataClasses replaces an agent's data classes, so an empty list differs
+// from leaving them unchanged.
+message AgentDataClasses {
+  // Classes, from public, internal, pii and secret.
+  repeated string classes = 1 [(buf.validate.field).repeated = {
+    max_items: 4
+    unique: true
+  }];
+}
+
+// GetAgentCardRequest names the agent.
+message GetAgentCardRequest {
+  // Agent id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetAgentCardResponse returns the card.
+message GetAgentCardResponse {
+  // The card.
+  AgentCard card = 1;
+}
+
+// AgentCard is the one-page account of an agent (G0 M24 D231).
+message AgentCard {
+  // Agent id.
+  string id = 1;
+  // Display name.
+  string name = 2;
+  // Permitted purpose, written by people.
+  string purpose = 3;
+  // Accountable owner; empty while discovered.
+  string owner_user_id = 4;
+  // Backup owner; optional.
+  string backup_owner_user_id = 5;
+  // Risk tier a person stated.
+  AgentRiskTier risk_tier = 6;
+  // Data classes a person stated.
+  repeated string data_classes = 7;
+  // EU AI Act role a person stated.
+  AgentAiActRole ai_act_role = 8;
+  // EU AI Act risk class a person stated.
+  AgentAiActRisk ai_act_risk = 9;
+  // Operations the agent reaches through usable pinned package versions.
+  repeated AgentApprovedTool approved_tools = 10;
+  // More approved tools exist than the card lists.
+  bool approved_tools_truncated = 11;
+}
+
+// AgentApprovedTool is one operation on an agent's card.
+message AgentApprovedTool {
+  // Connection id.
+  string connection_id = 1;
+  // Connection name.
+  string connection_name = 2;
+  // Package name.
+  string package = 3;
+  // Pinned package version.
+  string package_version = 4;
+  // Operation name.
+  string operation = 5;
 }
 
 // UpdateAgentResponse returns the agent.
@@ -474,13 +608,17 @@ message ListAgentChangesResponse {
 
 // ScanFinding is one finding of a local scan.
 message ScanFinding {
-  // "mcp_server" or "agent_project" from a local scan; from a gateway's
-  // organization scan (G0 M8, HR-209), "github_app", "github_workflow" or
-  // "github_mcp_config".
+  // "mcp_server", "agent_project", "hook", "skill" or "env_secret" from a
+  // local scan (env_secret carries the credential's kind and nothing of its
+  // value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,
+  // HR-209), "github_app", "github_workflow" or "github_mcp_config".
   string kind = 1 [(buf.validate.field).string = {
     in: [
       "mcp_server",
       "agent_project",
+      "hook",
+      "skill",
+      "env_secret",
       "github_app",
       "github_workflow",
       "github_mcp_config"

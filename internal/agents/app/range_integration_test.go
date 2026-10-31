@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/agents/app"
+	"github.com/katocxl/pantherclaw/internal/agents/domain"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -51,7 +52,7 @@ func TestHR220_RangeMarkIsImmutable(t *testing.T) {
 			t.Errorf("agent %s read back range=%v, %v, want %v", a.ID, got.RangeAgent, err, a.RangeAgent)
 		}
 		// Ordinary changes keep the mark.
-		if _, err := w.inv.Update(ctx, a.ID, ptr("renamed"), nil); err != nil {
+		if _, err := w.inv.Update(ctx, a.ID, ptr("renamed"), nil, domain.RiskPatch{}); err != nil {
 			t.Fatal(err)
 		}
 		if got, _ := w.inv.Get(ctx, a.ID); got.RangeAgent != a.RangeAgent {

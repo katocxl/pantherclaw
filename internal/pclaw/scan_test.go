@@ -32,7 +32,8 @@ func (r *recordScan) SubmitScanFindings(_ context.Context, req *pantherclawv1.Su
 }
 
 // TestF015_ScanStaysLocalUnlessSubmitted: the scan prints its findings;
-// --submit sends MCP servers and agent projects, never credentials.
+// --submit sends MCP servers and agent projects, and of a credential its kind
+// alone, never its value, name or location (D238).
 func TestF015_ScanStaysLocalUnlessSubmitted(t *testing.T) {
 	dir := t.TempDir()
 	for name, content := range map[string]string{
@@ -58,12 +59,18 @@ func TestF015_ScanStaysLocalUnlessSubmitted(t *testing.T) {
 		t.Fatalf("scan = %d %q %q", code, out, errs)
 	}
 	code, out, errs = run(t, env, "scan", "--path", dir, "--no-user-config", "--no-env", "--submit")
-	if code != 0 || !strings.Contains(out, "2 new discovered agents") || len(rec.req.GetFindings()) != 2 {
+	if code != 0 || !strings.Contains(out, "3 new discovered agents") || len(rec.req.GetFindings()) != 3 {
 		t.Fatalf("scan --submit = %d %q %q, request %v", code, out, errs, rec.req)
 	}
+	if strings.Contains(rec.req.String(), "LEAKCHECK") {
+		t.Errorf("a credential value left the machine: %v", rec.req)
+	}
 	for _, f := range rec.req.GetFindings() {
-		if f.GetKind() == "env_secret" || f.GetAttributes()["host"] != "" {
+		if f.GetAttributes()["host"] != "" {
 			t.Errorf("submitted %v", f)
+		}
+		if f.GetKind() == "env_secret" && (len(f.GetAttributes()) != 1 || f.GetAttributes()["secret_kind"] != "openai_api_key") {
+			t.Errorf("a credential carries more than its kind: %v", f)
 		}
 	}
 }

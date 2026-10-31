@@ -8,11 +8,13 @@ package app_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"slices"
 	"strings"
 	"testing"
 
+	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
@@ -523,5 +525,30 @@ func TestIntAppChannelsCountOnceActivated(t *testing.T) {
 		activated_at = now() WHERE org_id = $1`, o.Org, o.User, cred)
 	if got := channels(); !slices.Equal(got, []string{"slack_app", "teams_app"}) {
 		t.Fatalf("an activated Teams channel: %v", got)
+	}
+}
+
+// TestF343_SubmittedKeysReachTheCatalogue (D238): what `pclaw scan --submit`
+// sends, from a plain or a device scan, is the signal the model-keys entry
+// reads.
+//
+// Covers: F343
+func TestF343_SubmittedKeysReachTheCatalogue(t *testing.T) {
+	o := exposuretest.New(t)
+	inv := aapp.NewInventory(o.P, edition(billing.Team))
+	submit := as(o, td.RoleAgentOwner, td.Scope{Type: td.ScopeOrg, ID: o.Org.UUID()})
+	key := func(s string) [32]byte { return sha256.Sum256([]byte(s)) }
+	if _, err := inv.SubmitScan(submit, "laptop", []aapp.ScanFinding{{
+		Kind: "env_secret", Key: key("plain"), Attributes: map[string]string{"secret_kind": "openai_api_key"},
+	}}, aapp.ScanMode{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inv.SubmitScan(submit, "laptop", []aapp.ScanFinding{{
+		Kind: "env_secret", Key: key("device"), Attributes: map[string]string{"secret_kind": "anthropic_api_key"},
+	}}, aapp.ScanMode{Scope: "device:0123456789abcdef"}); err != nil {
+		t.Fatal(err)
+	}
+	if it, ok := item(list(orgWide(o), t, o, false), domain.ModelKeys); !ok || it.Evidence.Count != 2 {
+		t.Fatalf("model keys: %+v %v", it, ok)
 	}
 }

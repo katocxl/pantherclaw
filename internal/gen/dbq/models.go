@@ -168,6 +168,10 @@ type PcAgent struct {
 	RetiredAt         *time.Time
 	RangeAgent        bool
 	TaskType          *string
+	RiskTier          string
+	DataClasses       []string
+	AiActRole         string
+	AiActRisk         string
 }
 
 type PcAgentChange struct {

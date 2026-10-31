@@ -8,9 +8,11 @@
 // Google Gemini CLI, looks for agent-framework projects under the given directories, and checks
 // the environment and the servers' configured environment, HTTP headers and
 // OAuth client secrets for credentials agents use, PantherClaw pck_ keys
-// included. Secrets never appear in a finding: only the variable or header
-// name, the kind of credential and its well-known prefix. Findings stay on
-// the machine unless submitted.
+// included. It also lists hooks (event and executable basename) and skills
+// (name and path), never a command's other arguments, a prompt or a skill's
+// contents (G0 M24 D233, HR-588). Secrets never appear in a finding: only the
+// variable or header name, the kind of credential and its well-known prefix.
+// Findings stay on the machine unless submitted.
 package scan
 
 import (
@@ -35,6 +37,8 @@ const (
 	KindMCPServer    = "mcp_server"
 	KindAgentProject = "agent_project"
 	KindEnvSecret    = "env_secret"
+	KindHook         = "hook"
+	KindSkill        = "skill"
 )
 
 // Limits keep a scan bounded on large trees. MaxNesting bounds the nesting
@@ -69,6 +73,9 @@ type Options struct {
 	Paths []string
 	// Environ is the environment to check (os.Environ).
 	Environ []string
+	// Contained reads only inside Home and follows no symbolic link there:
+	// the scan of another person's home, as root or SYSTEM (D235).
+	Contained bool
 }
 
 func key(parts ...string) string {
@@ -95,6 +102,9 @@ func Run(o Options) []Finding {
 	var out []Finding
 	var read []os.FileInfo
 	for _, c := range clientConfigs(o) {
+		if !o.allowed(c.path) {
+			continue
+		}
 		// Read each file once, even when two locations name it (a
 		// case-insensitive file system, a symlinked ~/.config).
 		info, err := os.Stat(c.path)
@@ -106,6 +116,16 @@ func Run(o Options) []Finding {
 	}
 	for _, p := range o.Paths {
 		out = append(out, projects(o, p)...)
+	}
+	for _, path := range hookFiles(o) {
+		if o.allowed(path) {
+			out = append(out, hookFindings(o.Host, path)...)
+		}
+	}
+	for _, dir := range skillDirs(o) {
+		if o.allowed(dir) {
+			out = append(out, skillFindings(o, dir)...)
+		}
 	}
 	out = append(out, envSecrets(o.Host, "environment", o.Environ)...)
 	slices.SortFunc(out, func(a, b Finding) int {
@@ -313,12 +333,17 @@ func mcpFindings(host, client, path string, serversAt []string) []Finding {
 			where := client + " " + name
 			cmd, _ := s["command"].(string)
 			env, _ := s["env"].(map[string]any)
+			args := s["args"]
 			if nested, ok := s["command"].(map[string]any); ok { // older Zed: {"command": {"path", "args", "env"}}
 				cmd, _ = nested["path"].(string)
 				env, _ = nested["env"].(map[string]any)
+				args = nested["args"]
 			}
 			if cmd != "" {
 				attrs["transport"], attrs["command"] = "stdio", clip(filepath.Base(cmd))
+				if ref := packageRef(cmd, stringArgs(args)); ref != "" {
+					attrs["package_ref"] = ref
+				}
 			}
 			// serverUrl: Windsurf and Devin Desktop; httpUrl: Gemini CLI.
 			if u := firstString(s, "url", "serverUrl", "httpUrl"); u != "" {
@@ -393,6 +418,21 @@ func mcpFindings(host, client, path string, serversAt []string) []Finding {
 			}
 			out = append(out, Finding{Kind: KindMCPServer, Key: key(KindMCPServer, host, path, name), Attributes: attrs})
 		}
+	}
+	return out
+}
+
+// stringArgs reads a server's args, an array of strings. It stops at anything
+// else, so a package is read only from a plain argument list.
+func stringArgs(v any) []string {
+	list, _ := v.([]any)
+	out := make([]string, 0, len(list))
+	for _, a := range list {
+		s, ok := a.(string)
+		if !ok {
+			break
+		}
+		out = append(out, s)
 	}
 	return out
 }
@@ -623,7 +663,7 @@ func envSecrets(host, where string, env []string) []Finding {
 
 // headerSecrets reports an HTTP header of an MCP server that holds a
 // credential, redacted. These are reported as env_secret findings too, so
-// they are never submitted.
+// only the credential's kind is ever submitted.
 func headerSecrets(host, where, name, value string) []Finding {
 	scheme, token := "", value
 	if s, t, ok := strings.Cut(value, " "); ok && slices.Contains([]string{"bearer", "basic", "token"}, strings.ToLower(s)) {
