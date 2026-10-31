@@ -6,8 +6,10 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,6 +17,7 @@ import (
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/exposure/exposuretest"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/recommendations/app"
@@ -470,5 +473,55 @@ func TestIntIntegrationsCloseRecommendations(t *testing.T) {
 	o.D.AdminExec(t, `UPDATE pc.connections SET state = 'RETIRED' WHERE id = $1`, o.Conn)
 	if _, ok := item(list(ctx, t, o, false), domain.AWSKeys); !ok {
 		t.Fatal("a retired connection closed it")
+	}
+}
+
+// TestIntAppChannelsCountOnceActivated: a slack_app or teams_app channel
+// closes nothing until its side table says ACTIVE, the shape routing reads
+// (D317).
+//
+// Covers: F343
+func TestIntAppChannelsCountOnceActivated(t *testing.T) {
+	o := exposuretest.New(t)
+	cred := ids.NewV7()
+	o.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
+		backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
+		o.Org, cred, o.User, bytes.Repeat([]byte{1}, 16), bytes.Repeat([]byte{2}, 32))
+	channels := func() []string {
+		t.Helper()
+		var out []string
+		o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+			r, err := dbq.New(tx).RecommendationIntegrations(ctx, o.Org)
+			out = r.Channels
+			return err
+		})
+		return out
+	}
+	channel := func(kind string) ids.UUID {
+		t.Helper()
+		id := ids.NewV7()
+		o.Exec(t, `INSERT INTO pc.notification_channels (org_id, id, name, kind, event_types, secret, created_by)
+			VALUES ($1, $2, $3, $4, '{approval.*}', $5, 'test')`, o.Org, id, strings.TrimSuffix(kind, "_app"), kind, bytes.Repeat([]byte{3}, 32))
+		return id
+	}
+
+	slack := channel("slack_app")
+	o.Exec(t, `INSERT INTO pc.slack_app_channels (org_id, channel_record_id, slack_channel) VALUES ($1, $2, 'C0APPROVAL1')`, o.Org, slack)
+	teams := channel("teams_app")
+	o.Exec(t, `INSERT INTO pc.teams_app_channels (org_id, channel_record_id, tenant_id, team_id, teams_channel, app_id, service_url)
+		VALUES ($1, $2, $3, '19:team@thread.tacv2', '19:abc@thread.tacv2', $3, 'https://smba.trafficmanager.net/teams/')`, o.Org, teams, ids.NewV7())
+	if got := channels(); len(got) != 0 {
+		t.Fatalf("PENDING_ACTIVATION channels count: %v", got)
+	}
+
+	o.Exec(t, `UPDATE pc.slack_app_channels SET state = 'ACTIVE', team_id = 'T0TEAM', bot_id = 'B0BOT', activated_by = $2, activated_credential = $3,
+		activated_at = now() WHERE org_id = $1`, o.Org, o.User, cred)
+	if got := channels(); !slices.Equal(got, []string{"slack_app"}) {
+		t.Fatalf("an activated Slack channel: %v", got)
+	}
+	o.Exec(t, `UPDATE pc.teams_app_channels SET state = 'ACTIVE', membership_type = 'internal', activated_by = $2, activated_credential = $3,
+		activated_at = now() WHERE org_id = $1`, o.Org, o.User, cred)
+	if got := channels(); !slices.Equal(got, []string{"slack_app", "teams_app"}) {
+		t.Fatalf("an activated Teams channel: %v", got)
 	}
 }
