@@ -275,13 +275,16 @@ WHERE d.org_id = sqlc.arg(org_id) AND d.transaction_id = ANY (sqlc.arg(ids)::uui
 ORDER BY d.transaction_id, d.position
 LIMIT sqlc.arg(max_rows);
 
--- GraphGrantDelegations reads the parents of child grants (F282).
+-- GraphGrantDelegations reads the active child grants of agents and their
+-- parents (F282). Rights collapse by path, so a child under a wider grant of
+-- the same agent is not always the grant a right names.
 -- name: GraphGrantDelegations :many
-SELECT g.id AS child_id, g.parent_id::uuid AS parent_id, g.agent_id AS child_agent_id, p.agent_id AS parent_agent_id, g.created_at,
-    (g.state = 'ACTIVE')::boolean AS current
+SELECT g.id AS child_id, g.parent_id::uuid AS parent_id, g.agent_id AS child_agent_id, p.agent_id AS parent_agent_id, g.created_at
 FROM pc.grants g
 JOIN pc.grants p ON p.org_id = g.org_id AND p.id = g.parent_id
-WHERE g.org_id = sqlc.arg(org_id) AND g.id = ANY (sqlc.arg(ids)::uuid[]);
+WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]) AND g.state = 'ACTIVE'
+ORDER BY g.created_at DESC, g.id
+LIMIT sqlc.arg(max_rows);
 
 -- GraphContainment reads the response actions of an incident, or one action,
 -- with their controls (D38); an action that placed none has one row.

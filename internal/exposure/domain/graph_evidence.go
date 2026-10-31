@@ -575,21 +575,17 @@ type GrantDelegation struct {
 	Parent, Child           string
 	ParentAgent, ChildAgent string
 	At                      time.Time
-	Current                 bool
 }
 
-// DelegationEdges are grant-level delegations. Each belongs to both agents,
+// DelegationEdges are the delegations of active grants. Each belongs to both agents,
 // so a viewer who may not see the parent's agent never sees the parent.
 func DelegationEdges(ds []GrantDelegation) []Edge {
 	out := make([]Edge, 0, len(ds))
 	for _, d := range ds {
-		at, st := d.At, EdgeHistorical
-		if d.Current {
-			st = EdgeActive
-		}
+		at := d.At
 		out = append(out, Edge{
 			From: Node{Type: "grant", ID: d.Parent}, To: Node{Type: "grant", ID: d.Child},
-			Context: []Node{{Type: "agent", ID: d.ParentAgent}, {Type: "agent", ID: d.ChildAgent}}, Kind: EdgeDelegated, State: st,
+			Context: []Node{{Type: "agent", ID: d.ParentAgent}, {Type: "agent", ID: d.ChildAgent}}, Kind: EdgeDelegated, State: EdgeActive,
 			Basis: "OBSERVED", At: &at, Provenance: "grant", EvidenceRef: "grant:" + d.Child, Status: StatusAllowed,
 		})
 	}

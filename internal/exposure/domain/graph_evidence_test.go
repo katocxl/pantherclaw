@@ -327,7 +327,7 @@ func TestF276_AGapAboutNoRecordSurvivesFilters(t *testing.T) {
 
 // TestF272_AThenEdgeNeverJoinsAcrossAFilteredAction: order comes from the
 // whole run, so dropping the middle action drops both of its edges and
-// draws none between its neighbours, which the record does not show (D53).
+// draws none across it, which the record does not show (D53).
 // Covers: F272
 func TestF272_AThenEdgeNeverJoinsAcrossAFilteredAction(t *testing.T) {
 	at := time.Now()

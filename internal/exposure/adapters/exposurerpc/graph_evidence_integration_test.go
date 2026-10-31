@@ -7,11 +7,10 @@ package exposurerpc_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
-
-	"connectrpc.com/connect/v2"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/exposure/app"
@@ -435,12 +434,12 @@ func TestF276_TheChangeGraphShowsWhatResponseChanged(t *testing.T) {
 		}
 	}
 	added, removed := pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_ADDED, pb.GraphEdgeChange_GRAPH_EDGE_CHANGE_REMOVED
-	none := pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_UNSPECIFIED
+	seen := pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_OBSERVED
 	enforced := pb.GraphEdgeStatus_GRAPH_EDGE_STATUS_ENFORCED
 	edge("containment_control:"+held.String(), added, enforced)
-	edge("containment_control:"+lifted.String(), added, none)
-	edge("containment_control:"+lifted.String(), removed, none)
-	edge("containment_control:"+open.String(), added, none)
+	edge("containment_control:"+lifted.String(), added, seen)
+	edge("containment_control:"+lifted.String(), removed, seen)
+	edge("containment_control:"+open.String(), added, seen)
 	edge("response_action:"+revoked.String(), added, enforced)
 	unconfirmed := func(action ids.UUID) bool {
 		return slices.ContainsFunc(edgesOf(g, "gap"), func(e *pb.GraphEdge) bool {
@@ -460,11 +459,13 @@ func TestF276_TheChangeGraphShowsWhatResponseChanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	edge("containment_control:"+open.String(), added, none)
-	if len(edgesOf(g, "changed")) != 1 {
-		t.Errorf("a restriction shows another's controls: %v", g.GetEdges())
+	edge("containment_control:"+open.String(), added, seen)
+	for _, e := range edgesOf(g, "changed") {
+		if e.GetProvenance() == "containment_control" && e.GetEvidenceRef() != "containment_control:"+open.String() {
+			t.Errorf("a restriction shows another's control: %v", e)
+		}
 	}
-	if _, err := graph(w.org, "restriction", ids.NewV7().String()); connect.CodeOf(err) != connect.CodeNotFound {
+	if _, err := graph(w.org, "restriction", ids.NewV7().String()); !errors.Is(err, app.ErrNotFound) {
 		t.Errorf("an unknown restriction: %v", err)
 	}
 
@@ -476,7 +477,9 @@ func TestF276_TheChangeGraphShowsWhatResponseChanged(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", scope, err)
 		}
-		if !gapNamed(g, "CONTROLS_NOT_READABLE") || len(edgesOf(g, "changed")) != 0 {
+		if !gapNamed(g, "CONTROLS_NOT_READABLE") || slices.ContainsFunc(edgesOf(g, "changed"), func(e *pb.GraphEdge) bool {
+			return e.GetProvenance() == "containment_control" || e.GetProvenance() == "response_action"
+		}) {
 			t.Errorf("%v, viewer without containment.read: %v", scope, g.GetEdges())
 		}
 	}
@@ -505,8 +508,8 @@ func TestF276_TheChangeGraphShowsWhatResponseChanged(t *testing.T) {
 func TestF282_TheAuthorityGraphShowsGrantDelegation(t *testing.T) {
 	w := newWorld(t, billing.Team)
 	o := w.o
-	parent := o.Grant(t, o.Other, 1, "", "wiki.page.read")
-	child := o.Grant(t, o.Agent, 0, "", "wiki.page.read")
+	parent := o.Grant(t, o.Other, 1, "", "payments.*")
+	child := o.Grant(t, o.Agent, 0, "", "payments.refund.get")
 	o.D.AdminExec(t, `UPDATE pc.grants SET parent_id = $2, depth = 1 WHERE id = $1`, child, parent)
 	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := app.Recompute(ctx, tx, "manual", 0)

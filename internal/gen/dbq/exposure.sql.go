@@ -1116,11 +1116,12 @@ func (q *Queries) GraphGrantChanges(ctx context.Context, arg GraphGrantChangesPa
 }
 
 const graphGrantDelegations = `-- name: GraphGrantDelegations :many
-SELECT g.id AS child_id, g.parent_id::uuid AS parent_id, g.agent_id AS child_agent_id, p.agent_id AS parent_agent_id, g.created_at,
-    (g.state = 'ACTIVE')::boolean AS current
+SELECT g.id AS child_id, g.parent_id::uuid AS parent_id, g.agent_id AS child_agent_id, p.agent_id AS parent_agent_id, g.created_at
 FROM pc.grants g
 JOIN pc.grants p ON p.org_id = g.org_id AND p.id = g.parent_id
-WHERE g.org_id = $1 AND g.id = ANY ($2::uuid[])
+WHERE g.org_id = $1 AND g.agent_id = ANY ($2::uuid[]) AND g.state = 'ACTIVE'
+ORDER BY g.created_at DESC, g.id
+LIMIT $3
 `
 
 type GraphGrantDelegationsRow struct {
@@ -1129,12 +1130,13 @@ type GraphGrantDelegationsRow struct {
 	ChildAgentID  ids.UUID
 	ParentAgentID ids.UUID
 	CreatedAt     time.Time
-	Current       bool
 }
 
-// GraphGrantDelegations reads the parents of child grants (F282).
-func (q *Queries) GraphGrantDelegations(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]GraphGrantDelegationsRow, error) {
-	rows, err := q.db.Query(ctx, graphGrantDelegations, orgID, ids)
+// GraphGrantDelegations reads the active child grants of agents and their
+// parents (F282). Rights collapse by path, so a child under a wider grant of
+// the same agent is not always the grant a right names.
+func (q *Queries) GraphGrantDelegations(ctx context.Context, orgID ids.OrgID, agentIds []ids.UUID, maxRows int32) ([]GraphGrantDelegationsRow, error) {
+	rows, err := q.db.Query(ctx, graphGrantDelegations, orgID, agentIds, maxRows)
 	if err != nil {
 		return nil, err
 	}
@@ -1148,7 +1150,6 @@ func (q *Queries) GraphGrantDelegations(ctx context.Context, orgID ids.OrgID, id
 			&i.ChildAgentID,
 			&i.ParentAgentID,
 			&i.CreatedAt,
-			&i.Current,
 		); err != nil {
 			return nil, err
 		}

@@ -414,10 +414,11 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 			base = v.Snapshot.ComputedAt
 			gaps := domain.ReachGaps(held)
 			if mode == domain.ModeAuthority {
-				delegations, err := r.delegations(ctx, held)
+				delegations, over, err := r.delegations(ctx, held)
 				if err != nil {
 					return err
 				}
+				cut = cut || over
 				edges = slices.Concat(domain.AuthorityEdges(held), autoEdges, domain.DelegationEdges(delegations))
 			} else {
 				// The exposure graph shows what is reached: the ceiling, not
@@ -650,29 +651,29 @@ func controlSubject(scopeType, id string) domain.Node {
 	return domain.Node{Type: scopeType, ID: id}
 }
 
-// delegations reads the parents of the grants the rights rest on (F282).
-func (r *reader) delegations(ctx context.Context, rights []domain.Right) ([]domain.GrantDelegation, error) {
-	grants := map[ids.UUID]bool{}
+// delegations reads the delegated grants of the rights' agents (F282).
+func (r *reader) delegations(ctx context.Context, rights []domain.Right) ([]domain.GrantDelegation, bool, error) {
+	agents := map[ids.UUID]bool{}
 	for _, x := range rights {
-		if x.View == domain.Effective && x.Grant != nil {
-			grants[*x.Grant] = true
+		if x.View == domain.Effective && x.Agent != nil {
+			agents[*x.Agent] = true
 		}
 	}
-	if len(grants) == 0 {
-		return nil, nil
+	if len(agents) == 0 {
+		return nil, false, nil
 	}
-	rows, err := r.q.GraphGrantDelegations(ctx, r.c.Org, slices.Collect(maps.Keys(grants)))
+	rows, err := r.q.GraphGrantDelegations(ctx, r.c.Org, slices.Collect(maps.Keys(agents)), maxActivity)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	out := make([]domain.GrantDelegation, 0, len(rows))
 	for _, x := range rows {
 		out = append(out, domain.GrantDelegation{
 			Parent: x.ParentID.String(), Child: x.ChildID.String(), ParentAgent: x.ParentAgentID.String(), ChildAgent: x.ChildAgentID.String(),
-			At: x.CreatedAt, Current: x.Current,
+			At: x.CreatedAt,
 		})
 	}
-	return out, nil
+	return out, len(rows) == maxActivity, nil
 }
 
 func scoped(rights []domain.Right, s GraphScope, agents []ids.UUID) []domain.Right {
