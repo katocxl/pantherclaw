@@ -83,7 +83,8 @@ func (m20Business) Current(context.Context) (billing.Entitlements, error) {
 //     leased by the running server and probed at the GitHub simulator by the
 //     running gateway.
 //   - GitLab and ECS: an agent through the running gateway under its grant.
-//   - Jira: the setup runs in the test; the webhook goes to the running server.
+//   - Jira: the setup runs in the test; the webhook goes to the running server,
+//     and a refused ticket is leased by it and read by the running gateway.
 //
 // Covers: PN-018, F517, F424, F756, F545
 func TestE2E_M20_IntegrationsBreadth(t *testing.T) {
@@ -581,16 +582,21 @@ func (s *stack) m20JiraDone(t *testing.T, kp keys.KeyProvider) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var kase casesdomain.Case
-	if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
-		var err error
-		kase, err = casesstore.Open(ctx, tx, casesdomain.NewCase{
-			Title: "leaked token", Source: "manual", OpenedBy: casesdomain.Author{Type: "user", ID: person.Principal.ID.String()},
-		})
-		return err
-	}); err != nil {
-		t.Fatal(err)
+	open := func(title string) casesdomain.Case {
+		t.Helper()
+		var c casesdomain.Case
+		if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			c, err = casesstore.Open(ctx, tx, casesdomain.NewCase{
+				Title: title, Source: "manual", OpenedBy: casesdomain.Author{Type: "user", ID: person.Principal.ID.String()},
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return c
 	}
+	kase := open("leaked token")
 	if _, err := svc.LinkCase(admin, kase.ID, cfg.ID, "SEC-7"); err != nil {
 		t.Fatal(err)
 	}
@@ -648,5 +654,30 @@ func (s *stack) m20JiraDone(t *testing.T, kp keys.KeyProvider) {
 	}
 	if n := count("SELECT count(*) FROM pc.cases WHERE id = $1 AND state = 'OPEN'", kase.ID); n != 1 {
 		t.Fatal("the case moved")
+	}
+
+	// A ticket for a customer-visible project goes through the running
+	// server and gateway, and ends refused with nothing sent (D277, HR-522).
+	help, _, err := svc.CreateConfig(admin, s.jira.conn, sim.JiraHelpDesk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refused := open("customer must not read this")
+	issues := len(s.jira.sim.Issues())
+	out, err := svc.OpenCaseTicket(admin, refused.ID, help.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.eventually(t, "FAILED external_project", "SELECT state || ' ' || coalesce(result_code, '') FROM pc.ticket_outbound WHERE id = $1", out)
+	if state := s.row(t, `SELECT v.state FROM pc.verifications v JOIN pc.ticket_outbound o ON o.org_id = v.org_id AND o.verification_id = v.id
+		WHERE o.id = $1`, out); state != "DONE" {
+		t.Fatalf("the task: %s", state)
+	}
+	audited := s.row(t, "SELECT convert_from(body, 'UTF8') FROM pc.ledger_entries WHERE kind = 'audit.ticket.sync_failed'")
+	if !strings.Contains(audited, out.String()) || !strings.Contains(audited, tsapp.RefusedExternal) {
+		t.Fatalf("the refusal was not audited: %s", audited)
+	}
+	if n := len(s.jira.sim.Issues()); n != issues {
+		t.Fatalf("%d issues, %d before the refused write", n, issues)
 	}
 }

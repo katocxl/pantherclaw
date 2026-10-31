@@ -1116,9 +1116,10 @@ func (e orgEdition) Current(ctx context.Context) (billing.Entitlements, error) {
 	return x, nil
 }
 
-// TestHR514_AWorkerReadsTheOrgsEdition: the push's worker has no caller, so
-// it names the org: on a hosted server the licence alone is Community, and
-// a Business org's push must still go out.
+// TestHR514_AWorkerReadsTheOrgsEdition: Run names the org itself. The test
+// calls Run past the job wrapper, which sets the org in production: on a
+// hosted server the licence alone is Community, and a Business org's push
+// must still go out.
 // Covers: F517
 func TestHR514_AWorkerReadsTheOrgsEdition(t *testing.T) {
 	f := newPushFixture(t)

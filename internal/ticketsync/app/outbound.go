@@ -34,11 +34,11 @@ const (
 	ActionComment = "COMMENT"
 )
 
-// Refused is the field a gateway reports a write it would not send with;
-// RefusedExternal is its value for a customer-visible or unread project,
-// and the result code it becomes.
+// Refused is the field a gateway reports a write it would not send with, a
+// JSON pointer like every report field; RefusedExternal is its value for a
+// customer-visible or unread project, and the result code it becomes.
 const (
-	Refused         = "refused"
+	Refused         = "/refused"
 	RefusedExternal = "external_project"
 )
 

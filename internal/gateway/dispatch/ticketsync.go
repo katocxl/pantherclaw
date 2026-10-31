@@ -31,9 +31,9 @@ import (
 const ticketPackage = "pc.jira"
 
 // The field and value a report refuses a write with: the server's
-// ticketsync.Refused and RefusedExternal.
+// ticketsync.Refused and RefusedExternal. A report field is a JSON pointer.
 const (
-	ticketRefused         = "refused"
+	ticketRefused         = "/refused"
 	ticketRefusedExternal = "external_project"
 )
 
