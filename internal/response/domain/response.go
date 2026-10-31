@@ -27,6 +27,11 @@ const (
 	ScopePrincipal  = pipeline.ControlScopePrincipal
 )
 
+// ScopeMcpServer is the scope of the action that revokes a catalogue server
+// (G0 M24 D224). It is never a control's scope: the action holds one
+// connection control for each match it found when it ran.
+const ScopeMcpServer = "mcp_server"
+
 // Controls (D21).
 const (
 	DenyAll       = pipeline.ControlDenyAll

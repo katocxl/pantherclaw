@@ -11,9 +11,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/mcpcatalog/app"
@@ -74,6 +76,7 @@ type env struct {
 	conns   *capp.Service
 	gate    *protect.Gate
 	svc     *app.Service
+	cont    *rapp.Containment
 	edition *edition
 	// alice and bob are Security Admins with security keys.
 	alice, bob person
@@ -86,7 +89,8 @@ func newEnv(t *testing.T) *env {
 	e := &env{d: d, pool: d.AppPool(t), edition: &edition{e: billing.Team}}
 	e.gate = &protect.Gate{Requests: &requests{opened: map[ids.UUID]protect.Request{}}}
 	e.conns = capp.New(e.pool, nil, "https://pc.example.test", "https://gw.example.test:8443").WithCatalog(app.Gate{})
-	e.svc = &app.Service{Pool: e.pool, Editions: e.edition, Connections: e.conns}
+	e.cont = &rapp.Containment{Pool: e.pool}
+	e.svc = &app.Service{Pool: e.pool, Editions: e.edition, Connections: e.conns, Containment: e.cont, Versions: &defspg.Store{Pool: e.pool}}
 	e.svc.RegisterProtect(e.gate)
 	return e.withOrg(t, "catalog")
 }
@@ -461,6 +465,36 @@ func TestHR586_WeakeningEnforceAlwaysWaitsForASecondPerson(t *testing.T) {
 	}
 }
 
+// TestF874_AConnectionChangeTakesTheModeBeforeTheConnection: a change waits on
+// the mode's row holding no lock on the connection, the order a switch to
+// ENFORCE locks them in, so the two can never deadlock (D262).
+//
+// Covers: F874
+func TestF874_AConnectionChangeTakesTheModeBeforeTheConnection(t *testing.T) {
+	e := newEnv(t)
+	c := e.mustCreate(t, "a", "https://mcp.example.test/x")
+	moved := "https://mcp.example.test/y"
+	done := make(chan error, 1)
+	err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		if _, err := tx.Exec(ctx, "SELECT 1 FROM pc.mcp_catalog_settings WHERE org_id = $1 FOR UPDATE", e.org); err != nil {
+			return err
+		}
+		go func() {
+			_, err := e.conns.Update(e.admin, capp.UpdateInput{ID: c.ID, Revision: c.Revision, BaseURL: &moved})
+			done <- err
+		}()
+		time.Sleep(500 * time.Millisecond)
+		_, err := tx.Exec(ctx, "SELECT 1 FROM pc.connections WHERE org_id = $1 AND id = $2 FOR UPDATE NOWAIT", e.org, c.ID)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("the waiting change held the connection: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 // scanned records a local MCP server a scan found, on a discovered agent.
 func (e *env) scanned(t *testing.T, observed string) (agent, discovery ids.UUID) {
 	t.Helper()
@@ -514,6 +548,11 @@ func TestF879_UnapprovedServersReachTheQueueOnlyOnceACatalogueExists(t *testing.
 	if len(got) != 2 || got[conn].ConnectionID == nil || *got[conn].ConnectionID != stray.ID ||
 		got[scan].AgentID == nil || *got[scan].AgentID != agent {
 		t.Fatalf("findings %+v", got)
+	}
+
+	// A name a scan reports stays out of the title, whatever it says (D260).
+	if strings.Contains(got[scan].Title, "stranger") || got[scan].Detail["name"] != "stranger" {
+		t.Fatalf("finding %+v", got[scan])
 	}
 
 	if got := findings(ports.Viewer{Org: e.org, Posture: ports.Reach{Agents: []ids.UUID{agent}}}); len(got) != 1 || got[scan].AgentID == nil {

@@ -69557,6 +69557,14 @@
               "$ref": "#/components/schemas/pantherclaw.v1.McpLocalServerRef"
             },
             "title": "not_stoppable_here"
+          },
+          "restorationPlanIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "restoration_plan_ids",
+            "description": "The restoration plans that lift the controls, for someone else to decide.\n A lift leaves the server REVOKED and the package versions QUARANTINED."
           }
         },
         "title": "RevokeServerResponse",

@@ -47,6 +47,9 @@ const (
 	// An automation and one of its executions (G0 M11 part 2 D11).
 	SubjectAutomation          SubjectType = "automation"
 	SubjectAutomationExecution SubjectType = "automation_execution"
+	// SubjectMcpServer is a server of the MCP catalogue (G0 M24 D224). Only a
+	// person's revoke acts on one: as a containment scope it is refused.
+	SubjectMcpServer SubjectType = "mcp_server"
 	// SubjectSystem is PantherClaw acting by itself (D51), as the actor of
 	// automated containment. Its ids are fixed lowercase names:
 	// identity_playbook, detection, sweeper.
@@ -57,6 +60,7 @@ var subjectTypes = []SubjectType{
 	SubjectAgent, SubjectInstance, SubjectRun, SubjectTransaction, SubjectGrant, SubjectConnection, SubjectCredential,
 	SubjectGateway, SubjectPackage, SubjectUser, SubjectServiceAccount, SubjectResource, SubjectPolicyVersion,
 	SubjectAlert, SubjectIncident, SubjectCase, SubjectFinding, SubjectSystem, SubjectAutomation, SubjectAutomationExecution,
+	SubjectMcpServer,
 }
 
 // Valid reports whether t is a known subject type.

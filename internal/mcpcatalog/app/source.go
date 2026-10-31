@@ -23,7 +23,8 @@ const KindUnapprovedServer = "UNAPPROVED_SERVER"
 // reports nothing until the catalogue holds an APPROVED server: an empty
 // catalogue is not yet a statement about anything. A connection finding has
 // no agent, so it needs org scope; a scanned server's finding belongs to its
-// discovered agent. Both need catalog.read as well as posture.read.
+// discovered agent. Both need catalog.read as well as posture.read. A title
+// is fixed text: a name, which a scan reports, stays in Detail (D260).
 type Source struct {
 	Pool     *db.Pool
 	Editions Editions
@@ -126,8 +127,8 @@ func connectionFinding(c dbq.McpConnectionsRow) pvdomain.Finding {
 	id := c.ID
 	return pvdomain.Finding{
 		Source: pvdomain.SourceCatalog, SourceID: "connection:" + c.ID.String(), Kind: KindUnapprovedServer,
-		ConnectionID: &id, Title: "MCP connection " + c.Name + " reaches a server the catalogue has not approved",
-		State: "OPEN", Since: c.CreatedAt,
+		ConnectionID: &id, Title: "An MCP connection reaches a server the catalogue has not approved",
+		Detail: map[string]string{"name": c.Name}, State: "OPEN", Since: c.CreatedAt,
 		Fix: pvdomain.Fix{Kind: pvdomain.FixReviewServer, TargetID: "connection:" + c.ID.String(), Label: "Review this server for the catalogue"},
 	}
 }
@@ -136,7 +137,7 @@ func scanFinding(l dbq.McpScanServersRow) pvdomain.Finding {
 	agent := l.AgentID
 	return pvdomain.Finding{
 		Source: pvdomain.SourceCatalog, SourceID: "discovery:" + l.ID.String(), Kind: KindUnapprovedServer, AgentID: &agent,
-		Title: "Local MCP server " + l.Name + " is not in the catalogue", State: "OPEN", Since: l.FirstSeenAt,
+		Title: "A local MCP server is not in the catalogue", Detail: map[string]string{"name": l.Name}, State: "OPEN", Since: l.FirstSeenAt,
 		Fix: pvdomain.Fix{Kind: pvdomain.FixReviewServer, TargetID: "discovery:" + l.ID.String(), Label: "Review this server for the catalogue"},
 	}
 }

@@ -67,6 +67,17 @@ DO $$ BEGIN
 END $$;
 -- +goose StatementEnd
 
+-- The action of a revoke is scoped to its server (D224). Its controls stay on
+-- connections, so containment_controls does not change.
+ALTER TABLE pc.response_actions
+    DROP CONSTRAINT response_actions_scope_type_check,
+    ADD CONSTRAINT response_actions_scope_type_check CHECK (scope_type IN ('agent', 'run', 'grant', 'connection', 'resource', 'principal',
+                                                                           'credential', 'transaction', 'mcp_server'));
+
 -- +goose Down
+ALTER TABLE pc.response_actions
+    DROP CONSTRAINT response_actions_scope_type_check,
+    ADD CONSTRAINT response_actions_scope_type_check CHECK (scope_type IN ('agent', 'run', 'grant', 'connection', 'resource', 'principal',
+                                                                           'credential', 'transaction'));
 DROP TABLE pc.mcp_catalog_settings;
 DROP TABLE pc.mcp_servers;

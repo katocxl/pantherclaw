@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	ddomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -197,6 +198,75 @@ func (h *Handler) PreviewCatalogMode(ctx context.Context, req *pantherclawv1.Pre
 	}
 	for _, c := range p.Quarantines {
 		out.Quarantines = append(out.Quarantines, connectionRef(c))
+	}
+	return out, nil
+}
+
+func localRefs(locals []app.LocalServer) []*pantherclawv1.McpLocalServerRef {
+	out := make([]*pantherclawv1.McpLocalServerRef, 0, len(locals))
+	for _, l := range locals {
+		out = append(out, &pantherclawv1.McpLocalServerRef{
+			DiscoveryId: l.Discovery.String(), Name: l.Name, State: app.NotStoppableHere, DenyListHint: l.DenyListHint,
+		})
+	}
+	return out
+}
+
+func versionRefs(rows []dbq.McpPackageVersionsRow, state string) []*pantherclawv1.McpPackageVersionRef {
+	out := make([]*pantherclawv1.McpPackageVersionRef, 0, len(rows))
+	for _, v := range rows {
+		ref := &pantherclawv1.McpPackageVersionRef{Package: v.Package, Version: v.Version, State: v.State}
+		if state != "" {
+			ref.State = state
+		}
+		out = append(out, ref)
+	}
+	return out
+}
+
+func idStrings(in []ids.UUID) []string {
+	out := make([]string, 0, len(in))
+	for _, id := range in {
+		out = append(out, id.String())
+	}
+	return out
+}
+
+// PreviewServerRevoke implements McpCatalogServiceHandler.
+func (h *Handler) PreviewServerRevoke(ctx context.Context, req *pantherclawv1.PreviewServerRevokeRequest) (*pantherclawv1.PreviewServerRevokeResponse, error) {
+	id, err := idOf(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	p, err := h.s.PreviewRevoke(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.PreviewServerRevokeResponse{
+		Server: server(p.Server), PackageVersions: versionRefs(p.Versions, ""), NotStoppableHere: localRefs(p.Locals), PreviewDigest: p.Digest,
+	}
+	for _, c := range p.Connections {
+		out.Connections = append(out.Connections, connectionRef(c))
+	}
+	return out, nil
+}
+
+// RevokeServer implements McpCatalogServiceHandler.
+func (h *Handler) RevokeServer(ctx context.Context, req *pantherclawv1.RevokeServerRequest) (*pantherclawv1.RevokeServerResponse, error) {
+	id, err := idOf(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	r, err := h.s.RevokeServer(ctx, id, req.GetPreviewDigest(), req.GetReason())
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.RevokeServerResponse{
+		Server: server(r.Preview.Server), ControlIds: idStrings(r.Controls), RestorationPlanIds: idStrings(r.Plans),
+		QuarantinedVersions: versionRefs(r.Preview.Versions, string(ddomain.StateQuarantined)), NotStoppableHere: localRefs(r.Preview.Locals),
+	}
+	if !r.Action.IsZero() {
+		out.ResponseActionId = r.Action.String()
 	}
 	return out, nil
 }

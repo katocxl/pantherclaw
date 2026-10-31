@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -22,6 +23,15 @@ import (
 )
 
 const catalogServer = "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+
+// registryName is the pattern of a name in the registry's server.json schema.
+var registryName = regexp.MustCompile(`^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$`)
+
+func TestF878_ARegistryTextStopsAtItsLimit(t *testing.T) {
+	if got := clip(strings.Repeat("é", 101)); len([]rune(got)) != 100 {
+		t.Fatalf("clipped to %d", len([]rune(got)))
+	}
+}
 
 type recordCatalog struct {
 	pantherclawv1connect.UnimplementedMcpCatalogServiceHandler
@@ -63,6 +73,16 @@ func (r *recordCatalog) ListServers(_ context.Context, q *pb.ListServersRequest)
 		Name: "github", Title: "GitHub", PackageRef: "@modelcontextprotocol/server-github",
 	}, {
 		Name: "local", Title: "Local", ImageDigest: "sha256:abc",
+	}, {
+		Name: "both", Title: "Both", UrlHost: "both.example.test", PackageRef: "@acme/both",
+	}, {
+		Name: "dotted.name", Title: "Dotted", UrlHost: "dotted.example.test",
+	}, {
+		Name: "wild", Title: "Wild", UrlHost: "*.example.test",
+	}, {
+		Name: "creds", Title: "Creds", UrlHost: "user:pw@example.test",
+	}, {
+		Name: "query", Title: "Query", UrlHost: "example.test", UrlPathPrefix: "/x?y=1",
 	}}}, nil
 }
 
@@ -163,8 +183,9 @@ func TestF878_ModeOverACLITokenSaysWhereToStepUp(t *testing.T) {
 func TestF878_ExportWritesAStaticFileOfApprovedServers(t *testing.T) {
 	rc, env := catalogEnv(t)
 	out := filepath.Join(t.TempDir(), "allow.json")
-	if code, _, errs := run(t, env, "mcp", "catalog", "export", "--format", "managed-allow", "--out", out); code != 0 {
-		t.Fatalf("export = %d %q", code, errs)
+	code, _, warned := run(t, env, "mcp", "catalog", "export", "--format", "managed-allow", "--out", out)
+	if code != 0 {
+		t.Fatalf("export = %d %q", code, warned)
 	}
 	if len(rc.list) != 2 || rc.list[0].GetStatuses()[0] != pb.McpServerStatus_MCP_SERVER_STATUS_APPROVED {
 		t.Fatalf("export read %v", rc.list)
@@ -173,19 +194,36 @@ func TestF878_ExportWritesAStaticFileOfApprovedServers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The rules of the allow file's reader, readAllowFile in S23b's
+	// managedsettings.go: no other member, a name it takes, and exactly one of
+	// an exact URL and a command, here always a list.
 	var allow struct {
 		Servers []struct {
-			Name    string `json:"name"`
-			URL     string `json:"url"`
-			Command string `json:"command"`
+			Name    string   `json:"name"`
+			URL     string   `json:"url"`
+			Command []string `json:"command"`
 		} `json:"servers"`
 	}
-	if err := json.Unmarshal(raw, &allow); err != nil {
-		t.Fatal(err)
+	if err := json.Unmarshal(raw, &allow, json.RejectUnknownMembers(true)); err != nil {
+		t.Fatalf("%v in %s", err, raw)
 	}
-	if len(allow.Servers) != 3 || allow.Servers[0].URL != "https://mcp.example.test/v1" ||
-		allow.Servers[1].Command != "@modelcontextprotocol/server-github" {
+	names := []string{}
+	for _, s := range allow.Servers {
+		names = append(names, s.Name)
+		if !allowName.MatchString(s.Name) || (s.URL == "") == (len(s.Command) == 0) || (s.URL != "" && !exactURL(s.URL)) {
+			t.Fatalf("the reader would refuse %+v", s)
+		}
+	}
+	if got := strings.Join(names, ","); got != "payments,github,both" {
 		t.Fatalf("allow file %s", raw)
+	}
+	if allow.Servers[1].Command[0] != "@modelcontextprotocol/server-github" || allow.Servers[2].URL != "https://both.example.test" {
+		t.Fatalf("allow file %s", raw)
+	}
+	for _, name := range []string{"local", "dotted.name", "wild", "creds", "query"} {
+		if !strings.Contains(warned, "left out "+name+":") {
+			t.Fatalf("%s was not listed: %q", name, warned)
+		}
 	}
 
 	code, stdout, errs := run(t, env, "mcp", "catalog", "export", "--format", "registry-v0")
@@ -213,10 +251,15 @@ func TestF878_ExportWritesAStaticFileOfApprovedServers(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &reg); err != nil {
 		t.Fatal(err)
 	}
-	if len(reg.Servers) != 3 || reg.Metadata.Count != 3 || reg.Servers[0].Server.Remotes[0].URL != "https://mcp.example.test/v1" ||
+	if len(reg.Servers) != 8 || reg.Metadata.Count != 8 || reg.Servers[0].Server.Remotes[0].URL != "https://mcp.example.test/v1" ||
 		reg.Servers[1].Server.Packages[0].RegistryType != "npm" || reg.Servers[2].Server.Packages[0].RegistryType != "oci" ||
 		reg.Servers[0].Server.Version == "" {
 		t.Fatalf("registry file %s", stdout)
+	}
+	for _, s := range reg.Servers {
+		if !registryName.MatchString(s.Server.Name) {
+			t.Fatalf("name %q is not the registry's namespace/name", s.Server.Name)
+		}
 	}
 	if code, _, _ := run(t, env, "mcp", "catalog", "export", "--format", "yaml"); code == 0 {
 		t.Fatal("an unknown format was written")

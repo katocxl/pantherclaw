@@ -356,7 +356,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.McpCatalogService/GetServer":                          entitlements.ClassRead,
 	"/pantherclaw.v1.McpCatalogService/GetCatalogSettings":                 entitlements.ClassRead,
 	"/pantherclaw.v1.McpCatalogService/PreviewCatalogMode":                 entitlements.ClassRead,
-	"/pantherclaw.v1.McpCatalogService/SetCatalogMode":                     entitlements.ClassChange,
+	"/pantherclaw.v1.McpCatalogService/SetCatalogMode":                     entitlements.ClassSafety,
 	"/pantherclaw.v1.McpCatalogService/PreviewServerRevoke":                entitlements.ClassRead,
 	"/pantherclaw.v1.McpCatalogService/RevokeServer":                       entitlements.ClassSafety,
 	"/pantherclaw.v1.PostureService/MarkPostureEvidenceIncomplete":         entitlements.ClassSafety,

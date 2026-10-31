@@ -321,6 +321,59 @@ func (q *Queries) McpConnections(ctx context.Context, orgID ids.OrgID) ([]McpCon
 	return items, nil
 }
 
+const mcpPackageVersions = `-- name: McpPackageVersions :many
+SELECT t.name AS package, v.version, v.state
+FROM pc.package_versions v
+JOIN pc.tool_packages t ON t.org_id = v.org_id AND t.id = v.package_id
+WHERE v.org_id = $1 AND t.name = $2 AND v.state IN ('ACTIVE', 'STALE')
+ORDER BY v.version
+`
+
+type McpPackageVersionsRow struct {
+	Package string
+	Version string
+	State   string
+}
+
+// McpPackageVersions reads the versions of a tool package that can be
+// quarantined: only ACTIVE and STALE can (the definition lifecycle).
+func (q *Queries) McpPackageVersions(ctx context.Context, orgID ids.OrgID, name string) ([]McpPackageVersionsRow, error) {
+	rows, err := q.db.Query(ctx, mcpPackageVersions, orgID, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []McpPackageVersionsRow{}
+	for rows.Next() {
+		var i McpPackageVersionsRow
+		if err := rows.Scan(&i.Package, &i.Version, &i.State); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const mcpRevocationLive = `-- name: McpRevocationLive :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.response_actions a
+    JOIN pc.containment_controls c ON c.org_id = a.org_id AND c.action_id = a.id
+    WHERE a.org_id = $1 AND a.scope_type = 'mcp_server' AND a.scope_id = $2::text
+      AND c.lifted_at IS NULL)::boolean AS live
+`
+
+// McpRevocationLive reports whether a control of a server's revocation is
+// still live.
+func (q *Queries) McpRevocationLive(ctx context.Context, orgID ids.OrgID, server string) (bool, error) {
+	row := q.db.QueryRow(ctx, mcpRevocationLive, orgID, server)
+	var live bool
+	err := row.Scan(&live)
+	return live, err
+}
+
 const mcpScanServers = `-- name: McpScanServers :many
 SELECT id, agent_id, first_seen_at, left(coalesce(observed->>'name', ''), 200)::text AS name,
     coalesce(observed->>'url_host', '')::text AS url_host, coalesce(observed->>'package_ref', '')::text AS package_ref

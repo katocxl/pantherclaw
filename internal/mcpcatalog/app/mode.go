@@ -74,32 +74,50 @@ func decidedServers(ctx context.Context, q *dbq.Queries, org ids.OrgID) ([]dbq.P
 	return q.McpServersIn(ctx, org, []string{string(domain.StatusApproved), string(domain.StatusDenied), string(domain.StatusRevoked)})
 }
 
-// Gate is the catalogue's check on a connection's lifecycle (D223). It holds
-// the mode for its transaction, so a connection change and a switch to
-// ENFORCE take turns. It implements capp.CatalogGate.
+// Gate is the catalogue's check on a connection's lifecycle (D223). It refuses
+// a match of a REVOKED server in every mode, and under ENFORCE whatever is not
+// allowed. It holds the mode row for its transaction, so a connection change
+// takes turns with a switch to ENFORCE and with a revoke. It implements
+// capp.CatalogGate.
 type Gate struct{}
 
 var _ capp.CatalogGate = Gate{}
+
+func holdMode(ctx context.Context, q *dbq.Queries, org ids.OrgID) (string, error) {
+	if err := q.EnsureMcpCatalogSettings(ctx, org); err != nil {
+		return "", err
+	}
+	return q.ShareMcpCatalogMode(ctx, org)
+}
+
+// Hold implements capp.CatalogGate.
+func (Gate) Hold(ctx context.Context, tx db.TenantTx) error {
+	_, err := holdMode(ctx, dbq.New(tx), tx.OrgID())
+	return err
+}
 
 // CheckActivation implements capp.CatalogGate.
 func (Gate) CheckActivation(ctx context.Context, tx db.TenantTx, t capp.CatalogTarget) error {
 	org := tx.OrgID()
 	q := dbq.New(tx)
-	if err := q.EnsureMcpCatalogSettings(ctx, org); err != nil {
-		return err
-	}
-	mode, err := q.ShareMcpCatalogMode(ctx, org)
+	mode, err := holdMode(ctx, q, org)
 	if err != nil {
 		return err
-	}
-	if domain.Mode(mode) != domain.ModeEnforce {
-		return nil
 	}
 	servers, err := decidedServers(ctx, q, org)
 	if err != nil {
 		return err
 	}
-	if !allowed(servers, candidate(t)) {
+	c := candidate(t)
+	for _, s := range servers {
+		if domain.Status(s.Status) == domain.StatusRevoked && specOf(s).Matches(c) {
+			return ErrRevoked
+		}
+	}
+	if domain.Mode(mode) != domain.ModeEnforce {
+		return nil
+	}
+	if !allowed(servers, c) {
 		return ErrNotApproved
 	}
 	return nil

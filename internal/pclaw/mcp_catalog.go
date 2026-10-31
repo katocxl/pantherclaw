@@ -10,7 +10,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
+	"net/url"
 	"os"
+	"regexp"
+	"slices"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -207,9 +211,13 @@ func catalogExport(ctx context.Context, a *app, args []string) error {
 			break
 		}
 	}
-	doc := managedAllow(servers)
-	if *format == "registry-v0" {
-		doc = registryV0(servers)
+	doc := registryV0(servers)
+	if *format == "managed-allow" {
+		var left map[string]string
+		doc, left = managedAllow(servers)
+		for _, name := range slices.Sorted(maps.Keys(left)) {
+			_, _ = fmt.Fprintln(a.stderr, "left out "+name+": "+left[name])
+		}
 	}
 	b, err := json.Marshal(doc, json.Deterministic(true))
 	if err != nil {
@@ -230,23 +238,67 @@ func serverURL(s *pb.McpServer) string {
 	return "https://" + s.GetUrlHost() + s.GetUrlPathPrefix()
 }
 
-// managedAllow is the allow file of G0 M23 D113.
-func managedAllow(servers []*pb.McpServer) any {
+// allowName is what the allow file takes as a name (Claude Code's allow list).
+var allowName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// exactURL reports whether s is an address the allow file takes: no wildcard,
+// credentials, query or fragment (D138).
+func exactURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.Host != "" && u.User == nil && u.RawQuery == "" && !u.ForceQuery && u.Fragment == "" && !strings.Contains(s, "*")
+}
+
+// managedAllow is the allow file of G0 M23 D113, and the servers it left out,
+// each with why. An entry has one matcher, its URL or else its command as a
+// list. An entry with only a name would allow more than was approved (D225a),
+// and one the file's reader refuses would lose the whole file, so neither is
+// written (D138).
+func managedAllow(servers []*pb.McpServer) (any, map[string]string) {
 	type entry struct {
-		Name    string `json:"name"`
-		URL     string `json:"url,omitzero"`
-		Command string `json:"command,omitzero"`
+		Name    string   `json:"name"`
+		URL     string   `json:"url,omitzero"`
+		Command []string `json:"command,omitzero"`
 	}
 	out := make([]entry, 0, len(servers))
+	left := map[string]string{}
 	for _, s := range servers {
-		out = append(out, entry{Name: s.GetName(), URL: serverURL(s), Command: s.GetPackageRef()})
+		e := entry{Name: s.GetName(), URL: serverURL(s)}
+		switch {
+		case !allowName.MatchString(e.Name):
+			left[e.Name] = "the allow file takes 1 to 64 letters, digits, hyphens or underscores as a name"
+			continue
+		case e.URL != "" && !exactURL(e.URL):
+			left[e.Name] = "the allow file takes an exact URL, with no wildcard, credentials or query"
+			continue
+		case e.URL == "" && s.GetPackageRef() == "":
+			left[e.Name] = "the allow file cannot name a server by its image alone"
+			continue
+		case e.URL == "":
+			e.Command = []string{s.GetPackageRef()}
+		}
+		out = append(out, e)
 	}
-	return map[string]any{"servers": out}
+	return map[string]any{"servers": out}, left
+}
+
+// Limits of the registry's server.json (name, description, title).
+const (
+	registryNamespace = "catalog.local/"
+	registryTextMax   = 100
+)
+
+func clip(s string) string {
+	if r := []rune(s); len(r) > registryTextMax {
+		return string(r[:registryTextMax])
+	}
+	return s
 }
 
 // registryV0 is a static file in the shape of the official MCP registry's
-// server list. The catalogue does not version its entries, so each server
-// carries one fixed version.
+// server list, checked against its published server.json schema (D225a): a
+// name is namespace/name, so the catalogue's names sit under a namespace of
+// their own; a description and title stop at 100 characters. The catalogue
+// does not version its entries, so each server carries one fixed version.
 func registryV0(servers []*pb.McpServer) any {
 	type remote struct {
 		Type string `json:"type"`
@@ -263,6 +315,7 @@ func registryV0(servers []*pb.McpServer) any {
 	type server struct {
 		Name        string   `json:"name"`
 		Description string   `json:"description"`
+		Title       string   `json:"title"`
 		Version     string   `json:"version"`
 		Remotes     []remote `json:"remotes,omitzero"`
 		Packages    []pack   `json:"packages,omitzero"`
@@ -273,7 +326,8 @@ func registryV0(servers []*pb.McpServer) any {
 	stdio := transport{Type: "stdio"}
 	out := make([]entry, 0, len(servers))
 	for _, s := range servers {
-		e := server{Name: s.GetName(), Description: s.GetTitle(), Version: "1.0.0"}
+		text := clip(s.GetTitle())
+		e := server{Name: registryNamespace + s.GetName(), Description: text, Title: text, Version: "1.0.0"}
 		if u := serverURL(s); u != "" {
 			e.Remotes = append(e.Remotes, remote{Type: "streamable-http", URL: u})
 		}

@@ -27,6 +27,10 @@ type CatalogTarget struct {
 // the connection's lifecycle only, never on the decision path. An error
 // refuses the change.
 type CatalogGate interface {
+	// Hold keeps the catalogue's mode from changing until tx ends. A change
+	// calls it before it locks the connection, the order the switch to ENFORCE
+	// takes them in (D262).
+	Hold(ctx context.Context, tx db.TenantTx) error
 	CheckActivation(ctx context.Context, tx db.TenantTx, t CatalogTarget) error
 }
 
@@ -38,6 +42,13 @@ func (s *Service) WithCatalog(g CatalogGate) *Service {
 
 // servesMCP reports whether a kind of connection reaches an MCP server.
 func servesMCP(kind string) bool { return kind == KindMCP || kind == KindMCPContainer }
+
+func (s *Service) holdCatalog(ctx context.Context, tx db.TenantTx) error {
+	if s.catalog == nil {
+		return nil
+	}
+	return s.catalog.Hold(ctx, tx)
+}
 
 func (s *Service) checkCatalog(ctx context.Context, tx db.TenantTx, t *CatalogTarget) error {
 	if s.catalog == nil || t == nil {

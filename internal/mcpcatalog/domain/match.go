@@ -13,6 +13,7 @@ import (
 // segment or another digest is simply another server.
 type Spec struct {
 	// Host is the URL host in lower case, with its port unless that is 443.
+	// It means https: a bare host is https on 443 (D259).
 	Host string
 	// PathPrefix is whole path segments under Host; empty is every path.
 	PathPrefix string
@@ -52,14 +53,18 @@ func (s Spec) Normalize() (Spec, error) {
 // through to a URL nobody approved.
 type Candidate struct {
 	Host, Path, ImageDigest, PackageRef string
+	// Cleartext marks a URL over http. A host in a Spec means https, so it
+	// matches no Spec's host (D259).
+	Cleartext bool
 	// Unmatchable marks something that cannot be read safely: it matches
 	// nothing.
 	Unmatchable bool
 }
 
-// URLCandidate reads a URL the way the catalogue compares it: the scheme's
-// default port goes, and a URL with credentials, or one this cannot parse,
-// matches nothing.
+// URLCandidate reads a URL the way the catalogue compares it: https on its
+// effective port, as a Spec's host means it, so https's default port goes
+// (D259). http stays apart, whatever its port. A URL with credentials, or one
+// this cannot parse, matches nothing.
 func URLCandidate(raw string) Candidate {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "https" && u.Scheme != "http") {
@@ -68,10 +73,8 @@ func URLCandidate(raw string) Candidate {
 	host := strings.ToLower(u.Host)
 	if u.Scheme == "https" {
 		host = strings.TrimSuffix(host, ":443")
-	} else {
-		host = strings.TrimSuffix(host, ":80")
 	}
-	return Candidate{Host: host, Path: u.EscapedPath()}
+	return Candidate{Host: host, Path: u.EscapedPath(), Cleartext: u.Scheme == "http"}
 }
 
 // ImageCandidate reads a container image: repo@sha256:<hex> or sha256:<hex>.
@@ -117,7 +120,7 @@ func (s Spec) Matches(c Candidate) bool {
 		return false
 	}
 	switch {
-	case s.Host != "" && c.Host == s.Host && underPrefix(c.Path, s.PathPrefix):
+	case s.Host != "" && !c.Cleartext && c.Host == s.Host && underPrefix(c.Path, s.PathPrefix):
 		return true
 	case s.ImageDigest != "" && c.ImageDigest == s.ImageDigest:
 		return true

@@ -65,6 +65,24 @@ FROM pc.connections c
 WHERE c.org_id = sqlc.arg(org_id) AND c.kind IN ('mcp', 'mcp_container') AND c.state <> 'RETIRED'
 ORDER BY c.id;
 
+-- McpPackageVersions reads the versions of a tool package that can be
+-- quarantined: only ACTIVE and STALE can (the definition lifecycle).
+-- name: McpPackageVersions :many
+SELECT t.name AS package, v.version, v.state
+FROM pc.package_versions v
+JOIN pc.tool_packages t ON t.org_id = v.org_id AND t.id = v.package_id
+WHERE v.org_id = sqlc.arg(org_id) AND t.name = sqlc.arg(name) AND v.state IN ('ACTIVE', 'STALE')
+ORDER BY v.version;
+
+-- McpRevocationLive reports whether a control of a server's revocation is
+-- still live.
+-- name: McpRevocationLive :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.response_actions a
+    JOIN pc.containment_controls c ON c.org_id = a.org_id AND c.action_id = a.id
+    WHERE a.org_id = sqlc.arg(org_id) AND a.scope_type = 'mcp_server' AND a.scope_id = sqlc.arg(server)::text
+      AND c.lifted_at IS NULL)::boolean AS live;
+
 -- McpScanServers reads the open local MCP servers scans found. The attributes
 -- are UNTRUSTED observations, and a name is shown as plain text.
 -- name: McpScanServers :many

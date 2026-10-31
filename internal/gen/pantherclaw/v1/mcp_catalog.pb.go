@@ -1668,8 +1668,11 @@ type RevokeServerResponse struct {
 	ControlIds          []string                `protobuf:"bytes,3,rep,name=control_ids,json=controlIds,proto3" json:"control_ids,omitempty"`
 	QuarantinedVersions []*McpPackageVersionRef `protobuf:"bytes,4,rep,name=quarantined_versions,json=quarantinedVersions,proto3" json:"quarantined_versions,omitempty"`
 	NotStoppableHere    []*McpLocalServerRef    `protobuf:"bytes,5,rep,name=not_stoppable_here,json=notStoppableHere,proto3" json:"not_stoppable_here,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// The restoration plans that lift the controls, for someone else to decide.
+	// A lift leaves the server REVOKED and the package versions QUARANTINED.
+	RestorationPlanIds []string `protobuf:"bytes,6,rep,name=restoration_plan_ids,json=restorationPlanIds,proto3" json:"restoration_plan_ids,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *RevokeServerResponse) Reset() {
@@ -1733,6 +1736,13 @@ func (x *RevokeServerResponse) GetQuarantinedVersions() []*McpPackageVersionRef 
 func (x *RevokeServerResponse) GetNotStoppableHere() []*McpLocalServerRef {
 	if x != nil {
 		return x.NotStoppableHere
+	}
+	return nil
+}
+
+func (x *RevokeServerResponse) GetRestorationPlanIds() []string {
+	if x != nil {
+		return x.RestorationPlanIds
 	}
 	return nil
 }
@@ -1853,14 +1863,15 @@ const file_pantherclaw_v1_mcp_catalog_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12.\n" +
 	"\x0epreview_digest\x18\x02 \x01(\fB\a\xbaH\x04z\x02h R\rpreviewDigest\x12\"\n" +
 	"\x06reason\x18\x03 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"\xc2\x02\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"\xf4\x02\n" +
 	"\x14RevokeServerResponse\x121\n" +
 	"\x06server\x18\x01 \x01(\v2\x19.pantherclaw.v1.McpServerR\x06server\x12,\n" +
 	"\x12response_action_id\x18\x02 \x01(\tR\x10responseActionId\x12\x1f\n" +
 	"\vcontrol_ids\x18\x03 \x03(\tR\n" +
 	"controlIds\x12W\n" +
 	"\x14quarantined_versions\x18\x04 \x03(\v2$.pantherclaw.v1.McpPackageVersionRefR\x13quarantinedVersions\x12O\n" +
-	"\x12not_stoppable_here\x18\x05 \x03(\v2!.pantherclaw.v1.McpLocalServerRefR\x10notStoppableHere*\xb1\x01\n" +
+	"\x12not_stoppable_here\x18\x05 \x03(\v2!.pantherclaw.v1.McpLocalServerRefR\x10notStoppableHere\x120\n" +
+	"\x14restoration_plan_ids\x18\x06 \x03(\tR\x12restorationPlanIds*\xb1\x01\n" +
 	"\x0fMcpServerStatus\x12!\n" +
 	"\x1dMCP_SERVER_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aMCP_SERVER_STATUS_PROPOSED\x10\x01\x12\x1e\n" +

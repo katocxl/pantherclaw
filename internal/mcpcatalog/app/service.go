@@ -43,6 +43,9 @@ type Service struct {
 	Editions Editions
 	// Connections quarantines on the switch to ENFORCE.
 	Connections Quarantiner
+	// Containment and Versions carry out a revoke (D224).
+	Containment Containment
+	Versions    Versions
 	// Protect holds a change of mode out of ENFORCE (RegisterProtect, HR-586);
 	// nil refuses it.
 	Protect *protect.Gate
@@ -134,9 +137,11 @@ func (s *Service) Propose(ctx context.Context, p domain.Proposal) (dbq.PcMcpServ
 }
 
 // Approve moves a PROPOSED or DENIED server to APPROVED (catalog.manage). A
-// REVOKED server comes back only through its revoke's restoration.
+// lift leaves a server REVOKED: trusting it again is this decision, refused
+// while a control of its revocation is live and then a person's with a fresh
+// step-up (D224a).
 func (s *Service) Approve(ctx context.Context, id ids.UUID) (dbq.PcMcpServer, error) {
-	return s.decide(ctx, id, domain.StatusApproved, "mcp.catalog.server_approved", domain.StatusProposed, domain.StatusDenied)
+	return s.decide(ctx, id, domain.StatusApproved, "mcp.catalog.server_approved", domain.StatusProposed, domain.StatusDenied, domain.StatusRevoked)
 }
 
 // Deny moves a PROPOSED server to DENIED (catalog.manage). An approved server
@@ -165,6 +170,11 @@ func (s *Service) decide(ctx context.Context, id ids.UUID, to domain.Status, eve
 		}
 		if !known {
 			return ErrStatus
+		}
+		if domain.Status(cur.Status) == domain.StatusRevoked {
+			if err := reapprove(ctx, q, c, id); err != nil {
+				return err
+			}
 		}
 		by := c.Principal.String()
 		out, err = q.DecideMcpServer(ctx, dbq.DecideMcpServerParams{

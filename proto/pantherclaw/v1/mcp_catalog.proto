@@ -322,4 +322,7 @@ message RevokeServerResponse {
   repeated string control_ids = 3;
   repeated McpPackageVersionRef quarantined_versions = 4;
   repeated McpLocalServerRef not_stoppable_here = 5;
+  // The restoration plans that lift the controls, for someone else to decide.
+  // A lift leaves the server REVOKED and the package versions QUARANTINED.
+  repeated string restoration_plan_ids = 6;
 }

@@ -231,6 +231,11 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 	var held *protect.PendingError
 	err := func() error {
 		q := dbq.New(tx)
+		if in.Connector != nil || in.BaseURL != nil {
+			if err := s.holdCatalog(ctx, tx); err != nil {
+				return err
+			}
+		}
 		conn, err := lock(ctx, q, c.Org, in.ID)
 		if err != nil {
 			return err
@@ -596,6 +601,11 @@ func (s *Service) transition(ctx context.Context, id ids.UUID, from []string, to
 	var out Connection
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if to == StateActive {
+			if err := s.holdCatalog(ctx, tx); err != nil {
+				return err
+			}
+		}
 		conn, err := lock(ctx, q, c.Org, id)
 		if err != nil {
 			return err
