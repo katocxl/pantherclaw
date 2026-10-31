@@ -49,7 +49,14 @@ SELECT
     (SELECT COALESCE(array_agg(DISTINCT c.package), '{}')::text[] FROM pc.connections c
      WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'ACTIVE') AS packages,
     (SELECT COALESCE(array_agg(DISTINCT n.kind), '{}')::text[] FROM pc.notification_channels n
-     WHERE n.org_id = sqlc.arg(org_id) AND n.state = 'ACTIVE') AS channels,
+     WHERE n.org_id = sqlc.arg(org_id) AND n.state = 'ACTIVE'
+       -- A slack_app or teams_app channel counts once activated (D317).
+       AND (n.kind <> 'slack_app' OR EXISTS (
+           SELECT 1 FROM pc.slack_app_channels a
+           WHERE a.org_id = n.org_id AND a.channel_record_id = n.id AND a.state = 'ACTIVE'))
+       AND (n.kind <> 'teams_app' OR EXISTS (
+           SELECT 1 FROM pc.teams_app_channels a
+           WHERE a.org_id = n.org_id AND a.channel_record_id = n.id AND a.state = 'ACTIVE'))) AS channels,
     (SELECT EXISTS (SELECT 1 FROM pc.siem_destinations d WHERE d.org_id = sqlc.arg(org_id) AND d.state = 'ACTIVE'))::boolean AS siem,
     (SELECT EXISTS (SELECT 1 FROM pc.fact_providers f WHERE f.org_id = sqlc.arg(org_id) AND f.state = 'ACTIVE'))::boolean AS fact_providers;
 
