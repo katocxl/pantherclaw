@@ -52,7 +52,7 @@ pantherclaw-check:
       url="https://github.com/katocxl/pantherclaw/releases/download/v${PC_VERSION}"
       curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o "$dir/$name" "$url/$name"
       curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o "$dir/checksums.txt" "$url/checksums.txt"
-      grep -F "  $name" "$dir/checksums.txt" > "$dir/expected.txt"
+      awk -v f="$name" '$2 == f' "$dir/checksums.txt" > "$dir/expected.txt"
       if [ "$(wc -l < "$dir/expected.txt")" -ne 1 ]; then
         echo "pantherclaw: checksums.txt has no single entry for $name" >&2
         exit 2
@@ -62,7 +62,19 @@ pantherclaw-check:
 
       set -- ci check --policy "$PC_POLICY"
       base="${PC_BASE_REF:-${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}}"
-      if [ -n "$base" ] && git fetch --quiet --depth=1 origin "$base" && git show "FETCH_HEAD:$PC_POLICY" > "$dir/base.json" 2> /dev/null; then
+      if [ -z "$base" ]; then
+        echo "pantherclaw: no base to compare with; set base-ref" >&2
+        exit 2
+      fi
+      if ! git fetch --depth=1 origin "$base"; then
+        echo "pantherclaw: cannot fetch base-ref $base" >&2
+        exit 2
+      fi
+      # Only a file absent at the fetched base counts as no base: set -e ends
+      # the job on any other failure here.
+      found="$(git ls-tree --name-only FETCH_HEAD -- "$PC_POLICY")"
+      if [ -n "$found" ]; then
+        git show "FETCH_HEAD:$PC_POLICY" > "$dir/base.json"
         set -- "$@" --base "$dir/base.json"
       fi
       if [ -n "$PC_SCENARIOS" ]; then set -- "$@" --scenarios "$PC_SCENARIOS"; fi

@@ -16,7 +16,7 @@ GitLab components are served from a project on your GitLab instance, so mirror t
 |---|---|---|
 | `policy` | yes | Path of the policy bundle (JSON), inside the repository. |
 | `pclaw-version` | yes | The `pclaw` release to run. There is no `latest`. |
-| `base-ref` | no | Commit or branch to compare with. Default: the merge request's diff base. A policy the base does not have is checked with nothing to compare. |
+| `base-ref` | no | Commit or branch to compare with. Default: the merge request's diff base. A policy the base does not have is checked with nothing to compare; a base that cannot be fetched stops the job with exit 2. |
 | `scenarios` | no | Directory of scenario fixtures. |
 | `packages` | no | Directory of `package.yaml` files, with an optional `facts.json`. Default: the packages built into `pclaw`. |
 | `stage` | no | The job's stage. Default `test`. |
@@ -27,7 +27,7 @@ The job runs on merge request pipelines only. It downloads the release archive a
 
 Exit 0 passed, 1 the check failed, 2 it could not run on what it was given.
 
-Text from a policy file is untrusted: the Markdown report escapes it, so it cannot render markup or mention a person, and the report is capped at 60 KiB.
+Text from a policy file is untrusted: the Markdown report keeps it in code spans, so it cannot render markup, mention a person or link an issue or commit, and the report is capped at 60 KiB.
 
 Outcome samples are generated actions. The report says how many ran, because **an empty sample proves nothing**: samples can miss an action the two versions decide differently, and they show the policy engine alone, not grants, budgets, facts or holds. The rule diff is what decides `widen`; samples only add to it.
 

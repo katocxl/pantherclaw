@@ -6,6 +6,7 @@ package cicheck
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -148,18 +149,126 @@ func TestT245_ActionInputsNeverReachAShellAsCode(t *testing.T) {
 	}
 }
 
-// TestHR566_DownloadsAreVerified: an action that fetches a binary checks
-// its digest before anything runs it.
+// gitlabTemplate is the GitLab component, by its path.
+const gitlabTemplate = "integrations/gitlab/templates/pantherclaw-check.yml"
+
+// integrationScripts returns everything that runs in a customer's pipeline:
+// the actions and the GitLab component.
+func integrationScripts(t *testing.T) map[string]string {
+	t.Helper()
+	out := actions(t)
+	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gitlabTemplate)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out[gitlabTemplate] = string(b)
+	return out
+}
+
+// TestHR566_DownloadsAreVerified: whatever fetches a binary checks its
+// digest before anything runs it.
 func TestHR566_DownloadsAreVerified(t *testing.T) {
-	for name, a := range actions(t) {
+	found := 0
+	for name, a := range integrationScripts(t) {
 		if !strings.Contains(a, "curl ") {
 			continue
 		}
+		found++
 		check := strings.Index(a, "--check --strict")
 		extract := strings.Index(a, "tar -xzf")
 		if check < 0 || extract < check {
 			t.Errorf("%s: extracts a download before verifying it", name)
 		}
+	}
+	if found < 2 {
+		t.Errorf("found %d downloads, want the action and the GitLab component", found)
+	}
+}
+
+// checksumMatch finds the awk program that picks the archive's line.
+var checksumMatch = regexp.MustCompile(`awk -v f="\$name" '([^']+)'`)
+
+// TestHR566_ChecksumsAreMatchedExactly: a release lists <archive>.sbom.json
+// too, so a substring match finds two lines and refuses every real release
+// (G0 M23 D126). The program in each file runs on such a checksums file.
+func TestHR566_ChecksumsAreMatchedExactly(t *testing.T) {
+	awk, err := exec.LookPath("awk")
+	if err != nil {
+		t.Skip("no awk")
+	}
+	const name = "pantherclaw_1.0.0_linux_amd64.tar.gz"
+	archive := strings.Repeat("a", 64) + "  " + name
+	sums := filepath.Join(t.TempDir(), "checksums.txt")
+	lines := strings.Repeat("b", 64) + "  " + name + ".sbom.json\n" + archive + "\n" +
+		strings.Repeat("c", 64) + "  x" + name + "\n"
+	if err := os.WriteFile(sums, []byte(lines), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for file, a := range integrationScripts(t) {
+		m := checksumMatch.FindStringSubmatch(a)
+		if m == nil {
+			t.Errorf("%s: no exact checksum match", file)
+			continue
+		}
+		out, err := exec.CommandContext(t.Context(), awk, "-v", "f="+name, m[1], sums).Output()
+		if err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		if got := strings.TrimRight(string(out), "\r\n"); got != archive {
+			t.Errorf("%s: matched %q", file, got)
+		}
+	}
+}
+
+// TestHR566_AnUnreadableBaseStopsTheCheck: on GitLab a base that cannot be
+// fetched exits 2, since a check with nothing to compare would pass a
+// widening. Only a file absent at the fetched base counts as no base, and
+// git's own errors stay in the log (G0 M23 D127).
+func TestHR566_AnUnreadableBaseStopsTheCheck(t *testing.T) {
+	a := integrationScripts(t)[gitlabTemplate]
+	for _, want := range []string{
+		"if ! git fetch --depth=1 origin \"$base\"; then",
+		"git ls-tree --name-only FETCH_HEAD -- \"$PC_POLICY\"",
+	} {
+		i := strings.Index(a, want)
+		if i < 0 {
+			t.Errorf("%s: no %q", gitlabTemplate, want)
+		}
+		if strings.HasPrefix(want, "if !") && i >= 0 && !strings.Contains(a[i:min(i+160, len(a))], "exit 2") {
+			t.Errorf("%s: a failed fetch does not exit 2", gitlabTemplate)
+		}
+	}
+	for l := range strings.SplitSeq(a, "\n") {
+		if strings.Contains(l, "git ") && (strings.Contains(l, "--quiet") || strings.Contains(l, "/dev/null") || strings.Contains(l, "&&")) {
+			t.Errorf("%s: a git failure can pass unseen: %s", gitlabTemplate, strings.TrimSpace(l))
+		}
+	}
+}
+
+// TestHR566_ACommentNeverDecidesTheCheck: exit 2 has no report, so it keeps
+// the last one; failing to post warns, and the last step still ends the job
+// with the check's own result (G0 M23 D133).
+func TestHR566_ACommentNeverDecidesTheCheck(t *testing.T) {
+	a := actions(t)["integrations/github-action/action.yml"]
+	var step string
+	for _, s := range regexp.MustCompile(`(?m)^    - name:`).Split(a, -1) {
+		if strings.Contains(s, "Comment on the pull request") {
+			step = s
+		}
+	}
+	if step == "" {
+		t.Fatal("no comment step")
+	}
+	for _, want := range []string{"steps.check.outputs.code != '2'", "if ! post; then", "::warning"} {
+		if !strings.Contains(step, want) {
+			t.Errorf("the comment step has no %q", want)
+		}
+	}
+	if regexp.MustCompile(`set -[a-z]*e`).MatchString(step) || strings.Contains(step, "continue-on-error") {
+		t.Error("a failure in the comment step can end the job, or hides how it ended")
+	}
+	if !strings.Contains(a, `run: exit "$CODE"`) {
+		t.Error("the check's own result does not end the job")
 	}
 }
 

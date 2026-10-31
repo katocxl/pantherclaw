@@ -9,9 +9,11 @@ import (
 	"errors"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -22,14 +24,18 @@ type fakeDev struct {
 	started, stopped             []string
 	live                         map[string]bool
 	statusErr                    error
+	identity                     func(pid int) (string, error)
 }
+
+// fakeStart is the start time the fake records for a process.
+func fakeStart(pid int) string { return "started-" + strconv.Itoa(pid) }
 
 func installFakeDev(t *testing.T) *fakeDev {
 	t.Helper()
-	f := &fakeDev{live: map[string]bool{}}
-	up, down, status, start, stop, ls, bin := devNodeUp, devNodeDown, devNodeStatus, devStartSim, devStopSim, devListening, devSimBinary
+	f := &fakeDev{live: map[string]bool{}, identity: func(pid int) (string, error) { return fakeStart(pid), nil }}
+	up, down, status, start, stop, ls, bin, id := devNodeUp, devNodeDown, devNodeStatus, devStartSim, devStopSim, devListening, devSimBinary, devProcessIdentity
 	t.Cleanup(func() {
-		devNodeUp, devNodeDown, devNodeStatus, devStartSim, devStopSim, devListening, devSimBinary = up, down, status, start, stop, ls, bin
+		devNodeUp, devNodeDown, devNodeStatus, devStartSim, devStopSim, devListening, devSimBinary, devProcessIdentity = up, down, status, start, stop, ls, bin, id
 	})
 	devNodeUp = func(_ context.Context, _ *app, args []string) error {
 		f.upArgs = args
@@ -37,14 +43,16 @@ func installFakeDev(t *testing.T) *fakeDev {
 	}
 	devNodeDown = func(_ context.Context, _ *app, args []string) error { f.downArgs = args; return nil }
 	devNodeStatus = func(_ context.Context, _ *app, args []string) error { f.statusArgs = args; return f.statusErr }
-	devStartSim = func(_ context.Context, _, _ string, s devSim) (int, error) {
+	devStartSim = func(_ context.Context, _, _ string, s devSim) (devRunning, error) {
 		f.started = append(f.started, s.Name)
 		f.live[s.Addr] = true
-		return 100 + len(f.started), nil
+		pid := 100 + len(f.started)
+		return devRunning{Name: s.Name, Addr: s.Addr, PID: pid, Started: fakeStart(pid)}, nil
 	}
 	devStopSim = func(pid int) error { f.stopped = append(f.stopped, string(rune(pid))); return nil }
 	devListening = func(addr string) bool { return f.live[addr] }
 	devSimBinary = func() (string, error) { return "pantherclaw-sim", nil }
+	devProcessIdentity = func(_ context.Context, pid int) (string, error) { return f.identity(pid) }
 	return f
 }
 
@@ -144,6 +152,74 @@ func TestD125_DevDownStopsOnlyWhatIsItsOwn(t *testing.T) {
 	st, err := loadDevState(dir)
 	if err != nil || len(st.Sims) != 0 {
 		t.Errorf("state: %+v %v", st, err)
+	}
+}
+
+// TestD134_DevDownLeavesAProcessItCannotProveItsOwn: an id in use after a
+// reboot, an identity that cannot be read and a state file from before
+// identities all stop nothing, and each is reported.
+func TestD134_DevDownLeavesAProcessItCannotProveItsOwn(t *testing.T) {
+	for name, tamper := range map[string]func(*fakeDev, string){
+		"another process has the id": func(f *fakeDev, _ string) {
+			f.identity = func(int) (string, error) { return "a later process", nil }
+		},
+		"identity unreadable": func(f *fakeDev, _ string) {
+			f.identity = func(int) (string, error) { return "", errors.New("no such process") }
+		},
+		"no identity saved": func(_ *fakeDev, dir string) {
+			st, err := loadDevState(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := range st.Sims {
+				st.Sims[i].Started = ""
+			}
+			if err := saveDevState(dir, st); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := installFakeDev(t)
+			dir := t.TempDir()
+			if code, _, _ := devRun(t, "up", "--dir", dir); code != 0 {
+				t.Fatal("up")
+			}
+			tamper(f, dir)
+			code, _, stderr := devRun(t, "down", "--dir", dir)
+			if code != 0 {
+				t.Fatalf("down: %s", stderr)
+			}
+			if len(f.stopped) != 0 {
+				t.Errorf("stopped %d processes it could not prove its own", len(f.stopped))
+			}
+			if !strings.Contains(stderr, "left "+devSims[0].Addr+" running") {
+				t.Errorf("not reported: %s", stderr)
+			}
+			if !slices.Contains(f.downArgs, dir) {
+				t.Errorf("the node stayed up: %v", f.downArgs)
+			}
+		})
+	}
+}
+
+// TestD134_ProcessIdentityTellsProcessesApart: read twice it stays the same,
+// and a process that has ended never reads as this one.
+func TestD134_ProcessIdentityTellsProcessesApart(t *testing.T) {
+	ctx := t.Context()
+	own, err := processIdentity(ctx, os.Getpid())
+	if err != nil || own == "" {
+		t.Fatalf("identity %q: %v", own, err)
+	}
+	if again, err := processIdentity(ctx, os.Getpid()); err != nil || again != own {
+		t.Fatalf("identity moved: %q then %q (%v)", own, again, err)
+	}
+	child := exec.CommandContext(ctx, os.Args[0], "-test.run=^$")
+	if err := child.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if gone, err := processIdentity(ctx, child.Process.Pid); err == nil && gone == own {
+		t.Errorf("an ended process reads as this one: %q", gone)
 	}
 }
 

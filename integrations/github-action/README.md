@@ -45,14 +45,14 @@ jobs:
     pull-requests: write
   ```
 
-  The comment step is the only step that receives `GITHUB_TOKEN` for writing. It is skipped for a pull request from a fork, where GitHub gives no write token anyway, and the report stays in the job summary.
+  The comment step is the only step that receives `GITHUB_TOKEN` for writing. It is skipped for a pull request from a fork, where GitHub gives no write token anyway, and the report stays in the job summary. A run that could not check (exit 2) has no report and leaves the last comment alone. A comment that cannot be posted, as on a Dependabot pull request with its read-only token, is a warning and never fails the check.
 - **`pclaw` is verified before it runs.** The action downloads the release archive and refuses it unless its SHA-256 matches the release's `checksums.txt`.
 
 ## What the report means
 
 Exit 0 passed, 1 the check failed, 2 it could not run on what it was given.
 
-Text from a policy file is untrusted: the Markdown report escapes it, so it cannot render markup or mention a person, and the report is capped at 60 KiB. `--format json` has the rest.
+Text from a policy file is untrusted: the Markdown report keeps it in code spans, so it cannot render markup, mention a person or link an issue or commit, and the report is capped at 60 KiB. `--format json` has the rest.
 
 Outcome samples are generated actions. The report says how many ran, because **an empty sample proves nothing**: samples can miss an action the two versions decide differently, and they show the policy engine alone, not grants, budgets, facts or holds. The rule diff is what decides `widen`; samples only add to it.
 

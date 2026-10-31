@@ -349,45 +349,69 @@ var markup = regexp.MustCompile("[`<>\\[\\]()!*_~|\\\\]|@[a-zA-Z]|#[0-9]|https?:
 // hostile carries every way a policy could write into a report.
 const hostile = "@octocat cc @org/team <img src=x onerror=alert(1)> [click](https://evil.example) ![p](https://evil.example/p.png) " +
 	"`code` ``` **bold** _em_ ~~s~~ | a | b | #1 owner/repo#2 www.evil.example a@b.example :smile: !3 $x$ %4 &amp; <!-- c --> <details> " +
-	"deadbeefcafe0123 ## heading\n\n- [ ] task\n::error::owned\n##[error]owned\r\n\x1b[31mred\x1b[0m\u202Ebidi\u200Bzero\u2028line"
+	"deadbeefcafe0123 GH-123 ## heading\n\n- [ ] task\n::error::owned\n##[error]owned\r\n\x1b[31mred\x1b[0m\u202Ebidi\u200Bzero\u2028line"
 
-// escapedFully strips the escapes the report may hold and returns what is
-// left to look at: entities are safe by construction, so only raw text
-// counts, and it is what a parser sees.
-func rawText(s string) string {
-	return regexp.MustCompile(`&#[0-9]+;`).ReplaceAllString(s, " ")
+// outsideSpans parses a line's code spans as CommonMark does (a run of N
+// backticks closes at the next run of exactly N) and returns what is left
+// outside them. An opener that never closes is reported, since its text
+// would be read as Markdown.
+func outsideSpans(t *testing.T, line string) string {
+	t.Helper()
+	var out strings.Builder
+	run := func(s string, at int) int {
+		n := 0
+		for at+n < len(s) && s[at+n] == '`' {
+			n++
+		}
+		return n
+	}
+	for i := 0; i < len(line); {
+		n := run(line, i)
+		if n == 0 {
+			out.WriteByte(line[i])
+			i++
+			continue
+		}
+		end := -1
+		for j := i + n; j < len(line) && end < 0; {
+			switch m := run(line, j); m {
+			case 0:
+				j++
+			case n:
+				end = j + m
+			default:
+				j += m
+			}
+		}
+		if end < 0 {
+			t.Fatalf("a code span never closes in %q", line)
+		}
+		i = end
+	}
+	return out.String()
 }
 
-// TestHR565_ACheckReportCannotRenderMarkupOrMention: every report field
-// that comes from a file, through Escape, holds no raw markup, and each
-// sigil stays split from what follows once a renderer decodes entities
-// (G0 M23 D122).
+// TestHR565_ACheckReportCannotRenderMarkupOrMention: file text sits whole
+// in one code span, whatever backticks it holds, so nothing in it links or
+// renders (G0 M23 D122, D131).
 func TestHR565_ACheckReportCannotRenderMarkupOrMention(t *testing.T) {
-	out := offline.Escape(hostile)
-	if m := markup.FindString(rawText(out)); m != "" {
-		t.Fatalf("raw markup %q in %s", m, out)
-	}
-	if strings.ContainsAny(out, "\n\r\x1b") {
-		t.Fatalf("a control character survived: %q", out)
-	}
-	decoded := decode(out)
-	for _, bad := range []string{"@octocat", "@org", "#1", "#2", "https://", "www.evil", "a@b", ":smile:", "!3", "deadbeefcafe0123"} {
-		if strings.Contains(decoded, bad) {
-			t.Errorf("%q still reads whole after decoding", bad)
+	for _, in := range []string{
+		hostile, "@octocat", "#123", "GH-123", "owner/repo#2", "deadbeefcafe0123", "`", "``", "a`b", "`a`", "```` x ` y ``", "` `", "a\nb", " ",
+	} {
+		out := offline.Escape("x " + in)
+		if rest := outsideSpans(t, "- "+out+" tail"); rest != "-  tail" {
+			t.Errorf("%q escaped: text outside the span: %q", in, rest)
+		}
+		if out := offline.Escape(in); strings.TrimSpace(in) != "" && outsideSpans(t, out) != "" {
+			t.Errorf("%q alone escaped outside a span: %q", in, out)
 		}
 	}
-	if strings.ContainsAny(decoded, "\u202E\u2028\x1b") {
-		t.Errorf("a control character survived decoding: %q", decoded)
+	if out := offline.Escape(hostile); strings.ContainsAny(out, "\n\r\x1b\u202E\u2028") {
+		t.Fatalf("a control character survived: %q", out)
 	}
-}
-
-// decode undoes the numeric entities, as a Markdown parser does.
-func decode(s string) string {
-	return regexp.MustCompile(`&#([0-9]+);`).ReplaceAllStringFunc(s, func(m string) string {
-		var n rune
-		_, _ = fmt.Sscanf(m, "&#%d;", &n)
-		return string(n)
-	})
+	if offline.Escape("") != "" {
+		t.Error("an empty field made an empty span")
+	}
 }
 
 // TestT244_APolicyFileCannotInjectIntoACIReport: a whole report of a
@@ -416,9 +440,12 @@ func TestT244_APolicyFileCannotInjectIntoACIReport(t *testing.T) {
 		if strings.HasPrefix(l, "### ") {
 			continue
 		}
-		if m := markup.FindString(rawText(l)); m != "" {
+		if m := markup.FindString(outsideSpans(t, l)); m != "" {
 			t.Errorf("raw markup %q in line %q", m, l)
 		}
+	}
+	if !strings.Contains(md, "@octocat") {
+		t.Fatal("the hostile text did not reach the report, so this test proved nothing")
 	}
 	for _, line := range strings.Split(string(r.Text()), "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -439,16 +466,16 @@ func TestT244_APolicyFileCannotInjectIntoACIReport(t *testing.T) {
 	}
 }
 
-// TestHR565_TheMarkdownReportIsCapped: at most 60 KiB, never cut inside an
-// escape, and it says it was cut (D122).
+// TestHR565_TheMarkdownReportIsCapped: at most 60 KiB, never cut inside a
+// code span, and it says it was cut (D122).
 func TestHR565_TheMarkdownReportIsCapped(t *testing.T) {
 	r := &offline.Report{Validation: offline.Validation{}}
 	for i := range 200 {
-		r.Validation.Findings = append(r.Validation.Findings, pdomain.Finding{Code: "X", Severity: "ERROR", Detail: strings.Repeat("@", 2000) + fmt.Sprint(i)})
+		r.Validation.Findings = append(r.Validation.Findings, pdomain.Finding{Code: "X", Severity: "ERROR", Detail: strings.Repeat("語", 2000) + fmt.Sprint(i)})
 	}
 	for i := range 200 {
-		r.Scenarios.Surviving = append(r.Scenarios.Surviving, pdomain.MutantResult{Rule: "r", Mutation: strings.Repeat("<", 2000) + fmt.Sprint(i)})
-		r.Scenarios.Uncompilable = append(r.Scenarios.Uncompilable, pdomain.MutantResult{Rule: "r", Mutation: strings.Repeat("<", 2000) + fmt.Sprint(i)})
+		r.Scenarios.Surviving = append(r.Scenarios.Surviving, pdomain.MutantResult{Rule: "r", Mutation: strings.Repeat("語", 2000) + fmt.Sprint(i)})
+		r.Scenarios.Uncompilable = append(r.Scenarios.Uncompilable, pdomain.MutantResult{Rule: "r", Mutation: strings.Repeat("語", 2000) + fmt.Sprint(i)})
 	}
 	md := r.Markdown()
 	if len(md) > offline.MarkdownCap {
@@ -457,8 +484,8 @@ func TestHR565_TheMarkdownReportIsCapped(t *testing.T) {
 	if !strings.Contains(string(md), "Report cut at 60 KiB") {
 		t.Fatalf("not marked as cut: %d bytes", len(md))
 	}
-	if regexp.MustCompile(`&#[0-9]*$`).MatchString(strings.Split(strings.TrimRight(string(md), "\n"), "\n\n")[0]) {
-		t.Fatal("cut inside an escape")
+	for _, l := range strings.Split(string(md), "\n") {
+		outsideSpans(t, l) // a line cut inside a span would never close
 	}
 }
 

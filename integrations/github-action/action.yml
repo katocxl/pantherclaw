@@ -94,7 +94,7 @@ runs:
         url="https://github.com/katocxl/pantherclaw/releases/download/v${VERSION}"
         curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o "$name" "$url/$name"
         curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o checksums.txt "$url/checksums.txt"
-        grep -F "  $name" checksums.txt > expected.txt
+        awk -v f="$name" '$2 == f' checksums.txt > expected.txt
         if [ "$(wc -l < expected.txt)" -ne 1 ]; then
           echo "pantherclaw: checksums.txt has no single entry for $name" >&2
           exit 2
@@ -139,23 +139,32 @@ runs:
         echo "code=$code" >> "$GITHUB_OUTPUT"
 
     - name: Comment on the pull request
-      if: ${{ inputs.comment == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+      # Exit 2 means the check did not run, so it has no report to post. A
+      # comment is a courtesy: failing to post one warns, and the check's own
+      # result still decides the job.
+      if: ${{ inputs.comment == 'true' && steps.check.outputs.code != '2' && github.event.pull_request.head.repo.full_name == github.repository }}
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
         NUMBER: ${{ github.event.pull_request.number }}
         REPORT: ${{ steps.check.outputs.report }}
       run: |
-        set -euo pipefail
-        marker='<!-- pantherclaw-ci-check -->'
-        body="$RUNNER_TEMP/pantherclaw-comment.md"
-        { echo "$marker"; cat "$REPORT"; } > "$body"
-        id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" \
-          --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\")))][0].id // empty" | head -n 1)
-        if [ -n "$id" ]; then
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
-        else
-          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -F "body=@$body" > /dev/null
+        set -uo pipefail
+        post() {
+          local marker='<!-- pantherclaw-ci-check -->'
+          local body="$RUNNER_TEMP/pantherclaw-comment.md"
+          local id
+          { echo "$marker"; cat "$REPORT"; } > "$body" || return 1
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" \
+            --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\")))][0].id // empty" | head -n 1) || return 1
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -F "body=@$body" > /dev/null
+          fi
+        }
+        if ! post; then
+          echo "::warning title=PantherClaw::could not post the report as a comment; it is in the job summary"
         fi
 
     - name: Finish with the check's result
