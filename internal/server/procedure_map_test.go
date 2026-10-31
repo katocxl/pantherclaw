@@ -12,6 +12,8 @@ import (
 // TestProcedureMapMatchesTheTables (G0 M22 D9): the map holds every procedure
 // exactly once, with the permission and class the server enforces, side maps
 // included.
+//
+// Covers: F835
 func TestProcedureMapMatchesTheTables(t *testing.T) {
 	got := ProcedureMap()
 	if len(got) != len(procedurePermissions) {

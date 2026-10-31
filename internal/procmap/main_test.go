@@ -14,6 +14,8 @@ import (
 
 // TestRunPrintsTheProcedureMap (G0 M22 D9): the output round-trips to the
 // server's map and is byte-stable between runs.
+//
+// Covers: F835
 func TestRunPrintsTheProcedureMap(t *testing.T) {
 	var first, second bytes.Buffer
 	if err := run(&first); err != nil {
