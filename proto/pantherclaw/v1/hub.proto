@@ -1,0 +1,136 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// HubService installs items of PantherClaw Hub, a signed static index of
+// PantherClaw's own content (G0 M23 D100–D107; HR-560–HR-563; Community
+// edition).
+//
+// The server never fetches the index and makes no outbound call: the caller
+// sends the signed index and the item's exact bytes, and the server verifies
+// both itself. pclaw is only the transport.
+//
+// Install is always inert (HR-561): an item becomes a DRAFT policy version, a
+// DRAFT custom detection rule, a DRAFT automation or a REVIEWED package
+// version, through that kind's own use case and its own permission and
+// edition. Nothing is activated, published or enabled. Each org keeps the
+// highest index it accepted, and an older index, or another under the same
+// version, is refused (HR-562).
+service HubService {
+  // InstallHubItem verifies the index and the item and installs the item as
+  // an inert draft. Installing the same digest again changes nothing. Only a
+  // person may call it.
+  // permission: hub.install
+  rpc InstallHubItem(InstallHubItemRequest) returns (InstallHubItemResponse);
+  // ListHubInstalls lists the org's installs, newest first.
+  // permission: hub.read
+  rpc ListHubInstalls(ListHubInstallsRequest) returns (ListHubInstallsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetHubState returns the highest Hub index the org accepted.
+  // permission: hub.read
+  rpc GetHubState(GetHubStateRequest) returns (GetHubStateResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// HubItemKind is a closed list: an item holds data, never code (HR-563).
+enum HubItemKind {
+  HUB_ITEM_KIND_UNSPECIFIED = 0;
+  HUB_ITEM_KIND_POLICY_TEMPLATE = 1;
+  HUB_ITEM_KIND_DETECTION_RULE = 2;
+  // A range scenario is never installed on a server: pclaw writes it locally.
+  HUB_ITEM_KIND_RANGE_SCENARIO = 3;
+  HUB_ITEM_KIND_TOOL_PACKAGE = 4;
+  HUB_ITEM_KIND_AUTOMATION = 5;
+}
+
+enum HubInstallStatus {
+  HUB_INSTALL_STATUS_UNSPECIFIED = 0;
+  // The install was recorded and its draft is being made.
+  HUB_INSTALL_STATUS_PENDING = 1;
+  HUB_INSTALL_STATUS_INSTALLED = 2;
+  // The kind's own use case refused the item; installing it again retries.
+  HUB_INSTALL_STATUS_FAILED = 3;
+}
+
+// HubInstall is one item installed in the org.
+message HubInstall {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  HubItemKind kind = 4;
+  // item_sha256 is the hex SHA-256 of the item's exact bytes.
+  string item_sha256 = 5;
+  uint64 index_version = 6;
+  // result_kind and result_ref name what the install made: policy_version,
+  // custom_rule, automation or package_version, and its id. Empty until the
+  // install ends.
+  string result_kind = 7;
+  string result_ref = 8;
+  string installed_by = 9;
+  google.protobuf.Timestamp installed_at = 10;
+  HubInstallStatus status = 11;
+}
+
+message InstallHubItemRequest {
+  // index_jws is the signed index, compact JWS.
+  string index_jws = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2097152
+  }];
+  // item is the exact bytes of items/<sha256>.json.
+  bytes item = 2 [(buf.validate.field).bytes = {
+    min_len: 1
+    max_len: 1048576
+  }];
+  // params fill a policy template's placeholders: repos, default_branch,
+  // workspace, time_zone, payees, customers, slack_channels and environment.
+  map<string, string> params = 3 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {pattern: "^[a-z][a-z_]{0,31}$"}
+    }
+    values: {
+      string: {max_len: 4096}
+    }
+  }];
+}
+
+message InstallHubItemResponse {
+  HubInstall install = 1;
+  // already_installed: this digest was installed before; nothing changed.
+  bool already_installed = 2;
+  // skipped are per-agent rules a policy template left out.
+  repeated string skipped = 3;
+}
+
+message ListHubInstallsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string.max_len = 200];
+}
+
+message ListHubInstallsResponse {
+  repeated HubInstall installs = 1;
+  string next_page_token = 2;
+}
+
+message GetHubStateRequest {}
+
+message GetHubStateResponse {
+  // present is false until the org accepted an index.
+  bool present = 1;
+  uint64 index_version = 2;
+  // index_digest is the hex SHA-256 of the index payload.
+  string index_digest = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
