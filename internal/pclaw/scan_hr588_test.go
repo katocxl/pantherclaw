@@ -62,6 +62,7 @@ func writeTree(t *testing.T, root string, files map[string]string) {
 // config. The submitted request carries none of them, and each closed kind
 // carries exactly its named attributes.
 // Covers: T-255
+// Covers: F883, F884, F889
 func TestHR588_ScanSendsMetadataOnly(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
@@ -138,6 +139,7 @@ func TestHR588_ScanSendsMetadataOnly(t *testing.T) {
 // recommendations read are reported as present, and the list is the
 // catalogue's, so a new catalogue kind cannot silently stay dark (D238).
 // Covers: F343
+// Covers: F889
 func TestHR588_OtherCredentialKindsStayOnTheMachine(t *testing.T) {
 	want := domain.SecretKinds()
 	slices.Sort(want)
@@ -168,6 +170,7 @@ func TestHR588_OtherCredentialKindsStayOnTheMachine(t *testing.T) {
 // submission makes has the shape RecommendationOpenSecrets matches: kind
 // env_secret with a closed secret_kind (D238).
 // Covers: F343
+// Covers: F889
 func TestF343_ScanSubmitsTheSignalRecommendationsRead(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{".mcp.json": `{"mcpServers": {"s": {"command": "node", "env": {"OPENAI_API_KEY": "sk-proj-0123456789"}}}}`})
@@ -185,6 +188,7 @@ func TestF343_ScanSubmitsTheSignalRecommendationsRead(t *testing.T) {
 // TestScanDeviceScope (D234): the scope is device: and 16 hex digits, stable
 // across runs, different with another salt, and it does not hold the machine
 // id; --device goes with --submit and without --scope or --complete.
+// Covers: F885
 func TestScanDeviceScope(t *testing.T) {
 	old := machineID
 	t.Cleanup(func() { machineID = old })
@@ -223,6 +227,7 @@ func TestScanDeviceScope(t *testing.T) {
 
 // TestScanAllUsers (D235): --all-users needs root or SYSTEM; it reads each
 // home with the same metadata, and a link in a home reaches nothing outside.
+// Covers: F886
 func TestScanAllUsers(t *testing.T) {
 	old := privileged
 	t.Cleanup(func() { privileged = old })
@@ -273,6 +278,7 @@ func mapValues(m map[string]string) []string {
 
 // TestScanAPIKeyFile (D235): the key comes from PANTHERCLAW_API_KEY_FILE when
 // PANTHERCLAW_API_KEY is unset; a file holding more than one word is refused.
+// Covers: F886
 func TestScanAPIKeyFile(t *testing.T) {
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{".mcp.json": `{"mcpServers": {"s": {"command": "python"}}}`, "key": "pck_fromfile\n", "bad": "pck_a\npck_b\n"})
@@ -302,6 +308,7 @@ func TestScanAPIKeyFile(t *testing.T) {
 
 // TestScanSchedule (D237): each scheduler gets the scan with --every, never a
 // key in its definition; an all-users schedule is the machine's own.
+// Covers: F888
 func TestScanSchedule(t *testing.T) {
 	env := map[string]string{"PANTHERCLAW_SERVER": "https://pc.example", "PANTHERCLAW_API_KEY_FILE": "/etc/pantherclaw/key"}
 	base := scanSchedule{exe: "/opt/pclaw", home: "/home/ann", every: 24 * time.Hour, env: env}

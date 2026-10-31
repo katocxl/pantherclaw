@@ -26,6 +26,7 @@ import (
 // TestD230_RiskFieldsAreStatedAndRecorded: a holder of agent.manage states
 // the risk fields, each write leaves a history entry and an audit record,
 // unset fields stay, an empty list clears, and only closed values pass.
+// Covers: F880
 func TestD230_RiskFieldsAreStatedAndRecorded(t *testing.T) {
 	w := newWorld(t)
 	ctx := w.teamOwner()
@@ -78,6 +79,7 @@ func TestD230_RiskFieldsAreStatedAndRecorded(t *testing.T) {
 // TestD231_CardShowsPurposeOwnerRiskAndPinnedTools: the card needs what
 // reading the agent needs, and lists only operations of a usable pinned
 // version the agent has coverage of.
+// Covers: F881
 func TestD231_CardShowsPurposeOwnerRiskAndPinnedTools(t *testing.T) {
 	o := exposuretest.New(t)
 	inv := app.NewInventory(o.P, &fakeEnts{})
@@ -129,6 +131,7 @@ func TestD231_CardShowsPurposeOwnerRiskAndPinnedTools(t *testing.T) {
 // that carries more than its named attributes, or a credential kind off the
 // list, whatever a client sends. A valid one becomes a discovery.
 // Covers: T-255
+// Covers: F883, F889
 func TestHR588_ServerKeepsOnlyMetadata(t *testing.T) {
 	w := newWorld(t)
 	f := func(kind string, attrs map[string]string) []app.ScanFinding {
@@ -163,6 +166,7 @@ func TestHR588_ServerKeepsOnlyMetadata(t *testing.T) {
 
 // TestD234_CapIsPerSourceAndScope: a full device fills only its own room, and
 // what it drops is still counted; another device and unscoped scans go on.
+// Covers: F885
 func TestD234_CapIsPerSourceAndScope(t *testing.T) {
 	w := newWorld(t)
 	ctx := w.teamOwner()
@@ -186,5 +190,89 @@ func TestD234_CapIsPerSourceAndScope(t *testing.T) {
 	}
 	if r, err = w.inv.SubmitScan(ctx, "c", batch("c", 3), app.ScanMode{}); err != nil || r.Created != 3 || r.Dropped != 0 {
 		t.Fatalf("an unscoped scan: %+v, %v", r, err)
+	}
+}
+
+// scanner is a service account holding the Scanner role on a team.
+func (w *world) scanner() context.Context {
+	return as(w.org, td.KindServiceAccount, bind(td.RoleScanner, td.ScopeTeam, w.team))
+}
+
+// TestHR589_ScannerSubmitsOneDevicesPartialScan: the Scanner role admits a
+// partial scan of a device scope, and no other scan.
+// Covers: F887
+func TestHR589_ScannerSubmitsOneDevicesPartialScan(t *testing.T) {
+	w := newWorld(t)
+	finding := []app.ScanFinding{{
+		Kind: "skill", Key: sha256.Sum256([]byte("review")),
+		Attributes: map[string]string{"name": "review", "path": "/home/a/.claude/skills/review"},
+	}}
+	const device = "device:0123456789abcdef"
+	r, err := w.inv.SubmitScan(w.scanner(), "laptop", finding, app.ScanMode{Scope: device})
+	if err != nil || r.Created != 1 {
+		t.Fatalf("a device scan: %+v, %v", r, err)
+	}
+	for what, mode := range map[string]app.ScanMode{
+		"no scope":       {},
+		"a CI scope":     {Scope: "ci/repo"},
+		"short id":       {Scope: "device:0123"},
+		"upper-case id":  {Scope: "device:0123456789ABCDEF"},
+		"a complete run": {Scope: device, Complete: true},
+	} {
+		_, err := w.inv.SubmitScan(w.scanner(), "laptop", finding, mode)
+		wantCode(t, what, err, pcerr.PermissionDenied, "SCANNER_SCOPE")
+	}
+	// A holder of neither permission is refused for its missing permission,
+	// also on a device scope.
+	_, err = w.inv.SubmitScan(as(w.org, td.KindUser, bind(td.RoleViewer, td.ScopeOrg, w.org.UUID())), "laptop", finding, app.ScanMode{Scope: device})
+	if pcerr.CodeOf(err) != pcerr.PermissionDenied || pcerr.ReasonOf(err) == "SCANNER_SCOPE" {
+		t.Errorf("a viewer: %v", err)
+	}
+	// agent.manage keeps every mode.
+	if _, err := w.inv.SubmitScan(w.teamOwner(), "laptop", finding, app.ScanMode{Scope: "ci/repo", Complete: true}); err != nil {
+		t.Errorf("agent.manage: %v", err)
+	}
+}
+
+// TestT254_ScanKeyStolenFromALaptop: with the key the thief can add findings
+// to a device's scope and nothing else: it cannot read or change the
+// inventory, or clear what a complete scan would close.
+// Covers: F887
+func TestT254_ScanKeyStolenFromALaptop(t *testing.T) {
+	w := newWorld(t)
+	a, err := w.inv.Create(w.teamOwner(), w.details())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stolen := w.scanner()
+	if _, err := w.inv.Create(stolen, w.details()); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Errorf("Create: %v", err)
+	}
+	name := "taken"
+	if _, err := w.inv.Update(stolen, a.ID, &name, nil, domain.RiskPatch{}); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Errorf("Update: %v", err)
+	}
+	if _, err := w.inv.Get(stolen, a.ID); pcerr.CodeOf(err) != pcerr.PermissionDenied && pcerr.CodeOf(err) != pcerr.NotFound {
+		t.Errorf("Get: %v", err)
+	}
+	if _, err := w.inv.Card(stolen, a.ID); pcerr.CodeOf(err) != pcerr.PermissionDenied && pcerr.CodeOf(err) != pcerr.NotFound {
+		t.Errorf("Card: %v", err)
+	}
+	if _, err := w.inv.Retire(stolen, a.ID, "taken"); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Errorf("Retire: %v", err)
+	}
+	// A CI scan's discovery stays: the stolen key cannot run a complete scan
+	// over that scope to count it missed.
+	finding := []app.ScanFinding{{
+		Kind: "skill", Key: sha256.Sum256([]byte("ci")),
+		Attributes: map[string]string{"name": "ci", "path": "/ci"},
+	}}
+	if _, err := w.inv.SubmitScan(w.teamOwner(), "ci", finding, app.ScanMode{Scope: "ci/repo", Complete: true}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.inv.SubmitScan(stolen, "ci", nil, app.ScanMode{Scope: "ci/repo", Complete: true})
+	wantCode(t, "clearing a CI scope", err, pcerr.PermissionDenied, "SCANNER_SCOPE")
+	if n := w.count(t, `SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND source = 'ci_scan' AND state = 'OPEN'`, w.org); n != 1 {
+		t.Fatalf("open CI discoveries: %d", n)
 	}
 }

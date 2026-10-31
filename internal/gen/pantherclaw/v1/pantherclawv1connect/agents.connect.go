@@ -193,8 +193,11 @@ type AgentServiceClient interface {
 	// DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding
 	// submitted before is only counted. Findings are UNTRUSTED observations
 	// and grant nothing; credential values never leave the scanning machine,
-	// only the kind of a key that is present (G0 M24 D238). It is also served on the gateway listener, where a gateway holding an
-	// organization scan's org_scan lease submits that scan's findings and
+	// only the kind of a key that is present (G0 M24 D238). A caller holding
+	// agent.scan.submit instead of agent.manage may submit a partial scan of
+	// one `device:` scope and nothing else (G0 M24 D236, HR-589). It is also
+	// served on the gateway listener, where a gateway holding an organization
+	// scan's org_scan lease submits that scan's findings and
 	// needs gateway.scan.submit instead (G0 M8, HR-209).
 	// permission: agent.manage
 	SubmitScanFindings(context.Context, *v1.SubmitScanFindingsRequest) (*v1.SubmitScanFindingsResponse, error)
@@ -258,8 +261,11 @@ type AgentServiceHandler interface {
 	// DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding
 	// submitted before is only counted. Findings are UNTRUSTED observations
 	// and grant nothing; credential values never leave the scanning machine,
-	// only the kind of a key that is present (G0 M24 D238). It is also served on the gateway listener, where a gateway holding an
-	// organization scan's org_scan lease submits that scan's findings and
+	// only the kind of a key that is present (G0 M24 D238). A caller holding
+	// agent.scan.submit instead of agent.manage may submit a partial scan of
+	// one `device:` scope and nothing else (G0 M24 D236, HR-589). It is also
+	// served on the gateway listener, where a gateway holding an organization
+	// scan's org_scan lease submits that scan's findings and
 	// needs gateway.scan.submit instead (G0 M8, HR-209).
 	// permission: agent.manage
 	SubmitScanFindings(context.Context, *v1.SubmitScanFindingsRequest) (*v1.SubmitScanFindingsResponse, error)

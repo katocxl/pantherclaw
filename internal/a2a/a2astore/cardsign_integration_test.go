@@ -27,6 +27,7 @@ const peerCard = `{"name":"peer","description":"d","version":"1","capabilities":
 // TestHR590_TheServerSignsOnlyThePinnedCard (D232): the signature verifies
 // under the published key for the card the server would rewrite itself; the
 // key signs nothing else, for no other gateway, and no drifted pin.
+// Covers: F882
 func TestHR590_TheServerSignsOnlyThePinnedCard(t *testing.T) {
 	pool := dbtest.New(t).AppPool(t)
 	w := newWorld(t, pool, "https://peer.example/a2a")

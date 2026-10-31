@@ -467,6 +467,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 				cfg.APILimits(pool, log),
 				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan)),
 				rpcauth.WithBrowserSessions(sessions, log),
+				rpcauth.WithAlternatePermissions(m24AlternatePermissions),
 				ui.accountSessions(web, sessions.PublicOrigin()),
 				supportSessions(sup)),
 			support:   sup,

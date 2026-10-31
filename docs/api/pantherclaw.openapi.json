@@ -2496,7 +2496,7 @@
           "pantherclaw.v1.AgentService"
         ],
         "summary": "SubmitScanFindings",
-        "description": "SubmitScanFindings records the findings of a local `pclaw scan` as\n DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding\n submitted before is only counted. Findings are UNTRUSTED observations\n and grant nothing; credential values never leave the scanning machine,\n only the kind of a key that is present (G0 M24 D238). It is also served on the gateway listener, where a gateway holding an\n organization scan's org_scan lease submits that scan's findings and\n needs gateway.scan.submit instead (G0 M8, HR-209).\n permission: agent.manage",
+        "description": "SubmitScanFindings records the findings of a local `pclaw scan` as\n DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding\n submitted before is only counted. Findings are UNTRUSTED observations\n and grant nothing; credential values never leave the scanning machine,\n only the kind of a key that is present (G0 M24 D238). A caller holding\n agent.scan.submit instead of agent.manage may submit a partial scan of\n one `device:` scope and nothing else (G0 M24 D236, HR-589). It is also\n served on the gateway listener, where a gateway holding an organization\n scan's org_scan lease submits that scan's findings and\n needs gateway.scan.submit instead (G0 M8, HR-209).\n permission: agent.manage",
         "operationId": "pantherclaw.v1.AgentService.SubmitScanFindings",
         "parameters": [
           {

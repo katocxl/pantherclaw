@@ -11,6 +11,7 @@ import (
 // TestHR588_PackageRefIsTheTokenAlone (D233): a launcher gives its package or
 // image and nothing else; whatever cannot be told apart from an argument
 // gives nothing.
+// Covers: F884
 func TestHR588_PackageRefIsTheTokenAlone(t *testing.T) {
 	for _, c := range []struct {
 		line, want string
@@ -54,6 +55,7 @@ func TestHR588_PackageRefIsTheTokenAlone(t *testing.T) {
 
 // TestHR588_ExecutableIsTheBasename (D233): a hook's first word, base name
 // only, past any NAME=value prefix; anything unusual gives nothing.
+// Covers: F883
 func TestHR588_ExecutableIsTheBasename(t *testing.T) {
 	for line, want := range map[string]string{
 		"/opt/hooks/guard.sh --key sekret":     "guard.sh",

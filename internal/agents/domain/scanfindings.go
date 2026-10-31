@@ -3,7 +3,10 @@
 
 package domain
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Kinds of a local scan's findings that carry only named attributes (G0 M24
 // D233, D238).
@@ -25,6 +28,24 @@ var scanAttributes = map[string][]string{
 	ScanKindHook:      {"event", "executable"},
 	ScanKindSkill:     {"name", "path"},
 	ScanKindEnvSecret: {"secret_kind"},
+}
+
+// deviceScopeHexLen is the length of a device scope's hex id (G0 M24 D234).
+const deviceScopeHexLen = 16
+
+// DeviceScope reports whether scope is a laptop's own scan scope: `device:`
+// and 16 lower-case hex digits (G0 M24 D234).
+func DeviceScope(scope string) bool {
+	id, ok := strings.CutPrefix(scope, "device:")
+	if !ok || len(id) != deviceScopeHexLen {
+		return false
+	}
+	for _, r := range id {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // ScanAttributesOK reports whether a finding's attributes are allowed: a

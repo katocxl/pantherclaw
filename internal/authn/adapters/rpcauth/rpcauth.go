@@ -141,7 +141,7 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 			}
 			return actx, nil
 		}
-		if perm != td.PermAuthenticated && !c.CanAnywhere(perm) {
+		if perm != td.PermAuthenticated && !c.CanAnywhere(perm) && !o.admitsAlternate(c, spec.Procedure) {
 			if o.refusals != nil && perm.HumanOnly() && (!c.Human() || c.Credential == tapp.CredAPIKey) {
 				// A service, workload or API key calling a person's procedure is
 				// what pc.authority.self_issue and self_approve look for (G0 M10
@@ -259,6 +259,21 @@ type options struct {
 	supportReadOnly func(procedure string) bool
 	breakGlass      BreakGlassCalls
 	log             *slog.Logger
+	// alternates are the procedures with a second permission that admits.
+	alternates map[string]td.Permission
+}
+
+// WithAlternatePermissions lets a procedure in alternates also admit a caller
+// holding the permission it names, besides the one the table requires. The
+// procedure's handler narrows what that caller may do; the table's permission
+// stays what the procedure declares and what a refusal names.
+func WithAlternatePermissions(alternates map[string]td.Permission) Option {
+	return func(o *options) { o.alternates = alternates }
+}
+
+func (o *options) admitsAlternate(c tapp.Caller, procedure string) bool {
+	alt, ok := o.alternates[procedure]
+	return ok && c.CanAnywhere(alt)
 }
 
 // RefusalRecorder records a non-human caller refused a human-only

@@ -42,6 +42,7 @@ func signedFace(sign SignCard) (*Handler, *bytes.Buffer) {
 // TestHR590_AFailedSigningServesTheCardUnsigned: however signing fails, the
 // card goes out as rewritten, with no signature that does not verify, and the
 // failure is logged.
+// Covers: F882
 func TestHR590_AFailedSigningServesTheCardUnsigned(t *testing.T) {
 	priv, jwks := cardKey(t)
 	good, err := wire.Sign([]byte(rewrittenCard), "a2a-card-1", priv)
@@ -94,6 +95,7 @@ func sha256Of(s string) [32]byte { return sha256.Sum256([]byte(s)) }
 
 // TestHR590_ASignedCardVerifiesAndIsCachedAnHour (D232): a good answer is
 // served, verifies under the published key, and is reused for an hour.
+// Covers: F882
 func TestHR590_ASignedCardVerifiesAndIsCachedAnHour(t *testing.T) {
 	priv, jwks := cardKey(t)
 	calls := 0

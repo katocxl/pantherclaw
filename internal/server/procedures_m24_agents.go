@@ -22,6 +22,13 @@ var m24AgentClasses = map[string]entitlements.Class{
 	pantherclawv1connect.AgentServiceGetAgentCardProcedure: entitlements.ClassRead,
 }
 
+// m24AlternatePermissions lets a Scanner reach SubmitScanFindings without
+// agent.manage (G0 M24 D236); the use case holds it to one device's scope
+// (HR-589). The gateway listener has none of these.
+var m24AlternatePermissions = map[string]td.Permission{
+	pantherclawv1connect.AgentServiceSubmitScanFindingsProcedure: td.PermAgentScanSubmit,
+}
+
 func init() {
 	maps.Copy(procedurePermissions, m24AgentProcedures)
 	maps.Copy(procedureClasses, m24AgentClasses)

@@ -71,6 +71,11 @@ var (
 	ErrScopeRequired = pcerr.New(pcerr.InvalidArgument, "SCAN_SCOPE", "a complete scan names its scope (--scope)")
 	// ErrScope refuses a scope that is not plain text of 1 to 256 characters.
 	ErrScope = pcerr.New(pcerr.InvalidArgument, "SCAN_SCOPE", "a scope is 1 to 256 characters of plain text")
+	// ErrScannerScope refuses a holder of agent.scan.submit alone a scan
+	// outside one device's scope, or one that says it read the whole scope
+	// (G0 M24 D236, HR-589).
+	ErrScannerScope = pcerr.New(pcerr.PermissionDenied, "SCANNER_SCOPE",
+		"a scanner key submits device scans only (--device)")
 	// ErrCompleteTooLarge refuses a complete scan of more findings than one
 	// submission carries (D130).
 	ErrCompleteTooLarge = pcerr.New(pcerr.InvalidArgument, "SCAN_TOO_LARGE",
@@ -86,6 +91,23 @@ func (m ScanMode) check(findings int) error {
 	}
 	if m.Complete && findings > MaxCompleteFindings {
 		return ErrCompleteTooLarge
+	}
+	return nil
+}
+
+// permitted is the gate of SubmitScan: agent.manage submits any scan, and
+// agent.scan.submit alone only a partial scan of one device (G0 M24 D236). A
+// complete scan closes what it does not list, so a key taken from a laptop
+// can neither clear findings nor reach a CI scope (HR-589).
+func (m ScanMode) permitted(c tenancy.Caller) error {
+	if c.CanAnywhere(td.PermAgentManage) {
+		return nil
+	}
+	if !c.CanAnywhere(td.PermAgentScanSubmit) {
+		return td.ErrPermissionDenied(td.PermAgentManage)
+	}
+	if m.Complete || !domain.DeviceScope(m.Scope) {
+		return ErrScannerScope
 	}
 	return nil
 }
@@ -154,7 +176,8 @@ func scanName(f ScanFinding) string {
 
 // SubmitScan records scan findings as DISCOVERED agents, each with a
 // discovery and an ADMISSION entry (F015); a finding submitted before is
-// only counted. The caller needs agent.manage somewhere in the org. At
+// only counted. The caller needs agent.manage somewhere in the org, or
+// agent.scan.submit for one device's scope (HR-589). At
 // most MaxOpenScanDiscoveries discoveries are open per (source, scope); past
 // that, findings are dropped and counted. Submitting grants nothing.
 func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []ScanFinding, mode ScanMode) (ScanResult, error) {
@@ -175,8 +198,8 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 	}
 	var res ScanResult
 	err := inOrg(ctx, inv.pool, func(ctx context.Context, c tenancy.Caller, q *dbq.Queries, tx db.TenantTx) error {
-		if !c.CanAnywhere(td.PermAgentManage) {
-			return td.ErrPermissionDenied(td.PermAgentManage)
+		if err := mode.permitted(c); err != nil {
+			return err
 		}
 		if err := q.LockDiscoveries(ctx, c.Org.String()); err != nil {
 			return err
