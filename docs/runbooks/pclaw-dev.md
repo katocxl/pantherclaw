@@ -7,6 +7,6 @@
 | Command | What it does |
 |---|---|
 | `pclaw dev up` | Starts the node and the simulators |
-| `pclaw dev down` | Stops them |
+| `pclaw dev down` | Stops them, only when the saved process id still matches the started process; otherwise it reports and leaves it |
 | `pclaw dev status` | Reports what is running |
 | `pclaw dev env` | Prints connection settings, never a secret value |

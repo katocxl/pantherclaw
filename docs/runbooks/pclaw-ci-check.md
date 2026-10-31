@@ -27,7 +27,7 @@ pclaw ci check --policy F [--base F] [--scenarios DIR] [--packages DIR] [--forma
 
 Validation, scenario results, rule changes by direction, and outcome samples. Samples state how many were taken: "N sampled; an empty sample proves nothing". A passing check shows that these checks passed on these inputs. It says nothing about routes or live behaviour.
 
-Markdown output escapes everything that comes from a policy file (backticks, `@`, links, HTML) and is capped at 60 KiB, so policy text cannot mention a person or render markup.
+Markdown output puts all policy-derived text in code spans and is capped at 60 KiB, so policy text cannot mention a person, link an issue or render markup.
 
 ## GitHub Action
 
@@ -42,8 +42,8 @@ Markdown output escapes everything that comes from a policy file (backticks, `@`
 | `pclaw-version` | The `pclaw` version to fetch |
 | `comment` | Post the report on the pull request |
 
-Run it on `pull_request` only, never `pull_request_target`. The comment is skipped on forks. A comment needs `GITHUB_TOKEN` with `pull-requests: write` and nothing more.
+Run it on `pull_request` only, never `pull_request_target`. The comment is skipped on forks. A comment needs `GITHUB_TOKEN` with `pull-requests: write` and nothing more. A usage error (exit 2) posts no comment and leaves the last report alone. A failed comment warns and never fails the check.
 
 ## GitLab component
 
-`integrations/gitlab/templates/pantherclaw-check.yml` is a CI component, Apache-2.0, that runs the same check. Its README lists the inputs.
+`integrations/gitlab/templates/pantherclaw-check.yml` is a CI component, Apache-2.0, that runs the same check. Its README lists the inputs. A `base-ref` that cannot be fetched exits 2; only a file absent at a fetched base counts as no base.

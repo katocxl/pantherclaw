@@ -25,7 +25,7 @@ The command never writes to a managed location, and `pclaw init` never edits man
 
 **A settings file changes no coverage state.** Coverage comes from tested routes, not from a file being present. Generating the files, deploying them or finding them raises nothing.
 
-`pclaw init` reports the managed state it can see as `not_found`, `present` or `conflict`, and says that registry, device-management and server-managed settings cannot be read from there. `not_found` therefore does not mean there are none.
+`pclaw init` reports the managed state it can see as `not_found`, `present` or `conflict`. `not_found` shows as "No readable managed settings found": registry, device-management, server-managed and other clients' settings cannot be read from there, so the machine may still be managed.
 
 Scans add a `managed_settings` attribute to existing findings, and the recommendation `managed_settings_missing` appears when settings are missing.
 
