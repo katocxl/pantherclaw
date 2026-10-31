@@ -65,6 +65,8 @@ func devRun(t *testing.T, args ...string) (int, string, string) {
 
 // TestD125_DevUpIsANodeWithItsSimulators: up runs nodeUp with --dev in its
 // own directory, starts every simulator once, and a second up keeps them.
+//
+// Covers: F859
 func TestD125_DevUpIsANodeWithItsSimulators(t *testing.T) {
 	f := installFakeDev(t)
 	dir := t.TempDir()

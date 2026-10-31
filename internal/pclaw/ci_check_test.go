@@ -46,6 +46,8 @@ func ciRun(t *testing.T, args ...string) (int, string, string) {
 
 // TestD121_CICheckExitCodes: 0 passed, 1 the check failed, 2 it could not
 // run, with no server and no sign-in.
+//
+// Covers: F854
 func TestD121_CICheckExitCodes(t *testing.T) {
 	base := ciFile(t, "500.00")
 	if code, out, stderr := ciRun(t, "--policy", base); code != 0 || !strings.Contains(out, "passed") {

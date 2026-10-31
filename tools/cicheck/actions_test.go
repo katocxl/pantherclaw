@@ -81,6 +81,8 @@ func runBlocks(action string) []string {
 // this repository ships: pull_request_target never appears, every step is
 // pinned by full commit SHA, and a checkout keeps no credentials
 // (G0 M23 D123).
+//
+// Covers: F857
 func TestHR130_ActionsAreHardened(t *testing.T) {
 	for name, a := range actions(t) {
 		if strings.Contains(code(a), "pull_request_target") {
@@ -191,6 +193,8 @@ var checksumMatch = regexp.MustCompile(`awk -v f="\$name" '([^']+)'`)
 // TestHR566_ChecksumsAreMatchedExactly: a release lists <archive>.sbom.json
 // too, so a substring match finds two lines and refuses every real release
 // (G0 M23 D126). The program in each file runs on such a checksums file.
+//
+// Covers: F857, F858
 func TestHR566_ChecksumsAreMatchedExactly(t *testing.T) {
 	awk, err := exec.LookPath("awk")
 	if err != nil {
@@ -224,6 +228,8 @@ func TestHR566_ChecksumsAreMatchedExactly(t *testing.T) {
 // fetched exits 2, since a check with nothing to compare would pass a
 // widening. Only a file absent at the fetched base counts as no base, and
 // git's own errors stay in the log (G0 M23 D127).
+//
+// Covers: F858
 func TestHR566_AnUnreadableBaseStopsTheCheck(t *testing.T) {
 	a := integrationScripts(t)[gitlabTemplate]
 	for _, want := range []string{

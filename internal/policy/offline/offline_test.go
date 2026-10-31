@@ -79,6 +79,8 @@ func check(t *testing.T, o offline.Options) *offline.Report {
 // TestD120_ABundleThroughTheGateFromFiles: the real validator, scenario
 // runner and mutation gate, with no server (D120), over built-in packages
 // and over a directory of them, with the fixture's fact typed by its value.
+//
+// Covers: F853
 func TestD120_ABundleThroughTheGateFromFiles(t *testing.T) {
 	policy := write(t, bundle("500.00"))
 	r := check(t, offline.Options{PolicyFile: policy})
@@ -232,6 +234,8 @@ func dirWith(t *testing.T, files map[string]string) string {
 
 // TestD121_AWideningFailsAndATighteningDoesNot: rule changes by direction,
 // the fail-on modes, and outcome samples that say what they cannot prove.
+//
+// Covers: F854, F855
 func TestD121_AWideningFailsAndATighteningDoesNot(t *testing.T) {
 	base := write(t, bundle("500.00"))
 
@@ -394,6 +398,8 @@ func outsideSpans(t *testing.T, line string) string {
 // TestHR565_ACheckReportCannotRenderMarkupOrMention: file text sits whole
 // in one code span, whatever backticks it holds, so nothing in it links or
 // renders (G0 M23 D122, D131).
+//
+// Covers: F856
 func TestHR565_ACheckReportCannotRenderMarkupOrMention(t *testing.T) {
 	for _, in := range []string{
 		hostile, "@octocat", "#123", "GH-123", "owner/repo#2", "deadbeefcafe0123", "`", "``", "a`b", "`a`", "```` x ` y ``", "` `", "a\nb", " ",
