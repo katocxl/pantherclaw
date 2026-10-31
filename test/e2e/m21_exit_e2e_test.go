@@ -217,6 +217,7 @@ func (m21Env) AgentGrantable(context.Context, ids.UUID) (bool, error)    { retur
 func (m21Env) Operation(context.Context, string) (autodomain.OperationInfo, error) {
 	return autodomain.OperationInfo{Known: true}, nil
 }
+/^func (m21Env) DestinationActive/i
 func (m21Env) EligibleApprovers(context.Context, autodomain.GateWith, ids.UUID, ids.UUID) (int, error) {
 	return 1, nil
 }
