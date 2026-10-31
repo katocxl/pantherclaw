@@ -63,6 +63,7 @@ const findHubAutomation = `-- name: FindHubAutomation :one
 SELECT a.id FROM pc.automations a
 JOIN pc.automation_versions v ON v.org_id = a.org_id AND v.automation_id = a.id
 WHERE a.org_id = $1 AND a.name = $2 AND v.digest = $3
+  AND a.state = 'DRAFT' AND v.state = 'DRAFT'
 LIMIT 1
 `
 

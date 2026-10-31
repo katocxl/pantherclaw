@@ -5,7 +5,8 @@
 // (G0 M23 D104). Every adapter calls the use case an API caller would, so its
 // permission and edition checks apply unchanged, and none activates, publishes
 // or enables anything (HR-561). FindDraft is what a reclaimed install uses to
-// recognize the draft a crash left behind (D130); it only reads.
+// recognize the draft a crash left behind (D130). It only reads, and runs the
+// same permission and edition check as creating that draft (D142).
 package drafts
 
 import (
@@ -14,6 +15,7 @@ import (
 	"crypto/sha256"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
@@ -21,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/hub/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
@@ -70,6 +73,9 @@ func canonical(raw []byte) ([]byte, error) {
 
 // FindDraft implements app.PolicyDrafts.
 func (p Policies) FindDraft(ctx context.Context, raw []byte) (string, bool, error) {
+	if err := p.CanCreate(ctx); err != nil {
+		return "", false, err
+	}
 	want, err := canonical(raw)
 	if err != nil {
 		return "", false, err
@@ -102,6 +108,9 @@ func (d Detections) CreateDraft(ctx context.Context, content string) (string, er
 
 // FindDraft implements app.DetectionDrafts.
 func (d Detections) FindDraft(ctx context.Context, content string) (string, bool, error) {
+	if err := d.Rules.CanCreateCustomRule(ctx); err != nil {
+		return "", false, err
+	}
 	sum := sha256.Sum256([]byte(content))
 	return find(ctx, d.Rules.Pool, func(ctx context.Context, q *dbq.Queries, org ids.OrgID) (ids.UUID, error) {
 		return q.FindHubCustomRule(ctx, org, sum[:])
@@ -129,11 +138,20 @@ func (a Automations) CreateDraft(ctx context.Context, b domain.AutomationBody) (
 		id = out.ID.String()
 		return err
 	})
+	if errors.Is(err, autoapp.ErrNameTaken) {
+		// A leftover of this name, retired or past draft, is not this item's
+		// draft: say which one stands in the way (D140).
+		return "", pcerr.Wrap(err, pcerr.CodeOf(err), pcerr.ReasonOf(err),
+			fmt.Sprintf("automation %q exists and is not a draft of this item", b.AutomationName))
+	}
 	return id, err
 }
 
 // FindDraft implements app.AutomationDrafts.
 func (a Automations) FindDraft(ctx context.Context, b domain.AutomationBody) (string, bool, error) {
+	if err := a.Svc.CanCreateDraft(ctx); err != nil {
+		return "", false, err
+	}
 	d, err := autodomain.Parse([]byte(b.Definition))
 	if err != nil {
 		// Not this method's refusal: CreateDraft gives the clear one.

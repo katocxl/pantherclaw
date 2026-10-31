@@ -128,6 +128,12 @@ func (v *Versions) caller(ctx context.Context, p tdomain.Permission) (tapp.Calle
 	return c, v.Authz.Require(c, p, tdomain.OrgPath(c.Org))
 }
 
+// CanCreate is the check creating a version runs on its caller.
+func (v *Versions) CanCreate(ctx context.Context) error {
+	_, err := v.caller(ctx, PermPolicyAuthor)
+	return err
+}
+
 // DecodeBundle strictly decodes a submitted bundle (unknown members and
 // duplicate keys are refused). The server assigns the version.
 func DecodeBundle(raw []byte) (*domain.Bundle, error) {

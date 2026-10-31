@@ -53,6 +53,7 @@ LIMIT 1;
 SELECT a.id FROM pc.automations a
 JOIN pc.automation_versions v ON v.org_id = a.org_id AND v.automation_id = a.id
 WHERE a.org_id = sqlc.arg(org_id) AND a.name = sqlc.arg(name) AND v.digest = sqlc.arg(digest)
+  AND a.state = 'DRAFT' AND v.state = 'DRAFT'
 LIMIT 1;
 
 -- name: ListHubPolicyDrafts :many
