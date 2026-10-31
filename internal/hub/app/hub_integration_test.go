@@ -49,6 +49,8 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
+// Covers: F842, F843, F844, F845
+
 type edition struct{ e billing.Edition }
 
 func (e edition) Current(context.Context) (billing.Entitlements, error) {
@@ -322,7 +324,7 @@ func TestHR561_InstallIsInert(t *testing.T) {
 		t.Fatalf("published after install: %v %v", pub, err)
 	}
 	// The template's rule joins the published one in the draft.
-	if n := w.count("SELECT count(*) FROM pc.policy_versions WHERE id = $1 AND bundle::text LIKE '%no-root%' AND bundle::text LIKE '%hub-no-rm%'", res.Install.ResultRef); n != 1 {
+	if n := w.count("SELECT count(*) FROM pc.policy_versions WHERE id = $1 AND convert_from(bundle, 'UTF8') LIKE '%no-root%' AND convert_from(bundle, 'UTF8') LIKE '%hub-no-rm%'", res.Install.ResultRef); n != 1 {
 		t.Fatalf("draft bundle: %d", n)
 	}
 

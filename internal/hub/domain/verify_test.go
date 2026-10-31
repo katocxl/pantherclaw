@@ -20,6 +20,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/rootkey"
 )
 
+// Covers: F840, F841, F845
+
 var now = time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
 
 func signer(t *testing.T, p rootkey.Purpose) *jws.Signer {
