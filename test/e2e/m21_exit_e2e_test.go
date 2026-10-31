@@ -15,7 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
@@ -26,6 +29,8 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/exposure/exposuretest"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	modelapp "github.com/katocxl/pantherclaw/internal/model/app"
 	"github.com/katocxl/pantherclaw/internal/model/ports"
@@ -47,16 +52,19 @@ import (
 )
 
 // TestE2E_M21_BranchingRecommendationsMetricsDrafts is M21's exit journey
-// (G0 M21 exit criteria). The server of the stack proves the new services are
-// mounted behind authentication. The recommendations, outcome metrics and
-// drafting legs run those services in the test on the stack's database, with
-// a fake model provider. The automation leg runs the engine in the test on a
-// database of its own, so the stack's workers do not advance its executions.
+// (G0 M21 exit criteria). The stack's server answers the new services, for an
+// anonymous caller and a signed-in admin on a Business plan, with drafting off.
+// The recommendations, outcome metrics and drafting legs run those services
+// in the test on the stack's database, with a fake model provider. The
+// automation leg runs the engine in the test on a database of its own, so the
+// stack's workers do not advance its executions.
 //
 // Covers: F181, F304, F343, F678, F774
 func TestE2E_M21_BranchingRecommendationsMetricsDrafts(t *testing.T) {
-	s := start(t, options{budget: "1000.00"})
-	t.Run("the new services are mounted behind authentication", s.m21Mounted)
+	p := inProcessIdP(t)
+	s := start(t, options{budget: "1000.00", billing: true, people: &p})
+	activePlan(t, s.pool, s.org)
+	t.Run("the new services answer through the server", func(t *testing.T) { s.m21Server(t, p) })
 	t.Run("a switch runs its path, v1 finishes unchanged, a cycle is refused", m21Automations)
 	o := exposuretest.NewIn(t, s.db, s.pool)
 	t.Run("a recommendation states its limits and stays in scope", func(t *testing.T) { m21Recommendation(t, o) })
@@ -64,9 +72,11 @@ func TestE2E_M21_BranchingRecommendationsMetricsDrafts(t *testing.T) {
 	t.Run("drafts stay drafts, and off means off", func(t *testing.T) { s.m21Drafts(t, o) })
 }
 
-// m21Mounted: each service answers its path and refuses an anonymous caller,
-// where an unmounted one would answer 404.
-func (s *stack) m21Mounted(t *testing.T) {
+// m21Server: each service answers its path and refuses an anonymous caller,
+// where an unmounted one would answer 404. Then a signed-in admin reads each
+// one, which proves its permission, edition and org wiring on a Business
+// plan, and a draft is refused with drafting off.
+func (s *stack) m21Server(t *testing.T, p idp) {
 	for _, path := range []string{
 		"/pantherclaw.v1.RecommendationService/ListRecommendations",
 		"/pantherclaw.v1.OutcomeService/GetOutcomeMetrics",
@@ -85,6 +95,75 @@ func (s *stack) m21Mounted(t *testing.T) {
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("%s: %d", path, resp.StatusCode)
 		}
+	}
+
+	org := s.org.String()
+	var out, errb bytes.Buffer
+	if code := runServerCmd(&out, &errb, "org", "admin-invite", "--config", s.serverCfg, "--org", org); code != 0 {
+		t.Fatalf("org admin-invite: %d %s", code, errb.String())
+	}
+	people := &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p}
+	admin := people.user(t, "m21-admin", "m21-admin@example.test")
+	admin.login(t, org, pciToken.FindStringSubmatch(out.String())[1])
+	id := s.row(t, "SELECT id::text FROM pc.users WHERE subject = 'm21-admin'")
+	for _, role := range []string{"security_admin", "auditor"} {
+		if code, o, e := admin.pclaw(t, "role", "bind", "--role", role, "--user", id); code != 0 {
+			t.Fatalf("role bind %s: %d %s %s", role, code, o, e)
+		}
+	}
+	// Bindings are read at sign-in: sign in again for a token that carries them.
+	admin.login(t, org, "")
+	rc := connect.NewClient(connecthttp.NewTransport(&http.Client{
+		Timeout: 30 * time.Second, Transport: keyBearer{bearerOf(t, admin)},
+	}, s.apiURL))
+	ctx := context.Background()
+
+	if _, err := pantherclawv1connect.NewRecommendationServiceClient(rc).ListRecommendations(ctx, &pantherclawv1.ListRecommendationsRequest{}); err != nil {
+		t.Errorf("recommendations: %v", err)
+	}
+
+	// A fresh stack has had no nightly rollup, so its windows read NO_SAMPLE:
+	// run tonight's, then the server must read an empty window as NOT_COLLECTED.
+	s.db.AdminExec(t, "INSERT INTO pc.outcome_collection (org_id, started_at) VALUES ($1, now() - interval '60 days')", s.org)
+	rollup := &outcomes.Rollup{Pool: s.pool, Ents: m21Edition(billing.Business), Failures: &failures.Sink{}}
+	if n, err := rollup.Run(ctx, s.org); err != nil || n == 0 {
+		t.Fatalf("rollup: %d, %v", n, err)
+	}
+	end := time.Now().UTC().Truncate(24 * time.Hour)
+	metrics, err := pantherclawv1connect.NewOutcomeServiceClient(rc).GetOutcomeMetrics(ctx, &pantherclawv1.GetOutcomeMetricsRequest{
+		WindowDays: 7, StartTime: timestamppb.New(end.AddDate(0, 0, -1)), EndTime: timestamppb.New(end),
+	})
+	if err != nil {
+		t.Fatalf("metrics: %v", err)
+	}
+	if len(metrics.GetSeries()) < len(outcomes.Definitions) {
+		t.Fatalf("%d series", len(metrics.GetSeries()))
+	}
+	for _, m := range metrics.GetSeries() {
+		if len(m.GetPoints()) == 0 {
+			t.Errorf("%s/%s has no point", m.GetMetric(), m.GetDimension())
+		}
+		for _, point := range m.GetPoints() {
+			if point.GetState() != pantherclawv1.OutcomePointState_OUTCOME_POINT_STATE_NOT_COLLECTED {
+				t.Errorf("%s/%s: %+v", m.GetMetric(), m.GetDimension(), point)
+			}
+		}
+	}
+
+	models := pantherclawv1connect.NewModelServiceClient(rc)
+	settings, err := models.GetModelSettings(ctx, &pantherclawv1.GetModelSettingsRequest{})
+	if err != nil {
+		t.Fatalf("model settings: %v", err)
+	}
+	if got := settings.GetSettings(); got.GetEnabled() || got.GetAvailable() || got.GetKeySet() {
+		t.Errorf("drafting is on: %+v", got)
+	}
+	_, err = models.DraftQuery(ctx, &pantherclawv1.DraftQueryRequest{Text: "denied actions this week", Timezone: "UTC"})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "MODEL_DRAFTING_UNAVAILABLE") {
+		t.Errorf("a draft with drafting off: %v", err)
+	}
+	if n := s.row(t, "SELECT count(*)::text FROM pc.model_calls"); n != "0" {
+		t.Errorf("%s calls with drafting off", n)
 	}
 }
 
