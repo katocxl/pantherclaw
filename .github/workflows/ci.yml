@@ -59,6 +59,8 @@ jobs:
               - 'proto/**'
               - 'migrations/**'
               - 'queries/**'
+              - 'hub/**'
+              - 'integrations/**'
             range:
               - 'internal/authority/**'
               - 'internal/gateway/**'
