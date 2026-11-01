@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"regexp"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -79,33 +80,37 @@ func (a extAuthorizer) Require(ctx context.Context, permission string) error {
 	return nil
 }
 
-// errBillingAudit refuses an audit record the extension may not write.
-var errBillingAudit = pcerr.New(pcerr.InvalidArgument, "INVALID_AUDIT", "billing audit records need a billing. kind and small, non-secret fields")
+// errExtensionAudit refuses an audit record the extension may not write.
+var errExtensionAudit = pcerr.New(pcerr.InvalidArgument, "INVALID_AUDIT",
+	"extension audit records need a billing., scim. or saml. kind and small, non-secret fields")
 
-// billingKind is the shape of an extension audit kind (D88): "billing."
-// then dotted lowercase segments, each starting with a letter.
-var billingKind = regexp.MustCompile(`^billing\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
+// extensionKind is the shape of an extension audit kind (D88, G0 M26 D405):
+// a prefix of extension.AuditKindPrefixes, then dotted lowercase segments,
+// each starting with a letter.
+var extensionKind = regexp.MustCompile(`^(billing|scim|saml)\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
 
-// maxBillingKind bounds an extension audit kind in bytes (D88).
-const maxBillingKind = 64
+// maxExtensionKind bounds an extension audit kind in bytes (D88).
+const maxExtensionKind = 64
 
-func validBillingKind(kind string) bool {
-	return len(kind) <= maxBillingKind && billingKind.MatchString(kind)
+func validExtensionKind(kind string) bool {
+	return len(kind) <= maxExtensionKind && extensionKind.MatchString(kind)
 }
 
 // extAudit is extension.AuditRecorder.
 type extAudit struct{ pool *db.Pool }
 
-// Record writes a billing outcome into org's evidence ledger: kinds start
-// with "billing." (validBillingKind), fields are checked like every audit detail (at most 16
-// lowercase keys, none naming a secret, bounded values). The actor is the
-// session principal when there is one, else the billing extension.
+// Record writes an extension's outcome into org's evidence ledger: kinds
+// start with a prefix of extension.AuditKindPrefixes (validExtensionKind),
+// fields are checked like every audit detail (at most 16 lowercase keys,
+// none naming a secret, bounded values). The actor is the session principal
+// when there is one, else the extension the kind names.
 func (a extAudit) Record(ctx context.Context, orgID, kind string, fields map[string]string) error {
 	org, err := ids.Parse[ids.Org](orgID)
-	if err != nil || org == ids.PlatformOrg || !validBillingKind(kind) {
-		return errBillingAudit
+	if err != nil || org == ids.PlatformOrg || !validExtensionKind(kind) {
+		return errExtensionAudit
 	}
-	actor := evdomain.Actor{Type: "system", ID: "billing-extension"}
+	name, _, _ := strings.Cut(kind, ".")
+	actor := evdomain.Actor{Type: "system", ID: name + "-extension"}
 	if p, ok := extension.PrincipalFrom(ctx); ok && p.OrgID == orgID && p.UserID != "" {
 		actor = evdomain.Actor{Type: string(td.KindUser), ID: p.UserID}
 	}
@@ -113,7 +118,7 @@ func (a extAudit) Record(ctx context.Context, orgID, kind string, fields map[str
 		fields = map[string]string{}
 	}
 	if err := audit.ValidateDetails(fields); err != nil {
-		return errBillingAudit
+		return errExtensionAudit
 	}
 	return a.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
@@ -121,7 +126,7 @@ func (a extAudit) Record(ctx context.Context, orgID, kind string, fields map[str
 			Object: &audit.Object{Type: "org", ID: org.String()}, Details: fields,
 		})
 		if err != nil {
-			return pcerr.Wrap(err, pcerr.InvalidArgument, "INVALID_AUDIT", "invalid billing audit record")
+			return pcerr.Wrap(err, pcerr.InvalidArgument, "INVALID_AUDIT", "invalid extension audit record")
 		}
 		return nil
 	})

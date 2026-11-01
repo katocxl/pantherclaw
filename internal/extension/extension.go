@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/provisioning/ports"
 )
 
 // Deployment names the kind of deployment the server runs as (config
@@ -107,8 +108,13 @@ type Deps struct {
 	// Authz checks the session principal's permissions; while it is nil
 	// every session route refuses. Mount only.
 	Authz Authorizer
-	// Audit records billing events in the org's audit ledger. Mount only.
+	// Audit records extension events in the org's audit ledger. Mount only.
 	Audit AuditRecorder
+	// Directory is the core's provisioning directory, for SCIM (G0 M26
+	// D405). Mount only.
+	Directory ports.Directory
+	// SignIn is the core's side of a SAML sign-in (G0 M26 D405). Mount only.
+	SignIn ports.SignIn
 }
 
 // Authorizer checks a permission for the principal of a session route's
@@ -119,17 +125,70 @@ type Authorizer interface {
 }
 
 // AuditRecorder records one event in an org's audit ledger. kind must
-// start with "billing."; fields are small and never hold secrets (the core
-// bounds and checks them).
+// start with one of AuditKindPrefixes; fields are small and never hold
+// secrets (the core bounds and checks them).
 type AuditRecorder interface {
 	Record(ctx context.Context, orgID, kind string, fields map[string]string) error
 }
 
-// AuditKindPrefix is the prefix every extension audit kind carries.
-const AuditKindPrefix = "billing."
+// AuditKindPrefixes are the prefixes an extension audit kind may carry
+// (G0 M26 D405). Each names its extension as the ledger's actor.
+var AuditKindPrefixes = []string{"billing.", "scim.", "saml."}
 
 // Present reports whether s adds anything to the core server.
 func (s Set) Present() bool { return s.Console != nil || s.Mount != nil || s.Validate != nil }
+
+// ErrTwoConsoles stops a build that composes two consoles.
+var ErrTwoConsoles = errors.New("extension: more than one console")
+
+// Compose returns one Set that adds what each of sets adds, in order (G0
+// M26 D405): every Validate runs, the first error stopping the server, and
+// the routes of every Mount are mounted together. Two sets with a console
+// fail at Validate, and two routes that collide fail at mounting: either
+// way the server does not start.
+func Compose(sets ...Set) Set {
+	var out Set
+	var mounts []func(Deps) ([]Route, error)
+	var checks []func(Deps) error
+	for _, s := range sets {
+		if s.Console != nil {
+			if out.Console != nil {
+				return Set{Validate: func(Deps) error { return ErrTwoConsoles }}
+			}
+			out.Console = s.Console
+		}
+		if s.Mount != nil {
+			mounts = append(mounts, s.Mount)
+		}
+		if s.Validate != nil {
+			checks = append(checks, s.Validate)
+		}
+	}
+	if len(mounts) > 0 {
+		out.Mount = func(d Deps) ([]Route, error) {
+			var routes []Route
+			for _, m := range mounts {
+				rs, err := m(d)
+				if err != nil {
+					return nil, err
+				}
+				routes = append(routes, rs...)
+			}
+			return routes, nil
+		}
+	}
+	if len(checks) > 0 {
+		out.Validate = func(d Deps) error {
+			for _, c := range checks {
+				if err := c(d); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+	return out
+}
 
 // BillingLinks binds billing-provider subscriptions to orgs, only through
 // checkouts the server created (a webhook's own org hint is never

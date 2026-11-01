@@ -2341,6 +2341,36 @@ type PcGrantRevision struct {
 	Flows           []byte
 }
 
+type PcGroup struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Issuer      string
+	DisplayName string
+	ExternalID  *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type PcGroupMember struct {
+	OrgID   ids.OrgID
+	GroupID ids.UUID
+	UserID  ids.UUID
+	AddedAt time.Time
+}
+
+type PcGroupRoleMapping struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	GroupID        ids.UUID
+	Role           string
+	ScopeType      string
+	BusinessUnitID *ids.UUID
+	TeamID         *ids.UUID
+	EnvironmentID  *ids.UUID
+	CreatedBy      string
+	CreatedAt      time.Time
+}
+
 type PcHoldSlot struct {
 	OrgID     ids.OrgID
 	ScopeKind string
@@ -3604,6 +3634,7 @@ type PcRoleBinding struct {
 	EnvironmentID    *ids.UUID
 	CreatedBy        string
 	CreatedAt        time.Time
+	Provisioned      bool
 }
 
 type PcRun struct {
@@ -3632,6 +3663,22 @@ type PcRun struct {
 	EndedAt               *time.Time
 	Simulated             bool
 	AutomationExecutionID *ids.UUID
+}
+
+type PcSamlConnection struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	IdpEntityID  string
+	Issuer       *string
+	SsoUrl       string
+	Certificates []string
+	State        string
+	CreatedBy    string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	ActivatedAt  *time.Time
+	DisabledAt   *time.Time
 }
 
 type PcSandboxSession struct {
@@ -3686,6 +3733,32 @@ type PcSchemaInfo struct {
 	ID        int16
 	Version   int64
 	AppliedAt time.Time
+}
+
+type PcScimToken struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Name             string
+	Issuer           string
+	SubjectAttribute string
+	SecretHash       []byte
+	Hint             string
+	State            string
+	CreatedBy        string
+	CreatedAt        time.Time
+	ExpiresAt        time.Time
+	RevokedAt        *time.Time
+	LastUsedAt       *time.Time
+}
+
+type PcScimUser struct {
+	OrgID          ids.OrgID
+	UserID         ids.UUID
+	ExternalID     *string
+	DisabledByScim bool
+	DeletedAt      *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type PcSecurityEventOutbox struct {

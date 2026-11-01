@@ -16,7 +16,7 @@ import (
 )
 
 const bindingsOfServiceAccount = `-- name: BindingsOfServiceAccount :many
-SELECT org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at FROM pc.role_bindings
+SELECT org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at, provisioned FROM pc.role_bindings
 WHERE org_id = $1 AND service_account_id = $2 ORDER BY id LIMIT 500
 `
 
@@ -41,6 +41,7 @@ func (q *Queries) BindingsOfServiceAccount(ctx context.Context, orgID ids.OrgID,
 			&i.EnvironmentID,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.Provisioned,
 		); err != nil {
 			return nil, err
 		}
@@ -53,7 +54,7 @@ func (q *Queries) BindingsOfServiceAccount(ctx context.Context, orgID ids.OrgID,
 }
 
 const bindingsOfUser = `-- name: BindingsOfUser :many
-SELECT org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2 ORDER BY id LIMIT 500
+SELECT org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at, provisioned FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2 ORDER BY id LIMIT 500
 `
 
 func (q *Queries) BindingsOfUser(ctx context.Context, orgID ids.OrgID, userID *ids.UUID) ([]PcRoleBinding, error) {
@@ -77,6 +78,7 @@ func (q *Queries) BindingsOfUser(ctx context.Context, orgID ids.OrgID, userID *i
 			&i.EnvironmentID,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.Provisioned,
 		); err != nil {
 			return nil, err
 		}
@@ -116,7 +118,7 @@ func (q *Queries) DeleteRoleBinding(ctx context.Context, orgID ids.OrgID, iD ids
 }
 
 const getRoleBinding = `-- name: GetRoleBinding :one
-SELECT org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at FROM pc.role_bindings WHERE org_id = $1 AND id = $2
+SELECT org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at, provisioned FROM pc.role_bindings WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetRoleBinding(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcRoleBinding, error) {
@@ -134,6 +136,7 @@ func (q *Queries) GetRoleBinding(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.EnvironmentID,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.Provisioned,
 	)
 	return i, err
 }
@@ -245,7 +248,7 @@ INSERT INTO pc.role_bindings (org_id, id, role, user_id, service_account_id, sco
                               environment_id, created_by)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10)
-RETURNING org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at
+RETURNING org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at, provisioned
 `
 
 type InsertRoleBindingParams struct {
@@ -287,6 +290,7 @@ func (q *Queries) InsertRoleBinding(ctx context.Context, arg InsertRoleBindingPa
 		&i.EnvironmentID,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.Provisioned,
 	)
 	return i, err
 }
@@ -380,7 +384,7 @@ func (q *Queries) ListInvitations(ctx context.Context, arg ListInvitationsParams
 }
 
 const listRoleBindings = `-- name: ListRoleBindings :many
-SELECT org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at FROM pc.role_bindings
+SELECT org_id, id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, created_by, created_at, provisioned FROM pc.role_bindings
 WHERE org_id = $1 AND id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
   AND ($3::uuid IS NULL OR user_id = $3)
   AND ($4::uuid IS NULL OR service_account_id = $4)
@@ -423,6 +427,7 @@ func (q *Queries) ListRoleBindings(ctx context.Context, arg ListRoleBindingsPara
 			&i.EnvironmentID,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.Provisioned,
 		); err != nil {
 			return nil, err
 		}
