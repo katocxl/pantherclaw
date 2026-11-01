@@ -158,7 +158,7 @@ const listRedteamRuns = `-- name: ListRedteamRuns :many
 SELECT org_id, id, range_agent_id, started_by, runner_version, scenario_set_digest, scenarios, policy_versions, package_versions, baseline_range_id, state, started_at, finished_at, origin FROM pc.redteam_runs
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR range_agent_id = $2)
-  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR id < $3)
+  AND (coalesce($3::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000' OR id < $3)
 ORDER BY id DESC
 LIMIT $4
 `
@@ -373,6 +373,40 @@ func (q *Queries) RangeTransaction(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.ReceiptJws,
 	)
 	return i, err
+}
+
+const redteamResultCounts = `-- name: RedteamResultCounts :many
+SELECT range_id, verdict, count(*)::int AS results FROM pc.redteam_results
+WHERE org_id = $1 AND range_id = ANY ($2::uuid[])
+GROUP BY range_id, verdict
+`
+
+type RedteamResultCountsRow struct {
+	RangeID ids.UUID
+	Verdict string
+	Results int32
+}
+
+// RedteamResultCounts counts the stored results of ranges by verdict
+// (G0 M22 D58). A range with no stored result has no row.
+func (q *Queries) RedteamResultCounts(ctx context.Context, orgID ids.OrgID, rangeIds []ids.UUID) ([]RedteamResultCountsRow, error) {
+	rows, err := q.db.Query(ctx, redteamResultCounts, orgID, rangeIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RedteamResultCountsRow{}
+	for rows.Next() {
+		var i RedteamResultCountsRow
+		if err := rows.Scan(&i.RangeID, &i.Verdict, &i.Results); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const redteamResults = `-- name: RedteamResults :many

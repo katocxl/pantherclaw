@@ -15,6 +15,50 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const agentScanStates = `-- name: AgentScanStates :many
+SELECT agent_id::uuid AS agent_id, min(missed_scans)::int AS missed_scans, max(last_seen_at)::timestamptz AS last_seen_at,
+       bool_and(vanish_notified_at IS NOT NULL)::boolean AS vanished
+FROM pc.discoveries
+WHERE org_id = $1 AND agent_id = ANY ($2::uuid[])
+  AND source IN ('scan', 'github_scan', 'ci_scan') AND state <> 'DISMISSED'
+GROUP BY agent_id
+`
+
+type AgentScanStatesRow struct {
+	AgentID     ids.UUID
+	MissedScans int32
+	LastSeenAt  time.Time
+	Vanished    bool
+}
+
+// AgentScanStates sums up each agent's scan findings that were not dismissed
+// (G0 M22 D6): seen by any source is not missed, and an agent vanished only
+// when every finding did.
+func (q *Queries) AgentScanStates(ctx context.Context, orgID ids.OrgID, agentIds []ids.UUID) ([]AgentScanStatesRow, error) {
+	rows, err := q.db.Query(ctx, agentScanStates, orgID, agentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentScanStatesRow{}
+	for rows.Next() {
+		var i AgentScanStatesRow
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.MissedScans,
+			&i.LastSeenAt,
+			&i.Vanished,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const agentSummaryCounts = `-- name: AgentSummaryCounts :one
 SELECT
     (SELECT count(*) FROM pc.agent_instances i

@@ -59,6 +59,9 @@ func registerM18IdPs(rs *connect.Server, d apiDeps) {
 		svc.Register(d.m11protect.gate)
 	}
 	pantherclawv1connect.RegisterIdentityProviderServiceHandler(rs, idpsrpc.New(svc))
+	if d.web != nil {
+		d.web.WithIdentityProviderSecrets(svc)
+	}
 }
 
 // idpsWarnShadowed warns at start-up about every org's ACTIVE provider a

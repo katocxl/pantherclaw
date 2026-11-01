@@ -64,6 +64,8 @@ type Project struct {
 	Stopped []string `json:"stopped_environments,omitzero"`
 	// CIConfig is the file .gitlab-ci.yml at every commit, "" for none.
 	CIConfig string `json:"ci_config,omitzero"`
+	// CIConfigAt overrides CIConfig at the refs it names.
+	CIConfigAt map[string]string `json:"ci_config_at,omitzero"`
 	// CIConfigPath is the project's custom CI configuration path, "" for
 	// none, and AutoDevOps its Auto DevOps setting.
 	CIConfigPath string `json:"ci_config_path,omitzero"`

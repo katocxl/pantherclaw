@@ -35,6 +35,7 @@ function say(text) {
 }
 
 const messages = {
+  plan_required: "This organization's plan does not allow this. Choose a plan in Settings, Plan and billing.",
   not_found: "This policy change does not exist, or you cannot see it.",
   not_permitted: "You cannot confirm or decline it: that needs policy.publish (the Policy Publisher role).",
   human_session: "Sign in again in this browser.",

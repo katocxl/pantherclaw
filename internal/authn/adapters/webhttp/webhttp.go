@@ -105,6 +105,12 @@ type Handler struct {
 	// not mounted.
 	integrations       Integrations
 	exportDestinations ExportDestinations
+	// credentialRotations serves the rotation page (G0 M22 D5); nil without it.
+	credentialRotations CredentialRotations
+	// exportSecrets and providerSecrets serve the secret pages (G0 M22 D57); nil
+	// without them.
+	exportSecrets   ExportSecrets
+	providerSecrets IdentityProviderSecrets
 	// modelDrafting is the model drafting settings page (G0 M21 D309); nil
 	// when not mounted.
 	modelDrafting ModelDrafting
@@ -134,6 +140,9 @@ type Handler struct {
 	// served.
 	support    SupportAccess
 	breakGlass BreakGlass
+	// planGate is the plan gate of the pages (G0 M22 D77, HR-356); nil when
+	// no plan is required.
+	planGate PlanGate
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -170,6 +179,8 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountPolicyChanges(mux)
 	h.mountIntegrations(mux)
 	h.mountExportDestinations(mux)
+	h.mountCredentialRotations(mux)
+	h.mountSecretPages(mux)
 	h.mountModelDrafting(mux)
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)
@@ -210,6 +221,9 @@ func (h *Handler) withSession(mux *http.ServeMux, method, path string, f session
 			} else {
 				h.toLogin(w, r)
 			}
+			return
+		}
+		if csrf && !h.planAllows(w, r, s, path) {
 			return
 		}
 		f(w, r, s)
@@ -504,6 +518,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"approvals.js": "text/javascript; charset=utf-8", "reconciliations.js": "text/javascript; charset=utf-8",
 		"policy_changes.js": "text/javascript; charset=utf-8", "changes.js": "text/javascript; charset=utf-8", "integrations.js": "text/javascript; charset=utf-8", "playbook.js": "text/javascript; charset=utf-8",
 		"automation_endpoints.js": "text/javascript; charset=utf-8",
+		"secret_forms.js":         "text/javascript; charset=utf-8",
 		"model_drafting.js":       "text/javascript; charset=utf-8",
 		"promotions.js":           "text/javascript; charset=utf-8",
 		"pc.css":                  "text/css; charset=utf-8",

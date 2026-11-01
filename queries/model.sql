@@ -60,3 +60,23 @@ VALUES (sqlc.arg(org_id), sqlc.arg(version_id), sqlc.arg(call_id), sqlc.arg(kind
 
 -- name: GetModelDraft :one
 SELECT * FROM pc.model_drafts WHERE org_id = sqlc.arg(org_id) AND version_id = sqlc.arg(version_id);
+
+-- ListModelDrafts lists stored drafts of the given kinds, newest first (G0
+-- M22 D8). Version ids are v7 and each is drafted once, so the id is the page
+-- cursor.
+-- name: ListModelDrafts :many
+SELECT * FROM pc.model_drafts
+WHERE org_id = sqlc.arg(org_id) AND kind = ANY (sqlc.arg(kinds)::text[])
+  AND (sqlc.narg(after)::uuid IS NULL OR version_id < sqlc.narg(after)::uuid)
+ORDER BY version_id DESC
+LIMIT sqlc.arg(page_limit);
+
+-- ModelUsage sums the org's calls since a time by task and outcome: counts
+-- and tokens only (G0 M22 D8). pc.model_calls holds no text.
+-- name: ModelUsage :many
+SELECT task, outcome, count(*)::bigint AS calls, COALESCE(sum(input_tokens), 0)::bigint AS input_tokens,
+       COALESCE(sum(output_tokens), 0)::bigint AS output_tokens, COALESCE(sum(reserved_tokens), 0)::bigint AS reserved_tokens
+FROM pc.model_calls
+WHERE org_id = sqlc.arg(org_id) AND created_at >= sqlc.arg(since)
+GROUP BY task, outcome
+ORDER BY task, outcome;

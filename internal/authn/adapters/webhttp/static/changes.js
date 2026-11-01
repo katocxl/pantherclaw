@@ -35,6 +35,7 @@ function say(text) {
 }
 
 const messages = {
+  plan_required: "This organization's plan does not allow this. Choose a plan in Settings, Plan and billing.",
   not_found: "This change request does not exist, or you cannot see it.",
   not_permitted: "You cannot confirm or decline it: that needs every permission the change uses where it acts.",
   not_eligible: "You cannot confirm it: it needs permissions you do not hold where it acts.",

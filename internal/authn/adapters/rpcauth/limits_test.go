@@ -215,8 +215,10 @@ func TestT170_AFloodingCredentialIsContained(t *testing.T) {
 func TestHR375_SafetyCallsSkipTheOrgLimit(t *testing.T) {
 	who := pantherclawv1connect.AccessServiceWhoAmIProcedure
 	contain := pantherclawv1connect.AccessServiceListRolesProcedure // stands in for a safety procedure
+	// A stopped clock: the counts below must fall in one window.
+	stopped := clock.NewFake(time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC))
 	limits := rpcauth.APILimits{
-		PerOrg: 4, PerCredential: 2, Limiter: ratelimit.NewMemory(nil),
+		PerOrg: 4, PerCredential: 2, Limiter: ratelimit.NewMemory(stopped),
 		OrgExempt: func(p string) bool { return p == contain },
 	}
 	perms := map[string]td.Permission{who: td.PermAuthenticated, contain: td.PermAuthenticated}

@@ -53,3 +53,16 @@ func Check(ctx context.Context, tx db.TenantTx, c tenancy.Caller, su StepUp, now
 
 // Is reports whether err is a step-up refusal.
 func Is(err error) bool { return errors.Is(err, ErrStepUp) }
+
+// Verify is Check in a transaction of its own, by the database clock, for a
+// use case that has no step-up of its own: the server pages take a secret
+// after it (G0 M22 D57).
+func Verify(ctx context.Context, pool *db.Pool, c tenancy.Caller, su StepUp) error {
+	return pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		now, err := dbq.New(tx).DBNow(ctx)
+		if err != nil {
+			return err
+		}
+		return Check(ctx, tx, c, su, now)
+	}, db.ReadOnly())
+}

@@ -36,6 +36,7 @@ function say(text) {
 }
 
 const messages = {
+  plan_required: "This organization's plan does not allow this. Choose a plan in Settings, Plan and billing.",
   not_found: "This request does not exist, or you cannot see it.",
   not_eligible: "You cannot decide this request (you may have responded already, or a cooldown applies).",
   not_waiting: "The request is no longer waiting. Reload the page.",

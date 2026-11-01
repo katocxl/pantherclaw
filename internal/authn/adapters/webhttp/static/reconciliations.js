@@ -36,6 +36,7 @@ function say(text) {
 }
 
 const messages = {
+  plan_required: "This organization's plan does not allow this. Choose a plan in Settings, Plan and billing.",
   not_found: "This reconciliation does not exist, or you cannot see it.",
   not_permitted: "You cannot release it: that needs transaction.reconcile where the agent lives.",
   not_independent: "You cannot release it: the run's launcher, the person it acted for and the agent's owners never release their own run's outcome.",

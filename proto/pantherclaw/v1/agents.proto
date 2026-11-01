@@ -206,13 +206,27 @@ message Agent {
   // its runs are simulated and it may use only simulated connections.
   bool range_agent = 16;
   // Risk tier a person stated (G0 M24 D230). It grants nothing.
-  AgentRiskTier risk_tier = 17;
+  AgentRiskTier risk_tier = 18;
   // Data classes a person stated, from public, internal, pii and secret.
-  repeated string data_classes = 18;
+  repeated string data_classes = 19;
   // EU AI Act role a person stated.
-  AgentAiActRole ai_act_role = 19;
+  AgentAiActRole ai_act_role = 20;
   // EU AI Act risk class a person stated.
-  AgentAiActRisk ai_act_risk = 20;
+  AgentAiActRisk ai_act_risk = 21;
+  // What continuous discovery saw of it (G0 M22 D6); unset for an agent no
+  // scan found.
+  AgentScanState scan_state = 17;
+}
+
+// AgentScanState sums up the scan findings of one agent that were not
+// dismissed, across scan sources.
+message AgentScanState {
+  // Complete scans in a row that did not see it: the fewest of any finding.
+  int32 missed_scans = 1;
+  // When a scan last saw it.
+  google.protobuf.Timestamp last_seen_time = 2;
+  // Every finding reached the vanish threshold and people were told.
+  bool vanished = 3;
 }
 
 // Discovery is what a gateway or scan observed about a discovered agent.

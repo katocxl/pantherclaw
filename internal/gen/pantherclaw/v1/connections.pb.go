@@ -324,6 +324,8 @@ const (
 	SealedCredentialState_SEALED_CREDENTIAL_STATE_ACTIVE      SealedCredentialState = 1
 	SealedCredentialState_SEALED_CREDENTIAL_STATE_SUPERSEDED  SealedCredentialState = 2
 	SealedCredentialState_SEALED_CREDENTIAL_STATE_REVOKED     SealedCredentialState = 3
+	// A rotation's new key, which no gateway configuration serves (HR-517).
+	SealedCredentialState_SEALED_CREDENTIAL_STATE_CANDIDATE SealedCredentialState = 4
 )
 
 // Enum value maps for SealedCredentialState.
@@ -333,12 +335,14 @@ var (
 		1: "SEALED_CREDENTIAL_STATE_ACTIVE",
 		2: "SEALED_CREDENTIAL_STATE_SUPERSEDED",
 		3: "SEALED_CREDENTIAL_STATE_REVOKED",
+		4: "SEALED_CREDENTIAL_STATE_CANDIDATE",
 	}
 	SealedCredentialState_value = map[string]int32{
 		"SEALED_CREDENTIAL_STATE_UNSPECIFIED": 0,
 		"SEALED_CREDENTIAL_STATE_ACTIVE":      1,
 		"SEALED_CREDENTIAL_STATE_SUPERSEDED":  2,
 		"SEALED_CREDENTIAL_STATE_REVOKED":     3,
+		"SEALED_CREDENTIAL_STATE_CANDIDATE":   4,
 	}
 )
 
@@ -5834,12 +5838,13 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x10DestinationClass\x12!\n" +
 	"\x1dDESTINATION_CLASS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18DESTINATION_CLASS_PUBLIC\x10\x01\x12\x1e\n" +
-	"\x1aDESTINATION_CLASS_INTERNAL\x10\x02*\xb1\x01\n" +
+	"\x1aDESTINATION_CLASS_INTERNAL\x10\x02*\xd8\x01\n" +
 	"\x15SealedCredentialState\x12'\n" +
 	"#SEALED_CREDENTIAL_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eSEALED_CREDENTIAL_STATE_ACTIVE\x10\x01\x12&\n" +
 	"\"SEALED_CREDENTIAL_STATE_SUPERSEDED\x10\x02\x12#\n" +
-	"\x1fSEALED_CREDENTIAL_STATE_REVOKED\x10\x03*\x93\x01\n" +
+	"\x1fSEALED_CREDENTIAL_STATE_REVOKED\x10\x03\x12%\n" +
+	"!SEALED_CREDENTIAL_STATE_CANDIDATE\x10\x04*\x93\x01\n" +
 	"\x0fCapabilityLevel\x12 \n" +
 	"\x1cCAPABILITY_LEVEL_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCAPABILITY_LEVEL_SUPPORTED\x10\x01\x12\x1c\n" +

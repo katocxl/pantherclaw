@@ -1195,6 +1195,377 @@ func (*SetTicketFieldOwnerResponse) Descriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_ticketsync_proto_rawDescGZIP(), []int{22}
 }
 
+// ListTicketRefsRequest names one case or one incident.
+type ListTicketRefsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The case or the incident.
+	//
+	// Types that are valid to be assigned to Subject:
+	//
+	//	*ListTicketRefsRequest_CaseId
+	//	*ListTicketRefsRequest_IncidentId
+	Subject       isListTicketRefsRequest_Subject `protobuf_oneof:"subject"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTicketRefsRequest) Reset() {
+	*x = ListTicketRefsRequest{}
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTicketRefsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTicketRefsRequest) ProtoMessage() {}
+
+func (x *ListTicketRefsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTicketRefsRequest.ProtoReflect.Descriptor instead.
+func (*ListTicketRefsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_ticketsync_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListTicketRefsRequest) GetSubject() isListTicketRefsRequest_Subject {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
+func (x *ListTicketRefsRequest) GetCaseId() string {
+	if x != nil {
+		if x, ok := x.Subject.(*ListTicketRefsRequest_CaseId); ok {
+			return x.CaseId
+		}
+	}
+	return ""
+}
+
+func (x *ListTicketRefsRequest) GetIncidentId() string {
+	if x != nil {
+		if x, ok := x.Subject.(*ListTicketRefsRequest_IncidentId); ok {
+			return x.IncidentId
+		}
+	}
+	return ""
+}
+
+type isListTicketRefsRequest_Subject interface {
+	isListTicketRefsRequest_Subject()
+}
+
+type ListTicketRefsRequest_CaseId struct {
+	// Case id.
+	CaseId string `protobuf:"bytes,1,opt,name=case_id,json=caseId,proto3,oneof"`
+}
+
+type ListTicketRefsRequest_IncidentId struct {
+	// Incident id.
+	IncidentId string `protobuf:"bytes,2,opt,name=incident_id,json=incidentId,proto3,oneof"`
+}
+
+func (*ListTicketRefsRequest_CaseId) isListTicketRefsRequest_Subject() {}
+
+func (*ListTicketRefsRequest_IncidentId) isListTicketRefsRequest_Subject() {}
+
+// ListTicketRefsResponse is the linked tickets.
+type ListTicketRefsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The links.
+	Refs          []*TicketRef `protobuf:"bytes,1,rep,name=refs,proto3" json:"refs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTicketRefsResponse) Reset() {
+	*x = ListTicketRefsResponse{}
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTicketRefsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTicketRefsResponse) ProtoMessage() {}
+
+func (x *ListTicketRefsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTicketRefsResponse.ProtoReflect.Descriptor instead.
+func (*ListTicketRefsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_ticketsync_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListTicketRefsResponse) GetRefs() []*TicketRef {
+	if x != nil {
+		return x.Refs
+	}
+	return nil
+}
+
+// ListTicketSyncEventsRequest is one page of a configuration's log.
+type ListTicketSyncEventsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Configuration id.
+	ConfigId string `protobuf:"bytes,1,opt,name=config_id,json=configId,proto3" json:"config_id,omitempty"`
+	// Page size.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Page token.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTicketSyncEventsRequest) Reset() {
+	*x = ListTicketSyncEventsRequest{}
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTicketSyncEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTicketSyncEventsRequest) ProtoMessage() {}
+
+func (x *ListTicketSyncEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTicketSyncEventsRequest.ProtoReflect.Descriptor instead.
+func (*ListTicketSyncEventsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_ticketsync_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListTicketSyncEventsRequest) GetConfigId() string {
+	if x != nil {
+		return x.ConfigId
+	}
+	return ""
+}
+
+func (x *ListTicketSyncEventsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListTicketSyncEventsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// TicketSyncEvent is one entry of the sync log.
+type TicketSyncEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Event id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// INBOUND or OUTBOUND.
+	Direction string `protobuf:"bytes,2,opt,name=direction,proto3" json:"direction,omitempty"`
+	// When it was received or queued.
+	OccurTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=occur_time,json=occurTime,proto3" json:"occur_time,omitempty"`
+	// Inbound: APPLIED, IGNORED, NOTED, STALE or UNLINKED. Outbound: PENDING,
+	// DONE or FAILED.
+	Status string `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	// Inbound: the ticket key, when the delivery named one.
+	IssueKey string `protobuf:"bytes,5,opt,name=issue_key,json=issueKey,proto3" json:"issue_key,omitempty"`
+	// Outbound: CREATE or COMMENT.
+	Action string `protobuf:"bytes,6,opt,name=action,proto3" json:"action,omitempty"`
+	// Outbound: the case, if any.
+	CaseId string `protobuf:"bytes,7,opt,name=case_id,json=caseId,proto3" json:"case_id,omitempty"`
+	// Outbound: the incident, if any.
+	IncidentId string `protobuf:"bytes,8,opt,name=incident_id,json=incidentId,proto3" json:"incident_id,omitempty"`
+	// Outbound: the result code, once finished.
+	ResultCode    string `protobuf:"bytes,9,opt,name=result_code,json=resultCode,proto3" json:"result_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TicketSyncEvent) Reset() {
+	*x = TicketSyncEvent{}
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TicketSyncEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TicketSyncEvent) ProtoMessage() {}
+
+func (x *TicketSyncEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TicketSyncEvent.ProtoReflect.Descriptor instead.
+func (*TicketSyncEvent) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_ticketsync_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *TicketSyncEvent) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *TicketSyncEvent) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+func (x *TicketSyncEvent) GetOccurTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.OccurTime
+	}
+	return nil
+}
+
+func (x *TicketSyncEvent) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *TicketSyncEvent) GetIssueKey() string {
+	if x != nil {
+		return x.IssueKey
+	}
+	return ""
+}
+
+func (x *TicketSyncEvent) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *TicketSyncEvent) GetCaseId() string {
+	if x != nil {
+		return x.CaseId
+	}
+	return ""
+}
+
+func (x *TicketSyncEvent) GetIncidentId() string {
+	if x != nil {
+		return x.IncidentId
+	}
+	return ""
+}
+
+func (x *TicketSyncEvent) GetResultCode() string {
+	if x != nil {
+		return x.ResultCode
+	}
+	return ""
+}
+
+// ListTicketSyncEventsResponse is a page of the log.
+type ListTicketSyncEventsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The events.
+	Events []*TicketSyncEvent `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	// The next page, if any.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTicketSyncEventsResponse) Reset() {
+	*x = ListTicketSyncEventsResponse{}
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTicketSyncEventsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTicketSyncEventsResponse) ProtoMessage() {}
+
+func (x *ListTicketSyncEventsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_ticketsync_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTicketSyncEventsResponse.ProtoReflect.Descriptor instead.
+func (*ListTicketSyncEventsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_ticketsync_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ListTicketSyncEventsResponse) GetEvents() []*TicketSyncEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *ListTicketSyncEventsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_ticketsync_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_ticketsync_proto_rawDesc = "" +
@@ -1272,7 +1643,37 @@ const file_pantherclaw_v1_ticketsync_proto_rawDesc = "" +
 	"\x1aSetTicketFieldOwnerRequest\x12l\n" +
 	"\x05field\x18\x01 \x01(\tBV\xbaHSrQR\x05stateR\bseverityR\vcontainmentR\vrestorationR\bassigneeR\x06labelsR\bpriorityR\bcommentsR\x05field\x120\n" +
 	"\x05owner\x18\x02 \x01(\tB\x1a\xbaH\x17r\x15R\vPANTHERCLAWR\x06TICKETR\x05owner\"\x1d\n" +
-	"\x1bSetTicketFieldOwnerResponse2\xf4\b\n" +
+	"\x1bSetTicketFieldOwnerResponse\"{\n" +
+	"\x15ListTicketRefsRequest\x12#\n" +
+	"\acase_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x06caseId\x12+\n" +
+	"\vincident_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\n" +
+	"incidentIdB\x10\n" +
+	"\asubject\x12\x05\xbaH\x02\b\x01\"G\n" +
+	"\x16ListTicketRefsResponse\x12-\n" +
+	"\x04refs\x18\x01 \x03(\v2\x19.pantherclaw.v1.TicketRefR\x04refs\"\x96\x01\n" +
+	"\x1bListTicketSyncEventsRequest\x12%\n" +
+	"\tconfig_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bconfigId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"\xa2\x02\n" +
+	"\x0fTicketSyncEvent\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
+	"\tdirection\x18\x02 \x01(\tR\tdirection\x129\n" +
+	"\n" +
+	"occur_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\toccurTime\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x12\x1b\n" +
+	"\tissue_key\x18\x05 \x01(\tR\bissueKey\x12\x16\n" +
+	"\x06action\x18\x06 \x01(\tR\x06action\x12\x17\n" +
+	"\acase_id\x18\a \x01(\tR\x06caseId\x12\x1f\n" +
+	"\vincident_id\x18\b \x01(\tR\n" +
+	"incidentId\x12\x1f\n" +
+	"\vresult_code\x18\t \x01(\tR\n" +
+	"resultCode\"\x7f\n" +
+	"\x1cListTicketSyncEventsResponse\x127\n" +
+	"\x06events\x18\x01 \x03(\v2\x1f.pantherclaw.v1.TicketSyncEventR\x06events\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xd2\n" +
+	"\n" +
 	"\x11TicketSyncService\x12w\n" +
 	"\x16CreateTicketSyncConfig\x12-.pantherclaw.v1.CreateTicketSyncConfigRequest\x1a..pantherclaw.v1.CreateTicketSyncConfigResponse\x12y\n" +
 	"\x15ListTicketSyncConfigs\x12,.pantherclaw.v1.ListTicketSyncConfigsRequest\x1a-.pantherclaw.v1.ListTicketSyncConfigsResponse\"\x03\x90\x02\x01\x12w\n" +
@@ -1283,7 +1684,9 @@ const file_pantherclaw_v1_ticketsync_proto_rawDesc = "" +
 	"\x0eOpenCaseTicket\x12%.pantherclaw.v1.OpenCaseTicketRequest\x1a&.pantherclaw.v1.OpenCaseTicketResponse\x12k\n" +
 	"\x12OpenIncidentTicket\x12).pantherclaw.v1.OpenIncidentTicketRequest\x1a*.pantherclaw.v1.OpenIncidentTicketResponse\x12v\n" +
 	"\x14GetTicketFieldOwners\x12+.pantherclaw.v1.GetTicketFieldOwnersRequest\x1a,.pantherclaw.v1.GetTicketFieldOwnersResponse\"\x03\x90\x02\x01\x12n\n" +
-	"\x13SetTicketFieldOwner\x12*.pantherclaw.v1.SetTicketFieldOwnerRequest\x1a+.pantherclaw.v1.SetTicketFieldOwnerResponseB\xc8\x01\n" +
+	"\x13SetTicketFieldOwner\x12*.pantherclaw.v1.SetTicketFieldOwnerRequest\x1a+.pantherclaw.v1.SetTicketFieldOwnerResponse\x12d\n" +
+	"\x0eListTicketRefs\x12%.pantherclaw.v1.ListTicketRefsRequest\x1a&.pantherclaw.v1.ListTicketRefsResponse\"\x03\x90\x02\x01\x12v\n" +
+	"\x14ListTicketSyncEvents\x12+.pantherclaw.v1.ListTicketSyncEventsRequest\x1a,.pantherclaw.v1.ListTicketSyncEventsResponse\"\x03\x90\x02\x01B\xc8\x01\n" +
 	"\x12com.pantherclaw.v1B\x0fTicketsyncProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1298,7 +1701,7 @@ func file_pantherclaw_v1_ticketsync_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_ticketsync_proto_rawDescData
 }
 
-var file_pantherclaw_v1_ticketsync_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_pantherclaw_v1_ticketsync_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_pantherclaw_v1_ticketsync_proto_goTypes = []any{
 	(*TicketSyncConfig)(nil),               // 0: pantherclaw.v1.TicketSyncConfig
 	(*CreateTicketSyncConfigRequest)(nil),  // 1: pantherclaw.v1.CreateTicketSyncConfigRequest
@@ -1323,40 +1726,52 @@ var file_pantherclaw_v1_ticketsync_proto_goTypes = []any{
 	(*GetTicketFieldOwnersResponse)(nil),   // 20: pantherclaw.v1.GetTicketFieldOwnersResponse
 	(*SetTicketFieldOwnerRequest)(nil),     // 21: pantherclaw.v1.SetTicketFieldOwnerRequest
 	(*SetTicketFieldOwnerResponse)(nil),    // 22: pantherclaw.v1.SetTicketFieldOwnerResponse
-	(*timestamppb.Timestamp)(nil),          // 23: google.protobuf.Timestamp
+	(*ListTicketRefsRequest)(nil),          // 23: pantherclaw.v1.ListTicketRefsRequest
+	(*ListTicketRefsResponse)(nil),         // 24: pantherclaw.v1.ListTicketRefsResponse
+	(*ListTicketSyncEventsRequest)(nil),    // 25: pantherclaw.v1.ListTicketSyncEventsRequest
+	(*TicketSyncEvent)(nil),                // 26: pantherclaw.v1.TicketSyncEvent
+	(*ListTicketSyncEventsResponse)(nil),   // 27: pantherclaw.v1.ListTicketSyncEventsResponse
+	(*timestamppb.Timestamp)(nil),          // 28: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_ticketsync_proto_depIdxs = []int32{
-	23, // 0: pantherclaw.v1.TicketSyncConfig.create_time:type_name -> google.protobuf.Timestamp
+	28, // 0: pantherclaw.v1.TicketSyncConfig.create_time:type_name -> google.protobuf.Timestamp
 	0,  // 1: pantherclaw.v1.CreateTicketSyncConfigResponse.config:type_name -> pantherclaw.v1.TicketSyncConfig
 	0,  // 2: pantherclaw.v1.ListTicketSyncConfigsResponse.configs:type_name -> pantherclaw.v1.TicketSyncConfig
 	9,  // 3: pantherclaw.v1.LinkCaseTicketResponse.ref:type_name -> pantherclaw.v1.TicketRef
 	9,  // 4: pantherclaw.v1.LinkIncidentTicketResponse.ref:type_name -> pantherclaw.v1.TicketRef
 	18, // 5: pantherclaw.v1.GetTicketFieldOwnersResponse.owners:type_name -> pantherclaw.v1.TicketFieldOwner
-	1,  // 6: pantherclaw.v1.TicketSyncService.CreateTicketSyncConfig:input_type -> pantherclaw.v1.CreateTicketSyncConfigRequest
-	3,  // 7: pantherclaw.v1.TicketSyncService.ListTicketSyncConfigs:input_type -> pantherclaw.v1.ListTicketSyncConfigsRequest
-	5,  // 8: pantherclaw.v1.TicketSyncService.RotateTicketSyncSecret:input_type -> pantherclaw.v1.RotateTicketSyncSecretRequest
-	7,  // 9: pantherclaw.v1.TicketSyncService.SetTicketSyncPaused:input_type -> pantherclaw.v1.SetTicketSyncPausedRequest
-	10, // 10: pantherclaw.v1.TicketSyncService.LinkCaseTicket:input_type -> pantherclaw.v1.LinkCaseTicketRequest
-	12, // 11: pantherclaw.v1.TicketSyncService.LinkIncidentTicket:input_type -> pantherclaw.v1.LinkIncidentTicketRequest
-	14, // 12: pantherclaw.v1.TicketSyncService.OpenCaseTicket:input_type -> pantherclaw.v1.OpenCaseTicketRequest
-	16, // 13: pantherclaw.v1.TicketSyncService.OpenIncidentTicket:input_type -> pantherclaw.v1.OpenIncidentTicketRequest
-	19, // 14: pantherclaw.v1.TicketSyncService.GetTicketFieldOwners:input_type -> pantherclaw.v1.GetTicketFieldOwnersRequest
-	21, // 15: pantherclaw.v1.TicketSyncService.SetTicketFieldOwner:input_type -> pantherclaw.v1.SetTicketFieldOwnerRequest
-	2,  // 16: pantherclaw.v1.TicketSyncService.CreateTicketSyncConfig:output_type -> pantherclaw.v1.CreateTicketSyncConfigResponse
-	4,  // 17: pantherclaw.v1.TicketSyncService.ListTicketSyncConfigs:output_type -> pantherclaw.v1.ListTicketSyncConfigsResponse
-	6,  // 18: pantherclaw.v1.TicketSyncService.RotateTicketSyncSecret:output_type -> pantherclaw.v1.RotateTicketSyncSecretResponse
-	8,  // 19: pantherclaw.v1.TicketSyncService.SetTicketSyncPaused:output_type -> pantherclaw.v1.SetTicketSyncPausedResponse
-	11, // 20: pantherclaw.v1.TicketSyncService.LinkCaseTicket:output_type -> pantherclaw.v1.LinkCaseTicketResponse
-	13, // 21: pantherclaw.v1.TicketSyncService.LinkIncidentTicket:output_type -> pantherclaw.v1.LinkIncidentTicketResponse
-	15, // 22: pantherclaw.v1.TicketSyncService.OpenCaseTicket:output_type -> pantherclaw.v1.OpenCaseTicketResponse
-	17, // 23: pantherclaw.v1.TicketSyncService.OpenIncidentTicket:output_type -> pantherclaw.v1.OpenIncidentTicketResponse
-	20, // 24: pantherclaw.v1.TicketSyncService.GetTicketFieldOwners:output_type -> pantherclaw.v1.GetTicketFieldOwnersResponse
-	22, // 25: pantherclaw.v1.TicketSyncService.SetTicketFieldOwner:output_type -> pantherclaw.v1.SetTicketFieldOwnerResponse
-	16, // [16:26] is the sub-list for method output_type
-	6,  // [6:16] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	9,  // 6: pantherclaw.v1.ListTicketRefsResponse.refs:type_name -> pantherclaw.v1.TicketRef
+	28, // 7: pantherclaw.v1.TicketSyncEvent.occur_time:type_name -> google.protobuf.Timestamp
+	26, // 8: pantherclaw.v1.ListTicketSyncEventsResponse.events:type_name -> pantherclaw.v1.TicketSyncEvent
+	1,  // 9: pantherclaw.v1.TicketSyncService.CreateTicketSyncConfig:input_type -> pantherclaw.v1.CreateTicketSyncConfigRequest
+	3,  // 10: pantherclaw.v1.TicketSyncService.ListTicketSyncConfigs:input_type -> pantherclaw.v1.ListTicketSyncConfigsRequest
+	5,  // 11: pantherclaw.v1.TicketSyncService.RotateTicketSyncSecret:input_type -> pantherclaw.v1.RotateTicketSyncSecretRequest
+	7,  // 12: pantherclaw.v1.TicketSyncService.SetTicketSyncPaused:input_type -> pantherclaw.v1.SetTicketSyncPausedRequest
+	10, // 13: pantherclaw.v1.TicketSyncService.LinkCaseTicket:input_type -> pantherclaw.v1.LinkCaseTicketRequest
+	12, // 14: pantherclaw.v1.TicketSyncService.LinkIncidentTicket:input_type -> pantherclaw.v1.LinkIncidentTicketRequest
+	14, // 15: pantherclaw.v1.TicketSyncService.OpenCaseTicket:input_type -> pantherclaw.v1.OpenCaseTicketRequest
+	16, // 16: pantherclaw.v1.TicketSyncService.OpenIncidentTicket:input_type -> pantherclaw.v1.OpenIncidentTicketRequest
+	19, // 17: pantherclaw.v1.TicketSyncService.GetTicketFieldOwners:input_type -> pantherclaw.v1.GetTicketFieldOwnersRequest
+	21, // 18: pantherclaw.v1.TicketSyncService.SetTicketFieldOwner:input_type -> pantherclaw.v1.SetTicketFieldOwnerRequest
+	23, // 19: pantherclaw.v1.TicketSyncService.ListTicketRefs:input_type -> pantherclaw.v1.ListTicketRefsRequest
+	25, // 20: pantherclaw.v1.TicketSyncService.ListTicketSyncEvents:input_type -> pantherclaw.v1.ListTicketSyncEventsRequest
+	2,  // 21: pantherclaw.v1.TicketSyncService.CreateTicketSyncConfig:output_type -> pantherclaw.v1.CreateTicketSyncConfigResponse
+	4,  // 22: pantherclaw.v1.TicketSyncService.ListTicketSyncConfigs:output_type -> pantherclaw.v1.ListTicketSyncConfigsResponse
+	6,  // 23: pantherclaw.v1.TicketSyncService.RotateTicketSyncSecret:output_type -> pantherclaw.v1.RotateTicketSyncSecretResponse
+	8,  // 24: pantherclaw.v1.TicketSyncService.SetTicketSyncPaused:output_type -> pantherclaw.v1.SetTicketSyncPausedResponse
+	11, // 25: pantherclaw.v1.TicketSyncService.LinkCaseTicket:output_type -> pantherclaw.v1.LinkCaseTicketResponse
+	13, // 26: pantherclaw.v1.TicketSyncService.LinkIncidentTicket:output_type -> pantherclaw.v1.LinkIncidentTicketResponse
+	15, // 27: pantherclaw.v1.TicketSyncService.OpenCaseTicket:output_type -> pantherclaw.v1.OpenCaseTicketResponse
+	17, // 28: pantherclaw.v1.TicketSyncService.OpenIncidentTicket:output_type -> pantherclaw.v1.OpenIncidentTicketResponse
+	20, // 29: pantherclaw.v1.TicketSyncService.GetTicketFieldOwners:output_type -> pantherclaw.v1.GetTicketFieldOwnersResponse
+	22, // 30: pantherclaw.v1.TicketSyncService.SetTicketFieldOwner:output_type -> pantherclaw.v1.SetTicketFieldOwnerResponse
+	24, // 31: pantherclaw.v1.TicketSyncService.ListTicketRefs:output_type -> pantherclaw.v1.ListTicketRefsResponse
+	27, // 32: pantherclaw.v1.TicketSyncService.ListTicketSyncEvents:output_type -> pantherclaw.v1.ListTicketSyncEventsResponse
+	21, // [21:33] is the sub-list for method output_type
+	9,  // [9:21] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_ticketsync_proto_init() }
@@ -1364,13 +1779,17 @@ func file_pantherclaw_v1_ticketsync_proto_init() {
 	if File_pantherclaw_v1_ticketsync_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_ticketsync_proto_msgTypes[23].OneofWrappers = []any{
+		(*ListTicketRefsRequest_CaseId)(nil),
+		(*ListTicketRefsRequest_IncidentId)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_ticketsync_proto_rawDesc), len(file_pantherclaw_v1_ticketsync_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

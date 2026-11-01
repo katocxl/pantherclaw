@@ -200,6 +200,8 @@ enum SealedCredentialState {
   SEALED_CREDENTIAL_STATE_ACTIVE = 1;
   SEALED_CREDENTIAL_STATE_SUPERSEDED = 2;
   SEALED_CREDENTIAL_STATE_REVOKED = 3;
+  // A rotation's new key, which no gateway configuration serves (HR-517).
+  SEALED_CREDENTIAL_STATE_CANDIDATE = 4;
 }
 
 // Connection is one connection.

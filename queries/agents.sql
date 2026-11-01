@@ -164,6 +164,17 @@ WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id)::uuid AND kind
 SELECT * FROM pc.discoveries WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id)
 ORDER BY first_seen_at LIMIT 1;
 
+-- AgentScanStates sums up each agent's scan findings that were not dismissed
+-- (G0 M22 D6): seen by any source is not missed, and an agent vanished only
+-- when every finding did.
+-- name: AgentScanStates :many
+SELECT agent_id::uuid AS agent_id, min(missed_scans)::int AS missed_scans, max(last_seen_at)::timestamptz AS last_seen_at,
+       bool_and(vanish_notified_at IS NOT NULL)::boolean AS vanished
+FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND agent_id = ANY (sqlc.arg(agent_ids)::uuid[])
+  AND source IN ('scan', 'github_scan', 'ci_scan') AND state <> 'DISMISSED'
+GROUP BY agent_id;
+
 -- name: MoveDiscovery :exec
 UPDATE pc.discoveries SET agent_id = sqlc.arg(to_agent_id), state = 'CLAIMED'
 WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(from_agent_id) AND state = 'OPEN';
