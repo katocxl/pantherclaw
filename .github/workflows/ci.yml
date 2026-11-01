@@ -59,6 +59,8 @@ jobs:
               - 'proto/**'
               - 'migrations/**'
               - 'queries/**'
+              - 'hub/**'
+              - 'integrations/**'
             range:
               - 'internal/authority/**'
               - 'internal/gateway/**'
@@ -83,6 +85,7 @@ jobs:
               - 'test/e2e/**'
             workflows:
               - '.github/**'
+              - '**/action.yml'
             python:
               - 'sdk/python/**'
               - 'sdk/conformance/**'
