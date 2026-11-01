@@ -15,7 +15,7 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 **Edition** (the lowest edition that includes the row; each higher edition includes everything below it)
 
 - `Community`: the public, BSL 1.1-licensed core. Free production use for ≤ 5 governed agents in 1 organisation, with no hosted, embedded or competing offering.
-- `Team`, `Business`, `Enterprise`: unlocked by Ed25519-signed licence keys. Enterprise-only code lives in the private `pantherclaw-enterprise` repository.
+- `Team`, `Business`, `Enterprise`: unlocked by Ed25519-signed licence keys. Enterprise-only code lives in a clean package in a private repository. Its tables and ports stay in public core.
 - The PAP/1 spec, verifier libraries, SDKs and the Claude Code integration are Apache-2.0 whatever the edition.
 
 **Milestone**
@@ -801,8 +801,30 @@ Posture is ranked findings with fixes and no single measure (F797). Clean means 
 
 ### M25 rows: Prove it to the auditor
 
+Reports show evidence and gaps and are not a certification or statement of compliance (F527, F801). Campaigns measure whether the boundary held, not whether a model behaved ([G0 M25](g0/M25.md)).
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
+| F890 | OWASP and NIST coverage | Framework tables map OWASP ASI and NIST AI RMF controls to the evidence kinds that can show them. | Next | Team | M25 | new |
+| F891 | ISO, EU and SOC 2 coverage | The same tables for ISO 42001, the EU AI Act deployer view and SOC 2. | Next | Business | M25 | new |
+| F892 | Control states | Each control is EVIDENCED, PARTIAL, GAP or STATED, with no score and never "compliant". AI Act fields are STATED, never evidence. Simulated evidence is split and labelled. | Next | Team | M25 | F527, F630, F801 |
+| F893 | Framework coverage API | `ComplianceService` lists frameworks and returns controls with state, evidence references and gap reasons for a time range. Reading needs `compliance.read`. | Next | Team | M25 | new |
+| F894 | Compliance report pack | A signed pack of its own scope `compliance`, with its own Kind and fixed statement, re-derived offline by `pclaw verify`. Export needs `evidence.export` and stays ClassSafety. | Next | Team | M25 | F527 |
+| F895 | Report header | States the range, the simulated split and a fixed statement: this shows evidence and gaps and is not a certification or statement of compliance. | Next | Team | M25 | F801 |
+| F896 | Stored reports | A `pc.compliance_reports` row keeps the digest and parameters, so a report re-exports after the pack's 7 days. | Next | Team | M25 | new |
+| F897 | Own-records evidence | Evidence comes only from receipts, approvals, grants, coverage, range and campaign results. What the creator can't read is a gap. | Next | Team | M25 | F801 |
+| F898 | ASI tags on scenarios | Range scenarios carry ASI tags. ASI05 and ASI06 read as gaps unless a real source maps them. | Next | Team | M25 | F801 |
+| F899 | Framework view | A console view of controls, states, evidence and gaps per framework, with no score, in the edition of its data. | Next | Team | M25 | F797 |
+| F900 | `pclaw redteam campaign run` | Runs a campaign against a range twin of the customer's agent in the sandbox and starts the relay. A remote gateway is refused. | Next | Business | M25 | new |
+| F901 | Model key relay | A local relay outside the agent's container forwards to one model host over HTTPS and adds the key. The key never reaches the container, the logs or the server. | Next | Business | M25 | new |
+| F902 | Campaign API | `StartCampaign`, `FinishCampaign`, `GetCampaign` and `ListCampaigns`, with `redteam.run` and `redteam.read`. | Next | Business | M25 | new |
+| F903 | Campaign records | `pc.campaigns` and `pc.campaign_steps` under origin CAMPAIGN, with their own statement, never in an assurance pack. | Next | Business | M25 | new |
+| F904 | Range twin | A campaign needs a range twin. The report names the image digest and says it tested a twin, not production. | Next | Business | M25 | F630 |
+| F905 | Boundary outcomes | HELD, DENIED, NOT_ROUTED_REPORTED, ALLOWED or NOT_EXERCISED, derived by the server from its own transactions. An edge route report stays labelled reported, never proven. | Next | Business | M25 | F801 |
+| F906 | Not exercised is a gap | A step that never ran is a gap, not a pass. Repeat runs make no regression claim. | Next | Business | M25 | F797, F801 |
+| F907 | Attack scenarios | RT-140–149 in `redteam/campaigns/`: poisoned tool result, injected issue, injected README, fake approver, credential bait with canaries. Each names the boundary it expects. | Next | Business | M25 | new |
+| F908 | Scripted runs labelled | CI and the exit use a scripted stand-in agent and a local TLS fake provider, and the product says the run was scripted. | Next | Business | M25 | F801 |
+| F909 | Campaign read port | A read port gives compliance reports the campaign results. | Next | Business | M25 | new |
 
 ### M26 rows: Enterprise identity
 

@@ -103,7 +103,7 @@ Rules for the AI implementer:
 - No breaking changes without a new package version (`v2`).
 
 ### 3.3 Database rules
-- Migrations: `migrations/NNNN_name.sql` (goose, up + down), reviewed by squawk; never edit a merged migration.
+- Migrations: `migrations/NNNNN_name.sql` (goose, up + down), reviewed by squawk; never edit a merged migration.
 - Every tenant table: `org_id uuid NOT NULL`, composite PK `(org_id, id)`, composite FKs, RLS ENABLE + FORCE, policy using `(SELECT NULLIF(current_setting('app.org_id', true), '')::uuid)`.
 - Immutable revision tables for anything versioned; append-only evidence (UPDATE/DELETE revoked).
 - Queries live in `queries/*.sql` (sqlc); repositories take `OrgID` explicitly and run inside `db.InTenantTx(ctx, orgID, fn)`.
@@ -464,7 +464,7 @@ docs/                    this guide and companions
 | `search` | Structured + FTS search, saved queries (permission-safe) | `Query` | M10 |
 | `automations` | Definitions, schedules, triggers, executor | `Automation`, `Schedule` | M11 |
 | `notifications` / `exports` | Channels (log, SMTP, Slack, webhook), OCSF export, Standard Webhooks | `Notification`, `Delivery` | M5/M10 |
-| `discovery` | Shadow agent discovery (gateway-observed, `pclaw scan`, GitHub org scan) | `Discovery` | M3/M8 |
+| `agents` | Shadow agent discovery (gateway-observed, `pclaw scan`, GitHub org scan), in `internal/agents`; there is no `internal/discovery` | `Discovery` | M3/M8 |
 | `billing` | Editions, licence verification, entitlements, metering | `Licence`, `Entitlement` | M1/M13 |
 | `redteam` | Scenario engine, assurance reports | `Scenario`, `Report` | M12 |
 
@@ -792,6 +792,11 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Migrations `00270`–`00273` (`00274`–`00279` spare).
 
 ### M25 — Prove it to the auditor
+**HR:** HR-600..612 · **F:** F890–F909 · **ADR:** 0047 · **G0:** [g0/M25.md](g0/M25.md).
+- **Frameworks and reports** ([ADR-0047](adr/0047-compliance-reports-and-real-agent-campaigns.md), founder decision H4): OWASP ASI and NIST AI RMF on Team; ISO 42001, the EU AI Act deployer view and SOC 2 on Business. Control states with no score, and never "compliant". A report is its own pack scope, made only from PantherClaw's own records, and what its creator can't read is a gap.
+- **Campaigns** (Business, founder decision H6): attacks on a range twin of the customer's agent, with the customer's key in a local relay beside the sandbox. The server derives boundary outcomes, not exercised is a gap, and campaigns never enter an assurance pack. CI uses a scripted stand-in.
+- **Console** (private stream): the framework view.
+- Migrations `00280`–`00282` (`00283`–`00289` spare); new permission `compliance.read`.
 
 ### M26 — Enterprise identity
 
