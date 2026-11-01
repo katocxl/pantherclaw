@@ -796,6 +796,14 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 ### M26 — Enterprise identity
 
 ### M27 — Agent Detection & Response
+**HR:** HR-640..644, HR-647..658 · **F:** F930–F949 · **ADR:** 0049, 0050 · **G0:** [g0/M27.md](g0/M27.md).
+- **Behaviour profiles** (Business, [ADR-0049](adr/0049-behaviour-profiles-on-own-transactions.md), V6): on PantherClaw's own transactions, labelled inference, coded on simulated history with thresholds shown as UNVALIDATED. "Never done X" sits outside the approval binding, and a contain step on an INFERRED alert is refused.
+- **Content signals** (Business, [ADR-0050](adr/0050-content-signals-boundary-amendment.md), V5, a written amendment to F789): opt-in and restrict-only, Watching first, with no safety claim. Findings keep kind and location, never value. It says "no known flags", never "clean".
+- **Playbooks** (library Team, custom Business): six in `hub/`, a draft on install, range tested, contain steps only on CONFIRMED alerts.
+- **SIEM packs** (Business): six in `integrations/siem/`, Apache-2.0, on OCSF export, with no store certification.
+- **MCP server** (Team, founder decision H9): `pclaw mcp self`, read-only, with a closed allow-list, an `investigator` role and server-side audit. The assistant is parked.
+- **Console** (private stream): the baseline view.
+- Migrations `00300`–`00303` (`00304`–`00309` spare).
 
 ---
 
