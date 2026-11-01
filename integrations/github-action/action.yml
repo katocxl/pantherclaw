@@ -71,6 +71,7 @@ runs:
         persist-credentials: false
 
     - name: Install pclaw, verified against the release checksums
+      id: install
       shell: bash
       env:
         VERSION: ${{ inputs.pclaw-version }}
@@ -106,16 +107,17 @@ runs:
         fi
         if [ "$ext" = zip ]; then
           unzip -q -o "$name" pclaw.exe
-          echo "PCLAW=$dir/pclaw.exe" >> "$GITHUB_ENV"
+          echo "pclaw=$dir/pclaw.exe" >> "$GITHUB_OUTPUT"
         else
           tar -xzf "$name" pclaw
-          echo "PCLAW=$dir/pclaw" >> "$GITHUB_ENV"
+          echo "pclaw=$dir/pclaw" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Check the policy
       id: check
       shell: bash
       env:
+        PCLAW: ${{ steps.install.outputs.pclaw }}
         POLICY: ${{ inputs.policy }}
         SCENARIOS: ${{ inputs.scenarios }}
         PACKAGES: ${{ inputs.packages }}
