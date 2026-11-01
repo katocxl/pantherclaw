@@ -15,6 +15,9 @@ import (
 	"github.com/katocxl/pantherclaw/internal/scan"
 )
 
+// dirLink makes link point at the directory target.
+func dirLink(link, target string) error { return os.Symlink(target, link) }
+
 // TestD254_AFIFODoesNotHangTheScan: a FIFO in a home is refused at once, with
 // nobody at its other end.
 // Covers: F883

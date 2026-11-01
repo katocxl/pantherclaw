@@ -165,7 +165,11 @@ func skillFindings(o Options, dir string) []Finding {
 		if !e.IsDir() || !o.allowed(file) {
 			continue
 		}
-		if info, err := os.Stat(file); err != nil || !info.Mode().IsRegular() {
+		stat := os.Stat
+		if o.Contained {
+			stat = os.Lstat // The same no-link rule as o.reader (D287).
+		}
+		if info, err := stat(file); err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		out = append(out, Finding{Kind: KindSkill, Key: key(KindSkill, o.Host, path), Attributes: map[string]string{
@@ -190,7 +194,9 @@ func (o Options) allowed(path string) bool {
 	for _, part := range strings.Split(rel, string(filepath.Separator)) {
 		at = filepath.Join(at, part)
 		info, err := os.Lstat(at)
-		if err != nil || info.Mode()&os.ModeSymlink != 0 {
+		// A Windows junction is ModeIrregular, and no privilege is needed to
+		// make one.
+		if err != nil || info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
 			return false
 		}
 	}

@@ -161,11 +161,13 @@ func clientConfigs(o Options) []clientConfig {
 		// %APPDATA% on Windows, $XDG_CONFIG_HOME on Linux.
 		add("devin_desktop", filepath.Join(o.ConfigDir, "devin", "mcp_config.json"), "mcpServers")
 		add("zed", filepath.Join(o.ConfigDir, "zed", "settings.json"), "context_servers")
-		jetBrains := filepath.Join(o.ConfigDir, "JetBrains")
-		for _, p := range jetBrainsConfigs(jetBrains) {
-			add("jetbrains_ai", p, "mcpServers")
+		// A contained scan lists no directory it may not read (D287).
+		if jetBrains := filepath.Join(o.ConfigDir, "JetBrains"); o.allowed(jetBrains) {
+			for _, p := range jetBrainsConfigs(jetBrains) {
+				add("jetbrains_ai", p, "mcpServers")
+			}
+			jbGlobal, jbProject = jetBrainsMCPJSONPaths(jetBrains, o.reader())
 		}
-		jbGlobal, jbProject = jetBrainsMCPJSONPaths(jetBrains)
 	}
 	if o.Home != "" {
 		add("claude_desktop", filepath.Join(o.Home, "Library", "Application Support", "Claude", "claude_desktop_config.json"), "mcpServers")
@@ -265,12 +267,18 @@ func readContained(path string) []byte {
 	return readOpen(f)
 }
 
-// reader is how the scan reads a configuration file.
+// reader is how the scan reads a configuration file. A contained read stays
+// inside the home, with no link in any part of the path (G0 M24 D287).
 func (o Options) reader() func(string) []byte {
-	if o.Contained {
-		return readContained
+	if !o.Contained {
+		return readFile
 	}
-	return readFile
+	return func(path string) []byte {
+		if !o.allowed(path) {
+			return nil
+		}
+		return readContained(path)
+	}
 }
 
 func readOpen(f *os.File) []byte {
