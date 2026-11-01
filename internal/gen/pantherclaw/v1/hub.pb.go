@@ -153,11 +153,14 @@ type HubInstall struct {
 	// result_kind and result_ref name what the install made: policy_version,
 	// custom_rule, automation or package_version, and its id. Empty until the
 	// install ends.
-	ResultKind    string                 `protobuf:"bytes,7,opt,name=result_kind,json=resultKind,proto3" json:"result_kind,omitempty"`
-	ResultRef     string                 `protobuf:"bytes,8,opt,name=result_ref,json=resultRef,proto3" json:"result_ref,omitempty"`
-	InstalledBy   string                 `protobuf:"bytes,9,opt,name=installed_by,json=installedBy,proto3" json:"installed_by,omitempty"`
-	InstalledAt   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=installed_at,json=installedAt,proto3" json:"installed_at,omitempty"`
-	Status        HubInstallStatus       `protobuf:"varint,11,opt,name=status,proto3,enum=pantherclaw.v1.HubInstallStatus" json:"status,omitempty"`
+	ResultKind  string                 `protobuf:"bytes,7,opt,name=result_kind,json=resultKind,proto3" json:"result_kind,omitempty"`
+	ResultRef   string                 `protobuf:"bytes,8,opt,name=result_ref,json=resultRef,proto3" json:"result_ref,omitempty"`
+	InstalledBy string                 `protobuf:"bytes,9,opt,name=installed_by,json=installedBy,proto3" json:"installed_by,omitempty"`
+	InstalledAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=installed_at,json=installedAt,proto3" json:"installed_at,omitempty"`
+	Status      HubInstallStatus       `protobuf:"varint,11,opt,name=status,proto3,enum=pantherclaw.v1.HubInstallStatus" json:"status,omitempty"`
+	// failure_reason says why a FAILED install failed: its error's reason and
+	// client-facing message, at most 500 characters. Empty otherwise.
+	FailureReason string `protobuf:"bytes,12,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -267,6 +270,13 @@ func (x *HubInstall) GetStatus() HubInstallStatus {
 		return x.Status
 	}
 	return HubInstallStatus_HUB_INSTALL_STATUS_UNSPECIFIED
+}
+
+func (x *HubInstall) GetFailureReason() string {
+	if x != nil {
+		return x.FailureReason
+	}
+	return ""
 }
 
 type InstallHubItemRequest struct {
@@ -619,7 +629,7 @@ var File_pantherclaw_v1_hub_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_hub_proto_rawDesc = "" +
 	"\n" +
-	"\x18pantherclaw/v1/hub.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x03\n" +
+	"\x18pantherclaw/v1/hub.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc4\x03\n" +
 	"\n" +
 	"HubInstall\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -636,7 +646,8 @@ const file_pantherclaw_v1_hub_proto_rawDesc = "" +
 	"\finstalled_by\x18\t \x01(\tR\vinstalledBy\x12=\n" +
 	"\finstalled_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\vinstalledAt\x128\n" +
-	"\x06status\x18\v \x01(\x0e2 .pantherclaw.v1.HubInstallStatusR\x06status\"\x92\x02\n" +
+	"\x06status\x18\v \x01(\x0e2 .pantherclaw.v1.HubInstallStatusR\x06status\x12%\n" +
+	"\x0efailure_reason\x18\f \x01(\tR\rfailureReason\"\x92\x02\n" +
 	"\x15InstallHubItemRequest\x12(\n" +
 	"\tindex_jws\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x01\x18\x80\x80'R\bindexJws\x12\x1f\n" +
 	"\x04item\x18\x02 \x01(\fB\v\xbaH\bz\x06\x10\x01\x18\x80\x80\x18R\x04item\x12s\n" +

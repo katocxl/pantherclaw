@@ -68,6 +68,8 @@ type Install struct {
 	// Claim names the worker holding a PENDING install; only it can finish
 	// the install (D130).
 	Claim ids.UUID
+	// FailureReason says why a FAILED install failed (D149).
+	FailureReason string
 	// Reclaimed: Begin took over a FAILED or abandoned install, so its draft
 	// may exist already. Set by Begin only.
 	Reclaimed bool
@@ -89,6 +91,22 @@ type Finish struct {
 	ResultRef  string
 	// Replaced are the ids the draft changes; their count is audited.
 	Replaced []string
+	// Reason says why a FAILED install failed: it stays on the row and in the
+	// audit details (D149).
+	Reason string
+}
+
+// maxFailureReason is failure_reason's limit, in characters.
+const maxFailureReason = 500
+
+// failureReason is what a failed install keeps of its error: only what the
+// caller may see, on one line and bounded.
+func failureReason(err error) string {
+	msg := pcerr.PublicMessage(err)
+	if r := pcerr.ReasonOf(err); r != "" {
+		msg = r + ": " + msg
+	}
+	return td.SanitizeClaim(msg, maxFailureReason)
 }
 
 // State is the highest index an org accepted.
@@ -230,7 +248,7 @@ func (s *Service) Install(ctx context.Context, in Input) (Installed, error) {
 	// Recording the end outlives a caller that went away.
 	end := context.WithoutCancel(ctx)
 	if runErr != nil {
-		if _, err := s.Store.Finish(end, c.Org, c, Finish{ID: rec.ID, Claim: rec.Claim, Status: StatusFailed}); err != nil {
+		if _, err := s.Store.Finish(end, c.Org, c, Finish{ID: rec.ID, Claim: rec.Claim, Status: StatusFailed, Reason: failureReason(runErr)}); err != nil {
 			return Installed{}, errors.Join(runErr, fmt.Errorf("hub: recording the failed install: %w", err))
 		}
 		return Installed{}, runErr

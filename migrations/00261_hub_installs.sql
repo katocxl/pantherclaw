@@ -23,9 +23,12 @@ CREATE TABLE pc.hub_installs (
     installed_at  timestamptz NOT NULL DEFAULT now(),
     status        text        NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'INSTALLED', 'FAILED')),
     claim         uuid        NOT NULL,
+    -- Why a FAILED install failed, safe to show: its client-facing error.
+    failure_reason text       NOT NULL DEFAULT '' CHECK (char_length(failure_reason) <= 500),
     PRIMARY KEY (org_id, id),
     UNIQUE (org_id, name, version),
-    CHECK ((status = 'INSTALLED') = (result_kind <> ''))
+    CHECK ((status = 'INSTALLED') = (result_kind <> '')),
+    CHECK (status = 'FAILED' OR failure_reason = '')
 );
 CREATE INDEX hub_installs_newest ON pc.hub_installs (org_id, id DESC);
 
@@ -38,7 +41,7 @@ CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.hub_installs
     FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT ON pc.hub_installs TO pc_app;
-GRANT UPDATE (index_version, result_kind, result_ref, installed_by, installed_at, status, claim) ON pc.hub_installs TO pc_app;
+GRANT UPDATE (index_version, result_kind, result_ref, installed_by, installed_at, status, claim, failure_reason) ON pc.hub_installs TO pc_app;
 GRANT SELECT ON pc.hub_installs TO pc_audit_ro;
 -- +goose StatementBegin
 DO $$ BEGIN

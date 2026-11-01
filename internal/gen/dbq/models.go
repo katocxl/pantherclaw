@@ -2395,19 +2395,20 @@ type PcHostingSlug struct {
 }
 
 type PcHubInstall struct {
-	OrgID        ids.OrgID
-	ID           ids.UUID
-	Name         string
-	Version      string
-	Kind         string
-	ItemSha256   string
-	IndexVersion int64
-	ResultKind   string
-	ResultRef    string
-	InstalledBy  string
-	InstalledAt  time.Time
-	Status       string
-	Claim        ids.UUID
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Name          string
+	Version       string
+	Kind          string
+	ItemSha256    string
+	IndexVersion  int64
+	ResultKind    string
+	ResultRef     string
+	InstalledBy   string
+	InstalledAt   time.Time
+	Status        string
+	Claim         ids.UUID
+	FailureReason string
 }
 
 type PcHubState struct {

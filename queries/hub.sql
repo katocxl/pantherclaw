@@ -31,21 +31,24 @@ RETURNING *;
 -- name: ReclaimHubInstall :one
 UPDATE pc.hub_installs
 SET status = 'PENDING', index_version = sqlc.arg(index_version), installed_by = sqlc.arg(installed_by), installed_at = now(),
-    claim = sqlc.arg(claim)
+    claim = sqlc.arg(claim), failure_reason = ''
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)
 RETURNING *;
 
 -- name: FinishHubInstall :one
 UPDATE pc.hub_installs
-SET status = sqlc.arg(status), result_kind = sqlc.arg(result_kind), result_ref = sqlc.arg(result_ref), installed_at = now()
+SET status = sqlc.arg(status), result_kind = sqlc.arg(result_kind), result_ref = sqlc.arg(result_ref),
+    failure_reason = sqlc.arg(failure_reason), installed_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND status = 'PENDING' AND claim = sqlc.arg(claim)
 RETURNING *;
 
 -- A crashed install's draft, found by what the item would have made (D130).
+-- Only an authoring state is a draft: a rule DRAFT (D147); an automation DRAFT
+-- with its version not yet published or retired (D140, D150).
 
 -- name: FindHubCustomRule :one
 SELECT id FROM pc.custom_detection_rules
-WHERE org_id = sqlc.arg(org_id) AND content_digest = sqlc.arg(content_digest)
+WHERE org_id = sqlc.arg(org_id) AND content_digest = sqlc.arg(content_digest) AND state = 'DRAFT'
 ORDER BY version DESC
 LIMIT 1;
 
@@ -53,7 +56,7 @@ LIMIT 1;
 SELECT a.id FROM pc.automations a
 JOIN pc.automation_versions v ON v.org_id = a.org_id AND v.automation_id = a.id
 WHERE a.org_id = sqlc.arg(org_id) AND a.name = sqlc.arg(name) AND v.digest = sqlc.arg(digest)
-  AND a.state = 'DRAFT' AND v.state = 'DRAFT'
+  AND a.state = 'DRAFT' AND v.state IN ('DRAFT', 'VALIDATED', 'TESTED')
 LIMIT 1;
 
 -- name: ListHubPolicyDrafts :many

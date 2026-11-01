@@ -28,7 +28,7 @@ func installOf(r dbq.PcHubInstall) app.Install {
 		ID: r.ID, Name: r.Name, Version: r.Version, Kind: domain.Kind(r.Kind), ItemSHA256: r.ItemSha256,
 		IndexVersion: uint64(r.IndexVersion), //nolint:gosec // G115: CHECK >= 1
 		ResultKind:   r.ResultKind, ResultRef: r.ResultRef, InstalledBy: r.InstalledBy, InstalledAt: r.InstalledAt, Status: app.Status(r.Status),
-		Claim: r.Claim,
+		Claim: r.Claim, FailureReason: r.FailureReason,
 	}
 }
 
@@ -120,7 +120,7 @@ func (s *Store) Finish(ctx context.Context, org ids.OrgID, c tapp.Caller, f app.
 	var out app.Install
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		r, err := dbq.New(tx).FinishHubInstall(ctx, dbq.FinishHubInstallParams{
-			OrgID: org, ID: f.ID, Status: string(f.Status), ResultKind: f.ResultKind, ResultRef: f.ResultRef, Claim: f.Claim,
+			OrgID: org, ID: f.ID, Status: string(f.Status), ResultKind: f.ResultKind, ResultRef: f.ResultRef, FailureReason: f.Reason, Claim: f.Claim,
 		})
 		if db.IsNoRows(err) {
 			// Another worker reclaimed the row: the end of the install is its.
@@ -140,6 +140,7 @@ func (s *Store) Finish(ctx context.Context, org ids.OrgID, c tapp.Caller, f app.
 			Details: map[string]string{
 				"kind": r.Kind, "item_sha256": r.ItemSha256, "index_version": fmt.Sprint(r.IndexVersion),
 				"result_kind": r.ResultKind, "result_ref": r.ResultRef, "replaced": fmt.Sprint(len(f.Replaced)),
+				"failure_reason": r.FailureReason,
 			},
 		})
 		return err

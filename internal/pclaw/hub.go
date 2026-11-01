@@ -561,8 +561,8 @@ func (a *app) hubWriteScenario(b domain.RangeScenarioBody, dir string, dry bool)
 	return err
 }
 
-// hubInstalled lists the org's finished installs, every page.
-func hubInstalled(ctx context.Context, c pantherclawv1connect.HubServiceClient) ([]*pantherclawv1.HubInstall, error) {
+// hubInstalls lists the org's installs, every page.
+func hubInstalls(ctx context.Context, c pantherclawv1connect.HubServiceClient) ([]*pantherclawv1.HubInstall, error) {
 	var all []*pantherclawv1.HubInstall
 	var tok string
 	for {
@@ -570,15 +570,18 @@ func hubInstalled(ctx context.Context, c pantherclawv1connect.HubServiceClient) 
 		if err != nil {
 			return nil, err
 		}
-		for _, in := range res.GetInstalls() {
-			if in.GetStatus() == pantherclawv1.HubInstallStatus_HUB_INSTALL_STATUS_INSTALLED {
-				all = append(all, in)
-			}
-		}
+		all = append(all, res.GetInstalls()...)
 		if tok = res.GetNextPageToken(); tok == "" {
 			return all, nil
 		}
 	}
+}
+
+// hubInstalled keeps the installs that finished.
+func hubInstalled(all []*pantherclawv1.HubInstall) []*pantherclawv1.HubInstall {
+	return slices.DeleteFunc(slices.Clone(all), func(in *pantherclawv1.HubInstall) bool {
+		return in.GetStatus() != pantherclawv1.HubInstallStatus_HUB_INSTALL_STATUS_INSTALLED
+	})
 }
 
 // printHubUpdates says which installed items the index has a newer version
@@ -635,11 +638,11 @@ func hubUpdate(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	installed, err := hubInstalled(ctx, hubClient(s))
+	all, err := hubInstalls(ctx, hubClient(s))
 	if err != nil {
 		return err
 	}
-	return a.printHubUpdates(x, installed)
+	return a.printHubUpdates(x, hubInstalled(all))
 }
 
 // hubCached is the last index accepted here, verified again; nil when there
@@ -704,19 +707,28 @@ func hubStatus(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	installed, err := hubInstalled(ctx, c)
+	all, err := hubInstalls(ctx, c)
 	if err != nil {
 		return err
 	}
-	for _, in := range installed {
-		if _, err := fmt.Fprintf(a.stdout, "%s@%s\t%s\t%s\n", in.GetName(), in.GetVersion(), in.GetResultKind(), in.GetResultRef()); err != nil {
+	for _, in := range all {
+		status := in.GetStatus()
+		var err error
+		if status == pantherclawv1.HubInstallStatus_HUB_INSTALL_STATUS_INSTALLED {
+			_, err = fmt.Fprintf(a.stdout, "%s@%s\t%s\t%s\n", in.GetName(), in.GetVersion(), in.GetResultKind(), in.GetResultRef())
+		}
+		if status == pantherclawv1.HubInstallStatus_HUB_INSTALL_STATUS_FAILED {
+			// The reason comes from the server: %q keeps it to one safe line.
+			_, err = fmt.Fprintf(a.stdout, "%s@%s\tFAILED\t%q\n", in.GetName(), in.GetVersion(), in.GetFailureReason())
+		}
+		if err != nil {
 			return err
 		}
 	}
 	if x == nil {
 		return nil
 	}
-	return a.printHubUpdates(x, installed)
+	return a.printHubUpdates(x, hubInstalled(all))
 }
 
 // hubLoopback reports whether host is this machine.

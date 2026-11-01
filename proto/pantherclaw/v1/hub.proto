@@ -77,6 +77,9 @@ message HubInstall {
   string installed_by = 9;
   google.protobuf.Timestamp installed_at = 10;
   HubInstallStatus status = 11;
+  // failure_reason says why a FAILED install failed: its error's reason and
+  // client-facing message, at most 500 characters. Empty otherwise.
+  string failure_reason = 12;
 }
 
 message InstallHubItemRequest {

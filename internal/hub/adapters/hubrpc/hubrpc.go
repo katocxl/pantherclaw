@@ -50,7 +50,7 @@ func installPB(i app.Install) *pantherclawv1.HubInstall {
 	return &pantherclawv1.HubInstall{
 		Id: i.ID.String(), Name: i.Name, Version: i.Version, Kind: kinds[i.Kind], ItemSha256: i.ItemSHA256, IndexVersion: i.IndexVersion,
 		ResultKind: i.ResultKind, ResultRef: i.ResultRef, InstalledBy: i.InstalledBy, InstalledAt: timestamppb.New(i.InstalledAt),
-		Status: statuses[i.Status],
+		Status: statuses[i.Status], FailureReason: i.FailureReason,
 	}
 }
 

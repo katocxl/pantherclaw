@@ -140,6 +140,8 @@ func TestHubSearchShowAndUpdate(t *testing.T) {
 	h.sign(2, old, latest, cx)
 	f := &fakeHub{installs: []*pantherclawv1.HubInstall{{
 		Name: old.Name, Version: "1.0.0", Status: pantherclawv1.HubInstallStatus_HUB_INSTALL_STATUS_INSTALLED, ResultKind: "custom_rule", ResultRef: "r1",
+	}, {
+		Name: "pc.auto.hello", Version: "9.0.0", Status: pantherclawv1.HubInstallStatus_HUB_INSTALL_STATUS_FAILED, FailureReason: "AUTOMATION_NAME_TAKEN: in the way\x1b[2J",
 	}}}
 	env := hubEnv(t, h, f)
 
@@ -169,6 +171,12 @@ func TestHubSearchShowAndUpdate(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "this machine: index version 2") || !strings.Contains(out, "this org: index version 3") ||
 		!strings.Contains(out, "update available: pc.detect.watch") {
 		t.Fatalf("status = %d\n%s\n%s", code, out, errs)
+	}
+	// A failed install is marked, with its reason on one safe line, and it
+	// is not an installed item (D149).
+	if !strings.Contains(out, `pc.auto.hello@9.0.0	FAILED	"AUTOMATION_NAME_TAKEN: in the way\x1b[2J"`) || strings.Contains(out, "\x1b") ||
+		strings.Contains(out, "update available: pc.auto.hello") {
+		t.Fatalf("failed row:\n%s", out)
 	}
 }
 
