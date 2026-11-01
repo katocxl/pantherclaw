@@ -111,7 +111,7 @@ func idString(u ids.UUID) string {
 }
 
 func agentProto(a app.Agent) *pantherclawv1.Agent {
-	return &pantherclawv1.Agent{
+	out := &pantherclawv1.Agent{
 		Id: a.ID.String(), Name: a.Name, Purpose: a.Purpose, TeamId: idString(a.TeamID),
 		EnvironmentId: idString(a.EnvironmentID), OwnerUserId: idString(a.OwnerUserID),
 		BackupOwnerUserId: idString(a.BackupOwnerUserID), ExecutionContext: contextToProto[a.Context],
@@ -119,6 +119,10 @@ func agentProto(a app.Agent) *pantherclawv1.Agent {
 		CreateTime: ts(a.CreatedAt), UpdateTime: ts(a.UpdatedAt), ClaimTime: tsp(a.ClaimedAt), RetireTime: tsp(a.RetiredAt),
 		RangeAgent: a.RangeAgent,
 	}
+	if s := a.ScanState; s != nil {
+		out.ScanState = &pantherclawv1.AgentScanState{MissedScans: s.MissedScans, LastSeenTime: ts(s.LastSeenAt), Vanished: s.Vanished}
+	}
+	return out
 }
 
 func summaryProto(s app.Summary) *pantherclawv1.AgentSummary {

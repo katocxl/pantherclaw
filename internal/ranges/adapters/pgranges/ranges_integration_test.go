@@ -148,6 +148,35 @@ func uid(id ids.UUID) *ids.UUID { return &id }
 // on the real tables. A simulated transaction the server decided ALLOW
 // beats the runner's claim of DENY; a real run's transaction cannot back a
 // step; the result is stored with the server's value and MISMATCH.
+// TestListRangesCountsStoredResults (G0 M22 D58): the list reads the stored
+// results; a range with none has no counts. The first page has no cursor,
+// which a query sees as NULL, and it must still list.
+func TestListRangesCountsStoredResults(t *testing.T) {
+	w := newWorld(t, dbtest.New(t))
+	ctx := w.as(td.RoleAgentOwner)
+	r := w.start(t, "RT-009", "RT-010")
+	p, err := w.svc.ListRanges(ctx, nil, page.Request{Size: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Items) != 1 || p.Items[0].ID != r.ID {
+		t.Fatalf("the first page: %+v", p.Items)
+	}
+	if c, ok := p.Counts[r.ID]; ok {
+		t.Fatalf("no results stored, yet counts: %+v", c)
+	}
+	if _, err := w.svc.RecordResult(ctx, app.RecordInput{Range: r.ID, Scenario: "RT-009", Digest: dig("RT-009"), Verdict: domain.Skipped}); err != nil {
+		t.Fatal(err)
+	}
+	p, err = w.svc.ListRanges(ctx, nil, page.Request{Size: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := p.Counts[r.ID]; !ok || c != (domain.Counts{Skipped: 1}) {
+		t.Fatalf("counts: %+v, %v", c, ok)
+	}
+}
+
 func TestHR224_ServerRecordsWinOverClientClaims(t *testing.T) {
 	w := newWorld(t, dbtest.New(t))
 	ctx := w.as(td.RoleAgentOwner)

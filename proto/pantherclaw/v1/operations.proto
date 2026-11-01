@@ -38,8 +38,9 @@ service OperationsService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // GetMetrics returns hourly operating metrics (Team): consequential
-  // outcomes, coverage, bypass routes, exposure by resource group and the
-  // reconciliation backlog, each point with its drill-down search. Each
+  // outcomes, coverage and its staleness, bypass routes with their owners,
+  // exposure by resource group and the reconciliation backlog, each point
+  // with its drill-down search or no_drill. Each
   // metric needs its source's read permission across the organization,
   // else it reads RESTRICTED. They are
   // organization-wide, so they need operations.read across the
@@ -160,12 +161,17 @@ message MetricPoint {
   // The search behind the point (drill-down); one of query and builtin.
   Query drill_query = 4;
   BuiltinQuery drill_builtin = 5;
+  // No search opens this point's records (F302). Unset on a RESTRICTED point:
+  // the viewer may not read its source, which says nothing about a search.
+  bool no_drill = 6;
 }
 
 // MetricSeries is one metric and dimension over the range.
 message MetricSeries {
   string metric = 1;
-  // A breakdown key (a resource group), empty for the whole organization.
+  // A breakdown key (a resource group, or for bypass.routes_by_owner the
+  // owner's user id, "unowned", or "other" for the routes of owners past the
+  // 200 named), empty for the whole organization.
   string dimension = 2;
   repeated MetricPoint points = 3;
 }

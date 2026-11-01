@@ -422,3 +422,19 @@ func Finalize(declared []Scenario, recorded []Result, at time.Time) []Result {
 	}
 	return out
 }
+
+// Add counts n results of a verdict.
+func (c *Counts) Add(v Verdict, n int) {
+	switch v {
+	case Pass:
+		c.Pass += n
+	case Fail:
+		c.Fail += n
+	case Errored:
+		c.Error += n
+	case Skipped:
+		c.Skipped += n
+	case Missing:
+		c.Missing += n
+	}
+}

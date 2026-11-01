@@ -87,7 +87,7 @@ func registerM20Exports(rs *connect.Server, d apiDeps) error {
 	}
 	pantherclawv1connect.RegisterExportDestinationServiceHandler(rs, exportsrpc.New(s))
 	if d.web != nil {
-		d.web.WithExportDestinations(s)
+		d.web.WithExportDestinations(s).WithExportSecrets(s)
 	}
 	return nil
 }

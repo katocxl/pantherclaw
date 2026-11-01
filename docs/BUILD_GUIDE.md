@@ -767,6 +767,12 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Migrations `00246`–`00254` (`00255` spare).
 
 ### M22 — See it
+**HR:** HR-550..554 · **F:** F831–F839, F272, F274, F277, F284, F289, F293, F301, F424 · **ADR:** 0044 · **G0:** [g0/M22.md](g0/M22.md).
+- **Clean-up:** a range flake that slows every fleet, and three review follow-ups.
+- **API gaps:** credential rotation over RPC and `pclaw`, agent scan state, ticket link and sync reads, model draft and usage reads with no prompts or responses, and a procedure map for clients.
+- **Graph evidence** ([ADR-0044](adr/0044-graph-evidence.md)): plain-text labels from readable names; a causal link only with its receipt, otherwise a gap; gaps in every mode that collapse never hides; before and after; coverage reasons and times; lane events; read class.
+- **Console** (private stream): the re-pin, an in-house SVG kit, every M15–M21 screen, and views V1–V6, each with an equivalent table and the edition of its data.
+- Migration `00257` (`00256` held if a decision needs one; `00258`, `00259` spare).
 
 ### M23 — Easy to adopt
 

@@ -34,6 +34,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/page"
 	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -596,4 +597,86 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, q *dbq.Queries, or
 	return q.InsertIncidentEvent(ctx, dbq.InsertIncidentEventParams{
 		OrgID: org, ID: ids.NewV7(), IncidentID: *ref.IncidentID, Kind: "NOTE", ActorType: domain.ActorType, ActorID: domain.ActorID, Note: &note,
 	})
+}
+
+// RefsOfCase lists the tickets linked to a case (G0 M22 D7, F833).
+//
+// permission: case.read
+func (s *Service) RefsOfCase(ctx context.Context, id ids.UUID) ([]Ref, error) {
+	return s.refs(ctx, td.PermCaseRead, func(ctx context.Context, q *dbq.Queries, org ids.OrgID) ([]dbq.PcExternalRef, error) {
+		return q.ExternalRefsOfCase(ctx, org, &id)
+	})
+}
+
+// RefsOfIncident lists the tickets linked to an incident (G0 M22 D7, F833).
+//
+// permission: incident.read
+func (s *Service) RefsOfIncident(ctx context.Context, id ids.UUID) ([]Ref, error) {
+	return s.refs(ctx, td.PermIncidentRead, func(ctx context.Context, q *dbq.Queries, org ids.OrgID) ([]dbq.PcExternalRef, error) {
+		return q.ExternalRefsOfIncident(ctx, org, &id)
+	})
+}
+
+func (s *Service) refs(ctx context.Context, perm td.Permission, list func(context.Context, *dbq.Queries, ids.OrgID) ([]dbq.PcExternalRef, error)) ([]Ref, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Require(perm, td.OrgPath(c.Org)); err != nil {
+		return nil, err
+	}
+	if err := s.business(ctx); err != nil {
+		return nil, err
+	}
+	var out []Ref
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := list(ctx, dbq.New(tx), c.Org)
+		for _, r := range rows {
+			out = append(out, refOf(r))
+		}
+		return err
+	}, db.ReadOnly())
+	return out, err
+}
+
+// SyncEvent is one entry of a configuration's sync log. Bodies and secrets
+// are not stored here; empty fields do not apply to its direction.
+type SyncEvent = dbq.ListTicketSyncEventsRow
+
+// SyncEvents returns a page of a configuration's sync log, newest first
+// (G0 M22 D7, F833). An unknown configuration is not found.
+//
+// permission: connection.read
+func (s *Service) SyncEvents(ctx context.Context, config ids.UUID, pr page.Request) ([]SyncEvent, string, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := c.Require(td.PermConnectionRead, td.OrgPath(c.Org)); err != nil {
+		return nil, "", err
+	}
+	if err := s.business(ctx); err != nil {
+		return nil, "", err
+	}
+	var after *ids.UUID
+	if !pr.After.IsZero() {
+		after = &pr.After
+	}
+	var out []SyncEvent
+	var next string
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		if _, err := q.GetTicketSyncConfig(ctx, c.Org, config); db.IsNoRows(err) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		rows, err := q.ListTicketSyncEvents(ctx, dbq.ListTicketSyncEventsParams{OrgID: c.Org, ConfigID: config, After: after, PageLimit: pr.Limit()})
+		if err != nil {
+			return err
+		}
+		out, next = page.Finish(pr, rows, func(r SyncEvent) ids.UUID { return r.ID })
+		return nil
+	}, db.ReadOnly())
+	return out, next, err
 }

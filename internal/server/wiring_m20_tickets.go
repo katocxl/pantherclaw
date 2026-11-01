@@ -35,6 +35,8 @@ var m20TicketProcedures = map[string]td.Permission{
 	pantherclawv1connect.TicketSyncServiceOpenCaseTicketProcedure:         td.PermCaseManage,
 	pantherclawv1connect.TicketSyncServiceOpenIncidentTicketProcedure:     td.PermIncidentManage,
 	pantherclawv1connect.TicketSyncServiceGetTicketFieldOwnersProcedure:   td.PermCaseRead,
+	pantherclawv1connect.TicketSyncServiceListTicketRefsProcedure:         td.PermCaseRead,
+	pantherclawv1connect.TicketSyncServiceListTicketSyncEventsProcedure:   td.PermConnectionRead,
 	pantherclawv1connect.TicketSyncServiceSetTicketFieldOwnerProcedure:    td.PermConnectionManage,
 	pantherclawv1connect.NotificationServiceProposeSlackLinkProcedure:     "authenticated",
 	pantherclawv1connect.NotificationServiceConfirmChatLinkProcedure:      "authenticated",

@@ -122,5 +122,27 @@ WHERE org_id = sqlc.arg(org_id) AND (case_id = sqlc.narg(case_id) OR incident_id
 ORDER BY created_at DESC, id
 LIMIT 20;
 
+-- ListTicketSyncEvents is a configuration's sync log, newest first: the
+-- inbound log and the outbound calls (G0 M22 D7). Both use v7 ids, so the id
+-- orders them and is the page cursor. Bodies and secrets are not here.
+-- name: ListTicketSyncEvents :many
+SELECT e.id::uuid AS id, e.direction::text AS direction, e.occurred_at::timestamptz AS occurred_at, e.status::text AS status,
+       COALESCE(e.issue_key, '')::text AS issue_key, COALESCE(e.action, '')::text AS action,
+       COALESCE(e.case_id::text, '')::text AS case_id, COALESCE(e.incident_id::text, '')::text AS incident_id,
+       COALESCE(e.result_code, '')::text AS result_code
+FROM (
+    SELECT i.id, 'INBOUND' AS direction, i.received_at AS occurred_at, i.outcome AS status, i.issue_key, NULL AS action,
+           NULL::uuid AS case_id, NULL::uuid AS incident_id, NULL AS result_code
+    FROM pc.ticket_inbound_events i
+    WHERE i.org_id = sqlc.arg(org_id) AND i.config_id = sqlc.arg(config_id)
+    UNION ALL
+    SELECT o.id, 'OUTBOUND', o.created_at, o.state, NULL, o.action, o.case_id, o.incident_id, o.result_code
+    FROM pc.ticket_outbound o
+    WHERE o.org_id = sqlc.arg(org_id) AND o.config_id = sqlc.arg(config_id)
+) e
+WHERE sqlc.narg(after)::uuid IS NULL OR e.id < sqlc.narg(after)::uuid
+ORDER BY e.id DESC
+LIMIT sqlc.arg(page_limit);
+
 -- name: IncidentTitle :one
 SELECT title FROM pc.incidents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);

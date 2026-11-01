@@ -200,6 +200,10 @@ message TimelineEvent {
   string connection_id = 8;
   // Decision, state, outcome or change.
   string detail = 9;
+  // The class of the data a read returned, such as "pii" or "secret"
+  // (F285); empty when the action records none. It marks a read and claims
+  // nothing about what followed.
+  string read_class = 10;
 }
 
 // TimelineGap is evidence the timeline expected and did not find.
@@ -224,6 +228,15 @@ message TimelineLane {
   google.protobuf.Timestamp create_time = 4;
   // When it ended; unset while active.
   google.protobuf.Timestamp end_time = 5;
+  // Its events, oldest first (F284).
+  repeated TimelineEvent events = 6;
+  // The lane has more events than one lane holds.
+  bool events_truncated = 7;
+  // Its missing evidence.
+  repeated TimelineGap gaps = 8;
+  // This read does not load lane events (a lineage section): events and
+  // gaps being empty says nothing about the run.
+  bool events_not_loaded = 9;
 }
 
 // TimelinePhase is a stretch of actions, inferred from their order.
