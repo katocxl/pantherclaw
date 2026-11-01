@@ -1,0 +1,22 @@
+{
+  "index_patterns": ["logs-pantherclaw.ocsf-*"],
+  "data_stream": {},
+  "priority": 200,
+  "template": {
+    "settings": {"index.default_pipeline": "pantherclaw-ocsf"},
+    "mappings": {
+      "properties": {
+        "class_uid": {"type": "integer"},
+        "activity_id": {"type": "integer"},
+        "severity_id": {"type": "integer"},
+        "status_id": {"type": "integer"},
+        "metadata": {
+          "properties": {
+            "event_code": {"type": "keyword"},
+            "labels": {"type": "keyword"}
+          }
+        }
+      }
+    }
+  }
+}

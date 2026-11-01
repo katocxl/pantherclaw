@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+rule pc_siem_005_containment_taken {
+  meta:
+    author = "PantherClaw"
+    description = "PantherClaw containment action"
+    severity = "Medium"
+    rule_id = "pc-siem-005"
+
+  events:
+    $e.metadata.vendor_name = "PantherClaw"
+    ($e.metadata.product_event_type = "audit.response.contain" or $e.metadata.product_event_type = "audit.response.run_terminated" or $e.metadata.product_event_type = "audit.response.credential_revoked")
+    $e.additional.fields["ocsf_test"] != "true"
+
+  condition:
+    $e
+}

@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+title: PantherClaw containment action
+id: 0192f944-0000-7000-8000-000000000005
+status: experimental
+description: >-
+  A containment control was applied, a run was terminated or a credential was revoked.
+author: PantherClaw
+date: 2026-11-01
+tags:
+  - pc-siem-005
+logsource:
+  product: pantherclaw
+  service: ocsf
+detection:
+  selection:
+    metadata.event_code:
+      - 'audit.response.contain'
+      - 'audit.response.run_terminated'
+      - 'audit.response.credential_revoked'
+  simulated:
+    metadata.labels|contains: test
+  condition: selection and not simulated
+falsepositives:
+  - A planned response exercise.
+level: medium

@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+title: PantherClaw incident opened
+id: 0192f944-0000-7000-8000-000000000002
+status: experimental
+description: >-
+  An incident was opened or reopened.
+author: PantherClaw
+date: 2026-11-01
+tags:
+  - pc-siem-002
+logsource:
+  product: pantherclaw
+  service: ocsf
+detection:
+  selection:
+    class_uid: 2005
+    activity_id: 1
+  simulated:
+    metadata.labels|contains: test
+  condition: selection and not simulated
+falsepositives:
+  - An incident a person opened to test a procedure.
+level: high

@@ -1,0 +1,11 @@
+{
+  "properties": {
+    "schema": {
+      "name": "PantherClawOCSF_CL",
+      "columns": [
+        {"name": "TimeGenerated", "type": "datetime"},
+        {"name": "Ocsf", "type": "dynamic"}
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+title: PantherClaw denied an agent action
+id: 0192f944-0000-7000-8000-000000000003
+status: experimental
+description: >-
+  PantherClaw denied an action or could not authorize it. One denial is the product working; a run of them from one agent is worth a look.
+author: PantherClaw
+date: 2026-11-01
+tags:
+  - pc-siem-003
+logsource:
+  product: pantherclaw
+  service: ocsf
+detection:
+  selection:
+    class_uid: 6003
+    metadata.event_code: 'receipt.decision'
+    status_id: 2
+  simulated:
+    metadata.labels|contains: test
+  condition: selection and not simulated
+falsepositives:
+  - A new agent working out what its grant covers.
+level: low

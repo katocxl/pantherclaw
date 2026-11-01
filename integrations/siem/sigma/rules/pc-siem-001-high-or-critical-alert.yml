@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+title: PantherClaw high or critical alert
+id: 0192f944-0000-7000-8000-000000000001
+status: experimental
+description: >-
+  A detection rule raised a HIGH or CRITICAL alert. How the alert knows what it says is in unmapped.pantherclaw_uncertainty: read it before you act.
+author: PantherClaw
+date: 2026-11-01
+tags:
+  - pc-siem-001
+logsource:
+  product: pantherclaw
+  service: ocsf
+detection:
+  selection:
+    class_uid: 2004
+    activity_id: 1
+    severity_id:
+      - 4
+      - 5
+  simulated:
+    metadata.labels|contains: test
+  condition: selection and not simulated
+falsepositives:
+  - A detection rule tuned too widely for this organization.
+level: high

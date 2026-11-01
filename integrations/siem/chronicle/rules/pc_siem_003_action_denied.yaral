@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
+rule pc_siem_003_action_denied {
+  meta:
+    author = "PantherClaw"
+    description = "PantherClaw denied an agent action"
+    severity = "Low"
+    rule_id = "pc-siem-003"
+
+  events:
+    $e.metadata.vendor_name = "PantherClaw"
+    $e.additional.fields["ocsf_class_uid"] = "6003"
+    $e.metadata.product_event_type = "receipt.decision"
+    $e.additional.fields["ocsf_status_id"] = "2"
+    $e.additional.fields["ocsf_test"] != "true"
+
+  condition:
+    $e
+}

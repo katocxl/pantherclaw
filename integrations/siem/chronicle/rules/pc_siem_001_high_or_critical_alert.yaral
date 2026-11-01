@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
+rule pc_siem_001_high_or_critical_alert {
+  meta:
+    author = "PantherClaw"
+    description = "PantherClaw high or critical alert"
+    severity = "High"
+    rule_id = "pc-siem-001"
+
+  events:
+    $e.metadata.vendor_name = "PantherClaw"
+    $e.additional.fields["ocsf_class_uid"] = "2004"
+    $e.additional.fields["ocsf_activity_id"] = "1"
+    ($e.additional.fields["ocsf_severity_id"] = "4" or $e.additional.fields["ocsf_severity_id"] = "5")
+    $e.additional.fields["ocsf_test"] != "true"
+
+  condition:
+    $e
+}

@@ -1,0 +1,6 @@
+{
+  "description": "PantherClaw OCSF events: use the event's own time",
+  "processors": [
+    {"date": {"field": "time", "formats": ["UNIX_MS"], "target_field": "@timestamp"}}
+  ]
+}

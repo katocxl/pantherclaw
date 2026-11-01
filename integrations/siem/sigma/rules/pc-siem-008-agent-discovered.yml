@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+title: PantherClaw discovered an unclaimed agent
+id: 0192f944-0000-7000-8000-000000000008
+status: experimental
+description: >-
+  PantherClaw found an agent nobody has enrolled.
+author: PantherClaw
+date: 2026-11-01
+tags:
+  - pc-siem-008
+logsource:
+  product: pantherclaw
+  service: ocsf
+detection:
+  selection:
+    metadata.event_code: 'audit.agent.discovered'
+  simulated:
+    metadata.labels|contains: test
+  condition: selection and not simulated
+falsepositives:
+  - A team trying out a new tool.
+level: low

@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+rule pc_siem_007_siem_export_changed {
+  meta:
+    author = "PantherClaw"
+    description = "PantherClaw SIEM export changed"
+    severity = "Medium"
+    rule_id = "pc-siem-007"
+
+  events:
+    $e.metadata.vendor_name = "PantherClaw"
+    re.regex($e.metadata.product_event_type, `^audit\.siem\.destination_`)
+    $e.additional.fields["ocsf_test"] != "true"
+
+  condition:
+    $e
+}

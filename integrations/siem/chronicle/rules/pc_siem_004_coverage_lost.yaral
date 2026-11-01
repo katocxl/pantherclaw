@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+rule pc_siem_004_coverage_lost {
+  meta:
+    author = "PantherClaw"
+    description = "PantherClaw enforcement coverage invalidated"
+    severity = "Medium"
+    rule_id = "pc-siem-004"
+
+  events:
+    $e.metadata.vendor_name = "PantherClaw"
+    $e.metadata.product_event_type = "coverage.invalidation"
+    $e.additional.fields["ocsf_test"] != "true"
+
+  condition:
+    $e
+}

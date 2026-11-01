@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# The rules every pack carries, one entry per rule. fires_on lists the samples
+# in samples/ that the rule must fire on; it must fire on no other sample.
+rules:
+  - id: pc-siem-001
+    title: PantherClaw high or critical alert
+    severity: high
+    fires_on: [alert-critical, alert-high-inferred]
+  - id: pc-siem-002
+    title: PantherClaw incident opened
+    severity: high
+    fires_on: [incident-open]
+  - id: pc-siem-003
+    title: PantherClaw denied an agent action
+    severity: low
+    fires_on: [decision-deny]
+  - id: pc-siem-004
+    title: PantherClaw enforcement coverage invalidated
+    severity: medium
+    fires_on: [coverage-invalidation]
+  - id: pc-siem-005
+    title: PantherClaw containment action
+    severity: medium
+    fires_on: [response-contain]
+  - id: pc-siem-006
+    title: PantherClaw kill switch engaged
+    severity: critical
+    fires_on: [kill-switch-engaged]
+  - id: pc-siem-007
+    title: PantherClaw SIEM export changed
+    severity: medium
+    fires_on: [siem-destination-state-changed]
+  - id: pc-siem-008
+    title: PantherClaw discovered an unclaimed agent
+    severity: low
+    fires_on: [agent-discovered]

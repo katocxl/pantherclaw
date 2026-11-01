@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+rule pc_siem_008_agent_discovered {
+  meta:
+    author = "PantherClaw"
+    description = "PantherClaw discovered an unclaimed agent"
+    severity = "Low"
+    rule_id = "pc-siem-008"
+
+  events:
+    $e.metadata.vendor_name = "PantherClaw"
+    $e.metadata.product_event_type = "audit.agent.discovered"
+    $e.additional.fields["ocsf_test"] != "true"
+
+  condition:
+    $e
+}

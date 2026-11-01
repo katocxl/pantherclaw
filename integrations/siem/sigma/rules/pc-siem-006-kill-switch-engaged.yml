@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+title: PantherClaw kill switch engaged
+id: 0192f944-0000-7000-8000-000000000006
+status: experimental
+description: >-
+  A person engaged the organization's kill switch.
+author: PantherClaw
+date: 2026-11-01
+tags:
+  - pc-siem-006
+logsource:
+  product: pantherclaw
+  service: ocsf
+detection:
+  selection:
+    metadata.event_code: 'audit.security.kill_switch_engaged'
+  simulated:
+    metadata.labels|contains: test
+  condition: selection and not simulated
+falsepositives:
+  - A planned drill.
+level: critical

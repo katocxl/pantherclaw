@@ -1,0 +1,79 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- PantherClaw OCSF events, read one JSON object per line. Ids 100700-100799. -->
+<group name="pantherclaw,ocsf,">
+
+  <rule id="100700" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="metadata.product.name" type="pcre2">^PantherClaw$</field>
+    <description>PantherClaw event</description>
+  </rule>
+
+  <!-- First child: a simulated event stops here and raises nothing. -->
+  <rule id="100701" level="0">
+    <if_sid>100700</if_sid>
+    <field name="metadata.labels" type="pcre2">(^|,)test(,|$)</field>
+    <description>PantherClaw simulated event</description>
+  </rule>
+
+  <rule id="100711" level="12">
+    <if_sid>100700</if_sid>
+    <field name="class_uid" type="pcre2">^2004$</field>
+    <field name="activity_id" type="pcre2">^1$</field>
+    <field name="severity_id" type="pcre2">^(4|5)$</field>
+    <description>pc-siem-001: PantherClaw high or critical alert</description>
+    <group>pc-siem-001,</group>
+  </rule>
+
+  <rule id="100712" level="12">
+    <if_sid>100700</if_sid>
+    <field name="class_uid" type="pcre2">^2005$</field>
+    <field name="activity_id" type="pcre2">^1$</field>
+    <description>pc-siem-002: PantherClaw incident opened</description>
+    <group>pc-siem-002,</group>
+  </rule>
+
+  <rule id="100713" level="5">
+    <if_sid>100700</if_sid>
+    <field name="class_uid" type="pcre2">^6003$</field>
+    <field name="metadata.event_code" type="pcre2">^receipt\.decision$</field>
+    <field name="status_id" type="pcre2">^2$</field>
+    <description>pc-siem-003: PantherClaw denied an agent action</description>
+    <group>pc-siem-003,</group>
+  </rule>
+
+  <rule id="100714" level="8">
+    <if_sid>100700</if_sid>
+    <field name="metadata.event_code" type="pcre2">^coverage\.invalidation$</field>
+    <description>pc-siem-004: PantherClaw enforcement coverage invalidated</description>
+    <group>pc-siem-004,</group>
+  </rule>
+
+  <rule id="100715" level="8">
+    <if_sid>100700</if_sid>
+    <field name="metadata.event_code" type="pcre2">^(audit\.response\.contain|audit\.response\.run_terminated|audit\.response\.credential_revoked)$</field>
+    <description>pc-siem-005: PantherClaw containment action</description>
+    <group>pc-siem-005,</group>
+  </rule>
+
+  <rule id="100716" level="14">
+    <if_sid>100700</if_sid>
+    <field name="metadata.event_code" type="pcre2">^audit\.security\.kill_switch_engaged$</field>
+    <description>pc-siem-006: PantherClaw kill switch engaged</description>
+    <group>pc-siem-006,</group>
+  </rule>
+
+  <rule id="100717" level="8">
+    <if_sid>100700</if_sid>
+    <field name="metadata.event_code" type="pcre2">^audit\.siem\.destination_</field>
+    <description>pc-siem-007: PantherClaw SIEM export changed</description>
+    <group>pc-siem-007,</group>
+  </rule>
+
+  <rule id="100718" level="5">
+    <if_sid>100700</if_sid>
+    <field name="metadata.event_code" type="pcre2">^audit\.agent\.discovered$</field>
+    <description>pc-siem-008: PantherClaw discovered an unclaimed agent</description>
+    <group>pc-siem-008,</group>
+  </rule>
+
+</group>
