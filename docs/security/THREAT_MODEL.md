@@ -282,6 +282,21 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-234 | Data leaving through the model provider: records, payloads, evidence or untrusted text reach the customer's model vendor, drafting runs without the organization opting in, or the model key leaks | A7, A9, A5 | TB13 | Disclosure of customer data to a third party; key theft | HR-541, HR-542, HR-545, HR-070..077; requests carry only the task kind, the user's text, the schema and a viewer-scoped name catalogue; fixed provider host; key envelope-encrypted and write-only; every call audited without its text | M21 |
 | T-235 | Model output executed or injected: the model, or instructions injected through the user's text, returns output that runs a query, publishes or enables a policy or automation, or smuggles fields past the parser | A2, A5, A11 | TB13, TB4 | Unreviewed authority changes; data access by a generated query | HR-543, HR-544, HR-230, HR-231; strict parsing into existing structured types; drafts only, through the M11.1 gate; queries shown, never run; `Ask` stays deterministic | M21 |
 
+**G0 M22: graph evidence and API gaps**
+
+| ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
+|---|---|---|---|---|---|---|
+
+**G0 M23: Hub, CI checks and the settings kit**
+
+| ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
+|---|---|---|---|---|---|---|
+
+**G0 M24: posture, supply chain, catalogue and device scans**
+
+| ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
+|---|---|---|---|---|---|---|
+
 ## 8. Residual risks (accepted, owner: founder, reviewed quarterly)
 
 | ID | Risk | Why accepted | Compensating controls |
@@ -405,3 +420,4 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | 2026-10-29 | M20 brief (integrations breadth; ADR-0042): webhook key misuse across orgs, exfiltration through export destinations or a hold bypass, rotation lockout or rollback abuse, AWS over-privilege, external disclosure through Jira or Teams, a restoration driven by a ticket, an approval DM to someone who is not a decider and a GitLab deploy without a verified pipeline become T-222..T-229 with HR-510..529. New attack surfaces: the per-org webhook JWKS, export destinations and their pushes, the rotation leases, the GitLab, Jira, Teams and AWS connectors with the `oauth_client` and `aws_sigv4` credential kinds, inbound Jira webhooks and the ticket-sync leases, and Slack DMs and Teams cards. No residual risk added | G0 M20 |
 | 2026-10-30 | M20 amendment D283: one founder-approved exception to HR-190 lets the ECS deploy verifier read with `POST`, only for the exact `DescribeServices` target in a session narrowed to `ecs:DescribeServices`. T-070 and T-225 record the risk of a write declared as a read. D290 narrows the exception to PantherClaw's own `pc.aws.ecs` on a `pantherclaw_held` `aws_sigv4` credential sealed for `ecs`, after a review showed an organization-signed package could declare a write-shaped `POST`. D289 adds custom CI paths and Auto DevOps to the GitLab hold in T-229. No residual risk added | G0 M20 |
 | 2026-10-29 | M21 brief (branching automations, recommendations, outcome metrics and model drafting; ADR-0043): a validator bypass through branching, v1/v2 engine incompatibility and the migration, recommendations leaking across scopes, misleading outcome metrics, data leaving through the model provider and model output executed or injected become T-230..T-235 with HR-530..545. New trust boundary TB13: the customer's model provider is an external processor; the customer holds the data-processing agreement with that vendor (DPA note), and the vendor's region may differ from the hosted region named in the PantherClaw order form (residency caveat; `docs/runbooks/residency.md`). New attack surfaces: the v2 automation format, the recommendation, outcome-metric and drafting RPCs, and the outbound model call. No residual risk added | G0 M21 |
+| 2026-10-31 | M22, M23 and M24 briefs (ADR-0044, ADR-0045, ADR-0046), rows landing with each milestone. M22: a graph label leaking a hidden name, a cause shown without evidence and a rotation RPC skipping step-up become T-238..T-240 with HR-550..554. M23: a malicious Hub index or mirror, a Hub rollback, a policy file injecting into a CI report and CI action token abuse become T-242..T-245 with HR-560..567. M24: a poisoned tool description, a rug pull after approval, tool shadowing, an unapproved server slipping past the catalogue, a scan key stolen from a laptop and a scan over-collecting become T-250..T-255 with HR-580..590. New attack surfaces: the rotation RPCs, Hub documents and `pclaw hub` sources, `pclaw ci check` reports and the CI action, the catalogue and revoke RPCs, `input_schema` in inventory reports, scanner keys and device scans. No residual risk added | G0 M22, G0 M23, G0 M24 |
