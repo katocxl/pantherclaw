@@ -4,6 +4,7 @@
 package pclaw
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -60,11 +61,42 @@ var devSims = []devSim{
 	{"teams", "127.0.0.1:9098"},
 }
 
-// devRunning is a simulator this pclaw started.
+// devRunning is a simulator this pclaw started. Started is the process's
+// start time as the system reports it (processIdentity): after a reboot the
+// same id can be someone else's, so the id alone proves nothing. Unproved
+// says dev down left it running for want of that proof (D143).
 type devRunning struct {
-	Name string `json:"name"`
-	Addr string `json:"addr"`
-	PID  int    `json:"pid"`
+	Name     string `json:"name"`
+	Addr     string `json:"addr"`
+	PID      int    `json:"pid"`
+	Started  string `json:"started"`
+	Unproved bool   `json:"unproved,omitempty"`
+}
+
+// ours reports whether r's process is provably the one pclaw started.
+func (r devRunning) ours(ctx context.Context) bool {
+	id, err := devProcessIdentity(ctx, r.PID)
+	return err == nil && r.Started != "" && id == r.Started
+}
+
+// What holds a simulator's port. Every dev command reads it the same way
+// (D143): a listener is ours only when its process is proved ours.
+const (
+	devSimStopped = "not running"
+	devSimRunning = "running"
+	devSimForeign = "in use by another process"
+)
+
+// devSimState says what holds s's port.
+func devSimState(ctx context.Context, st devState, s devSim) string {
+	if !devListening(s.Addr) {
+		return devSimStopped
+	}
+	i := slices.IndexFunc(st.Sims, func(r devRunning) bool { return r.Name == s.Name && r.Addr == s.Addr })
+	if i >= 0 && st.Sims[i].ours(ctx) {
+		return devSimRunning
+	}
+	return devSimForeign
 }
 
 type devState struct {
@@ -73,13 +105,14 @@ type devState struct {
 
 // The seams tests replace.
 var (
-	devNodeUp     = nodeUp
-	devNodeDown   = nodeDown
-	devNodeStatus = nodeStatus
-	devStartSim   = startDevSim
-	devStopSim    = stopDevSim
-	devListening  = listening
-	devSimBinary  = findSimBinary
+	devNodeUp          = nodeUp
+	devNodeDown        = nodeDown
+	devNodeStatus      = nodeStatus
+	devStartSim        = startDevSim
+	devStopSim         = stopDevSim
+	devListening       = listening
+	devSimBinary       = findSimBinary
+	devProcessIdentity = processIdentity
 )
 
 // devDir resolves the directory: --dir, else ~/.pantherclaw/dev.
@@ -147,21 +180,21 @@ func devUp(ctx context.Context, a *app, args []string) error {
 		return err
 	}
 	for _, s := range devSims {
-		if slices.ContainsFunc(st.Sims, func(r devRunning) bool { return r.Name == s.Name && devListening(r.Addr) }) {
+		switch devSimState(ctx, st, s) {
+		case devSimRunning:
 			continue
+		case devSimForeign:
+			return fmt.Errorf("pclaw: %s is already in use by another process, so simulator %s cannot start; stop what holds it, then run pclaw dev up again", s.Addr, s.Name)
 		}
 		st.Sims = slices.DeleteFunc(st.Sims, func(r devRunning) bool { return r.Name == s.Name })
 		if !loopback(s.Addr) {
 			return fmt.Errorf("pclaw: simulator %s is not on loopback: %s", s.Name, s.Addr)
 		}
-		if devListening(s.Addr) {
-			return fmt.Errorf("pclaw: %s is already in use, so simulator %s cannot start; stop what holds it, then run pclaw dev up again", s.Addr, s.Name)
-		}
-		pid, err := devStartSim(ctx, bin, dir, s)
+		running, err := devStartSim(ctx, bin, dir, s)
 		if err != nil {
 			return err
 		}
-		st.Sims = append(st.Sims, devRunning{Name: s.Name, Addr: s.Addr, PID: pid})
+		st.Sims = append(st.Sims, running)
 		if err := saveDevState(dir, st); err != nil {
 			return err
 		}
@@ -185,17 +218,27 @@ func devDown(ctx context.Context, a *app, args []string) error {
 		return err
 	}
 	var failed []string
+	var kept []devRunning // what still runs stays on record (D143)
 	for _, r := range st.Sims {
 		// Nothing listening means it is gone, and the id may be another
 		// process's by now.
 		if !devListening(r.Addr) {
 			continue
 		}
+		// Something listens, but only the start time says it is what we
+		// started (D134). Unproved, it is left running and said so.
+		if !r.ours(ctx) {
+			_, _ = fmt.Fprintf(a.stderr, "pclaw: left %s running: process %d is not provably the simulator pclaw started; if it is, stop it yourself\n", r.Addr, r.PID)
+			r.Unproved = true
+			kept = append(kept, r)
+			continue
+		}
 		if err := devStopSim(r.PID); err != nil {
 			failed = append(failed, fmt.Sprintf("%s (process %d): %v", r.Name, r.PID, err))
+			kept = append(kept, r)
 		}
 	}
-	st.Sims = nil
+	st.Sims = kept
 	if err := saveDevState(dir, st); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -221,18 +264,15 @@ func devStatus(ctx context.Context, a *app, args []string) error {
 	statusErr := devNodeStatus(ctx, a, []string{"--dir", dir})
 	_, _ = fmt.Fprintln(a.stdout, "\nsimulators:")
 	for _, s := range devSims {
-		state := "not running"
-		if i := slices.IndexFunc(st.Sims, func(r devRunning) bool { return r.Name == s.Name }); i >= 0 && devListening(st.Sims[i].Addr) {
-			state = "running"
-		}
-		_, _ = fmt.Fprintf(a.stdout, "  %s: %s, http://%s\n", s.Name, state, s.Addr)
+		_, _ = fmt.Fprintf(a.stdout, "  %s: %s, http://%s\n", s.Name, devSimState(ctx, st, s), s.Addr)
 	}
 	return statusErr
 }
 
 // devEnv prints connection settings: addresses and the organization id,
-// which are no secret. The node's secrets are never read here.
-func devEnv(_ context.Context, a *app, args []string) error {
+// which are no secret. The node's secrets are never read here. A port some
+// other process holds is left out, so nothing is pointed at that process.
+func devEnv(ctx context.Context, a *app, args []string) error {
 	dir, err := devFlags(a, "dev env", args, nil)
 	if err != nil {
 		return err
@@ -244,13 +284,22 @@ func devEnv(_ context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
+	sims, err := loadDevState(dir)
+	if err != nil {
+		return err
+	}
 	lines := []string{
 		"PANTHERCLAW_SERVER=" + nodePublicURL(st),
 		"PANTHERCLAW_GATEWAY=http://localhost:" + strconv.Itoa(st.GatewayPort),
 		"PANTHERCLAW_ORG=" + st.Org,
 	}
 	for _, s := range devSims {
-		lines = append(lines, "PANTHERCLAW_SIM_"+strings.ToUpper(s.Name)+"=http://"+s.Addr)
+		name := "PANTHERCLAW_SIM_" + strings.ToUpper(s.Name)
+		if devSimState(ctx, sims, s) == devSimForeign {
+			_, _ = fmt.Fprintf(a.stderr, "pclaw: left out %s: %s is in use by another process\n", name, s.Addr)
+			continue
+		}
+		lines = append(lines, name+"=http://"+s.Addr)
 	}
 	_, err = fmt.Fprintln(a.stdout, strings.Join(lines, "\n"))
 	return err
@@ -349,34 +398,71 @@ func simEnv(env []string) []string {
 
 // startDevSim starts one simulator, detached so that it outlives pclaw,
 // and waits for its port. Its log is sim-<name>.log in dir.
-func startDevSim(ctx context.Context, bin, dir string, s devSim) (int, error) {
+func startDevSim(ctx context.Context, bin, dir string, s devSim) (devRunning, error) {
 	log, err := os.OpenFile(filepath.Join(dir, "sim-"+s.Name+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec // G304: the node directory pclaw manages
 	if err != nil {
-		return 0, err
+		return devRunning{}, err
 	}
 	defer func() { _ = log.Close() }()
 	cmd := exec.Command(bin, s.Name, "--addr", s.Addr) //nolint:gosec,noctx // G204: pclaw's own simulator; it must outlive this command's context
 	cmd.Dir, cmd.Stdout, cmd.Stderr, cmd.Env = dir, log, log, simEnv(os.Environ())
 	detach(cmd)
 	if err := cmd.Start(); err != nil {
-		return 0, fmt.Errorf("pclaw: start simulator %s: %w", s.Name, err)
+		return devRunning{}, fmt.Errorf("pclaw: start simulator %s: %w", s.Name, err)
 	}
 	pid := cmd.Process.Pid
+	// Read while the process is still ours to wait for, so the id cannot
+	// have been reused yet. Without it, dev down could never stop this one.
+	started, err := devProcessIdentity(ctx, pid)
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Process.Release()
+		return devRunning{}, fmt.Errorf("pclaw: identify simulator %s: %w", s.Name, err)
+	}
 	_ = cmd.Process.Release()
 	deadline := time.Now().Add(devSimReady)
 	for !devListening(s.Addr) {
 		if time.Now().After(deadline) {
 			_ = devStopSim(pid)
-			return 0, fmt.Errorf("pclaw: simulator %s did not listen on %s within %s; see %s", s.Name, s.Addr, devSimReady, log.Name())
+			return devRunning{}, fmt.Errorf("pclaw: simulator %s did not listen on %s within %s; see %s", s.Name, s.Addr, devSimReady, log.Name())
 		}
 		select {
 		case <-ctx.Done():
 			_ = devStopSim(pid)
-			return 0, ctx.Err()
+			return devRunning{}, ctx.Err()
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
-	return pid, nil
+	return devRunning{Name: s.Name, Addr: s.Addr, PID: pid, Started: started}, nil
+}
+
+// procStartField is the place of starttime in /proc/<pid>/stat, counted
+// from 1 (proc(5)).
+const procStartField = 22
+
+// readProcStart reads a process's start time from a Linux /proc/<pid>/stat
+// file, in clock ticks since boot. The second field is the program's name
+// in parentheses, which can itself hold spaces and parentheses, so fields
+// are counted from the last closing one (D146).
+func readProcStart(path string) (string, error) {
+	b, err := os.ReadFile(path) //nolint:gosec // G304: a /proc path pclaw builds from a number
+	if err != nil {
+		return "", err
+	}
+	i := bytes.LastIndexByte(b, ')')
+	if i < 0 {
+		return "", fmt.Errorf("%s: no program name", path)
+	}
+	fields := strings.Fields(string(b[i+1:]))
+	const first = 3 // the field right after the name
+	if len(fields) <= procStartField-first {
+		return "", fmt.Errorf("%s: %d fields after the program name", path, len(fields))
+	}
+	start := fields[procStartField-first]
+	if _, err := strconv.ParseUint(start, 10, 64); err != nil {
+		return "", fmt.Errorf("%s: start time %q", path, start)
+	}
+	return start, nil
 }
 
 func stopDevSim(pid int) error {

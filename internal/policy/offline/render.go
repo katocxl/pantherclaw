@@ -7,9 +7,7 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"fmt"
-	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -171,7 +169,7 @@ func (r *Report) Markdown() []byte {
 	const cut = "\n\nReport cut at 60 KiB; the JSON format has all of it.\n"
 	var b bytes.Buffer
 	for i, l := range w.lines {
-		// Lines stay whole, so no escape is ever cut in half.
+		// Lines stay whole, so no code span is ever cut in half.
 		if b.Len()+len(l)+len(cut)+1 > MarkdownCap {
 			b.WriteString(cut)
 			return b.Bytes()
@@ -231,46 +229,29 @@ func Plain(s string) string {
 	return s
 }
 
-const zeroWidth = string(rune(0x200b)) // by value: a literal would be invisible here
-
-var (
-	wwwRe = regexp.MustCompile(`(?i)\bwww\.`)
-	// A run this long of hex digits can link to a commit.
-	hexRe = regexp.MustCompile(`\b[0-9a-fA-F]{7,}\b`)
-)
-
-// Escape makes file text inert in GitHub and GitLab Markdown (D122,
-// HR-565). A renderer decodes an entity to text and then runs its mention,
-// reference, emoji and link filters over that text, so an entity alone
-// does not stop `@someone`: each sigil is followed by a zero-width space
-// as well, which it stays separated by in the rendered text. Every other
-// ASCII mark becomes an entity, so nothing in the text can open markup.
+// Escape puts file text in a code span, the one place GitHub and GitLab
+// Markdown leave alone (D122, D131, HR-565): no markup, mention, issue or
+// commit reference, emoji or link is read inside one. The span's fence is
+// longer than any backtick run in the text, so the text cannot close it,
+// and clean has taken out the line breaks that could end it.
 func Escape(s string) string {
 	s = clean(s)
-	s = wwwRe.ReplaceAllStringFunc(s, func(m string) string { return m[:3] + zeroWidth + m[3:] })
-	s = hexRe.ReplaceAllStringFunc(s, func(m string) string {
-		var b strings.Builder
-		for i := 0; i < len(m); i += 6 {
-			if i > 0 {
-				b.WriteString(zeroWidth)
-			}
-			b.WriteString(m[i:min(i+6, len(m))])
-		}
-		return b.String()
-	})
-	var b strings.Builder
+	if s == "" {
+		return ""
+	}
+	longest, run := 0, 0
 	for _, r := range s {
-		switch {
-		case r == 0x200b:
-			b.WriteString("&#8203;")
-		case r == ' ', r == '.', r == ',', r == '-', r > unicode.MaxASCII, unicode.IsLetter(r), unicode.IsDigit(r):
-			b.WriteRune(r)
-		default:
-			b.WriteString("&#" + strconv.Itoa(int(r)) + ";")
-			if strings.ContainsRune("@#!~%$^&*:", r) {
-				b.WriteString("&#8203;")
-			}
+		if r == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
 		}
 	}
-	return b.String()
+	fence := strings.Repeat("`", longest+1)
+	pad := ""
+	if s[0] == '`' || s[len(s)-1] == '`' {
+		pad = " " // a backtick must not touch the fence
+	}
+	return fence + pad + s + pad + fence
 }
