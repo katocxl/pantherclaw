@@ -2436,13 +2436,67 @@
         }
       }
     },
+    "/pantherclaw.v1.AgentService/GetAgentCard": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.AgentService"
+        ],
+        "summary": "GetAgentCard",
+        "description": "GetAgentCard returns an agent's purpose, owner, stated risk fields and\n approved tools from pinned packages (G0 M24 D231).\n permission: agent.read",
+        "operationId": "pantherclaw.v1.AgentService.GetAgentCard",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetAgentCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetAgentCardResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.AgentService/SubmitScanFindings": {
       "post": {
         "tags": [
           "pantherclaw.v1.AgentService"
         ],
         "summary": "SubmitScanFindings",
-        "description": "SubmitScanFindings records the findings of a local `pclaw scan` as\n DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding\n submitted before is only counted. Findings are UNTRUSTED observations\n and grant nothing; credentials never leave the scanning machine. It is\n also served on the gateway listener, where a gateway holding an\n organization scan's org_scan lease submits that scan's findings and\n needs gateway.scan.submit instead (G0 M8, HR-209).\n permission: agent.manage",
+        "description": "SubmitScanFindings records the findings of a local `pclaw scan` as\n DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding\n submitted before is only counted. Findings are UNTRUSTED observations\n and grant nothing; credential values never leave the scanning machine,\n only the kind of a key that is present (G0 M24 D238). A caller holding\n agent.scan.submit instead of agent.manage may submit a partial scan of\n one `device:` scope and nothing else (G0 M24 D236, HR-589). It is also\n served on the gateway listener, where a gateway holding an organization\n scan's org_scan lease submits that scan's findings and\n needs gateway.scan.submit instead (G0 M8, HR-209).\n permission: agent.manage",
         "operationId": "pantherclaw.v1.AgentService.SubmitScanFindings",
         "parameters": [
           {
@@ -14579,6 +14633,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.ReportInventoryResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/SignAgentCard": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "SignAgentCard",
+        "description": "SignAgentCard signs a rewritten A2A card the calling gateway serves, with\n the platform's a2a_card key (G0 M24 D232). The server rewrites the\n connection's active pin itself and signs only an exact match.\n permission: gateway.sync",
+        "operationId": "pantherclaw.v1.GatewayService.SignAgentCard",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SignAgentCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SignAgentCardResponse"
                 }
               }
             }
@@ -34638,6 +34746,43 @@
         ],
         "description": "ActivityStatus distinguishes empty states explicitly (F624)."
       },
+      "pantherclaw.v1.AgentAiActRisk": {
+        "type": "string",
+        "title": "AgentAiActRisk",
+        "enum": [
+          "AGENT_AI_ACT_RISK_UNSPECIFIED",
+          "AGENT_AI_ACT_RISK_UNSET",
+          "AGENT_AI_ACT_RISK_MINIMAL",
+          "AGENT_AI_ACT_RISK_LIMITED",
+          "AGENT_AI_ACT_RISK_HIGH"
+        ],
+        "description": "AgentAiActRisk is the EU AI Act risk class people state for an agent (D230)."
+      },
+      "pantherclaw.v1.AgentAiActRole": {
+        "type": "string",
+        "title": "AgentAiActRole",
+        "enum": [
+          "AGENT_AI_ACT_ROLE_UNSPECIFIED",
+          "AGENT_AI_ACT_ROLE_UNSET",
+          "AGENT_AI_ACT_ROLE_PROVIDER",
+          "AGENT_AI_ACT_ROLE_DEPLOYER",
+          "AGENT_AI_ACT_ROLE_NOT_APPLICABLE"
+        ],
+        "description": "AgentAiActRole is the EU AI Act role people state for an agent (D230)."
+      },
+      "pantherclaw.v1.AgentRiskTier": {
+        "type": "string",
+        "title": "AgentRiskTier",
+        "enum": [
+          "AGENT_RISK_TIER_UNSPECIFIED",
+          "AGENT_RISK_TIER_UNSET",
+          "AGENT_RISK_TIER_LOW",
+          "AGENT_RISK_TIER_MEDIUM",
+          "AGENT_RISK_TIER_HIGH",
+          "AGENT_RISK_TIER_CRITICAL"
+        ],
+        "description": "AgentRiskTier is the risk tier people state for an agent (G0 M24 D230)."
+      },
       "pantherclaw.v1.AgentState": {
         "type": "string",
         "title": "AgentState",
@@ -34748,11 +34893,136 @@
             "type": "boolean",
             "title": "range_agent",
             "description": "A range agent (G0 M12, HR-220): marked at creation, never changed; all\n its runs are simulated and it may use only simulated connections."
+          },
+          "riskTier": {
+            "title": "risk_tier",
+            "description": "Risk tier a person stated (G0 M24 D230). It grants nothing.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentRiskTier"
+          },
+          "dataClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "data_classes",
+            "description": "Data classes a person stated, from public, internal, pii and secret."
+          },
+          "aiActRole": {
+            "title": "ai_act_role",
+            "description": "EU AI Act role a person stated.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentAiActRole"
+          },
+          "aiActRisk": {
+            "title": "ai_act_risk",
+            "description": "EU AI Act risk class a person stated.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentAiActRisk"
           }
         },
         "title": "Agent",
         "additionalProperties": false,
         "description": "Agent is one accountable agent record."
+      },
+      "pantherclaw.v1.AgentApprovedTool": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "Connection id."
+          },
+          "connectionName": {
+            "type": "string",
+            "title": "connection_name",
+            "description": "Connection name."
+          },
+          "package": {
+            "type": "string",
+            "title": "package",
+            "description": "Package name."
+          },
+          "packageVersion": {
+            "type": "string",
+            "title": "package_version",
+            "description": "Pinned package version."
+          },
+          "operation": {
+            "type": "string",
+            "title": "operation",
+            "description": "Operation name."
+          }
+        },
+        "title": "AgentApprovedTool",
+        "additionalProperties": false,
+        "description": "AgentApprovedTool is one operation on an agent's card."
+      },
+      "pantherclaw.v1.AgentCard": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Agent id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Display name."
+          },
+          "purpose": {
+            "type": "string",
+            "title": "purpose",
+            "description": "Permitted purpose, written by people."
+          },
+          "ownerUserId": {
+            "type": "string",
+            "title": "owner_user_id",
+            "description": "Accountable owner; empty while discovered."
+          },
+          "backupOwnerUserId": {
+            "type": "string",
+            "title": "backup_owner_user_id",
+            "description": "Backup owner; optional."
+          },
+          "riskTier": {
+            "title": "risk_tier",
+            "description": "Risk tier a person stated.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentRiskTier"
+          },
+          "dataClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "data_classes",
+            "description": "Data classes a person stated."
+          },
+          "aiActRole": {
+            "title": "ai_act_role",
+            "description": "EU AI Act role a person stated.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentAiActRole"
+          },
+          "aiActRisk": {
+            "title": "ai_act_risk",
+            "description": "EU AI Act risk class a person stated.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentAiActRisk"
+          },
+          "approvedTools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.AgentApprovedTool"
+            },
+            "title": "approved_tools",
+            "description": "Operations the agent reaches through usable pinned package versions."
+          },
+          "approvedToolsTruncated": {
+            "type": "boolean",
+            "title": "approved_tools_truncated",
+            "description": "More approved tools exist than the card lists."
+          }
+        },
+        "title": "AgentCard",
+        "additionalProperties": false,
+        "description": "AgentCard is the one-page account of an agent (G0 M24 D231)."
       },
       "pantherclaw.v1.AgentChange": {
         "type": "object",
@@ -34815,6 +35085,29 @@
         },
         "title": "DetailsEntry",
         "additionalProperties": false
+      },
+      "pantherclaw.v1.AgentDataClasses": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxItems": 4,
+              "uniqueItems": true
+            },
+            "title": "classes",
+            "maxItems": 4,
+            "uniqueItems": true,
+            "description": "Classes, from public, internal, pii and secret."
+          }
+        },
+        "title": "AgentDataClasses",
+        "additionalProperties": false,
+        "description": "AgentDataClasses replaces an agent's data classes, so an empty list differs\n from leaving them unchanged."
       },
       "pantherclaw.v1.AgentSummary": {
         "type": "object",
@@ -35182,6 +35475,36 @@
         "title": "UntrustedObservedEntry",
         "additionalProperties": false
       },
+      "pantherclaw.v1.GetAgentCardRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Agent id."
+          }
+        },
+        "title": "GetAgentCardRequest",
+        "additionalProperties": false,
+        "description": "GetAgentCardRequest names the agent.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetAgentCardResponse": {
+        "type": "object",
+        "properties": {
+          "card": {
+            "title": "card",
+            "description": "The card.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AgentCard"
+          }
+        },
+        "title": "GetAgentCardResponse",
+        "additionalProperties": false,
+        "description": "GetAgentCardResponse returns the card."
+      },
       "pantherclaw.v1.GetAgentRequest": {
         "type": "object",
         "properties": {
@@ -35485,11 +35808,14 @@
             "enum": [
               "mcp_server",
               "agent_project",
+              "hook",
+              "skill",
+              "env_secret",
               "github_app",
               "github_workflow",
               "github_mcp_config"
             ],
-            "description": "\"mcp_server\" or \"agent_project\" from a local scan; from a gateway's\n organization scan (G0 M8, HR-209), \"github_app\", \"github_workflow\" or\n \"github_mcp_config\"."
+            "description": "\"mcp_server\", \"agent_project\", \"hook\", \"skill\" or \"env_secret\" from a\n local scan (env_secret carries the credential's kind and nothing of its\n value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,\n HR-209), \"github_app\", \"github_workflow\" or \"github_mcp_config\"."
           },
           "key": {
             "type": "string",
@@ -35634,6 +35960,12 @@
             "title": "missed",
             "format": "int32",
             "description": "Discoveries of the scope a complete scan did not see, each counted a\n miss. A discovery missed by 3 complete scans in a row is announced as\n vanished; nothing changes the agent (HR-458)."
+          },
+          "droppedAttributes": {
+            "type": "integer",
+            "title": "dropped_attributes",
+            "format": "int32",
+            "description": "Attributes the server did not keep: a name the finding's kind does not\n have, or a value that is not plain text (G0 M24 D252)."
           }
         },
         "title": "SubmitScanFindingsResponse",
@@ -35769,6 +36101,72 @@
             "maxLength": 2000,
             "description": "New purpose.",
             "nullable": true
+          },
+          "riskTier": {
+            "title": "risk_tier",
+            "description": "New risk tier (D230).",
+            "nullable": true,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.AgentRiskTier"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "not": {
+              "enum": [
+                "AGENT_RISK_TIER_UNSPECIFIED"
+              ]
+            }
+          },
+          "dataClasses": {
+            "title": "data_classes",
+            "description": "New data classes (D230); an empty list clears them.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.AgentDataClasses"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aiActRole": {
+            "title": "ai_act_role",
+            "description": "New EU AI Act role (D230).",
+            "nullable": true,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.AgentAiActRole"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "not": {
+              "enum": [
+                "AGENT_AI_ACT_ROLE_UNSPECIFIED"
+              ]
+            }
+          },
+          "aiActRisk": {
+            "title": "ai_act_risk",
+            "description": "New EU AI Act risk class (D230).",
+            "nullable": true,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.AgentAiActRisk"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "not": {
+              "enum": [
+                "AGENT_AI_ACT_RISK_UNSPECIFIED"
+              ]
+            }
           }
         },
         "title": "UpdateAgentRequest",
@@ -46937,6 +47335,12 @@
             "minimum": 0,
             "format": "int32",
             "description": "Longest a relayed stream may run, in seconds (default 300, at most\n 3600)."
+          },
+          "publicUrl": {
+            "type": "string",
+            "title": "public_url",
+            "maxLength": 2048,
+            "description": "The URL agents reach this connection at through its gateway, set by a\n person. The server signs the card only for exactly this URL, so a gateway\n cannot name its own host; without it the card stays unsigned (G0 M24\n D247)."
           }
         },
         "title": "A2AConfig",
@@ -47061,6 +47465,15 @@
             "minimum": 0,
             "format": "int32",
             "description": "Longest a relayed stream may run, in seconds (default 300, at most\n 3600)."
+          },
+          "publicUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "public_url",
+            "maxLength": 2048,
+            "description": "The URL agents reach this connection at through its gateway, set by a\n person. The server signs the card only for exactly this URL, so a gateway\n cannot name its own host; without it the card stays unsigned (G0 M24\n D247)."
           }
         },
         "title": "A2AConfig",
@@ -61463,6 +61876,52 @@
         "title": "SetFleetPolicyResponse",
         "additionalProperties": false,
         "description": "SetFleetPolicyResponse is the policy as stored."
+      },
+      "pantherclaw.v1.SignAgentCardRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "The a2a connection."
+          },
+          "card": {
+            "type": "string",
+            "title": "card",
+            "maxLength": 262144,
+            "minLength": 2,
+            "format": "byte",
+            "description": "The rewritten card."
+          }
+        },
+        "title": "SignAgentCardRequest",
+        "additionalProperties": false,
+        "description": "SignAgentCardRequest carries a card as the gateway rewrote it.",
+        "required": [
+          "connectionId",
+          "card"
+        ]
+      },
+      "pantherclaw.v1.SignAgentCardResponse": {
+        "type": "object",
+        "properties": {
+          "signedCard": {
+            "type": "string",
+            "title": "signed_card",
+            "format": "byte",
+            "description": "The card with the platform's signature."
+          },
+          "keys": {
+            "type": "string",
+            "title": "keys",
+            "format": "byte",
+            "description": "The JWKS holding the signing key, also published in the platform JWKS."
+          }
+        },
+        "title": "SignAgentCardResponse",
+        "additionalProperties": false,
+        "description": "SignAgentCardResponse carries the signed card."
       },
       "pantherclaw.v1.TargetLogItem": {
         "type": "object",

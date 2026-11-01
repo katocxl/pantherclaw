@@ -114,9 +114,9 @@ const (
 // the IDEs in dir (<config>/JetBrains) set, for the home directory (global)
 // and for projects, each once. An empty value, which names the directory
 // itself, is left out.
-func jetBrainsMCPJSONPaths(dir string) (global, project []string) {
+func jetBrainsMCPJSONPaths(dir string, read func(string) []byte) (global, project []string) {
 	for _, ide := range entries(dir, "") {
-		reg := jetBrainsRegistry(readFile(filepath.Join(ide, "options", "ide.general.xml")))
+		reg := jetBrainsRegistry(read(filepath.Join(ide, "options", "ide.general.xml")))
 		if p := reg[jetBrainsGlobalMCPJSON]; p != "" && !slices.Contains(global, p) {
 			global = append(global, p)
 		}

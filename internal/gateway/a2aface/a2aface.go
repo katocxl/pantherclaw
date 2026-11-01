@@ -7,7 +7,8 @@
 //
 //   - GET /a2a/{connection}/.well-known/agent-card.json serves the pinned
 //     card, its interface rewritten to the gateway's (and only the allowed
-//     skills, without the peer's signatures or security schemes).
+//     skills, without the peer's signatures or security schemes), signed by
+//     the server when it can be and otherwise unsigned (G0 M24 D232).
 //   - POST /a2a/{connection} speaks the JSON-RPC 2.0 binding; the paths
 //     below it (/message:send, /tasks/{id}, …) the HTTP+JSON binding. The
 //     gateway calls the peer over the binding the connection pins.
@@ -31,6 +32,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -109,6 +111,10 @@ type Handler struct {
 	// send decides and sends one call (answer.go), relaying a stream to
 	// sink; tests replace it.
 	send func(ctx context.Context, c call, sink dispatch.A2ASink) dispatch.Result
+	// signCard has the server sign a rewritten card; nil serves it unsigned.
+	signCard SignCard
+	cards    signedCards
+	now      func() time.Time
 }
 
 // New returns the A2A face. publicURL is the gateway's base URL: proofs
@@ -120,7 +126,7 @@ func New(engine *dispatch.Engine, config Configuration, peerOf PeerOf, publicURL
 	}
 	h := &Handler{
 		engine: engine, config: config, peerOf: peerOf, publicURL: strings.TrimSuffix(publicURL, "/"), log: log,
-		owned: newOwned(0),
+		owned: newOwned(0), now: time.Now,
 	}
 	h.send = h.dispatch
 	if u, err := url.Parse(publicURL); err == nil {
@@ -452,7 +458,7 @@ func (h *Handler) card(ctx context.Context, w http.ResponseWriter, c call, body 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "private, no-store")
-	_, _ = w.Write(out)
+	_, _ = w.Write(h.signed(ctx, c.conn.GetId(), out))
 }
 
 // read decodes and checks the call's parameters, and rebuilds what the

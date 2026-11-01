@@ -8,9 +8,11 @@
 // Google Gemini CLI, looks for agent-framework projects under the given directories, and checks
 // the environment and the servers' configured environment, HTTP headers and
 // OAuth client secrets for credentials agents use, PantherClaw pck_ keys
-// included. Secrets never appear in a finding: only the variable or header
-// name, the kind of credential and its well-known prefix. Findings stay on
-// the machine unless submitted.
+// included. It also lists hooks (event and executable basename) and skills
+// (name and path), never a command's other arguments, a prompt or a skill's
+// contents (G0 M24 D233, HR-588). Secrets never appear in a finding: only the
+// variable or header name, the kind of credential and its well-known prefix.
+// Findings stay on the machine unless submitted.
 package scan
 
 import (
@@ -19,6 +21,7 @@ import (
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"io"
 	"io/fs"
 	"net/url"
 	"os"
@@ -35,6 +38,8 @@ const (
 	KindMCPServer    = "mcp_server"
 	KindAgentProject = "agent_project"
 	KindEnvSecret    = "env_secret"
+	KindHook         = "hook"
+	KindSkill        = "skill"
 )
 
 // Limits keep a scan bounded on large trees. MaxNesting bounds the nesting
@@ -69,6 +74,12 @@ type Options struct {
 	Paths []string
 	// Environ is the environment to check (os.Environ).
 	Environ []string
+	// Contained reads only inside Home and follows no symbolic link there:
+	// the scan of another person's home, as root or SYSTEM (D235).
+	Contained bool
+
+	// root is Home, open for the length of a contained scan (D291).
+	root *os.Root
 }
 
 func key(parts ...string) string {
@@ -92,9 +103,19 @@ func clip(s string) string {
 
 // Run scans and returns the findings, sorted by kind and key.
 func Run(o Options) []Finding {
+	if o.Contained {
+		// Without the root nothing in the home is read; the environment still is.
+		if root, err := os.OpenRoot(o.Home); err == nil {
+			defer func() { _ = root.Close() }()
+			o.root = root
+		}
+	}
 	var out []Finding
 	var read []os.FileInfo
 	for _, c := range clientConfigs(o) {
+		if !o.allowed(c.path) {
+			continue
+		}
 		// Read each file once, even when two locations name it (a
 		// case-insensitive file system, a symlinked ~/.config).
 		info, err := os.Stat(c.path)
@@ -102,10 +123,20 @@ func Run(o Options) []Finding {
 			continue
 		}
 		read = append(read, info)
-		out = append(out, mcpFindings(o.Host, c.client, c.path, c.servers)...)
+		out = append(out, mcpFindings(o.Host, c.client, c.path, c.servers, o.reader())...)
 	}
 	for _, p := range o.Paths {
 		out = append(out, projects(o, p)...)
+	}
+	for _, path := range hookFiles(o) {
+		if o.allowed(path) {
+			out = append(out, hookFindings(o.Host, path, o.reader())...)
+		}
+	}
+	for _, dir := range skillDirs(o) {
+		if o.allowed(dir) {
+			out = append(out, skillFindings(o, dir)...)
+		}
 	}
 	out = append(out, envSecrets(o.Host, "environment", o.Environ)...)
 	slices.SortFunc(out, func(a, b Finding) int {
@@ -140,11 +171,13 @@ func clientConfigs(o Options) []clientConfig {
 		// %APPDATA% on Windows, $XDG_CONFIG_HOME on Linux.
 		add("devin_desktop", filepath.Join(o.ConfigDir, "devin", "mcp_config.json"), "mcpServers")
 		add("zed", filepath.Join(o.ConfigDir, "zed", "settings.json"), "context_servers")
-		jetBrains := filepath.Join(o.ConfigDir, "JetBrains")
-		for _, p := range jetBrainsConfigs(jetBrains) {
-			add("jetbrains_ai", p, "mcpServers")
+		// A contained scan lists no directory it may not read (D287).
+		if jetBrains := filepath.Join(o.ConfigDir, "JetBrains"); o.allowed(jetBrains) {
+			for _, p := range jetBrainsConfigs(jetBrains) {
+				add("jetbrains_ai", p, "mcpServers")
+			}
+			jbGlobal, jbProject = jetBrainsMCPJSONPaths(jetBrains, o.reader())
 		}
-		jbGlobal, jbProject = jetBrainsMCPJSONPaths(jetBrains)
 	}
 	if o.Home != "" {
 		add("claude_desktop", filepath.Join(o.Home, "Library", "Application Support", "Claude", "claude_desktop_config.json"), "mcpServers")
@@ -186,14 +219,89 @@ func clientConfigs(o Options) []clientConfig {
 	return out
 }
 
-// readFile reads a regular file of at most MaxFileSize bytes, or returns nil.
-func readFile(path string) []byte {
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() > MaxFileSize {
+// afterCheck runs between a file's check and its read; tests replace it.
+var afterCheck = func() {}
+
+// openRegular opens path and checks the open file, or returns nil: what is
+// read is what was checked, whatever replaces the name meanwhile (G0 M24
+// D254). Opening does not wait, so a FIFO cannot hang the scan.
+func openRegular(path string) *os.File {
+	return checkedFile(os.OpenFile(path, os.O_RDONLY|openNoWait, 0)) //nolint:gosec // G304: scanning the user's own configuration
+}
+
+// checkedFile keeps a file just opened if it is regular and within MaxFileSize.
+func checkedFile(f *os.File, err error) *os.File {
+	if err != nil {
 		return nil
 	}
-	b, err := os.ReadFile(path) //nolint:gosec // G304: scanning the user's own configuration
-	if err != nil {
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > MaxFileSize {
+		_ = f.Close()
+		return nil
+	}
+	return f
+}
+
+// readFile reads a regular file of at most MaxFileSize bytes, or returns nil.
+func readFile(path string) []byte {
+	f := openRegular(path)
+	if f == nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	return readOpen(f)
+}
+
+// afterLstat runs between a contained read's Lstat and its open; tests
+// replace it.
+var afterLstat = func() {}
+
+// readContained is readFile for a scan of another person's home: that person
+// can swap the file between Options.allowed and the open, so the file opened
+// must be the regular file that was looked at, and never a link (G0 M24 D282).
+// root is the home and rel the path inside it: root refuses a path that leaves
+// it, whatever a parent directory has become (D291).
+func readContained(root *os.Root, rel string) []byte {
+	before, err := root.Lstat(rel)
+	if err != nil || !before.Mode().IsRegular() {
+		return nil
+	}
+	// On Windows a FileInfo reads its file id by path at the first SameFile, so
+	// take it now, or it would describe whatever replaced the file.
+	os.SameFile(before, before)
+	afterLstat()
+	f := checkedFile(root.OpenFile(rel, os.O_RDONLY|openNoWait, 0))
+	if f == nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	if info, err := f.Stat(); err != nil || !os.SameFile(before, info) {
+		return nil
+	}
+	return readOpen(f)
+}
+
+// reader is how the scan reads a configuration file. A contained read first
+// checks that no part of the path is a link (G0 M24 D287), then opens the file
+// through the home's os.Root, so a parent swapped after that check cannot take
+// the read out of the home (D291).
+func (o Options) reader() func(string) []byte {
+	if !o.Contained {
+		return readFile
+	}
+	return func(path string) []byte {
+		rel, err := filepath.Rel(o.Home, path)
+		if o.root == nil || err != nil || !o.allowed(path) {
+			return nil
+		}
+		return readContained(o.root, rel)
+	}
+}
+
+func readOpen(f *os.File) []byte {
+	afterCheck()
+	b, err := io.ReadAll(io.LimitReader(f, MaxFileSize+1))
+	if err != nil || len(b) > MaxFileSize {
 		return nil
 	}
 	return b
@@ -201,8 +309,9 @@ func readFile(path string) []byte {
 
 // readConfig reads a JSON, JSONC, TOML (Codex) or JetBrains XML file into
 // an object; anything else is skipped.
-func readConfig(path string) map[string]any {
-	b := readFile(path)
+func readConfig(path string) map[string]any { return configOf(path, readFile(path)) }
+
+func configOf(path string, b []byte) map[string]any {
 	if b == nil {
 		return nil
 	}
@@ -283,8 +392,8 @@ func member(v map[string]any, path []string) map[string]any {
 	return v
 }
 
-func mcpFindings(host, client, path string, serversAt []string) []Finding {
-	doc := readConfig(path)
+func mcpFindings(host, client, path string, serversAt []string, read func(string) []byte) []Finding {
+	doc := configOf(path, read(path))
 	if doc == nil {
 		return nil
 	}
@@ -313,12 +422,17 @@ func mcpFindings(host, client, path string, serversAt []string) []Finding {
 			where := client + " " + name
 			cmd, _ := s["command"].(string)
 			env, _ := s["env"].(map[string]any)
+			args := s["args"]
 			if nested, ok := s["command"].(map[string]any); ok { // older Zed: {"command": {"path", "args", "env"}}
 				cmd, _ = nested["path"].(string)
 				env, _ = nested["env"].(map[string]any)
+				args = nested["args"]
 			}
 			if cmd != "" {
 				attrs["transport"], attrs["command"] = "stdio", clip(filepath.Base(cmd))
+				if ref := packageRef(cmd, stringArgs(args)); ref != "" {
+					attrs["package_ref"] = ref
+				}
 			}
 			// serverUrl: Windsurf and Devin Desktop; httpUrl: Gemini CLI.
 			if u := firstString(s, "url", "serverUrl", "httpUrl"); u != "" {
@@ -393,6 +507,21 @@ func mcpFindings(host, client, path string, serversAt []string) []Finding {
 			}
 			out = append(out, Finding{Kind: KindMCPServer, Key: key(KindMCPServer, host, path, name), Attributes: attrs})
 		}
+	}
+	return out
+}
+
+// stringArgs reads a server's args, an array of strings. It stops at anything
+// else, so a package is read only from a plain argument list.
+func stringArgs(v any) []string {
+	list, _ := v.([]any)
+	out := make([]string, 0, len(list))
+	for _, a := range list {
+		s, ok := a.(string)
+		if !ok {
+			break
+		}
+		out = append(out, s)
 	}
 	return out
 }
@@ -491,8 +620,8 @@ func packageJSON(path string) []string {
 // lineDeps finds framework names at the start of dependency lines
 // (requirements.txt, pyproject.toml, go.mod).
 func lineDeps(path string) []string {
-	f, err := os.Open(path) //nolint:gosec // G304: scanning the user's own project
-	if err != nil {
+	f := openRegular(path)
+	if f == nil {
 		return nil
 	}
 	defer func() { _ = f.Close() }()
@@ -623,7 +752,7 @@ func envSecrets(host, where string, env []string) []Finding {
 
 // headerSecrets reports an HTTP header of an MCP server that holds a
 // credential, redacted. These are reported as env_secret findings too, so
-// they are never submitted.
+// only the credential's kind is ever submitted.
 func headerSecrets(host, where, name, value string) []Finding {
 	scheme, token := "", value
 	if s, t, ok := strings.Cut(value, " "); ok && slices.Contains([]string{"bearer", "basic", "token"}, strings.ToLower(s)) {

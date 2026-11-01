@@ -41,6 +41,7 @@ func a2aIn(a *pb.A2AConfig) (*capp.A2AConfig, error) {
 		CardURL: a.GetCardUrl(), PinnedCard: a.GetPinnedCard(), CardKeys: a.GetCardKeys(), Skills: a.GetSkills(),
 		Interface:      capp.A2AInterface{Protocol: a.GetInterface().GetProtocol(), URL: a.GetInterface().GetUrl()},
 		MaxAnswerBytes: a.GetMaxAnswerBytes(), MaxStreamSeconds: a.GetMaxStreamSeconds(),
+		PublicURL: a.GetPublicUrl(),
 	}
 	if p := a.GetPeerAgentId(); p != "" {
 		id, err := ids.ParseUUID(p)

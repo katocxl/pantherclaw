@@ -219,6 +219,190 @@ func (ActivityStatus) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{2}
 }
 
+// AgentRiskTier is the risk tier people state for an agent (G0 M24 D230).
+type AgentRiskTier int32
+
+const (
+	AgentRiskTier_AGENT_RISK_TIER_UNSPECIFIED AgentRiskTier = 0
+	// Nobody has stated a tier.
+	AgentRiskTier_AGENT_RISK_TIER_UNSET AgentRiskTier = 1
+	// Low.
+	AgentRiskTier_AGENT_RISK_TIER_LOW AgentRiskTier = 2
+	// Medium.
+	AgentRiskTier_AGENT_RISK_TIER_MEDIUM AgentRiskTier = 3
+	// High.
+	AgentRiskTier_AGENT_RISK_TIER_HIGH AgentRiskTier = 4
+	// Critical.
+	AgentRiskTier_AGENT_RISK_TIER_CRITICAL AgentRiskTier = 5
+)
+
+// Enum value maps for AgentRiskTier.
+var (
+	AgentRiskTier_name = map[int32]string{
+		0: "AGENT_RISK_TIER_UNSPECIFIED",
+		1: "AGENT_RISK_TIER_UNSET",
+		2: "AGENT_RISK_TIER_LOW",
+		3: "AGENT_RISK_TIER_MEDIUM",
+		4: "AGENT_RISK_TIER_HIGH",
+		5: "AGENT_RISK_TIER_CRITICAL",
+	}
+	AgentRiskTier_value = map[string]int32{
+		"AGENT_RISK_TIER_UNSPECIFIED": 0,
+		"AGENT_RISK_TIER_UNSET":       1,
+		"AGENT_RISK_TIER_LOW":         2,
+		"AGENT_RISK_TIER_MEDIUM":      3,
+		"AGENT_RISK_TIER_HIGH":        4,
+		"AGENT_RISK_TIER_CRITICAL":    5,
+	}
+)
+
+func (x AgentRiskTier) Enum() *AgentRiskTier {
+	p := new(AgentRiskTier)
+	*p = x
+	return p
+}
+
+func (x AgentRiskTier) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AgentRiskTier) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_agents_proto_enumTypes[3].Descriptor()
+}
+
+func (AgentRiskTier) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_agents_proto_enumTypes[3]
+}
+
+func (x AgentRiskTier) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AgentRiskTier.Descriptor instead.
+func (AgentRiskTier) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{3}
+}
+
+// AgentAiActRole is the EU AI Act role people state for an agent (D230).
+type AgentAiActRole int32
+
+const (
+	AgentAiActRole_AGENT_AI_ACT_ROLE_UNSPECIFIED AgentAiActRole = 0
+	// Nobody has stated a role.
+	AgentAiActRole_AGENT_AI_ACT_ROLE_UNSET AgentAiActRole = 1
+	// Provider.
+	AgentAiActRole_AGENT_AI_ACT_ROLE_PROVIDER AgentAiActRole = 2
+	// Deployer.
+	AgentAiActRole_AGENT_AI_ACT_ROLE_DEPLOYER AgentAiActRole = 3
+	// The Act does not apply.
+	AgentAiActRole_AGENT_AI_ACT_ROLE_NOT_APPLICABLE AgentAiActRole = 4
+)
+
+// Enum value maps for AgentAiActRole.
+var (
+	AgentAiActRole_name = map[int32]string{
+		0: "AGENT_AI_ACT_ROLE_UNSPECIFIED",
+		1: "AGENT_AI_ACT_ROLE_UNSET",
+		2: "AGENT_AI_ACT_ROLE_PROVIDER",
+		3: "AGENT_AI_ACT_ROLE_DEPLOYER",
+		4: "AGENT_AI_ACT_ROLE_NOT_APPLICABLE",
+	}
+	AgentAiActRole_value = map[string]int32{
+		"AGENT_AI_ACT_ROLE_UNSPECIFIED":    0,
+		"AGENT_AI_ACT_ROLE_UNSET":          1,
+		"AGENT_AI_ACT_ROLE_PROVIDER":       2,
+		"AGENT_AI_ACT_ROLE_DEPLOYER":       3,
+		"AGENT_AI_ACT_ROLE_NOT_APPLICABLE": 4,
+	}
+)
+
+func (x AgentAiActRole) Enum() *AgentAiActRole {
+	p := new(AgentAiActRole)
+	*p = x
+	return p
+}
+
+func (x AgentAiActRole) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AgentAiActRole) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_agents_proto_enumTypes[4].Descriptor()
+}
+
+func (AgentAiActRole) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_agents_proto_enumTypes[4]
+}
+
+func (x AgentAiActRole) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AgentAiActRole.Descriptor instead.
+func (AgentAiActRole) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{4}
+}
+
+// AgentAiActRisk is the EU AI Act risk class people state for an agent (D230).
+type AgentAiActRisk int32
+
+const (
+	AgentAiActRisk_AGENT_AI_ACT_RISK_UNSPECIFIED AgentAiActRisk = 0
+	// Nobody has stated a class.
+	AgentAiActRisk_AGENT_AI_ACT_RISK_UNSET AgentAiActRisk = 1
+	// Minimal.
+	AgentAiActRisk_AGENT_AI_ACT_RISK_MINIMAL AgentAiActRisk = 2
+	// Limited.
+	AgentAiActRisk_AGENT_AI_ACT_RISK_LIMITED AgentAiActRisk = 3
+	// High.
+	AgentAiActRisk_AGENT_AI_ACT_RISK_HIGH AgentAiActRisk = 4
+)
+
+// Enum value maps for AgentAiActRisk.
+var (
+	AgentAiActRisk_name = map[int32]string{
+		0: "AGENT_AI_ACT_RISK_UNSPECIFIED",
+		1: "AGENT_AI_ACT_RISK_UNSET",
+		2: "AGENT_AI_ACT_RISK_MINIMAL",
+		3: "AGENT_AI_ACT_RISK_LIMITED",
+		4: "AGENT_AI_ACT_RISK_HIGH",
+	}
+	AgentAiActRisk_value = map[string]int32{
+		"AGENT_AI_ACT_RISK_UNSPECIFIED": 0,
+		"AGENT_AI_ACT_RISK_UNSET":       1,
+		"AGENT_AI_ACT_RISK_MINIMAL":     2,
+		"AGENT_AI_ACT_RISK_LIMITED":     3,
+		"AGENT_AI_ACT_RISK_HIGH":        4,
+	}
+)
+
+func (x AgentAiActRisk) Enum() *AgentAiActRisk {
+	p := new(AgentAiActRisk)
+	*p = x
+	return p
+}
+
+func (x AgentAiActRisk) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AgentAiActRisk) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_agents_proto_enumTypes[5].Descriptor()
+}
+
+func (AgentAiActRisk) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_agents_proto_enumTypes[5]
+}
+
+func (x AgentAiActRisk) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AgentAiActRisk.Descriptor instead.
+func (AgentAiActRisk) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{5}
+}
+
 // Agent is one accountable agent record.
 type Agent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -254,7 +438,15 @@ type Agent struct {
 	RetireTime *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=retire_time,json=retireTime,proto3" json:"retire_time,omitempty"`
 	// A range agent (G0 M12, HR-220): marked at creation, never changed; all
 	// its runs are simulated and it may use only simulated connections.
-	RangeAgent    bool `protobuf:"varint,16,opt,name=range_agent,json=rangeAgent,proto3" json:"range_agent,omitempty"`
+	RangeAgent bool `protobuf:"varint,16,opt,name=range_agent,json=rangeAgent,proto3" json:"range_agent,omitempty"`
+	// Risk tier a person stated (G0 M24 D230). It grants nothing.
+	RiskTier AgentRiskTier `protobuf:"varint,17,opt,name=risk_tier,json=riskTier,proto3,enum=pantherclaw.v1.AgentRiskTier" json:"risk_tier,omitempty"`
+	// Data classes a person stated, from public, internal, pii and secret.
+	DataClasses []string `protobuf:"bytes,18,rep,name=data_classes,json=dataClasses,proto3" json:"data_classes,omitempty"`
+	// EU AI Act role a person stated.
+	AiActRole AgentAiActRole `protobuf:"varint,19,opt,name=ai_act_role,json=aiActRole,proto3,enum=pantherclaw.v1.AgentAiActRole" json:"ai_act_role,omitempty"`
+	// EU AI Act risk class a person stated.
+	AiActRisk     AgentAiActRisk `protobuf:"varint,20,opt,name=ai_act_risk,json=aiActRisk,proto3,enum=pantherclaw.v1.AgentAiActRisk" json:"ai_act_risk,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -399,6 +591,34 @@ func (x *Agent) GetRangeAgent() bool {
 		return x.RangeAgent
 	}
 	return false
+}
+
+func (x *Agent) GetRiskTier() AgentRiskTier {
+	if x != nil {
+		return x.RiskTier
+	}
+	return AgentRiskTier_AGENT_RISK_TIER_UNSPECIFIED
+}
+
+func (x *Agent) GetDataClasses() []string {
+	if x != nil {
+		return x.DataClasses
+	}
+	return nil
+}
+
+func (x *Agent) GetAiActRole() AgentAiActRole {
+	if x != nil {
+		return x.AiActRole
+	}
+	return AgentAiActRole_AGENT_AI_ACT_ROLE_UNSPECIFIED
+}
+
+func (x *Agent) GetAiActRisk() AgentAiActRisk {
+	if x != nil {
+		return x.AiActRisk
+	}
+	return AgentAiActRisk_AGENT_AI_ACT_RISK_UNSPECIFIED
 }
 
 // Discovery is what a gateway or scan observed about a discovered agent.
@@ -1174,7 +1394,15 @@ type UpdateAgentRequest struct {
 	// New display name.
 	Name *string `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	// New purpose.
-	Purpose       *string `protobuf:"bytes,3,opt,name=purpose,proto3,oneof" json:"purpose,omitempty"`
+	Purpose *string `protobuf:"bytes,3,opt,name=purpose,proto3,oneof" json:"purpose,omitempty"`
+	// New risk tier (D230).
+	RiskTier *AgentRiskTier `protobuf:"varint,4,opt,name=risk_tier,json=riskTier,proto3,enum=pantherclaw.v1.AgentRiskTier,oneof" json:"risk_tier,omitempty"`
+	// New data classes (D230); an empty list clears them.
+	DataClasses *AgentDataClasses `protobuf:"bytes,5,opt,name=data_classes,json=dataClasses,proto3" json:"data_classes,omitempty"`
+	// New EU AI Act role (D230).
+	AiActRole *AgentAiActRole `protobuf:"varint,6,opt,name=ai_act_role,json=aiActRole,proto3,enum=pantherclaw.v1.AgentAiActRole,oneof" json:"ai_act_role,omitempty"`
+	// New EU AI Act risk class (D230).
+	AiActRisk     *AgentAiActRisk `protobuf:"varint,7,opt,name=ai_act_risk,json=aiActRisk,proto3,enum=pantherclaw.v1.AgentAiActRisk,oneof" json:"ai_act_risk,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1230,6 +1458,391 @@ func (x *UpdateAgentRequest) GetPurpose() string {
 	return ""
 }
 
+func (x *UpdateAgentRequest) GetRiskTier() AgentRiskTier {
+	if x != nil && x.RiskTier != nil {
+		return *x.RiskTier
+	}
+	return AgentRiskTier_AGENT_RISK_TIER_UNSPECIFIED
+}
+
+func (x *UpdateAgentRequest) GetDataClasses() *AgentDataClasses {
+	if x != nil {
+		return x.DataClasses
+	}
+	return nil
+}
+
+func (x *UpdateAgentRequest) GetAiActRole() AgentAiActRole {
+	if x != nil && x.AiActRole != nil {
+		return *x.AiActRole
+	}
+	return AgentAiActRole_AGENT_AI_ACT_ROLE_UNSPECIFIED
+}
+
+func (x *UpdateAgentRequest) GetAiActRisk() AgentAiActRisk {
+	if x != nil && x.AiActRisk != nil {
+		return *x.AiActRisk
+	}
+	return AgentAiActRisk_AGENT_AI_ACT_RISK_UNSPECIFIED
+}
+
+// AgentDataClasses replaces an agent's data classes, so an empty list differs
+// from leaving them unchanged.
+type AgentDataClasses struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Classes, from public, internal, pii and secret.
+	Classes       []string `protobuf:"bytes,1,rep,name=classes,proto3" json:"classes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentDataClasses) Reset() {
+	*x = AgentDataClasses{}
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentDataClasses) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentDataClasses) ProtoMessage() {}
+
+func (x *AgentDataClasses) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentDataClasses.ProtoReflect.Descriptor instead.
+func (*AgentDataClasses) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AgentDataClasses) GetClasses() []string {
+	if x != nil {
+		return x.Classes
+	}
+	return nil
+}
+
+// GetAgentCardRequest names the agent.
+type GetAgentCardRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Agent id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAgentCardRequest) Reset() {
+	*x = GetAgentCardRequest{}
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAgentCardRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAgentCardRequest) ProtoMessage() {}
+
+func (x *GetAgentCardRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAgentCardRequest.ProtoReflect.Descriptor instead.
+func (*GetAgentCardRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetAgentCardRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// GetAgentCardResponse returns the card.
+type GetAgentCardResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The card.
+	Card          *AgentCard `protobuf:"bytes,1,opt,name=card,proto3" json:"card,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAgentCardResponse) Reset() {
+	*x = GetAgentCardResponse{}
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAgentCardResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAgentCardResponse) ProtoMessage() {}
+
+func (x *GetAgentCardResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAgentCardResponse.ProtoReflect.Descriptor instead.
+func (*GetAgentCardResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetAgentCardResponse) GetCard() *AgentCard {
+	if x != nil {
+		return x.Card
+	}
+	return nil
+}
+
+// AgentCard is the one-page account of an agent (G0 M24 D231).
+type AgentCard struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Agent id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Display name.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Permitted purpose, written by people.
+	Purpose string `protobuf:"bytes,3,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	// Accountable owner; empty while discovered.
+	OwnerUserId string `protobuf:"bytes,4,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
+	// Backup owner; optional.
+	BackupOwnerUserId string `protobuf:"bytes,5,opt,name=backup_owner_user_id,json=backupOwnerUserId,proto3" json:"backup_owner_user_id,omitempty"`
+	// Risk tier a person stated.
+	RiskTier AgentRiskTier `protobuf:"varint,6,opt,name=risk_tier,json=riskTier,proto3,enum=pantherclaw.v1.AgentRiskTier" json:"risk_tier,omitempty"`
+	// Data classes a person stated.
+	DataClasses []string `protobuf:"bytes,7,rep,name=data_classes,json=dataClasses,proto3" json:"data_classes,omitempty"`
+	// EU AI Act role a person stated.
+	AiActRole AgentAiActRole `protobuf:"varint,8,opt,name=ai_act_role,json=aiActRole,proto3,enum=pantherclaw.v1.AgentAiActRole" json:"ai_act_role,omitempty"`
+	// EU AI Act risk class a person stated.
+	AiActRisk AgentAiActRisk `protobuf:"varint,9,opt,name=ai_act_risk,json=aiActRisk,proto3,enum=pantherclaw.v1.AgentAiActRisk" json:"ai_act_risk,omitempty"`
+	// Operations the agent reaches through usable pinned package versions.
+	ApprovedTools []*AgentApprovedTool `protobuf:"bytes,10,rep,name=approved_tools,json=approvedTools,proto3" json:"approved_tools,omitempty"`
+	// More approved tools exist than the card lists.
+	ApprovedToolsTruncated bool `protobuf:"varint,11,opt,name=approved_tools_truncated,json=approvedToolsTruncated,proto3" json:"approved_tools_truncated,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *AgentCard) Reset() {
+	*x = AgentCard{}
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentCard) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentCard) ProtoMessage() {}
+
+func (x *AgentCard) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentCard.ProtoReflect.Descriptor instead.
+func (*AgentCard) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *AgentCard) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AgentCard) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AgentCard) GetPurpose() string {
+	if x != nil {
+		return x.Purpose
+	}
+	return ""
+}
+
+func (x *AgentCard) GetOwnerUserId() string {
+	if x != nil {
+		return x.OwnerUserId
+	}
+	return ""
+}
+
+func (x *AgentCard) GetBackupOwnerUserId() string {
+	if x != nil {
+		return x.BackupOwnerUserId
+	}
+	return ""
+}
+
+func (x *AgentCard) GetRiskTier() AgentRiskTier {
+	if x != nil {
+		return x.RiskTier
+	}
+	return AgentRiskTier_AGENT_RISK_TIER_UNSPECIFIED
+}
+
+func (x *AgentCard) GetDataClasses() []string {
+	if x != nil {
+		return x.DataClasses
+	}
+	return nil
+}
+
+func (x *AgentCard) GetAiActRole() AgentAiActRole {
+	if x != nil {
+		return x.AiActRole
+	}
+	return AgentAiActRole_AGENT_AI_ACT_ROLE_UNSPECIFIED
+}
+
+func (x *AgentCard) GetAiActRisk() AgentAiActRisk {
+	if x != nil {
+		return x.AiActRisk
+	}
+	return AgentAiActRisk_AGENT_AI_ACT_RISK_UNSPECIFIED
+}
+
+func (x *AgentCard) GetApprovedTools() []*AgentApprovedTool {
+	if x != nil {
+		return x.ApprovedTools
+	}
+	return nil
+}
+
+func (x *AgentCard) GetApprovedToolsTruncated() bool {
+	if x != nil {
+		return x.ApprovedToolsTruncated
+	}
+	return false
+}
+
+// AgentApprovedTool is one operation on an agent's card.
+type AgentApprovedTool struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id.
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Connection name.
+	ConnectionName string `protobuf:"bytes,2,opt,name=connection_name,json=connectionName,proto3" json:"connection_name,omitempty"`
+	// Package name.
+	Package string `protobuf:"bytes,3,opt,name=package,proto3" json:"package,omitempty"`
+	// Pinned package version.
+	PackageVersion string `protobuf:"bytes,4,opt,name=package_version,json=packageVersion,proto3" json:"package_version,omitempty"`
+	// Operation name.
+	Operation     string `protobuf:"bytes,5,opt,name=operation,proto3" json:"operation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentApprovedTool) Reset() {
+	*x = AgentApprovedTool{}
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentApprovedTool) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentApprovedTool) ProtoMessage() {}
+
+func (x *AgentApprovedTool) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentApprovedTool.ProtoReflect.Descriptor instead.
+func (*AgentApprovedTool) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *AgentApprovedTool) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *AgentApprovedTool) GetConnectionName() string {
+	if x != nil {
+		return x.ConnectionName
+	}
+	return ""
+}
+
+func (x *AgentApprovedTool) GetPackage() string {
+	if x != nil {
+		return x.Package
+	}
+	return ""
+}
+
+func (x *AgentApprovedTool) GetPackageVersion() string {
+	if x != nil {
+		return x.PackageVersion
+	}
+	return ""
+}
+
+func (x *AgentApprovedTool) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
 // UpdateAgentResponse returns the agent.
 type UpdateAgentResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1241,7 +1854,7 @@ type UpdateAgentResponse struct {
 
 func (x *UpdateAgentResponse) Reset() {
 	*x = UpdateAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1253,7 +1866,7 @@ func (x *UpdateAgentResponse) String() string {
 func (*UpdateAgentResponse) ProtoMessage() {}
 
 func (x *UpdateAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1266,7 +1879,7 @@ func (x *UpdateAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAgentResponse.ProtoReflect.Descriptor instead.
 func (*UpdateAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *UpdateAgentResponse) GetAgent() *Agent {
@@ -1293,7 +1906,7 @@ type TransferOwnershipRequest struct {
 
 func (x *TransferOwnershipRequest) Reset() {
 	*x = TransferOwnershipRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1305,7 +1918,7 @@ func (x *TransferOwnershipRequest) String() string {
 func (*TransferOwnershipRequest) ProtoMessage() {}
 
 func (x *TransferOwnershipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1318,7 +1931,7 @@ func (x *TransferOwnershipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransferOwnershipRequest.ProtoReflect.Descriptor instead.
 func (*TransferOwnershipRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TransferOwnershipRequest) GetId() string {
@@ -1360,7 +1973,7 @@ type TransferOwnershipResponse struct {
 
 func (x *TransferOwnershipResponse) Reset() {
 	*x = TransferOwnershipResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1372,7 +1985,7 @@ func (x *TransferOwnershipResponse) String() string {
 func (*TransferOwnershipResponse) ProtoMessage() {}
 
 func (x *TransferOwnershipResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1385,7 +1998,7 @@ func (x *TransferOwnershipResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransferOwnershipResponse.ProtoReflect.Descriptor instead.
 func (*TransferOwnershipResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TransferOwnershipResponse) GetAgent() *Agent {
@@ -1415,7 +2028,7 @@ type ClaimAgentRequest struct {
 
 func (x *ClaimAgentRequest) Reset() {
 	*x = ClaimAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1427,7 +2040,7 @@ func (x *ClaimAgentRequest) String() string {
 func (*ClaimAgentRequest) ProtoMessage() {}
 
 func (x *ClaimAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1440,7 +2053,7 @@ func (x *ClaimAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimAgentRequest.ProtoReflect.Descriptor instead.
 func (*ClaimAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ClaimAgentRequest) GetId() string {
@@ -1524,7 +2137,7 @@ type ClaimDetails struct {
 
 func (x *ClaimDetails) Reset() {
 	*x = ClaimDetails{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1536,7 +2149,7 @@ func (x *ClaimDetails) String() string {
 func (*ClaimDetails) ProtoMessage() {}
 
 func (x *ClaimDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1549,7 +2162,7 @@ func (x *ClaimDetails) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimDetails.ProtoReflect.Descriptor instead.
 func (*ClaimDetails) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ClaimDetails) GetName() string {
@@ -1612,7 +2225,7 @@ type ClaimAgentResponse struct {
 
 func (x *ClaimAgentResponse) Reset() {
 	*x = ClaimAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1624,7 +2237,7 @@ func (x *ClaimAgentResponse) String() string {
 func (*ClaimAgentResponse) ProtoMessage() {}
 
 func (x *ClaimAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1637,7 +2250,7 @@ func (x *ClaimAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimAgentResponse.ProtoReflect.Descriptor instead.
 func (*ClaimAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ClaimAgentResponse) GetAgent() *Agent {
@@ -1660,7 +2273,7 @@ type SuspendAgentRequest struct {
 
 func (x *SuspendAgentRequest) Reset() {
 	*x = SuspendAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1672,7 +2285,7 @@ func (x *SuspendAgentRequest) String() string {
 func (*SuspendAgentRequest) ProtoMessage() {}
 
 func (x *SuspendAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1685,7 +2298,7 @@ func (x *SuspendAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuspendAgentRequest.ProtoReflect.Descriptor instead.
 func (*SuspendAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SuspendAgentRequest) GetId() string {
@@ -1713,7 +2326,7 @@ type SuspendAgentResponse struct {
 
 func (x *SuspendAgentResponse) Reset() {
 	*x = SuspendAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1725,7 +2338,7 @@ func (x *SuspendAgentResponse) String() string {
 func (*SuspendAgentResponse) ProtoMessage() {}
 
 func (x *SuspendAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1738,7 +2351,7 @@ func (x *SuspendAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuspendAgentResponse.ProtoReflect.Descriptor instead.
 func (*SuspendAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SuspendAgentResponse) GetAgent() *Agent {
@@ -1761,7 +2374,7 @@ type RetireAgentRequest struct {
 
 func (x *RetireAgentRequest) Reset() {
 	*x = RetireAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1773,7 +2386,7 @@ func (x *RetireAgentRequest) String() string {
 func (*RetireAgentRequest) ProtoMessage() {}
 
 func (x *RetireAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1786,7 +2399,7 @@ func (x *RetireAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireAgentRequest.ProtoReflect.Descriptor instead.
 func (*RetireAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *RetireAgentRequest) GetId() string {
@@ -1814,7 +2427,7 @@ type RetireAgentResponse struct {
 
 func (x *RetireAgentResponse) Reset() {
 	*x = RetireAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1826,7 +2439,7 @@ func (x *RetireAgentResponse) String() string {
 func (*RetireAgentResponse) ProtoMessage() {}
 
 func (x *RetireAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1839,7 +2452,7 @@ func (x *RetireAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireAgentResponse.ProtoReflect.Descriptor instead.
 func (*RetireAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *RetireAgentResponse) GetAgent() *Agent {
@@ -1864,7 +2477,7 @@ type ListAgentChangesRequest struct {
 
 func (x *ListAgentChangesRequest) Reset() {
 	*x = ListAgentChangesRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1876,7 +2489,7 @@ func (x *ListAgentChangesRequest) String() string {
 func (*ListAgentChangesRequest) ProtoMessage() {}
 
 func (x *ListAgentChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1889,7 +2502,7 @@ func (x *ListAgentChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentChangesRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentChangesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListAgentChangesRequest) GetAgentId() string {
@@ -1926,7 +2539,7 @@ type ListAgentChangesResponse struct {
 
 func (x *ListAgentChangesResponse) Reset() {
 	*x = ListAgentChangesResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1938,7 +2551,7 @@ func (x *ListAgentChangesResponse) String() string {
 func (*ListAgentChangesResponse) ProtoMessage() {}
 
 func (x *ListAgentChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1951,7 +2564,7 @@ func (x *ListAgentChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentChangesResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentChangesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{22}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListAgentChangesResponse) GetChanges() []*AgentChange {
@@ -1971,9 +2584,10 @@ func (x *ListAgentChangesResponse) GetNextPageToken() string {
 // ScanFinding is one finding of a local scan.
 type ScanFinding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "mcp_server" or "agent_project" from a local scan; from a gateway's
-	// organization scan (G0 M8, HR-209), "github_app", "github_workflow" or
-	// "github_mcp_config".
+	// "mcp_server", "agent_project", "hook", "skill" or "env_secret" from a
+	// local scan (env_secret carries the credential's kind and nothing of its
+	// value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,
+	// HR-209), "github_app", "github_workflow" or "github_mcp_config".
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Stable key of the finding on the scanning machine (hex SHA-256), so a
 	// later scan of the same thing is only counted.
@@ -1986,7 +2600,7 @@ type ScanFinding struct {
 
 func (x *ScanFinding) Reset() {
 	*x = ScanFinding{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1998,7 +2612,7 @@ func (x *ScanFinding) String() string {
 func (*ScanFinding) ProtoMessage() {}
 
 func (x *ScanFinding) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2011,7 +2625,7 @@ func (x *ScanFinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScanFinding.ProtoReflect.Descriptor instead.
 func (*ScanFinding) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{23}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ScanFinding) GetKind() string {
@@ -2064,7 +2678,7 @@ type SubmitScanFindingsRequest struct {
 
 func (x *SubmitScanFindingsRequest) Reset() {
 	*x = SubmitScanFindingsRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2076,7 +2690,7 @@ func (x *SubmitScanFindingsRequest) String() string {
 func (*SubmitScanFindingsRequest) ProtoMessage() {}
 
 func (x *SubmitScanFindingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2089,7 +2703,7 @@ func (x *SubmitScanFindingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitScanFindingsRequest.ProtoReflect.Descriptor instead.
 func (*SubmitScanFindingsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SubmitScanFindingsRequest) GetFindings() []*ScanFinding {
@@ -2146,14 +2760,17 @@ type SubmitScanFindingsResponse struct {
 	// Discoveries of the scope a complete scan did not see, each counted a
 	// miss. A discovery missed by 3 complete scans in a row is announced as
 	// vanished; nothing changes the agent (HR-458).
-	Missed        int32 `protobuf:"varint,4,opt,name=missed,proto3" json:"missed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Missed int32 `protobuf:"varint,4,opt,name=missed,proto3" json:"missed,omitempty"`
+	// Attributes the server did not keep: a name the finding's kind does not
+	// have, or a value that is not plain text (G0 M24 D252).
+	DroppedAttributes int32 `protobuf:"varint,5,opt,name=dropped_attributes,json=droppedAttributes,proto3" json:"dropped_attributes,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *SubmitScanFindingsResponse) Reset() {
 	*x = SubmitScanFindingsResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2165,7 +2782,7 @@ func (x *SubmitScanFindingsResponse) String() string {
 func (*SubmitScanFindingsResponse) ProtoMessage() {}
 
 func (x *SubmitScanFindingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2178,7 +2795,7 @@ func (x *SubmitScanFindingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitScanFindingsResponse.ProtoReflect.Descriptor instead.
 func (*SubmitScanFindingsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *SubmitScanFindingsResponse) GetCreated() int32 {
@@ -2209,6 +2826,13 @@ func (x *SubmitScanFindingsResponse) GetMissed() int32 {
 	return 0
 }
 
+func (x *SubmitScanFindingsResponse) GetDroppedAttributes() int32 {
+	if x != nil {
+		return x.DroppedAttributes
+	}
+	return 0
+}
+
 // RequestAgentRestorationRequest asks to restore a suspended agent.
 type RequestAgentRestorationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2223,7 +2847,7 @@ type RequestAgentRestorationRequest struct {
 
 func (x *RequestAgentRestorationRequest) Reset() {
 	*x = RequestAgentRestorationRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2235,7 +2859,7 @@ func (x *RequestAgentRestorationRequest) String() string {
 func (*RequestAgentRestorationRequest) ProtoMessage() {}
 
 func (x *RequestAgentRestorationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2248,7 +2872,7 @@ func (x *RequestAgentRestorationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestAgentRestorationRequest.ProtoReflect.Descriptor instead.
 func (*RequestAgentRestorationRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *RequestAgentRestorationRequest) GetId() string {
@@ -2280,7 +2904,7 @@ type RequestAgentRestorationResponse struct {
 
 func (x *RequestAgentRestorationResponse) Reset() {
 	*x = RequestAgentRestorationResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2292,7 +2916,7 @@ func (x *RequestAgentRestorationResponse) String() string {
 func (*RequestAgentRestorationResponse) ProtoMessage() {}
 
 func (x *RequestAgentRestorationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2305,7 +2929,7 @@ func (x *RequestAgentRestorationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestAgentRestorationResponse.ProtoReflect.Descriptor instead.
 func (*RequestAgentRestorationResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *RequestAgentRestorationResponse) GetApprovalRequestId() string {
@@ -2333,7 +2957,7 @@ var File_pantherclaw_v1_agents_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpantherclaw/v1/agents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/automations.proto\"\xd0\x05\n" +
+	"\x1bpantherclaw/v1/agents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/automations.proto\"\xaf\a\n" +
 	"\x05Agent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -2357,7 +2981,11 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\vretire_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"retireTime\x12\x1f\n" +
 	"\vrange_agent\x18\x10 \x01(\bR\n" +
-	"rangeAgent\"\xbc\x03\n" +
+	"rangeAgent\x12:\n" +
+	"\trisk_tier\x18\x11 \x01(\x0e2\x1d.pantherclaw.v1.AgentRiskTierR\briskTier\x12!\n" +
+	"\fdata_classes\x18\x12 \x03(\tR\vdataClasses\x12>\n" +
+	"\vai_act_role\x18\x13 \x01(\x0e2\x1e.pantherclaw.v1.AgentAiActRoleR\taiActRole\x12>\n" +
+	"\vai_act_risk\x18\x14 \x01(\x0e2\x1e.pantherclaw.v1.AgentAiActRiskR\taiActRisk\"\xbc\x03\n" +
 	"\tDiscovery\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12%\n" +
@@ -2432,15 +3060,52 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12)\n" +
 	"\x11org_has_no_agents\x18\x03 \x01(\bR\x0eorgHasNoAgents\x12D\n" +
 	"\vautomations\x18\x04 \x03(\v2\".pantherclaw.v1.AutomationIdentityR\vautomations\x12)\n" +
-	"\x10automations_note\x18\x05 \x01(\tR\x0fautomationsNote\"\x91\x01\n" +
+	"\x10automations_note\x18\x05 \x01(\tR\x0fautomationsNote\"\xf3\x03\n" +
 	"\x12UpdateAgentRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12#\n" +
 	"\x04name\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xc8\x01H\x00R\x04name\x88\x01\x01\x12'\n" +
-	"\apurpose\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fH\x01R\apurpose\x88\x01\x01B\a\n" +
+	"\apurpose\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fH\x01R\apurpose\x88\x01\x01\x12K\n" +
+	"\trisk_tier\x18\x04 \x01(\x0e2\x1d.pantherclaw.v1.AgentRiskTierB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x02R\briskTier\x88\x01\x01\x12C\n" +
+	"\fdata_classes\x18\x05 \x01(\v2 .pantherclaw.v1.AgentDataClassesR\vdataClasses\x12O\n" +
+	"\vai_act_role\x18\x06 \x01(\x0e2\x1e.pantherclaw.v1.AgentAiActRoleB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x03R\taiActRole\x88\x01\x01\x12O\n" +
+	"\vai_act_risk\x18\a \x01(\x0e2\x1e.pantherclaw.v1.AgentAiActRiskB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x04R\taiActRisk\x88\x01\x01B\a\n" +
 	"\x05_nameB\n" +
 	"\n" +
-	"\b_purpose\"B\n" +
+	"\b_purposeB\f\n" +
+	"\n" +
+	"_risk_tierB\x0e\n" +
+	"\f_ai_act_roleB\x0e\n" +
+	"\f_ai_act_risk\"8\n" +
+	"\x10AgentDataClasses\x12$\n" +
+	"\aclasses\x18\x01 \x03(\tB\n" +
+	"\xbaH\a\x92\x01\x04\x10\x04\x18\x01R\aclasses\"/\n" +
+	"\x13GetAgentCardRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"E\n" +
+	"\x14GetAgentCardResponse\x12-\n" +
+	"\x04card\x18\x01 \x01(\v2\x19.pantherclaw.v1.AgentCardR\x04card\"\x81\x04\n" +
+	"\tAgentCard\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
+	"\apurpose\x18\x03 \x01(\tR\apurpose\x12\"\n" +
+	"\rowner_user_id\x18\x04 \x01(\tR\vownerUserId\x12/\n" +
+	"\x14backup_owner_user_id\x18\x05 \x01(\tR\x11backupOwnerUserId\x12:\n" +
+	"\trisk_tier\x18\x06 \x01(\x0e2\x1d.pantherclaw.v1.AgentRiskTierR\briskTier\x12!\n" +
+	"\fdata_classes\x18\a \x03(\tR\vdataClasses\x12>\n" +
+	"\vai_act_role\x18\b \x01(\x0e2\x1e.pantherclaw.v1.AgentAiActRoleR\taiActRole\x12>\n" +
+	"\vai_act_risk\x18\t \x01(\x0e2\x1e.pantherclaw.v1.AgentAiActRiskR\taiActRisk\x12H\n" +
+	"\x0eapproved_tools\x18\n" +
+	" \x03(\v2!.pantherclaw.v1.AgentApprovedToolR\rapprovedTools\x128\n" +
+	"\x18approved_tools_truncated\x18\v \x01(\bR\x16approvedToolsTruncated\"\xc2\x01\n" +
+	"\x11AgentApprovedTool\x12#\n" +
+	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12'\n" +
+	"\x0fconnection_name\x18\x02 \x01(\tR\x0econnectionName\x12\x18\n" +
+	"\apackage\x18\x03 \x01(\tR\apackage\x12'\n" +
+	"\x0fpackage_version\x18\x04 \x01(\tR\x0epackageVersion\x12\x1c\n" +
+	"\toperation\x18\x05 \x01(\tR\toperation\"B\n" +
 	"\x13UpdateAgentResponse\x12+\n" +
 	"\x05agent\x18\x01 \x01(\v2\x15.pantherclaw.v1.AgentR\x05agent\"\x93\x02\n" +
 	"\x18TransferOwnershipRequest\x12\x18\n" +
@@ -2492,10 +3157,11 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"y\n" +
 	"\x18ListAgentChangesResponse\x125\n" +
 	"\achanges\x18\x01 \x03(\v2\x1b.pantherclaw.v1.AgentChangeR\achanges\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xcd\x02\n" +
-	"\vScanFinding\x12d\n" +
-	"\x04kind\x18\x01 \x01(\tBP\xbaHMrKR\n" +
-	"mcp_serverR\ragent_projectR\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe6\x02\n" +
+	"\vScanFinding\x12}\n" +
+	"\x04kind\x18\x01 \x01(\tBi\xbaHfrdR\n" +
+	"mcp_serverR\ragent_projectR\x04hookR\x05skillR\n" +
+	"env_secretR\n" +
 	"github_appR\x0fgithub_workflowR\x11github_mcp_configR\x04kind\x12'\n" +
 	"\x03key\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x03key\x12p\n" +
 	"\n" +
@@ -2510,12 +3176,13 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\ascan_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x06scanId\x12\x1d\n" +
 	"\x05lease\x18\x04 \x01(\fB\a\xbaH\x04z\x02\x18@R\x05lease\x12\x1e\n" +
 	"\x05scope\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x05scope\x12\x1a\n" +
-	"\bcomplete\x18\x06 \x01(\bR\bcomplete\"\x82\x01\n" +
+	"\bcomplete\x18\x06 \x01(\bR\bcomplete\"\xb1\x01\n" +
 	"\x1aSubmitScanFindingsResponse\x12\x18\n" +
 	"\acreated\x18\x01 \x01(\x05R\acreated\x12\x18\n" +
 	"\acounted\x18\x02 \x01(\x05R\acounted\x12\x18\n" +
 	"\adropped\x18\x03 \x01(\x05R\adropped\x12\x16\n" +
-	"\x06missed\x18\x04 \x01(\x05R\x06missed\"^\n" +
+	"\x06missed\x18\x04 \x01(\x05R\x06missed\x12-\n" +
+	"\x12dropped_attributes\x18\x05 \x01(\x05R\x11droppedAttributes\"^\n" +
 	"\x1eRequestAgentRestorationRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\"\n" +
 	"\x06reason\x18\x02 \x01(\tB\n" +
@@ -2545,7 +3212,26 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\x1bACTIVITY_STATUS_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cACTIVITY_STATUS_NO_INSTANCES\x10\x01\x12'\n" +
 	"#ACTIVITY_STATUS_VERIFIED_NO_ACTIONS\x10\x02\x12\x1a\n" +
-	"\x16ACTIVITY_STATUS_ACTIVE\x10\x032\xb3\b\n" +
+	"\x16ACTIVITY_STATUS_ACTIVE\x10\x03*\xb8\x01\n" +
+	"\rAgentRiskTier\x12\x1f\n" +
+	"\x1bAGENT_RISK_TIER_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15AGENT_RISK_TIER_UNSET\x10\x01\x12\x17\n" +
+	"\x13AGENT_RISK_TIER_LOW\x10\x02\x12\x1a\n" +
+	"\x16AGENT_RISK_TIER_MEDIUM\x10\x03\x12\x18\n" +
+	"\x14AGENT_RISK_TIER_HIGH\x10\x04\x12\x1c\n" +
+	"\x18AGENT_RISK_TIER_CRITICAL\x10\x05*\xb6\x01\n" +
+	"\x0eAgentAiActRole\x12!\n" +
+	"\x1dAGENT_AI_ACT_ROLE_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17AGENT_AI_ACT_ROLE_UNSET\x10\x01\x12\x1e\n" +
+	"\x1aAGENT_AI_ACT_ROLE_PROVIDER\x10\x02\x12\x1e\n" +
+	"\x1aAGENT_AI_ACT_ROLE_DEPLOYER\x10\x03\x12$\n" +
+	" AGENT_AI_ACT_ROLE_NOT_APPLICABLE\x10\x04*\xaa\x01\n" +
+	"\x0eAgentAiActRisk\x12!\n" +
+	"\x1dAGENT_AI_ACT_RISK_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17AGENT_AI_ACT_RISK_UNSET\x10\x01\x12\x1d\n" +
+	"\x19AGENT_AI_ACT_RISK_MINIMAL\x10\x02\x12\x1d\n" +
+	"\x19AGENT_AI_ACT_RISK_LIMITED\x10\x03\x12\x1a\n" +
+	"\x16AGENT_AI_ACT_RISK_HIGH\x10\x042\x93\t\n" +
 	"\fAgentService\x12V\n" +
 	"\vCreateAgent\x12\".pantherclaw.v1.CreateAgentRequest\x1a#.pantherclaw.v1.CreateAgentResponse\x12R\n" +
 	"\bGetAgent\x12\x1f.pantherclaw.v1.GetAgentRequest\x1a .pantherclaw.v1.GetAgentResponse\"\x03\x90\x02\x01\x12X\n" +
@@ -2557,7 +3243,8 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"ClaimAgent\x12!.pantherclaw.v1.ClaimAgentRequest\x1a\".pantherclaw.v1.ClaimAgentResponse\x12Y\n" +
 	"\fSuspendAgent\x12#.pantherclaw.v1.SuspendAgentRequest\x1a$.pantherclaw.v1.SuspendAgentResponse\x12V\n" +
 	"\vRetireAgent\x12\".pantherclaw.v1.RetireAgentRequest\x1a#.pantherclaw.v1.RetireAgentResponse\x12j\n" +
-	"\x10ListAgentChanges\x12'.pantherclaw.v1.ListAgentChangesRequest\x1a(.pantherclaw.v1.ListAgentChangesResponse\"\x03\x90\x02\x01\x12k\n" +
+	"\x10ListAgentChanges\x12'.pantherclaw.v1.ListAgentChangesRequest\x1a(.pantherclaw.v1.ListAgentChangesResponse\"\x03\x90\x02\x01\x12^\n" +
+	"\fGetAgentCard\x12#.pantherclaw.v1.GetAgentCardRequest\x1a$.pantherclaw.v1.GetAgentCardResponse\"\x03\x90\x02\x01\x12k\n" +
 	"\x12SubmitScanFindings\x12).pantherclaw.v1.SubmitScanFindingsRequest\x1a*.pantherclaw.v1.SubmitScanFindingsResponse\x12z\n" +
 	"\x17RequestAgentRestoration\x12..pantherclaw.v1.RequestAgentRestorationRequest\x1a/.pantherclaw.v1.RequestAgentRestorationResponseB\xc4\x01\n" +
 	"\x12com.pantherclaw.v1B\vAgentsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
@@ -2574,107 +3261,129 @@ func file_pantherclaw_v1_agents_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_agents_proto_rawDescData
 }
 
-var file_pantherclaw_v1_agents_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_agents_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_pantherclaw_v1_agents_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_pantherclaw_v1_agents_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_pantherclaw_v1_agents_proto_goTypes = []any{
 	(AgentState)(0),                         // 0: pantherclaw.v1.AgentState
 	(ExecutionContext)(0),                   // 1: pantherclaw.v1.ExecutionContext
 	(ActivityStatus)(0),                     // 2: pantherclaw.v1.ActivityStatus
-	(*Agent)(nil),                           // 3: pantherclaw.v1.Agent
-	(*Discovery)(nil),                       // 4: pantherclaw.v1.Discovery
-	(*AgentSummary)(nil),                    // 5: pantherclaw.v1.AgentSummary
-	(*AgentChange)(nil),                     // 6: pantherclaw.v1.AgentChange
-	(*CreateAgentRequest)(nil),              // 7: pantherclaw.v1.CreateAgentRequest
-	(*CreateAgentResponse)(nil),             // 8: pantherclaw.v1.CreateAgentResponse
-	(*GetAgentRequest)(nil),                 // 9: pantherclaw.v1.GetAgentRequest
-	(*GetAgentResponse)(nil),                // 10: pantherclaw.v1.GetAgentResponse
-	(*ListAgentsRequest)(nil),               // 11: pantherclaw.v1.ListAgentsRequest
-	(*ListAgentsResponse)(nil),              // 12: pantherclaw.v1.ListAgentsResponse
-	(*UpdateAgentRequest)(nil),              // 13: pantherclaw.v1.UpdateAgentRequest
-	(*UpdateAgentResponse)(nil),             // 14: pantherclaw.v1.UpdateAgentResponse
-	(*TransferOwnershipRequest)(nil),        // 15: pantherclaw.v1.TransferOwnershipRequest
-	(*TransferOwnershipResponse)(nil),       // 16: pantherclaw.v1.TransferOwnershipResponse
-	(*ClaimAgentRequest)(nil),               // 17: pantherclaw.v1.ClaimAgentRequest
-	(*ClaimDetails)(nil),                    // 18: pantherclaw.v1.ClaimDetails
-	(*ClaimAgentResponse)(nil),              // 19: pantherclaw.v1.ClaimAgentResponse
-	(*SuspendAgentRequest)(nil),             // 20: pantherclaw.v1.SuspendAgentRequest
-	(*SuspendAgentResponse)(nil),            // 21: pantherclaw.v1.SuspendAgentResponse
-	(*RetireAgentRequest)(nil),              // 22: pantherclaw.v1.RetireAgentRequest
-	(*RetireAgentResponse)(nil),             // 23: pantherclaw.v1.RetireAgentResponse
-	(*ListAgentChangesRequest)(nil),         // 24: pantherclaw.v1.ListAgentChangesRequest
-	(*ListAgentChangesResponse)(nil),        // 25: pantherclaw.v1.ListAgentChangesResponse
-	(*ScanFinding)(nil),                     // 26: pantherclaw.v1.ScanFinding
-	(*SubmitScanFindingsRequest)(nil),       // 27: pantherclaw.v1.SubmitScanFindingsRequest
-	(*SubmitScanFindingsResponse)(nil),      // 28: pantherclaw.v1.SubmitScanFindingsResponse
-	(*RequestAgentRestorationRequest)(nil),  // 29: pantherclaw.v1.RequestAgentRestorationRequest
-	(*RequestAgentRestorationResponse)(nil), // 30: pantherclaw.v1.RequestAgentRestorationResponse
-	nil,                                     // 31: pantherclaw.v1.Discovery.UntrustedObservedEntry
-	nil,                                     // 32: pantherclaw.v1.AgentChange.DetailsEntry
-	nil,                                     // 33: pantherclaw.v1.ScanFinding.AttributesEntry
-	(*timestamppb.Timestamp)(nil),           // 34: google.protobuf.Timestamp
-	(*AutomationIdentity)(nil),              // 35: pantherclaw.v1.AutomationIdentity
+	(AgentRiskTier)(0),                      // 3: pantherclaw.v1.AgentRiskTier
+	(AgentAiActRole)(0),                     // 4: pantherclaw.v1.AgentAiActRole
+	(AgentAiActRisk)(0),                     // 5: pantherclaw.v1.AgentAiActRisk
+	(*Agent)(nil),                           // 6: pantherclaw.v1.Agent
+	(*Discovery)(nil),                       // 7: pantherclaw.v1.Discovery
+	(*AgentSummary)(nil),                    // 8: pantherclaw.v1.AgentSummary
+	(*AgentChange)(nil),                     // 9: pantherclaw.v1.AgentChange
+	(*CreateAgentRequest)(nil),              // 10: pantherclaw.v1.CreateAgentRequest
+	(*CreateAgentResponse)(nil),             // 11: pantherclaw.v1.CreateAgentResponse
+	(*GetAgentRequest)(nil),                 // 12: pantherclaw.v1.GetAgentRequest
+	(*GetAgentResponse)(nil),                // 13: pantherclaw.v1.GetAgentResponse
+	(*ListAgentsRequest)(nil),               // 14: pantherclaw.v1.ListAgentsRequest
+	(*ListAgentsResponse)(nil),              // 15: pantherclaw.v1.ListAgentsResponse
+	(*UpdateAgentRequest)(nil),              // 16: pantherclaw.v1.UpdateAgentRequest
+	(*AgentDataClasses)(nil),                // 17: pantherclaw.v1.AgentDataClasses
+	(*GetAgentCardRequest)(nil),             // 18: pantherclaw.v1.GetAgentCardRequest
+	(*GetAgentCardResponse)(nil),            // 19: pantherclaw.v1.GetAgentCardResponse
+	(*AgentCard)(nil),                       // 20: pantherclaw.v1.AgentCard
+	(*AgentApprovedTool)(nil),               // 21: pantherclaw.v1.AgentApprovedTool
+	(*UpdateAgentResponse)(nil),             // 22: pantherclaw.v1.UpdateAgentResponse
+	(*TransferOwnershipRequest)(nil),        // 23: pantherclaw.v1.TransferOwnershipRequest
+	(*TransferOwnershipResponse)(nil),       // 24: pantherclaw.v1.TransferOwnershipResponse
+	(*ClaimAgentRequest)(nil),               // 25: pantherclaw.v1.ClaimAgentRequest
+	(*ClaimDetails)(nil),                    // 26: pantherclaw.v1.ClaimDetails
+	(*ClaimAgentResponse)(nil),              // 27: pantherclaw.v1.ClaimAgentResponse
+	(*SuspendAgentRequest)(nil),             // 28: pantherclaw.v1.SuspendAgentRequest
+	(*SuspendAgentResponse)(nil),            // 29: pantherclaw.v1.SuspendAgentResponse
+	(*RetireAgentRequest)(nil),              // 30: pantherclaw.v1.RetireAgentRequest
+	(*RetireAgentResponse)(nil),             // 31: pantherclaw.v1.RetireAgentResponse
+	(*ListAgentChangesRequest)(nil),         // 32: pantherclaw.v1.ListAgentChangesRequest
+	(*ListAgentChangesResponse)(nil),        // 33: pantherclaw.v1.ListAgentChangesResponse
+	(*ScanFinding)(nil),                     // 34: pantherclaw.v1.ScanFinding
+	(*SubmitScanFindingsRequest)(nil),       // 35: pantherclaw.v1.SubmitScanFindingsRequest
+	(*SubmitScanFindingsResponse)(nil),      // 36: pantherclaw.v1.SubmitScanFindingsResponse
+	(*RequestAgentRestorationRequest)(nil),  // 37: pantherclaw.v1.RequestAgentRestorationRequest
+	(*RequestAgentRestorationResponse)(nil), // 38: pantherclaw.v1.RequestAgentRestorationResponse
+	nil,                                     // 39: pantherclaw.v1.Discovery.UntrustedObservedEntry
+	nil,                                     // 40: pantherclaw.v1.AgentChange.DetailsEntry
+	nil,                                     // 41: pantherclaw.v1.ScanFinding.AttributesEntry
+	(*timestamppb.Timestamp)(nil),           // 42: google.protobuf.Timestamp
+	(*AutomationIdentity)(nil),              // 43: pantherclaw.v1.AutomationIdentity
 }
 var file_pantherclaw_v1_agents_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.Agent.execution_context:type_name -> pantherclaw.v1.ExecutionContext
 	0,  // 1: pantherclaw.v1.Agent.state:type_name -> pantherclaw.v1.AgentState
 	0,  // 2: pantherclaw.v1.Agent.suspended_from:type_name -> pantherclaw.v1.AgentState
-	34, // 3: pantherclaw.v1.Agent.create_time:type_name -> google.protobuf.Timestamp
-	34, // 4: pantherclaw.v1.Agent.update_time:type_name -> google.protobuf.Timestamp
-	34, // 5: pantherclaw.v1.Agent.claim_time:type_name -> google.protobuf.Timestamp
-	34, // 6: pantherclaw.v1.Agent.retire_time:type_name -> google.protobuf.Timestamp
-	34, // 7: pantherclaw.v1.Discovery.first_seen_time:type_name -> google.protobuf.Timestamp
-	34, // 8: pantherclaw.v1.Discovery.last_seen_time:type_name -> google.protobuf.Timestamp
-	31, // 9: pantherclaw.v1.Discovery.untrusted_observed:type_name -> pantherclaw.v1.Discovery.UntrustedObservedEntry
-	3,  // 10: pantherclaw.v1.AgentSummary.agent:type_name -> pantherclaw.v1.Agent
-	2,  // 11: pantherclaw.v1.AgentSummary.activity:type_name -> pantherclaw.v1.ActivityStatus
-	34, // 12: pantherclaw.v1.AgentSummary.last_verify_time:type_name -> google.protobuf.Timestamp
-	4,  // 13: pantherclaw.v1.AgentSummary.discovery:type_name -> pantherclaw.v1.Discovery
-	32, // 14: pantherclaw.v1.AgentChange.details:type_name -> pantherclaw.v1.AgentChange.DetailsEntry
-	34, // 15: pantherclaw.v1.AgentChange.create_time:type_name -> google.protobuf.Timestamp
-	1,  // 16: pantherclaw.v1.CreateAgentRequest.execution_context:type_name -> pantherclaw.v1.ExecutionContext
-	3,  // 17: pantherclaw.v1.CreateAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	5,  // 18: pantherclaw.v1.GetAgentResponse.summary:type_name -> pantherclaw.v1.AgentSummary
-	0,  // 19: pantherclaw.v1.ListAgentsRequest.states:type_name -> pantherclaw.v1.AgentState
-	3,  // 20: pantherclaw.v1.ListAgentsResponse.agents:type_name -> pantherclaw.v1.Agent
-	35, // 21: pantherclaw.v1.ListAgentsResponse.automations:type_name -> pantherclaw.v1.AutomationIdentity
-	3,  // 22: pantherclaw.v1.UpdateAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	3,  // 23: pantherclaw.v1.TransferOwnershipResponse.agent:type_name -> pantherclaw.v1.Agent
-	18, // 24: pantherclaw.v1.ClaimAgentRequest.as_new_agent:type_name -> pantherclaw.v1.ClaimDetails
-	1,  // 25: pantherclaw.v1.ClaimDetails.execution_context:type_name -> pantherclaw.v1.ExecutionContext
-	3,  // 26: pantherclaw.v1.ClaimAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	3,  // 27: pantherclaw.v1.SuspendAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	3,  // 28: pantherclaw.v1.RetireAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	6,  // 29: pantherclaw.v1.ListAgentChangesResponse.changes:type_name -> pantherclaw.v1.AgentChange
-	33, // 30: pantherclaw.v1.ScanFinding.attributes:type_name -> pantherclaw.v1.ScanFinding.AttributesEntry
-	26, // 31: pantherclaw.v1.SubmitScanFindingsRequest.findings:type_name -> pantherclaw.v1.ScanFinding
-	34, // 32: pantherclaw.v1.RequestAgentRestorationResponse.deadline_time:type_name -> google.protobuf.Timestamp
-	7,  // 33: pantherclaw.v1.AgentService.CreateAgent:input_type -> pantherclaw.v1.CreateAgentRequest
-	9,  // 34: pantherclaw.v1.AgentService.GetAgent:input_type -> pantherclaw.v1.GetAgentRequest
-	11, // 35: pantherclaw.v1.AgentService.ListAgents:input_type -> pantherclaw.v1.ListAgentsRequest
-	13, // 36: pantherclaw.v1.AgentService.UpdateAgent:input_type -> pantherclaw.v1.UpdateAgentRequest
-	15, // 37: pantherclaw.v1.AgentService.TransferOwnership:input_type -> pantherclaw.v1.TransferOwnershipRequest
-	17, // 38: pantherclaw.v1.AgentService.ClaimAgent:input_type -> pantherclaw.v1.ClaimAgentRequest
-	20, // 39: pantherclaw.v1.AgentService.SuspendAgent:input_type -> pantherclaw.v1.SuspendAgentRequest
-	22, // 40: pantherclaw.v1.AgentService.RetireAgent:input_type -> pantherclaw.v1.RetireAgentRequest
-	24, // 41: pantherclaw.v1.AgentService.ListAgentChanges:input_type -> pantherclaw.v1.ListAgentChangesRequest
-	27, // 42: pantherclaw.v1.AgentService.SubmitScanFindings:input_type -> pantherclaw.v1.SubmitScanFindingsRequest
-	29, // 43: pantherclaw.v1.AgentService.RequestAgentRestoration:input_type -> pantherclaw.v1.RequestAgentRestorationRequest
-	8,  // 44: pantherclaw.v1.AgentService.CreateAgent:output_type -> pantherclaw.v1.CreateAgentResponse
-	10, // 45: pantherclaw.v1.AgentService.GetAgent:output_type -> pantherclaw.v1.GetAgentResponse
-	12, // 46: pantherclaw.v1.AgentService.ListAgents:output_type -> pantherclaw.v1.ListAgentsResponse
-	14, // 47: pantherclaw.v1.AgentService.UpdateAgent:output_type -> pantherclaw.v1.UpdateAgentResponse
-	16, // 48: pantherclaw.v1.AgentService.TransferOwnership:output_type -> pantherclaw.v1.TransferOwnershipResponse
-	19, // 49: pantherclaw.v1.AgentService.ClaimAgent:output_type -> pantherclaw.v1.ClaimAgentResponse
-	21, // 50: pantherclaw.v1.AgentService.SuspendAgent:output_type -> pantherclaw.v1.SuspendAgentResponse
-	23, // 51: pantherclaw.v1.AgentService.RetireAgent:output_type -> pantherclaw.v1.RetireAgentResponse
-	25, // 52: pantherclaw.v1.AgentService.ListAgentChanges:output_type -> pantherclaw.v1.ListAgentChangesResponse
-	28, // 53: pantherclaw.v1.AgentService.SubmitScanFindings:output_type -> pantherclaw.v1.SubmitScanFindingsResponse
-	30, // 54: pantherclaw.v1.AgentService.RequestAgentRestoration:output_type -> pantherclaw.v1.RequestAgentRestorationResponse
-	44, // [44:55] is the sub-list for method output_type
-	33, // [33:44] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	42, // 3: pantherclaw.v1.Agent.create_time:type_name -> google.protobuf.Timestamp
+	42, // 4: pantherclaw.v1.Agent.update_time:type_name -> google.protobuf.Timestamp
+	42, // 5: pantherclaw.v1.Agent.claim_time:type_name -> google.protobuf.Timestamp
+	42, // 6: pantherclaw.v1.Agent.retire_time:type_name -> google.protobuf.Timestamp
+	3,  // 7: pantherclaw.v1.Agent.risk_tier:type_name -> pantherclaw.v1.AgentRiskTier
+	4,  // 8: pantherclaw.v1.Agent.ai_act_role:type_name -> pantherclaw.v1.AgentAiActRole
+	5,  // 9: pantherclaw.v1.Agent.ai_act_risk:type_name -> pantherclaw.v1.AgentAiActRisk
+	42, // 10: pantherclaw.v1.Discovery.first_seen_time:type_name -> google.protobuf.Timestamp
+	42, // 11: pantherclaw.v1.Discovery.last_seen_time:type_name -> google.protobuf.Timestamp
+	39, // 12: pantherclaw.v1.Discovery.untrusted_observed:type_name -> pantherclaw.v1.Discovery.UntrustedObservedEntry
+	6,  // 13: pantherclaw.v1.AgentSummary.agent:type_name -> pantherclaw.v1.Agent
+	2,  // 14: pantherclaw.v1.AgentSummary.activity:type_name -> pantherclaw.v1.ActivityStatus
+	42, // 15: pantherclaw.v1.AgentSummary.last_verify_time:type_name -> google.protobuf.Timestamp
+	7,  // 16: pantherclaw.v1.AgentSummary.discovery:type_name -> pantherclaw.v1.Discovery
+	40, // 17: pantherclaw.v1.AgentChange.details:type_name -> pantherclaw.v1.AgentChange.DetailsEntry
+	42, // 18: pantherclaw.v1.AgentChange.create_time:type_name -> google.protobuf.Timestamp
+	1,  // 19: pantherclaw.v1.CreateAgentRequest.execution_context:type_name -> pantherclaw.v1.ExecutionContext
+	6,  // 20: pantherclaw.v1.CreateAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	8,  // 21: pantherclaw.v1.GetAgentResponse.summary:type_name -> pantherclaw.v1.AgentSummary
+	0,  // 22: pantherclaw.v1.ListAgentsRequest.states:type_name -> pantherclaw.v1.AgentState
+	6,  // 23: pantherclaw.v1.ListAgentsResponse.agents:type_name -> pantherclaw.v1.Agent
+	43, // 24: pantherclaw.v1.ListAgentsResponse.automations:type_name -> pantherclaw.v1.AutomationIdentity
+	3,  // 25: pantherclaw.v1.UpdateAgentRequest.risk_tier:type_name -> pantherclaw.v1.AgentRiskTier
+	17, // 26: pantherclaw.v1.UpdateAgentRequest.data_classes:type_name -> pantherclaw.v1.AgentDataClasses
+	4,  // 27: pantherclaw.v1.UpdateAgentRequest.ai_act_role:type_name -> pantherclaw.v1.AgentAiActRole
+	5,  // 28: pantherclaw.v1.UpdateAgentRequest.ai_act_risk:type_name -> pantherclaw.v1.AgentAiActRisk
+	20, // 29: pantherclaw.v1.GetAgentCardResponse.card:type_name -> pantherclaw.v1.AgentCard
+	3,  // 30: pantherclaw.v1.AgentCard.risk_tier:type_name -> pantherclaw.v1.AgentRiskTier
+	4,  // 31: pantherclaw.v1.AgentCard.ai_act_role:type_name -> pantherclaw.v1.AgentAiActRole
+	5,  // 32: pantherclaw.v1.AgentCard.ai_act_risk:type_name -> pantherclaw.v1.AgentAiActRisk
+	21, // 33: pantherclaw.v1.AgentCard.approved_tools:type_name -> pantherclaw.v1.AgentApprovedTool
+	6,  // 34: pantherclaw.v1.UpdateAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	6,  // 35: pantherclaw.v1.TransferOwnershipResponse.agent:type_name -> pantherclaw.v1.Agent
+	26, // 36: pantherclaw.v1.ClaimAgentRequest.as_new_agent:type_name -> pantherclaw.v1.ClaimDetails
+	1,  // 37: pantherclaw.v1.ClaimDetails.execution_context:type_name -> pantherclaw.v1.ExecutionContext
+	6,  // 38: pantherclaw.v1.ClaimAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	6,  // 39: pantherclaw.v1.SuspendAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	6,  // 40: pantherclaw.v1.RetireAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	9,  // 41: pantherclaw.v1.ListAgentChangesResponse.changes:type_name -> pantherclaw.v1.AgentChange
+	41, // 42: pantherclaw.v1.ScanFinding.attributes:type_name -> pantherclaw.v1.ScanFinding.AttributesEntry
+	34, // 43: pantherclaw.v1.SubmitScanFindingsRequest.findings:type_name -> pantherclaw.v1.ScanFinding
+	42, // 44: pantherclaw.v1.RequestAgentRestorationResponse.deadline_time:type_name -> google.protobuf.Timestamp
+	10, // 45: pantherclaw.v1.AgentService.CreateAgent:input_type -> pantherclaw.v1.CreateAgentRequest
+	12, // 46: pantherclaw.v1.AgentService.GetAgent:input_type -> pantherclaw.v1.GetAgentRequest
+	14, // 47: pantherclaw.v1.AgentService.ListAgents:input_type -> pantherclaw.v1.ListAgentsRequest
+	16, // 48: pantherclaw.v1.AgentService.UpdateAgent:input_type -> pantherclaw.v1.UpdateAgentRequest
+	23, // 49: pantherclaw.v1.AgentService.TransferOwnership:input_type -> pantherclaw.v1.TransferOwnershipRequest
+	25, // 50: pantherclaw.v1.AgentService.ClaimAgent:input_type -> pantherclaw.v1.ClaimAgentRequest
+	28, // 51: pantherclaw.v1.AgentService.SuspendAgent:input_type -> pantherclaw.v1.SuspendAgentRequest
+	30, // 52: pantherclaw.v1.AgentService.RetireAgent:input_type -> pantherclaw.v1.RetireAgentRequest
+	32, // 53: pantherclaw.v1.AgentService.ListAgentChanges:input_type -> pantherclaw.v1.ListAgentChangesRequest
+	18, // 54: pantherclaw.v1.AgentService.GetAgentCard:input_type -> pantherclaw.v1.GetAgentCardRequest
+	35, // 55: pantherclaw.v1.AgentService.SubmitScanFindings:input_type -> pantherclaw.v1.SubmitScanFindingsRequest
+	37, // 56: pantherclaw.v1.AgentService.RequestAgentRestoration:input_type -> pantherclaw.v1.RequestAgentRestorationRequest
+	11, // 57: pantherclaw.v1.AgentService.CreateAgent:output_type -> pantherclaw.v1.CreateAgentResponse
+	13, // 58: pantherclaw.v1.AgentService.GetAgent:output_type -> pantherclaw.v1.GetAgentResponse
+	15, // 59: pantherclaw.v1.AgentService.ListAgents:output_type -> pantherclaw.v1.ListAgentsResponse
+	22, // 60: pantherclaw.v1.AgentService.UpdateAgent:output_type -> pantherclaw.v1.UpdateAgentResponse
+	24, // 61: pantherclaw.v1.AgentService.TransferOwnership:output_type -> pantherclaw.v1.TransferOwnershipResponse
+	27, // 62: pantherclaw.v1.AgentService.ClaimAgent:output_type -> pantherclaw.v1.ClaimAgentResponse
+	29, // 63: pantherclaw.v1.AgentService.SuspendAgent:output_type -> pantherclaw.v1.SuspendAgentResponse
+	31, // 64: pantherclaw.v1.AgentService.RetireAgent:output_type -> pantherclaw.v1.RetireAgentResponse
+	33, // 65: pantherclaw.v1.AgentService.ListAgentChanges:output_type -> pantherclaw.v1.ListAgentChangesResponse
+	19, // 66: pantherclaw.v1.AgentService.GetAgentCard:output_type -> pantherclaw.v1.GetAgentCardResponse
+	36, // 67: pantherclaw.v1.AgentService.SubmitScanFindings:output_type -> pantherclaw.v1.SubmitScanFindingsResponse
+	38, // 68: pantherclaw.v1.AgentService.RequestAgentRestoration:output_type -> pantherclaw.v1.RequestAgentRestorationResponse
+	57, // [57:69] is the sub-list for method output_type
+	45, // [45:57] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_agents_proto_init() }
@@ -2686,18 +3395,18 @@ func file_pantherclaw_v1_agents_proto_init() {
 	file_pantherclaw_v1_agents_proto_msgTypes[4].OneofWrappers = []any{}
 	file_pantherclaw_v1_agents_proto_msgTypes[8].OneofWrappers = []any{}
 	file_pantherclaw_v1_agents_proto_msgTypes[10].OneofWrappers = []any{}
-	file_pantherclaw_v1_agents_proto_msgTypes[14].OneofWrappers = []any{
+	file_pantherclaw_v1_agents_proto_msgTypes[19].OneofWrappers = []any{
 		(*ClaimAgentRequest_AsNewAgent)(nil),
 		(*ClaimAgentRequest_MergeIntoAgentId)(nil),
 	}
-	file_pantherclaw_v1_agents_proto_msgTypes[15].OneofWrappers = []any{}
+	file_pantherclaw_v1_agents_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_agents_proto_rawDesc), len(file_pantherclaw_v1_agents_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   31,
+			NumEnums:      6,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

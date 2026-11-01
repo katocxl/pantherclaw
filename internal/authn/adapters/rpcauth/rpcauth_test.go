@@ -185,3 +185,44 @@ func TestAFinishedCallIsNotUnauthenticated(t *testing.T) {
 		t.Errorf("live call = %v, want unauthenticated", err)
 	}
 }
+
+// TestHR589_AlternatePermissionAdmitsOnlyItsProcedure: a caller holding the
+// alternate gets past the interceptor on that procedure; one holding neither
+// is refused, and the alternate opens no other procedure.
+// Covers: F887
+func TestHR589_AlternatePermissionAdmitsOnlyItsProcedure(t *testing.T) {
+	const held = td.PermOrgRead // A viewer holds it, and not user.read.
+	for _, tc := range []struct {
+		name string
+		alts map[string]td.Permission
+		ok   bool
+	}{
+		{"no alternate", nil, false},
+		{"another procedure's", map[string]td.Permission{pantherclawv1connect.AccessServiceListRolesProcedure: held}, false},
+		{"an alternate it lacks", map[string]td.Permission{pantherclawv1connect.AccessServiceListUsersProcedure: td.PermCatalogManage}, false},
+		{"its alternate", map[string]td.Permission{pantherclawv1connect.AccessServiceListUsersProcedure: held}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			perms := map[string]td.Permission{pantherclawv1connect.AccessServiceListUsersProcedure: td.PermUserRead}
+			s, err := rpc.NewServer(rpc.Options{Authenticate: rpcauth.New(
+				fakeAuthn{org: ids.New[ids.Org]()}, perms, nil, rpcauth.WithAlternatePermissions(tc.alts))})
+			if err != nil {
+				t.Fatal(err)
+			}
+			pantherclawv1connect.RegisterAccessServiceHandler(s, fakeAccess{})
+			mux := http.NewServeMux()
+			rpc.Mount(mux, s)
+			ts := httptest.NewServer(mux)
+			defer ts.Close()
+			hc := &http.Client{Transport: bearer{token: "viewer", base: ts.Client().Transport}}
+			c := pantherclawv1connect.NewAccessServiceClient(connect.NewClient(connecthttp.NewTransport(hc, ts.URL)))
+			_, err = c.ListUsers(context.Background(), &pantherclawv1.ListUsersRequest{})
+			if tc.ok && err != nil {
+				t.Errorf("admitted: %v", err)
+			}
+			if !tc.ok && code(err) != connect.CodePermissionDenied {
+				t.Errorf("refused: %v", err)
+			}
+		})
+	}
+}

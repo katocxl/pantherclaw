@@ -46,6 +46,10 @@ const (
 	ChangeDiscoveryChanged    ChangeKind = "agent.discovery_changed"
 )
 
+// ChangeRiskUpdated records a change of the fields people state about an
+// agent's risk (G0 M24 D230).
+const ChangeRiskUpdated ChangeKind = "agent.risk_updated"
+
 // VanishAfterMisses is how many complete scans in a row must miss a
 // discovery before people are told it vanished (G3, HR-458).
 const VanishAfterMisses = 3

@@ -52,6 +52,7 @@ type PcA2aPin struct {
 	DecidedAt           *time.Time
 	DriftedAt           *time.Time
 	ObservedDigest      []byte
+	PublicUrl           *string
 }
 
 type PcAccount struct {
@@ -168,6 +169,10 @@ type PcAgent struct {
 	RetiredAt         *time.Time
 	RangeAgent        bool
 	TaskType          *string
+	RiskTier          string
+	DataClasses       []string
+	AiActRole         string
+	AiActRisk         string
 }
 
 type PcAgentChange struct {
