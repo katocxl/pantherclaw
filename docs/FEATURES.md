@@ -725,7 +725,7 @@ Hub is a part of Root, not a new component. It publishes PantherClaw's own conte
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| F840 | Hub directory format | A static directory: a signed `index.jws` and `items/<sha256>.json`, no archives. Kinds are closed and hold no code. An item is at most 384 KiB, a compact index 640 KiB with 1,000 items; oversize is refused. | Next | Community | M23 | new |
+| F840 | Hub directory format | A static directory: a signed `index.jws` and `items/<sha256>.json`, no archives. Kinds are closed and hold no code. An item is at most 384 KiB, a compact index 624 KiB with 1,000 items; oversize is refused. | Next | Community | M23 | new |
 | F841 | Hub trust root | Hub documents verify under their own root and purpose, never as package documents or the reverse. The development key works on loopback only; empty roots elsewhere refuse with `HUB_NO_ROOT`. | Next | Community | M23 | new |
 | F842 | Hub state and install records | Per organization, the last accepted index version and digest, and one record per installed item, its result and who installed it. | Next | Community | M23 | new |
 | F843 | Hub API | `HubService` installs an item and lists installs and state. Reading needs `hub.read`; installing needs `hub.install`, a person only, and each kind's own gate still applies. | Next | Community | M23 | new |
@@ -737,7 +737,7 @@ Hub is a part of Root, not a new component. It publishes PantherClaw's own conte
 | F849 | Seed Hub content | Six policy templates, eight alert-only detection rules, five range scenarios and three automations; `task hub:check` runs the real validators in `task check`. | Next | Community | M23 | new |
 | F850 | Managed-settings kit | `pclaw managed-settings generate` writes Claude Code or Copilot admin files to a chosen directory or stdout, never to a managed location. It raises no coverage. | Next | Community | M23 | new |
 | F851 | Managed state in `pclaw init` | Reports managed settings as not found, present or in conflict, and says that registry, device-management and server-managed settings cannot be read here. | Next | Community | M23 | new |
-| F852 | Managed-settings signals | Scan adds a `managed_settings` attribute to existing findings, and a recommendation says when settings are missing. No coverage state changes. | Next | Community | M23 | F801 |
+| F852 | Managed-settings signals | Scan adds a `managed_settings` attribute to existing findings. A recommendation says when settings are missing; it is Team and up, the attribute Community. No coverage state changes. | Next | Community | M23 | F801 |
 | F853 | Offline policy checks | Validation, scenarios, policy comparison and simulation run from files, with no server and no network. | Next | Community | M23 | new |
 | F854 | `pclaw ci check` | Checks a policy file and reports validation, scenarios and rule changes by direction, as text, JSON or Markdown, with exit codes for pass, failed check and usage. | Next | Community | M23 | new |
 | F855 | Simulation samples in CI | The check adds outcome samples and says how many were sampled and that an empty sample proves nothing. | Next | Team | M23 | new |

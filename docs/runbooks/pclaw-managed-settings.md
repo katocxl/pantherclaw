@@ -12,12 +12,14 @@ pclaw managed-settings generate --client claude-code|copilot [--allow-file F] [-
 |---|---|
 | `--client` | `claude-code` or `copilot` |
 | `--allow-file F` | Allowed servers, as JSON: `{"servers":[{"name","url","command"}]}` |
-| `--out DIR` | Output directory; without it, stdout |
+| `--out DIR` | Output directory; without it, stdout. Managed locations, Copilot's managed directories and `.github-private` are refused |
+
+In the allow file, `command` is a string list, or one string that is the whole command and is never split. URLs are exact, with no wildcard, credentials or query. **With no allow file, the lists are empty and block every MCP server**; the command says so on stderr.
 
 | Client | Files |
 |---|---|
-| Claude Code | `managed-settings.json` (`allowManagedHooksOnly`, PantherClaw's hook, `allowedMcpServers`) and `managed-mcp.json` |
-| Copilot | `managed-settings.json` with allow and deny lists |
+| Claude Code | `managed-settings.json` (`allowManagedHooksOnly`, PantherClaw's hook, `allowedMcpServers`, and `allowManagedMcpServersOnly: true`, so a user cannot broaden the list) and `managed-mcp.json` |
+| Copilot | `managed-settings.json` with allow and deny lists; the deny list is empty |
 
 The command never writes to a managed location, and `pclaw init` never edits managed settings.
 
@@ -27,6 +29,6 @@ The command never writes to a managed location, and `pclaw init` never edits man
 
 `pclaw init` reports the managed state it can see as `not_found`, `present` or `conflict`. `not_found` shows as "No readable managed settings found": registry, device-management, server-managed and other clients' settings cannot be read from there, so the machine may still be managed.
 
-Scans add a `managed_settings` attribute to existing findings, and the recommendation `managed_settings_missing` appears when settings are missing.
+Scans add a `managed_settings` attribute to existing findings, and the recommendation `unsupported.managed_settings_missing` (Team and up) appears when settings are missing.
 
 From M24, `pclaw mcp catalog export --format managed-allow` writes the `--allow-file` from your catalogue.
