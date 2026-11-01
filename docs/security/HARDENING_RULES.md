@@ -653,3 +653,18 @@
 | HR-588 | A scan sends metadata only: no file content, no prompts and no arguments beyond the package or image token. Home paths become `~`, and a `--device` scan sends no hostname unless `--include-hostname` is passed. | T-255 | M24 |
 | HR-589 | The Scanner role belongs to service accounts only and holds exactly `org.read` and `agent.scan.submit`. It can submit scans for its own scope. Like every role it holds `org.read`, which reaches `GetOrg`, `GetModelSettings` and `GetModelDraft`; none of these carries a secret. It holds no other permission. | T-254 | M24 |
 | HR-590 | A failed signing never serves an invalid card signature: the gateway serves the rewritten card unsigned, as before, and logs it. | T-149 | M24 |
+
+## Prove it to the auditor: compliance reports and real-agent campaigns (G0 M25)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+
+## Enterprise identity: IdP access, SCIM, SAML and SaaS discovery (G0 M26)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+
+## Agent Detection & Response: analytics, content signals, playbooks and the read-only MCP server (G0 M27)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
