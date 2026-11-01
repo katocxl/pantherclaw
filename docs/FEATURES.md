@@ -755,10 +755,10 @@ Posture is ranked findings with fixes and no single measure (F797). Clean means 
 | F882 | Signed A2A cards | The server signs A2A cards with an `a2a_card` key in JWKS, only at a card URL a person stored. The gateway caches by digest for an hour. Otherwise, or if signing fails, it is served unsigned. | Next | Team | M24 | new |
 | F883 | Hook and skill findings | `pclaw scan` reports hooks by event and executable basename and skills by name and path, and nothing more. | Next | Community | M24 | F015 |
 | F884 | Package references in scans | For `npx`, `uvx`, `bunx`, `pipx run` and `docker run`, a scan keeps the package or image token only, with no other arguments. | Next | Community | M24 | F015 |
-| F885 | Device scope | Scans carry a `device:<id>` scope, a salted hash stored locally, and the 200 finding cap applies per source and scope. Dropped findings are still reported. Past org-wide limits on device scopes: `SCAN_DEVICE_LIMIT`. | Next | Team | M24 | new |
-| F886 | All-users scan | `pclaw scan --all-users` reads each home directory under SYSTEM or root, metadata only, and `PANTHERCLAW_API_KEY_FILE` supplies the key. It refuses with `SCAN_BINARY_WRITABLE` if a non-admin can replace the binary. | Next | Team | M24 | new |
+| F885 | Device scope | Scans carry a `device:<id>` scope, a salted hash of the machine id, and the 200 finding cap applies per source and scope. Dropped findings are still reported. Past org-wide limits on device scopes: `SCAN_DEVICE_LIMIT`. | Next | Community | M24 | new |
+| F886 | All-users scan | `pclaw scan --all-users` reads each home directory under SYSTEM or root, metadata only, and `PANTHERCLAW_API_KEY_FILE` supplies the key. It refuses with `SCAN_BINARY_WRITABLE` if a non-admin can replace the binary. | Next | Community | M24 | new |
 | F887 | Scanner role | A service-account role holding exactly `org.read` and `agent.scan.submit`, so it can submit scans for its scope and write nothing else. | Next | Team | M24 | new |
-| F888 | Scheduled device scans | `pclaw scan schedule` installs, removes and reports a scheduled task, launchd job or systemd timer; a runbook covers Intune and Jamf. | Next | Team | M24 | new |
+| F888 | Scheduled device scans | `pclaw scan schedule` installs, removes and reports a scheduled task, launchd job or systemd timer; a runbook covers Intune and Jamf. | Next | Community | M24 | new |
 | F889 | Environment-secret signal | The `env_secret` recommendation signal works from real input, so that F343 keeps its promise. | Next | Team | M24 | F343 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
