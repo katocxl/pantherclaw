@@ -410,7 +410,7 @@ definitions:
 # and one whose head pipeline did not pass at the head leaves the fact missing:
 # the consequence is unknown and the merge at least held (HR-521, T-229). A
 # project with none is read for how its pipeline is configured and for
-# .gitlab-ci.yml at the head: no file deploys nothing, and a custom
+# .gitlab-ci.yml at the head and the target branch: no file deploys nothing, and a custom
 # configuration path, Auto DevOps, a file that mentions environment or include,
 # or anything that could not be read leaves the fact missing too (D287, D289).
 consequences:
