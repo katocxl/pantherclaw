@@ -620,3 +620,52 @@ func ToolDigest(tool jsontext.Value) (string, error) {
 	sum := sha256.Sum256(v)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
+
+// listedFields are the rest of a listing an agent reads, each with its own
+// limit in bytes, so padding one cannot hide another (G0 M24 D270). Together
+// they fit a report's 16 KiB for them.
+var listedFields = []struct {
+	key   string
+	limit int
+}{{"title", 1 << 10}, {"annotations", 2 << 10}, {"outputSchema", 12 << 10}}
+
+// ListedExtra is the rest of a tool's listing an agent reads, beside its
+// description and input schema: a JSON object of its title, annotations and
+// output schema, empty when it lists none of them (G0 M24 D245). UNTRUSTED. A
+// field over its limit is left out, and the second result says one was.
+func ListedExtra(tool jsontext.Value) (jsontext.Value, bool) {
+	var m map[string]jsontext.Value
+	if json.Unmarshal(tool, &m) != nil {
+		return nil, false
+	}
+	keep, cut := map[string]jsontext.Value{}, false
+	for _, f := range listedFields {
+		v, ok := m[f.key]
+		switch {
+		case !ok:
+		case len(v) > f.limit:
+			cut = true
+		default:
+			keep[f.key] = v
+		}
+	}
+	if len(keep) == 0 {
+		return nil, cut
+	}
+	b, err := json.Marshal(keep, json.Deterministic(true))
+	if err != nil {
+		return nil, true
+	}
+	return b, cut
+}
+
+// SchemaDigest is "sha256:<hex>" of a tool's canonical input schema (G0 M24
+// D211).
+func SchemaDigest(schema jsontext.Value) (string, error) {
+	v := schema.Clone()
+	if err := v.Canonicalize(); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(v)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}

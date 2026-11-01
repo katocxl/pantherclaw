@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// SupplyChainService reads the supply-chain flags on what MCP servers list
+// and what packages carry (G0 M24 D210-D214; F867-F871; HR-582, HR-583). A
+// flag informs a person and decides nothing: it approves nothing and refuses
+// nothing. No flags means "no known flags", never safe.
+service SupplyChainService {
+  // ListSupplyChainFlags lists flags, oldest first.
+  // permission: connection.read
+  rpc ListSupplyChainFlags(ListSupplyChainFlagsRequest) returns (ListSupplyChainFlagsResponse);
+}
+
+// SupplyChainFlagSpan says where a flag looked. It holds offsets, never the
+// text they point at.
+message SupplyChainFlagSpan {
+  // description or input_schema.
+  string field = 1;
+  // First byte.
+  int32 start = 2;
+  // One past the last byte.
+  int32 end = 3;
+}
+
+// SupplyChainFlag is one check's finding on one listed entry or package tool.
+message SupplyChainFlag {
+  // Flag id.
+  string id = 1;
+  // The connection, for a listed entry.
+  string connection_id = 2;
+  // The inventory item, for a listed entry.
+  string inventory_item_id = 3;
+  // The package version, for a tool of an imported package.
+  string package_version_id = 4;
+  // The pattern-checked tool name; empty for a resource or template.
+  string tool = 5;
+  // sha256:<hex> of the entry checked.
+  string digest = 6;
+  // hidden_instruction, injection_pattern, tool_shadowing, overbroad_schema,
+  // rug_pull, provenance_unknown or schema_unavailable.
+  string check_kind = 7;
+  // LOW, MEDIUM or HIGH.
+  string severity = 8;
+  // PantherClaw's own note. It never holds listed text (HR-583).
+  string note = 9;
+  // Where it looked, at most 32 ranges.
+  repeated SupplyChainFlagSpan spans = 10;
+  // OPEN, or CLEARED once what it is on left review.
+  string state = 11;
+  // First flagged.
+  google.protobuf.Timestamp first_seen_time = 12;
+  // Last seen.
+  google.protobuf.Timestamp last_seen_time = 13;
+  // A fixed word for a flag with more than one reason, or empty:
+  // digest_unknown on a tool_shadowing flag with no upstream digest to compare.
+  string reason = 14;
+}
+
+// ListSupplyChainFlagsRequest selects one page.
+message ListSupplyChainFlagsRequest {
+  // Only this connection.
+  string connection_id = 1 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  // Only this inventory item.
+  string inventory_item_id = 2 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  // Only this package version.
+  string package_version_id = 3 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  // Only these states: OPEN, CLEARED (default all).
+  repeated string states = 4 [(buf.validate.field).repeated = {
+    max_items: 2
+    items: {
+      string: {
+        in: ["OPEN", "CLEARED"]
+      }
+    }
+  }];
+  // Page size (default 50, at most 200).
+  int32 page_size = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Page token.
+  string page_token = 6 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListSupplyChainFlagsResponse is one page.
+message ListSupplyChainFlagsResponse {
+  // Flags.
+  repeated SupplyChainFlag flags = 1;
+  // Next page, if any.
+  string next_page_token = 2;
+}

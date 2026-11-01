@@ -1168,24 +1168,32 @@ type PcConnectionGithub struct {
 }
 
 type PcConnectionInventory struct {
-	OrgID            ids.OrgID
-	ID               ids.UUID
-	ConnectionID     ids.UUID
-	Kind             string
-	Name             string
-	DisplayName      string
-	MimeType         string
-	DisplayTruncated bool
-	Digest           string
-	Description      string
-	DescriptionScan  string
-	State            string
-	ReviewEntryID    *ids.UUID
-	DismissedBy      *string
-	DismissReason    *string
-	FirstSeen        time.Time
-	LastSeen         time.Time
-	UpdatedAt        time.Time
+	OrgID                ids.OrgID
+	ID                   ids.UUID
+	ConnectionID         ids.UUID
+	Kind                 string
+	Name                 string
+	DisplayName          string
+	MimeType             string
+	DisplayTruncated     bool
+	Digest               string
+	Description          string
+	DescriptionScan      string
+	State                string
+	ReviewEntryID        *ids.UUID
+	DismissedBy          *string
+	DismissReason        *string
+	FirstSeen            time.Time
+	LastSeen             time.Time
+	UpdatedAt            time.Time
+	InputSchema          string
+	InputSchemaDigest    string
+	InputSchemaTruncated bool
+	ListedExtra          string
+	ListedExtraTruncated bool
+	OperatorNote         string
+	OperatorNoteBy       *string
+	OperatorNoteAt       *time.Time
 }
 
 type PcConnectionRoute struct {
@@ -3876,6 +3884,23 @@ type PcStreamLease struct {
 	Holder    string
 	ExpiresAt time.Time
 	CreatedAt time.Time
+}
+
+type PcSupplychainFlag struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	ConnectionID     *ids.UUID
+	InventoryID      *ids.UUID
+	PackageVersionID *ids.UUID
+	Tool             string
+	Entry            string
+	Digest           string
+	CheckKind        string
+	Severity         string
+	Detail           []byte
+	FirstSeen        time.Time
+	LastSeen         time.Time
+	State            string
 }
 
 type PcSupportAccessGrant struct {
