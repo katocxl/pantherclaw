@@ -98,6 +98,14 @@ type Admin struct {
 	// Pool runs an activation with Checks in one transaction when Protect
 	// is nil. Without it such an activation is refused.
 	Pool *db.Pool
+	// Catalog refuses to activate a version of a revoked server's package,
+	// in the activating transaction (G0 M24 D267).
+	Catalog CatalogCheck
+}
+
+// CatalogCheck is the MCP catalog's say on activating a package's version.
+type CatalogCheck interface {
+	CheckPackageActivation(ctx context.Context, tx db.TenantTx, name string) error
 }
 
 // ActivationCheck re-checks one thing that depends on the org's active
@@ -203,7 +211,7 @@ func (a *Admin) Transition(ctx context.Context, name, version string, to domain.
 		}
 		return a.version(ctx, c.Org, name, version)
 	}
-	if to == domain.StateActive && len(a.Checks) > 0 {
+	if to == domain.StateActive && (len(a.Checks) > 0 || a.Catalog != nil) {
 		if a.Pool == nil {
 			return VersionInfo{}, errNoActivationChecks
 		}
@@ -275,6 +283,11 @@ func (a *Admin) activateTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, n
 	}
 	if err := domain.Lifecycle.Check(from, domain.StateActive); err != nil {
 		return err
+	}
+	if a.Catalog != nil {
+		if err := a.Catalog.CheckPackageActivation(ctx, tx, name); err != nil {
+			return err
+		}
 	}
 	if a.Importer.Keys != nil {
 		k, err := a.Importer.Keys.VersionSigner(ctx, c.Org, name, version)

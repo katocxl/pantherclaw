@@ -231,6 +231,11 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 	var held *protect.PendingError
 	err := func() error {
 		q := dbq.New(tx)
+		if in.Connector != nil || in.BaseURL != nil {
+			if err := s.holdCatalog(ctx, tx); err != nil {
+				return err
+			}
+		}
 		conn, err := lock(ctx, q, c.Org, in.ID)
 		if err != nil {
 			return err
@@ -356,6 +361,13 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			}
 			kc = &kindConfig{cfg: cfg, store: store}
 			set(conn.Kind, "current", "replaced", true)
+		}
+		// A connection never moves to a server the catalog would refuse
+		// (HR-585); a held update checks again when it applies.
+		if in.Connector != nil || in.BaseURL != nil {
+			if err := s.checkCatalog(ctx, tx, createdTarget(conn.Kind, p.BaseUrl, spec)); err != nil {
+				return err
+			}
 		}
 		write := func(ctx context.Context) error {
 			if kc != nil {
@@ -589,12 +601,26 @@ func (s *Service) transition(ctx context.Context, id ids.UUID, from []string, to
 	var out Connection
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if to == StateActive {
+			if err := s.holdCatalog(ctx, tx); err != nil {
+				return err
+			}
+		}
 		conn, err := lock(ctx, q, c.Org, id)
 		if err != nil {
 			return err
 		}
 		if !slices.Contains(from, conn.State) {
 			return ErrState
+		}
+		if to == StateActive {
+			target, err := currentTarget(ctx, q, conn)
+			if err != nil {
+				return err
+			}
+			if err := s.checkCatalog(ctx, tx, target); err != nil {
+				return err
+			}
 		}
 		p := params(c, conn)
 		p.State, p.QuarantineReason = to, reasonCode

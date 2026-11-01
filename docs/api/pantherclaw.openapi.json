@@ -17937,6 +17937,546 @@
         }
       }
     },
+    "/pantherclaw.v1.McpCatalogService/ProposeServer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "ProposeServer",
+        "description": "ProposeServer adds a PROPOSED server.\n permission: catalog.manage",
+        "operationId": "pantherclaw.v1.McpCatalogService.ProposeServer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ProposeServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ProposeServerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/ApproveServer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "ApproveServer",
+        "description": "ApproveServer moves a PROPOSED or DENIED server to APPROVED.\n permission: catalog.manage",
+        "operationId": "pantherclaw.v1.McpCatalogService.ApproveServer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ApproveServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ApproveServerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/DenyServer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "DenyServer",
+        "description": "DenyServer moves a PROPOSED server to DENIED.\n permission: catalog.manage",
+        "operationId": "pantherclaw.v1.McpCatalogService.DenyServer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DenyServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DenyServerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/ListServers": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "ListServers",
+        "description": "ListServers lists the catalog.\n permission: catalog.read",
+        "operationId": "pantherclaw.v1.McpCatalogService.ListServers",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListServersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListServersResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/GetServer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "GetServer",
+        "description": "GetServer reads one server.\n permission: catalog.read",
+        "operationId": "pantherclaw.v1.McpCatalogService.GetServer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetServerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/GetCatalogSettings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "GetCatalogSettings",
+        "description": "GetCatalogSettings reads the catalog's mode.\n permission: catalog.read",
+        "operationId": "pantherclaw.v1.McpCatalogService.GetCatalogSettings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetCatalogSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetCatalogSettingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/PreviewCatalogMode": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "PreviewCatalogMode",
+        "description": "PreviewCatalogMode says what switching to a mode would do, and gives the\n digest a switch to ENFORCE must be confirmed against.\n permission: catalog.read",
+        "operationId": "pantherclaw.v1.McpCatalogService.PreviewCatalogMode",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.PreviewCatalogModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.PreviewCatalogModeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/SetCatalogMode": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "SetCatalogMode",
+        "description": "SetCatalogMode changes the mode (a person with a fresh security-key\n step-up). A switch to ENFORCE needs preview_digest and quarantines the\n non-matching connections in one transaction. Leaving ENFORCE files a\n protected change and returns it: nothing changes until a second person\n confirms it.\n permission: catalog.manage",
+        "operationId": "pantherclaw.v1.McpCatalogService.SetCatalogMode",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetCatalogModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetCatalogModeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/PreviewServerRevoke": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "PreviewServerRevoke",
+        "description": "PreviewServerRevoke says what revoking a server would do and gives the\n digest a revoke must be confirmed against.\n permission: catalog.read",
+        "operationId": "pantherclaw.v1.McpCatalogService.PreviewServerRevoke",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.PreviewServerRevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.PreviewServerRevokeResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.McpCatalogService/RevokeServer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.McpCatalogService"
+        ],
+        "summary": "RevokeServer",
+        "description": "RevokeServer moves a server to REVOKED and stops every matching\n connection in the org (a person with a fresh security-key step-up,\n against the digest of a current preview). An independent second person\n lifts it through ResponseService's restoration.\n permission: catalog.manage",
+        "operationId": "pantherclaw.v1.McpCatalogService.RevokeServer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokeServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokeServerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.SearchService/Search": {
       "post": {
         "tags": [
@@ -68404,6 +68944,695 @@
         "additionalProperties": false,
         "description": "WhatHappenedResponse is what actually happened (F239)."
       },
+      "pantherclaw.v1.McpCatalogMode": {
+        "type": "string",
+        "title": "McpCatalogMode",
+        "enum": [
+          "MCP_CATALOG_MODE_UNSPECIFIED",
+          "MCP_CATALOG_MODE_OFF",
+          "MCP_CATALOG_MODE_WATCH",
+          "MCP_CATALOG_MODE_ENFORCE"
+        ],
+        "description": "McpCatalogMode is what the catalog does (D220)."
+      },
+      "pantherclaw.v1.McpServerStatus": {
+        "type": "string",
+        "title": "McpServerStatus",
+        "enum": [
+          "MCP_SERVER_STATUS_UNSPECIFIED",
+          "MCP_SERVER_STATUS_PROPOSED",
+          "MCP_SERVER_STATUS_APPROVED",
+          "MCP_SERVER_STATUS_DENIED",
+          "MCP_SERVER_STATUS_REVOKED"
+        ],
+        "description": "McpServerStatus is where a server stands in the catalog."
+      },
+      "pantherclaw.v1.McpServerTransport": {
+        "type": "string",
+        "title": "McpServerTransport",
+        "enum": [
+          "MCP_SERVER_TRANSPORT_UNSPECIFIED",
+          "MCP_SERVER_TRANSPORT_HTTP",
+          "MCP_SERVER_TRANSPORT_STDIO",
+          "MCP_SERVER_TRANSPORT_CONTAINER"
+        ],
+        "description": "McpServerTransport is how the server is reached."
+      },
+      "pantherclaw.v1.ApproveServerRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "ApproveServerRequest",
+        "additionalProperties": false,
+        "description": "ApproveServerRequest names a server.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ApproveServerResponse": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "title": "server",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServer"
+          }
+        },
+        "title": "ApproveServerResponse",
+        "additionalProperties": false,
+        "description": "ApproveServerResponse holds the entry."
+      },
+      "pantherclaw.v1.DenyServerRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "DenyServerRequest",
+        "additionalProperties": false,
+        "description": "DenyServerRequest names a server.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DenyServerResponse": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "title": "server",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServer"
+          }
+        },
+        "title": "DenyServerResponse",
+        "additionalProperties": false,
+        "description": "DenyServerResponse holds the entry."
+      },
+      "pantherclaw.v1.GetCatalogSettingsRequest": {
+        "type": "object",
+        "title": "GetCatalogSettingsRequest",
+        "additionalProperties": false,
+        "description": "GetCatalogSettingsRequest is empty."
+      },
+      "pantherclaw.v1.GetCatalogSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "title": "settings",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpCatalogSettings"
+          }
+        },
+        "title": "GetCatalogSettingsResponse",
+        "additionalProperties": false,
+        "description": "GetCatalogSettingsResponse holds the settings."
+      },
+      "pantherclaw.v1.GetServerRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "GetServerRequest",
+        "additionalProperties": false,
+        "description": "GetServerRequest names a server.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetServerResponse": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "title": "server",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServer"
+          }
+        },
+        "title": "GetServerResponse",
+        "additionalProperties": false,
+        "description": "GetServerResponse holds the entry."
+      },
+      "pantherclaw.v1.ListServersRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token"
+          },
+          "statuses": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpServerStatus"
+            },
+            "title": "statuses",
+            "maxItems": 4
+          }
+        },
+        "title": "ListServersRequest",
+        "additionalProperties": false,
+        "description": "ListServersRequest pages the catalog, optionally of some statuses."
+      },
+      "pantherclaw.v1.ListServersResponse": {
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpServer"
+            },
+            "title": "servers"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListServersResponse",
+        "additionalProperties": false,
+        "description": "ListServersResponse is one page."
+      },
+      "pantherclaw.v1.McpCatalogSettings": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "title": "mode",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpCatalogMode"
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by",
+            "description": "Empty until the mode was first changed."
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "McpCatalogSettings",
+        "additionalProperties": false,
+        "description": "McpCatalogSettings is the catalog's mode."
+      },
+      "pantherclaw.v1.McpConnectionRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind"
+          },
+          "state": {
+            "type": "string",
+            "title": "state"
+          },
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id"
+          }
+        },
+        "title": "McpConnectionRef",
+        "additionalProperties": false,
+        "description": "McpConnectionRef is a connection a catalog change would touch."
+      },
+      "pantherclaw.v1.McpLocalServerRef": {
+        "type": "object",
+        "properties": {
+          "discoveryId": {
+            "type": "string",
+            "title": "discovery_id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "UNTRUSTED: what the scan reported, plain text only."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "Always \"not_stoppable_here\"."
+          },
+          "denyListHint": {
+            "type": "string",
+            "title": "deny_list_hint",
+            "description": "What to add to a managed deny list instead (D113)."
+          }
+        },
+        "title": "McpLocalServerRef",
+        "additionalProperties": false,
+        "description": "McpLocalServerRef is a local server only a scan saw, as a discovery. It runs\n on someone's machine outside any connection, so nothing here can stop it."
+      },
+      "pantherclaw.v1.McpPackageVersionRef": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string",
+            "title": "package"
+          },
+          "version": {
+            "type": "string",
+            "title": "version"
+          },
+          "state": {
+            "type": "string",
+            "title": "state"
+          }
+        },
+        "title": "McpPackageVersionRef",
+        "additionalProperties": false,
+        "description": "McpPackageVersionRef is a package version tied to a server."
+      },
+      "pantherclaw.v1.McpServer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "status": {
+            "title": "status",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServerStatus"
+          },
+          "transport": {
+            "title": "transport",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServerTransport"
+          },
+          "packageRef": {
+            "type": "string",
+            "title": "package_ref",
+            "description": "What it matches, exactly (HR-585). At least one of package_ref, url_host\n and image_digest is set."
+          },
+          "urlHost": {
+            "type": "string",
+            "title": "url_host"
+          },
+          "urlPathPrefix": {
+            "type": "string",
+            "title": "url_path_prefix"
+          },
+          "imageDigest": {
+            "type": "string",
+            "title": "image_digest"
+          },
+          "notes": {
+            "type": "string",
+            "title": "notes",
+            "description": "UNTRUSTED: the proposer's text, plain text only."
+          },
+          "decidedBy": {
+            "type": "string",
+            "title": "decided_by"
+          },
+          "decideTime": {
+            "title": "decide_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "McpServer",
+        "additionalProperties": false,
+        "description": "McpServer is one catalog entry."
+      },
+      "pantherclaw.v1.PreviewCatalogModeRequest": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "title": "mode",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpCatalogMode",
+            "not": {
+              "enum": [
+                "MCP_CATALOG_MODE_UNSPECIFIED"
+              ]
+            }
+          }
+        },
+        "title": "PreviewCatalogModeRequest",
+        "additionalProperties": false,
+        "description": "PreviewCatalogModeRequest names the mode to switch to.",
+        "required": [
+          "mode"
+        ]
+      },
+      "pantherclaw.v1.PreviewCatalogModeResponse": {
+        "type": "object",
+        "properties": {
+          "fromMode": {
+            "title": "from_mode",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpCatalogMode"
+          },
+          "toMode": {
+            "title": "to_mode",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpCatalogMode"
+          },
+          "quarantines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpConnectionRef"
+            },
+            "title": "quarantines",
+            "description": "The active connections a switch to ENFORCE quarantines."
+          },
+          "needsSecondPerson": {
+            "type": "boolean",
+            "title": "needs_second_person",
+            "description": "Whether leaving ENFORCE waits for a second person."
+          },
+          "previewDigest": {
+            "type": "string",
+            "title": "preview_digest",
+            "format": "byte",
+            "description": "The SHA-256 a switch to ENFORCE is confirmed against."
+          }
+        },
+        "title": "PreviewCatalogModeResponse",
+        "additionalProperties": false,
+        "description": "PreviewCatalogModeResponse is what the switch would do."
+      },
+      "pantherclaw.v1.PreviewServerRevokeRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "PreviewServerRevokeRequest",
+        "additionalProperties": false,
+        "description": "PreviewServerRevokeRequest names a server.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.PreviewServerRevokeResponse": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "title": "server",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServer"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpConnectionRef"
+            },
+            "title": "connections",
+            "description": "The connections it stops."
+          },
+          "packageVersions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpPackageVersionRef"
+            },
+            "title": "package_versions",
+            "description": "The package versions it quarantines."
+          },
+          "notStoppableHere": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpLocalServerRef"
+            },
+            "title": "not_stoppable_here",
+            "description": "Local servers a scan saw: stated, and not stopped."
+          },
+          "previewDigest": {
+            "type": "string",
+            "title": "preview_digest",
+            "format": "byte",
+            "description": "The SHA-256 RevokeServer is confirmed against (HR-252)."
+          }
+        },
+        "title": "PreviewServerRevokeResponse",
+        "additionalProperties": false,
+        "description": "PreviewServerRevokeResponse is what a revoke would do."
+      },
+      "pantherclaw.v1.ProposeServerRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "title": "title",
+            "maxLength": 200,
+            "minLength": 1
+          },
+          "transport": {
+            "title": "transport",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServerTransport",
+            "not": {
+              "enum": [
+                "MCP_SERVER_TRANSPORT_UNSPECIFIED"
+              ]
+            }
+          },
+          "packageRef": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "package_ref",
+            "maxLength": 256
+          },
+          "urlHost": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "url_host",
+            "maxLength": 261,
+            "description": "A host name or IP literal with an optional port, which means https, or\n http://addr:port for a private or loopback address: no wildcard."
+          },
+          "urlPathPrefix": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "url_path_prefix",
+            "maxLength": 512
+          },
+          "imageDigest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "image_digest",
+            "maxLength": 71
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "notes",
+            "maxLength": 2000
+          }
+        },
+        "title": "ProposeServerRequest",
+        "additionalProperties": false,
+        "description": "ProposeServerRequest is a new entry.",
+        "required": [
+          "name",
+          "title",
+          "transport"
+        ]
+      },
+      "pantherclaw.v1.ProposeServerResponse": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "title": "server",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServer"
+          }
+        },
+        "title": "ProposeServerResponse",
+        "additionalProperties": false,
+        "description": "ProposeServerResponse holds the new entry."
+      },
+      "pantherclaw.v1.RevokeServerRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "previewDigest": {
+            "type": "string",
+            "title": "preview_digest",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 1000,
+            "minLength": 1
+          }
+        },
+        "title": "RevokeServerRequest",
+        "additionalProperties": false,
+        "description": "RevokeServerRequest confirms a preview.",
+        "required": [
+          "id",
+          "previewDigest",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RevokeServerResponse": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "title": "server",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpServer"
+          },
+          "responseActionId": {
+            "type": "string",
+            "title": "response_action_id",
+            "description": "The response action; its paths say how far the revoke reached."
+          },
+          "controlIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "control_ids",
+            "description": "The containment controls, one per connection, a restoration lifts."
+          },
+          "quarantinedVersions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpPackageVersionRef"
+            },
+            "title": "quarantined_versions"
+          },
+          "notStoppableHere": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpLocalServerRef"
+            },
+            "title": "not_stoppable_here"
+          },
+          "restorationPlanIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "restoration_plan_ids",
+            "description": "The restoration plans that lift the controls, for someone else to decide.\n A lift leaves the server REVOKED and the package versions QUARANTINED."
+          }
+        },
+        "title": "RevokeServerResponse",
+        "additionalProperties": false,
+        "description": "RevokeServerResponse is what happened."
+      },
+      "pantherclaw.v1.SetCatalogModeRequest": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "title": "mode",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpCatalogMode",
+            "not": {
+              "enum": [
+                "MCP_CATALOG_MODE_UNSPECIFIED"
+              ]
+            }
+          },
+          "previewDigest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "preview_digest",
+            "maxLength": 32,
+            "format": "byte",
+            "description": "Required for ENFORCE."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "SetCatalogModeRequest",
+        "additionalProperties": false,
+        "description": "SetCatalogModeRequest changes the mode.",
+        "required": [
+          "mode",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.SetCatalogModeResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "title": "settings",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpCatalogSettings"
+          },
+          "quarantinedConnectionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "quarantined_connection_ids",
+            "description": "The connections the switch quarantined."
+          },
+          "change": {
+            "title": "change",
+            "description": "Set when the change waits for a second person: settings are unchanged.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "SetCatalogModeResponse",
+        "additionalProperties": false,
+        "description": "SetCatalogModeResponse is what happened."
+      },
       "pantherclaw.v1.Ambiguity": {
         "type": "object",
         "properties": {
@@ -90554,6 +91783,10 @@
     {
       "name": "pantherclaw.v1.InvestigationService",
       "description": "InvestigationService explains runs and actions from recorded evidence\n (G0 M10 D20; F239, F241, F248, F232, F284, F234; HR-247). Every row is\n read with evidence.read where its agent lives; rows of other agents are\n left out before anything is counted, and an action or run outside that\n scope is reported as not found. Nothing here asserts causation: items\n carry their basis, and a comparison never labels a run malicious."
+    },
+    {
+      "name": "pantherclaw.v1.McpCatalogService",
+      "description": "McpCatalogService is the org's approved MCP server catalog (G0 M24\n D220-D226; F872-F879; HR-585, HR-586, HR-587; Team edition).\n\n A server names what it matches, and matching is exact: a URL host with an\n optional path prefix, an image digest or a package reference, never a\n similar name. The catalog starts in WATCH, which reports unapproved\n servers and stops nothing. ENFORCE is opt-in: it refuses to activate a\n connection to an unapproved server, and switching to it quarantines the\n connections that match no approved server, after a preview. Leaving ENFORCE\n always waits for a second person. Being in the catalog never adds to what\n an agent may do: the Authority decides as it always did.\n\n Revoking a server stops every connection that matches it inside one org.\n A person does it, against the digest of a current preview, and an\n independent second person lifts it. A local server that only a scan saw is\n not stoppable from here: the preview says so and gives a deny-list hint."
     },
     {
       "name": "pantherclaw.v1.SearchService",

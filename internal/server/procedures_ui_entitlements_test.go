@@ -80,7 +80,8 @@ func TestPlanGateClassesAreSound(t *testing.T) {
 		"/pantherclaw.v1.AgentService/SuspendAgent", "/pantherclaw.v1.ApprovalService/DeclineApprovalRequest",
 		"/pantherclaw.v1.GrantService/RevokeGrant", "/pantherclaw.v1.EvidenceService/CreateEvidencePack",
 		"/pantherclaw.v1.ReconciliationService/ResolveOccurred", "/pantherclaw.v1.ConnectionService/QuarantineConnection",
-		"/pantherclaw.v1.RunService/StartRun", // D88: existing agents keep running under enforcement
+		"/pantherclaw.v1.RunService/StartRun",              // D88: existing agents keep running under enforcement
+		"/pantherclaw.v1.McpCatalogService/SetCatalogMode", // D261: a lapsed org can still weaken or turn off the mode
 	} {
 		if c := procedureClasses[p]; c != entitlements.ClassSafety {
 			t.Errorf("%s is %s, want safety", p, c)

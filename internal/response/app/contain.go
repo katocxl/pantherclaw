@@ -91,7 +91,7 @@ func scopeOf(s reflexdomain.Subject) (string, string, error) {
 	case reflexdomain.SubjectInstance, reflexdomain.SubjectTransaction, reflexdomain.SubjectCredential, reflexdomain.SubjectGateway,
 		reflexdomain.SubjectPackage, reflexdomain.SubjectPolicyVersion, reflexdomain.SubjectAlert, reflexdomain.SubjectIncident,
 		reflexdomain.SubjectCase, reflexdomain.SubjectFinding, reflexdomain.SubjectSystem, reflexdomain.SubjectAutomation,
-		reflexdomain.SubjectAutomationExecution:
+		reflexdomain.SubjectAutomationExecution, reflexdomain.SubjectMcpServer:
 	}
 	return "", "", rdomain.ErrScope
 }

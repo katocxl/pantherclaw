@@ -509,6 +509,13 @@ func preconditions(ctx context.Context, q *dbq.Queries, org ids.OrgID, controls 
 			}
 			if h.State != "ACTIVE" || h.GatewayState != "ACTIVE" {
 				pc.State, pc.Detail = PreUnmet, "the connection is "+orUnknown(h.State)+" on a "+orUnknown(h.GatewayState)+" gateway"
+				revocation, err := serverRevocation(ctx, q, org, c.ActionID)
+				if err != nil {
+					return nil, err
+				}
+				if revocation {
+					pc.State, pc.Detail = PreInfo, "not applicable, recorded: "+pc.Detail+", and a lift leaves it so"
+				}
 			}
 			out = append(out, pc)
 		}

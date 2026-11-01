@@ -952,6 +952,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM11Protect(rs, d, autos)
 	registerM17Rules(rs, d)
 	registerM18IdPs(rs, d)
+	registerM24Catalog(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
@@ -1258,7 +1259,7 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 	}
 	pantherclawv1connect.RegisterPackageServiceHandler(rs, packagesrpc.New(protectPackages(&defsapp.Admin{
 		Importer: &defsapp.Importer{Roots: roots, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs, Authz: authz,
-		Ents: d.billing, Checks: activationChecks(d.pool, d.cel), Pool: d.pool,
+		Ents: d.billing, Checks: activationChecks(d.pool, d.cel), Pool: d.pool, Catalog: packageCatalogCheck(),
 	}, d)))
 	registerPolicyGate(rs, d)
 	return nil
