@@ -316,10 +316,16 @@ func shadowing(t Tool, k Known) *Flag {
 	if slices.Contains(k.BuiltIns, t.Name) {
 		return &Flag{Kind: KindToolShadowing, Severity: SeverityHigh, Note: "Same name as a tool agents have built in."}
 	}
-	if slices.ContainsFunc(k.Approved, func(a Approved) bool { return a.Name == t.Name && a.Digest != t.Digest }) {
-		return &Flag{Kind: KindToolShadowing, Severity: SeverityHigh, Note: "Same name as an approved tool with another definition."}
+	if !slices.ContainsFunc(k.Approved, func(a Approved) bool { return a.Name == t.Name && a.Digest != t.Digest }) {
+		return nil
 	}
-	return nil
+	if t.DigestUnknown {
+		return &Flag{
+			Kind: KindToolShadowing, Severity: SeverityMedium, Reason: ReasonDigestUnknown,
+			Note: "Same name as an approved tool, and no upstream digest to compare it by.",
+		}
+	}
+	return &Flag{Kind: KindToolShadowing, Severity: SeverityHigh, Note: "Same name as an approved tool with another definition."}
 }
 
 // rugPull is the rug_pull check: what the pinned version reviewed changed

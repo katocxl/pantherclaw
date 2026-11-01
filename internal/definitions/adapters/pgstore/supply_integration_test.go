@@ -107,3 +107,47 @@ func TestD212_DevelopmentKeyHasNoProvenance(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestD272_ImportFlagsKeepTheWorstAndAResourceItsOwn: two mappings of a tool
+// with one kind keep the higher severity, whichever came first, and two
+// resources do not share a flag.
+// Covers: T-250, F869
+func TestD272_ImportFlagsKeepTheWorstAndAResourceItsOwn(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	org := newOrg(t, f.pool)
+	if _, err := f.im.Import(ctx, org, "pc.mock-payments", "1.0.0", f.targets(1, "1.0.0"), f.files["1.0.0"], nil); err != nil {
+		t.Fatal(err)
+	}
+	var version ids.UUID
+	if err := f.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT id FROM pc.package_versions WHERE version = '1.0.0'`).Scan(&version)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	digest := "sha256:" + strings.Repeat("a", 64)
+	p := &domain.Package{Name: "pc.mock-payments", Definitions: []domain.Definition{{
+		Digest: digest,
+		Mappings: []domain.Mapping{
+			{Channel: domain.ChannelMCP, Tool: "worst_last", Description: "One <!-- x -->."},
+			{Channel: domain.ChannelMCP, Tool: "worst_last", Description: "Two a\u202eb."},
+			{Channel: domain.ChannelMCP, Tool: "worst_first", Description: "Two a\u202eb."},
+			{Channel: domain.ChannelMCP, Tool: "worst_first", Description: "One <!-- x -->."},
+			{Channel: domain.ChannelMCPResource, Resource: "file:///a/{id}", Description: "A <!-- y -->."},
+			{Channel: domain.ChannelMCPResource, Resource: "file:///b/{id}", Description: "B <!-- z -->."},
+		},
+	}}}
+	if err := f.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := pgflags.CheckPackage(ctx, tx, org, version, p, false)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.rows(org, `SELECT count(*) FROM pc.supplychain_flags WHERE package_version_id = $1 AND check_kind = 'hidden_instruction' AND severity = 'HIGH'
+		AND tool IN ('worst_first', 'worst_last')`, version); n != 2 {
+		t.Errorf("%d tools kept HIGH, want 2", n)
+	}
+	if n := f.rows(org, `SELECT count(*) FROM pc.supplychain_flags WHERE package_version_id = $1 AND tool = '' AND check_kind = 'hidden_instruction'`, version); n != 2 {
+		t.Errorf("%d resource flags, want 2", n)
+	}
+}

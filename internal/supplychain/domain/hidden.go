@@ -4,6 +4,7 @@
 package domain
 
 import (
+	"encoding/json/jsontext"
 	"fmt"
 	"strings"
 	"unicode"
@@ -62,15 +63,15 @@ func classify(s string, i int, r rune, n int) hiddenClass {
 			return notHidden
 		}
 		return hiddenTag
-	case r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069:
+	case r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069, r == 0x061C:
 		return hiddenBidi
-	case r == 0x200E, r == 0x200F, r == 0x061C:
+	case r == 0x200E, r == 0x200F:
 		if isRTL(prev) || isRTL(next) {
 			return notHidden
 		}
 		return hiddenBidi
 	case r == 0x200C, r == 0x200D:
-		if r == 0x200D && isEmoji(prev) && isEmoji(next) || unicode.In(prev, joiningScripts...) || unicode.In(next, joiningScripts...) {
+		if r == 0x200D && isEmoji(prev) && isEmoji(next) || unicode.In(prev, joiningScripts...) && unicode.In(next, joiningScripts...) {
 			return notHidden
 		}
 		return hiddenZeroWidth
@@ -79,18 +80,13 @@ func classify(s string, i int, r rune, n int) hiddenClass {
 			return notHidden // a byte order mark
 		}
 		return hiddenZeroWidth
-	case r >= 0xE0100 && r <= 0xE01EF:
-		if unicode.Is(unicode.Han, prev) {
-			return notHidden // an ideographic variation sequence
-		}
-		return hiddenZeroWidth
 	case r == 0xFE0F:
 		if isEmojiBase(prev) || isKeycapBase(prev) && next == 0x20E3 {
 			return notHidden // one selector asking for emoji presentation
 		}
 		return hiddenZeroWidth
-	case r >= 0xFE00 && r <= 0xFE0E, r >= 0x180B && r <= 0x180F, r == 0x034F, r == 0x115F, r == 0x1160, r == 0x3164, r == 0xFFA0,
-		unicode.Is(unicode.Cf, r):
+	case r >= 0xFE00 && r <= 0xFE0E, r >= 0xE0100 && r <= 0xE01EF, r >= 0x180B && r <= 0x180F, r == 0x034F, r == 0x115F, r == 0x1160,
+		r == 0x3164, r == 0xFFA0, unicode.Is(unicode.Cf, r):
 		return hiddenZeroWidth
 	}
 	return notHidden
@@ -207,6 +203,32 @@ func documentOf(f Field, raw []byte, n *node, err error) document {
 	return document{field: f, node: n}
 }
 
+// eachEscaped calls f with every string of a raw document that holds an escape,
+// decoded, since the raw text does not show what an escape stands for. It walks
+// string literals, so neither depth nor a syntax error stops it (D272).
+func (d document) eachEscaped(f func(s string, start, end int)) {
+	for i := 0; i < len(d.raw); i++ {
+		if d.raw[i] != '"' {
+			continue
+		}
+		end, escaped := i+1, false
+		for end < len(d.raw) && d.raw[end] != '"' {
+			if d.raw[end] == '\\' {
+				escaped = true
+				end++
+			}
+			end++
+		}
+		end = min(end+1, len(d.raw))
+		if escaped {
+			if s, err := jsontext.AppendUnquote(nil, d.raw[i:end]); err == nil {
+				f(string(s), i, end)
+			}
+		}
+		i = end - 1
+	}
+}
+
 // hidden is the hidden_instruction check: characters that do not show, and
 // HTML comments, in the description, the schema or the other listed fields.
 // Agents read these; people rarely do.
@@ -215,6 +237,9 @@ func hidden(t Tool, docs []document) *Flag {
 	h.scan(t.Description, func(start, end int) Span { return Span{FieldDescription, start, end} })
 	for _, d := range docs {
 		h.scan(d.raw, func(start, end int) Span { return Span{d.field, start, end} })
+		d.eachEscaped(func(s string, start, end int) {
+			h.scan(s, func(int, int) Span { return Span{d.field, start, end} })
+		})
 		d.node.eachString(func(s string, n *node) {
 			// One span per token: offsets inside it would not line up with the
 			// JSON escapes of the listed text.
@@ -272,6 +297,9 @@ func injected(t Tool, docs []document) *Flag {
 	note(injection.Scan(t.Description), "", func(x injection.Span) Span { return Span{FieldDescription, x.Start, x.End} })
 	for _, d := range docs {
 		note(injection.Scan(d.raw), "", func(x injection.Span) Span { return Span{d.field, x.Start, x.End} })
+		d.eachEscaped(func(s string, start, end int) {
+			note(injection.Scan(s), "", func(injection.Span) Span { return Span{d.field, start, end} })
+		})
 		d.node.eachString(func(s string, n *node) {
 			skip := ""
 			if n.key == "pattern" {

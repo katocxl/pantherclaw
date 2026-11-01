@@ -148,11 +148,20 @@ func (s *Service) AddInventoryNote(ctx context.Context, id ids.UUID, note string
 	return out, err
 }
 
-// fills reports whether an entry brings text a NEW item has been waiting for:
-// its digest or schema, once a report has room (D240), or its other fields.
+// fillsSchema reports whether an entry brings the digest or schema a NEW item
+// has been waiting for, once a report has room (D240).
+func fillsSchema(row dbq.PcConnectionInventory, e InventoryEntry) bool {
+	return row.InputSchema == "" && (e.InputSchema != "" || row.InputSchemaDigest == "" && e.InputSchemaDigest != "")
+}
+
+// fillsExtra reports whether an entry brings the other listed fields.
+func fillsExtra(row dbq.PcConnectionInventory, e InventoryEntry) bool {
+	return row.ListedExtra == "" && e.ListedExtra != ""
+}
+
+// fills reports whether an entry brings text a NEW item has been waiting for.
 func fills(row dbq.PcConnectionInventory, e InventoryEntry) bool {
-	return row.InputSchema == "" && (e.InputSchema != "" || row.InputSchemaDigest == "" && e.InputSchemaDigest != "") ||
-		row.ListedExtra == "" && e.ListedExtra != ""
+	return fillsSchema(row, e) || fillsExtra(row, e)
 }
 
 // GetInventoryItem reads one item in full, schema included: the one read that
@@ -174,17 +183,39 @@ func (s *Service) GetInventoryItem(ctx context.Context, id ids.UUID) (dbq.PcConn
 	return out, err
 }
 
-// fillSchema gives a NEW item first listed without a schema the one a report
-// now has, and checks it again. The item's review entry is already open and
-// its evidence does not change, so these flags show in the flag list and the
-// queue.
-func fillSchema(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcConnection, cov coverage, row dbq.PcConnectionInventory, e InventoryEntry) error {
-	if err := db.ExpectOneRow(dbq.New(tx).SetInventorySchema(ctx, dbq.SetInventorySchemaParams{
-		InputSchema: e.InputSchema, InputSchemaDigest: e.InputSchemaDigest, InputSchemaTruncated: e.InputSchemaCut, ListedExtra: e.ListedExtra,
-		OrgID: c.Org, ID: row.ID,
-	})); err != nil {
-		return err
+// withHeld is an entry with the text its item already holds. The digest is the
+// same, so the text is too, and a report that left it out loses no flag it
+// raised.
+func withHeld(row dbq.PcConnectionInventory, e InventoryEntry) InventoryEntry {
+	if e.InputSchema == "" && row.InputSchema != "" {
+		e.InputSchema, e.InputSchemaDigest, e.InputSchemaCut, e.SchemaOmitted = row.InputSchema, row.InputSchemaDigest, false, false
 	}
-	_, err := flagItem(ctx, tx, c, conn, cov, pgflags.Item{Connection: conn.ID, Inventory: row.ID, Name: e.Name, Digest: e.Digest}, e)
+	if e.ListedExtra == "" {
+		e.ListedExtra = row.ListedExtra
+	}
+	return e
+}
+
+// fill gives a NEW item first listed without some of its text what a report
+// now has, and checks it again. The schema and the other listed fields fill on
+// their own, each guarded by its own column, and a fill that finds its column
+// taken changes nothing: a server cannot abort its own reports by what it
+// lists (D269). The item's review entry is already open and its evidence does
+// not change, so these flags show in the flag list and the queue.
+func fill(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcConnection, cov coverage, row dbq.PcConnectionInventory, e InventoryEntry) error {
+	q := dbq.New(tx)
+	if fillsSchema(row, e) {
+		if _, err := q.SetInventorySchema(ctx, dbq.SetInventorySchemaParams{
+			InputSchema: e.InputSchema, InputSchemaDigest: e.InputSchemaDigest, InputSchemaTruncated: e.InputSchemaCut, OrgID: c.Org, ID: row.ID,
+		}); err != nil {
+			return err
+		}
+	}
+	if fillsExtra(row, e) {
+		if _, err := q.SetInventoryExtra(ctx, e.ListedExtra, c.Org, row.ID); err != nil {
+			return err
+		}
+	}
+	_, err := flagItem(ctx, tx, c, conn, cov, pgflags.Item{Connection: conn.ID, Inventory: row.ID, Name: e.Name, Digest: e.Digest}, withHeld(row, e))
 	return err
 }

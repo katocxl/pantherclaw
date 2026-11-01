@@ -82,3 +82,43 @@ func TestD241_TheOneReadWithTheSchema(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// TestD269_AFillNeverAbortsAReport: a server cannot wedge its reports. Fields
+// that arrive later fill on their own, in either order, and a report that
+// leaves out what the item holds loses no flag.
+// Covers: F868
+func TestD269_AFillNeverAbortsAReport(t *testing.T) {
+	e := newEnv(t)
+	e.pin(t, upstreamPackage, "1.0.0", mcpPayments(t))
+	c := e.upstreamConn(t, "upstream")
+	ctx := context.Background()
+	report := func(in app.InventoryEntry) {
+		t.Helper()
+		if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Entries: []app.InventoryEntry{in}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const open = `{"properties":{"command":{"type":"string"}}}`
+	const extra = `{"title":"Runs<!-- x -->"}`
+	schemaFirst := app.InventoryEntry{Kind: app.InventoryTool, Name: "schema-first", Digest: digest("aa"), Description: "Runs.", InputSchema: open, InputSchemaDigest: digest("a0")}
+	report(schemaFirst)
+	id := e.itemID(t, c.ID, "schema-first")
+	schemaFirst.InputSchema, schemaFirst.SchemaOmitted, schemaFirst.ListedExtra = "", true, extra
+	report(schemaFirst)
+	row, err := e.svc.GetInventoryItem(e.admin, id)
+	if err != nil || row.InputSchema != open || row.ListedExtra != extra {
+		t.Fatalf("%+v %v", row, err)
+	}
+	if got := e.flagsOn(t, id, "OPEN"); !slices.Contains(got, "overbroad_schema") || !slices.Contains(got, "hidden_instruction") || slices.Contains(got, "schema_unavailable") {
+		t.Errorf("flags %v", got)
+	}
+
+	extraFirst := app.InventoryEntry{Kind: app.InventoryTool, Name: "extra-first", Digest: digest("ab"), Description: "Runs.", ListedExtra: extra}
+	report(extraFirst)
+	extraFirst.InputSchema, extraFirst.InputSchemaDigest, extraFirst.ListedExtra = open, digest("a1"), `{"title":"Other"}`
+	report(extraFirst)
+	row, err = e.svc.GetInventoryItem(e.admin, e.itemID(t, c.ID, "extra-first"))
+	if err != nil || row.InputSchema != open || row.ListedExtra != extra {
+		t.Fatalf("%+v %v", row, err)
+	}
+}

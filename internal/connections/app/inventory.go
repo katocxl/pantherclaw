@@ -246,7 +246,7 @@ func (s *Service) see(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcC
 			"item_id": row.ID.String(), "kind": e.Kind, "name": e.Name, "digest": e.Digest, "state": to,
 		})
 	case row.State == InventoryNew && fills(row, e):
-		if err := fillSchema(ctx, tx, c, conn, cov, row, e); err != nil {
+		if err := fill(ctx, tx, c, conn, cov, row, e); err != nil {
 			return ids.UUID{}, false, err
 		}
 	}

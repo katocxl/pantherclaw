@@ -5,9 +5,11 @@ package pgflags
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	ddomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
@@ -71,5 +73,56 @@ func TestD255_BelowItsScopeTheSourceSaysRestricted(t *testing.T) {
 	e, ok := errors.AsType[*pcerr.Error](err)
 	if !ok || e.Code() != pcerr.PermissionDenied {
 		t.Fatalf("%v", err)
+	}
+}
+
+// TestD272_AToolWithNoUpstreamDigestSaysSo: a package that pins no digest gives
+// the checks nothing to compare, and the stored flag keeps the reason.
+// Covers: T-252, F869
+func TestD272_AToolWithNoUpstreamDigestSaysSo(t *testing.T) {
+	p := &ddomain.Package{Definitions: []ddomain.Definition{{
+		Digest:   upstreamDigest,
+		Mappings: []ddomain.Mapping{{Channel: ddomain.ChannelMCP, Tool: "t", Description: "Reads."}},
+	}}}
+	entries, err := packageEntries(p)
+	if err != nil || len(entries) != 1 || !entries[0].tool.DigestUnknown {
+		t.Fatalf("%+v %v", entries, err)
+	}
+	r := domain.Check(entries[0].tool, domain.Known{Provenance: true, Approved: []domain.Approved{{Name: "t", Digest: "sha256:other"}}})
+	if len(r.Flags) != 1 || r.Flags[0].Severity != domain.SeverityMedium {
+		t.Fatalf("%+v", r)
+	}
+	b, err := encode(r.Flags[0])
+	if err != nil || !strings.Contains(string(b), `"reason":"digest_unknown"`) {
+		t.Errorf("%s %v", b, err)
+	}
+}
+
+// TestD272_EachResourceHasItsOwnKey: a key holds the URI, within what an index
+// takes, and two long URIs stay apart.
+// Covers: F869
+func TestD272_EachResourceHasItsOwnKey(t *testing.T) {
+	if k := resourceKey("file:///{id}"); k != "resource:file:///{id}" {
+		t.Errorf("%s", k)
+	}
+	a, b := resourceKey(strings.Repeat("a", maxResourceKey+1)), resourceKey(strings.Repeat("b", maxResourceKey+1))
+	if a == b || len(a) > 100 {
+		t.Errorf("%s %s", a, b)
+	}
+}
+
+// TestD260_AnObservedNameStaysOutOfTheTitle: the title is fixed words, and the
+// name a tool was listed under is detail.
+// Covers: F860, F869
+func TestD260_AnObservedNameStaysOutOfTheTitle(t *testing.T) {
+	f := finding(dbq.PcSupplychainFlag{CheckKind: string(domain.KindToolShadowing), Tool: "list_issues", Severity: "HIGH", State: "OPEN"})
+	if strings.Contains(f.Title, "list_issues") || f.Title != domain.Title(domain.KindToolShadowing) {
+		t.Errorf("title %q", f.Title)
+	}
+	if f.Detail["name"] != "list_issues" {
+		t.Errorf("detail %v", f.Detail)
+	}
+	if f := finding(dbq.PcSupplychainFlag{CheckKind: string(domain.KindHiddenInstruction)}); f.Detail != nil {
+		t.Errorf("no name: %v", f.Detail)
 	}
 }

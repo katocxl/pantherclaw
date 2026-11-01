@@ -28,8 +28,8 @@ const (
 	KindOverbroadSchema   CheckKind = "overbroad_schema"
 	KindRugPull           CheckKind = "rug_pull"
 	KindProvenanceUnknown CheckKind = "provenance_unknown"
-	// KindSchemaUnavailable: the gateway left a schema out of a report at its
-	// size limit (D240), so a server cannot hide behind the size of its list.
+	// KindSchemaUnavailable: the gateway left a schema or another listed field
+	// out at a size limit (D240, D270), so a server cannot hide behind size.
 	KindSchemaUnavailable CheckKind = "schema_unavailable"
 )
 
@@ -53,6 +53,9 @@ const (
 
 // Field names the text a Span points into.
 type Field string
+
+// ReasonDigestUnknown says a tool had no upstream digest to compare (D272).
+const ReasonDigestUnknown = "digest_unknown"
 
 // Fields.
 const (
@@ -91,6 +94,8 @@ type Flag struct {
 	Severity Severity
 	Note     string
 	Spans    []Span
+	// Reason is a fixed word for a flag that has more than one, or empty.
+	Reason string
 }
 
 // Tool is one listed entry. All of its text is UNTRUSTED.
@@ -101,8 +106,11 @@ type Tool struct {
 	// rug pull are about tools.
 	IsTool bool
 	// Digest is "sha256:<hex>" of the listing entry.
-	Digest      string
-	Description string
+	Digest string
+	// DigestUnknown: Digest is not the upstream tool's, because a package pins
+	// none, so it says nothing against another definition's (D272).
+	DigestUnknown bool
+	Description   string
 	// DescriptionCut: the description reached here cut short.
 	DescriptionCut bool
 	// InputSchema is the schema's JSON as listed. Empty when none was
@@ -113,7 +121,8 @@ type Tool struct {
 	// SchemaOmitted: the schema fit its own limit and not the report's.
 	SchemaOmitted bool
 	// Extra is a JSON object of the tool's other listed fields an agent reads:
-	// title, annotations and output schema. ExtraCut: it was too long to report.
+	// title, annotations and output schema. ExtraCut: one or more of them did
+	// not fit and is missing from Extra.
 	Extra    []byte
 	ExtraCut bool
 	// Version is the version the entry is judged at: the connection's pinned
@@ -180,10 +189,27 @@ func Check(t Tool, k Known) Result {
 	if !k.Provenance {
 		add(&Flag{Kind: KindProvenanceUnknown, Severity: SeverityLow, Note: "No reviewed package names this entry."})
 	}
-	if t.IsTool && t.SchemaOmitted {
-		add(&Flag{Kind: KindSchemaUnavailable, Severity: SeverityMedium, Note: "The input schema did not fit the report and was not checked."})
+	if t.IsTool {
+		add(unavailable(t))
 	}
 	return out
+}
+
+// unavailable is the schema_unavailable check: a field left out at a size limit
+// was not checked, so it never passes by silence (D240, D270).
+func unavailable(t Tool) *Flag {
+	note := ""
+	switch {
+	case t.SchemaOmitted && t.ExtraCut:
+		note = "The input schema and another listed field did not fit and were not checked."
+	case t.SchemaOmitted:
+		note = "The input schema did not fit the report and was not checked."
+	case t.ExtraCut:
+		note = "A listed title, annotations or output schema did not fit and was not checked."
+	default:
+		return nil
+	}
+	return &Flag{Kind: KindSchemaUnavailable, Severity: SeverityMedium, Note: note}
 }
 
 // Summary is the result in words, for a review entry. An empty result reads

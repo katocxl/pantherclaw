@@ -41,8 +41,7 @@ func TestHR582_NoStringSaysMoreThanNoKnownFlags(t *testing.T) {
 		}
 	}
 	for _, k := range Kinds() {
-		check(Title(k, ""))
-		check(Title(k, "list_issues"))
+		check(Title(k))
 	}
-	check(Title("unknown_kind", ""))
+	check(Title("unknown_kind"))
 }

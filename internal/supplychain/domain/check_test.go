@@ -343,7 +343,6 @@ func TestD210_BenignToolsAreNotFlagged(t *testing.T) {
 		{"leading byte order mark", "\ufeffLists issues.", ""},
 		{"empty comment", "Lists issues. <!---->", ""},
 		{"less-than prose", "Returns items where a <!- b is not a comment.", ""},
-		{"ideographic variation", "\u845b\U000E0100 lists names.", ""},
 		{"accented text", "Cr\u00e9e une t\u00e2che. \u00dcberpr\u00fcft Gr\u00f6\u00dfen.", ""},
 		{"CJK", "\u8ab2\u984c\u3092\u4e00\u89a7\u8868\u793a\u3057\u307e\u3059\u3002", ""},
 	}

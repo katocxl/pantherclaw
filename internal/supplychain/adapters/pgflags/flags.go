@@ -9,6 +9,8 @@ package pgflags
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json/v2"
 	"slices"
 
@@ -22,12 +24,13 @@ import (
 
 // detail is the stored shape of supplychain_flags.detail.
 type detail struct {
-	Note  string        `json:"note"`
-	Spans []domain.Span `json:"spans"`
+	Note   string        `json:"note"`
+	Spans  []domain.Span `json:"spans"`
+	Reason string        `json:"reason,omitzero"`
 }
 
 func encode(f domain.Flag) ([]byte, error) {
-	return json.Marshal(detail{Note: f.Note, Spans: append([]domain.Span{}, f.Spans...)})
+	return json.Marshal(detail{Note: f.Note, Spans: append([]domain.Span{}, f.Spans...), Reason: f.Reason})
 }
 
 // Detail reads a stored detail back; one that does not decode reads empty.
@@ -89,6 +92,21 @@ func ClearPackage(ctx context.Context, tx db.TenantTx, org ids.OrgID, version id
 type packageEntry struct {
 	mapping ddomain.Mapping
 	tool    domain.Tool
+	// key tells a resource's flags from another's; a tool has its name.
+	key string
+}
+
+// maxResourceKey is the longest URI a flag's key holds as it is.
+const maxResourceKey = 2048
+
+// resourceKey is a resource's flag key (D272), its URI's digest when the URI
+// is too long to index.
+func resourceKey(uri string) string {
+	if len(uri) > maxResourceKey {
+		sum := sha256.Sum256([]byte(uri))
+		uri = "sha256:" + hex.EncodeToString(sum[:])
+	}
+	return "resource:" + uri
 }
 
 // packageEntries lists a package's mappings as listed entries. A tool's digest
@@ -100,7 +118,7 @@ func packageEntries(p *ddomain.Package) ([]packageEntry, error) {
 		for _, m := range d.Mappings {
 			switch {
 			case m.Channel == ddomain.ChannelMCP && m.Tool != "":
-				in := domain.Tool{Name: m.Tool, IsTool: true, Digest: toolDigest(d), Description: m.Description}
+				in := domain.Tool{Name: m.Tool, IsTool: true, Digest: toolDigest(d), DigestUnknown: !pinsDigest(d), Description: m.Description}
 				if m.InputSchema != nil {
 					var err error
 					if in.InputSchema, err = json.Marshal(m.InputSchema, json.Deterministic(true)); err != nil {
@@ -109,17 +127,22 @@ func packageEntries(p *ddomain.Package) ([]packageEntry, error) {
 				}
 				out = append(out, packageEntry{mapping: m, tool: in})
 			case m.Channel == ddomain.ChannelMCPResource:
-				out = append(out, packageEntry{mapping: m, tool: domain.Tool{Name: m.Resource, Digest: d.Digest, Description: m.Description}})
+				out = append(out, packageEntry{mapping: m, key: resourceKey(m.Resource), tool: domain.Tool{Name: m.Resource, Digest: d.Digest, Description: m.Description}})
 			}
 		}
 	}
 	return out, nil
 }
 
+// pinsDigest reports whether a definition pins its upstream tool's digest.
+func pinsDigest(d ddomain.Definition) bool {
+	return d.Dispatch != nil && d.Dispatch.MCP != nil && d.Dispatch.MCP.UpstreamDigest != ""
+}
+
 // toolDigest is what a definition pins of its upstream tool, or, when it pins
 // nothing, its own digest.
 func toolDigest(d ddomain.Definition) string {
-	if d.Dispatch != nil && d.Dispatch.MCP != nil && d.Dispatch.MCP.UpstreamDigest != "" {
+	if pinsDigest(d) {
 		return d.Dispatch.MCP.UpstreamDigest
 	}
 	return d.Digest
@@ -164,7 +187,7 @@ func CheckPackage(ctx context.Context, tx db.TenantTx, org ids.OrgID, version id
 				return out, err
 			}
 			if err := q.InsertPackageFlag(ctx, dbq.InsertPackageFlagParams{
-				OrgID: org, ID: ids.NewV7(), PackageVersionID: &version, Tool: domain.ToolName(in.Name), Digest: in.Digest,
+				OrgID: org, ID: ids.NewV7(), PackageVersionID: &version, Tool: domain.ToolName(in.Name), Entry: e.key, Digest: in.Digest,
 				CheckKind: string(f.Kind), Severity: string(f.Severity), Detail: b,
 			}); err != nil {
 				return out, err

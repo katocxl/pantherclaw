@@ -98,3 +98,23 @@ func TestD245_GatewayReportsTheOtherListedFields(t *testing.T) {
 		t.Errorf("c: %d bytes", len(got[2].GetListedExtra()))
 	}
 }
+
+// TestD270_PaddingOneFieldHidesNoOther: a field over its own limit is left out
+// and marked, and the others still travel, also through a full report.
+// Covers: F868
+func TestD270_PaddingOneFieldHidesNoOther(t *testing.T) {
+	padded := jsontext.Value(`{"name":"p","title":"Reads<!-- x -->","annotations":{"a":"z"},"outputSchema":{"d":"` + strings.Repeat("x", 13<<10) + `"}}`)
+	got := inventoryRequest("c", dispatch.Inventory{Complete: true, Tools: upstream.Listing{Items: []jsontext.Value{padded}}}).GetTools()[0]
+	x := got.GetListedExtra()
+	if !strings.Contains(x, "Reads<!-- x -->") || !strings.Contains(x, "annotations") || strings.Contains(x, "xxxx") || !got.GetListedExtraTruncated() {
+		t.Fatalf("%d bytes, cut %v", len(x), got.GetListedExtraTruncated())
+	}
+	items := []jsontext.Value{padded}
+	for i := range 80 {
+		items = append(items, jsontext.Value(`{"name":"t`+strconv.Itoa(i)+`","inputSchema":{"d":"`+strings.Repeat("y", 60<<10)+`"}}`))
+	}
+	req := inventoryRequest("c", dispatch.Inventory{Complete: true, Tools: upstream.Listing{Items: items}})
+	if p := req.GetTools()[0]; p.GetListedExtra() == "" || !p.GetListedExtraTruncated() {
+		t.Errorf("through a full report: %d bytes, cut %v", len(p.GetListedExtra()), p.GetListedExtraTruncated())
+	}
+}

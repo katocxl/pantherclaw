@@ -103,17 +103,22 @@ func subject(r dbq.PcSupplychainFlag) string {
 	return ""
 }
 
-// finding is a flag in the queue's shape. Its title is PantherClaw's, with
-// only a pattern-checked tool name in it (HR-583).
+// finding is a flag in the queue's shape. Its title is PantherClaw's fixed
+// words; the tool name it was seen under is detail, shown escaped (HR-583,
+// D260).
 func finding(r dbq.PcSupplychainFlag) pvdomain.Finding {
 	var connection *ids.UUID
 	if r.ConnectionID != nil {
 		c := *r.ConnectionID
 		connection = &c
 	}
+	var observed map[string]string
+	if r.Tool != "" {
+		observed = map[string]string{"name": r.Tool}
+	}
 	return pvdomain.Finding{
 		Source: pvdomain.SourceSupplyChain, SourceID: r.ID.String(), Kind: r.CheckKind, RootCause: subject(r), ConnectionID: connection,
-		Title: domain.Title(domain.CheckKind(r.CheckKind), r.Tool), Severity: pvdomain.Severity(r.Severity),
+		Title: domain.Title(domain.CheckKind(r.CheckKind)), Detail: observed, Severity: pvdomain.Severity(r.Severity),
 		SeverityBasis: pvdomain.BasisStated, State: r.State, Since: r.FirstSeen,
 		Fix: pvdomain.Fix{Kind: pvdomain.FixReviewTool, TargetID: subject(r), Label: "Review this tool"},
 	}

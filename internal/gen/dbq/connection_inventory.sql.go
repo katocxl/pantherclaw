@@ -437,6 +437,17 @@ func (q *Queries) SeeInventoryItem(ctx context.Context, orgID ids.OrgID, iD ids.
 	return err
 }
 
+const setInventoryExtra = `-- name: SetInventoryExtra :execresult
+UPDATE pc.connection_inventory SET listed_extra = $1, updated_at = now()
+WHERE org_id = $2 AND id = $3 AND listed_extra = ''
+`
+
+// SetInventoryExtra fills in the other listed fields on their own (D269): no
+// row means the item holds them already.
+func (q *Queries) SetInventoryExtra(ctx context.Context, listedExtra string, orgID ids.OrgID, iD ids.UUID) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, setInventoryExtra, listedExtra, orgID, iD)
+}
+
 const setInventoryNote = `-- name: SetInventoryNote :execresult
 UPDATE pc.connection_inventory
 SET operator_note = $1, operator_note_by = $2, operator_note_at = now()
@@ -462,15 +473,14 @@ func (q *Queries) SetInventoryNote(ctx context.Context, arg SetInventoryNotePara
 const setInventorySchema = `-- name: SetInventorySchema :execresult
 UPDATE pc.connection_inventory
 SET input_schema = $1, input_schema_digest = $2,
-    input_schema_truncated = $3, listed_extra = $4, updated_at = now()
-WHERE org_id = $5 AND id = $6 AND input_schema = ''
+    input_schema_truncated = $3, updated_at = now()
+WHERE org_id = $4 AND id = $5 AND input_schema = ''
 `
 
 type SetInventorySchemaParams struct {
 	InputSchema          string
 	InputSchemaDigest    string
 	InputSchemaTruncated bool
-	ListedExtra          string
 	OrgID                ids.OrgID
 	ID                   ids.UUID
 }
@@ -483,7 +493,6 @@ func (q *Queries) SetInventorySchema(ctx context.Context, arg SetInventorySchema
 		arg.InputSchema,
 		arg.InputSchemaDigest,
 		arg.InputSchemaTruncated,
-		arg.ListedExtra,
 		arg.OrgID,
 		arg.ID,
 	)

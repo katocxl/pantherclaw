@@ -97,10 +97,13 @@ func (q *Queries) ClearPackageFlags(ctx context.Context, orgID ids.OrgID, packag
 }
 
 const insertPackageFlag = `-- name: InsertPackageFlag :exec
-INSERT INTO pc.supplychain_flags (org_id, id, package_version_id, tool, digest, check_kind, severity, detail)
-VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8)
-ON CONFLICT (org_id, package_version_id, tool, check_kind) WHERE package_version_id IS NOT NULL DO NOTHING
+INSERT INTO pc.supplychain_flags (org_id, id, package_version_id, tool, entry, digest, check_kind, severity, detail)
+VALUES ($1, $2, $3, $4, $5, $6, $7,
+        $8, $9)
+ON CONFLICT (org_id, package_version_id, tool, entry, check_kind) WHERE package_version_id IS NOT NULL
+DO UPDATE SET severity = excluded.severity, detail = excluded.detail, last_seen = now()
+WHERE CASE excluded.severity WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 1 ELSE 0 END
+    > CASE pc.supplychain_flags.severity WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 1 ELSE 0 END
 `
 
 type InsertPackageFlagParams struct {
@@ -108,6 +111,7 @@ type InsertPackageFlagParams struct {
 	ID               ids.UUID
 	PackageVersionID *ids.UUID
 	Tool             string
+	Entry            string
 	Digest           string
 	CheckKind        string
 	Severity         string
@@ -120,6 +124,7 @@ func (q *Queries) InsertPackageFlag(ctx context.Context, arg InsertPackageFlagPa
 		arg.ID,
 		arg.PackageVersionID,
 		arg.Tool,
+		arg.Entry,
 		arg.Digest,
 		arg.CheckKind,
 		arg.Severity,
@@ -129,7 +134,7 @@ func (q *Queries) InsertPackageFlag(ctx context.Context, arg InsertPackageFlagPa
 }
 
 const listOpenSupplyChainFlags = `-- name: ListOpenSupplyChainFlags :many
-SELECT org_id, id, connection_id, inventory_id, package_version_id, tool, digest, check_kind, severity, detail, first_seen, last_seen, state FROM pc.supplychain_flags
+SELECT org_id, id, connection_id, inventory_id, package_version_id, tool, entry, digest, check_kind, severity, detail, first_seen, last_seen, state FROM pc.supplychain_flags
 WHERE org_id = $1 AND state = 'OPEN'
   AND (($2::boolean AND inventory_id IS NOT NULL) OR ($3::boolean AND package_version_id IS NOT NULL))
   AND ($4::uuid IS NULL OR connection_id = $4::uuid)
@@ -169,6 +174,7 @@ func (q *Queries) ListOpenSupplyChainFlags(ctx context.Context, arg ListOpenSupp
 			&i.InventoryID,
 			&i.PackageVersionID,
 			&i.Tool,
+			&i.Entry,
 			&i.Digest,
 			&i.CheckKind,
 			&i.Severity,
@@ -188,7 +194,7 @@ func (q *Queries) ListOpenSupplyChainFlags(ctx context.Context, arg ListOpenSupp
 }
 
 const listSupplyChainFlags = `-- name: ListSupplyChainFlags :many
-SELECT org_id, id, connection_id, inventory_id, package_version_id, tool, digest, check_kind, severity, detail, first_seen, last_seen, state FROM pc.supplychain_flags
+SELECT org_id, id, connection_id, inventory_id, package_version_id, tool, entry, digest, check_kind, severity, detail, first_seen, last_seen, state FROM pc.supplychain_flags
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR connection_id = $2::uuid)
   AND ($3::uuid IS NULL OR inventory_id = $3::uuid)
@@ -236,6 +242,7 @@ func (q *Queries) ListSupplyChainFlags(ctx context.Context, arg ListSupplyChainF
 			&i.InventoryID,
 			&i.PackageVersionID,
 			&i.Tool,
+			&i.Entry,
 			&i.Digest,
 			&i.CheckKind,
 			&i.Severity,

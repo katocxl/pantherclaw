@@ -40,6 +40,9 @@ CREATE TABLE pc.supplychain_flags (
     package_version_id uuid,
     -- The pattern-checked tool name; empty for a resource or template.
     tool               text        NOT NULL DEFAULT '' CHECK (tool ~ '^[A-Za-z0-9_.-]{0,128}$'),
+    -- UNTRUSTED, and only a key: 'resource:<uri>' for a resource of a package,
+    -- so each has its own flags (D272). Empty for a tool. Never served.
+    entry              text        NOT NULL DEFAULT '' CHECK (octet_length(entry) <= 2100),
     digest             text        NOT NULL CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
     check_kind         text        NOT NULL CHECK (check_kind IN ('hidden_instruction', 'injection_pattern', 'tool_shadowing',
                                                                   'overbroad_schema', 'rug_pull', 'provenance_unknown',
@@ -59,7 +62,7 @@ CREATE TABLE pc.supplychain_flags (
     CHECK ((inventory_id IS NOT NULL) <> (package_version_id IS NOT NULL))
 );
 CREATE UNIQUE INDEX supplychain_flags_inventory ON pc.supplychain_flags (org_id, inventory_id, check_kind) WHERE inventory_id IS NOT NULL;
-CREATE UNIQUE INDEX supplychain_flags_package ON pc.supplychain_flags (org_id, package_version_id, tool, check_kind)
+CREATE UNIQUE INDEX supplychain_flags_package ON pc.supplychain_flags (org_id, package_version_id, tool, entry, check_kind)
     WHERE package_version_id IS NOT NULL;
 CREATE INDEX supplychain_flags_open ON pc.supplychain_flags (org_id, id) WHERE state = 'OPEN';
 CREATE INDEX supplychain_flags_connection ON pc.supplychain_flags (org_id, connection_id, id);

@@ -30,14 +30,11 @@ var titles = map[CheckKind]string{
 	KindSchemaUnavailable: "A tool whose input schema was not reported",
 }
 
-// Title is a flag's title; tool is a name from ToolName.
-func Title(k CheckKind, tool string) string {
-	t := titles[k]
-	if t == "" {
-		t = "A supply-chain flag"
+// Title is a flag's title, always one of these fixed words: an observed name
+// goes in a finding's detail, never here (D260).
+func Title(k CheckKind) string {
+	if t := titles[k]; t != "" {
+		return t
 	}
-	if tool != "" {
-		return t + ": " + tool
-	}
-	return t
+	return "A supply-chain flag"
 }

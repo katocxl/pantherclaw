@@ -111,11 +111,11 @@ func inventoryRequest(conn string, inv dispatch.Inventory) *pb.ReportInventoryRe
 
 // listedExtra is a tool's other listed fields as reported.
 func listedExtra(t jsontext.Value) (string, bool) {
-	v := upstream.ListedExtra(t)
+	v, cut := upstream.ListedExtra(t)
 	if len(v) > maxListedExtra || !utf8.Valid(v) {
 		return "", true
 	}
-	return string(v), false
+	return string(v), cut
 }
 
 // capReport fits a report to maxInventoryReport, so a server cannot silence
@@ -158,8 +158,9 @@ func omitListed(req *pb.ReportInventoryRequest) {
 			pieces = append(pieces, piece{len(s), func() { t.InputSchema, t.SchemaOmitted = s, false }})
 		}
 		if x := t.GetListedExtra(); x != "" {
+			cut := t.GetListedExtraTruncated() // a field it left out stays marked
 			t.ListedExtra, t.ListedExtraTruncated = "", true
-			pieces = append(pieces, piece{len(x), func() { t.ListedExtra, t.ListedExtraTruncated = x, false }})
+			pieces = append(pieces, piece{len(x), func() { t.ListedExtra, t.ListedExtraTruncated = x, cut }})
 		}
 	}
 	slices.SortStableFunc(pieces, func(a, b piece) int { return a.size - b.size })

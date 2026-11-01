@@ -3846,6 +3846,7 @@ type PcSupplychainFlag struct {
 	InventoryID      *ids.UUID
 	PackageVersionID *ids.UUID
 	Tool             string
+	Entry            string
 	Digest           string
 	CheckKind        string
 	Severity         string

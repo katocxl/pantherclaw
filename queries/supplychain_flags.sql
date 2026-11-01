@@ -13,10 +13,13 @@ ON CONFLICT (org_id, inventory_id, check_kind) WHERE inventory_id IS NOT NULL
 DO UPDATE SET severity = excluded.severity, detail = excluded.detail, state = 'OPEN', last_seen = now();
 
 -- name: InsertPackageFlag :exec
-INSERT INTO pc.supplychain_flags (org_id, id, package_version_id, tool, digest, check_kind, severity, detail)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(package_version_id), sqlc.arg(tool), sqlc.arg(digest), sqlc.arg(check_kind),
+INSERT INTO pc.supplychain_flags (org_id, id, package_version_id, tool, entry, digest, check_kind, severity, detail)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(package_version_id), sqlc.arg(tool), sqlc.arg(entry), sqlc.arg(digest), sqlc.arg(check_kind),
         sqlc.arg(severity), sqlc.arg(detail))
-ON CONFLICT (org_id, package_version_id, tool, check_kind) WHERE package_version_id IS NOT NULL DO NOTHING;
+ON CONFLICT (org_id, package_version_id, tool, entry, check_kind) WHERE package_version_id IS NOT NULL
+DO UPDATE SET severity = excluded.severity, detail = excluded.detail, last_seen = now()
+WHERE CASE excluded.severity WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 1 ELSE 0 END
+    > CASE pc.supplychain_flags.severity WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 1 ELSE 0 END;
 
 -- name: ClearInventoryFlags :exec
 UPDATE pc.supplychain_flags SET state = 'CLEARED', last_seen = now()

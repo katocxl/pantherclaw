@@ -25,8 +25,14 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind),
 -- name: SetInventorySchema :execresult
 UPDATE pc.connection_inventory
 SET input_schema = sqlc.arg(input_schema), input_schema_digest = sqlc.arg(input_schema_digest),
-    input_schema_truncated = sqlc.arg(input_schema_truncated), listed_extra = sqlc.arg(listed_extra), updated_at = now()
+    input_schema_truncated = sqlc.arg(input_schema_truncated), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND input_schema = '';
+
+-- SetInventoryExtra fills in the other listed fields on their own (D269): no
+-- row means the item holds them already.
+-- name: SetInventoryExtra :execresult
+UPDATE pc.connection_inventory SET listed_extra = sqlc.arg(listed_extra), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND listed_extra = '';
 
 -- name: SeeInventoryItem :exec
 UPDATE pc.connection_inventory SET last_seen = now()
