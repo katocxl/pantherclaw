@@ -775,6 +775,12 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Migration `00257` (`00256` held if a decision needs one; `00258`, `00259` spare).
 
 ### M23 — Easy to adopt
+**HR:** HR-560..567 · **F:** F840–F859 · **ADR:** 0045 · **G0:** [g0/M23.md](g0/M23.md).
+- **Hub** ([ADR-0045](adr/0045-hub-trust-and-distribution.md), a Root part, founder decisions H1 and H3): a static signed directory of PantherClaw's own content, Apache-2.0, in closed code-free kinds, under its own root; the server verifies again and never fetches; install is inert. It signs with the dev key until the root ceremony.
+- **CI checks:** `pclaw ci check` runs validation, scenarios, comparison and simulation offline, with a GitHub Action that needs no secrets and a GitLab component.
+- **Developer loop:** `pclaw dev`, a loopback node with the simulators.
+- **Managed-settings kit:** generates admin files for Claude Code and Copilot, never writes a managed location and raises no coverage.
+- Migrations `00260`, `00261` (`00262`–`00269` spare); new permissions `hub.read` and `hub.install`.
 
 ### M24 — Agent Posture
 

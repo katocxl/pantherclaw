@@ -117,6 +117,13 @@ var (
 	refKind = regexp.MustCompile(`^[a-z][a-z_]{0,31}$`)
 )
 
+// ParseTests reads baseline tests written for a definition that is not one of
+// these templates (a Hub automation's tests, G0 M23 D112), with the checks a
+// template's tests get. name seeds the tests' stable ids.
+func ParseTests(name string, def *autodomain.Definition, raw []byte) ([]TestCase, error) {
+	return buildTests(name, def, raw)
+}
+
 // buildTests decodes the rendered tests and binds them to def: trigger
 // parameters are converted by the trigger's declarations, and every step
 // named exists.

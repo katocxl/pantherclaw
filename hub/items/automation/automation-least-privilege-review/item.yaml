@@ -1,0 +1,53 @@
+name: pc.automation.least-privilege-review
+version: 1.0.0
+kind: automation
+title: Least-privilege review
+summary: >-
+  On a schedule, draft a restriction of unused grants, simulate it, and hand
+  the result to a person. Nothing is published.
+body:
+  automation_name: hub-least-privilege-review
+  purpose: Regularly propose and simulate restrictions of authority that goes unused.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Regularly propose and simulate restrictions of authority that goes unused."
+    work_kind: SECURITY_WORK
+    when:
+      schedule:
+        cron: "0 8 * * 1"
+        timezone: "UTC"
+    authority:
+      principal: self
+      platform:
+        - step: draft_restriction
+          scopes: [ORG]
+        - step: simulate_restriction
+          scopes: [ORG]
+        - step: notify
+          scopes: [OWNER]
+    do:
+      - id: draft
+        step: draft_restriction
+        with:
+          from: UNUSED_GRANTS
+          days: 30
+      - id: simulate
+        step: simulate_restriction
+        with:
+          step: draft
+          days: 14
+        timeout: 4h
+      - id: tell
+        step: notify
+        with:
+          to: [OWNER]
+          message:
+            title: A least-privilege restriction is ready for review
+            body: "A restriction of unused authority was drafted and simulated. Review the simulation; nothing changes until a person publishes it."
+    finish_when:
+      - step: simulate
+        condition: SIMULATION_DONE
+    limits:
+      deadline: 1d

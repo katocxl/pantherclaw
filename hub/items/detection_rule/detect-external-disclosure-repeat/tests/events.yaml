@@ -1,0 +1,7 @@
+tests:
+  - name: across agents
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a1}}
+      - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a2}}
+      - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a3}}

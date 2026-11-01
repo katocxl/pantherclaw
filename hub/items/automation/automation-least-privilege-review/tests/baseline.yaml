@@ -1,0 +1,32 @@
+- name: the_draft_is_simulated
+  kind: NORMAL
+  stubs:
+    draft: [{state: DONE, refs: [policy_version]}]
+    simulate: [{state: WAITING}, {state: DONE, refs: [policy_simulation]}]
+    tell: [{state: DONE, effect: CHANGED, refs: [ledger]}]
+  expect:
+    state: SUCCEEDED
+    steps: {draft: DONE, simulate: DONE, tell: DONE}
+- name: the_draft_is_refused
+  kind: DENIED
+  stubs:
+    draft: [{state: FAILED, reason: AUTHORITY_CHANGED}]
+  expect:
+    state: FAILED
+    reason: AUTHORITY_CHANGED
+    steps: {draft: FAILED}
+- name: the_simulation_does_not_finish_in_time
+  kind: TIMEOUT
+  stubs:
+    draft: [{state: DONE, refs: [policy_version]}]
+    simulate: [{state: WAITING}]
+  expect:
+    state: FAILED
+    reason: TIMEOUT
+    steps: {simulate: FAILED}
+- name: the_same_occurrence_twice_starts_one_execution
+  kind: DUPLICATE
+  stubs:
+    simulate: [{state: DONE, refs: [policy_simulation]}]
+  expect:
+    state: SUCCEEDED

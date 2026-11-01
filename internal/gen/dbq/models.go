@@ -2394,6 +2394,30 @@ type PcHostingSlug struct {
 	ClaimedAt time.Time
 }
 
+type PcHubInstall struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Name          string
+	Version       string
+	Kind          string
+	ItemSha256    string
+	IndexVersion  int64
+	ResultKind    string
+	ResultRef     string
+	InstalledBy   string
+	InstalledAt   time.Time
+	Status        string
+	Claim         ids.UUID
+	FailureReason string
+}
+
+type PcHubState struct {
+	OrgID        ids.OrgID
+	IndexVersion int64
+	IndexDigest  string
+	UpdatedAt    time.Time
+}
+
 type PcIdentityDeletionGuard struct {
 	IdentityHash []byte
 	State        string

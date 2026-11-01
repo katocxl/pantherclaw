@@ -1,0 +1,14 @@
+tests:
+  - name: other operations
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 0m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 1m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 2m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 3m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 4m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 5m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 6m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 7m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 8m}
+      - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.read, subjects: {agent: a1}, at: 9m}

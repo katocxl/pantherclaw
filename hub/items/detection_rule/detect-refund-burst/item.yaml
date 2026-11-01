@@ -1,0 +1,55 @@
+name: pc.detect.refund-burst
+version: 1.0.0
+kind: detection_rule
+title: Many refunds by an agent in an hour
+summary: >-
+  One agent was allowed ten or more refunds within an hour. Each may be within
+  its limit while the total is not what anyone intended.
+body:
+  content: |
+    id: org.hub.refund_burst
+    version: "1"
+    title: Many refunds by an agent in an hour
+    description: >-
+      One agent was allowed ten or more refunds within an hour. Each may be
+      within its limit while the total is not what anyone intended.
+    severity: MEDIUM
+    attention: ALERT
+    basis: INFERRED
+    owasp: [ASI02]
+    edition: business
+    on: [receipt.decision]
+    match: >-
+      event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"]
+      && event.operation.matches("\\.refund\\.create$")
+    window:
+      duration: 1h
+      group_by: [subjects.agent]
+      count: 10
+    group: agent
+    tests:
+      - name: ten refunds
+        fires: true
+        events:
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 0m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 1m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 2m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 3m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 4m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 5m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 6m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 7m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 8m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 9m}
+      - name: nine refunds
+        fires: false
+        events:
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 0m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 1m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 2m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 3m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 4m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 5m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 6m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 7m}
+          - {kind: receipt.decision, decision: ALLOW, operation: stripe.refund.create, subjects: {agent: a1}, at: 8m}

@@ -1,0 +1,63 @@
+name: pc.automation.coverage-recovery
+version: 1.0.0
+kind: automation
+title: Coverage recovery
+summary: >-
+  When enforcement coverage is lost, assign an owner, pause the launches that
+  depend on it, and resume them once coverage is restored.
+body:
+  automation_name: hub-coverage-recovery
+  purpose: Pause launches that depend on lost coverage until a person restores it.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Pause launches that depend on lost coverage until a person restores it."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: coverage.lost
+        params:
+          agent: {from: subjects.agent, type: uuid}
+          connection: {from: subjects.connection, type: uuid, required: false}
+          operation: {from: operation, type: string, pattern: '[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,6}', max_len: 128}
+      dedupe:
+        key: "{{params.agent}}/{{params.connection}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: assign_owner
+          scopes: ["AGENT_OWNER"]
+        - step: pause_launches
+          scopes: [AFFECTED]
+        - step: wait_coverage
+          scopes: [TRIGGER_SCOPE]
+        - step: resume_launches
+          scopes: [AFFECTED]
+    do:
+      - id: assign
+        step: assign_owner
+        with:
+          to: "AGENT_OWNER"
+          summary: "Enforcement coverage was lost for agent {{params.agent}}."
+          next_step: Restore the route's enforcement; paused launches resume when coverage is back.
+          deadline: 1d
+      - id: pause
+        step: pause_launches
+        with:
+          selector: AFFECTED
+      - id: restored
+        step: wait_coverage
+        with:
+          min_state: "ENFORCED"
+          timeout: "24h"
+      - id: resume
+        step: resume_launches
+        with:
+          step: pause
+    finish_when:
+      - step: restored
+        condition: COVERAGE_RESTORED
+    limits:
+      deadline: 7d

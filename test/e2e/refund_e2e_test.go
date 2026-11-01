@@ -201,6 +201,8 @@ type options struct {
 	// dev.external_checks_loopback so a check on this machine answers (G0
 	// M16 D93b).
 	externalChecks []string
+	// hubKey is dev.hub_key_file: the public JWKS of the development Hub key.
+	hubKey string
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -287,6 +289,9 @@ func start(t *testing.T, o options) *stack {
 	if o.externalChecks != nil {
 		cfg["external_checks"] = map[string]any{"allowed_prefixes": o.externalChecks}
 		cfg["dev"] = map[string]any{"external_checks_loopback": true}
+	}
+	if o.hubKey != "" {
+		cfg["dev"] = map[string]any{"hub_key_file": o.hubKey}
 	}
 	write := func(name string) string {
 		b, err := json.Marshal(cfg)

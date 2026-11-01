@@ -39,11 +39,12 @@ const (
 const usage = `pclaw-admin — offline root key, licence and package signing tool (keep this machine offline)
 
 Usage:
-  pclaw-admin keygen --purpose licence|packages --out-dir DIR [--passphrase-file FILE]
+  pclaw-admin keygen --purpose licence|packages|hub|hub-dev --out-dir DIR [--passphrase-file FILE]
   pclaw-admin licence sign --key FILE [--passphrase-file FILE] --claims FILE --out FILE
   pclaw-admin licence verify --roots FILE --in FILE
   pclaw-admin packages sign --key FILE [--passphrase-file FILE] --version N [--expires-days 180] --out FILE PACKAGE.yaml...
   pclaw-admin packages verify --roots FILE --targets FILE PACKAGE.yaml...
+  pclaw-admin hub build --dir hub --out DIR --key FILE [--passphrase-file FILE] --version N [--expires-days 180]
   pclaw-admin version
 
 Flags come before the package files.
@@ -70,6 +71,8 @@ func Run(args []string, stdout, stderr io.Writer, now func() time.Time) int {
 		err = signPackages(args[2:], stdout, stderr, now)
 	case args[0] == "packages" && len(args) > 1 && args[1] == "verify":
 		err = verifyPackages(args[2:], stdout, stderr, now)
+	case args[0] == "hub" && len(args) > 1 && args[1] == "build":
+		err = hubBuild(args[2:], stdout, stderr, now)
 	default:
 		_, _ = fmt.Fprint(stderr, usage)
 		return exitUsage
@@ -127,14 +130,14 @@ func loadSigner(keyFile, ppFile string, want ...rootkey.Purpose) (*jws.Signer, e
 
 func keygen(args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("keygen", stderr)
-	purpose := fs.String("purpose", "", "licence or packages")
+	purpose := fs.String("purpose", "", "licence, packages, hub or hub-dev")
 	outDir := fs.String("out-dir", "", "directory for the key files (offline media)")
 	ppFile := fs.String("passphrase-file", "", "file holding a passphrase (≥ 16 characters) to encrypt the private key")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	p := rootkey.Purpose(*purpose)
-	if !p.Root() || *outDir == "" || fs.NArg() != 0 {
+	if (!p.Root() && p != rootkey.PurposeDevHub) || *outDir == "" || fs.NArg() != 0 {
 		fs.Usage()
 		return errUsage
 	}
@@ -157,8 +160,12 @@ func keygen(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	privPath := filepath.Join(*outDir, string(p)+"-root.key")
-	pubPath := filepath.Join(*outDir, string(p)+"-root.pub.json")
+	stem := string(p) + "-root"
+	if p == rootkey.PurposeDevHub {
+		stem = string(p)
+	}
+	privPath := filepath.Join(*outDir, stem+".key")
+	pubPath := filepath.Join(*outDir, stem+".pub.json")
 	if err := rootkey.WriteNew(privPath, privPEM); err != nil {
 		return err
 	}
@@ -169,11 +176,19 @@ func keygen(args []string, stdout, stderr io.Writer) error {
 	if len(pp) > 0 {
 		encrypted = "encrypted with your passphrase"
 	}
+	if p == rootkey.PurposeDevHub {
+		_, _ = fmt.Fprintf(stdout, "Generated development Hub key %s\n  private key: %s (%s)\n  public key:  %s\n\nOnly a local server with dev.hub_key_file names this key, and pclaw trusts it through %s for a directory or loopback source.\n",
+			kid, privPath, encrypted, pubPath, "PANTHERCLAW_HUB_DEV_KEY")
+		return nil
+	}
 	_, _ = fmt.Fprintf(stdout, "Generated %s root key %s\n  private key: %s (%s)\n  public key:  %s\n\n", p, kid, privPath, encrypted, pubPath)
 	_, _ = fmt.Fprintf(stdout, "Next steps:\n  1. Copy the private key to a second offline medium. Never copy it to CI or a server.\n")
 	roots := "internal/billing/licence/roots.json"
 	if p == rootkey.PurposePackages {
 		roots = "internal/definitions/trust/roots.json"
+	}
+	if p == rootkey.PurposeHub {
+		roots = "internal/hub/roots.json"
 	}
 	_, _ = fmt.Fprintf(stdout, "  2. Add the key from %s to %s and commit it.\n", pubPath, roots)
 	return nil

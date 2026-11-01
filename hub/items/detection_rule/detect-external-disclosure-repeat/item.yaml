@@ -1,0 +1,40 @@
+name: pc.detect.external-disclosure-repeat
+version: 1.0.0
+kind: detection_rule
+title: Repeated refused disclosures by an agent
+summary: >-
+  One agent had three or more external disclosures refused within an hour. An
+  agent looking for a way out looks like this.
+body:
+  content: |
+    id: org.hub.external_disclosure_repeat
+    version: "1"
+    title: Repeated refused disclosures by an agent
+    description: >-
+      One agent had three or more external disclosures refused within an hour.
+      An agent looking for a way out looks like this.
+    severity: HIGH
+    attention: ALERT
+    basis: INFERRED
+    owasp: [ASI01, ASI02]
+    edition: business
+    on: [receipt.decision]
+    match: event.decision == "DENY" && event.reason == "EXTERNAL_DISCLOSURE"
+    window:
+      duration: 1h
+      group_by: [subjects.agent]
+      count: 3
+    group: agent
+    tests:
+      - name: three refusals
+        fires: true
+        events:
+          - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a1}}
+          - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a1}, at: 10m}
+          - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a1}, at: 20m}
+      - name: spread out
+        fires: false
+        events:
+          - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a1}}
+          - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a1}, at: 40m}
+          - {kind: receipt.decision, decision: DENY, reason: EXTERNAL_DISCLOSURE, subjects: {agent: a1}, at: 80m}

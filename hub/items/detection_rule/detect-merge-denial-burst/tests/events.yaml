@@ -1,0 +1,7 @@
+tests:
+  - name: across runs
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, operation: github.pull.merge, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: DENY, operation: github.pull.merge, subjects: {run: r2}}
+      - {kind: receipt.decision, decision: DENY, operation: github.pull.merge, subjects: {run: r3}}

@@ -192,6 +192,11 @@ func load(ctx context.Context, q *dbq.Queries, org ids.OrgID, vis exapp.Visible)
 		return f, err
 	}
 	f.DataAgents = domain.Group{Count: int(data.Agents), IDs: data.Refs}
+	missing, err := q.RecommendationManagedSettingsMissing(ctx, org, vis.All, agents)
+	if err != nil {
+		return f, err
+	}
+	f.ManagedSettings = domain.Group{Count: int(missing.Discoveries), IDs: missing.Refs}
 	in, err := q.RecommendationIntegrations(ctx, org)
 	if err != nil {
 		return f, err

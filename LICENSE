@@ -6,8 +6,9 @@ Parameters
 Licensor:             Joshua Kato
 
 Licensed Work:        PantherClaw (core), every version published on or after
-                      2026-10-08, excluding the directories listed under
-                      "Separately Licensed Components" in the NOTICE file.
+                      2026-10-08, excluding hub/ and the other directories
+                      listed under "Separately Licensed Components" in the
+                      NOTICE file.
                       The Licensed Work is (c) 2026 Joshua Kato.
 
 Additional Use Grant: You may make production use of the Licensed Work,

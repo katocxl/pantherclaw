@@ -294,6 +294,10 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 
 | ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
 |---|---|---|---|---|---|---|
+| T-242 | A malicious Hub index or mirror: a mirror, a tampered item or a replayed document serves altered content, a package document is passed off as a Hub document or the reverse, or an item carries code or activates itself on install | A10, A9, A5 | TB4, TB10 | Widened policy or a tampered tool package reaching an organization | HR-560, HR-561, HR-563; own root and purpose, the server re-verifies everything and the CLI is transport, closed code-free kinds, inert install, no server fetch | M23 |
+| T-243 | Hub rollback to a bad version: an old signed index, or a same-version document with another digest, is replayed to bring back content with a known flaw | A10, A9 | TB4 | A fixed flaw returns under a valid signature | HR-562; a rising index version kept per organization and in the CLI, index expiry of at most 180 days (`HUB_EXPIRED`) | M23 |
+| T-244 | A policy file injects into a CI report: a pull request's policy text carries markup, links or `@` mentions that render in the job summary or pull-request comment, misleading a reviewer or pinging a person | A5, A2 | TB10 | A misleading report on a policy change; unwanted notifications | HR-565; all policy-file text escaped, output capped, the report states what its samples prove | M23 |
+| T-245 | CI action token abuse: a fork pull request or a `pull_request_target` run gets a write token, or a tampered `pclaw` or unpinned step runs in the customer's workflow | A10, A5 | TB10 | Write access to the customer's repository; code running in their CI | HR-566; no secrets needed, steps pinned by SHA, `pclaw` checksum-verified, comment skipped on forks, `tools/cicheck` covers `integrations/**/action.yml` | M23 |
 
 **G0 M24: posture, supply chain, catalogue and device scans**
 

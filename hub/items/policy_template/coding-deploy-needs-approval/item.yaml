@@ -1,0 +1,46 @@
+name: pc.coding.deploy-needs-approval
+version: 1.0.0
+kind: policy_template
+title: Deployments need a release approver
+summary: >-
+  Every deployment of a named repository, direct or through a merge that
+  deploys, waits for an independent release approver inside a change window.
+  Set the change window and bind release_approver yourself.
+body:
+  placeholders:
+    repository: {"kind": "repository", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"}
+    environment: {"kind": "environment", "pattern": "^[a-z][a-z0-9_-]{0,63}$"}
+  rules:
+    - id: dn-release
+      per: repo
+      kind: REQUIRE_APPROVAL
+      summary: a release approver releases every deployment of the repository inside a change window
+      operations: [github.deployment.trigger]
+      when: "{{repository}}"
+      reason: DEPLOYMENT_NEEDS_RELEASE
+      approval: {role: release_approver, count: 1, independent: true, window: true}
+  tests:
+    - {"id": "dn-held", "per": "repo", "summary": "a merge into the repository that deploys waits for a release approver",
+        "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+          "params": {"sha": "1111111111111111111111111111111111111111"}},
+        "given": {"facts": {
+            "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+            "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+            "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+            "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+            "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+            "github.repo.deploy_triggers": {"value": {"object": {"state": "triggered", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": ["{{environment}}"]}}, "age_seconds": 5}
+          }},
+        "expect": {"decision": "REQUIRE_APPROVAL", "reason": "DEPLOYMENT_NEEDS_RELEASE"}}
+    - {"id": "dn-no-deployment", "per": "repo", "summary": "a merge into the repository that deploys nothing goes through",
+        "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+          "params": {"sha": "1111111111111111111111111111111111111111"}},
+        "given": {"facts": {
+            "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+            "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+            "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+            "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+            "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+            "github.repo.deploy_triggers": {"value": {"object": {"state": "none", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
+          }},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
