@@ -18,12 +18,14 @@ ALTER TABLE pc.connection_inventory
     -- UNTRUSTED: the tool's title, annotations and output schema as a JSON
     -- object, which the checks read too.
     ADD COLUMN listed_extra           text    NOT NULL DEFAULT '' CHECK (octet_length(listed_extra) <= 16384),
+    -- One of those fields did not fit and is not in listed_extra (D289).
+    ADD COLUMN listed_extra_truncated boolean NOT NULL DEFAULT false,
     -- UNTRUSTED: what an operator reported from `pclaw mcp inspect --submit`
     -- (D214). Their machine's word, not a check PantherClaw ran.
     ADD COLUMN operator_note          text    NOT NULL DEFAULT '' CHECK (octet_length(operator_note) <= 8192),
     ADD COLUMN operator_note_by       text    CHECK (char_length(operator_note_by) BETWEEN 1 AND 100),
     ADD COLUMN operator_note_at       timestamptz;
-GRANT UPDATE (input_schema, input_schema_digest, input_schema_truncated, listed_extra, operator_note, operator_note_by, operator_note_at)
+GRANT UPDATE (input_schema, input_schema_digest, input_schema_truncated, listed_extra, listed_extra_truncated, operator_note, operator_note_by, operator_note_at)
     ON pc.connection_inventory TO pc_app;
 
 -- Tool names approved on other connections, for tool_shadowing.
@@ -93,6 +95,7 @@ ALTER TABLE pc.connection_inventory
     DROP COLUMN operator_note_at,
     DROP COLUMN operator_note_by,
     DROP COLUMN operator_note,
+    DROP COLUMN listed_extra_truncated,
     DROP COLUMN listed_extra,
     DROP COLUMN input_schema_truncated,
     DROP COLUMN input_schema_digest,

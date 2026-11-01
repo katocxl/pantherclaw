@@ -185,13 +185,13 @@ func (s *Service) GetInventoryItem(ctx context.Context, id ids.UUID) (dbq.PcConn
 
 // withHeld is an entry with the text its item already holds. The digest is the
 // same, so the text is too, and a report that left it out loses no flag it
-// raised.
+// raised. Held text that had lost a field still has (D289).
 func withHeld(row dbq.PcConnectionInventory, e InventoryEntry) InventoryEntry {
 	if e.InputSchema == "" && row.InputSchema != "" {
 		e.InputSchema, e.InputSchemaDigest, e.InputSchemaCut, e.SchemaOmitted = row.InputSchema, row.InputSchemaDigest, false, false
 	}
 	if e.ListedExtra == "" && row.ListedExtra != "" {
-		e.ListedExtra, e.ListedExtraCut = row.ListedExtra, false
+		e.ListedExtra, e.ListedExtraCut = row.ListedExtra, row.ListedExtraTruncated
 	}
 	return e
 }
@@ -212,7 +212,9 @@ func fill(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcConnection, c
 		}
 	}
 	if fillsExtra(row, e) {
-		if _, err := q.SetInventoryExtra(ctx, e.ListedExtra, c.Org, row.ID); err != nil {
+		if _, err := q.SetInventoryExtra(ctx, dbq.SetInventoryExtraParams{
+			ListedExtra: e.ListedExtra, ListedExtraTruncated: e.ListedExtraCut, OrgID: c.Org, ID: row.ID,
+		}); err != nil {
 			return err
 		}
 	}

@@ -174,3 +174,35 @@ func TestD281_HeldTextIsNotCalledCut(t *testing.T) {
 		t.Errorf("flags %v", got)
 	}
 }
+
+// TestD289_HeldTextThatLostAFieldStaysFlagged: an item stored with a field cut
+// is still missing it when a report omits the rest, so a relist keeps
+// schema_unavailable.
+// Covers: F868, F869
+func TestD289_HeldTextThatLostAFieldStaysFlagged(t *testing.T) {
+	e := newEnv(t)
+	e.pin(t, upstreamPackage, "1.0.0", mcpPayments(t))
+	c := e.upstreamConn(t, "upstream")
+	ctx := context.Background()
+	in := app.InventoryEntry{
+		Kind: app.InventoryTool, Name: "padded", Digest: digest("aa"), Description: "Runs.", InputSchema: cleanSchema, InputSchemaDigest: digest("a0"),
+		ListedExtra: `{"title":"Runs"}`, ListedExtraCut: true,
+	}
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Entries: []app.InventoryEntry{in}}); err != nil {
+		t.Fatal(err)
+	}
+	id := e.itemID(t, c.ID, "padded")
+	if got := e.flagsOn(t, id, "OPEN"); !slices.Contains(got, "schema_unavailable") {
+		t.Fatalf("flags %v", got)
+	}
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Complete: true}); err != nil {
+		t.Fatal(err)
+	}
+	in.ListedExtra = ""
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Entries: []app.InventoryEntry{in}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.flagsOn(t, id, "OPEN"); !slices.Contains(got, "schema_unavailable") {
+		t.Errorf("flags %v", got)
+	}
+}

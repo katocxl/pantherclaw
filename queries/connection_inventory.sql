@@ -14,10 +14,11 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND 
 -- name: InsertInventoryItem :exec
 INSERT INTO pc.connection_inventory (org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest,
                                      description, description_scan, state, input_schema, input_schema_digest,
-                                     input_schema_truncated, listed_extra)
+                                     input_schema_truncated, listed_extra, listed_extra_truncated)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind), sqlc.arg(name), sqlc.arg(display_name),
         sqlc.arg(mime_type), sqlc.arg(display_truncated), sqlc.arg(digest), sqlc.arg(description), sqlc.arg(description_scan),
-        sqlc.arg(state), sqlc.arg(input_schema), sqlc.arg(input_schema_digest), sqlc.arg(input_schema_truncated), sqlc.arg(listed_extra));
+        sqlc.arg(state), sqlc.arg(input_schema), sqlc.arg(input_schema_digest), sqlc.arg(input_schema_truncated), sqlc.arg(listed_extra),
+        sqlc.arg(listed_extra_truncated));
 
 -- SetInventorySchema fills in the schema of an item first listed by a gateway
 -- that did not report one (G0 M24 D211). The digest of the item covers it, so
@@ -31,7 +32,8 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND input_schema = '';
 -- SetInventoryExtra fills in the other listed fields on their own (D269): no
 -- row means the item holds them already.
 -- name: SetInventoryExtra :execresult
-UPDATE pc.connection_inventory SET listed_extra = sqlc.arg(listed_extra), updated_at = now()
+UPDATE pc.connection_inventory
+SET listed_extra = sqlc.arg(listed_extra), listed_extra_truncated = sqlc.arg(listed_extra_truncated), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND listed_extra = '';
 
 -- name: SeeInventoryItem :exec

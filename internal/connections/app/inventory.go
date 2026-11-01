@@ -276,7 +276,7 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 		OrgID: c.Org, ID: id, ConnectionID: conn.ID, Kind: e.Kind, Name: e.Name, DisplayName: e.DisplayName,
 		MimeType: e.MimeType, DisplayTruncated: e.DisplayTruncated, Digest: e.Digest, Description: e.Description,
 		DescriptionScan: scan, State: state, InputSchema: e.InputSchema, InputSchemaDigest: e.InputSchemaDigest,
-		InputSchemaTruncated: e.InputSchemaCut, ListedExtra: e.ListedExtra,
+		InputSchemaTruncated: e.InputSchemaCut, ListedExtra: e.ListedExtra, ListedExtraTruncated: e.ListedExtraCut,
 	}); err != nil {
 		return ids.UUID{}, false, err
 	}

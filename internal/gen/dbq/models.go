@@ -1185,6 +1185,7 @@ type PcConnectionInventory struct {
 	InputSchemaDigest    string
 	InputSchemaTruncated bool
 	ListedExtra          string
+	ListedExtraTruncated bool
 	OperatorNote         string
 	OperatorNoteBy       *string
 	OperatorNoteAt       *time.Time

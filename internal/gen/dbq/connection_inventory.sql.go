@@ -38,7 +38,7 @@ func (q *Queries) DismissInventoryItem(ctx context.Context, arg DismissInventory
 }
 
 const getInventoryItemByID = `-- name: GetInventoryItemByID :one
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory WHERE org_id = $1 AND id = $2
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, listed_extra_truncated, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetInventoryItemByID(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcConnectionInventory, error) {
@@ -67,6 +67,7 @@ func (q *Queries) GetInventoryItemByID(ctx context.Context, orgID ids.OrgID, iD 
 		&i.InputSchemaDigest,
 		&i.InputSchemaTruncated,
 		&i.ListedExtra,
+		&i.ListedExtraTruncated,
 		&i.OperatorNote,
 		&i.OperatorNoteBy,
 		&i.OperatorNoteAt,
@@ -76,7 +77,7 @@ func (q *Queries) GetInventoryItemByID(ctx context.Context, orgID ids.OrgID, iD 
 
 const getInventoryItemByKey = `-- name: GetInventoryItemByKey :one
 
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, listed_extra_truncated, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2 AND kind = $3
   AND name = $4 AND digest = $5
 `
@@ -128,6 +129,7 @@ func (q *Queries) GetInventoryItemByKey(ctx context.Context, arg GetInventoryIte
 		&i.InputSchemaDigest,
 		&i.InputSchemaTruncated,
 		&i.ListedExtra,
+		&i.ListedExtraTruncated,
 		&i.OperatorNote,
 		&i.OperatorNoteBy,
 		&i.OperatorNoteAt,
@@ -136,7 +138,7 @@ func (q *Queries) GetInventoryItemByKey(ctx context.Context, arg GetInventoryIte
 }
 
 const getInventoryItems = `-- name: GetInventoryItems :many
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, listed_extra_truncated, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2 AND id = ANY ($3::uuid[])
 ORDER BY kind, name, id
 `
@@ -173,6 +175,7 @@ func (q *Queries) GetInventoryItems(ctx context.Context, orgID ids.OrgID, connec
 			&i.InputSchemaDigest,
 			&i.InputSchemaTruncated,
 			&i.ListedExtra,
+			&i.ListedExtraTruncated,
 			&i.OperatorNote,
 			&i.OperatorNoteBy,
 			&i.OperatorNoteAt,
@@ -190,10 +193,11 @@ func (q *Queries) GetInventoryItems(ctx context.Context, orgID ids.OrgID, connec
 const insertInventoryItem = `-- name: InsertInventoryItem :exec
 INSERT INTO pc.connection_inventory (org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest,
                                      description, description_scan, state, input_schema, input_schema_digest,
-                                     input_schema_truncated, listed_extra)
+                                     input_schema_truncated, listed_extra, listed_extra_truncated)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11,
-        $12, $13, $14, $15, $16)
+        $12, $13, $14, $15, $16,
+        $17)
 `
 
 type InsertInventoryItemParams struct {
@@ -213,6 +217,7 @@ type InsertInventoryItemParams struct {
 	InputSchemaDigest    string
 	InputSchemaTruncated bool
 	ListedExtra          string
+	ListedExtraTruncated bool
 }
 
 func (q *Queries) InsertInventoryItem(ctx context.Context, arg InsertInventoryItemParams) error {
@@ -233,12 +238,13 @@ func (q *Queries) InsertInventoryItem(ctx context.Context, arg InsertInventoryIt
 		arg.InputSchemaDigest,
 		arg.InputSchemaTruncated,
 		arg.ListedExtra,
+		arg.ListedExtraTruncated,
 	)
 	return err
 }
 
 const listConnectionInventory = `-- name: ListConnectionInventory :many
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, listed_extra_truncated, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2
   AND (cardinality($3::text[]) = 0 OR state = ANY ($3::text[]))
   AND (cardinality($4::text[]) = 0 OR kind = ANY ($4::text[]))
@@ -295,6 +301,7 @@ func (q *Queries) ListConnectionInventory(ctx context.Context, arg ListConnectio
 			&i.InputSchemaDigest,
 			&i.InputSchemaTruncated,
 			&i.ListedExtra,
+			&i.ListedExtraTruncated,
 			&i.OperatorNote,
 			&i.OperatorNoteBy,
 			&i.OperatorNoteAt,
@@ -310,7 +317,7 @@ func (q *Queries) ListConnectionInventory(ctx context.Context, arg ListConnectio
 }
 
 const listNewInventory = `-- name: ListNewInventory :many
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, listed_extra_truncated, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory
 WHERE org_id = $1 AND connection_id = $2 AND state = 'NEW'
 ORDER BY id
 `
@@ -347,6 +354,7 @@ func (q *Queries) ListNewInventory(ctx context.Context, orgID ids.OrgID, connect
 			&i.InputSchemaDigest,
 			&i.InputSchemaTruncated,
 			&i.ListedExtra,
+			&i.ListedExtraTruncated,
 			&i.OperatorNote,
 			&i.OperatorNoteBy,
 			&i.OperatorNoteAt,
@@ -362,7 +370,7 @@ func (q *Queries) ListNewInventory(ctx context.Context, orgID ids.OrgID, connect
 }
 
 const lockInventoryItem = `-- name: LockInventoryItem :one
-SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, connection_id, kind, name, display_name, mime_type, display_truncated, digest, description, description_scan, state, review_entry_id, dismissed_by, dismiss_reason, first_seen, last_seen, updated_at, input_schema, input_schema_digest, input_schema_truncated, listed_extra, listed_extra_truncated, operator_note, operator_note_by, operator_note_at FROM pc.connection_inventory WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockInventoryItem(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcConnectionInventory, error) {
@@ -391,6 +399,7 @@ func (q *Queries) LockInventoryItem(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.InputSchemaDigest,
 		&i.InputSchemaTruncated,
 		&i.ListedExtra,
+		&i.ListedExtraTruncated,
 		&i.OperatorNote,
 		&i.OperatorNoteBy,
 		&i.OperatorNoteAt,
@@ -438,14 +447,27 @@ func (q *Queries) SeeInventoryItem(ctx context.Context, orgID ids.OrgID, iD ids.
 }
 
 const setInventoryExtra = `-- name: SetInventoryExtra :execresult
-UPDATE pc.connection_inventory SET listed_extra = $1, updated_at = now()
-WHERE org_id = $2 AND id = $3 AND listed_extra = ''
+UPDATE pc.connection_inventory
+SET listed_extra = $1, listed_extra_truncated = $2, updated_at = now()
+WHERE org_id = $3 AND id = $4 AND listed_extra = ''
 `
+
+type SetInventoryExtraParams struct {
+	ListedExtra          string
+	ListedExtraTruncated bool
+	OrgID                ids.OrgID
+	ID                   ids.UUID
+}
 
 // SetInventoryExtra fills in the other listed fields on their own (D269): no
 // row means the item holds them already.
-func (q *Queries) SetInventoryExtra(ctx context.Context, listedExtra string, orgID ids.OrgID, iD ids.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, setInventoryExtra, listedExtra, orgID, iD)
+func (q *Queries) SetInventoryExtra(ctx context.Context, arg SetInventoryExtraParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, setInventoryExtra,
+		arg.ListedExtra,
+		arg.ListedExtraTruncated,
+		arg.OrgID,
+		arg.ID,
+	)
 }
 
 const setInventoryNote = `-- name: SetInventoryNote :execresult
