@@ -42,6 +42,9 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M22 | See it: API gaps left by M15–M21, graph evidence, every M15–M21 console screen, graph views |
 | M23 | Easy to adopt: Hub, CI checks, `pclaw dev`, the managed-settings kit |
 | M24 | Agent Posture: ranked findings, MCP supply-chain checks, the private MCP catalogue, agent cards, scheduled device scans |
+| M25 | Prove it to the auditor: framework coverage, compliance reports, real-agent campaigns |
+| M26 | Enterprise identity: IdP access, MCP client authorization, SCIM, SAML, SaaS agent discovery |
+| M27 | Agent Detection & Response: behaviour profiles, content signals, playbooks, SIEM packs, the read-only MCP server |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -796,6 +799,21 @@ Posture is ranked findings with fixes and no single measure (F797). Clean means 
 | F888 | Scheduled device scans | `pclaw scan schedule` installs, removes and reports a scheduled task, launchd job or systemd timer; a runbook covers Intune and Jamf. | Next | Community | M24 | new |
 | F889 | Environment-secret signal | The `env_secret` recommendation signal works from real input, so that F343 keeps its promise. | Next | Team | M24 | F343 |
 
+### M25 rows: Prove it to the auditor
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+
+### M26 rows: Enterprise identity
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+
+### M27 rows: Agent Detection & Response
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.
@@ -850,7 +868,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 
 Checked on 2026-10-09 by a script that parsed every table row with a Source column and expanded the ranges, after ADR-0017, ADR-0018 and ADR-0019 added PN-002.8, PN-016.3, PN-023 and PN-024 and moved four rows to M14; row counts updated on 2026-10-20 after G0 UI added PN-025, PN-026 and the new rows F803–F830.
 
-- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows F831–F889 of M22–M24 come on top of these counts as each milestone lands; they are new rows, not catalog IDs.
+- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows F831–F949 of M22–M27 come on top of these counts as each milestone lands; they are new rows, not catalog IDs.
 - **Coverage:** 802 of 802 catalog IDs (F001–F802) appear in at least one Source cell. None are missing and none are out of range.
 - **Format checks:** every row ID matches its convention, and no row ID repeats. Every Phase, Edition and Milestone value is valid. Every "What the backend delivers" cell is ≤ 36 words.
 

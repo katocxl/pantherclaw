@@ -501,13 +501,14 @@ Each milestone starts with a G0 brief in [GATES_AND_REVIEW.md](security/GATES_AN
 ```
 M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M12 → v0.1.0 preview
    → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0 → M15 → M16 → M17 → M18 → M19 → M20 → M21
-   → M22 → M23 → M24
+   → M22 → M23 → M24 → M25 → M26 → M27
 ```
 
 M15 and M16 are post-1.0 milestones (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); M15 lands before M16 ([G0 M15](g0/M15.md), founder decision F9).
 M19 is a post-1.0 milestone (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); it lands after M15–M18, in migration order ([G0 M19](g0/M19.md)), and the delivery order above gains it at the exit.
 M21 is a post-1.0 milestone that lands after M20, in migration-number order ([G0 M21](g0/M21.md)).
 M22, M23 and M24 are post-1.0 milestones built in parallel as one wave (founder, 2026-10-31: all coding comes before live testing and founder steps); they land in migration-number order.
+M25, M26 and M27 are the second such wave: they build in parallel after M24 has landed, and land in migration-number order.
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -789,6 +790,12 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Catalogue** ([ADR-0046](adr/0046-mcp-server-catalogue.md), Team to manage, revoke on every edition, founder decision H3): exact approvals and wider denials, Watching by default, opt-in enforcement outside the decision path; weakening always waits for a second person; a person revokes a server inside one organization.
 - **Agents and scans:** risk and AI Act fields on the existing record, agent cards, signed A2A cards; hook, skill and package metadata in scans, a Scanner role and scheduled scans, never file contents or prompts.
 - Migrations `00270`–`00273` (`00274`–`00279` spare).
+
+### M25 — Prove it to the auditor
+
+### M26 — Enterprise identity
+
+### M27 — Agent Detection & Response
 
 ---
 
