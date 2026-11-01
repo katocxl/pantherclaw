@@ -43,7 +43,7 @@ In scope: `pantherclaw-server` (api + worker), `pantherclaw-gateway`, `pclaw`, `
 | TB9 | Third-party MCP code ↔ Connector runtime | Connector process → gateway | Isolation, customer-hosted only (HR-084..086) |
 | TB10 | CI/CD ↔ Repo/Registries | Workflows, deps → artifacts | Pinned actions, OIDC publishing, attestations (HR-130..132) |
 | TB11 | Tool output/content ↔ Agent | External text → agent reasoning | Outside our enforcement; constrained by grants, sequences, detections |
-| TB12 | Public repo ↔ Private `pantherclaw-cloud` repo | Public → private | No private code/secrets in public repo; extension interfaces |
+| TB12 | Public repo ↔ Private repo | Public → private | No private code/secrets in public repo; extension interfaces |
 | TB13 | Server ↔ Model provider (external processor) | Server → the customer's own model vendor (M21 drafting) | Off by default, customer's key, names-only requests, fixed host through the egress guards, strict output parsing, drafts only (HR-541..545, ADR-0043) |
 
 ## 4. Attack surfaces
@@ -348,7 +348,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | R-09 | Go cannot reliably zeroize secrets | Runtime limitation | Short-lived plaintext, no swap/core dumps in images |
 | R-10 | Ledger proves integrity, not completeness | Inherent | Target-log reconciliation, external anchoring |
 | R-11 | Solo founder: no independent human reviewer | Team size | EX-001 compensating controls ([GATES_AND_REVIEW.md](GATES_AND_REVIEW.md)) |
-| R-12 | Public source can be copied | Business choice | BSL, private `pantherclaw-cloud` repo, signed roots, detection |
+| R-12 | Public source can be copied | Business choice | BSL, private repo, signed roots, detection |
 | R-13 | Device-code phishing: a person can be talked into confirming a code someone else started, giving that CLI their session | Device flow is the only browserless CLI login (ADR-0016) | Confirmation page shows device name, address and time with an explicit warning; same-origin POST; 10-minute codes, 5 attempts; each session is tied to the requesting device key, audited (`authn.login`) and revocable (logout, user disable) |
 | R-14 | A local attacker who copies `credentials.json` gets the CLI session (the device key is in the same file) | Founder decision 4 (ADR-0016): private file now, OS keychain later | Mode 0600 in the user profile; 15-minute access tokens; 8-hour absolute sessions; refresh rotation with reuse detection; immediate server-side revocation |
 | R-15 | The Kubernetes reviewer credential (TokenReview and pod reads) is a bearer token in a file; the server reads the file again every minute, so a replaced token is used up to a minute later (until 2026-10-09 a rotated token needed a restart) | M3 keeps cluster access in operator configuration (founder decision 3) | Least-privilege RBAC from the workload-identity runbook (TokenReview plus `get` on pods in pinned namespaces); short-lived reviewer tokens, rotated without a restart; any failed cluster call refuses the attestation (fail closed) |

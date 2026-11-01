@@ -20,7 +20,7 @@
    - An outage fails closed; the bounded DEK cache keeps serving the keys it already holds.
    - The fan-out port is extracted with a Postgres adapter and no change in behaviour. The BlobStore port ships with an in-memory test adapter only; its real adapter comes with the first caller that moves (D172). The search port waits.
 4. **pclaw keeps its secrets in the OS keychain** (HR-485). The refresh token, the device key seed and, if it fits, the access token go to the keychain (`zalando/go-keyring`); metadata stays in the file. `--credential-store=auto|keychain|file`; `auto` falls back to the 0600 file with a warning. No secret ever goes on a command line.
-5. **SCIM and SAML come after M18** (G8), in a clean package in the private `pantherclaw-cloud` repository, with their tables and ports in public core (founder decision H7, [G0 M25](../g0/M25.md)).
+5. **SCIM and SAML come after M18** (G8), in a clean package in a private repository, with their tables and ports in public core (founder decision H7, [G0 M25](../g0/M25.md)).
 
 **A customer's identity-provider admin can defeat separation of duties.** This is residual risk R-08 and stays accepted. Organization identity providers make it more direct: whoever administers the provider an organization signs in with can create identities that look like distinct people, and two such identities can satisfy any two-person rule, including the protected change that adds the provider. PantherClaw cannot tell two people from one person with two accounts at the provider. The compensating controls stay those of R-08 (distinct WebAuthn credentials, cooldowns, admin notices), plus the notice to every organization admin on any identity-provider change (HR-481) and the immutable issuer.
 

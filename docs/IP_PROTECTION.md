@@ -23,10 +23,10 @@ SDK files use `Apache-2.0` and `Copyright 2026 Joshua Kato`.
 
 ## 2. Architectural layer — keep the crown jewels private
 
-| Public (this repo) | Private repo `pantherclaw-cloud` |
+| Public (this repo) | A private repository |
 |---|---|
-| Core server, gateway, CLI, simulators | SCIM and SAML in a clean package, multi-org fleet management, HA tooling |
-| PAP/1 spec and SDKs | SIEM/SOAR connectors beyond OCSF export |
+| Core server, gateway, CLI, simulators, multi-org fleet management, high availability | SCIM and SAML in a clean package, with `cmd/pantherclaw-server-ee` |
+| PAP/1 spec and SDKs, SIEM content packs (Apache-2.0) | Web console |
 | Extension interfaces (`internal/extension`; G0 UI, ADR-0030) | Advanced detection content and threat intelligence |
 | Basic tool packages for simulators | Curated, reviewed tool-package catalog for real providers |
 | Community red-team scenarios, compliance reports (edition-gated) | Full adversarial scenario library |

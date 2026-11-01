@@ -15,7 +15,7 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 **Edition** (the lowest edition that includes the row; each higher edition includes everything below it)
 
 - `Community`: the public, BSL 1.1-licensed core. Free production use for ≤ 5 governed agents in 1 organisation, with no hosted, embedded or competing offering.
-- `Team`, `Business`, `Enterprise`: unlocked by Ed25519-signed licence keys. Enterprise-only code lives in a clean package in the private `pantherclaw-cloud` repository. Its tables and ports stay in public core.
+- `Team`, `Business`, `Enterprise`: unlocked by Ed25519-signed licence keys. Enterprise-only code lives in a clean package in a private repository. Its tables and ports stay in public core.
 - The PAP/1 spec, verifier libraries, SDKs and the Claude Code integration are Apache-2.0 whatever the edition.
 
 **Milestone**
