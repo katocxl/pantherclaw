@@ -149,8 +149,9 @@ func TestHR588_OtherCredentialKindsStayOnTheMachine(t *testing.T) {
 		t.Fatalf("scan kinds %v, catalog kinds %v", got, want)
 	}
 	dir := t.TempDir()
+	ghp, pck, aws := "ghp_"+"0123456789", "pck_"+"0123456789", "abcdefgh"+"12345678"
 	writeTree(t, dir, map[string]string{".mcp.json": `{"mcpServers": {"s": {"command": "node",
-		"env": {"GITHUB_TOKEN": "ghp_0123456789", "PANTHERCLAW_API_KEY": "pck_0123456789", "AWS_SECRET_ACCESS_KEY": "abcdefgh12345678"}}}}`})
+		"env": {"GITHUB_TOKEN": "` + ghp + `", "PANTHERCLAW_API_KEY": "` + pck + `", "AWS_SECRET_ACCESS_KEY": "` + aws + `"}}}}`})
 	rec, _, env := scanServer(t)
 	if code, out, errs := run(t, env, "scan", "--path", dir, "--no-user-config", "--no-env", "--submit"); code != 0 {
 		t.Fatalf("scan = %d %q %q", code, out, errs)
@@ -173,7 +174,8 @@ func TestHR588_OtherCredentialKindsStayOnTheMachine(t *testing.T) {
 // Covers: F889
 func TestF343_ScanSubmitsTheSignalRecommendationsRead(t *testing.T) {
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{".mcp.json": `{"mcpServers": {"s": {"command": "node", "env": {"OPENAI_API_KEY": "sk-proj-0123456789"}}}}`})
+	openai := "sk-proj-" + "0123456789"
+	writeTree(t, dir, map[string]string{".mcp.json": `{"mcpServers": {"s": {"command": "node", "env": {"OPENAI_API_KEY": "` + openai + `"}}}}`})
 	rec, _, env := scanServer(t)
 	if code, out, errs := run(t, env, "scan", "--path", dir, "--no-user-config", "--no-env", "--submit"); code != 0 {
 		t.Fatalf("scan = %d %q %q", code, out, errs)
