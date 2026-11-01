@@ -12,6 +12,7 @@ import (
 	"encoding/json/v2"
 	"strings"
 	"testing"
+	"time"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
@@ -33,14 +34,23 @@ import (
 // cannot project stops here, as it stops the org's chain.
 func (e *env) chain(t *testing.T) {
 	t.Helper()
-	if _, err := ledger.ChainAll(context.Background(), e.pool, e.org, 500); err != nil {
-		t.Fatalf("the org's chain stopped: %v", err)
-	}
-	var left int
-	e.d.AdminQueryRow(t, `SELECT count(*) FROM pc.ledger_entries l WHERE org_id = $1
-		AND NOT EXISTS (SELECT 1 FROM pc.ledger_chain c WHERE c.org_id = l.org_id AND c.entry_id = l.id)`, []any{e.org}, &left)
-	if left != 0 {
-		t.Fatalf("%d entries are not chained", left)
+	// The chainer links only entries older than every running transaction on
+	// the cluster; under a parallel test run that can take a moment.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := ledger.ChainAll(context.Background(), e.pool, e.org, 500); err != nil {
+			t.Fatalf("the org's chain stopped: %v", err)
+		}
+		var left int
+		e.d.AdminQueryRow(t, `SELECT count(*) FROM pc.ledger_entries l WHERE org_id = $1
+			AND NOT EXISTS (SELECT 1 FROM pc.ledger_chain c WHERE c.org_id = l.org_id AND c.entry_id = l.id)`, []any{e.org}, &left)
+		if left == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d entries are not chained within 30 s", left)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

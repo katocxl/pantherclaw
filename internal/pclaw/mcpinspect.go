@@ -230,7 +230,7 @@ type mcpStdio struct {
 }
 
 func (s *mcpStdio) send(v any) error {
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		return err
 	}
