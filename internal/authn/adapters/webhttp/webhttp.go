@@ -140,6 +140,9 @@ type Handler struct {
 	// served.
 	support    SupportAccess
 	breakGlass BreakGlass
+	// planGate is the plan gate of the pages (G0 M22 D77, HR-356); nil when
+	// no plan is required.
+	planGate PlanGate
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -218,6 +221,9 @@ func (h *Handler) withSession(mux *http.ServeMux, method, path string, f session
 			} else {
 				h.toLogin(w, r)
 			}
+			return
+		}
+		if csrf && !h.planAllows(w, r, s, path) {
 			return
 		}
 		f(w, r, s)

@@ -46,6 +46,7 @@ import (
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
+	"github.com/katocxl/pantherclaw/internal/entitlements"
 	"github.com/katocxl/pantherclaw/internal/evidence/chainer"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/extension"
@@ -458,6 +459,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err != nil {
 			return err
 		}
+		web.WithPlanGate(entitlements.NewGate(entsSvc, cfg.Billing.RequirePlan, procedureClass))
 		sup := newSupport(cfg, pool, entsSvc, m5.notifications, log)
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,

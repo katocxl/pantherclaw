@@ -38,6 +38,7 @@ function say(text) {
 const messages = {
   no_keys: "You need a security key on your account first (add one on your account page).",
   step_up_required: "Verify with your security key first.",
+  plan_required: "This organization's plan does not allow this. Choose a plan in Settings, Plan and billing.",
   verification_failed: "The security key's answer could not be verified.",
   forbidden: "You cannot do this: it needs the permission and a person's session.",
   edition: "Automations need the Team edition or above.",
