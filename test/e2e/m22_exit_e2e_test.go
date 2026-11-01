@@ -32,12 +32,15 @@ import (
 // goes through the real gateway; a signed-in admin then reads, through the
 // server, a causal graph whose links name the stored receipts of that refund,
 // gaps where a record is missing, lanes, coverage edges with their reasons, and
-// metrics that drill to their records or say they have none.
+// metrics that drill to their records or say they have none. The same admin
+// then rotates a credential over the RPCs, which refuse what needs a step-up
+// (T-240), and reads scan state, ticket links, the sync log and model usage
+// (G0 M22 D6-D8).
 //
-// Covers: F272, F277, F284, F289, F293, F301
+// Covers: F272, F277, F284, F289, F293, F301, F424, F831, F832, F833, F834
 func TestE2E_M22_GraphData(t *testing.T) {
 	p := inProcessIdP(t)
-	s := start(t, options{budget: "1000.00", billing: true, people: &p})
+	s := start(t, options{budget: "1000.00", billing: true, people: &p, github: true, jira: true, modelDrafting: true})
 	activePlan(t, s.pool, s.org)
 	code, r := s.refund(t, ids.NewV7(), "30.00")
 	if code != http.StatusOK || r.Outcome != "ACCEPTED" {
@@ -49,9 +52,14 @@ func TestE2E_M22_GraphData(t *testing.T) {
 	t.Run("the timeline's events carry their read class and the run's lanes", func(t *testing.T) { s.m22Timeline(t, rc, r.TransactionID) })
 	t.Run("the coverage graph's edges say why, when and until when", func(t *testing.T) { s.m22Coverage(t, rc, r.TransactionID) })
 	t.Run("a metric drills to its records or says it has none", func(t *testing.T) { s.m22Metrics(t, rc) })
+	t.Run("a rotation runs over the RPCs and only a step-up activates or rolls back", func(t *testing.T) { s.m22Rotation(t, rc) })
+	t.Run("an agent's scan state sums its findings", func(t *testing.T) { s.m22ScanState(t, rc) })
+	t.Run("a case's tickets and the sync log read back", func(t *testing.T) { s.m22Tickets(t, rc) })
+	t.Run("model drafts and usage read back as counts", func(t *testing.T) { s.m22ModelReads(t, rc) })
 }
 
-// m22Admin signs in a security admin and auditor of the stack's org.
+// m22Admin signs in a security admin, auditor, gateway admin and responder of
+// the stack's org.
 func (s *stack) m22Admin(t *testing.T, p idp) *connect.Client {
 	t.Helper()
 	org := s.org.String()
@@ -63,7 +71,7 @@ func (s *stack) m22Admin(t *testing.T, p idp) *connect.Client {
 	admin := people.user(t, "m22-admin", "m22-admin@example.test")
 	admin.login(t, org, pciToken.FindStringSubmatch(out.String())[1])
 	id := s.row(t, "SELECT id::text FROM pc.users WHERE subject = 'm22-admin'")
-	for _, role := range []string{"security_admin", "auditor"} {
+	for _, role := range []string{"security_admin", "auditor", "gateway_admin", "responder"} {
 		if code, o, e := admin.pclaw(t, "role", "bind", "--role", role, "--user", id); code != 0 {
 			t.Fatalf("role bind %s: %d %s %s", role, code, o, e)
 		}
