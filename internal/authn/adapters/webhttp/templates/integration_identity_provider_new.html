@@ -10,6 +10,7 @@
 <p><label><input type="checkbox" name="trust_email"> Trust the email claim without email_verified</label></p>
 <p><button type="submit" class="danger">Save with your security key</button></p>
 </form>
+<p id="secret-change" hidden>Its activation is filed: <a id="secret-change-link">review the protected change</a>. The provider stays PENDING until it is approved.</p>
 {{else}}
 <p class="note">You cannot add a provider: that needs identity_provider.manage and a security key.</p>
 {{end}}

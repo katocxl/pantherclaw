@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
+	"github.com/katocxl/pantherclaw/internal/changes"
 	"github.com/katocxl/pantherclaw/internal/exports"
 	"github.com/katocxl/pantherclaw/internal/idps"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -84,7 +85,9 @@ func mayManage(s authnapp.BrowserSession, perm td.Permission) bool {
 // secretFormView is the data of the secret forms.
 type secretFormView struct {
 	page
-	CanManage   bool
+	CanManage bool
+	// Disabled is a destination whose credential cannot be replaced.
+	Disabled    bool
 	DataClasses []string
 	// ID and Name are the destination whose credential is replaced.
 	ID, Name, Kind string
@@ -124,7 +127,7 @@ func (h *Handler) exportCredentialPage(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 	h.secretForm(w, r, s, secretFormView{
-		page: page{Title: title}, CanManage: mayManage(s, exports.PermManage), ID: d.ID.String(), Name: d.Name, Kind: d.Kind,
+		page: page{Title: title}, CanManage: mayManage(s, exports.PermManage), Disabled: d.State == exports.StateDisabled, ID: d.ID.String(), Name: d.Name, Kind: d.Kind,
 	}, "integration_export_credential.html")
 }
 
@@ -239,7 +242,11 @@ func (h *Handler) replaceExportCredential(w http.ResponseWriter, r *http.Request
 		h.secretError(w, r, err)
 		return
 	}
-	h.writeJSON(w, http.StatusOK, map[string]string{"id": d.ID.String(), "state": d.State, "next": confirmPath(d.ID)})
+	out := map[string]string{"id": d.ID.String(), "state": d.State}
+	if d.State == exports.StatePending {
+		out["next"] = confirmPath(d.ID)
+	}
+	h.writeJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) createIdentityProvider(w http.ResponseWriter, r *http.Request, s authnapp.BrowserSession) {
@@ -267,5 +274,8 @@ func (h *Handler) createIdentityProvider(w http.ResponseWriter, r *http.Request,
 		h.secretError(w, r, err)
 		return
 	}
-	h.writeJSON(w, http.StatusOK, map[string]string{"id": p.ID.String(), "state": p.State, "change": filed.Change.String(), "request": filed.Request.String()})
+	h.writeJSON(w, http.StatusOK, map[string]string{
+		"id": p.ID.String(), "state": p.State, "change": filed.Change.String(), "request": filed.Request.String(),
+		"change_path": changes.Path + "/" + filed.Request.String(),
+	})
 }

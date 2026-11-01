@@ -37,6 +37,7 @@ function say(text) {
 const messages = {
   no_keys: "You need a security key on your account first (add one on your account page).",
   step_up_required: "Verify with your security key first.",
+  plan_required: "This organization's plan does not allow this. Choose a plan in Settings, Plan and billing.",
   verification_failed: "The security key's answer could not be verified.",
   forbidden: "You cannot activate it: that needs the manage permission and a person's session.",
   not_found: "It does not exist, or you cannot see it.",
@@ -51,6 +52,7 @@ const messages = {
   edition_required: "Your edition does not include this.",
   invalid_export_destination: "Check the name, target and data classes.",
   invalid_export_credential: "Give the credential this kind of destination uses.",
+  export_destination_state: "This destination is disabled, so its credential cannot be replaced.",
   export_destination_url: "This URL is not allowed.",
   export_destination_metadata: "This URL is not allowed.",
   export_destination_exists: "A destination of that name exists.",

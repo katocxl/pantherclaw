@@ -25,6 +25,15 @@ type fakeSecrets struct {
 	cred  exports.Credential
 	input idps.Input
 	calls int
+	// state is the destination's state; empty is pending.
+	state string
+}
+
+func (f *fakeSecrets) current() string {
+	if f.state == "" {
+		return exports.StatePending
+	}
+	return f.state
 }
 
 func (f *fakeSecrets) gate(su stepup.StepUp) error {
@@ -42,11 +51,11 @@ func (f *fakeSecrets) CreateOnPage(_ context.Context, in exports.NewDestination,
 
 func (f *fakeSecrets) ReplaceCredentialOnPage(_ context.Context, id ids.UUID, c exports.Credential, su stepup.StepUp) (exports.Destination, error) {
 	f.cred = c
-	return exports.Destination{ID: id, State: exports.StatePending}, f.gate(su)
+	return exports.Destination{ID: id, State: f.current()}, f.gate(su)
 }
 
 func (f *fakeSecrets) Get(_ context.Context, id ids.UUID) (exports.Destination, error) {
-	return exports.Destination{ID: id, Name: "dest", Kind: "https_put", State: exports.StatePending}, nil
+	return exports.Destination{ID: id, Name: "dest", Kind: "https_put", State: f.current()}, nil
 }
 
 func (f *fakeSecrets) Activate(context.Context, ids.UUID, stepup.StepUp) (exports.Destination, error) {
@@ -141,5 +150,49 @@ func TestSecretPagesKeepTheSessionStepUpAndPermission(t *testing.T) {
 				t.Fatalf("the answer repeats the secret: %s", resp.Body)
 			}
 		})
+	}
+}
+
+// TestSecretPagesAnswerByState (G0 M22 D78): only a pending destination goes
+// on to activation, a disabled one has no form and says why, and a new
+// provider links to the change to approve.
+func TestSecretPagesAnswerByState(t *testing.T) {
+	secrets, providers := &fakeSecrets{}, &fakeProviders{}
+	h, err := webhttp.New(&rotationBrowser{key: ids.NewV7(), roles: []td.RoleName{td.RoleSecurityAdmin, td.RoleOrgAdmin}}, origin, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.WithExportDestinations(secrets).WithExportSecrets(secrets).WithIdentityProviderSecrets(providers)
+	mux := http.NewServeMux()
+	h.Mount(mux)
+	path := webhttp.ExportDestinationsPath + "/" + ids.NewV7().String() + "/credential"
+	replace := func() string {
+		t.Helper()
+		resp := do(t, mux, rotationBody(withCookie(post(path), "stepped"), `{"bearer_token":"t"}`))
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("replace: %d %s", resp.StatusCode, resp.Body)
+		}
+		return resp.Body
+	}
+
+	if body := replace(); !strings.Contains(body, `"next":"`) {
+		t.Fatalf("pending goes on to activation: %s", body)
+	}
+	secrets.state = exports.StateActive
+	if body := replace(); strings.Contains(body, `"next"`) {
+		t.Fatalf("an active destination has nothing to activate: %s", body)
+	}
+
+	secrets.state = exports.StateDisabled
+	r := httptest.NewRequest(http.MethodGet, origin+path, nil)
+	r.AddCookie(&http.Cookie{Name: "__Host-pc_session", Value: "person"})
+	resp := do(t, mux, r)
+	if resp.StatusCode != http.StatusOK || strings.Contains(resp.Body, `id="secret-form"`) || !strings.Contains(resp.Body, "is disabled") {
+		t.Fatalf("a disabled destination: %d %s", resp.StatusCode, resp.Body)
+	}
+
+	created := do(t, mux, rotationBody(withCookie(post(webhttp.IdentityProvidersPath+"/new"), "stepped"), `{"name":"p","issuer":"https://i.test","client_id":"c","client_secret":"s"}`))
+	if created.StatusCode != http.StatusOK || !strings.Contains(created.Body, `"change_path":"/changes/`) {
+		t.Fatalf("a new provider: %d %s", created.StatusCode, created.Body)
 	}
 }

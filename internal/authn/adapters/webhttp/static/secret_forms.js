@@ -27,6 +27,8 @@ function clearSecrets(form) {
   for (const el of form.querySelectorAll('input[type="password"]')) { el.value = ""; }
 }
 
+function samePath(p) { return typeof p === "string" && p.startsWith("/") && !p.startsWith("//"); }
+
 const secretForm = document.getElementById("secret-form");
 if (secretForm) {
   secretForm.addEventListener("submit", async (event) => {
@@ -35,10 +37,16 @@ if (secretForm) {
       say("Waiting for your security key…");
       await stepUp();
       const res = await post(secretForm.dataset.path, formBody(secretForm));
-      say("Saved. It stays pending until it is activated.");
-      if (typeof res.next === "string" && res.next.startsWith("/") && !res.next.startsWith("//")) {
-        window.location.assign(res.next);
+      if (samePath(res.change_path)) {
+        // Filed as a protected change: the form has done its work.
+        document.getElementById("secret-change-link").href = res.change_path;
+        document.getElementById("secret-change").hidden = false;
+        secretForm.hidden = true;
+        say("Saved.");
+        return;
       }
+      say(res.state === "PENDING" ? "Saved. It stays pending until it is activated." : "Saved. The credential is replaced.");
+      if (samePath(res.next)) { window.location.assign(res.next); }
     } catch (e) {
       say(e instanceof APIError ? explain(e) : "The security key did not answer (" + e.message + ").");
     } finally {
