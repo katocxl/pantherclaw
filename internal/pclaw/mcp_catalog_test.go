@@ -220,6 +220,14 @@ func TestF878_ExportWritesAStaticFileOfApprovedServers(t *testing.T) {
 			t.Fatalf("the reader would refuse %+v", s)
 		}
 	}
+	// The kit itself reads the file, through its own reader and generator
+	// (D138 with M23).
+	if got, err := readAllowFile(out); err != nil || len(got) != len(allow.Servers) {
+		t.Fatalf("the kit read %v: %v", got, err)
+	}
+	if code, stdout, errs := run(t, env, "managed-settings", "generate", "--client", "copilot", "--allow-file", out); code != 0 || !strings.Contains(stdout, "serverUrl") {
+		t.Fatalf("generate = %d %q %q", code, stdout, errs)
+	}
 	if got := strings.Join(names, ","); got != "payments,both,private" {
 		t.Fatalf("allow file %s", raw)
 	}
