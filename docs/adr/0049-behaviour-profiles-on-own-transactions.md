@@ -8,7 +8,7 @@
 1. **Own transactions only** (D502, D506, V6(a), HR-642). Profiles read `pc.transactions`, not the ledger, and no outside logs. This fits F787: these are the attributable actions PantherClaw already holds. F787 is unchanged.
 2. **Profiles are inference, and they say so** (D502, HR-644). `definition_status` gains UNVALIDATED (F801). Thresholds stay unvalidated until real data exists. It extends `pc.drift.behavior` and F399, using `BehaviorProfile`, not `cohorts.Baseline`.
 3. **Simulated history is labelled** (D502, HR-643). A labelled generator, split from real history (F630, HR-222).
-4. **Inference never contains** (D500, H4, HR-640). `reflex.alert` gains `basis`. Automation validation refuses a contain step on an INFERRED alert. This is stricter than F800.
+4. **Inference never contains** (D500, H4, HR-640). `reflex.alert` gains `basis`. A contain step runs only on CONFIRMED alerts, for every automation, library or custom, and validation refuses one on an INFERRED alert. This is stricter than F800.
 5. **Inference never decides** (D501, HR-641). "Never done X" shows beside the approval display, outside the binding, labelled inference. No decision reads it. HR-030, HR-034 and HR-240 are unchanged.
 
 **Consequences.**

@@ -668,7 +668,7 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
-| HR-640 | Automation validation refuses a contain step on an alert whose `basis` is INFERRED. | T-274 | M27 |
+| HR-640 | A contain step runs only on CONFIRMED alerts, for every automation, library or custom. Automation validation refuses a contain step on an alert whose `basis` is INFERRED. | T-274 | M27 |
 | HR-641 | "Never done X" shows beside the approval display, outside the binding, labelled inference. No decision reads it. HR-030, HR-034 and HR-240 are unchanged. | T-275 | M27 |
 | HR-642 | Behaviour profiles read PantherClaw's own transactions in `pc.transactions`, never the ledger and never outside logs. | T-275 | M27 |
 | HR-643 | Simulated history comes from a labelled generator and stays split from real history (F630, HR-222). | T-275 | M27 |

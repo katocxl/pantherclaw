@@ -828,7 +828,7 @@ Analytics use PantherClaw's own transactions and never contain automatically (F7
 | F940 | Restrict-only facts | A flag becomes a fact on the run, read by later decisions: hold or deny, never allow. Alerts are labelled inference. | Next | Business | M27 | F793 |
 | F941 | Content signal rollout | Opt-in per organization, Watching first, ACTIVE by step-up. It stays on at lapse until a person turns it off. It says "no known flags", and hook, SDK and delegated faces show as not inspected. | Next | Business | M27 | F801 |
 | F942 | Playbook library | Six governed playbooks in `hub/`: leaked key, poisoned MCP server, compromised laptop, rogue sub-agent, data-flow hold escalation, offboarded owner. Install makes a draft, and each is range tested. | Next | Team | M27 | F793 |
-| F943 | Custom playbooks | Customer-made playbooks. A contain step on an INFERRED alert is refused. | Next | Business | M27 | F800 |
+| F943 | Custom playbooks | Customer-made playbooks. As for every automation, a contain step runs only on CONFIRMED alerts. | Next | Business | M27 | F800 |
 | F944 | SIEM packs | `integrations/siem/` for Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, Apache-2.0, built on OCSF export. | Next | Business | M27 | new |
 | F945 | Golden OCSF samples | Each pack is tested on golden OCSF samples. No store certification is claimed. | Next | Business | M27 | F801 |
 | F946 | `pclaw mcp self` | A stdio MCP server with tools `search`, `explain_decision`, `run_timeline` and `breach_radius`. | Next | Team | M27 | new |
