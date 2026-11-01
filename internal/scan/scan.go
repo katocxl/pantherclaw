@@ -261,6 +261,7 @@ var afterLstat = func() {}
 // must be the regular file that was looked at, and never a link (G0 M24 D282).
 // root is the home and rel the path inside it: root refuses a path that leaves
 // it, whatever a parent directory has become (D291).
+// A replacement can reuse the inode, so size and mtime must match too (D96).
 func readContained(root *os.Root, rel string) []byte {
 	before, err := root.Lstat(rel)
 	if err != nil || !before.Mode().IsRegular() {
@@ -275,7 +276,8 @@ func readContained(root *os.Root, rel string) []byte {
 		return nil
 	}
 	defer func() { _ = f.Close() }()
-	if info, err := f.Stat(); err != nil || !os.SameFile(before, info) {
+	info, err := f.Stat()
+	if err != nil || !os.SameFile(before, info) || info.Size() != before.Size() || !info.ModTime().Equal(before.ModTime()) {
 		return nil
 	}
 	return readOpen(f)
