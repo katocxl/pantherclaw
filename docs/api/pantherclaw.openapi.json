@@ -85078,7 +85078,7 @@
           "checkKind": {
             "type": "string",
             "title": "check_kind",
-            "description": "hidden_instruction, injection_pattern, tool_shadowing, overbroad_schema,\n rug_pull or provenance_unknown."
+            "description": "hidden_instruction, injection_pattern, tool_shadowing, overbroad_schema,\n rug_pull, provenance_unknown or schema_unavailable."
           },
           "severity": {
             "type": "string",
@@ -85112,6 +85112,11 @@
             "title": "last_seen_time",
             "description": "Last seen.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "A fixed word for a flag with more than one reason, or empty:\n digest_unknown on a tool_shadowing flag with no upstream digest to compare."
           }
         },
         "title": "SupplyChainFlag",

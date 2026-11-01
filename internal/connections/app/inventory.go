@@ -234,11 +234,14 @@ func (s *Service) see(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcC
 			return ids.UUID{}, false, err
 		}
 		if to == InventoryNew {
-			flags, err := flagItem(ctx, tx, c, conn, cov, pgflags.Item{Connection: conn.ID, Inventory: row.ID, Name: e.Name, Digest: e.Digest}, e)
+			// Checked against what the item holds too: a report that leaves it
+			// out loses no flag (D280).
+			held := withHeld(row, e)
+			flags, err := flagItem(ctx, tx, c, conn, cov, pgflags.Item{Connection: conn.ID, Inventory: row.ID, Name: e.Name, Digest: e.Digest}, held)
 			if err != nil {
 				return ids.UUID{}, false, err
 			}
-			if err := s.openReview(ctx, tx, c, row.ID, e, flags); err != nil {
+			if err := s.openReview(ctx, tx, c, row.ID, held, flags); err != nil {
 				return ids.UUID{}, false, err
 			}
 		}

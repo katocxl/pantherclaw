@@ -249,3 +249,12 @@ func TestD272_NoDigestNoHighShadowing(t *testing.T) {
 		t.Errorf("%+v", f)
 	}
 }
+
+// TestD281_TheTitleCoversEveryFieldLeftOut: schema_unavailable is about more
+// than the input schema now.
+// Covers: F867
+func TestD281_TheTitleCoversEveryFieldLeftOut(t *testing.T) {
+	if got := Title(KindSchemaUnavailable); got != "A tool definition was not fully reported" {
+		t.Errorf("%q", got)
+	}
+}

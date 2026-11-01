@@ -27,7 +27,7 @@ var titles = map[CheckKind]string{
 	KindOverbroadSchema:   "A tool that takes free-form input",
 	KindRugPull:           "A tool that changed after approval",
 	KindProvenanceUnknown: "A listed entry no reviewed package names",
-	KindSchemaUnavailable: "A tool whose input schema was not reported",
+	KindSchemaUnavailable: "A tool definition was not fully reported",
 }
 
 // Title is a flag's title, always one of these fixed words: an observed name

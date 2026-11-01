@@ -50,11 +50,11 @@ func idString(id *ids.UUID) string {
 
 // flagOf is a flag as the API shows it.
 func flagOf(r dbq.PcSupplychainFlag) *pb.SupplyChainFlag {
-	note, spans := pgflags.Detail(r.Detail)
+	note, spans, reason := pgflags.Detail(r.Detail)
 	out := &pb.SupplyChainFlag{
 		Id: r.ID.String(), ConnectionId: idString(r.ConnectionID), InventoryItemId: idString(r.InventoryID),
 		PackageVersionId: idString(r.PackageVersionID), Tool: r.Tool, Digest: r.Digest, CheckKind: r.CheckKind, Severity: r.Severity,
-		Note: note, State: r.State, FirstSeenTime: timestamppb.New(r.FirstSeen), LastSeenTime: timestamppb.New(r.LastSeen),
+		Note: note, Reason: reason, State: r.State, FirstSeenTime: timestamppb.New(r.FirstSeen), LastSeenTime: timestamppb.New(r.LastSeen),
 	}
 	for _, s := range spans {
 		out.Spans = append(out.Spans, &pb.SupplyChainFlagSpan{

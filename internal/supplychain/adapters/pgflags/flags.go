@@ -33,13 +33,14 @@ func encode(f domain.Flag) ([]byte, error) {
 	return json.Marshal(detail{Note: f.Note, Spans: append([]domain.Span{}, f.Spans...), Reason: f.Reason})
 }
 
-// Detail reads a stored detail back; one that does not decode reads empty.
-func Detail(raw []byte) (string, []domain.Span) {
+// Detail reads a stored detail back: its note, spans and reason. One that does
+// not decode reads empty.
+func Detail(raw []byte) (string, []domain.Span, string) {
 	var d detail
 	if json.Unmarshal(raw, &d) != nil {
-		return "", nil
+		return "", nil, ""
 	}
-	return d.Note, d.Spans
+	return d.Note, d.Spans, d.Reason
 }
 
 // BuiltIns are the names agents have built in.

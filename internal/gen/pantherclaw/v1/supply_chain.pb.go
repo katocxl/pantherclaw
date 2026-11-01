@@ -107,7 +107,7 @@ type SupplyChainFlag struct {
 	// sha256:<hex> of the entry checked.
 	Digest string `protobuf:"bytes,6,opt,name=digest,proto3" json:"digest,omitempty"`
 	// hidden_instruction, injection_pattern, tool_shadowing, overbroad_schema,
-	// rug_pull or provenance_unknown.
+	// rug_pull, provenance_unknown or schema_unavailable.
 	CheckKind string `protobuf:"bytes,7,opt,name=check_kind,json=checkKind,proto3" json:"check_kind,omitempty"`
 	// LOW, MEDIUM or HIGH.
 	Severity string `protobuf:"bytes,8,opt,name=severity,proto3" json:"severity,omitempty"`
@@ -120,7 +120,10 @@ type SupplyChainFlag struct {
 	// First flagged.
 	FirstSeenTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=first_seen_time,json=firstSeenTime,proto3" json:"first_seen_time,omitempty"`
 	// Last seen.
-	LastSeenTime  *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
+	LastSeenTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
+	// A fixed word for a flag with more than one reason, or empty:
+	// digest_unknown on a tool_shadowing flag with no upstream digest to compare.
+	Reason        string `protobuf:"bytes,14,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -244,6 +247,13 @@ func (x *SupplyChainFlag) GetLastSeenTime() *timestamppb.Timestamp {
 		return x.LastSeenTime
 	}
 	return nil
+}
+
+func (x *SupplyChainFlag) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
 }
 
 // ListSupplyChainFlagsRequest selects one page.
@@ -400,7 +410,7 @@ const file_pantherclaw_v1_supply_chain_proto_rawDesc = "" +
 	"\x13SupplyChainFlagSpan\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x14\n" +
 	"\x05start\x18\x02 \x01(\x05R\x05start\x12\x10\n" +
-	"\x03end\x18\x03 \x01(\x05R\x03end\"\xf2\x03\n" +
+	"\x03end\x18\x03 \x01(\x05R\x03end\"\x8a\x04\n" +
 	"\x0fSupplyChainFlag\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12*\n" +
@@ -416,7 +426,8 @@ const file_pantherclaw_v1_supply_chain_proto_rawDesc = "" +
 	" \x03(\v2#.pantherclaw.v1.SupplyChainFlagSpanR\x05spans\x12\x14\n" +
 	"\x05state\x18\v \x01(\tR\x05state\x12B\n" +
 	"\x0ffirst_seen_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\rfirstSeenTime\x12@\n" +
-	"\x0elast_seen_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\"\x8c\x03\n" +
+	"\x0elast_seen_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12\x16\n" +
+	"\x06reason\x18\x0e \x01(\tR\x06reason\"\x8c\x03\n" +
 	"\x1bListSupplyChainFlagsRequest\x12@\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\fconnectionId\x12G\n" +
 	"\x11inventory_item_id\x18\x02 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\x0finventoryItemId\x12I\n" +

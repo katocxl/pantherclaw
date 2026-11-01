@@ -190,8 +190,8 @@ func withHeld(row dbq.PcConnectionInventory, e InventoryEntry) InventoryEntry {
 	if e.InputSchema == "" && row.InputSchema != "" {
 		e.InputSchema, e.InputSchemaDigest, e.InputSchemaCut, e.SchemaOmitted = row.InputSchema, row.InputSchemaDigest, false, false
 	}
-	if e.ListedExtra == "" {
-		e.ListedExtra = row.ListedExtra
+	if e.ListedExtra == "" && row.ListedExtra != "" {
+		e.ListedExtra, e.ListedExtraCut = row.ListedExtra, false
 	}
 	return e
 }

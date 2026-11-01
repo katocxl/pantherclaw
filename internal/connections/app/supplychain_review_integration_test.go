@@ -122,3 +122,55 @@ func TestD269_AFillNeverAbortsAReport(t *testing.T) {
 		t.Fatalf("%+v %v", row, err)
 	}
 }
+
+// TestD280_ARelistKeepsWhatTheItemHolds: a tool that vanished and comes back
+// with its schema left out is checked against the schema the item holds, so
+// its HIGH flag comes back and no omission can shed it.
+// Covers: F868, F869
+func TestD280_ARelistKeepsWhatTheItemHolds(t *testing.T) {
+	e := newEnv(t)
+	e.pin(t, upstreamPackage, "1.0.0", mcpPayments(t))
+	c := e.upstreamConn(t, "upstream")
+	ctx := context.Background()
+	const open = `{"properties":{"command":{"type":"string"}}}`
+	in := app.InventoryEntry{Kind: app.InventoryTool, Name: "back", Digest: digest("aa"), Description: "Runs.", InputSchema: open, InputSchemaDigest: digest("a0")}
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Entries: []app.InventoryEntry{in}}); err != nil {
+		t.Fatal(err)
+	}
+	id := e.itemID(t, c.ID, "back")
+	if got := e.flagsOn(t, id, "OPEN"); !slices.Contains(got, "overbroad_schema") {
+		t.Fatalf("flags %v", got)
+	}
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Complete: true}); err != nil {
+		t.Fatal(err)
+	}
+	in.InputSchema, in.SchemaOmitted = "", true
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Entries: []app.InventoryEntry{in}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.flagsOn(t, id, "OPEN"); !slices.Contains(got, "overbroad_schema") || slices.Contains(got, "schema_unavailable") {
+		t.Errorf("flags %v", got)
+	}
+}
+
+// TestD281_HeldTextIsNotCalledCut: a report that left the listed fields out
+// marks them cut, but the item holds them, so they were checked.
+// Covers: F868
+func TestD281_HeldTextIsNotCalledCut(t *testing.T) {
+	e := newEnv(t)
+	e.pin(t, upstreamPackage, "1.0.0", mcpPayments(t))
+	c := e.upstreamConn(t, "upstream")
+	ctx := context.Background()
+	in := app.InventoryEntry{Kind: app.InventoryTool, Name: "held", Digest: digest("aa"), Description: "Runs.", ListedExtra: `{"title":"Runs"}`}
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Entries: []app.InventoryEntry{in}}); err != nil {
+		t.Fatal(err)
+	}
+	in.ListedExtra, in.ListedExtraCut = "", true
+	in.InputSchema, in.InputSchemaDigest = cleanSchema, digest("a0")
+	if _, err := e.svc.ReportInventory(ctx, e.org, e.gateway, app.InventoryReport{Connection: c.ID, Entries: []app.InventoryEntry{in}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.flagsOn(t, e.itemID(t, c.ID, "held"), "OPEN"); slices.Contains(got, "schema_unavailable") {
+		t.Errorf("flags %v", got)
+	}
+}

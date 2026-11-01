@@ -44,7 +44,7 @@ message SupplyChainFlag {
   // sha256:<hex> of the entry checked.
   string digest = 6;
   // hidden_instruction, injection_pattern, tool_shadowing, overbroad_schema,
-  // rug_pull or provenance_unknown.
+  // rug_pull, provenance_unknown or schema_unavailable.
   string check_kind = 7;
   // LOW, MEDIUM or HIGH.
   string severity = 8;
@@ -58,6 +58,9 @@ message SupplyChainFlag {
   google.protobuf.Timestamp first_seen_time = 12;
   // Last seen.
   google.protobuf.Timestamp last_seen_time = 13;
+  // A fixed word for a flag with more than one reason, or empty:
+  // digest_unknown on a tool_shadowing flag with no upstream digest to compare.
+  string reason = 14;
 }
 
 // ListSupplyChainFlagsRequest selects one page.
