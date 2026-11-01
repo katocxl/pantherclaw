@@ -29,7 +29,7 @@ var owaspByKind = map[string][]string{
 	KindNewTool:           {"ASI02", "ASI04"},
 	KindNewResource:       {"ASI04"},
 	KindNewResourceTmpl:   {"ASI04"},
-	// Supply chain and catalogue.
+	// Supply chain and catalog.
 	"hidden_instruction": {"ASI01", "ASI04"},
 	"injection_pattern":  {"ASI01", "ASI04"},
 	"tool_shadowing":     {"ASI02", "ASI04"},

@@ -170,13 +170,17 @@ func (s *Service) collect(ctx context.Context, v ports.Viewer, f domain.Filter) 
 			if st.State, err = stateOf(err); err != nil {
 				return nil, nil, err
 			}
-			statuses = append(statuses, st)
-			continue
+			// A restricted source may still answer for what the viewer
+			// reaches: the state says the answer is partial (D277).
+			if st.State != SourceRestricted {
+				statuses = append(statuses, st)
+				continue
+			}
 		}
 		if len(found) > domain.MaxPerSource {
 			found, more = found[:domain.MaxPerSource], true
 		}
-		if more {
+		if more && st.State == SourceComplete {
 			st.State = SourceTruncated
 		}
 		for _, x := range found {

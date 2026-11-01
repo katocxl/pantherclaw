@@ -4,6 +4,7 @@
 package queuerpc
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -106,7 +107,7 @@ func TestParseID(t *testing.T) {
 	if id, err := parseID(""); id != nil || err != nil {
 		t.Errorf("empty: %v %v", id, err)
 	}
-	if _, err := parseID("not-a-uuid"); err != errBadID {
+	if _, err := parseID("not-a-uuid"); !errors.Is(err, errBadID) {
 		t.Errorf("bad id: %v", err)
 	}
 }
