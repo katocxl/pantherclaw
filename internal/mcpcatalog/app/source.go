@@ -54,9 +54,6 @@ func (s *Source) Findings(ctx context.Context, v ports.Viewer, _ pvdomain.Filter
 			return nil, false, err
 		}
 		reach = reach.Intersect(r)
-		if none(reach) && !none(v.Posture) {
-			return nil, false, td.ErrPermissionDenied(td.PermCatalogRead) // RESTRICTED, never empty (D255)
-		}
 	}
 	var out []pvdomain.Finding
 	truncated := false
@@ -108,16 +105,13 @@ func (s *Source) Findings(ctx context.Context, v ports.Viewer, _ pvdomain.Filter
 	if err != nil {
 		return nil, false, err
 	}
-	if len(out) == 0 && !reach.Has(nil) {
-		// Connection findings need org scope: an empty answer here would
-		// claim there are none (D255).
-		return nil, false, td.ErrPermissionDenied(td.PermCatalogRead)
+	if !reach.All || !reach.Org {
+		// Part of the catalogue's answer is out of reach, so what is here is
+		// not all of it: findings in reach, and RESTRICTED (D255, D277).
+		return out, truncated, td.ErrPermissionDenied(td.PermCatalogRead)
 	}
 	return out, truncated, nil
 }
-
-// none reports whether a reach covers nothing at all.
-func none(r ports.Reach) bool { return !r.All && !r.Org && len(r.Agents) == 0 }
 
 func anyApproved(servers []dbq.PcMcpServer) bool {
 	for _, s := range servers {

@@ -318,8 +318,21 @@ func TestF872_TheCatalogueHoldsProposalsAndDecisions(t *testing.T) {
 		t.Fatalf("filtered: %d %v", len(rows), err)
 	}
 	e.edition.e = billing.Community
-	if _, _, err := e.svc.List(e.alice.ctx, 10, "", nil); !is(err, app.ErrEdition) {
-		t.Fatalf("on Community: %v", err)
+	// A downgraded org can still find what to revoke, under its permission
+	// (D276); writes keep their gate.
+	if rows, _, err := e.svc.List(e.alice.ctx, 10, "", nil); err != nil || len(rows) == 0 {
+		t.Fatalf("listing on Community: %d %v", len(rows), err)
+	}
+	if got, err := e.svc.Get(e.alice.ctx, s.ID); err != nil || got.ID != s.ID {
+		t.Fatalf("reading on Community: %+v %v", got, err)
+	}
+	if _, _, err := e.svc.List(e.as(ids.NewV7(), td.RoleGatewayAdmin), 10, "", nil); pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Fatalf("listing without catalog.read: %v", err)
+	}
+	if _, err := e.svc.Propose(e.alice.ctx, domain.Proposal{
+		Name: "late", Title: "late", Transport: domain.TransportHTTP, Spec: domain.Spec{Host: "late.example.test"},
+	}); !is(err, app.ErrEdition) {
+		t.Fatalf("proposing on Community: %v", err)
 	}
 }
 
@@ -556,10 +569,20 @@ func TestF879_UnapprovedServersReachTheQueueOnlyOnceACatalogueExists(t *testing.
 		t.Fatalf("finding %+v", got[scan])
 	}
 
-	if got := findings(ports.Viewer{Org: e.org, Posture: ports.Reach{Agents: []ids.UUID{agent}}}); len(got) != 1 || got[scan].AgentID == nil {
+	// Part of the answer out of reach is RESTRICTED, with what is in reach
+	// still shown (D277).
+	partial := func(v ports.Viewer) []pvdomain.Finding {
+		t.Helper()
+		got, _, err := src.Findings(ctx, v, pvdomain.Filter{})
+		if pcerr.CodeOf(err) != pcerr.PermissionDenied {
+			t.Fatalf("part out of reach: %v", err)
+		}
+		return got
+	}
+	if got := partial(ports.Viewer{Org: e.org, Posture: ports.Reach{Agents: []ids.UUID{agent}}}); len(got) != 1 || got[0].AgentID == nil || *got[0].AgentID != agent {
 		t.Fatalf("no org scope: %+v", got)
 	}
-	if got := findings(ports.Viewer{Org: e.org, Posture: ports.Reach{Org: true}}); len(got) != 1 || got[conn].ConnectionID == nil {
+	if got := partial(ports.Viewer{Org: e.org, Posture: ports.Reach{Org: true}}); len(got) != 1 || got[0].ConnectionID == nil || *got[0].ConnectionID != stray.ID {
 		t.Fatalf("no agents: %+v", got)
 	}
 	under := all

@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"strings"
 	"testing"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -186,6 +187,90 @@ func TestF876_ALiftEndsWhateverStateAConnectionIsIn(t *testing.T) {
 	}
 	if got := e.serverStatus(t, s.ID); got != domain.StatusRevoked {
 		t.Fatalf("a lift changed the server: %s", got)
+	}
+}
+
+// TestF876_NoPlanSticksOnAGateway: an ACTIVE connection on a gateway that is
+// not ACTIVE reads not applicable too, so a revocation's plan cannot stick on
+// health, whatever the cause (D275). The same gateway still blocks a plan that
+// is not a revocation's.
+//
+// Covers: F876
+func TestF876_NoPlanSticksOnAGateway(t *testing.T) {
+	e := newEnv(t)
+	s := e.approved(t, "good", revokedHost, "")
+	e.mustCreate(t, "a", "https://"+revokedHost+"/a")
+	r := e.revokeServer(t, e.alice, s.ID)
+	e.exec(t, `UPDATE pc.gateways SET state = 'REVOKED', revoked_by = 'test', revoked_at = now(), revoke_reason = 'test' WHERE org_id = $1 AND id = $2`, e.org, e.gateway)
+	if state, err := e.decide(t, r.Plans[0], e.bob.id); err != nil || state != rapp.PlanCompleted {
+		t.Fatalf("lift on a revoked gateway: %s %v", state, err)
+	}
+	var checks string
+	e.d.AdminQueryRow(t, "SELECT preconditions::text FROM pc.restoration_plans WHERE org_id = $1 AND id = $2", []any{e.org, r.Plans[0]}, &checks)
+	if !strings.Contains(checks, "not applicable, recorded") {
+		t.Fatalf("recorded %s", checks)
+	}
+}
+
+// TestF875_ARestoreBringsBackAServerItNeverHeld: the log carries the server's
+// spec and name, so a backup from before the server gets it back REVOKED and
+// the refusals hold. With no spec there is nothing to rebuild from, and a name
+// taken by another server fails the replay held (D278).
+//
+// Covers: F875
+func TestF875_ARestoreBringsBackAServerItNeverHeld(t *testing.T) {
+	e := newEnv(t)
+	s := e.withPackage(t)
+	e.revokeServer(t, e.alice, s.ID)
+	e.chain(t)
+	events := e.shipped(t)
+	var revoked restore.Event
+	for _, ev := range events {
+		if ev.Kind == "mcp.catalog.server_revoked" {
+			revoked = ev
+		}
+	}
+	if m := revoked.McpServer; m == nil || m.Name != "payments" || m.Transport != "http" || m.URLHost != revokedHost || m.PackageRef != mcpPackage {
+		t.Fatalf("the record carries %+v", m)
+	}
+	operator := evdomain.Actor{Type: "operator", ID: "cli:test"}
+	replay := func(ev restore.Event) error {
+		return restore.NewRegistry().Reapply(context.Background(), e.pool, []restore.Event{ev}, true, operator)
+	}
+
+	bare := revoked
+	bare.McpServer = nil
+	e.d.AdminExec(t, "DELETE FROM pc.mcp_servers WHERE org_id = $1", e.org)
+	if err := replay(bare); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.int64(t, "SELECT count(*) FROM pc.mcp_servers WHERE org_id = $1", e.org); n != 0 {
+		t.Fatalf("a payload with no spec made %d rows", n)
+	}
+
+	taken := e.approved(t, "payments", "other.example.test", "")
+	if err := replay(revoked); err == nil {
+		t.Fatal("a replay took over another server's name")
+	}
+	e.d.AdminExec(t, "DELETE FROM pc.mcp_servers WHERE org_id = $1 AND id = $2", e.org, taken.ID)
+
+	for range 2 {
+		if err := replay(revoked); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := e.serverStatus(t, s.ID); got != domain.StatusRevoked {
+		t.Fatalf("status %s", got)
+	}
+	if _, err := e.create("again", "https://"+revokedHost+"/x"); !is(err, app.ErrRevoked) {
+		t.Fatalf("a new connection after the restore: %v", err)
+	}
+	e.exec(t, "UPDATE pc.package_versions SET state = 'REVIEWED' WHERE org_id = $1", e.org)
+	if err := replay(revoked); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.versionState(t); got != "QUARANTINED" {
+		t.Fatalf("version %s", got)
 	}
 }
 

@@ -70,7 +70,9 @@ type Viewer struct {
 // shown, never silent. It returns only what v may read; the service checks
 // that again before it ranks. A source that does not apply to the caller
 // returns a permission-denied or EDITION_REQUIRED error, which the read shows
-// as a state of the source, never as empty.
+// as a state of the source, never as empty. A source that reaches only part of
+// what it covers returns what it can read together with a permission-denied
+// error: the read shows those findings and the state RESTRICTED (D277).
 type Source interface {
 	Name() domain.Source
 	Findings(ctx context.Context, v Viewer, f domain.Filter) ([]domain.Finding, bool, error)

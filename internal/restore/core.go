@@ -87,7 +87,7 @@ func registerCore(r *Registry) {
 		if err != nil {
 			return err
 		}
-		return catalog.ReapplyRevocation(ctx, tx, id, e.Actor, &defspg.Store{})
+		return catalog.ReapplyRevocation(ctx, tx, id, e.McpServer, e.Actor, &defspg.Store{})
 	}
 }
 

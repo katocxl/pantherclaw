@@ -39,6 +39,19 @@ type Event struct {
 	RecordDigest     string       `json:"record_digest,omitempty"`
 	Containment      *Containment `json:"containment,omitempty"`
 	RevocationReason string       `json:"revocation_reason,omitempty"`
+	McpServer        *McpServer   `json:"mcp_server,omitempty"`
+}
+
+// McpServer is what a revoke stopped, so a restore can bring back a server the
+// backup never held (G0 M24 D278). Its name and matchers are identifiers; no
+// title or note is copied.
+type McpServer struct {
+	Name          string `json:"name"`
+	Transport     string `json:"transport"`
+	PackageRef    string `json:"package_ref,omitempty"`
+	URLHost       string `json:"url_host,omitempty"`
+	URLPathPrefix string `json:"url_path_prefix,omitempty"`
+	ImageDigest   string `json:"image_digest,omitempty"`
 }
 
 // Containment is the bounded enforcement metadata approved in D50. It
@@ -164,10 +177,24 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 		}
 		e.Containment = &Containment{ActionID: action, ControlID: control, ScopeType: body.Details["scope_type"], ScopeID: body.Details["scope"], Control: body.Details["control"], Operation: body.Details["operation"], Source: body.Details["source"], Server: body.Details["server"]}
 	}
+	if kind == "mcp.catalog.server_revoked" {
+		e.McpServer = serverOf(body.Details)
+	}
 	if err := Validate(e); err != nil {
 		return Event{}, false, err
 	}
 	return e, true, nil
+}
+
+// serverOf reads a revoke's spec; with no matcher there is none to carry.
+func serverOf(d map[string]string) *McpServer {
+	if d["package_ref"] == "" && d["url_host"] == "" && d["image_digest"] == "" {
+		return nil
+	}
+	return &McpServer{
+		Name: d["name"], Transport: d["transport"], PackageRef: d["package_ref"], URLHost: d["url_host"],
+		URLPathPrefix: d["url_path_prefix"], ImageDigest: d["image_digest"],
+	}
 }
 
 // Emit writes one structured line. The outbox worker calls it after its
@@ -190,6 +217,9 @@ func Emit(ctx context.Context, log *slog.Logger, e Event) {
 	}
 	if e.RevocationReason != "" {
 		attrs = append(attrs, slog.String("revocation_reason", e.RevocationReason))
+	}
+	if s := e.McpServer; s != nil {
+		attrs = append(attrs, slog.Group("mcp_server", slog.String("name", s.Name), slog.String("transport", s.Transport), slog.String("package_ref", s.PackageRef), slog.String("url_host", s.URLHost), slog.String("url_path_prefix", s.URLPathPrefix), slog.String("image_digest", s.ImageDigest)))
 	}
 	if c := e.Containment; c != nil {
 		attrs = append(attrs, slog.Group("containment", slog.String("action_id", c.ActionID.String()), slog.String("control_id", c.ControlID.String()), slog.String("scope_type", c.ScopeType), slog.String("scope_id", c.ScopeID), slog.String("control", c.Control), slog.String("operation", c.Operation), slog.String("source", c.Source), slog.String("server", c.Server)))

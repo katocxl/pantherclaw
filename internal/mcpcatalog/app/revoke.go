@@ -13,6 +13,7 @@ import (
 	ddomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/securityevent"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/mcpcatalog/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -233,6 +234,8 @@ func (s *Service) RevokeServer(ctx context.Context, id ids.UUID, digest []byte, 
 		out = RevokeResult{Preview: p, Action: added.Action, Controls: added.Controls, Plans: added.Plans}
 		return record(ctx, tx, c, "mcp.catalog.server_revoked", id, map[string]string{
 			"name": server.Name, "status_old": server.Status, "status_new": string(domain.StatusRevoked), "reason": reason,
+			"transport": server.Transport, "package_ref": deref(server.PackageRef), "url_host": deref(server.UrlHost),
+			"url_path_prefix": deref(server.UrlPathPrefix), "image_digest": deref(server.ImageDigest),
 		})
 	})
 	return out, err
@@ -241,20 +244,37 @@ func (s *Service) RevokeServer(ctx context.Context, id ids.UUID, digest []byte, 
 // ReapplyRevocation brings a revocation back under the restore command's
 // transaction: the server REVOKED and its package's versions quarantined. The
 // controls come back from their own records. It only tightens, and it repeats
-// safely; a server the restored database never held has nothing to change
-// (G0 M24 D264).
-func ReapplyRevocation(ctx context.Context, tx db.TenantTx, id ids.UUID, actor evdomain.Actor, versions Versions) error {
+// safely. A server the restored database never held comes back as a REVOKED
+// row from spec, under its name, so the refusals hold; another server by that
+// name fails the replay held. With no spec there is nothing to rebuild it from
+// (G0 M24 D264, D278).
+func ReapplyRevocation(ctx context.Context, tx db.TenantTx, id ids.UUID, spec *securityevent.McpServer, actor evdomain.Actor, versions Versions) error {
 	org := tx.OrgID()
 	q := dbq.New(tx)
+	by := actor.Type + ":" + actor.ID
 	server, err := q.LockMcpServer(ctx, org, id)
 	if db.IsNoRows(err) {
-		return nil
-	}
-	if err != nil {
+		if spec == nil {
+			return nil
+		}
+		p, err := domain.Proposal{
+			Name: spec.Name, Title: spec.Name, Transport: spec.Transport,
+			Spec: domain.Spec{Host: spec.URLHost, PathPrefix: spec.URLPathPrefix, ImageDigest: spec.ImageDigest, PackageRef: spec.PackageRef},
+		}.Check()
+		if err != nil {
+			return err
+		}
+		server, err = q.InsertRevokedMcpServer(ctx, dbq.InsertRevokedMcpServerParams{
+			OrgID: org, ID: id, Name: p.Name, Title: p.Title, Transport: p.Transport, PackageRef: opt(p.Spec.PackageRef),
+			UrlHost: opt(p.Spec.Host), UrlPathPrefix: opt(p.Spec.PathPrefix), ImageDigest: opt(p.Spec.ImageDigest), DecidedBy: &by,
+		})
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
 	}
 	if domain.Status(server.Status) != domain.StatusRevoked {
-		by := actor.Type + ":" + actor.ID
 		if _, err := q.DecideMcpServer(ctx, dbq.DecideMcpServerParams{
 			OrgID: org, ID: id, FromStatus: server.Status, ToStatus: string(domain.StatusRevoked), DecidedBy: &by,
 		}); err != nil {

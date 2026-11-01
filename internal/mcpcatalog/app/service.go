@@ -190,7 +190,7 @@ func (s *Service) decide(ctx context.Context, id ids.UUID, to domain.Status, eve
 
 // Get reads one server (catalog.read).
 func (s *Service) Get(ctx context.Context, id ids.UUID) (dbq.PcMcpServer, error) {
-	c, err := s.use(ctx, td.PermCatalogRead)
+	c, err := s.caller(ctx, td.PermCatalogRead)
 	if err != nil {
 		return dbq.PcMcpServer{}, err
 	}
@@ -208,7 +208,7 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (dbq.PcMcpServer, error)
 
 // List pages the catalogue (catalog.read).
 func (s *Service) List(ctx context.Context, size int32, token string, statuses []string) ([]dbq.PcMcpServer, string, error) {
-	c, err := s.use(ctx, td.PermCatalogRead)
+	c, err := s.caller(ctx, td.PermCatalogRead)
 	if err != nil {
 		return nil, "", err
 	}

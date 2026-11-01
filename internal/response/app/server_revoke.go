@@ -118,9 +118,10 @@ func union(a, b []ids.UUID) []ids.UUID {
 }
 
 // serverRevocation reports whether an action is a catalogue server's revoke.
-// Its control on a connection that is not ACTIVE only ends a block: the
-// connection stays as it is, the server stays REVOKED and activating the
-// connection is refused, so nothing starts running on the lift (G0 M24 D265).
+// Its control on an unhealthy connection, whatever the cause, only ends a
+// block: the connection stays as it is, the server stays REVOKED and activating
+// the connection is refused, so nothing starts running on the lift and no plan
+// sticks on health (G0 M24 D265, D275).
 func serverRevocation(ctx context.Context, q *dbq.Queries, org ids.OrgID, action ids.UUID) (bool, error) {
 	a, err := q.GetResponseAction(ctx, org, action)
 	if err != nil {

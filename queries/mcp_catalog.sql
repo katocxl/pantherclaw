@@ -9,6 +9,15 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.ar
     sqlc.narg(url_host), sqlc.narg(url_path_prefix), sqlc.narg(image_digest), sqlc.arg(notes))
 RETURNING *;
 
+-- InsertRevokedMcpServer brings back a revoked server a restored database never
+-- held (G0 M24 D278). A clash on the name is left to fail the replay.
+-- name: InsertRevokedMcpServer :one
+INSERT INTO pc.mcp_servers (org_id, id, name, title, status, transport, package_ref, url_host, url_path_prefix, image_digest,
+    decided_by, decided_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), 'REVOKED', sqlc.arg(transport), sqlc.narg(package_ref),
+    sqlc.narg(url_host), sqlc.narg(url_path_prefix), sqlc.narg(image_digest), sqlc.arg(decided_by), now())
+RETURNING *;
+
 -- name: GetMcpServer :one
 SELECT * FROM pc.mcp_servers WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 

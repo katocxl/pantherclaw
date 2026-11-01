@@ -169,6 +169,62 @@ func (q *Queries) InsertMcpServer(ctx context.Context, arg InsertMcpServerParams
 	return i, err
 }
 
+const insertRevokedMcpServer = `-- name: InsertRevokedMcpServer :one
+INSERT INTO pc.mcp_servers (org_id, id, name, title, status, transport, package_ref, url_host, url_path_prefix, image_digest,
+    decided_by, decided_at)
+VALUES ($1, $2, $3, $4, 'REVOKED', $5, $6,
+    $7, $8, $9, $10, now())
+RETURNING org_id, id, name, title, status, transport, package_ref, url_host, url_path_prefix, image_digest, notes, decided_by, decided_at, created_at
+`
+
+type InsertRevokedMcpServerParams struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Name          string
+	Title         string
+	Transport     string
+	PackageRef    *string
+	UrlHost       *string
+	UrlPathPrefix *string
+	ImageDigest   *string
+	DecidedBy     *string
+}
+
+// InsertRevokedMcpServer brings back a revoked server a restored database never
+// held (G0 M24 D278). A clash on the name is left to fail the replay.
+func (q *Queries) InsertRevokedMcpServer(ctx context.Context, arg InsertRevokedMcpServerParams) (PcMcpServer, error) {
+	row := q.db.QueryRow(ctx, insertRevokedMcpServer,
+		arg.OrgID,
+		arg.ID,
+		arg.Name,
+		arg.Title,
+		arg.Transport,
+		arg.PackageRef,
+		arg.UrlHost,
+		arg.UrlPathPrefix,
+		arg.ImageDigest,
+		arg.DecidedBy,
+	)
+	var i PcMcpServer
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Name,
+		&i.Title,
+		&i.Status,
+		&i.Transport,
+		&i.PackageRef,
+		&i.UrlHost,
+		&i.UrlPathPrefix,
+		&i.ImageDigest,
+		&i.Notes,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listMcpServers = `-- name: ListMcpServers :many
 SELECT org_id, id, name, title, status, transport, package_ref, url_host, url_path_prefix, image_digest, notes, decided_by, decided_at, created_at FROM pc.mcp_servers
 WHERE org_id = $1
