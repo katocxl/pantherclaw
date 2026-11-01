@@ -17,6 +17,7 @@ import (
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/model/app"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -88,5 +89,24 @@ func TestHR554_DraftAndUsageReadsReturnNoPromptsOrResponses(t *testing.T) {
 		if _, err := f.svc.Usage(f.admin(), time.Now()); !errors.Is(err, app.ErrEdition) {
 			t.Fatalf("usage below Business, drafting on %v: %v", enabled, err)
 		}
+	}
+}
+
+// TestHR554_AnOrgReadHolderReadsNeitherDraftsNorUsage: org.read reaches
+// neither read (G0 M24 D95). A Scanner holds org.read and the scan submission
+// only, so a key taken from a laptop is refused on both.
+//
+// Covers: F834
+func TestHR554_AnOrgReadHolderReadsNeitherDraftsNorUsage(t *testing.T) {
+	f, _ := drafting(t)
+	if _, err := f.svc.DraftPolicy(f.author(), secretText); err != nil {
+		t.Fatal(err)
+	}
+	scanner := f.as(td.KindServiceAccount, td.RoleScanner)
+	if drafts, _, err := f.svc.ListDrafts(scanner, page.Request{Size: 10}); pcerr.CodeOf(err) != pcerr.PermissionDenied || len(drafts) != 0 {
+		t.Fatalf("drafts: %+v, %v", drafts, err)
+	}
+	if rows, err := f.svc.Usage(scanner, time.Now().Add(-time.Hour)); pcerr.CodeOf(err) != pcerr.PermissionDenied || len(rows) != 0 {
+		t.Fatalf("usage: %+v, %v", rows, err)
 	}
 }

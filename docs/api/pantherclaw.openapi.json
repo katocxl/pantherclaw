@@ -20535,7 +20535,7 @@
           "pantherclaw.v1.ModelService"
         ],
         "summary": "ListModelDrafts",
-        "description": "ListModelDrafts lists stored drafts, newest first: only the kinds the\n caller may read (policy.read, automation.read). Never a prompt or a\n response (HR-554). Business, as drafting is.\n permission: org.read",
+        "description": "ListModelDrafts lists stored drafts, newest first: only the kinds the\n caller may read (policy.read, automation.read). Never a prompt or a\n response (HR-554). Business, as drafting is.\n permission: policy.read",
         "operationId": "pantherclaw.v1.ModelService.ListModelDrafts",
         "parameters": [
           {
@@ -20589,7 +20589,7 @@
           "pantherclaw.v1.ModelService"
         ],
         "summary": "GetModelUsage",
-        "description": "GetModelUsage sums the organization's model calls: counts and tokens by\n task and outcome, never a prompt or a response (HR-554). Business, as\n drafting is.\n permission: org.read",
+        "description": "GetModelUsage sums the organization's model calls: counts and tokens by\n task and outcome, never a prompt or a response (HR-554). Business, as\n drafting is.\n permission: audit.read",
         "operationId": "pantherclaw.v1.ModelService.GetModelUsage",
         "parameters": [
           {

@@ -170,12 +170,12 @@ type ModelServiceClient interface {
 	// ListModelDrafts lists stored drafts, newest first: only the kinds the
 	// caller may read (policy.read, automation.read). Never a prompt or a
 	// response (HR-554). Business, as drafting is.
-	// permission: org.read
+	// permission: policy.read
 	ListModelDrafts(context.Context, *v1.ListModelDraftsRequest) (*v1.ListModelDraftsResponse, error)
 	// GetModelUsage sums the organization's model calls: counts and tokens by
 	// task and outcome, never a prompt or a response (HR-554). Business, as
 	// drafting is.
-	// permission: org.read
+	// permission: audit.read
 	GetModelUsage(context.Context, *v1.GetModelUsageRequest) (*v1.GetModelUsageResponse, error)
 }
 
@@ -224,12 +224,12 @@ type ModelServiceHandler interface {
 	// ListModelDrafts lists stored drafts, newest first: only the kinds the
 	// caller may read (policy.read, automation.read). Never a prompt or a
 	// response (HR-554). Business, as drafting is.
-	// permission: org.read
+	// permission: policy.read
 	ListModelDrafts(context.Context, *v1.ListModelDraftsRequest) (*v1.ListModelDraftsResponse, error)
 	// GetModelUsage sums the organization's model calls: counts and tokens by
 	// task and outcome, never a prompt or a response (HR-554). Business, as
 	// drafting is.
-	// permission: org.read
+	// permission: audit.read
 	GetModelUsage(context.Context, *v1.GetModelUsageRequest) (*v1.GetModelUsageResponse, error)
 }
 

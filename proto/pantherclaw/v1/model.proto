@@ -56,14 +56,14 @@ service ModelService {
   // ListModelDrafts lists stored drafts, newest first: only the kinds the
   // caller may read (policy.read, automation.read). Never a prompt or a
   // response (HR-554). Business, as drafting is.
-  // permission: org.read
+  // permission: policy.read
   rpc ListModelDrafts(ListModelDraftsRequest) returns (ListModelDraftsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // GetModelUsage sums the organization's model calls: counts and tokens by
   // task and outcome, never a prompt or a response (HR-554). Business, as
   // drafting is.
-  // permission: org.read
+  // permission: audit.read
   rpc GetModelUsage(GetModelUsageRequest) returns (GetModelUsageResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
