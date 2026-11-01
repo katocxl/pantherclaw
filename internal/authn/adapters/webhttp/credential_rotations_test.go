@@ -27,18 +27,25 @@ import (
 type rotationBrowser struct {
 	fakeBrowser
 	key ids.UUID
+	// roles are the person's roles; none means gateway admin.
+	roles []td.RoleName
 }
 
 func (b *rotationBrowser) Authenticate(_ context.Context, cookie string) (authnapp.BrowserSession, error) {
-	role := td.RoleGatewayAdmin
+	roles := b.roles
+	if len(roles) == 0 {
+		roles = []td.RoleName{td.RoleGatewayAdmin}
+	}
 	if cookie == "viewer" {
-		role = td.RoleViewer
+		roles = []td.RoleName{td.RoleViewer}
+	}
+	bindings := make([]td.Binding, 0, len(roles))
+	for _, role := range roles {
+		bindings = append(bindings, td.Binding{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: testOrg.UUID()}})
 	}
 	s := authnapp.BrowserSession{
 		Caller: tapp.Caller{
-			Subject: td.Subject{Org: testOrg, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()}, Bindings: []td.Binding{
-				{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: testOrg.UUID()}},
-			}},
+			Subject:    td.Subject{Org: testOrg, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()}, Bindings: bindings},
 			Credential: authnapp.CredBrowserSession,
 		},
 		ID: ids.NewV7(),

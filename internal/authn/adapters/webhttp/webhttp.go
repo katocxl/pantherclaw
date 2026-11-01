@@ -107,6 +107,10 @@ type Handler struct {
 	exportDestinations ExportDestinations
 	// credentialRotations serves the rotation page (G0 M22 D5); nil without it.
 	credentialRotations CredentialRotations
+	// exportSecrets and providerSecrets serve the secret pages (G0 M22 D57); nil
+	// without them.
+	exportSecrets   ExportSecrets
+	providerSecrets IdentityProviderSecrets
 	// modelDrafting is the model drafting settings page (G0 M21 D309); nil
 	// when not mounted.
 	modelDrafting ModelDrafting
@@ -173,6 +177,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountIntegrations(mux)
 	h.mountExportDestinations(mux)
 	h.mountCredentialRotations(mux)
+	h.mountSecretPages(mux)
 	h.mountModelDrafting(mux)
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)
@@ -507,6 +512,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"approvals.js": "text/javascript; charset=utf-8", "reconciliations.js": "text/javascript; charset=utf-8",
 		"policy_changes.js": "text/javascript; charset=utf-8", "changes.js": "text/javascript; charset=utf-8", "integrations.js": "text/javascript; charset=utf-8", "playbook.js": "text/javascript; charset=utf-8",
 		"automation_endpoints.js": "text/javascript; charset=utf-8",
+		"secret_forms.js":         "text/javascript; charset=utf-8",
 		"model_drafting.js":       "text/javascript; charset=utf-8",
 		"promotions.js":           "text/javascript; charset=utf-8",
 		"pc.css":                  "text/css; charset=utf-8",

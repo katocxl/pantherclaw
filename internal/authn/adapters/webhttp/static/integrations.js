@@ -47,6 +47,17 @@ const messages = {
   rotation_state: "The rotation has moved on. Reload the page.",
   rollback_closed: "The rollback window is closed.",
   rotation_reason: "Give a reason of 1 to 500 characters.",
+  invalid_request: "The form could not be read. Reload the page.",
+  edition_required: "Your edition does not include this.",
+  invalid_export_destination: "Check the name, target and data classes.",
+  invalid_export_credential: "Give the credential this kind of destination uses.",
+  export_destination_url: "This URL is not allowed.",
+  export_destination_metadata: "This URL is not allowed.",
+  export_destination_exists: "A destination of that name exists.",
+  identity_provider_invalid: "Check the name, issuer URL, client id and client secret.",
+  identity_provider_discovery: "The issuer did not answer as an OpenID provider.",
+  identity_provider_name_taken: "A provider of that name exists.",
+  identity_provider_limit: "This organization has as many providers as it can have.",
 };
 
 function explain(e) { return messages[e.code] || ("Something went wrong (" + e.message + ")."); }
