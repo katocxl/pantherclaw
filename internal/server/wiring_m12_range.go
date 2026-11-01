@@ -29,7 +29,7 @@ func registerRanges(rs *connect.Server, d apiDeps, evidence *evapp.Service) {
 	if d.billing != nil {
 		svc.Editions = d.billing
 	}
-	pantherclawv1connect.RegisterRangeServiceHandler(rs, rangerpc.New(svc))
+	pantherclawv1connect.RegisterRangeServiceHandler(rs, rangerpc.New(svc).WithCampaigns(newCampaigns(d)))
 }
 
 // rangePacks exports a finished range's assurance report as an evidence

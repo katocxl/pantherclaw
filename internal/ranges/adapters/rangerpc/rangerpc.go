@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	capp "github.com/katocxl/pantherclaw/internal/campaigns/app"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -24,6 +25,8 @@ import (
 type Handler struct {
 	pantherclawv1connect.UnimplementedRangeServiceHandler
 	svc *app.Service
+	// campaigns serves the campaign procedures; nil answers Unavailable.
+	campaigns *capp.Service
 }
 
 // New returns the RangeService handler.

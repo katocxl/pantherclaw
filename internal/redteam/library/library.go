@@ -13,6 +13,8 @@ import (
 	_ "embed"
 	"encoding/json/v2"
 	"fmt"
+
+	"github.com/katocxl/pantherclaw/internal/campaigns/domain"
 )
 
 // Entry is one library scenario.
@@ -31,6 +33,31 @@ var entries = func() map[string]Entry {
 	}
 	return m
 }()
+
+// CampaignEntry is one library campaign (G0 M25 D310): its digest, and the
+// attempts the server derives outcomes for, never the runner's.
+type CampaignEntry struct {
+	Digest   string           `json:"digest"`
+	Tier     string           `json:"tier"`
+	Attempts []domain.Attempt `json:"attempts"`
+}
+
+//go:embed campaigns.json
+var campaignsRaw []byte
+
+var campaigns = func() map[string]CampaignEntry {
+	var m map[string]CampaignEntry
+	if err := json.Unmarshal(campaignsRaw, &m, json.RejectUnknownMembers(true)); err != nil {
+		panic(fmt.Sprintf("campaigns.json: %v", err))
+	}
+	return m
+}()
+
+// Campaign returns the library's campaign for an RT id.
+func Campaign(id string) (CampaignEntry, bool) {
+	e, ok := campaigns[id]
+	return e, ok
+}
 
 // Lookup returns the library's entry for an RT id.
 func Lookup(id string) (Entry, bool) {

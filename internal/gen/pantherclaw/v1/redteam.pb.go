@@ -192,6 +192,182 @@ func (RangeObservedBy) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{2}
 }
 
+// CampaignState is where a campaign is in its life.
+type CampaignState int32
+
+const (
+	CampaignState_CAMPAIGN_STATE_UNSPECIFIED CampaignState = 0
+	CampaignState_CAMPAIGN_STATE_RUNNING     CampaignState = 1
+	CampaignState_CAMPAIGN_STATE_FINISHED    CampaignState = 2
+	// ABANDONED: never finished within 24 hours. It says nothing about its
+	// campaigns.
+	CampaignState_CAMPAIGN_STATE_ABANDONED CampaignState = 3
+)
+
+// Enum value maps for CampaignState.
+var (
+	CampaignState_name = map[int32]string{
+		0: "CAMPAIGN_STATE_UNSPECIFIED",
+		1: "CAMPAIGN_STATE_RUNNING",
+		2: "CAMPAIGN_STATE_FINISHED",
+		3: "CAMPAIGN_STATE_ABANDONED",
+	}
+	CampaignState_value = map[string]int32{
+		"CAMPAIGN_STATE_UNSPECIFIED": 0,
+		"CAMPAIGN_STATE_RUNNING":     1,
+		"CAMPAIGN_STATE_FINISHED":    2,
+		"CAMPAIGN_STATE_ABANDONED":   3,
+	}
+)
+
+func (x CampaignState) Enum() *CampaignState {
+	p := new(CampaignState)
+	*p = x
+	return p
+}
+
+func (x CampaignState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CampaignState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_redteam_proto_enumTypes[3].Descriptor()
+}
+
+func (CampaignState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_redteam_proto_enumTypes[3]
+}
+
+func (x CampaignState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CampaignState.Descriptor instead.
+func (CampaignState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{3}
+}
+
+// CampaignOutcome says what happened to one attempt of a campaign (D309).
+type CampaignOutcome int32
+
+const (
+	CampaignOutcome_CAMPAIGN_OUTCOME_UNSPECIFIED CampaignOutcome = 0
+	// HELD: the server held the action for a person.
+	CampaignOutcome_CAMPAIGN_OUTCOME_HELD CampaignOutcome = 1
+	// DENIED: the server denied the action or could not authorize it.
+	CampaignOutcome_CAMPAIGN_OUTCOME_DENIED CampaignOutcome = 2
+	// NOT_ROUTED_REPORTED: the edge reports it refused the route or stripped
+	// the credential. A report, never proven by the server's records.
+	CampaignOutcome_CAMPAIGN_OUTCOME_NOT_ROUTED_REPORTED CampaignOutcome = 3
+	// ALLOWED: the action went through: the boundary did not stop it.
+	CampaignOutcome_CAMPAIGN_OUTCOME_ALLOWED CampaignOutcome = 4
+	// NOT_EXERCISED: nothing shows the agent tried. A gap, not a pass.
+	CampaignOutcome_CAMPAIGN_OUTCOME_NOT_EXERCISED CampaignOutcome = 5
+)
+
+// Enum value maps for CampaignOutcome.
+var (
+	CampaignOutcome_name = map[int32]string{
+		0: "CAMPAIGN_OUTCOME_UNSPECIFIED",
+		1: "CAMPAIGN_OUTCOME_HELD",
+		2: "CAMPAIGN_OUTCOME_DENIED",
+		3: "CAMPAIGN_OUTCOME_NOT_ROUTED_REPORTED",
+		4: "CAMPAIGN_OUTCOME_ALLOWED",
+		5: "CAMPAIGN_OUTCOME_NOT_EXERCISED",
+	}
+	CampaignOutcome_value = map[string]int32{
+		"CAMPAIGN_OUTCOME_UNSPECIFIED":         0,
+		"CAMPAIGN_OUTCOME_HELD":                1,
+		"CAMPAIGN_OUTCOME_DENIED":              2,
+		"CAMPAIGN_OUTCOME_NOT_ROUTED_REPORTED": 3,
+		"CAMPAIGN_OUTCOME_ALLOWED":             4,
+		"CAMPAIGN_OUTCOME_NOT_EXERCISED":       5,
+	}
+)
+
+func (x CampaignOutcome) Enum() *CampaignOutcome {
+	p := new(CampaignOutcome)
+	*p = x
+	return p
+}
+
+func (x CampaignOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CampaignOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_redteam_proto_enumTypes[4].Descriptor()
+}
+
+func (CampaignOutcome) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_redteam_proto_enumTypes[4]
+}
+
+func (x CampaignOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CampaignOutcome.Descriptor instead.
+func (CampaignOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{4}
+}
+
+// CampaignBasis says what an outcome rests on.
+type CampaignBasis int32
+
+const (
+	CampaignBasis_CAMPAIGN_BASIS_UNSPECIFIED CampaignBasis = 0
+	// SERVER_RECORD: the server's own transaction.
+	CampaignBasis_CAMPAIGN_BASIS_SERVER_RECORD CampaignBasis = 1
+	// EDGE_REPORT: the edge's route report, as the runner passed it on.
+	CampaignBasis_CAMPAIGN_BASIS_EDGE_REPORT CampaignBasis = 2
+	// NONE: nothing; the outcome is NOT_EXERCISED.
+	CampaignBasis_CAMPAIGN_BASIS_NONE CampaignBasis = 3
+)
+
+// Enum value maps for CampaignBasis.
+var (
+	CampaignBasis_name = map[int32]string{
+		0: "CAMPAIGN_BASIS_UNSPECIFIED",
+		1: "CAMPAIGN_BASIS_SERVER_RECORD",
+		2: "CAMPAIGN_BASIS_EDGE_REPORT",
+		3: "CAMPAIGN_BASIS_NONE",
+	}
+	CampaignBasis_value = map[string]int32{
+		"CAMPAIGN_BASIS_UNSPECIFIED":   0,
+		"CAMPAIGN_BASIS_SERVER_RECORD": 1,
+		"CAMPAIGN_BASIS_EDGE_REPORT":   2,
+		"CAMPAIGN_BASIS_NONE":          3,
+	}
+)
+
+func (x CampaignBasis) Enum() *CampaignBasis {
+	p := new(CampaignBasis)
+	*p = x
+	return p
+}
+
+func (x CampaignBasis) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CampaignBasis) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_redteam_proto_enumTypes[5].Descriptor()
+}
+
+func (CampaignBasis) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_redteam_proto_enumTypes[5]
+}
+
+func (x CampaignBasis) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CampaignBasis.Descriptor instead.
+func (CampaignBasis) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{5}
+}
+
 // RangeScenarioDecl declares a scenario of the set a range runs. The
 // digest is the SHA-256 (lowercase hex) of the scenario's canonical form.
 // RT-### is the PantherClaw library: the server accepts it only with the
@@ -1566,6 +1742,1087 @@ func (x *ExportAssuranceReportResponse) GetPackId() string {
 	return ""
 }
 
+// CampaignDecl declares a library campaign by id and digest. The server
+// takes its attempts and tier from the library, never from the runner.
+type CampaignDecl struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Digest        string                 `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CampaignDecl) Reset() {
+	*x = CampaignDecl{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CampaignDecl) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CampaignDecl) ProtoMessage() {}
+
+func (x *CampaignDecl) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CampaignDecl.ProtoReflect.Descriptor instead.
+func (*CampaignDecl) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *CampaignDecl) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CampaignDecl) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+type StartCampaignRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// range_agent_id is the range twin: never the customer's real agent.
+	RangeAgentId  string          `protobuf:"bytes,1,opt,name=range_agent_id,json=rangeAgentId,proto3" json:"range_agent_id,omitempty"`
+	Campaigns     []*CampaignDecl `protobuf:"bytes,2,rep,name=campaigns,proto3" json:"campaigns,omitempty"`
+	RunnerVersion string          `protobuf:"bytes,3,opt,name=runner_version,json=runnerVersion,proto3" json:"runner_version,omitempty"`
+	// image_digest is the agent image the twin ran; the report names it.
+	ImageDigest string `protobuf:"bytes,4,opt,name=image_digest,json=imageDigest,proto3" json:"image_digest,omitempty"`
+	// model_host is the one host the run's model relay forwards to.
+	ModelHost string `protobuf:"bytes,5,opt,name=model_host,json=modelHost,proto3" json:"model_host,omitempty"`
+	// relay_connection_id is the simulated connection of the run's relay.
+	RelayConnectionId string `protobuf:"bytes,6,opt,name=relay_connection_id,json=relayConnectionId,proto3" json:"relay_connection_id,omitempty"`
+	// scripted: a scripted stand-in agent ran, not a real model. The report
+	// says so.
+	Scripted      bool `protobuf:"varint,7,opt,name=scripted,proto3" json:"scripted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartCampaignRequest) Reset() {
+	*x = StartCampaignRequest{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartCampaignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartCampaignRequest) ProtoMessage() {}
+
+func (x *StartCampaignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartCampaignRequest.ProtoReflect.Descriptor instead.
+func (*StartCampaignRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *StartCampaignRequest) GetRangeAgentId() string {
+	if x != nil {
+		return x.RangeAgentId
+	}
+	return ""
+}
+
+func (x *StartCampaignRequest) GetCampaigns() []*CampaignDecl {
+	if x != nil {
+		return x.Campaigns
+	}
+	return nil
+}
+
+func (x *StartCampaignRequest) GetRunnerVersion() string {
+	if x != nil {
+		return x.RunnerVersion
+	}
+	return ""
+}
+
+func (x *StartCampaignRequest) GetImageDigest() string {
+	if x != nil {
+		return x.ImageDigest
+	}
+	return ""
+}
+
+func (x *StartCampaignRequest) GetModelHost() string {
+	if x != nil {
+		return x.ModelHost
+	}
+	return ""
+}
+
+func (x *StartCampaignRequest) GetRelayConnectionId() string {
+	if x != nil {
+		return x.RelayConnectionId
+	}
+	return ""
+}
+
+func (x *StartCampaignRequest) GetScripted() bool {
+	if x != nil {
+		return x.Scripted
+	}
+	return false
+}
+
+type StartCampaignResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CampaignId    string                 `protobuf:"bytes,1,opt,name=campaign_id,json=campaignId,proto3" json:"campaign_id,omitempty"`
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartCampaignResponse) Reset() {
+	*x = StartCampaignResponse{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartCampaignResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartCampaignResponse) ProtoMessage() {}
+
+func (x *StartCampaignResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartCampaignResponse.ProtoReflect.Descriptor instead.
+func (*StartCampaignResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *StartCampaignResponse) GetCampaignId() string {
+	if x != nil {
+		return x.CampaignId
+	}
+	return ""
+}
+
+func (x *StartCampaignResponse) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+// CampaignRoute is a route the edge reported.
+type CampaignRoute struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Locator       string                 `protobuf:"bytes,2,opt,name=locator,proto3" json:"locator,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CampaignRoute) Reset() {
+	*x = CampaignRoute{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CampaignRoute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CampaignRoute) ProtoMessage() {}
+
+func (x *CampaignRoute) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CampaignRoute.ProtoReflect.Descriptor instead.
+func (*CampaignRoute) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CampaignRoute) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *CampaignRoute) GetLocator() string {
+	if x != nil {
+		return x.Locator
+	}
+	return ""
+}
+
+// CampaignRunReport names the run of one campaign and what its edge saw.
+type CampaignRunReport struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ScenarioId    string                 `protobuf:"bytes,1,opt,name=scenario_id,json=scenarioId,proto3" json:"scenario_id,omitempty"`
+	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Routes        []*CampaignRoute       `protobuf:"bytes,3,rep,name=routes,proto3" json:"routes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CampaignRunReport) Reset() {
+	*x = CampaignRunReport{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CampaignRunReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CampaignRunReport) ProtoMessage() {}
+
+func (x *CampaignRunReport) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CampaignRunReport.ProtoReflect.Descriptor instead.
+func (*CampaignRunReport) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CampaignRunReport) GetScenarioId() string {
+	if x != nil {
+		return x.ScenarioId
+	}
+	return ""
+}
+
+func (x *CampaignRunReport) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *CampaignRunReport) GetRoutes() []*CampaignRoute {
+	if x != nil {
+		return x.Routes
+	}
+	return nil
+}
+
+type FinishCampaignRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CampaignId    string                 `protobuf:"bytes,1,opt,name=campaign_id,json=campaignId,proto3" json:"campaign_id,omitempty"`
+	Runs          []*CampaignRunReport   `protobuf:"bytes,2,rep,name=runs,proto3" json:"runs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FinishCampaignRequest) Reset() {
+	*x = FinishCampaignRequest{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinishCampaignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinishCampaignRequest) ProtoMessage() {}
+
+func (x *FinishCampaignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinishCampaignRequest.ProtoReflect.Descriptor instead.
+func (*FinishCampaignRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *FinishCampaignRequest) GetCampaignId() string {
+	if x != nil {
+		return x.CampaignId
+	}
+	return ""
+}
+
+func (x *FinishCampaignRequest) GetRuns() []*CampaignRunReport {
+	if x != nil {
+		return x.Runs
+	}
+	return nil
+}
+
+// CampaignStep is one attempt's outcome, as the server derived it.
+type CampaignStep struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ScenarioId string                 `protobuf:"bytes,1,opt,name=scenario_id,json=scenarioId,proto3" json:"scenario_id,omitempty"`
+	StepId     string                 `protobuf:"bytes,2,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	// boundary is the rule the campaign says stops the attempt.
+	Boundary string `protobuf:"bytes,3,opt,name=boundary,proto3" json:"boundary,omitempty"`
+	// expected is HELD, DENIED or NOT_ROUTED.
+	Expected      string          `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
+	Outcome       CampaignOutcome `protobuf:"varint,5,opt,name=outcome,proto3,enum=pantherclaw.v1.CampaignOutcome" json:"outcome,omitempty"`
+	Basis         CampaignBasis   `protobuf:"varint,6,opt,name=basis,proto3,enum=pantherclaw.v1.CampaignBasis" json:"basis,omitempty"`
+	TransactionId string          `protobuf:"bytes,7,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	Reason        string          `protobuf:"bytes,8,opt,name=reason,proto3" json:"reason,omitempty"`
+	// route_locator is the reported route behind a NOT_ROUTED_REPORTED.
+	RouteLocator  string `protobuf:"bytes,9,opt,name=route_locator,json=routeLocator,proto3" json:"route_locator,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CampaignStep) Reset() {
+	*x = CampaignStep{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CampaignStep) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CampaignStep) ProtoMessage() {}
+
+func (x *CampaignStep) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CampaignStep.ProtoReflect.Descriptor instead.
+func (*CampaignStep) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CampaignStep) GetScenarioId() string {
+	if x != nil {
+		return x.ScenarioId
+	}
+	return ""
+}
+
+func (x *CampaignStep) GetStepId() string {
+	if x != nil {
+		return x.StepId
+	}
+	return ""
+}
+
+func (x *CampaignStep) GetBoundary() string {
+	if x != nil {
+		return x.Boundary
+	}
+	return ""
+}
+
+func (x *CampaignStep) GetExpected() string {
+	if x != nil {
+		return x.Expected
+	}
+	return ""
+}
+
+func (x *CampaignStep) GetOutcome() CampaignOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return CampaignOutcome_CAMPAIGN_OUTCOME_UNSPECIFIED
+}
+
+func (x *CampaignStep) GetBasis() CampaignBasis {
+	if x != nil {
+		return x.Basis
+	}
+	return CampaignBasis_CAMPAIGN_BASIS_UNSPECIFIED
+}
+
+func (x *CampaignStep) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *CampaignStep) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *CampaignStep) GetRouteLocator() string {
+	if x != nil {
+		return x.RouteLocator
+	}
+	return ""
+}
+
+// CampaignCounts counts a campaign's attempts by outcome.
+type CampaignCounts struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Held              int32                  `protobuf:"varint,1,opt,name=held,proto3" json:"held,omitempty"`
+	Denied            int32                  `protobuf:"varint,2,opt,name=denied,proto3" json:"denied,omitempty"`
+	NotRoutedReported int32                  `protobuf:"varint,3,opt,name=not_routed_reported,json=notRoutedReported,proto3" json:"not_routed_reported,omitempty"`
+	Allowed           int32                  `protobuf:"varint,4,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	NotExercised      int32                  `protobuf:"varint,5,opt,name=not_exercised,json=notExercised,proto3" json:"not_exercised,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CampaignCounts) Reset() {
+	*x = CampaignCounts{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CampaignCounts) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CampaignCounts) ProtoMessage() {}
+
+func (x *CampaignCounts) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CampaignCounts.ProtoReflect.Descriptor instead.
+func (*CampaignCounts) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CampaignCounts) GetHeld() int32 {
+	if x != nil {
+		return x.Held
+	}
+	return 0
+}
+
+func (x *CampaignCounts) GetDenied() int32 {
+	if x != nil {
+		return x.Denied
+	}
+	return 0
+}
+
+func (x *CampaignCounts) GetNotRoutedReported() int32 {
+	if x != nil {
+		return x.NotRoutedReported
+	}
+	return 0
+}
+
+func (x *CampaignCounts) GetAllowed() int32 {
+	if x != nil {
+		return x.Allowed
+	}
+	return 0
+}
+
+func (x *CampaignCounts) GetNotExercised() int32 {
+	if x != nil {
+		return x.NotExercised
+	}
+	return 0
+}
+
+// CampaignModelUsage is a run's model traffic: never its content (D313).
+// It is not attack evidence.
+type CampaignModelUsage struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RunId          string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	ScenarioId     string                 `protobuf:"bytes,2,opt,name=scenario_id,json=scenarioId,proto3" json:"scenario_id,omitempty"`
+	ModelHost      string                 `protobuf:"bytes,3,opt,name=model_host,json=modelHost,proto3" json:"model_host,omitempty"`
+	Requests       int64                  `protobuf:"varint,4,opt,name=requests,proto3" json:"requests,omitempty"`
+	BytesToModel   int64                  `protobuf:"varint,5,opt,name=bytes_to_model,json=bytesToModel,proto3" json:"bytes_to_model,omitempty"`
+	BytesFromModel int64                  `protobuf:"varint,6,opt,name=bytes_from_model,json=bytesFromModel,proto3" json:"bytes_from_model,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CampaignModelUsage) Reset() {
+	*x = CampaignModelUsage{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CampaignModelUsage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CampaignModelUsage) ProtoMessage() {}
+
+func (x *CampaignModelUsage) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CampaignModelUsage.ProtoReflect.Descriptor instead.
+func (*CampaignModelUsage) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CampaignModelUsage) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *CampaignModelUsage) GetScenarioId() string {
+	if x != nil {
+		return x.ScenarioId
+	}
+	return ""
+}
+
+func (x *CampaignModelUsage) GetModelHost() string {
+	if x != nil {
+		return x.ModelHost
+	}
+	return ""
+}
+
+func (x *CampaignModelUsage) GetRequests() int64 {
+	if x != nil {
+		return x.Requests
+	}
+	return 0
+}
+
+func (x *CampaignModelUsage) GetBytesToModel() int64 {
+	if x != nil {
+		return x.BytesToModel
+	}
+	return 0
+}
+
+func (x *CampaignModelUsage) GetBytesFromModel() int64 {
+	if x != nil {
+		return x.BytesFromModel
+	}
+	return 0
+}
+
+// Campaign is one attack campaign against a range twin.
+type Campaign struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	RangeAgentId      string                 `protobuf:"bytes,2,opt,name=range_agent_id,json=rangeAgentId,proto3" json:"range_agent_id,omitempty"`
+	StartedBy         string                 `protobuf:"bytes,3,opt,name=started_by,json=startedBy,proto3" json:"started_by,omitempty"`
+	RunnerVersion     string                 `protobuf:"bytes,4,opt,name=runner_version,json=runnerVersion,proto3" json:"runner_version,omitempty"`
+	SetDigest         string                 `protobuf:"bytes,5,opt,name=set_digest,json=setDigest,proto3" json:"set_digest,omitempty"`
+	ScenarioIds       []string               `protobuf:"bytes,6,rep,name=scenario_ids,json=scenarioIds,proto3" json:"scenario_ids,omitempty"`
+	ImageDigest       string                 `protobuf:"bytes,7,opt,name=image_digest,json=imageDigest,proto3" json:"image_digest,omitempty"`
+	ModelHost         string                 `protobuf:"bytes,8,opt,name=model_host,json=modelHost,proto3" json:"model_host,omitempty"`
+	RelayConnectionId string                 `protobuf:"bytes,9,opt,name=relay_connection_id,json=relayConnectionId,proto3" json:"relay_connection_id,omitempty"`
+	Scripted          bool                   `protobuf:"varint,10,opt,name=scripted,proto3" json:"scripted,omitempty"`
+	State             CampaignState          `protobuf:"varint,11,opt,name=state,proto3,enum=pantherclaw.v1.CampaignState" json:"state,omitempty"`
+	StartTime         *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	FinishTime        *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=finish_time,json=finishTime,proto3" json:"finish_time,omitempty"`
+	Counts            *CampaignCounts        `protobuf:"bytes,14,opt,name=counts,proto3" json:"counts,omitempty"`
+	// origin is "campaign".
+	Origin string `protobuf:"bytes,15,opt,name=origin,proto3" json:"origin,omitempty"`
+	// statement is what the result is and is not: it tested a twin, by image
+	// digest, and never production.
+	Statement     string `protobuf:"bytes,16,opt,name=statement,proto3" json:"statement,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Campaign) Reset() {
+	*x = Campaign{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Campaign) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Campaign) ProtoMessage() {}
+
+func (x *Campaign) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Campaign.ProtoReflect.Descriptor instead.
+func (*Campaign) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *Campaign) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Campaign) GetRangeAgentId() string {
+	if x != nil {
+		return x.RangeAgentId
+	}
+	return ""
+}
+
+func (x *Campaign) GetStartedBy() string {
+	if x != nil {
+		return x.StartedBy
+	}
+	return ""
+}
+
+func (x *Campaign) GetRunnerVersion() string {
+	if x != nil {
+		return x.RunnerVersion
+	}
+	return ""
+}
+
+func (x *Campaign) GetSetDigest() string {
+	if x != nil {
+		return x.SetDigest
+	}
+	return ""
+}
+
+func (x *Campaign) GetScenarioIds() []string {
+	if x != nil {
+		return x.ScenarioIds
+	}
+	return nil
+}
+
+func (x *Campaign) GetImageDigest() string {
+	if x != nil {
+		return x.ImageDigest
+	}
+	return ""
+}
+
+func (x *Campaign) GetModelHost() string {
+	if x != nil {
+		return x.ModelHost
+	}
+	return ""
+}
+
+func (x *Campaign) GetRelayConnectionId() string {
+	if x != nil {
+		return x.RelayConnectionId
+	}
+	return ""
+}
+
+func (x *Campaign) GetScripted() bool {
+	if x != nil {
+		return x.Scripted
+	}
+	return false
+}
+
+func (x *Campaign) GetState() CampaignState {
+	if x != nil {
+		return x.State
+	}
+	return CampaignState_CAMPAIGN_STATE_UNSPECIFIED
+}
+
+func (x *Campaign) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *Campaign) GetFinishTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FinishTime
+	}
+	return nil
+}
+
+func (x *Campaign) GetCounts() *CampaignCounts {
+	if x != nil {
+		return x.Counts
+	}
+	return nil
+}
+
+func (x *Campaign) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
+}
+
+func (x *Campaign) GetStatement() string {
+	if x != nil {
+		return x.Statement
+	}
+	return ""
+}
+
+type FinishCampaignResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Campaign      *Campaign              `protobuf:"bytes,1,opt,name=campaign,proto3" json:"campaign,omitempty"`
+	Steps         []*CampaignStep        `protobuf:"bytes,2,rep,name=steps,proto3" json:"steps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FinishCampaignResponse) Reset() {
+	*x = FinishCampaignResponse{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinishCampaignResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinishCampaignResponse) ProtoMessage() {}
+
+func (x *FinishCampaignResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinishCampaignResponse.ProtoReflect.Descriptor instead.
+func (*FinishCampaignResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *FinishCampaignResponse) GetCampaign() *Campaign {
+	if x != nil {
+		return x.Campaign
+	}
+	return nil
+}
+
+func (x *FinishCampaignResponse) GetSteps() []*CampaignStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+type GetCampaignRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CampaignId    string                 `protobuf:"bytes,1,opt,name=campaign_id,json=campaignId,proto3" json:"campaign_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCampaignRequest) Reset() {
+	*x = GetCampaignRequest{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCampaignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCampaignRequest) ProtoMessage() {}
+
+func (x *GetCampaignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCampaignRequest.ProtoReflect.Descriptor instead.
+func (*GetCampaignRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetCampaignRequest) GetCampaignId() string {
+	if x != nil {
+		return x.CampaignId
+	}
+	return ""
+}
+
+type GetCampaignResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Campaign      *Campaign              `protobuf:"bytes,1,opt,name=campaign,proto3" json:"campaign,omitempty"`
+	Steps         []*CampaignStep        `protobuf:"bytes,2,rep,name=steps,proto3" json:"steps,omitempty"`
+	ModelUsage    []*CampaignModelUsage  `protobuf:"bytes,3,rep,name=model_usage,json=modelUsage,proto3" json:"model_usage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCampaignResponse) Reset() {
+	*x = GetCampaignResponse{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCampaignResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCampaignResponse) ProtoMessage() {}
+
+func (x *GetCampaignResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCampaignResponse.ProtoReflect.Descriptor instead.
+func (*GetCampaignResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *GetCampaignResponse) GetCampaign() *Campaign {
+	if x != nil {
+		return x.Campaign
+	}
+	return nil
+}
+
+func (x *GetCampaignResponse) GetSteps() []*CampaignStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+func (x *GetCampaignResponse) GetModelUsage() []*CampaignModelUsage {
+	if x != nil {
+		return x.ModelUsage
+	}
+	return nil
+}
+
+type ListCampaignsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RangeAgentId  string                 `protobuf:"bytes,1,opt,name=range_agent_id,json=rangeAgentId,proto3" json:"range_agent_id,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCampaignsRequest) Reset() {
+	*x = ListCampaignsRequest{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCampaignsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCampaignsRequest) ProtoMessage() {}
+
+func (x *ListCampaignsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCampaignsRequest.ProtoReflect.Descriptor instead.
+func (*ListCampaignsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListCampaignsRequest) GetRangeAgentId() string {
+	if x != nil {
+		return x.RangeAgentId
+	}
+	return ""
+}
+
+func (x *ListCampaignsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListCampaignsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListCampaignsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Campaigns     []*Campaign            `protobuf:"bytes,1,rep,name=campaigns,proto3" json:"campaigns,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCampaignsResponse) Reset() {
+	*x = ListCampaignsResponse{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCampaignsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCampaignsResponse) ProtoMessage() {}
+
+func (x *ListCampaignsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCampaignsResponse.ProtoReflect.Descriptor instead.
+func (*ListCampaignsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ListCampaignsResponse) GetCampaigns() []*Campaign {
+	if x != nil {
+		return x.Campaigns
+	}
+	return nil
+}
+
+func (x *ListCampaignsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_redteam_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
@@ -1687,7 +2944,111 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x1cExportAssuranceReportRequest\x12#\n" +
 	"\brange_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\arangeId\"8\n" +
 	"\x1dExportAssuranceReportResponse\x12\x17\n" +
-	"\apack_id\x18\x01 \x01(\tR\x06packId*w\n" +
+	"\apack_id\x18\x01 \x01(\tR\x06packId\"b\n" +
+	"\fCampaignDecl\x12#\n" +
+	"\x02id\x18\x01 \x01(\tB\x13\xbaH\x10r\x0e2\f^RT-14[0-9]$R\x02id\x12-\n" +
+	"\x06digest\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x06digest\"\xa8\x03\n" +
+	"\x14StartCampaignRequest\x12.\n" +
+	"\x0erange_agent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\frangeAgentId\x12F\n" +
+	"\tcampaigns\x18\x02 \x03(\v2\x1c.pantherclaw.v1.CampaignDeclB\n" +
+	"\xbaH\a\x92\x01\x04\b\x01\x10\n" +
+	"R\tcampaigns\x120\n" +
+	"\x0erunner_version\x18\x03 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\rrunnerVersion\x12?\n" +
+	"\fimage_digest\x18\x04 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\vimageDigest\x12O\n" +
+	"\n" +
+	"model_host\x18\x05 \x01(\tB0\xbaH-r+\x18\xfd\x012&^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$R\tmodelHost\x128\n" +
+	"\x13relay_connection_id\x18\x06 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x11relayConnectionId\x12\x1a\n" +
+	"\bscripted\x18\a \x01(\bR\bscripted\"s\n" +
+	"\x15StartCampaignResponse\x12\x1f\n" +
+	"\vcampaign_id\x18\x01 \x01(\tR\n" +
+	"campaignId\x129\n" +
+	"\n" +
+	"start_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"h\n" +
+	"\rCampaignRoute\x121\n" +
+	"\x04kind\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18R\n" +
+	"direct_apiR\n" +
+	"credentialR\x04kind\x12$\n" +
+	"\alocator\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\alocator\"\xab\x01\n" +
+	"\x11CampaignRunReport\x124\n" +
+	"\vscenario_id\x18\x01 \x01(\tB\x13\xbaH\x10r\x0e2\f^RT-14[0-9]$R\n" +
+	"scenarioId\x12\x1f\n" +
+	"\x06run_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\x12?\n" +
+	"\x06routes\x18\x03 \x03(\v2\x1d.pantherclaw.v1.CampaignRouteB\b\xbaH\x05\x92\x01\x02\x10@R\x06routes\"\x83\x01\n" +
+	"\x15FinishCampaignRequest\x12)\n" +
+	"\vcampaign_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
+	"campaignId\x12?\n" +
+	"\x04runs\x18\x02 \x03(\v2!.pantherclaw.v1.CampaignRunReportB\b\xbaH\x05\x92\x01\x02\x10\n" +
+	"R\x04runs\"\xd4\x02\n" +
+	"\fCampaignStep\x12\x1f\n" +
+	"\vscenario_id\x18\x01 \x01(\tR\n" +
+	"scenarioId\x12\x17\n" +
+	"\astep_id\x18\x02 \x01(\tR\x06stepId\x12\x1a\n" +
+	"\bboundary\x18\x03 \x01(\tR\bboundary\x12\x1a\n" +
+	"\bexpected\x18\x04 \x01(\tR\bexpected\x129\n" +
+	"\aoutcome\x18\x05 \x01(\x0e2\x1f.pantherclaw.v1.CampaignOutcomeR\aoutcome\x123\n" +
+	"\x05basis\x18\x06 \x01(\x0e2\x1d.pantherclaw.v1.CampaignBasisR\x05basis\x12%\n" +
+	"\x0etransaction_id\x18\a \x01(\tR\rtransactionId\x12\x16\n" +
+	"\x06reason\x18\b \x01(\tR\x06reason\x12#\n" +
+	"\rroute_locator\x18\t \x01(\tR\frouteLocator\"\xab\x01\n" +
+	"\x0eCampaignCounts\x12\x12\n" +
+	"\x04held\x18\x01 \x01(\x05R\x04held\x12\x16\n" +
+	"\x06denied\x18\x02 \x01(\x05R\x06denied\x12.\n" +
+	"\x13not_routed_reported\x18\x03 \x01(\x05R\x11notRoutedReported\x12\x18\n" +
+	"\aallowed\x18\x04 \x01(\x05R\aallowed\x12#\n" +
+	"\rnot_exercised\x18\x05 \x01(\x05R\fnotExercised\"\xd7\x01\n" +
+	"\x12CampaignModelUsage\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1f\n" +
+	"\vscenario_id\x18\x02 \x01(\tR\n" +
+	"scenarioId\x12\x1d\n" +
+	"\n" +
+	"model_host\x18\x03 \x01(\tR\tmodelHost\x12\x1a\n" +
+	"\brequests\x18\x04 \x01(\x03R\brequests\x12$\n" +
+	"\x0ebytes_to_model\x18\x05 \x01(\x03R\fbytesToModel\x12(\n" +
+	"\x10bytes_from_model\x18\x06 \x01(\x03R\x0ebytesFromModel\"\xf1\x04\n" +
+	"\bCampaign\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12$\n" +
+	"\x0erange_agent_id\x18\x02 \x01(\tR\frangeAgentId\x12\x1d\n" +
+	"\n" +
+	"started_by\x18\x03 \x01(\tR\tstartedBy\x12%\n" +
+	"\x0erunner_version\x18\x04 \x01(\tR\rrunnerVersion\x12\x1d\n" +
+	"\n" +
+	"set_digest\x18\x05 \x01(\tR\tsetDigest\x12!\n" +
+	"\fscenario_ids\x18\x06 \x03(\tR\vscenarioIds\x12!\n" +
+	"\fimage_digest\x18\a \x01(\tR\vimageDigest\x12\x1d\n" +
+	"\n" +
+	"model_host\x18\b \x01(\tR\tmodelHost\x12.\n" +
+	"\x13relay_connection_id\x18\t \x01(\tR\x11relayConnectionId\x12\x1a\n" +
+	"\bscripted\x18\n" +
+	" \x01(\bR\bscripted\x123\n" +
+	"\x05state\x18\v \x01(\x0e2\x1d.pantherclaw.v1.CampaignStateR\x05state\x129\n" +
+	"\n" +
+	"start_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
+	"\vfinish_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"finishTime\x126\n" +
+	"\x06counts\x18\x0e \x01(\v2\x1e.pantherclaw.v1.CampaignCountsR\x06counts\x12\x16\n" +
+	"\x06origin\x18\x0f \x01(\tR\x06origin\x12\x1c\n" +
+	"\tstatement\x18\x10 \x01(\tR\tstatement\"\x82\x01\n" +
+	"\x16FinishCampaignResponse\x124\n" +
+	"\bcampaign\x18\x01 \x01(\v2\x18.pantherclaw.v1.CampaignR\bcampaign\x122\n" +
+	"\x05steps\x18\x02 \x03(\v2\x1c.pantherclaw.v1.CampaignStepR\x05steps\"?\n" +
+	"\x12GetCampaignRequest\x12)\n" +
+	"\vcampaign_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
+	"campaignId\"\xc4\x01\n" +
+	"\x13GetCampaignResponse\x124\n" +
+	"\bcampaign\x18\x01 \x01(\v2\x18.pantherclaw.v1.CampaignR\bcampaign\x122\n" +
+	"\x05steps\x18\x02 \x03(\v2\x1c.pantherclaw.v1.CampaignStepR\x05steps\x12C\n" +
+	"\vmodel_usage\x18\x03 \x03(\v2\".pantherclaw.v1.CampaignModelUsageR\n" +
+	"modelUsage\"\xad\x01\n" +
+	"\x14ListCampaignsRequest\x121\n" +
+	"\x0erange_agent_id\x18\x01 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\frangeAgentId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x129\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18\x80\x022\x10^[A-Za-z0-9_-]*$R\tpageToken\"w\n" +
+	"\x15ListCampaignsResponse\x126\n" +
+	"\tcampaigns\x18\x01 \x03(\v2\x18.pantherclaw.v1.CampaignR\tcampaigns\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*w\n" +
 	"\n" +
 	"RangeState\x12\x1b\n" +
 	"\x17RANGE_STATE_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -1704,7 +3065,24 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x0fRangeObservedBy\x12!\n" +
 	"\x1dRANGE_OBSERVED_BY_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18RANGE_OBSERVED_BY_SERVER\x10\x01\x12\x1c\n" +
-	"\x18RANGE_OBSERVED_BY_CLIENT\x10\x022\xba\x04\n" +
+	"\x18RANGE_OBSERVED_BY_CLIENT\x10\x02*\x86\x01\n" +
+	"\rCampaignState\x12\x1e\n" +
+	"\x1aCAMPAIGN_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16CAMPAIGN_STATE_RUNNING\x10\x01\x12\x1b\n" +
+	"\x17CAMPAIGN_STATE_FINISHED\x10\x02\x12\x1c\n" +
+	"\x18CAMPAIGN_STATE_ABANDONED\x10\x03*\xd7\x01\n" +
+	"\x0fCampaignOutcome\x12 \n" +
+	"\x1cCAMPAIGN_OUTCOME_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15CAMPAIGN_OUTCOME_HELD\x10\x01\x12\x1b\n" +
+	"\x17CAMPAIGN_OUTCOME_DENIED\x10\x02\x12(\n" +
+	"$CAMPAIGN_OUTCOME_NOT_ROUTED_REPORTED\x10\x03\x12\x1c\n" +
+	"\x18CAMPAIGN_OUTCOME_ALLOWED\x10\x04\x12\"\n" +
+	"\x1eCAMPAIGN_OUTCOME_NOT_EXERCISED\x10\x05*\x8a\x01\n" +
+	"\rCampaignBasis\x12\x1e\n" +
+	"\x1aCAMPAIGN_BASIS_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cCAMPAIGN_BASIS_SERVER_RECORD\x10\x01\x12\x1e\n" +
+	"\x1aCAMPAIGN_BASIS_EDGE_REPORT\x10\x02\x12\x17\n" +
+	"\x13CAMPAIGN_BASIS_NONE\x10\x032\xb9\a\n" +
 	"\fRangeService\x12S\n" +
 	"\n" +
 	"StartRange\x12!.pantherclaw.v1.StartRangeRequest\x1a\".pantherclaw.v1.StartRangeResponse\x12Y\n" +
@@ -1713,7 +3091,11 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\bGetRange\x12\x1f.pantherclaw.v1.GetRangeRequest\x1a .pantherclaw.v1.GetRangeResponse\"\x03\x90\x02\x01\x12X\n" +
 	"\n" +
 	"ListRanges\x12!.pantherclaw.v1.ListRangesRequest\x1a\".pantherclaw.v1.ListRangesResponse\"\x03\x90\x02\x01\x12t\n" +
-	"\x15ExportAssuranceReport\x12,.pantherclaw.v1.ExportAssuranceReportRequest\x1a-.pantherclaw.v1.ExportAssuranceReportResponseB\xc5\x01\n" +
+	"\x15ExportAssuranceReport\x12,.pantherclaw.v1.ExportAssuranceReportRequest\x1a-.pantherclaw.v1.ExportAssuranceReportResponse\x12\\\n" +
+	"\rStartCampaign\x12$.pantherclaw.v1.StartCampaignRequest\x1a%.pantherclaw.v1.StartCampaignResponse\x12_\n" +
+	"\x0eFinishCampaign\x12%.pantherclaw.v1.FinishCampaignRequest\x1a&.pantherclaw.v1.FinishCampaignResponse\x12[\n" +
+	"\vGetCampaign\x12\".pantherclaw.v1.GetCampaignRequest\x1a#.pantherclaw.v1.GetCampaignResponse\"\x03\x90\x02\x01\x12a\n" +
+	"\rListCampaigns\x12$.pantherclaw.v1.ListCampaignsRequest\x1a%.pantherclaw.v1.ListCampaignsResponse\"\x03\x90\x02\x01B\xc5\x01\n" +
 	"\x12com.pantherclaw.v1B\fRedteamProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1728,76 +3110,118 @@ func file_pantherclaw_v1_redteam_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_redteam_proto_rawDescData
 }
 
-var file_pantherclaw_v1_redteam_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_redteam_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_pantherclaw_v1_redteam_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_pantherclaw_v1_redteam_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_pantherclaw_v1_redteam_proto_goTypes = []any{
 	(RangeState)(0),                       // 0: pantherclaw.v1.RangeState
 	(RangeVerdict)(0),                     // 1: pantherclaw.v1.RangeVerdict
 	(RangeObservedBy)(0),                  // 2: pantherclaw.v1.RangeObservedBy
-	(*RangeScenarioDecl)(nil),             // 3: pantherclaw.v1.RangeScenarioDecl
-	(*StartRangeRequest)(nil),             // 4: pantherclaw.v1.StartRangeRequest
-	(*StartRangeResponse)(nil),            // 5: pantherclaw.v1.StartRangeResponse
-	(*RangeExpect)(nil),                   // 6: pantherclaw.v1.RangeExpect
-	(*RangeStepInput)(nil),                // 7: pantherclaw.v1.RangeStepInput
-	(*RecordResultRequest)(nil),           // 8: pantherclaw.v1.RecordResultRequest
-	(*RangeStep)(nil),                     // 9: pantherclaw.v1.RangeStep
-	(*RangeResult)(nil),                   // 10: pantherclaw.v1.RangeResult
-	(*RecordResultResponse)(nil),          // 11: pantherclaw.v1.RecordResultResponse
-	(*FinishRangeRequest)(nil),            // 12: pantherclaw.v1.FinishRangeRequest
-	(*RangeCounts)(nil),                   // 13: pantherclaw.v1.RangeCounts
-	(*Range)(nil),                         // 14: pantherclaw.v1.Range
-	(*FinishRangeResponse)(nil),           // 15: pantherclaw.v1.FinishRangeResponse
-	(*GetRangeRequest)(nil),               // 16: pantherclaw.v1.GetRangeRequest
-	(*GetRangeResponse)(nil),              // 17: pantherclaw.v1.GetRangeResponse
-	(*ListRangesRequest)(nil),             // 18: pantherclaw.v1.ListRangesRequest
-	(*ListRangesResponse)(nil),            // 19: pantherclaw.v1.ListRangesResponse
-	(*ExportAssuranceReportRequest)(nil),  // 20: pantherclaw.v1.ExportAssuranceReportRequest
-	(*ExportAssuranceReportResponse)(nil), // 21: pantherclaw.v1.ExportAssuranceReportResponse
-	(*timestamppb.Timestamp)(nil),         // 22: google.protobuf.Timestamp
+	(CampaignState)(0),                    // 3: pantherclaw.v1.CampaignState
+	(CampaignOutcome)(0),                  // 4: pantherclaw.v1.CampaignOutcome
+	(CampaignBasis)(0),                    // 5: pantherclaw.v1.CampaignBasis
+	(*RangeScenarioDecl)(nil),             // 6: pantherclaw.v1.RangeScenarioDecl
+	(*StartRangeRequest)(nil),             // 7: pantherclaw.v1.StartRangeRequest
+	(*StartRangeResponse)(nil),            // 8: pantherclaw.v1.StartRangeResponse
+	(*RangeExpect)(nil),                   // 9: pantherclaw.v1.RangeExpect
+	(*RangeStepInput)(nil),                // 10: pantherclaw.v1.RangeStepInput
+	(*RecordResultRequest)(nil),           // 11: pantherclaw.v1.RecordResultRequest
+	(*RangeStep)(nil),                     // 12: pantherclaw.v1.RangeStep
+	(*RangeResult)(nil),                   // 13: pantherclaw.v1.RangeResult
+	(*RecordResultResponse)(nil),          // 14: pantherclaw.v1.RecordResultResponse
+	(*FinishRangeRequest)(nil),            // 15: pantherclaw.v1.FinishRangeRequest
+	(*RangeCounts)(nil),                   // 16: pantherclaw.v1.RangeCounts
+	(*Range)(nil),                         // 17: pantherclaw.v1.Range
+	(*FinishRangeResponse)(nil),           // 18: pantherclaw.v1.FinishRangeResponse
+	(*GetRangeRequest)(nil),               // 19: pantherclaw.v1.GetRangeRequest
+	(*GetRangeResponse)(nil),              // 20: pantherclaw.v1.GetRangeResponse
+	(*ListRangesRequest)(nil),             // 21: pantherclaw.v1.ListRangesRequest
+	(*ListRangesResponse)(nil),            // 22: pantherclaw.v1.ListRangesResponse
+	(*ExportAssuranceReportRequest)(nil),  // 23: pantherclaw.v1.ExportAssuranceReportRequest
+	(*ExportAssuranceReportResponse)(nil), // 24: pantherclaw.v1.ExportAssuranceReportResponse
+	(*CampaignDecl)(nil),                  // 25: pantherclaw.v1.CampaignDecl
+	(*StartCampaignRequest)(nil),          // 26: pantherclaw.v1.StartCampaignRequest
+	(*StartCampaignResponse)(nil),         // 27: pantherclaw.v1.StartCampaignResponse
+	(*CampaignRoute)(nil),                 // 28: pantherclaw.v1.CampaignRoute
+	(*CampaignRunReport)(nil),             // 29: pantherclaw.v1.CampaignRunReport
+	(*FinishCampaignRequest)(nil),         // 30: pantherclaw.v1.FinishCampaignRequest
+	(*CampaignStep)(nil),                  // 31: pantherclaw.v1.CampaignStep
+	(*CampaignCounts)(nil),                // 32: pantherclaw.v1.CampaignCounts
+	(*CampaignModelUsage)(nil),            // 33: pantherclaw.v1.CampaignModelUsage
+	(*Campaign)(nil),                      // 34: pantherclaw.v1.Campaign
+	(*FinishCampaignResponse)(nil),        // 35: pantherclaw.v1.FinishCampaignResponse
+	(*GetCampaignRequest)(nil),            // 36: pantherclaw.v1.GetCampaignRequest
+	(*GetCampaignResponse)(nil),           // 37: pantherclaw.v1.GetCampaignResponse
+	(*ListCampaignsRequest)(nil),          // 38: pantherclaw.v1.ListCampaignsRequest
+	(*ListCampaignsResponse)(nil),         // 39: pantherclaw.v1.ListCampaignsResponse
+	(*timestamppb.Timestamp)(nil),         // 40: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_redteam_proto_depIdxs = []int32{
-	3,  // 0: pantherclaw.v1.StartRangeRequest.scenarios:type_name -> pantherclaw.v1.RangeScenarioDecl
-	22, // 1: pantherclaw.v1.StartRangeResponse.start_time:type_name -> google.protobuf.Timestamp
-	6,  // 2: pantherclaw.v1.RangeStepInput.expect:type_name -> pantherclaw.v1.RangeExpect
-	6,  // 3: pantherclaw.v1.RangeStepInput.observed:type_name -> pantherclaw.v1.RangeExpect
+	6,  // 0: pantherclaw.v1.StartRangeRequest.scenarios:type_name -> pantherclaw.v1.RangeScenarioDecl
+	40, // 1: pantherclaw.v1.StartRangeResponse.start_time:type_name -> google.protobuf.Timestamp
+	9,  // 2: pantherclaw.v1.RangeStepInput.expect:type_name -> pantherclaw.v1.RangeExpect
+	9,  // 3: pantherclaw.v1.RangeStepInput.observed:type_name -> pantherclaw.v1.RangeExpect
 	1,  // 4: pantherclaw.v1.RecordResultRequest.verdict:type_name -> pantherclaw.v1.RangeVerdict
-	7,  // 5: pantherclaw.v1.RecordResultRequest.steps:type_name -> pantherclaw.v1.RangeStepInput
-	6,  // 6: pantherclaw.v1.RangeStep.expect:type_name -> pantherclaw.v1.RangeExpect
-	6,  // 7: pantherclaw.v1.RangeStep.observed:type_name -> pantherclaw.v1.RangeExpect
+	10, // 5: pantherclaw.v1.RecordResultRequest.steps:type_name -> pantherclaw.v1.RangeStepInput
+	9,  // 6: pantherclaw.v1.RangeStep.expect:type_name -> pantherclaw.v1.RangeExpect
+	9,  // 7: pantherclaw.v1.RangeStep.observed:type_name -> pantherclaw.v1.RangeExpect
 	2,  // 8: pantherclaw.v1.RangeStep.observed_by:type_name -> pantherclaw.v1.RangeObservedBy
-	6,  // 9: pantherclaw.v1.RangeStep.claimed:type_name -> pantherclaw.v1.RangeExpect
+	9,  // 9: pantherclaw.v1.RangeStep.claimed:type_name -> pantherclaw.v1.RangeExpect
 	1,  // 10: pantherclaw.v1.RangeResult.verdict:type_name -> pantherclaw.v1.RangeVerdict
 	1,  // 11: pantherclaw.v1.RangeResult.claimed_verdict:type_name -> pantherclaw.v1.RangeVerdict
-	9,  // 12: pantherclaw.v1.RangeResult.steps:type_name -> pantherclaw.v1.RangeStep
-	22, // 13: pantherclaw.v1.RangeResult.record_time:type_name -> google.protobuf.Timestamp
-	10, // 14: pantherclaw.v1.RecordResultResponse.result:type_name -> pantherclaw.v1.RangeResult
-	3,  // 15: pantherclaw.v1.Range.scenarios:type_name -> pantherclaw.v1.RangeScenarioDecl
+	12, // 12: pantherclaw.v1.RangeResult.steps:type_name -> pantherclaw.v1.RangeStep
+	40, // 13: pantherclaw.v1.RangeResult.record_time:type_name -> google.protobuf.Timestamp
+	13, // 14: pantherclaw.v1.RecordResultResponse.result:type_name -> pantherclaw.v1.RangeResult
+	6,  // 15: pantherclaw.v1.Range.scenarios:type_name -> pantherclaw.v1.RangeScenarioDecl
 	0,  // 16: pantherclaw.v1.Range.state:type_name -> pantherclaw.v1.RangeState
-	22, // 17: pantherclaw.v1.Range.start_time:type_name -> google.protobuf.Timestamp
-	22, // 18: pantherclaw.v1.Range.finish_time:type_name -> google.protobuf.Timestamp
-	13, // 19: pantherclaw.v1.Range.counts:type_name -> pantherclaw.v1.RangeCounts
-	14, // 20: pantherclaw.v1.FinishRangeResponse.range:type_name -> pantherclaw.v1.Range
-	10, // 21: pantherclaw.v1.FinishRangeResponse.results:type_name -> pantherclaw.v1.RangeResult
-	14, // 22: pantherclaw.v1.GetRangeResponse.range:type_name -> pantherclaw.v1.Range
-	10, // 23: pantherclaw.v1.GetRangeResponse.results:type_name -> pantherclaw.v1.RangeResult
-	14, // 24: pantherclaw.v1.ListRangesResponse.ranges:type_name -> pantherclaw.v1.Range
-	4,  // 25: pantherclaw.v1.RangeService.StartRange:input_type -> pantherclaw.v1.StartRangeRequest
-	8,  // 26: pantherclaw.v1.RangeService.RecordResult:input_type -> pantherclaw.v1.RecordResultRequest
-	12, // 27: pantherclaw.v1.RangeService.FinishRange:input_type -> pantherclaw.v1.FinishRangeRequest
-	16, // 28: pantherclaw.v1.RangeService.GetRange:input_type -> pantherclaw.v1.GetRangeRequest
-	18, // 29: pantherclaw.v1.RangeService.ListRanges:input_type -> pantherclaw.v1.ListRangesRequest
-	20, // 30: pantherclaw.v1.RangeService.ExportAssuranceReport:input_type -> pantherclaw.v1.ExportAssuranceReportRequest
-	5,  // 31: pantherclaw.v1.RangeService.StartRange:output_type -> pantherclaw.v1.StartRangeResponse
-	11, // 32: pantherclaw.v1.RangeService.RecordResult:output_type -> pantherclaw.v1.RecordResultResponse
-	15, // 33: pantherclaw.v1.RangeService.FinishRange:output_type -> pantherclaw.v1.FinishRangeResponse
-	17, // 34: pantherclaw.v1.RangeService.GetRange:output_type -> pantherclaw.v1.GetRangeResponse
-	19, // 35: pantherclaw.v1.RangeService.ListRanges:output_type -> pantherclaw.v1.ListRangesResponse
-	21, // 36: pantherclaw.v1.RangeService.ExportAssuranceReport:output_type -> pantherclaw.v1.ExportAssuranceReportResponse
-	31, // [31:37] is the sub-list for method output_type
-	25, // [25:31] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	40, // 17: pantherclaw.v1.Range.start_time:type_name -> google.protobuf.Timestamp
+	40, // 18: pantherclaw.v1.Range.finish_time:type_name -> google.protobuf.Timestamp
+	16, // 19: pantherclaw.v1.Range.counts:type_name -> pantherclaw.v1.RangeCounts
+	17, // 20: pantherclaw.v1.FinishRangeResponse.range:type_name -> pantherclaw.v1.Range
+	13, // 21: pantherclaw.v1.FinishRangeResponse.results:type_name -> pantherclaw.v1.RangeResult
+	17, // 22: pantherclaw.v1.GetRangeResponse.range:type_name -> pantherclaw.v1.Range
+	13, // 23: pantherclaw.v1.GetRangeResponse.results:type_name -> pantherclaw.v1.RangeResult
+	17, // 24: pantherclaw.v1.ListRangesResponse.ranges:type_name -> pantherclaw.v1.Range
+	25, // 25: pantherclaw.v1.StartCampaignRequest.campaigns:type_name -> pantherclaw.v1.CampaignDecl
+	40, // 26: pantherclaw.v1.StartCampaignResponse.start_time:type_name -> google.protobuf.Timestamp
+	28, // 27: pantherclaw.v1.CampaignRunReport.routes:type_name -> pantherclaw.v1.CampaignRoute
+	29, // 28: pantherclaw.v1.FinishCampaignRequest.runs:type_name -> pantherclaw.v1.CampaignRunReport
+	4,  // 29: pantherclaw.v1.CampaignStep.outcome:type_name -> pantherclaw.v1.CampaignOutcome
+	5,  // 30: pantherclaw.v1.CampaignStep.basis:type_name -> pantherclaw.v1.CampaignBasis
+	3,  // 31: pantherclaw.v1.Campaign.state:type_name -> pantherclaw.v1.CampaignState
+	40, // 32: pantherclaw.v1.Campaign.start_time:type_name -> google.protobuf.Timestamp
+	40, // 33: pantherclaw.v1.Campaign.finish_time:type_name -> google.protobuf.Timestamp
+	32, // 34: pantherclaw.v1.Campaign.counts:type_name -> pantherclaw.v1.CampaignCounts
+	34, // 35: pantherclaw.v1.FinishCampaignResponse.campaign:type_name -> pantherclaw.v1.Campaign
+	31, // 36: pantherclaw.v1.FinishCampaignResponse.steps:type_name -> pantherclaw.v1.CampaignStep
+	34, // 37: pantherclaw.v1.GetCampaignResponse.campaign:type_name -> pantherclaw.v1.Campaign
+	31, // 38: pantherclaw.v1.GetCampaignResponse.steps:type_name -> pantherclaw.v1.CampaignStep
+	33, // 39: pantherclaw.v1.GetCampaignResponse.model_usage:type_name -> pantherclaw.v1.CampaignModelUsage
+	34, // 40: pantherclaw.v1.ListCampaignsResponse.campaigns:type_name -> pantherclaw.v1.Campaign
+	7,  // 41: pantherclaw.v1.RangeService.StartRange:input_type -> pantherclaw.v1.StartRangeRequest
+	11, // 42: pantherclaw.v1.RangeService.RecordResult:input_type -> pantherclaw.v1.RecordResultRequest
+	15, // 43: pantherclaw.v1.RangeService.FinishRange:input_type -> pantherclaw.v1.FinishRangeRequest
+	19, // 44: pantherclaw.v1.RangeService.GetRange:input_type -> pantherclaw.v1.GetRangeRequest
+	21, // 45: pantherclaw.v1.RangeService.ListRanges:input_type -> pantherclaw.v1.ListRangesRequest
+	23, // 46: pantherclaw.v1.RangeService.ExportAssuranceReport:input_type -> pantherclaw.v1.ExportAssuranceReportRequest
+	26, // 47: pantherclaw.v1.RangeService.StartCampaign:input_type -> pantherclaw.v1.StartCampaignRequest
+	30, // 48: pantherclaw.v1.RangeService.FinishCampaign:input_type -> pantherclaw.v1.FinishCampaignRequest
+	36, // 49: pantherclaw.v1.RangeService.GetCampaign:input_type -> pantherclaw.v1.GetCampaignRequest
+	38, // 50: pantherclaw.v1.RangeService.ListCampaigns:input_type -> pantherclaw.v1.ListCampaignsRequest
+	8,  // 51: pantherclaw.v1.RangeService.StartRange:output_type -> pantherclaw.v1.StartRangeResponse
+	14, // 52: pantherclaw.v1.RangeService.RecordResult:output_type -> pantherclaw.v1.RecordResultResponse
+	18, // 53: pantherclaw.v1.RangeService.FinishRange:output_type -> pantherclaw.v1.FinishRangeResponse
+	20, // 54: pantherclaw.v1.RangeService.GetRange:output_type -> pantherclaw.v1.GetRangeResponse
+	22, // 55: pantherclaw.v1.RangeService.ListRanges:output_type -> pantherclaw.v1.ListRangesResponse
+	24, // 56: pantherclaw.v1.RangeService.ExportAssuranceReport:output_type -> pantherclaw.v1.ExportAssuranceReportResponse
+	27, // 57: pantherclaw.v1.RangeService.StartCampaign:output_type -> pantherclaw.v1.StartCampaignResponse
+	35, // 58: pantherclaw.v1.RangeService.FinishCampaign:output_type -> pantherclaw.v1.FinishCampaignResponse
+	37, // 59: pantherclaw.v1.RangeService.GetCampaign:output_type -> pantherclaw.v1.GetCampaignResponse
+	39, // 60: pantherclaw.v1.RangeService.ListCampaigns:output_type -> pantherclaw.v1.ListCampaignsResponse
+	51, // [51:61] is the sub-list for method output_type
+	41, // [41:51] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_redteam_proto_init() }
@@ -1810,8 +3234,8 @@ func file_pantherclaw_v1_redteam_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_redteam_proto_rawDesc), len(file_pantherclaw_v1_redteam_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   19,
+			NumEnums:      6,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

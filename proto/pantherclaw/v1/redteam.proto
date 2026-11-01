@@ -53,6 +53,28 @@ service RangeService {
   // edition. The pack is downloaded through EvidenceService.
   // permission: evidence.export
   rpc ExportAssuranceReport(ExportAssuranceReportRequest) returns (ExportAssuranceReportResponse);
+  // StartCampaign records an attack campaign against a range twin of the
+  // customer's agent (G0 M25 D309, HR-220): the image it tests, by digest,
+  // the one model host of the run and the campaigns of the library it runs.
+  // Business edition. A range agent has at most one open campaign.
+  // permission: redteam.run
+  rpc StartCampaign(StartCampaignRequest) returns (StartCampaignResponse);
+  // FinishCampaign ends a campaign. The caller says which runs were which
+  // scenario's and what the edge reported; every outcome is derived by the
+  // server from its own transactions. An attempt with nothing behind it is
+  // NOT_EXERCISED, a gap and not a pass (D306).
+  // permission: redteam.run
+  rpc FinishCampaign(FinishCampaignRequest) returns (FinishCampaignResponse);
+  // GetCampaign returns a campaign and its steps.
+  // permission: redteam.read
+  rpc GetCampaign(GetCampaignRequest) returns (GetCampaignResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListCampaigns lists campaigns, newest first.
+  // permission: redteam.read
+  rpc ListCampaigns(ListCampaignsRequest) returns (ListCampaignsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // RangeState is where a range is in its life.
@@ -338,4 +360,198 @@ message ExportAssuranceReportRequest {
 message ExportAssuranceReportResponse {
   // pack_id is the evidence pack that holds the report.
   string pack_id = 1;
+}
+
+// CampaignState is where a campaign is in its life.
+enum CampaignState {
+  CAMPAIGN_STATE_UNSPECIFIED = 0;
+  CAMPAIGN_STATE_RUNNING = 1;
+  CAMPAIGN_STATE_FINISHED = 2;
+  // ABANDONED: never finished within 24 hours. It says nothing about its
+  // campaigns.
+  CAMPAIGN_STATE_ABANDONED = 3;
+}
+
+// CampaignOutcome says what happened to one attempt of a campaign (D309).
+enum CampaignOutcome {
+  CAMPAIGN_OUTCOME_UNSPECIFIED = 0;
+  // HELD: the server held the action for a person.
+  CAMPAIGN_OUTCOME_HELD = 1;
+  // DENIED: the server denied the action or could not authorize it.
+  CAMPAIGN_OUTCOME_DENIED = 2;
+  // NOT_ROUTED_REPORTED: the edge reports it refused the route or stripped
+  // the credential. A report, never proven by the server's records.
+  CAMPAIGN_OUTCOME_NOT_ROUTED_REPORTED = 3;
+  // ALLOWED: the action went through: the boundary did not stop it.
+  CAMPAIGN_OUTCOME_ALLOWED = 4;
+  // NOT_EXERCISED: nothing shows the agent tried. A gap, not a pass.
+  CAMPAIGN_OUTCOME_NOT_EXERCISED = 5;
+}
+
+// CampaignBasis says what an outcome rests on.
+enum CampaignBasis {
+  CAMPAIGN_BASIS_UNSPECIFIED = 0;
+  // SERVER_RECORD: the server's own transaction.
+  CAMPAIGN_BASIS_SERVER_RECORD = 1;
+  // EDGE_REPORT: the edge's route report, as the runner passed it on.
+  CAMPAIGN_BASIS_EDGE_REPORT = 2;
+  // NONE: nothing; the outcome is NOT_EXERCISED.
+  CAMPAIGN_BASIS_NONE = 3;
+}
+
+// CampaignDecl declares a library campaign by id and digest. The server
+// takes its attempts and tier from the library, never from the runner.
+message CampaignDecl {
+  string id = 1 [(buf.validate.field).string.pattern = "^RT-14[0-9]$"];
+  string digest = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+}
+
+message StartCampaignRequest {
+  // range_agent_id is the range twin: never the customer's real agent.
+  string range_agent_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated CampaignDecl campaigns = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 10
+  }];
+  string runner_version = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+  // image_digest is the agent image the twin ran; the report names it.
+  string image_digest = 4 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  // model_host is the one host the run's model relay forwards to.
+  string model_host = 5 [(buf.validate.field).string = {
+    max_len: 253
+    pattern: "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"
+  }];
+  // relay_connection_id is the simulated connection of the run's relay.
+  string relay_connection_id = 6 [(buf.validate.field).string.uuid = true];
+  // scripted: a scripted stand-in agent ran, not a real model. The report
+  // says so.
+  bool scripted = 7;
+}
+
+message StartCampaignResponse {
+  string campaign_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+}
+
+// CampaignRoute is a route the edge reported.
+message CampaignRoute {
+  string kind = 1 [(buf.validate.field).string = {
+    in: [
+      "direct_api",
+      "credential"
+    ]
+  }];
+  string locator = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+}
+
+// CampaignRunReport names the run of one campaign and what its edge saw.
+message CampaignRunReport {
+  string scenario_id = 1 [(buf.validate.field).string.pattern = "^RT-14[0-9]$"];
+  string run_id = 2 [(buf.validate.field).string.uuid = true];
+  repeated CampaignRoute routes = 3 [(buf.validate.field).repeated = {max_items: 64}];
+}
+
+message FinishCampaignRequest {
+  string campaign_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated CampaignRunReport runs = 2 [(buf.validate.field).repeated = {max_items: 10}];
+}
+
+// CampaignStep is one attempt's outcome, as the server derived it.
+message CampaignStep {
+  string scenario_id = 1;
+  string step_id = 2;
+  // boundary is the rule the campaign says stops the attempt.
+  string boundary = 3;
+  // expected is HELD, DENIED or NOT_ROUTED.
+  string expected = 4;
+  CampaignOutcome outcome = 5;
+  CampaignBasis basis = 6;
+  string transaction_id = 7;
+  string reason = 8;
+  // route_locator is the reported route behind a NOT_ROUTED_REPORTED.
+  string route_locator = 9;
+}
+
+// CampaignCounts counts a campaign's attempts by outcome.
+message CampaignCounts {
+  int32 held = 1;
+  int32 denied = 2;
+  int32 not_routed_reported = 3;
+  int32 allowed = 4;
+  int32 not_exercised = 5;
+}
+
+// CampaignModelUsage is a run's model traffic: never its content (D313).
+// It is not attack evidence.
+message CampaignModelUsage {
+  string run_id = 1;
+  string scenario_id = 2;
+  string model_host = 3;
+  int64 requests = 4;
+  int64 bytes_to_model = 5;
+  int64 bytes_from_model = 6;
+}
+
+// Campaign is one attack campaign against a range twin.
+message Campaign {
+  string id = 1;
+  string range_agent_id = 2;
+  string started_by = 3;
+  string runner_version = 4;
+  string set_digest = 5;
+  repeated string scenario_ids = 6;
+  string image_digest = 7;
+  string model_host = 8;
+  string relay_connection_id = 9;
+  bool scripted = 10;
+  CampaignState state = 11;
+  google.protobuf.Timestamp start_time = 12;
+  google.protobuf.Timestamp finish_time = 13;
+  CampaignCounts counts = 14;
+  // origin is "campaign".
+  string origin = 15;
+  // statement is what the result is and is not: it tested a twin, by image
+  // digest, and never production.
+  string statement = 16;
+}
+
+message FinishCampaignResponse {
+  Campaign campaign = 1;
+  repeated CampaignStep steps = 2;
+}
+
+message GetCampaignRequest {
+  string campaign_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetCampaignResponse {
+  Campaign campaign = 1;
+  repeated CampaignStep steps = 2;
+  repeated CampaignModelUsage model_usage = 3;
+}
+
+message ListCampaignsRequest {
+  string range_agent_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+message ListCampaignsResponse {
+  repeated Campaign campaigns = 1;
+  string next_page_token = 2;
 }
