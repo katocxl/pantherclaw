@@ -325,7 +325,8 @@ func (s *stack) m22Tickets(t *testing.T, rc *connect.Client) {
 
 // m22ModelReads reads D8's drafts and usage through ModelService: what a call
 // spent and which version it drafted, never its text (HR-554). The table holds
-// no text to return, so the rows are seeded; drafting itself is M21's.
+// no text to return, so the rows are seeded; drafting itself is M21's. This
+// server has drafting off, and the reads still answer (G0 M22 D88).
 func (s *stack) m22ModelReads(t *testing.T, rc *connect.Client) {
 	ctx := context.Background()
 	call, version := ids.NewV7(), ids.NewV7()

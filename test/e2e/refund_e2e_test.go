@@ -123,8 +123,6 @@ type stack struct {
 }
 
 type options struct {
-	// modelDrafting allows model drafting on the server (G0 M21 D309).
-	modelDrafting bool
 	// logGateways keeps the gateways' logs (stack.gatewayLogs).
 	logGateways bool
 	budget      string
@@ -285,9 +283,6 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.apiPerCredential > 0 {
 		cfg["limits"] = map[string]any{"api": map[string]any{"per_credential_per_minute": o.apiPerCredential}}
-	}
-	if o.modelDrafting {
-		cfg["model"] = map[string]any{"enabled": true}
 	}
 	if o.externalChecks != nil {
 		cfg["external_checks"] = map[string]any{"allowed_prefixes": o.externalChecks}

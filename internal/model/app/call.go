@@ -300,7 +300,7 @@ func storedDraft(row dbq.PcModelDraft) (StoredDraft, error) {
 // caller may read (G0 M22 D8, F834, HR-554). A draft's row holds its mark and
 // thresholds; the prompt and the response are not stored.
 func (s *Service) ListDrafts(ctx context.Context, pr page.Request) ([]StoredDraft, string, error) {
-	if err := s.entitled(ctx); err != nil {
+	if err := s.inEdition(ctx); err != nil {
 		return nil, "", err
 	}
 	c, err := tenancy.CallerFrom(ctx)
@@ -350,7 +350,7 @@ type UsageRow struct {
 // Usage sums the organization's model calls since a time, for whoever may
 // read the organization (G0 M22 D8, F834, HR-554).
 func (s *Service) Usage(ctx context.Context, since time.Time) ([]UsageRow, error) {
-	if err := s.entitled(ctx); err != nil {
+	if err := s.inEdition(ctx); err != nil {
 		return nil, err
 	}
 	c, err := tenancy.CallerFrom(ctx)

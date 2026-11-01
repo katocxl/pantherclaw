@@ -153,6 +153,13 @@ func (s *Service) entitled(ctx context.Context) error {
 	if !s.Config.Enabled {
 		return ErrPlatformOff
 	}
+	return s.inEdition(ctx)
+}
+
+// inEdition refuses below the Business edition. The stored drafts and usage
+// stay readable with the server's switch off (G0 M22 D88): they are records of
+// what was spent, and reading them calls no model.
+func (s *Service) inEdition(ctx context.Context) error {
 	if s.Editions == nil {
 		return ErrEdition
 	}

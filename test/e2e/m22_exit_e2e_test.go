@@ -40,7 +40,7 @@ import (
 // Covers: F272, F277, F284, F289, F293, F301, F424, F831, F832, F833, F834
 func TestE2E_M22_GraphData(t *testing.T) {
 	p := inProcessIdP(t)
-	s := start(t, options{budget: "1000.00", billing: true, people: &p, github: true, jira: true, modelDrafting: true})
+	s := start(t, options{budget: "1000.00", billing: true, people: &p, github: true, jira: true})
 	activePlan(t, s.pool, s.org)
 	code, r := s.refund(t, ids.NewV7(), "30.00")
 	if code != http.StatusOK || r.Outcome != "ACCEPTED" {

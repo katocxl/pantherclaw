@@ -23,8 +23,9 @@ import (
 
 // TestHR554_DraftAndUsageReadsReturnNoPromptsOrResponses: the reads give the
 // mark and the counts, never the person's text or the model's output: no
-// such field exists, and neither is in what comes back. They sit behind the
-// same gate as drafting, and a draft reads only for who may read its kind.
+// such field exists, and neither is in what comes back. They need the
+// edition drafting needs but not the server's switch, and a draft reads only
+// for who may read its kind.
 //
 // Covers: F834
 func TestHR554_DraftAndUsageReadsReturnNoPromptsOrResponses(t *testing.T) {
@@ -66,11 +67,26 @@ func TestHR554_DraftAndUsageReadsReturnNoPromptsOrResponses(t *testing.T) {
 		}
 	}
 
-	f.svc.Editions = &edition{billing.Team}
-	if _, _, err := f.svc.ListDrafts(f.author(), page.Request{Size: 10}); !errors.Is(err, app.ErrEdition) {
-		t.Fatalf("drafts below Business: %v", err)
+	// The server's switch stops calls, not the record of them (G0 M22 D88).
+	f.svc.Config.Enabled = false
+	if drafts, _, err := f.svc.ListDrafts(f.author(), page.Request{Size: 10}); err != nil || len(drafts) != 1 {
+		t.Fatalf("drafts with drafting off: %+v, %v", drafts, err)
 	}
-	if _, err := f.svc.Usage(f.admin(), time.Now()); !errors.Is(err, app.ErrEdition) {
-		t.Fatalf("usage below Business: %v", err)
+	if rows, err := f.svc.Usage(f.admin(), time.Now().Add(-time.Hour)); err != nil || len(rows) != 1 {
+		t.Fatalf("usage with drafting off: %+v, %v", rows, err)
+	}
+	if _, err := f.svc.DraftPolicy(f.author(), secretText); !errors.Is(err, app.ErrPlatformOff) {
+		t.Fatalf("a draft with drafting off: %v", err)
+	}
+
+	for _, enabled := range []bool{true, false} {
+		f.svc.Config.Enabled = enabled
+		f.svc.Editions = &edition{billing.Team}
+		if _, _, err := f.svc.ListDrafts(f.author(), page.Request{Size: 10}); !errors.Is(err, app.ErrEdition) {
+			t.Fatalf("drafts below Business, drafting on %v: %v", enabled, err)
+		}
+		if _, err := f.svc.Usage(f.admin(), time.Now()); !errors.Is(err, app.ErrEdition) {
+			t.Fatalf("usage below Business, drafting on %v: %v", enabled, err)
+		}
 	}
 }
