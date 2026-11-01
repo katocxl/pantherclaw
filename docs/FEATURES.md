@@ -1,6 +1,6 @@
 # PantherClaw — Product Features (revised)
 
-PantherClaw is an AI Agent Identity & Runtime Authorization Firewall. It gives every agent workload a verifiable identity and binds each consequential action to an explicit task grant and a deterministic policy decision. It routes that action through a gateway that dispatches only what was authorized, and keeps signed, independently verifiable evidence of what was decided, what was dispatched and what actually happened. This document turns all 802 catalog requirements (F001–F802) into consolidated, testable backend capabilities grouped into 20 commercially framed pillars, which roll up into seven product components ([PRODUCT.md](PRODUCT.md)). It also adds new PantherClaw features (PN-001–PN-026) and the web console, hosted-account and plan rows F803–F830 of milestone UI. Version 1.0 is a Go backend with a Connect-RPC API and the `pclaw` CLI, plus the web console of milestone UI. Each backend row states what the backend must deliver, and the console exposes it. Everything here is planned scope, not a claim that the behaviour is built. Behaviour detail lives in the catalog ([`reference/PantherClaw_Feature_Catalog_F001-F802.md`](reference/PantherClaw_Feature_Catalog_F001-F802.md)), [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`protocol/PAP-1.md`](protocol/PAP-1.md); where they are more specific, they take precedence.
+PantherClaw is an AI Agent Identity & Runtime Authorization Firewall. It gives every agent workload a verifiable identity and binds each consequential action to an explicit task grant and a deterministic policy decision. It routes that action through a gateway that dispatches only what was authorized, and keeps signed, independently verifiable evidence of what was decided, what was dispatched and what actually happened. This document turns all 802 catalog requirements (F001–F802) into consolidated, testable backend capabilities grouped into 20 commercially framed pillars, which roll up into seven product components ([PRODUCT.md](PRODUCT.md)). It also adds new PantherClaw features (PN-001–PN-026) and the web console, hosted-account and plan rows F803–F830 of milestone UI, and the rows F831–F889 of milestones M22–M24. Version 1.0 is a Go backend with a Connect-RPC API and the `pclaw` CLI, plus the web console of milestone UI. Each backend row states what the backend must deliver, and the console exposes it. Everything here is planned scope, not a claim that the behaviour is built. Behaviour detail lives in the catalog ([`reference/PantherClaw_Feature_Catalog_F001-F802.md`](reference/PantherClaw_Feature_Catalog_F001-F802.md)), [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`protocol/PAP-1.md`](protocol/PAP-1.md); where they are more specific, they take precedence.
 
 ## How to read this
 
@@ -39,6 +39,9 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M13 | Commercial & production hardening |
 | M14 | Framework SDKs & business connectors (framework wrappers, Stripe test mode, Slack, Postgres) |
 | UI | Web console, hosted accounts, self-serve organizations, per-organization plans, onboarding, website and interactive demo ([G0 UI](g0/UI.md)) |
+| M22 | See it: API gaps left by M15–M21, graph evidence, every M15–M21 console screen, graph views |
+| M23 | Easy to adopt: Hub, CI checks, `pclaw dev`, the managed-settings kit |
+| M24 | Agent Posture: ranked findings, MCP supply-chain checks, the private MCP catalogue, agent cards, scheduled device scans |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -74,7 +77,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | Core firewall: PAP/1 identity, grants, CEL policy, gateway, waitlist, WebAuthn approvals, kill switch, signed receipts, `pclaw verify` | Yes | Yes | Yes | Yes |
 | Discovery | Local `pclaw scan` | + GitHub organisation scan | + GitHub organisation scan | + GitHub organisation scan |
 | Policy simulation, shadow & pilot rollout; governed automations | — | Yes | Yes | Yes |
-| Investigation cases & breach radius | Search & evidence explorer | Cases, breach radius | + posture queue, automation exposure | + posture queue, automation exposure |
+| Investigation cases & breach radius | Search & evidence explorer | Cases, breach radius, posture findings | + posture trends and remediation, automation exposure | + posture trends and remediation, automation exposure |
 | Transparency anchoring (Rekor v2 + RFC 3161) | — | Yes | Yes | Yes |
 | SIEM export (OCSF 1.9) & SOAR response requests | — | — | Yes | Yes |
 | Threat detections | Core built-ins | Core built-ins | Advanced built-ins + custom rules | Advanced built-ins + custom rules |
@@ -711,6 +714,53 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F829 | Test access and deployment banner | Development sign-in providers, billing off or faked, and the console's mock mode are adapters chosen by configuration, shown by a permanent banner and refused in production. | MVP | Community | UI | new |
 | F830 | Guided hosted onboarding | Resumable steps from sign-in to a first protected path, guided tests and validation, computed on the server from real records; simulated records never complete a step. | MVP | Team | UI | F322, F325, F335, F336, F341 |
 
+### M22 rows: See it
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+
+### M23 rows: Easy to adopt
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+
+### M24 rows: Agent Posture
+
+Posture is ranked findings with fixes and no single measure (F797). Clean means "no known flags", never "safe" (F801) ([G0 M24](g0/M24.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F860 | Posture queue | `PostureQueueService` lists findings ranked by consequence, joined from what already exists, scoped to the viewer before ranking. | Next | Team | M24 | F797 |
+| F861 | Finding record | Each finding names its source, kind, root cause, agent, connection, team, severity and its basis, state, age, a fix never linking to a refusal, and the reasons for its rank. | Next | Team | M24 | new |
+| F862 | Explained ranking | Findings sort by severity, reach to production, missing owner, age and a stable id. Each states which applied; sources without a severity use a fixed table. | Next | Team | M24 | F797 |
+| F863 | Joined finding sources | Posture, coverage, suggestions, open agent changes, recommendations, new inventory, supply-chain flags and unapproved servers, capped at 1,000 per source. Truncation is shown, never silent. A source below its needed scope reports `RESTRICTED`. | Next | Team | M24 | F801 |
+| F864 | OWASP ASI mapping | Each finding kind maps to OWASP Agentic Top 10 entries through a pure table. | Next | Team | M24 | new |
+| F865 | Posture trends | Daily open and closed counts by kind, severity and team. A missing day is `NOT_COLLECTED`, never zero. | Next | Business | M24 | F301 |
+| F866 | Findings clear at the source | A finding clears when its source clears, and dismissal goes to the source, so the queue holds no state of its own to drift. | Next | Team | M24 | new |
+| F867 | MCP supply-chain checks | Pure checks for hidden instructions, injection patterns, tool shadowing, over-broad schemas, changes after approval and unknown provenance, each with severity and offsets. Flagged text stays untrusted. | Next | Team | M24 | F388 |
+| F868 | Tool schema reporting | The gateway reports each tool's input schema, capped at 64 KiB, and its digest, stored with the inventory and its flags. Past 768 KiB in one report, a tool sends its digest only, raising `schema_unavailable`. | Next | Team | M24 | new |
+| F869 | Flags in tool review | Checks run in discovery before a tool review opens and at package import. Flags appear on the review item and feed posture; drift quarantine is unchanged. | Next | Team | M24 | new |
+| F870 | Flag wording | Every string says "no known flags" for a clean result and never "safe"; a flag never approves anything. | Next | Team | M24 | F801 |
+| F871 | `pclaw mcp inspect` | Runs a server in the sandbox with no credentials and egress denied, lists its tools and resources, records egress attempts and runs the checks. Customer machine only; images pinned by digest only. | Next | Community | M24 | new |
+| F872 | Private MCP catalogue | One list of an organization's servers, proposed, approved, denied or revoked, with `OFF`, `WATCH` or `ENFORCE` mode; the default is `WATCH`. Mode and revoke need a person and a step-up. | Next | Team | M24 | new |
+| F873 | Exact server matching | An approval matches only on exact URL scheme, host, effective port and path prefix, image digest or package reference. Denials compare host and effective port, whatever the scheme. No fuzzy matching. | Next | Team | M24 | new |
+| F874 | Opt-in catalogue enforcement | `ENFORCE` refuses to activate a connection to an unapproved server, and turning it on previews, then quarantines non-matching connections. Leaving it always waits for a second person. | Next | Team | M24 | new |
+| F875 | Server revoke | A person revokes a server in one organization with a preview digest and reason. Connections get a deny-all control, package versions are quarantined, new matches are refused in every mode. Downgraded organizations can still revoke. | Next | Team to manage; revoke on every edition | M24 | new |
+| F876 | Revoke lift | An independent second person lifts a server revoke, which ends the blocks on connections, each staying in its own state. The server stays revoked, and package versions return only through fresh review. | Next | Team | M24 | F563 |
+| F877 | Scan-only servers | A local server seen only by scans comes back as `not_stoppable_here`, with a deny-list hint, so a revoke never claims to have stopped it. | Next | Team | M24 | F801 |
+| F878 | `pclaw mcp catalog` | List, propose, approve, deny, set the mode, revoke and export, as a managed-settings allow file or a static file in the official registry's shape. No new HTTP endpoint. | Next | Team | M24 | new |
+| F879 | Unapproved server finding | A posture finding for connections to unapproved servers, raised only once the catalogue holds at least one approved server. | Next | Team | M24 | new |
+| F880 | Agent risk and AI Act fields | Risk tier, data classes, EU AI Act role and risk class on the existing agent record; set values are audited and recorded as changes. | Next | Team | M24 | new |
+| F881 | Agent card | `GetAgentCard` shows purpose, owner, those fields and approved tools from pins, under the same permission as reading the agent. | Next | Team | M24 | new |
+| F882 | Signed A2A cards | The server signs A2A cards with an `a2a_card` key in JWKS, only at a card URL a person stored. The gateway caches by digest for an hour. Otherwise, or if signing fails, it is served unsigned. | Next | Team | M24 | new |
+| F883 | Hook and skill findings | `pclaw scan` reports hooks by event and executable basename and skills by name and path, and nothing more. | Next | Community | M24 | F015 |
+| F884 | Package references in scans | For `npx`, `uvx`, `bunx`, `pipx run` and `docker run`, a scan keeps the package or image token only, with no other arguments. | Next | Community | M24 | F015 |
+| F885 | Device scope | Scans carry a `device:<id>` scope, a salted hash of the machine id, and the 200 finding cap applies per source and scope. Dropped findings are still reported. Past org-wide limits on device scopes: `SCAN_DEVICE_LIMIT`. | Next | Community | M24 | new |
+| F886 | All-users scan | `pclaw scan --all-users` reads each home directory under SYSTEM or root, metadata only, and `PANTHERCLAW_API_KEY_FILE` supplies the key. It refuses with `SCAN_BINARY_WRITABLE` if a non-admin can replace the binary. | Next | Community | M24 | new |
+| F887 | Scanner role | A service-account role holding exactly `org.read` and `agent.scan.submit`, so it can submit scans for its scope and write nothing else. | Next | Team | M24 | new |
+| F888 | Scheduled device scans | `pclaw scan schedule` installs, removes and reports a scheduled task, launchd job or systemd timer; a runbook covers Intune and Jamf. | Next | Community | M24 | new |
+| F889 | Environment-secret signal | The `env_secret` recommendation signal works from real input, so that F343 keeps its promise. | Next | Team | M24 | F343 |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.
@@ -765,7 +815,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 
 Checked on 2026-10-09 by a script that parsed every table row with a Source column and expanded the ranges, after ADR-0017, ADR-0018 and ADR-0019 added PN-002.8, PN-016.3, PN-023 and PN-024 and moved four rows to M14; row counts updated on 2026-10-20 after G0 UI added PN-025, PN-026 and the new rows F803–F830.
 
-- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows.
+- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows F831–F889 of M22–M24 come on top of these counts as each milestone lands; they are new rows, not catalog IDs.
 - **Coverage:** 802 of 802 catalog IDs (F001–F802) appear in at least one Source cell. None are missing and none are out of range.
 - **Format checks:** every row ID matches its convention, and no row ID repeats. Every Phase, Edition and Milestone value is valid. Every "What the backend delivers" cell is ≤ 36 words.
 

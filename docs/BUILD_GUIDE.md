@@ -501,11 +501,13 @@ Each milestone starts with a G0 brief in [GATES_AND_REVIEW.md](security/GATES_AN
 ```
 M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M12 → v0.1.0 preview
    → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0 → M15 → M16 → M17 → M18 → M19 → M20 → M21
+   → M22 → M23 → M24
 ```
 
 M15 and M16 are post-1.0 milestones (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); M15 lands before M16 ([G0 M15](g0/M15.md), founder decision F9).
 M19 is a post-1.0 milestone (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); it lands after M15–M18, in migration order ([G0 M19](g0/M19.md)), and the delivery order above gains it at the exit.
 M21 is a post-1.0 milestone that lands after M20, in migration-number order ([G0 M21](g0/M21.md)).
+M22, M23 and M24 are post-1.0 milestones built in parallel as one wave (founder, 2026-10-31: all coding comes before live testing and founder steps); they land in migration-number order.
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -763,6 +765,18 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Outcome metrics** (F774, Business, founder decision G17): time to protected work, to explanation and to containment, friction, change assurance and automation usefulness, as distributions with unmeasured cases and reasons; not collected is never zero. The six definitions are drafts awaiting founder sign-off.
 - **Model drafting** (F181, F304, Business, founder decision G16): an optional model provider with the customer's own key, off by default; it drafts queries, policies and automations from text and never runs anything; only the reviewed structured form executes.
 - Migrations `00246`–`00254` (`00255` spare).
+
+### M22 — See it
+
+### M23 — Easy to adopt
+
+### M24 — Agent Posture
+**HR:** HR-580..590 · **F:** F860–F889 · **ADR:** 0046 · **G0:** [g0/M24.md](g0/M24.md).
+- **Posture** (Team; trends Business): findings joined from what exists, ranked by consequence with the reasons stated and a fix on each, no single number (F797); a finding clears when its source clears.
+- **Supply chain:** pure checks on tool text and schemas in tool review and at package import; clean means "no known flags"; `pclaw mcp inspect` runs a server in the sandbox on the customer's machine.
+- **Catalogue** ([ADR-0046](adr/0046-mcp-server-catalogue.md), Team to manage, revoke on every edition, founder decision H3): exact approvals and wider denials, Watching by default, opt-in enforcement outside the decision path; weakening always waits for a second person; a person revokes a server inside one organization.
+- **Agents and scans:** risk and AI Act fields on the existing record, agent cards, signed A2A cards; hook, skill and package metadata in scans, a Scanner role and scheduled scans, never file contents or prompts.
+- Migrations `00270`–`00273` (`00274`–`00279` spare).
 
 ---
 

@@ -16,6 +16,7 @@ steps:
       face: mcp
       connection: payments
       concurrent: 4
+      retry_on: BUDGET_BUSY
       tool: create_refund
       args:
         charge: ch_${fixture.nonce}rt027
