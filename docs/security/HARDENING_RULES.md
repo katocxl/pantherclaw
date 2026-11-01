@@ -658,6 +658,19 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
+| HR-600 | A compliance report is a signed pack of its own scope `compliance`, with its own Kind and fixed statement, never a manifest field. | T-258 | M25 |
+| HR-601 | Control states are EVIDENCED, PARTIAL, GAP and STATED. There is no score, and no report, API or page says "compliant". | T-258 | M25 |
+| HR-602 | AI Act fields read STATED, never evidence. | T-258 | M25 |
+| HR-603 | Simulated evidence is split from real evidence and labelled. | T-259 | M25 |
+| HR-604 | Evidence comes only from PantherClaw's own records. What the report's creator can't read is a gap. | T-260 | M25 |
+| HR-605 | A report's header states its range, the simulated split and the fixed statement: this shows evidence and gaps and is not a certification or statement of compliance. | T-258 | M25 |
+| HR-606 | ASI05 and ASI06 read as gaps unless a real source maps them. | T-258 | M25 |
+| HR-607 | The campaign relay runs outside the agent's container. It listens on a private address reachable by the local gateway, never a public interface, and forwards only to the one model host named on the run, over HTTPS. It strips inbound auth headers and adds the key header. The key is read once from `--model-key-file` and held in memory. It is never logged, never in the container's environment, arguments or mounts, and never sent to the server. The relay is a simulated connection (HR-221), and a remote gateway is refused. HR-213 and HR-214 are unchanged. | T-261, T-262 | M25 |
+| HR-608 | A campaign needs a range twin (HR-220). Its report names the image digest and says it tested a twin, not production. | T-263 | M25 |
+| HR-609 | Not exercised is a gap, not a pass. Repeat campaign runs make no regression claim (HR-226). | T-264 | M25 |
+| HR-610 | Campaigns have their own origin and statement and never appear in an assurance pack (HR-466). | T-265 | M25 |
+| HR-611 | The server derives campaign outcomes from its own transactions. An edge route report stays labelled reported, never proven. Model traffic is not attack evidence. | T-264 | M25 |
+| HR-612 | Each campaign scenario names the boundary it expects, and the product says when a run was scripted. | T-264 | M25 |
 
 ## Enterprise identity: IdP access, SCIM, SAML and SaaS discovery (G0 M26)
 

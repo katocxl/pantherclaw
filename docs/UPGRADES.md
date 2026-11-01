@@ -12,7 +12,7 @@ Everything in the MVP runs at **$0 recurring cost** on the founder's machine plu
 | Human identity (dev) | Keycloak 26.7 in compose (`--profile identity`); mock-oauth2-server 6.0 in CI | Customer IdP (Okta, Entra ID, Google Workspace) | Every customer | Today: `auth.oidc_providers` in the server config (per deployment); later: per-org provider records for multi-org SaaS | $0 |
 | CLI credential storage | `credentials.json` (0600) in the user profile, device key in the same file (ADR-0016, R-14) | OS keychain (Windows Credential Manager, macOS Keychain, Secret Service) or TPM-bound device key | Enterprise rollouts or security questionnaires | `pclaw` credential-store adapter; needs a new dependency row | $0 |
 | API key network limits | Scopes and expiry only | Per-key IP allowlists (SB-2 option) | A customer asks for them | Trusted-proxy configuration first, then an `allowed_cidrs` column | $0 |
-| Enterprise identity | — | SCIM 2.0 provisioning, SAML bridge | Enterprise deals | Private enterprise module | — |
+| Enterprise identity | — | SCIM 2.0 provisioning, SAML bridge | Enterprise deals | Clean package in private `pantherclaw-cloud`; tables and ports in public core | — |
 | Email | Log mailer / SMTP | Resend / SES / Postmark | Real notifications | `Mailer` adapter config | $0–20/mo |
 | Telemetry | `grafana/otel-lgtm` container | Grafana Cloud free tier → paid / Datadog | Hosted environments | OTLP endpoint config | $0 → usage |
 | Replay & rate-limit store | Postgres (partitioned `dpop_jti`) | Valkey | > ~5k rps per org | Adapter swap | $15+/mo |
