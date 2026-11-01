@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package domain holds the org's MCP server catalogue (G0 M24 D220, D221;
-// F872, F873; HR-585): a server's statuses, the catalogue's modes and the
+// Package domain holds the org's MCP server catalog (G0 M24 D220, D221;
+// F872, F873; HR-585): a server's statuses, the catalog's modes and the
 // exact match between a server and what is really running. Everything here
 // is pure.
 package domain
@@ -15,7 +15,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 )
 
-// Status is where a server stands in the catalogue, as stored.
+// Status is where a server stands in the catalog, as stored.
 type Status string
 
 // Statuses.
@@ -26,7 +26,7 @@ const (
 	StatusRevoked  Status = "REVOKED"
 )
 
-// Mode is what the catalogue does, as stored.
+// Mode is what the catalog does, as stored.
 type Mode string
 
 // Modes.

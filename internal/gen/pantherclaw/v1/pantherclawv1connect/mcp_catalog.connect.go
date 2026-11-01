@@ -148,13 +148,13 @@ type McpCatalogServiceClient interface {
 	// DenyServer moves a PROPOSED server to DENIED.
 	// permission: catalog.manage
 	DenyServer(context.Context, *v1.DenyServerRequest) (*v1.DenyServerResponse, error)
-	// ListServers lists the catalogue.
+	// ListServers lists the catalog.
 	// permission: catalog.read
 	ListServers(context.Context, *v1.ListServersRequest) (*v1.ListServersResponse, error)
 	// GetServer reads one server.
 	// permission: catalog.read
 	GetServer(context.Context, *v1.GetServerRequest) (*v1.GetServerResponse, error)
-	// GetCatalogSettings reads the catalogue's mode.
+	// GetCatalogSettings reads the catalog's mode.
 	// permission: catalog.read
 	GetCatalogSettings(context.Context, *v1.GetCatalogSettingsRequest) (*v1.GetCatalogSettingsResponse, error)
 	// PreviewCatalogMode says what switching to a mode would do, and gives the
@@ -197,13 +197,13 @@ type McpCatalogServiceHandler interface {
 	// DenyServer moves a PROPOSED server to DENIED.
 	// permission: catalog.manage
 	DenyServer(context.Context, *v1.DenyServerRequest) (*v1.DenyServerResponse, error)
-	// ListServers lists the catalogue.
+	// ListServers lists the catalog.
 	// permission: catalog.read
 	ListServers(context.Context, *v1.ListServersRequest) (*v1.ListServersResponse, error)
 	// GetServer reads one server.
 	// permission: catalog.read
 	GetServer(context.Context, *v1.GetServerRequest) (*v1.GetServerResponse, error)
-	// GetCatalogSettings reads the catalogue's mode.
+	// GetCatalogSettings reads the catalog's mode.
 	// permission: catalog.read
 	GetCatalogSettings(context.Context, *v1.GetCatalogSettingsRequest) (*v1.GetCatalogSettingsResponse, error)
 	// PreviewCatalogMode says what switching to a mode would do, and gives the

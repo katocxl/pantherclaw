@@ -13,7 +13,7 @@ import (
 // cleartextScheme starts a Spec's explicit http host.
 const cleartextScheme = "http://"
 
-// Spec is what a catalogue server matches (D221, HR-585). Nothing here is
+// Spec is what a catalog server matches (D221, HR-585). Nothing here is
 // fuzzy: no similarity, no wildcard, no name. A similar host, a longer path
 // segment or another digest is simply another server.
 type Spec struct {
@@ -78,7 +78,7 @@ type Candidate struct {
 	Unmatchable bool
 }
 
-// URLCandidate reads a URL the way the catalogue compares it: https on its
+// URLCandidate reads a URL the way the catalog compares it: https on its
 // effective port, as a Spec's host means it, so https's default port goes
 // (D259). http stays apart, whatever its port. A URL with credentials, or one
 // this cannot parse, matches nothing.

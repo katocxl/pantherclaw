@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: BUSL-1.1
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
--- The org's approved MCP server catalogue (G0 M24 D220, D221; F872, HR-585).
+-- The org's approved MCP server catalog (G0 M24 D220, D221; F872, HR-585).
 -- A server names what it matches: a URL host with an optional path prefix,
 -- an image digest or a package reference, compared exactly. A mode row
 -- appears when something first needs one; no row means WATCH.

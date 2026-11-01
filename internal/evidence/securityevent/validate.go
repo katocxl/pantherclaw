@@ -55,7 +55,7 @@ var machineID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
 var serverName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
 
-// validateServer bounds a revoke's spec. The catalogue checks its meaning when
+// validateServer bounds a revoke's spec. The server's owner checks its meaning when
 // a restore uses it.
 func validateServer(e Event) error {
 	s := e.McpServer

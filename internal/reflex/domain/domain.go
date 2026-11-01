@@ -47,7 +47,7 @@ const (
 	// An automation and one of its executions (G0 M11 part 2 D11).
 	SubjectAutomation          SubjectType = "automation"
 	SubjectAutomationExecution SubjectType = "automation_execution"
-	// SubjectMcpServer is a server of the MCP catalogue (G0 M24 D224). Only a
+	// SubjectMcpServer is a server of the MCP catalog (G0 M24 D224). Only a
 	// person's revoke acts on one: as a containment scope it is refused.
 	SubjectMcpServer SubjectType = "mcp_server"
 	// SubjectSystem is PantherClaw acting by itself (D51), as the actor of

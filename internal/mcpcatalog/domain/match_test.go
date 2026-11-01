@@ -12,7 +12,7 @@ import (
 
 var digest = "sha256:" + strings.Repeat("ab", 32)
 
-// TestHR585_MatchingIsExact: a catalogue server matches only what it names.
+// TestHR585_MatchingIsExact: a catalog server matches only what it names.
 // Near-matches of a URL, an image or a package are other servers, and a URL
 // that hides where it goes matches nothing (T-253).
 //

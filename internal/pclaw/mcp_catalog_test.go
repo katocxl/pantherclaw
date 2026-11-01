@@ -196,13 +196,13 @@ func TestF878_ExportWritesAStaticFileOfApprovedServers(t *testing.T) {
 	if len(rc.list) != 2 || rc.list[0].GetStatuses()[0] != pb.McpServerStatus_MCP_SERVER_STATUS_APPROVED {
 		t.Fatalf("export read %v", rc.list)
 	}
-	raw, err := os.ReadFile(out) //nolint:gosec // G304: the test's own temp file
+	raw, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The rules of the allow file's reader, readAllowFile in S23b's
 	// managedsettings.go: no other member, a name it takes, and exactly one of
-	// an exact URL and a command. The catalogue records no launch command, so
+	// an exact URL and a command. The catalog records no launch command, so
 	// no entry claims one: a package reference is not what runs (D268).
 	var allow struct {
 		Servers []struct {

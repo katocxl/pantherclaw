@@ -277,13 +277,13 @@ func TestF875_ARevokedServerStaysRefusedInEveryMode(t *testing.T) {
 	}
 }
 
-// TestT253_AnUnapprovedServerDoesNotSlipPastTheCatalogue: under ENFORCE a
+// TestT253_AnUnapprovedServerDoesNotSlipPastTheCatalog: under ENFORCE a
 // lookalike host, a sibling path and another port reach no approved server,
 // a second entry for a revoked URL does not bring it back, and
 // a connection cannot be pointed somewhere else afterwards.
 //
 // Covers: F874
-func TestT253_AnUnapprovedServerDoesNotSlipPastTheCatalogue(t *testing.T) {
+func TestT253_AnUnapprovedServerDoesNotSlipPastTheCatalog(t *testing.T) {
 	e := newEnv(t)
 	e.approved(t, "good", revokedHost, "/v1")
 	fine := e.mustCreate(t, "fine", "https://"+revokedHost+"/v1/tools")

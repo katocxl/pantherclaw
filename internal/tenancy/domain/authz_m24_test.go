@@ -12,7 +12,7 @@ import (
 
 // TestM24_PermissionsAndRoles: the M24 permissions of G0 M24 D222 and D236
 // and the roles that hold them, exactly. None is human only in the catalog;
-// the catalogue service refuses any caller but a person where D222 says so.
+// the catalog service refuses any caller but a person where D222 says so.
 func TestM24_PermissionsAndRoles(t *testing.T) {
 	want := map[domain.Permission][]domain.RoleName{
 		domain.PermCatalogRead:     {domain.RoleAuditor, domain.RoleOrgAdmin, domain.RoleSecurityAdmin},

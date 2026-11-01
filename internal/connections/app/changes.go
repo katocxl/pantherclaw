@@ -362,7 +362,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			kc = &kindConfig{cfg: cfg, store: store}
 			set(conn.Kind, "current", "replaced", true)
 		}
-		// A connection never moves to a server the catalogue would refuse
+		// A connection never moves to a server the catalog would refuse
 		// (HR-585); a held update checks again when it applies.
 		if in.Connector != nil || in.BaseURL != nil {
 			if err := s.checkCatalog(ctx, tx, createdTarget(conn.Kind, p.BaseUrl, spec)); err != nil {

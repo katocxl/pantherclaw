@@ -9,16 +9,16 @@ import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "pantherclaw/v1/identity_providers.proto";
 
-// McpCatalogService is the org's approved MCP server catalogue (G0 M24
+// McpCatalogService is the org's approved MCP server catalog (G0 M24
 // D220-D226; F872-F879; HR-585, HR-586, HR-587; Team edition).
 //
 // A server names what it matches, and matching is exact: a URL host with an
 // optional path prefix, an image digest or a package reference, never a
-// similar name. The catalogue starts in WATCH, which reports unapproved
+// similar name. The catalog starts in WATCH, which reports unapproved
 // servers and stops nothing. ENFORCE is opt-in: it refuses to activate a
 // connection to an unapproved server, and switching to it quarantines the
 // connections that match no approved server, after a preview. Leaving ENFORCE
-// always waits for a second person. Being in the catalogue never adds to what
+// always waits for a second person. Being in the catalog never adds to what
 // an agent may do: the Authority decides as it always did.
 //
 // Revoking a server stops every connection that matches it inside one org.
@@ -35,7 +35,7 @@ service McpCatalogService {
   // DenyServer moves a PROPOSED server to DENIED.
   // permission: catalog.manage
   rpc DenyServer(DenyServerRequest) returns (DenyServerResponse);
-  // ListServers lists the catalogue.
+  // ListServers lists the catalog.
   // permission: catalog.read
   rpc ListServers(ListServersRequest) returns (ListServersResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -45,7 +45,7 @@ service McpCatalogService {
   rpc GetServer(GetServerRequest) returns (GetServerResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // GetCatalogSettings reads the catalogue's mode.
+  // GetCatalogSettings reads the catalog's mode.
   // permission: catalog.read
   rpc GetCatalogSettings(GetCatalogSettingsRequest) returns (GetCatalogSettingsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -77,7 +77,7 @@ service McpCatalogService {
   rpc RevokeServer(RevokeServerRequest) returns (RevokeServerResponse);
 }
 
-// McpServerStatus is where a server stands in the catalogue.
+// McpServerStatus is where a server stands in the catalog.
 enum McpServerStatus {
   MCP_SERVER_STATUS_UNSPECIFIED = 0;
   MCP_SERVER_STATUS_PROPOSED = 1;
@@ -86,10 +86,10 @@ enum McpServerStatus {
   MCP_SERVER_STATUS_REVOKED = 4;
 }
 
-// McpCatalogMode is what the catalogue does (D220).
+// McpCatalogMode is what the catalog does (D220).
 enum McpCatalogMode {
   MCP_CATALOG_MODE_UNSPECIFIED = 0;
-  // The catalogue reports nothing and stops nothing.
+  // The catalog reports nothing and stops nothing.
   MCP_CATALOG_MODE_OFF = 1;
   // The default: unapproved servers are reported and keep running.
   MCP_CATALOG_MODE_WATCH = 2;
@@ -105,7 +105,7 @@ enum McpServerTransport {
   MCP_SERVER_TRANSPORT_CONTAINER = 3;
 }
 
-// McpServer is one catalogue entry.
+// McpServer is one catalog entry.
 message McpServer {
   string id = 1;
   string name = 2;
@@ -173,7 +173,7 @@ message DenyServerResponse {
   McpServer server = 1;
 }
 
-// ListServersRequest pages the catalogue, optionally of some statuses.
+// ListServersRequest pages the catalog, optionally of some statuses.
 message ListServersRequest {
   int32 page_size = 1 [(buf.validate.field).int32 = {
     gte: 0
@@ -199,7 +199,7 @@ message GetServerResponse {
   McpServer server = 1;
 }
 
-// McpCatalogSettings is the catalogue's mode.
+// McpCatalogSettings is the catalog's mode.
 message McpCatalogSettings {
   McpCatalogMode mode = 1;
   // Empty until the mode was first changed.
@@ -215,7 +215,7 @@ message GetCatalogSettingsResponse {
   McpCatalogSettings settings = 1;
 }
 
-// McpConnectionRef is a connection a catalogue change would touch.
+// McpConnectionRef is a connection a catalog change would touch.
 message McpConnectionRef {
   string id = 1;
   string name = 2;

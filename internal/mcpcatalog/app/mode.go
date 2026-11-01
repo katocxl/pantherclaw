@@ -23,11 +23,11 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// Errors of the catalogue's mode and enforcement.
+// Errors of the catalog's mode and enforcement.
 var (
 	// ErrNotApproved refuses a connection to a server ENFORCE does not allow.
 	ErrNotApproved = pcerr.New(pcerr.FailedPrecondition, "SERVER_NOT_APPROVED",
-		"the catalogue is enforcing and no approved server matches this connection exactly")
+		"the catalog is enforcing and no approved server matches this connection exactly")
 	ErrPreviewStale = pcerr.New(pcerr.FailedPrecondition, "PREVIEW_STALE",
 		"what this would do has changed: preview it again and confirm the new digest")
 	ErrReason = pcerr.New(pcerr.InvalidArgument, "REASON_REQUIRED", "a reason of 1 to 500 characters is required")
@@ -53,6 +53,8 @@ func allowed(servers []dbq.PcMcpServer, c domain.Candidate) bool {
 			}
 		case domain.StatusApproved:
 			ok = ok || specOf(s).Matches(c)
+		case domain.StatusProposed:
+			// A proposal decides nothing.
 		}
 	}
 	return ok
@@ -62,7 +64,7 @@ func specOf(s dbq.PcMcpServer) domain.Spec {
 	return domain.Spec{Host: deref(s.UrlHost), PathPrefix: deref(s.UrlPathPrefix), ImageDigest: deref(s.ImageDigest), PackageRef: deref(s.PackageRef)}
 }
 
-// candidate is what a connection reaches, as the catalogue compares it.
+// candidate is what a connection reaches, as the catalog compares it.
 func candidate(t capp.CatalogTarget) domain.Candidate {
 	if t.Image != "" {
 		return domain.ImageCandidate(t.Image)
@@ -75,7 +77,7 @@ func decidedServers(ctx context.Context, q *dbq.Queries, org ids.OrgID) ([]dbq.P
 	return q.McpServersIn(ctx, org, []string{string(domain.StatusApproved), string(domain.StatusDenied), string(domain.StatusRevoked)})
 }
 
-// Gate is the catalogue's check on a connection's lifecycle (D223). It refuses
+// Gate is the catalog's check on a connection's lifecycle (D223). It refuses
 // a match of a REVOKED server in every mode, and under ENFORCE whatever is not
 // allowed. It holds the mode row for its transaction, so a connection change
 // takes turns with a switch to ENFORCE and with a revoke. It implements
@@ -237,7 +239,7 @@ type modePayload struct {
 // modeSubject is the subject of the mode's changes.
 var modeSubject = protect.SubjectID(protect.SurfaceCatalogMode, "mcp_catalog_mode")
 
-// RegisterProtect sets the Gate's applier for the catalogue's mode.
+// RegisterProtect sets the Gate's applier for the catalog's mode.
 func (s *Service) RegisterProtect(g *protect.Gate) {
 	s.Protect = g
 	if g != nil {

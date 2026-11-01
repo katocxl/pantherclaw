@@ -135,7 +135,7 @@ type InsertMcpServerParams struct {
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 //
-// The org's MCP server catalogue (G0 M24 D220-D226).
+// The org's MCP server catalog (G0 M24 D220-D226).
 func (q *Queries) InsertMcpServer(ctx context.Context, arg InsertMcpServerParams) (PcMcpServer, error) {
 	row := q.db.QueryRow(ctx, insertMcpServer,
 		arg.OrgID,

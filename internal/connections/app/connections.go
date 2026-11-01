@@ -125,7 +125,7 @@ type Service struct {
 	// D23); nil refuses it.
 	ents Entitlements
 	// catalog refuses to activate a connection to an unapproved MCP server
-	// (WithCatalog, G0 M24 D223); nil has no catalogue.
+	// (WithCatalog, G0 M24 D223); nil has no catalog.
 	catalog CatalogGate
 }
 

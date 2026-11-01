@@ -26,7 +26,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// McpServerStatus is where a server stands in the catalogue.
+// McpServerStatus is where a server stands in the catalog.
 type McpServerStatus int32
 
 const (
@@ -82,12 +82,12 @@ func (McpServerStatus) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_mcp_catalog_proto_rawDescGZIP(), []int{0}
 }
 
-// McpCatalogMode is what the catalogue does (D220).
+// McpCatalogMode is what the catalog does (D220).
 type McpCatalogMode int32
 
 const (
 	McpCatalogMode_MCP_CATALOG_MODE_UNSPECIFIED McpCatalogMode = 0
-	// The catalogue reports nothing and stops nothing.
+	// The catalog reports nothing and stops nothing.
 	McpCatalogMode_MCP_CATALOG_MODE_OFF McpCatalogMode = 1
 	// The default: unapproved servers are reported and keep running.
 	McpCatalogMode_MCP_CATALOG_MODE_WATCH McpCatalogMode = 2
@@ -191,7 +191,7 @@ func (McpServerTransport) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_mcp_catalog_proto_rawDescGZIP(), []int{2}
 }
 
-// McpServer is one catalogue entry.
+// McpServer is one catalog entry.
 type McpServer struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -663,7 +663,7 @@ func (x *DenyServerResponse) GetServer() *McpServer {
 	return nil
 }
 
-// ListServersRequest pages the catalogue, optionally of some statuses.
+// ListServersRequest pages the catalog, optionally of some statuses.
 type ListServersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -867,7 +867,7 @@ func (x *GetServerResponse) GetServer() *McpServer {
 	return nil
 }
 
-// McpCatalogSettings is the catalogue's mode.
+// McpCatalogSettings is the catalog's mode.
 type McpCatalogSettings struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Mode  McpCatalogMode         `protobuf:"varint,1,opt,name=mode,proto3,enum=pantherclaw.v1.McpCatalogMode" json:"mode,omitempty"`
@@ -1011,7 +1011,7 @@ func (x *GetCatalogSettingsResponse) GetSettings() *McpCatalogSettings {
 	return nil
 }
 
-// McpConnectionRef is a connection a catalogue change would touch.
+// McpConnectionRef is a connection a catalog change would touch.
 type McpConnectionRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`

@@ -98,7 +98,7 @@ const (
 	// SurfaceTicketFieldOwner gives a field of an org's ticket sync to the
 	// ticket system (G0 M20 D264); taking one back applies directly.
 	SurfaceTicketFieldOwner Surface = "ticket.field_owner"
-	// SurfaceCatalogMode takes the MCP server catalogue out of ENFORCE (G0
+	// SurfaceCatalogMode takes the MCP server catalog out of ENFORCE (G0
 	// M24 D223, HR-586): always held for a second person, whatever the
 	// TOOL_MEANING mode (AlwaysProtected).
 	SurfaceCatalogMode Surface = "mcp.catalog.mode"

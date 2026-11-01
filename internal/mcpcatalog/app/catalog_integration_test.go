@@ -266,12 +266,12 @@ func (e *env) mode(t *testing.T) domain.Mode {
 
 func is(err, want error) bool { return errors.Is(err, want) }
 
-// TestF872_TheCatalogueHoldsProposalsAndDecisions: a server moves from
+// TestF872_TheCatalogHoldsProposalsAndDecisions: a server moves from
 // proposed to approved or denied, an org sees only its own, the edition and
 // the permissions gate it, and the mode starts at WATCH.
 //
 // Covers: F872
-func TestF872_TheCatalogueHoldsProposalsAndDecisions(t *testing.T) {
+func TestF872_TheCatalogHoldsProposalsAndDecisions(t *testing.T) {
 	e := newEnv(t)
 	if m := e.mode(t); m != domain.ModeWatch {
 		t.Fatalf("default mode %s", m)
@@ -521,13 +521,13 @@ func (e *env) scanned(t *testing.T, observed string) (agent, discovery ids.UUID)
 	return agent, discovery
 }
 
-// TestF879_UnapprovedServersReachTheQueueOnlyOnceACatalogueExists: nothing
+// TestF879_UnapprovedServersReachTheQueueOnlyOnceACatalogExists: nothing
 // until a server is APPROVED, then every running connection and scanned server
 // that matches none, each only to a viewer who may read it under both
 // permissions.
 //
 // Covers: F879
-func TestF879_UnapprovedServersReachTheQueueOnlyOnceACatalogueExists(t *testing.T) {
+func TestF879_UnapprovedServersReachTheQueueOnlyOnceACatalogExists(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	src := &app.Source{Pool: e.pool, Editions: e.edition}
@@ -551,7 +551,7 @@ func TestF879_UnapprovedServersReachTheQueueOnlyOnceACatalogueExists(t *testing.
 	stray := e.mustCreate(t, "stray", "https://stray.example.test/mcp")
 	agent, stranger := e.scanned(t, `{"kind":"mcp_server","name":"stranger","url_host":"stray.example.test"}`)
 	if got := findings(all); len(got) != 0 {
-		t.Fatalf("an empty catalogue reported: %v", got)
+		t.Fatalf("an empty catalog reported: %v", got)
 	}
 
 	e.approved(t, "good", "mcp.example.test", "")

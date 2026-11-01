@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package app holds the MCP server catalogue's use cases (G0 M24 D220-D226;
+// Package app holds the MCP server catalog's use cases (G0 M24 D220-D226;
 // F872-F879; HR-585, HR-586, HR-587). Nothing here runs on the decision path:
-// the catalogue acts on a connection's lifecycle and through the response
+// the catalog acts on a connection's lifecycle and through the response
 // service, and the Authority decides as it always did (D223).
 package app
 
@@ -25,9 +25,9 @@ import (
 
 // Errors.
 var (
-	ErrEdition  = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "the MCP server catalogue needs the Team edition or above")
+	ErrEdition  = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "the MCP server catalog needs the Team edition or above")
 	ErrNotFound = pcerr.New(pcerr.NotFound, "MCP_SERVER_NOT_FOUND", "MCP server not found")
-	ErrNameUsed = pcerr.New(pcerr.AlreadyExists, "MCP_SERVER_NAME_TAKEN", "the catalogue already has a server of this name")
+	ErrNameUsed = pcerr.New(pcerr.AlreadyExists, "MCP_SERVER_NAME_TAKEN", "the catalog already has a server of this name")
 	ErrStatus   = pcerr.New(pcerr.FailedPrecondition, "MCP_SERVER_STATUS", "the server is not in a status that allows this")
 )
 
@@ -37,7 +37,7 @@ type Editions interface {
 	Current(ctx context.Context) (bdomain.Entitlements, error)
 }
 
-// Service serves the catalogue.
+// Service serves the catalog.
 type Service struct {
 	Pool     *db.Pool
 	Editions Editions
@@ -75,7 +75,7 @@ func (s *Service) entitled(ctx context.Context) error {
 	return nil
 }
 
-// use is caller and entitled together, what most of the catalogue needs.
+// use is caller and entitled together, what most of the catalog needs.
 func (s *Service) use(ctx context.Context, p td.Permission) (tenancy.Caller, error) {
 	c, err := s.caller(ctx, p)
 	if err != nil {
@@ -145,7 +145,7 @@ func (s *Service) Approve(ctx context.Context, id ids.UUID) (dbq.PcMcpServer, er
 }
 
 // Deny moves a PROPOSED server to DENIED (catalog.manage). An approved server
-// leaves the catalogue through a revoke, which stops what matches it.
+// leaves the catalog through a revoke, which stops what matches it.
 func (s *Service) Deny(ctx context.Context, id ids.UUID) (dbq.PcMcpServer, error) {
 	return s.decide(ctx, id, domain.StatusDenied, "mcp.catalog.server_denied", domain.StatusProposed)
 }
@@ -206,7 +206,7 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (dbq.PcMcpServer, error)
 	return out, err
 }
 
-// List pages the catalogue (catalog.read).
+// List pages the catalog (catalog.read).
 func (s *Service) List(ctx context.Context, size int32, token string, statuses []string) ([]dbq.PcMcpServer, string, error) {
 	c, err := s.caller(ctx, td.PermCatalogRead)
 	if err != nil {
@@ -232,7 +232,7 @@ func (s *Service) List(ctx context.Context, size int32, token string, statuses [
 	return out, next, err
 }
 
-// GetSettings reads the catalogue's mode (catalog.read).
+// GetSettings reads the catalog's mode (catalog.read).
 func (s *Service) GetSettings(ctx context.Context) (dbq.PcMcpCatalogSetting, error) {
 	c, err := s.use(ctx, td.PermCatalogRead)
 	if err != nil {

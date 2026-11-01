@@ -14,7 +14,7 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// TestHR586_LeavingEnforceIsAlwaysProtected: the catalogue mode surface
+// TestHR586_LeavingEnforceIsAlwaysProtected: the catalog mode surface
 // always waits for a second person, needs catalog.manage, and fails closed
 // without a Gate (T-253).
 //

@@ -24,7 +24,7 @@ import (
 )
 
 // `pclaw mcp catalog` (G0 M24 D225; F878) reads and changes the org's approved
-// MCP server catalogue. Changing the mode and revoking need a person with a
+// MCP server catalog. Changing the mode and revoking need a person with a
 // security-key step-up on a browser session, so here they answer
 // STEP_UP_REQUIRED with a hint; their previews work. `export` writes a static
 // file from the approved servers and opens no endpoint.
@@ -44,10 +44,10 @@ var (
 	}
 )
 
-// catalogCall is one call of a catalogue command.
+// catalogCall is one call of a catalog command.
 type catalogCall func(ctx context.Context, c pantherclawv1connect.McpCatalogServiceClient, args []string) (proto.Message, error)
 
-// catalogRPC is rpc for the catalogue's own client.
+// catalogRPC is rpc for the catalog's own client.
 func catalogRPC(usage string, nargs int, setup func(fs *flag.FlagSet) catalogCall) command {
 	return command{usage: usage, run: func(ctx context.Context, a *app, args []string) error {
 		if len(args) < nargs {
@@ -253,7 +253,7 @@ func exactURL(s string) bool {
 
 // managedAllow is the allow file of G0 M23 D113, and the servers it left out,
 // each with why. An entry has one matcher. A URL is one; the file's other is a
-// command, and the catalogue records no launch command, only a package or an
+// command, and the catalog records no launch command, only a package or an
 // image, so a server without a URL has nothing true to write (D268). An entry
 // with only a name would allow more than was approved (D225a), and one the
 // file's reader refuses would lose the whole file, so neither is written
@@ -272,7 +272,7 @@ func managedAllow(servers []*pb.McpServer) (any, map[string]string) {
 			left[e.Name] = "the allow file takes 1 to 64 letters, digits, hyphens or underscores as a name"
 			continue
 		case e.URL == "":
-			left[e.Name] = "the catalogue records no launch command for it, and the allow file needs a URL or a command"
+			left[e.Name] = "the catalog records no launch command for it, and the allow file needs a URL or a command"
 			continue
 		case !exactURL(e.URL):
 			left[e.Name] = "the allow file takes an exact URL, with no wildcard, credentials or query"
@@ -298,9 +298,9 @@ func clip(s string) string {
 
 // registryV0 is a static file in the shape of the official MCP registry's
 // server list, checked against its published server.json schema, 2025-12-11
-// (D225a, D268): a name is namespace/name, so the catalogue's names sit under
+// (D225a, D268): a name is namespace/name, so the catalog's names sit under
 // a namespace of their own; a description and title stop at 100 characters.
-// The catalogue does not version its entries, so each server carries one fixed
+// The catalog does not version its entries, so each server carries one fixed
 // version. What the schema cannot say truthfully stays out, listed in what it
 // returns second: a package of unknown registry type, and a bare digest, since
 // an oci identifier is a full image reference. A server left with nothing goes.

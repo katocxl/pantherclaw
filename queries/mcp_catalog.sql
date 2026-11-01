@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: BUSL-1.1
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 --
--- The org's MCP server catalogue (G0 M24 D220-D226).
+-- The org's MCP server catalog (G0 M24 D220-D226).
 
 -- name: InsertMcpServer :one
 INSERT INTO pc.mcp_servers (org_id, id, name, title, transport, package_ref, url_host, url_path_prefix, image_digest, notes)

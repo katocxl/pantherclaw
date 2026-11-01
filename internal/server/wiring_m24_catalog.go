@@ -18,7 +18,7 @@ import (
 )
 
 // registerM24Catalog serves McpCatalogService (G0 M24 D222), holds a change
-// of mode out of ENFORCE behind the Gate (HR-586) and connects the catalogue
+// of mode out of ENFORCE behind the Gate (HR-586) and connects the catalog
 // to the connection lifecycle (D223). The procedure permissions are in
 // procedures_m24_catalog.go.
 func registerM24Catalog(rs *connect.Server, d apiDeps) {

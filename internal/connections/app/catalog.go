@@ -13,7 +13,7 @@ import (
 )
 
 // QuarantineCatalogNotApproved is the reason code of a connection the MCP
-// server catalogue quarantined on the switch to ENFORCE (G0 M24 D223).
+// server catalog quarantined on the switch to ENFORCE (G0 M24 D223).
 const QuarantineCatalogNotApproved = "catalog_not_approved"
 
 // CatalogTarget is the MCP server a connection reaches: its URL, or a
@@ -22,19 +22,19 @@ type CatalogTarget struct {
 	BaseURL, Image string
 }
 
-// CatalogGate refuses to activate a connection to a server the catalogue
+// CatalogGate refuses to activate a connection to a server the catalog
 // does not allow (G0 M24 D223). It runs in the change's transaction and on
 // the connection's lifecycle only, never on the decision path. An error
 // refuses the change.
 type CatalogGate interface {
-	// Hold keeps the catalogue's mode from changing until tx ends. A change
+	// Hold keeps the catalog's mode from changing until tx ends. A change
 	// calls it before it locks the connection, the order the switch to ENFORCE
 	// takes them in (D262).
 	Hold(ctx context.Context, tx db.TenantTx) error
 	CheckActivation(ctx context.Context, tx db.TenantTx, t CatalogTarget) error
 }
 
-// WithCatalog sets the catalogue's check; nil has none.
+// WithCatalog sets the catalog's check; nil has none.
 func (s *Service) WithCatalog(g CatalogGate) *Service {
 	s.catalog = g
 	return s
@@ -88,7 +88,7 @@ func currentTarget(ctx context.Context, q *dbq.Queries, conn dbq.PcConnection) (
 // is. It reports whether it quarantined.
 //
 // Precondition: it checks no permission itself. Its one caller is the
-// catalogue's switch to ENFORCE, which has verified, in this same tx, that
+// catalog's switch to ENFORCE, which has verified, in this same tx, that
 // the caller is a person holding catalog.manage with a fresh security-key
 // step-up. Exported only for that cross-package caller.
 func (s *Service) QuarantineForCatalogTx(ctx context.Context, tx db.TenantTx, caller tenancy.Caller, id ids.UUID) (bool, error) {

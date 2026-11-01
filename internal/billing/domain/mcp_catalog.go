@@ -4,6 +4,6 @@
 package domain
 
 // MCPCatalog reports whether the org may keep an approved MCP server
-// catalogue (G0 M24 D222): Team and above. Without it the catalogue reads as
+// catalog (G0 M24 D222): Team and above. Without it the catalog reads as
 // EDITION_REQUIRED; a revoke stays available, because it only stops things.
 func (e Entitlements) MCPCatalog() bool { return e.Edition.Paid() }

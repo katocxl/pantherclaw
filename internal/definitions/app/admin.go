@@ -103,7 +103,7 @@ type Admin struct {
 	Catalog CatalogCheck
 }
 
-// CatalogCheck is the MCP catalogue's say on activating a package's version.
+// CatalogCheck is the MCP catalog's say on activating a package's version.
 type CatalogCheck interface {
 	CheckPackageActivation(ctx context.Context, tx db.TenantTx, name string) error
 }

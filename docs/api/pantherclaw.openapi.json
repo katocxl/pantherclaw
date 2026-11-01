@@ -18105,7 +18105,7 @@
           "pantherclaw.v1.McpCatalogService"
         ],
         "summary": "ListServers",
-        "description": "ListServers lists the catalogue.\n permission: catalog.read",
+        "description": "ListServers lists the catalog.\n permission: catalog.read",
         "operationId": "pantherclaw.v1.McpCatalogService.ListServers",
         "parameters": [
           {
@@ -18213,7 +18213,7 @@
           "pantherclaw.v1.McpCatalogService"
         ],
         "summary": "GetCatalogSettings",
-        "description": "GetCatalogSettings reads the catalogue's mode.\n permission: catalog.read",
+        "description": "GetCatalogSettings reads the catalog's mode.\n permission: catalog.read",
         "operationId": "pantherclaw.v1.McpCatalogService.GetCatalogSettings",
         "parameters": [
           {
@@ -68953,7 +68953,7 @@
           "MCP_CATALOG_MODE_WATCH",
           "MCP_CATALOG_MODE_ENFORCE"
         ],
-        "description": "McpCatalogMode is what the catalogue does (D220)."
+        "description": "McpCatalogMode is what the catalog does (D220)."
       },
       "pantherclaw.v1.McpServerStatus": {
         "type": "string",
@@ -68965,7 +68965,7 @@
           "MCP_SERVER_STATUS_DENIED",
           "MCP_SERVER_STATUS_REVOKED"
         ],
-        "description": "McpServerStatus is where a server stands in the catalogue."
+        "description": "McpServerStatus is where a server stands in the catalog."
       },
       "pantherclaw.v1.McpServerTransport": {
         "type": "string",
@@ -69114,7 +69114,7 @@
         },
         "title": "ListServersRequest",
         "additionalProperties": false,
-        "description": "ListServersRequest pages the catalogue, optionally of some statuses."
+        "description": "ListServersRequest pages the catalog, optionally of some statuses."
       },
       "pantherclaw.v1.ListServersResponse": {
         "type": "object",
@@ -69154,7 +69154,7 @@
         },
         "title": "McpCatalogSettings",
         "additionalProperties": false,
-        "description": "McpCatalogSettings is the catalogue's mode."
+        "description": "McpCatalogSettings is the catalog's mode."
       },
       "pantherclaw.v1.McpConnectionRef": {
         "type": "object",
@@ -69182,7 +69182,7 @@
         },
         "title": "McpConnectionRef",
         "additionalProperties": false,
-        "description": "McpConnectionRef is a connection a catalogue change would touch."
+        "description": "McpConnectionRef is a connection a catalog change would touch."
       },
       "pantherclaw.v1.McpLocalServerRef": {
         "type": "object",
@@ -69291,7 +69291,7 @@
         },
         "title": "McpServer",
         "additionalProperties": false,
-        "description": "McpServer is one catalogue entry."
+        "description": "McpServer is one catalog entry."
       },
       "pantherclaw.v1.PreviewCatalogModeRequest": {
         "type": "object",
@@ -91757,7 +91757,7 @@
     },
     {
       "name": "pantherclaw.v1.McpCatalogService",
-      "description": "McpCatalogService is the org's approved MCP server catalogue (G0 M24\n D220-D226; F872-F879; HR-585, HR-586, HR-587; Team edition).\n\n A server names what it matches, and matching is exact: a URL host with an\n optional path prefix, an image digest or a package reference, never a\n similar name. The catalogue starts in WATCH, which reports unapproved\n servers and stops nothing. ENFORCE is opt-in: it refuses to activate a\n connection to an unapproved server, and switching to it quarantines the\n connections that match no approved server, after a preview. Leaving ENFORCE\n always waits for a second person. Being in the catalogue never adds to what\n an agent may do: the Authority decides as it always did.\n\n Revoking a server stops every connection that matches it inside one org.\n A person does it, against the digest of a current preview, and an\n independent second person lifts it. A local server that only a scan saw is\n not stoppable from here: the preview says so and gives a deny-list hint."
+      "description": "McpCatalogService is the org's approved MCP server catalog (G0 M24\n D220-D226; F872-F879; HR-585, HR-586, HR-587; Team edition).\n\n A server names what it matches, and matching is exact: a URL host with an\n optional path prefix, an image digest or a package reference, never a\n similar name. The catalog starts in WATCH, which reports unapproved\n servers and stops nothing. ENFORCE is opt-in: it refuses to activate a\n connection to an unapproved server, and switching to it quarantines the\n connections that match no approved server, after a preview. Leaving ENFORCE\n always waits for a second person. Being in the catalog never adds to what\n an agent may do: the Authority decides as it always did.\n\n Revoking a server stops every connection that matches it inside one org.\n A person does it, against the digest of a current preview, and an\n independent second person lifts it. A local server that only a scan saw is\n not stoppable from here: the preview says so and gives a deny-list hint."
     },
     {
       "name": "pantherclaw.v1.SearchService",

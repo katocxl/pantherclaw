@@ -64,7 +64,7 @@ type Containment struct {
 	Control   string   `json:"control"`
 	Operation string   `json:"operation,omitempty"`
 	Source    string   `json:"source"`
-	// Server is the catalogue server a revoke acted for: its controls sit on
+	// Server is the MCP server a revoke acted for: its controls sit on
 	// connections under one action scoped to that server (G0 M24 D264).
 	Server string `json:"server,omitempty"`
 }
@@ -219,7 +219,9 @@ func Emit(ctx context.Context, log *slog.Logger, e Event) {
 		attrs = append(attrs, slog.String("revocation_reason", e.RevocationReason))
 	}
 	if s := e.McpServer; s != nil {
-		attrs = append(attrs, slog.Group("mcp_server", slog.String("name", s.Name), slog.String("transport", s.Transport), slog.String("package_ref", s.PackageRef), slog.String("url_host", s.URLHost), slog.String("url_path_prefix", s.URLPathPrefix), slog.String("image_digest", s.ImageDigest)))
+		// A path can name a tenant, so the prefix stays out of the log line; the
+		// record keeps it for replay (D290).
+		attrs = append(attrs, slog.Group("mcp_server", slog.String("name", s.Name), slog.String("transport", s.Transport), slog.String("package_ref", s.PackageRef), slog.String("url_host", s.URLHost), slog.String("image_digest", s.ImageDigest)))
 	}
 	if c := e.Containment; c != nil {
 		attrs = append(attrs, slog.Group("containment", slog.String("action_id", c.ActionID.String()), slog.String("control_id", c.ControlID.String()), slog.String("scope_type", c.ScopeType), slog.String("scope_id", c.ScopeID), slog.String("control", c.Control), slog.String("operation", c.Operation), slog.String("source", c.Source), slog.String("server", c.Server)))

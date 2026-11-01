@@ -29,7 +29,7 @@ const (
 // review (F402); retired versions are kept for evidence but never used again
 // (F398). Nothing becomes ACTIVE without passing REVIEWED, so a
 // model-proposed mapping stays a draft until it is reviewed (F404). REVIEWED
-// to QUARANTINED is the revoke of a catalogue server only (G0 M24 D267): the
+// to QUARANTINED is the revoke of a catalog server only (G0 M24 D267): the
 // Importer refuses it, so no person moves a version there by hand.
 var Lifecycle = statemachine.New("definition", map[State][]State{
 	StateUnclassified: {StateDraft, StateRetired},

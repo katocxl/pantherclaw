@@ -38,6 +38,16 @@ func TestHR383_ARevokeCarriesItsSpecAndNothingElse(t *testing.T) {
 	if err != nil || strings.Contains(string(line), "never log") {
 		t.Fatalf("line %s %v", line, err)
 	}
+	// The path prefix is for replay: the record keeps it, the log line does
+	// not (D290).
+	if !strings.Contains(string(line), `"url_path_prefix":"/v1"`) {
+		t.Fatalf("the record lost its prefix: %s", line)
+	}
+	var output bytes.Buffer
+	Emit(context.Background(), pclog.New(&output, pclog.Options{}), e)
+	if logged := output.String(); strings.Contains(logged, "url_path_prefix") || strings.Contains(logged, "/v1") || !strings.Contains(logged, "mcp.example.test") {
+		t.Fatalf("log line: %s", logged)
+	}
 	if e, ok, err := FromEntry(entry(map[string]string{"name": "payments"}), 1); err != nil || !ok || e.McpServer != nil {
 		t.Fatalf("no matcher: %+v %v %v", e, ok, err)
 	}

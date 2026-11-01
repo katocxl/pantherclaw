@@ -16,12 +16,12 @@ import (
 	rdomain "github.com/katocxl/pantherclaw/internal/response/domain"
 )
 
-// ServerRevoke is a revoke of a catalogue server, expanded to the connections
+// ServerRevoke is a revoke of a catalog server, expanded to the connections
 // that match it when it runs (G0 M24 D224).
 type ServerRevoke struct {
 	Server      ids.UUID
 	Connections []ids.UUID
-	// Person is who confirmed it: the catalogue checked a person with a fresh
+	// Person is who confirmed it: the catalog checked a person with a fresh
 	// step-up and PreviewDigest in this transaction.
 	Person        ids.UUID
 	Reason        string
@@ -117,7 +117,7 @@ func union(a, b []ids.UUID) []ids.UUID {
 	return a
 }
 
-// serverRevocation reports whether an action is a catalogue server's revoke.
+// serverRevocation reports whether an action is a catalog server's revoke.
 // Its control on an unhealthy connection, whatever the cause, only ends a
 // block: the connection stays as it is, the server stays REVOKED and activating
 // the connection is refused, so nothing starts running on the lift and no plan

@@ -16,12 +16,12 @@ import (
 )
 
 // KindUnapprovedServer is the posture queue's finding for a running server
-// the catalogue has not approved (D226, F879).
+// the catalog has not approved (D226, F879).
 const KindUnapprovedServer = "UNAPPROVED_SERVER"
 
 // Source reports unapproved servers to the ranked posture queue (D226). It
-// reports nothing until the catalogue holds an APPROVED server: an empty
-// catalogue is not yet a statement about anything. A connection finding has
+// reports nothing until the catalog holds an APPROVED server: an empty
+// catalog is not yet a statement about anything. A connection finding has
 // no agent, so it needs org scope; a scanned server's finding belongs to its
 // discovered agent. Both need catalog.read as well as posture.read. A title
 // is fixed text: a name, which a scan reports, stays in Detail (D260).
@@ -106,7 +106,7 @@ func (s *Source) Findings(ctx context.Context, v ports.Viewer, _ pvdomain.Filter
 		return nil, false, err
 	}
 	if !reach.All || !reach.Org {
-		// Part of the catalogue's answer is out of reach, so what is here is
+		// Part of the catalog's answer is out of reach, so what is here is
 		// not all of it: findings in reach, and RESTRICTED (D255, D277).
 		return out, truncated, td.ErrPermissionDenied(td.PermCatalogRead)
 	}
@@ -132,9 +132,9 @@ func connectionFinding(c dbq.McpConnectionsRow) pvdomain.Finding {
 	id := c.ID
 	return pvdomain.Finding{
 		Source: pvdomain.SourceCatalog, SourceID: "connection:" + c.ID.String(), Kind: KindUnapprovedServer,
-		ConnectionID: &id, Title: "An MCP connection reaches a server the catalogue has not approved",
+		ConnectionID: &id, Title: "An MCP connection reaches a server the catalog has not approved",
 		Detail: map[string]string{"name": c.Name}, State: "OPEN", Since: c.CreatedAt,
-		Fix: pvdomain.Fix{Kind: pvdomain.FixReviewServer, TargetID: "connection:" + c.ID.String(), Label: "Review this server for the catalogue"},
+		Fix: pvdomain.Fix{Kind: pvdomain.FixReviewServer, TargetID: "connection:" + c.ID.String(), Label: "Review this server for the catalog"},
 	}
 }
 
@@ -142,7 +142,7 @@ func scanFinding(l dbq.McpScanServersRow) pvdomain.Finding {
 	agent := l.AgentID
 	return pvdomain.Finding{
 		Source: pvdomain.SourceCatalog, SourceID: "discovery:" + l.ID.String(), Kind: KindUnapprovedServer, AgentID: &agent,
-		Title: "A local MCP server is not in the catalogue", Detail: map[string]string{"name": l.Name}, State: "OPEN", Since: l.FirstSeenAt,
-		Fix: pvdomain.Fix{Kind: pvdomain.FixReviewServer, TargetID: "discovery:" + l.ID.String(), Label: "Review this server for the catalogue"},
+		Title: "A local MCP server is not in the catalog", Detail: map[string]string{"name": l.Name}, State: "OPEN", Since: l.FirstSeenAt,
+		Fix: pvdomain.Fix{Kind: pvdomain.FixReviewServer, TargetID: "discovery:" + l.ID.String(), Label: "Review this server for the catalog"},
 	}
 }
