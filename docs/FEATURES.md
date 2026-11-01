@@ -806,8 +806,30 @@ Posture is ranked findings with fixes and no single measure (F797). Clean means 
 
 ### M26 rows: Enterprise identity
 
+PantherClaw is the per-task layer behind the customer's IdP. An assertion uses or narrows an existing grant and never creates one (HR-146). All of this is tested on simulators, and real tenant checks stay pending (F801) ([G0 M26](g0/M26.md)).
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
+| F910 | Assertion port | `AssertionVerifier` in `internal/idaccess`, with an `idjag` adapter that names the draft revision, so the draft can change behind one adapter. | Next | Team | M26 | new |
+| F911 | Cross App Access entry | ID-JAG assertions enter through jwt-bearer. `iss+sub` maps to a user, `client_id` to an enrolled agent by a pinned binding, and the run records principal source `id_jag`. | Next | Team | M26 | new |
+| F912 | Existing-grant rule | The assertion's scope intersects the grant. With no existing grant it is refused with `NO_GRANT`, and it never creates or widens one. | Next | Team | M26 | new |
+| F913 | Organization assertion issuers | `pc.org_assertion_issuers` entries are two-person protected changes, with HTTPS discovery through the egress guard and a pinned audience. | Next | Team | M26 | new |
+| F914 | MCP client route | An opt-in gateway face for MCP 2026-07-28 clients, off by default per organization: RFC 9728 metadata, issuer check, RFC 8707 audience, CIMD. A client URL maps to one enrolled agent. | Next | Team | M26 | new |
+| F915 | MCP client tokens | `pap-mcp+jwt`, valid 5 minutes, for one gateway server. The Authority re-verifies it, and every call gets a full policy check. | Next | Team | M26 | new |
+| F916 | Bearer proof in policy | Policy sees `workload.proof == "bearer"` and can refuse it. It never satisfies an attestation requirement, and PAP/1 routes are unchanged. | Next | Team | M26 | F801 |
+| F917 | Simulated IdP | `internal/sim/okta` with the SIMULATED mark. A revoked grant stops the next call. The real tenant check stays pending. | Next | Team | M26 | F801 |
+| F918 | Provisioning tables and ports | `pc.groups`, `pc.group_members`, `pc.group_role_mappings`, `pc.scim_tokens` (hash only) and `pc.saml_connections` in public core, with ports in `internal/provisioning/ports`. | Next | Enterprise | M26 | new |
+| F919 | SCIM 2.0 | Provisioning at `/v1/ext/scim/v2/*`, in the private package. `SCIM()` is the gate. | Next | Enterprise | M26 | new |
+| F920 | SAML sign-in | SP-initiated SAML at `/app/ext/saml/*`, with signed assertions, audience and a replay cache, in the private package. `SAML()` is the gate. | Next | Enterprise | M26 | new |
+| F921 | Deprovisioning | Ends sessions and API keys. The last admin is refused, as an owned failure. | Next | Enterprise | M26 | new |
+| F922 | Group role mappings | A group maps only to non-admin roles, and a mapping change is a protected change. Org Admin and Security Admin bindings stay in PantherClaw. | Next | Enterprise | M26 | new |
+| F923 | Enterprise server build | `cmd/pantherclaw-server-ee` in the private repository, with no billing or console. | Next | Enterprise | M26 | new |
+| F924 | Copilot Studio source | A pure parser for source `copilot_studio`, metadata only, tested on fixtures labelled SYNTHETIC. | Next | Business | M26 | new |
+| F925 | ChatGPT Enterprise source | A pure parser for source `chatgpt_enterprise`, metadata only, tested on fixtures labelled SYNTHETIC. | Next | Business | M26 | new |
+| F926 | `pclaw discover import` | Imports a file for a named source. | Next | Business | M26 | new |
+| F927 | SaaS collector | Collects through a gateway lease, as `StartOrgScan` does, tested on simulators under `internal/sim`. | Next | Business | M26 | new |
+| F928 | External agents | Imported agents land DISCOVERED and OBSERVE_ONLY, with an `external` mark and no key path. Claiming sets an owner only. | Next | Business | M26 | new |
+| F929 | Not scanned, never none found | A source not read reports "not scanned", never "none found". Imported agents join the queue as a source. | Next | Business | M26 | F801 |
 
 ### M27 rows: Agent Detection & Response
 

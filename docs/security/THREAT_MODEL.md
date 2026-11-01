@@ -319,6 +319,14 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 
 | ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
 |---|---|---|---|---|---|---|
+| T-266 | A forged or wrong-issuer assertion: an attacker signs for a user or agent, one admin adds an issuer alone, or a run on the simulated IdP reads as a real tenant check | A7, A4, A9 | TB8 | Actions attributed to the wrong person or agent | HR-621, HR-622, HR-627; a pinned binding, a pinned audience, two people | M26 |
+| T-267 | An assertion creates or widens authority: an IdP-side grant turns into PantherClaw access with no PantherClaw grant behind it | A7, A4 | TB8 | Access the task grant never allowed | HR-620; use or narrow only, otherwise `NO_GRANT` | M26 |
+| T-268 | An MCP client token is reused: stolen and replayed at another server, or used after its grant is revoked | A4, A1 | TB1 | Actions beyond the client's scope or after a revoke | HR-624, HR-626; 5 minutes, one server, a full policy check on every call | M26 |
+| T-269 | A bearer client passes as an attested workload, or a client URL it does not own gets it onto the route | A1, A4 | TB1 | Weaker proof treated as strong; another agent's access | HR-623, HR-625; off by default, an allow-listed client URL, a proof attribute policy can refuse | M26 |
+| T-270 | Provisioning reaches admin or strands an organization: a stolen SCIM token, a group mapped to an admin role, a quiet mapping change, or a deprovision that removes the last admin | A7, A4 | TB8 | Privilege escalation or lockout | HR-629, HR-630, HR-631, HR-632; hash only, non-admin roles, a protected change, the last admin refused | M26 |
+| T-271 | A forged, replayed or wrong-audience SAML assertion signs someone in, or a route sits outside the extension prefixes | A9, A7 | TB8 | Sign-in as another person | HR-633, HR-634; SP-initiated, signed assertions, audience, replay cache | M26 |
+| T-272 | A SaaS importer over-collects: conversations or their content reach PantherClaw from a file or a collector | A7, A5 | TB8 | Disclosure of people's work; surveillance | HR-635; metadata only | M26 |
+| T-273 | SaaS discovery misleads: a source not read looks empty, a synthetic fixture passes as a real capture, or an imported agent gains authority or a key path | A5, A7 | TB8 | False assurance, or authority for an unmediated agent | HR-636, HR-637, HR-638; "not scanned", the SYNTHETIC label, OBSERVE_ONLY with no key path | M26 |
 
 **G0 M27: analytics, content signals, playbooks and the read-only MCP server**
 

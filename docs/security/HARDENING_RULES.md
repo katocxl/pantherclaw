@@ -663,6 +663,24 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
+| HR-620 | An assertion uses or narrows an existing grant and never creates or widens one. Its scope intersects the grant. With no existing grant it is refused with `NO_GRANT`. HR-146 stands. | T-267 | M26 |
+| HR-621 | An assertion's `iss+sub` maps to a user in `pc.users`, and its `client_id` maps to an enrolled agent by a pinned binding (HR-140). | T-266 | M26 |
+| HR-622 | An assertion issuer entry is a two-person protected change (HR-481..484), with HTTPS discovery through the egress guard and a pinned audience. | T-266 | M26 |
+| HR-623 | The MCP client route is off by default per organization. A client URL is allow-listed by the organization to one enrolled agent. | T-269 | M26 |
+| HR-624 | A `pap-mcp+jwt` lasts 5 minutes and its `aud` is one gateway server. The gateway forwards it and the Authority re-verifies it (HR-021). Every call gets a full policy check. | T-268 | M26 |
+| HR-625 | A call on the MCP client route carries `workload.proof == "bearer"`, which policy can refuse and which never satisfies an attestation requirement. PAP/1 routes are unchanged. | T-269 | M26 |
+| HR-626 | A revoked grant stops the next call. | T-268 | M26 |
+| HR-627 | The test IdP carries the SIMULATED mark, and a real tenant check stays pending until one has run (F801). | T-266 | M26 |
+| HR-629 | SCIM tokens are stored as a hash only. | T-270 | M26 |
+| HR-630 | A group maps only to non-admin roles. Org Admin and Security Admin bindings stay in PantherClaw. | T-270 | M26 |
+| HR-631 | A group mapping change is a protected change. | T-270 | M26 |
+| HR-632 | Deprovision ends sessions and API keys and respects HR-484: the last admin is refused, as an owned failure. | T-270 | M26 |
+| HR-633 | SAML is SP-initiated and accepts only signed assertions with the right audience, through a replay cache. | T-271 | M26 |
+| HR-634 | SCIM and SAML routes sit only at `/v1/ext/scim/v2/*` and `/app/ext/saml/*` (HR-341 unchanged). | T-271 | M26 |
+| HR-635 | SaaS discovery takes metadata only, never conversations. | T-272 | M26 |
+| HR-636 | SaaS fixtures are labelled SYNTHETIC until real captures exist. | T-273 | M26 |
+| HR-637 | A source not read reports "not scanned", never "none found". | T-273 | M26 |
+| HR-638 | An imported agent lands DISCOVERED and OBSERVE_ONLY, with an `external` mark and no key path. Claiming it sets an owner only. | T-273 | M26 |
 
 ## Agent Detection & Response: analytics, content signals, playbooks and the read-only MCP server (G0 M27)
 

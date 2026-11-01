@@ -794,6 +794,13 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 ### M25 — Prove it to the auditor
 
 ### M26 — Enterprise identity
+**HR:** HR-620..627, HR-629..638 · **F:** F910–F929 · **ADR:** 0048 · **G0:** [g0/M26.md](g0/M26.md).
+- **IdP access** (Team on `IdpAccess()`, [ADR-0048](adr/0048-idp-assertions-and-mcp-client-authorization.md), founder decision H8): Okta Cross App Access assertions behind an adapter. They use or narrow an existing grant and never create one. Issuer entries need two people.
+- **MCP client route:** an opt-in gateway face for MCP 2026-07-28 clients, with 5-minute tokens bound to one server, a full policy check on every call, and a weaker proof that policy can refuse.
+- **SCIM and SAML** (Enterprise, founder decision H7): tables and ports in public core, code in a clean private package with `cmd/pantherclaw-server-ee`. A group maps only to non-admin roles.
+- **SaaS discovery** (Business): Copilot Studio and ChatGPT Enterprise, metadata only, on synthetic fixtures. It says "not scanned", never "none found", and agents stay OBSERVE_ONLY.
+- **Console** (private stream): identity settings.
+- Migrations `00290`–`00294` (`00295`–`00299` spare).
 
 ### M27 — Agent Detection & Response
 
