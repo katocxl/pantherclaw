@@ -254,7 +254,10 @@ type Agent struct {
 	RetireTime *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=retire_time,json=retireTime,proto3" json:"retire_time,omitempty"`
 	// A range agent (G0 M12, HR-220): marked at creation, never changed; all
 	// its runs are simulated and it may use only simulated connections.
-	RangeAgent    bool `protobuf:"varint,16,opt,name=range_agent,json=rangeAgent,proto3" json:"range_agent,omitempty"`
+	RangeAgent bool `protobuf:"varint,16,opt,name=range_agent,json=rangeAgent,proto3" json:"range_agent,omitempty"`
+	// What continuous discovery saw of it (G0 M22 D6); unset for an agent no
+	// scan found.
+	ScanState     *AgentScanState `protobuf:"bytes,17,opt,name=scan_state,json=scanState,proto3" json:"scan_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -401,6 +404,78 @@ func (x *Agent) GetRangeAgent() bool {
 	return false
 }
 
+func (x *Agent) GetScanState() *AgentScanState {
+	if x != nil {
+		return x.ScanState
+	}
+	return nil
+}
+
+// AgentScanState sums up the scan findings of one agent that were not
+// dismissed, across scan sources.
+type AgentScanState struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Complete scans in a row that did not see it: the fewest of any finding.
+	MissedScans int32 `protobuf:"varint,1,opt,name=missed_scans,json=missedScans,proto3" json:"missed_scans,omitempty"`
+	// When a scan last saw it.
+	LastSeenTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
+	// Every finding reached the vanish threshold and people were told.
+	Vanished      bool `protobuf:"varint,3,opt,name=vanished,proto3" json:"vanished,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentScanState) Reset() {
+	*x = AgentScanState{}
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentScanState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentScanState) ProtoMessage() {}
+
+func (x *AgentScanState) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentScanState.ProtoReflect.Descriptor instead.
+func (*AgentScanState) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AgentScanState) GetMissedScans() int32 {
+	if x != nil {
+		return x.MissedScans
+	}
+	return 0
+}
+
+func (x *AgentScanState) GetLastSeenTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeenTime
+	}
+	return nil
+}
+
+func (x *AgentScanState) GetVanished() bool {
+	if x != nil {
+		return x.Vanished
+	}
+	return false
+}
+
 // Discovery is what a gateway or scan observed about a discovered agent.
 type Discovery struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -427,7 +502,7 @@ type Discovery struct {
 
 func (x *Discovery) Reset() {
 	*x = Discovery{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -439,7 +514,7 @@ func (x *Discovery) String() string {
 func (*Discovery) ProtoMessage() {}
 
 func (x *Discovery) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -452,7 +527,7 @@ func (x *Discovery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Discovery.ProtoReflect.Descriptor instead.
 func (*Discovery) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{1}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Discovery) GetId() string {
@@ -545,7 +620,7 @@ type AgentSummary struct {
 
 func (x *AgentSummary) Reset() {
 	*x = AgentSummary{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -557,7 +632,7 @@ func (x *AgentSummary) String() string {
 func (*AgentSummary) ProtoMessage() {}
 
 func (x *AgentSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -570,7 +645,7 @@ func (x *AgentSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentSummary.ProtoReflect.Descriptor instead.
 func (*AgentSummary) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AgentSummary) GetAgent() *Agent {
@@ -673,7 +748,7 @@ type AgentChange struct {
 
 func (x *AgentChange) Reset() {
 	*x = AgentChange{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -685,7 +760,7 @@ func (x *AgentChange) String() string {
 func (*AgentChange) ProtoMessage() {}
 
 func (x *AgentChange) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -698,7 +773,7 @@ func (x *AgentChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentChange.ProtoReflect.Descriptor instead.
 func (*AgentChange) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *AgentChange) GetId() string {
@@ -777,7 +852,7 @@ type CreateAgentRequest struct {
 
 func (x *CreateAgentRequest) Reset() {
 	*x = CreateAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -789,7 +864,7 @@ func (x *CreateAgentRequest) String() string {
 func (*CreateAgentRequest) ProtoMessage() {}
 
 func (x *CreateAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -802,7 +877,7 @@ func (x *CreateAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAgentRequest.ProtoReflect.Descriptor instead.
 func (*CreateAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateAgentRequest) GetName() string {
@@ -872,7 +947,7 @@ type CreateAgentResponse struct {
 
 func (x *CreateAgentResponse) Reset() {
 	*x = CreateAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -884,7 +959,7 @@ func (x *CreateAgentResponse) String() string {
 func (*CreateAgentResponse) ProtoMessage() {}
 
 func (x *CreateAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -897,7 +972,7 @@ func (x *CreateAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAgentResponse.ProtoReflect.Descriptor instead.
 func (*CreateAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateAgentResponse) GetAgent() *Agent {
@@ -918,7 +993,7 @@ type GetAgentRequest struct {
 
 func (x *GetAgentRequest) Reset() {
 	*x = GetAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -930,7 +1005,7 @@ func (x *GetAgentRequest) String() string {
 func (*GetAgentRequest) ProtoMessage() {}
 
 func (x *GetAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -943,7 +1018,7 @@ func (x *GetAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentRequest.ProtoReflect.Descriptor instead.
 func (*GetAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetAgentRequest) GetId() string {
@@ -964,7 +1039,7 @@ type GetAgentResponse struct {
 
 func (x *GetAgentResponse) Reset() {
 	*x = GetAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -976,7 +1051,7 @@ func (x *GetAgentResponse) String() string {
 func (*GetAgentResponse) ProtoMessage() {}
 
 func (x *GetAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -989,7 +1064,7 @@ func (x *GetAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentResponse.ProtoReflect.Descriptor instead.
 func (*GetAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetAgentResponse) GetSummary() *AgentSummary {
@@ -1019,7 +1094,7 @@ type ListAgentsRequest struct {
 
 func (x *ListAgentsRequest) Reset() {
 	*x = ListAgentsRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1031,7 +1106,7 @@ func (x *ListAgentsRequest) String() string {
 func (*ListAgentsRequest) ProtoMessage() {}
 
 func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1044,7 +1119,7 @@ func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListAgentsRequest) GetPageSize() int32 {
@@ -1103,7 +1178,7 @@ type ListAgentsResponse struct {
 
 func (x *ListAgentsResponse) Reset() {
 	*x = ListAgentsResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1115,7 +1190,7 @@ func (x *ListAgentsResponse) String() string {
 func (*ListAgentsResponse) ProtoMessage() {}
 
 func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1128,7 +1203,7 @@ func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListAgentsResponse) GetAgents() []*Agent {
@@ -1181,7 +1256,7 @@ type UpdateAgentRequest struct {
 
 func (x *UpdateAgentRequest) Reset() {
 	*x = UpdateAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1193,7 +1268,7 @@ func (x *UpdateAgentRequest) String() string {
 func (*UpdateAgentRequest) ProtoMessage() {}
 
 func (x *UpdateAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1206,7 +1281,7 @@ func (x *UpdateAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAgentRequest.ProtoReflect.Descriptor instead.
 func (*UpdateAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UpdateAgentRequest) GetId() string {
@@ -1241,7 +1316,7 @@ type UpdateAgentResponse struct {
 
 func (x *UpdateAgentResponse) Reset() {
 	*x = UpdateAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1253,7 +1328,7 @@ func (x *UpdateAgentResponse) String() string {
 func (*UpdateAgentResponse) ProtoMessage() {}
 
 func (x *UpdateAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1266,7 +1341,7 @@ func (x *UpdateAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAgentResponse.ProtoReflect.Descriptor instead.
 func (*UpdateAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *UpdateAgentResponse) GetAgent() *Agent {
@@ -1293,7 +1368,7 @@ type TransferOwnershipRequest struct {
 
 func (x *TransferOwnershipRequest) Reset() {
 	*x = TransferOwnershipRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1305,7 +1380,7 @@ func (x *TransferOwnershipRequest) String() string {
 func (*TransferOwnershipRequest) ProtoMessage() {}
 
 func (x *TransferOwnershipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1318,7 +1393,7 @@ func (x *TransferOwnershipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransferOwnershipRequest.ProtoReflect.Descriptor instead.
 func (*TransferOwnershipRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *TransferOwnershipRequest) GetId() string {
@@ -1360,7 +1435,7 @@ type TransferOwnershipResponse struct {
 
 func (x *TransferOwnershipResponse) Reset() {
 	*x = TransferOwnershipResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1372,7 +1447,7 @@ func (x *TransferOwnershipResponse) String() string {
 func (*TransferOwnershipResponse) ProtoMessage() {}
 
 func (x *TransferOwnershipResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1385,7 +1460,7 @@ func (x *TransferOwnershipResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransferOwnershipResponse.ProtoReflect.Descriptor instead.
 func (*TransferOwnershipResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TransferOwnershipResponse) GetAgent() *Agent {
@@ -1415,7 +1490,7 @@ type ClaimAgentRequest struct {
 
 func (x *ClaimAgentRequest) Reset() {
 	*x = ClaimAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1427,7 +1502,7 @@ func (x *ClaimAgentRequest) String() string {
 func (*ClaimAgentRequest) ProtoMessage() {}
 
 func (x *ClaimAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1440,7 +1515,7 @@ func (x *ClaimAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimAgentRequest.ProtoReflect.Descriptor instead.
 func (*ClaimAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ClaimAgentRequest) GetId() string {
@@ -1524,7 +1599,7 @@ type ClaimDetails struct {
 
 func (x *ClaimDetails) Reset() {
 	*x = ClaimDetails{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1536,7 +1611,7 @@ func (x *ClaimDetails) String() string {
 func (*ClaimDetails) ProtoMessage() {}
 
 func (x *ClaimDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1549,7 +1624,7 @@ func (x *ClaimDetails) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimDetails.ProtoReflect.Descriptor instead.
 func (*ClaimDetails) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ClaimDetails) GetName() string {
@@ -1612,7 +1687,7 @@ type ClaimAgentResponse struct {
 
 func (x *ClaimAgentResponse) Reset() {
 	*x = ClaimAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1624,7 +1699,7 @@ func (x *ClaimAgentResponse) String() string {
 func (*ClaimAgentResponse) ProtoMessage() {}
 
 func (x *ClaimAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1637,7 +1712,7 @@ func (x *ClaimAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimAgentResponse.ProtoReflect.Descriptor instead.
 func (*ClaimAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ClaimAgentResponse) GetAgent() *Agent {
@@ -1660,7 +1735,7 @@ type SuspendAgentRequest struct {
 
 func (x *SuspendAgentRequest) Reset() {
 	*x = SuspendAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1672,7 +1747,7 @@ func (x *SuspendAgentRequest) String() string {
 func (*SuspendAgentRequest) ProtoMessage() {}
 
 func (x *SuspendAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1685,7 +1760,7 @@ func (x *SuspendAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuspendAgentRequest.ProtoReflect.Descriptor instead.
 func (*SuspendAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SuspendAgentRequest) GetId() string {
@@ -1713,7 +1788,7 @@ type SuspendAgentResponse struct {
 
 func (x *SuspendAgentResponse) Reset() {
 	*x = SuspendAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1725,7 +1800,7 @@ func (x *SuspendAgentResponse) String() string {
 func (*SuspendAgentResponse) ProtoMessage() {}
 
 func (x *SuspendAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1738,7 +1813,7 @@ func (x *SuspendAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuspendAgentResponse.ProtoReflect.Descriptor instead.
 func (*SuspendAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SuspendAgentResponse) GetAgent() *Agent {
@@ -1761,7 +1836,7 @@ type RetireAgentRequest struct {
 
 func (x *RetireAgentRequest) Reset() {
 	*x = RetireAgentRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1773,7 +1848,7 @@ func (x *RetireAgentRequest) String() string {
 func (*RetireAgentRequest) ProtoMessage() {}
 
 func (x *RetireAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1786,7 +1861,7 @@ func (x *RetireAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireAgentRequest.ProtoReflect.Descriptor instead.
 func (*RetireAgentRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RetireAgentRequest) GetId() string {
@@ -1814,7 +1889,7 @@ type RetireAgentResponse struct {
 
 func (x *RetireAgentResponse) Reset() {
 	*x = RetireAgentResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1826,7 +1901,7 @@ func (x *RetireAgentResponse) String() string {
 func (*RetireAgentResponse) ProtoMessage() {}
 
 func (x *RetireAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1839,7 +1914,7 @@ func (x *RetireAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireAgentResponse.ProtoReflect.Descriptor instead.
 func (*RetireAgentResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RetireAgentResponse) GetAgent() *Agent {
@@ -1864,7 +1939,7 @@ type ListAgentChangesRequest struct {
 
 func (x *ListAgentChangesRequest) Reset() {
 	*x = ListAgentChangesRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1876,7 +1951,7 @@ func (x *ListAgentChangesRequest) String() string {
 func (*ListAgentChangesRequest) ProtoMessage() {}
 
 func (x *ListAgentChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1889,7 +1964,7 @@ func (x *ListAgentChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentChangesRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentChangesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListAgentChangesRequest) GetAgentId() string {
@@ -1926,7 +2001,7 @@ type ListAgentChangesResponse struct {
 
 func (x *ListAgentChangesResponse) Reset() {
 	*x = ListAgentChangesResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1938,7 +2013,7 @@ func (x *ListAgentChangesResponse) String() string {
 func (*ListAgentChangesResponse) ProtoMessage() {}
 
 func (x *ListAgentChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1951,7 +2026,7 @@ func (x *ListAgentChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentChangesResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentChangesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{22}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListAgentChangesResponse) GetChanges() []*AgentChange {
@@ -1986,7 +2061,7 @@ type ScanFinding struct {
 
 func (x *ScanFinding) Reset() {
 	*x = ScanFinding{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1998,7 +2073,7 @@ func (x *ScanFinding) String() string {
 func (*ScanFinding) ProtoMessage() {}
 
 func (x *ScanFinding) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2011,7 +2086,7 @@ func (x *ScanFinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScanFinding.ProtoReflect.Descriptor instead.
 func (*ScanFinding) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{23}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ScanFinding) GetKind() string {
@@ -2064,7 +2139,7 @@ type SubmitScanFindingsRequest struct {
 
 func (x *SubmitScanFindingsRequest) Reset() {
 	*x = SubmitScanFindingsRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2076,7 +2151,7 @@ func (x *SubmitScanFindingsRequest) String() string {
 func (*SubmitScanFindingsRequest) ProtoMessage() {}
 
 func (x *SubmitScanFindingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2089,7 +2164,7 @@ func (x *SubmitScanFindingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitScanFindingsRequest.ProtoReflect.Descriptor instead.
 func (*SubmitScanFindingsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SubmitScanFindingsRequest) GetFindings() []*ScanFinding {
@@ -2153,7 +2228,7 @@ type SubmitScanFindingsResponse struct {
 
 func (x *SubmitScanFindingsResponse) Reset() {
 	*x = SubmitScanFindingsResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2165,7 +2240,7 @@ func (x *SubmitScanFindingsResponse) String() string {
 func (*SubmitScanFindingsResponse) ProtoMessage() {}
 
 func (x *SubmitScanFindingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2178,7 +2253,7 @@ func (x *SubmitScanFindingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitScanFindingsResponse.ProtoReflect.Descriptor instead.
 func (*SubmitScanFindingsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *SubmitScanFindingsResponse) GetCreated() int32 {
@@ -2223,7 +2298,7 @@ type RequestAgentRestorationRequest struct {
 
 func (x *RequestAgentRestorationRequest) Reset() {
 	*x = RequestAgentRestorationRequest{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2235,7 +2310,7 @@ func (x *RequestAgentRestorationRequest) String() string {
 func (*RequestAgentRestorationRequest) ProtoMessage() {}
 
 func (x *RequestAgentRestorationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2248,7 +2323,7 @@ func (x *RequestAgentRestorationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestAgentRestorationRequest.ProtoReflect.Descriptor instead.
 func (*RequestAgentRestorationRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RequestAgentRestorationRequest) GetId() string {
@@ -2280,7 +2355,7 @@ type RequestAgentRestorationResponse struct {
 
 func (x *RequestAgentRestorationResponse) Reset() {
 	*x = RequestAgentRestorationResponse{}
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2292,7 +2367,7 @@ func (x *RequestAgentRestorationResponse) String() string {
 func (*RequestAgentRestorationResponse) ProtoMessage() {}
 
 func (x *RequestAgentRestorationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_agents_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_agents_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2305,7 +2380,7 @@ func (x *RequestAgentRestorationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestAgentRestorationResponse.ProtoReflect.Descriptor instead.
 func (*RequestAgentRestorationResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_agents_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *RequestAgentRestorationResponse) GetApprovalRequestId() string {
@@ -2333,7 +2408,7 @@ var File_pantherclaw_v1_agents_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpantherclaw/v1/agents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/automations.proto\"\xd0\x05\n" +
+	"\x1bpantherclaw/v1/agents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/automations.proto\"\x8f\x06\n" +
 	"\x05Agent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -2357,7 +2432,13 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\vretire_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"retireTime\x12\x1f\n" +
 	"\vrange_agent\x18\x10 \x01(\bR\n" +
-	"rangeAgent\"\xbc\x03\n" +
+	"rangeAgent\x12=\n" +
+	"\n" +
+	"scan_state\x18\x11 \x01(\v2\x1e.pantherclaw.v1.AgentScanStateR\tscanState\"\x91\x01\n" +
+	"\x0eAgentScanState\x12!\n" +
+	"\fmissed_scans\x18\x01 \x01(\x05R\vmissedScans\x12@\n" +
+	"\x0elast_seen_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12\x1a\n" +
+	"\bvanished\x18\x03 \x01(\bR\bvanished\"\xbc\x03\n" +
 	"\tDiscovery\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12%\n" +
@@ -2575,106 +2656,109 @@ func file_pantherclaw_v1_agents_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_agents_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_agents_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_pantherclaw_v1_agents_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_pantherclaw_v1_agents_proto_goTypes = []any{
 	(AgentState)(0),                         // 0: pantherclaw.v1.AgentState
 	(ExecutionContext)(0),                   // 1: pantherclaw.v1.ExecutionContext
 	(ActivityStatus)(0),                     // 2: pantherclaw.v1.ActivityStatus
 	(*Agent)(nil),                           // 3: pantherclaw.v1.Agent
-	(*Discovery)(nil),                       // 4: pantherclaw.v1.Discovery
-	(*AgentSummary)(nil),                    // 5: pantherclaw.v1.AgentSummary
-	(*AgentChange)(nil),                     // 6: pantherclaw.v1.AgentChange
-	(*CreateAgentRequest)(nil),              // 7: pantherclaw.v1.CreateAgentRequest
-	(*CreateAgentResponse)(nil),             // 8: pantherclaw.v1.CreateAgentResponse
-	(*GetAgentRequest)(nil),                 // 9: pantherclaw.v1.GetAgentRequest
-	(*GetAgentResponse)(nil),                // 10: pantherclaw.v1.GetAgentResponse
-	(*ListAgentsRequest)(nil),               // 11: pantherclaw.v1.ListAgentsRequest
-	(*ListAgentsResponse)(nil),              // 12: pantherclaw.v1.ListAgentsResponse
-	(*UpdateAgentRequest)(nil),              // 13: pantherclaw.v1.UpdateAgentRequest
-	(*UpdateAgentResponse)(nil),             // 14: pantherclaw.v1.UpdateAgentResponse
-	(*TransferOwnershipRequest)(nil),        // 15: pantherclaw.v1.TransferOwnershipRequest
-	(*TransferOwnershipResponse)(nil),       // 16: pantherclaw.v1.TransferOwnershipResponse
-	(*ClaimAgentRequest)(nil),               // 17: pantherclaw.v1.ClaimAgentRequest
-	(*ClaimDetails)(nil),                    // 18: pantherclaw.v1.ClaimDetails
-	(*ClaimAgentResponse)(nil),              // 19: pantherclaw.v1.ClaimAgentResponse
-	(*SuspendAgentRequest)(nil),             // 20: pantherclaw.v1.SuspendAgentRequest
-	(*SuspendAgentResponse)(nil),            // 21: pantherclaw.v1.SuspendAgentResponse
-	(*RetireAgentRequest)(nil),              // 22: pantherclaw.v1.RetireAgentRequest
-	(*RetireAgentResponse)(nil),             // 23: pantherclaw.v1.RetireAgentResponse
-	(*ListAgentChangesRequest)(nil),         // 24: pantherclaw.v1.ListAgentChangesRequest
-	(*ListAgentChangesResponse)(nil),        // 25: pantherclaw.v1.ListAgentChangesResponse
-	(*ScanFinding)(nil),                     // 26: pantherclaw.v1.ScanFinding
-	(*SubmitScanFindingsRequest)(nil),       // 27: pantherclaw.v1.SubmitScanFindingsRequest
-	(*SubmitScanFindingsResponse)(nil),      // 28: pantherclaw.v1.SubmitScanFindingsResponse
-	(*RequestAgentRestorationRequest)(nil),  // 29: pantherclaw.v1.RequestAgentRestorationRequest
-	(*RequestAgentRestorationResponse)(nil), // 30: pantherclaw.v1.RequestAgentRestorationResponse
-	nil,                                     // 31: pantherclaw.v1.Discovery.UntrustedObservedEntry
-	nil,                                     // 32: pantherclaw.v1.AgentChange.DetailsEntry
-	nil,                                     // 33: pantherclaw.v1.ScanFinding.AttributesEntry
-	(*timestamppb.Timestamp)(nil),           // 34: google.protobuf.Timestamp
-	(*AutomationIdentity)(nil),              // 35: pantherclaw.v1.AutomationIdentity
+	(*AgentScanState)(nil),                  // 4: pantherclaw.v1.AgentScanState
+	(*Discovery)(nil),                       // 5: pantherclaw.v1.Discovery
+	(*AgentSummary)(nil),                    // 6: pantherclaw.v1.AgentSummary
+	(*AgentChange)(nil),                     // 7: pantherclaw.v1.AgentChange
+	(*CreateAgentRequest)(nil),              // 8: pantherclaw.v1.CreateAgentRequest
+	(*CreateAgentResponse)(nil),             // 9: pantherclaw.v1.CreateAgentResponse
+	(*GetAgentRequest)(nil),                 // 10: pantherclaw.v1.GetAgentRequest
+	(*GetAgentResponse)(nil),                // 11: pantherclaw.v1.GetAgentResponse
+	(*ListAgentsRequest)(nil),               // 12: pantherclaw.v1.ListAgentsRequest
+	(*ListAgentsResponse)(nil),              // 13: pantherclaw.v1.ListAgentsResponse
+	(*UpdateAgentRequest)(nil),              // 14: pantherclaw.v1.UpdateAgentRequest
+	(*UpdateAgentResponse)(nil),             // 15: pantherclaw.v1.UpdateAgentResponse
+	(*TransferOwnershipRequest)(nil),        // 16: pantherclaw.v1.TransferOwnershipRequest
+	(*TransferOwnershipResponse)(nil),       // 17: pantherclaw.v1.TransferOwnershipResponse
+	(*ClaimAgentRequest)(nil),               // 18: pantherclaw.v1.ClaimAgentRequest
+	(*ClaimDetails)(nil),                    // 19: pantherclaw.v1.ClaimDetails
+	(*ClaimAgentResponse)(nil),              // 20: pantherclaw.v1.ClaimAgentResponse
+	(*SuspendAgentRequest)(nil),             // 21: pantherclaw.v1.SuspendAgentRequest
+	(*SuspendAgentResponse)(nil),            // 22: pantherclaw.v1.SuspendAgentResponse
+	(*RetireAgentRequest)(nil),              // 23: pantherclaw.v1.RetireAgentRequest
+	(*RetireAgentResponse)(nil),             // 24: pantherclaw.v1.RetireAgentResponse
+	(*ListAgentChangesRequest)(nil),         // 25: pantherclaw.v1.ListAgentChangesRequest
+	(*ListAgentChangesResponse)(nil),        // 26: pantherclaw.v1.ListAgentChangesResponse
+	(*ScanFinding)(nil),                     // 27: pantherclaw.v1.ScanFinding
+	(*SubmitScanFindingsRequest)(nil),       // 28: pantherclaw.v1.SubmitScanFindingsRequest
+	(*SubmitScanFindingsResponse)(nil),      // 29: pantherclaw.v1.SubmitScanFindingsResponse
+	(*RequestAgentRestorationRequest)(nil),  // 30: pantherclaw.v1.RequestAgentRestorationRequest
+	(*RequestAgentRestorationResponse)(nil), // 31: pantherclaw.v1.RequestAgentRestorationResponse
+	nil,                                     // 32: pantherclaw.v1.Discovery.UntrustedObservedEntry
+	nil,                                     // 33: pantherclaw.v1.AgentChange.DetailsEntry
+	nil,                                     // 34: pantherclaw.v1.ScanFinding.AttributesEntry
+	(*timestamppb.Timestamp)(nil),           // 35: google.protobuf.Timestamp
+	(*AutomationIdentity)(nil),              // 36: pantherclaw.v1.AutomationIdentity
 }
 var file_pantherclaw_v1_agents_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.Agent.execution_context:type_name -> pantherclaw.v1.ExecutionContext
 	0,  // 1: pantherclaw.v1.Agent.state:type_name -> pantherclaw.v1.AgentState
 	0,  // 2: pantherclaw.v1.Agent.suspended_from:type_name -> pantherclaw.v1.AgentState
-	34, // 3: pantherclaw.v1.Agent.create_time:type_name -> google.protobuf.Timestamp
-	34, // 4: pantherclaw.v1.Agent.update_time:type_name -> google.protobuf.Timestamp
-	34, // 5: pantherclaw.v1.Agent.claim_time:type_name -> google.protobuf.Timestamp
-	34, // 6: pantherclaw.v1.Agent.retire_time:type_name -> google.protobuf.Timestamp
-	34, // 7: pantherclaw.v1.Discovery.first_seen_time:type_name -> google.protobuf.Timestamp
-	34, // 8: pantherclaw.v1.Discovery.last_seen_time:type_name -> google.protobuf.Timestamp
-	31, // 9: pantherclaw.v1.Discovery.untrusted_observed:type_name -> pantherclaw.v1.Discovery.UntrustedObservedEntry
-	3,  // 10: pantherclaw.v1.AgentSummary.agent:type_name -> pantherclaw.v1.Agent
-	2,  // 11: pantherclaw.v1.AgentSummary.activity:type_name -> pantherclaw.v1.ActivityStatus
-	34, // 12: pantherclaw.v1.AgentSummary.last_verify_time:type_name -> google.protobuf.Timestamp
-	4,  // 13: pantherclaw.v1.AgentSummary.discovery:type_name -> pantherclaw.v1.Discovery
-	32, // 14: pantherclaw.v1.AgentChange.details:type_name -> pantherclaw.v1.AgentChange.DetailsEntry
-	34, // 15: pantherclaw.v1.AgentChange.create_time:type_name -> google.protobuf.Timestamp
-	1,  // 16: pantherclaw.v1.CreateAgentRequest.execution_context:type_name -> pantherclaw.v1.ExecutionContext
-	3,  // 17: pantherclaw.v1.CreateAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	5,  // 18: pantherclaw.v1.GetAgentResponse.summary:type_name -> pantherclaw.v1.AgentSummary
-	0,  // 19: pantherclaw.v1.ListAgentsRequest.states:type_name -> pantherclaw.v1.AgentState
-	3,  // 20: pantherclaw.v1.ListAgentsResponse.agents:type_name -> pantherclaw.v1.Agent
-	35, // 21: pantherclaw.v1.ListAgentsResponse.automations:type_name -> pantherclaw.v1.AutomationIdentity
-	3,  // 22: pantherclaw.v1.UpdateAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	3,  // 23: pantherclaw.v1.TransferOwnershipResponse.agent:type_name -> pantherclaw.v1.Agent
-	18, // 24: pantherclaw.v1.ClaimAgentRequest.as_new_agent:type_name -> pantherclaw.v1.ClaimDetails
-	1,  // 25: pantherclaw.v1.ClaimDetails.execution_context:type_name -> pantherclaw.v1.ExecutionContext
-	3,  // 26: pantherclaw.v1.ClaimAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	3,  // 27: pantherclaw.v1.SuspendAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	3,  // 28: pantherclaw.v1.RetireAgentResponse.agent:type_name -> pantherclaw.v1.Agent
-	6,  // 29: pantherclaw.v1.ListAgentChangesResponse.changes:type_name -> pantherclaw.v1.AgentChange
-	33, // 30: pantherclaw.v1.ScanFinding.attributes:type_name -> pantherclaw.v1.ScanFinding.AttributesEntry
-	26, // 31: pantherclaw.v1.SubmitScanFindingsRequest.findings:type_name -> pantherclaw.v1.ScanFinding
-	34, // 32: pantherclaw.v1.RequestAgentRestorationResponse.deadline_time:type_name -> google.protobuf.Timestamp
-	7,  // 33: pantherclaw.v1.AgentService.CreateAgent:input_type -> pantherclaw.v1.CreateAgentRequest
-	9,  // 34: pantherclaw.v1.AgentService.GetAgent:input_type -> pantherclaw.v1.GetAgentRequest
-	11, // 35: pantherclaw.v1.AgentService.ListAgents:input_type -> pantherclaw.v1.ListAgentsRequest
-	13, // 36: pantherclaw.v1.AgentService.UpdateAgent:input_type -> pantherclaw.v1.UpdateAgentRequest
-	15, // 37: pantherclaw.v1.AgentService.TransferOwnership:input_type -> pantherclaw.v1.TransferOwnershipRequest
-	17, // 38: pantherclaw.v1.AgentService.ClaimAgent:input_type -> pantherclaw.v1.ClaimAgentRequest
-	20, // 39: pantherclaw.v1.AgentService.SuspendAgent:input_type -> pantherclaw.v1.SuspendAgentRequest
-	22, // 40: pantherclaw.v1.AgentService.RetireAgent:input_type -> pantherclaw.v1.RetireAgentRequest
-	24, // 41: pantherclaw.v1.AgentService.ListAgentChanges:input_type -> pantherclaw.v1.ListAgentChangesRequest
-	27, // 42: pantherclaw.v1.AgentService.SubmitScanFindings:input_type -> pantherclaw.v1.SubmitScanFindingsRequest
-	29, // 43: pantherclaw.v1.AgentService.RequestAgentRestoration:input_type -> pantherclaw.v1.RequestAgentRestorationRequest
-	8,  // 44: pantherclaw.v1.AgentService.CreateAgent:output_type -> pantherclaw.v1.CreateAgentResponse
-	10, // 45: pantherclaw.v1.AgentService.GetAgent:output_type -> pantherclaw.v1.GetAgentResponse
-	12, // 46: pantherclaw.v1.AgentService.ListAgents:output_type -> pantherclaw.v1.ListAgentsResponse
-	14, // 47: pantherclaw.v1.AgentService.UpdateAgent:output_type -> pantherclaw.v1.UpdateAgentResponse
-	16, // 48: pantherclaw.v1.AgentService.TransferOwnership:output_type -> pantherclaw.v1.TransferOwnershipResponse
-	19, // 49: pantherclaw.v1.AgentService.ClaimAgent:output_type -> pantherclaw.v1.ClaimAgentResponse
-	21, // 50: pantherclaw.v1.AgentService.SuspendAgent:output_type -> pantherclaw.v1.SuspendAgentResponse
-	23, // 51: pantherclaw.v1.AgentService.RetireAgent:output_type -> pantherclaw.v1.RetireAgentResponse
-	25, // 52: pantherclaw.v1.AgentService.ListAgentChanges:output_type -> pantherclaw.v1.ListAgentChangesResponse
-	28, // 53: pantherclaw.v1.AgentService.SubmitScanFindings:output_type -> pantherclaw.v1.SubmitScanFindingsResponse
-	30, // 54: pantherclaw.v1.AgentService.RequestAgentRestoration:output_type -> pantherclaw.v1.RequestAgentRestorationResponse
-	44, // [44:55] is the sub-list for method output_type
-	33, // [33:44] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	35, // 3: pantherclaw.v1.Agent.create_time:type_name -> google.protobuf.Timestamp
+	35, // 4: pantherclaw.v1.Agent.update_time:type_name -> google.protobuf.Timestamp
+	35, // 5: pantherclaw.v1.Agent.claim_time:type_name -> google.protobuf.Timestamp
+	35, // 6: pantherclaw.v1.Agent.retire_time:type_name -> google.protobuf.Timestamp
+	4,  // 7: pantherclaw.v1.Agent.scan_state:type_name -> pantherclaw.v1.AgentScanState
+	35, // 8: pantherclaw.v1.AgentScanState.last_seen_time:type_name -> google.protobuf.Timestamp
+	35, // 9: pantherclaw.v1.Discovery.first_seen_time:type_name -> google.protobuf.Timestamp
+	35, // 10: pantherclaw.v1.Discovery.last_seen_time:type_name -> google.protobuf.Timestamp
+	32, // 11: pantherclaw.v1.Discovery.untrusted_observed:type_name -> pantherclaw.v1.Discovery.UntrustedObservedEntry
+	3,  // 12: pantherclaw.v1.AgentSummary.agent:type_name -> pantherclaw.v1.Agent
+	2,  // 13: pantherclaw.v1.AgentSummary.activity:type_name -> pantherclaw.v1.ActivityStatus
+	35, // 14: pantherclaw.v1.AgentSummary.last_verify_time:type_name -> google.protobuf.Timestamp
+	5,  // 15: pantherclaw.v1.AgentSummary.discovery:type_name -> pantherclaw.v1.Discovery
+	33, // 16: pantherclaw.v1.AgentChange.details:type_name -> pantherclaw.v1.AgentChange.DetailsEntry
+	35, // 17: pantherclaw.v1.AgentChange.create_time:type_name -> google.protobuf.Timestamp
+	1,  // 18: pantherclaw.v1.CreateAgentRequest.execution_context:type_name -> pantherclaw.v1.ExecutionContext
+	3,  // 19: pantherclaw.v1.CreateAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	6,  // 20: pantherclaw.v1.GetAgentResponse.summary:type_name -> pantherclaw.v1.AgentSummary
+	0,  // 21: pantherclaw.v1.ListAgentsRequest.states:type_name -> pantherclaw.v1.AgentState
+	3,  // 22: pantherclaw.v1.ListAgentsResponse.agents:type_name -> pantherclaw.v1.Agent
+	36, // 23: pantherclaw.v1.ListAgentsResponse.automations:type_name -> pantherclaw.v1.AutomationIdentity
+	3,  // 24: pantherclaw.v1.UpdateAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	3,  // 25: pantherclaw.v1.TransferOwnershipResponse.agent:type_name -> pantherclaw.v1.Agent
+	19, // 26: pantherclaw.v1.ClaimAgentRequest.as_new_agent:type_name -> pantherclaw.v1.ClaimDetails
+	1,  // 27: pantherclaw.v1.ClaimDetails.execution_context:type_name -> pantherclaw.v1.ExecutionContext
+	3,  // 28: pantherclaw.v1.ClaimAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	3,  // 29: pantherclaw.v1.SuspendAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	3,  // 30: pantherclaw.v1.RetireAgentResponse.agent:type_name -> pantherclaw.v1.Agent
+	7,  // 31: pantherclaw.v1.ListAgentChangesResponse.changes:type_name -> pantherclaw.v1.AgentChange
+	34, // 32: pantherclaw.v1.ScanFinding.attributes:type_name -> pantherclaw.v1.ScanFinding.AttributesEntry
+	27, // 33: pantherclaw.v1.SubmitScanFindingsRequest.findings:type_name -> pantherclaw.v1.ScanFinding
+	35, // 34: pantherclaw.v1.RequestAgentRestorationResponse.deadline_time:type_name -> google.protobuf.Timestamp
+	8,  // 35: pantherclaw.v1.AgentService.CreateAgent:input_type -> pantherclaw.v1.CreateAgentRequest
+	10, // 36: pantherclaw.v1.AgentService.GetAgent:input_type -> pantherclaw.v1.GetAgentRequest
+	12, // 37: pantherclaw.v1.AgentService.ListAgents:input_type -> pantherclaw.v1.ListAgentsRequest
+	14, // 38: pantherclaw.v1.AgentService.UpdateAgent:input_type -> pantherclaw.v1.UpdateAgentRequest
+	16, // 39: pantherclaw.v1.AgentService.TransferOwnership:input_type -> pantherclaw.v1.TransferOwnershipRequest
+	18, // 40: pantherclaw.v1.AgentService.ClaimAgent:input_type -> pantherclaw.v1.ClaimAgentRequest
+	21, // 41: pantherclaw.v1.AgentService.SuspendAgent:input_type -> pantherclaw.v1.SuspendAgentRequest
+	23, // 42: pantherclaw.v1.AgentService.RetireAgent:input_type -> pantherclaw.v1.RetireAgentRequest
+	25, // 43: pantherclaw.v1.AgentService.ListAgentChanges:input_type -> pantherclaw.v1.ListAgentChangesRequest
+	28, // 44: pantherclaw.v1.AgentService.SubmitScanFindings:input_type -> pantherclaw.v1.SubmitScanFindingsRequest
+	30, // 45: pantherclaw.v1.AgentService.RequestAgentRestoration:input_type -> pantherclaw.v1.RequestAgentRestorationRequest
+	9,  // 46: pantherclaw.v1.AgentService.CreateAgent:output_type -> pantherclaw.v1.CreateAgentResponse
+	11, // 47: pantherclaw.v1.AgentService.GetAgent:output_type -> pantherclaw.v1.GetAgentResponse
+	13, // 48: pantherclaw.v1.AgentService.ListAgents:output_type -> pantherclaw.v1.ListAgentsResponse
+	15, // 49: pantherclaw.v1.AgentService.UpdateAgent:output_type -> pantherclaw.v1.UpdateAgentResponse
+	17, // 50: pantherclaw.v1.AgentService.TransferOwnership:output_type -> pantherclaw.v1.TransferOwnershipResponse
+	20, // 51: pantherclaw.v1.AgentService.ClaimAgent:output_type -> pantherclaw.v1.ClaimAgentResponse
+	22, // 52: pantherclaw.v1.AgentService.SuspendAgent:output_type -> pantherclaw.v1.SuspendAgentResponse
+	24, // 53: pantherclaw.v1.AgentService.RetireAgent:output_type -> pantherclaw.v1.RetireAgentResponse
+	26, // 54: pantherclaw.v1.AgentService.ListAgentChanges:output_type -> pantherclaw.v1.ListAgentChangesResponse
+	29, // 55: pantherclaw.v1.AgentService.SubmitScanFindings:output_type -> pantherclaw.v1.SubmitScanFindingsResponse
+	31, // 56: pantherclaw.v1.AgentService.RequestAgentRestoration:output_type -> pantherclaw.v1.RequestAgentRestorationResponse
+	46, // [46:57] is the sub-list for method output_type
+	35, // [35:46] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_agents_proto_init() }
@@ -2683,21 +2767,21 @@ func file_pantherclaw_v1_agents_proto_init() {
 		return
 	}
 	file_pantherclaw_v1_automations_proto_init()
-	file_pantherclaw_v1_agents_proto_msgTypes[4].OneofWrappers = []any{}
-	file_pantherclaw_v1_agents_proto_msgTypes[8].OneofWrappers = []any{}
-	file_pantherclaw_v1_agents_proto_msgTypes[10].OneofWrappers = []any{}
-	file_pantherclaw_v1_agents_proto_msgTypes[14].OneofWrappers = []any{
+	file_pantherclaw_v1_agents_proto_msgTypes[5].OneofWrappers = []any{}
+	file_pantherclaw_v1_agents_proto_msgTypes[9].OneofWrappers = []any{}
+	file_pantherclaw_v1_agents_proto_msgTypes[11].OneofWrappers = []any{}
+	file_pantherclaw_v1_agents_proto_msgTypes[15].OneofWrappers = []any{
 		(*ClaimAgentRequest_AsNewAgent)(nil),
 		(*ClaimAgentRequest_MergeIntoAgentId)(nil),
 	}
-	file_pantherclaw_v1_agents_proto_msgTypes[15].OneofWrappers = []any{}
+	file_pantherclaw_v1_agents_proto_msgTypes[16].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_agents_proto_rawDesc), len(file_pantherclaw_v1_agents_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   31,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

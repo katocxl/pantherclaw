@@ -200,7 +200,7 @@ func InspectRun(ctx context.Context, tx db.TenantTx, s SectionScope, run ids.UUI
 	}
 
 	if read[SectionTimeline] || read[SectionGaps] {
-		tl, err := RunTimeline(ctx, tx, s, run, o.WithPhases)
+		tl, err := runTimeline(ctx, tx, s, run, o.WithPhases, read[SectionTimeline])
 		if err != nil {
 			return Inspection{}, err
 		}
@@ -364,7 +364,7 @@ func children(ctx context.Context, q *dbq.Queries, org ids.OrgID, s Scope, run i
 			if len(out) == MaxChildren {
 				return out, true, nil
 			}
-			out = append(out, Lane{Run: k.ID, Agent: k.AgentID, State: k.State, Created: k.CreatedAt, Ended: k.EndedAt})
+			out = append(out, Lane{Run: k.ID, Agent: k.AgentID, State: k.State, Created: k.CreatedAt, Ended: k.EndedAt, EventsNotLoaded: true})
 		}
 		if len(kids) <= MaxChildren {
 			return out, false, nil

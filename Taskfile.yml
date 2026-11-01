@@ -298,9 +298,9 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M21)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M22)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M21"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M22"}}
 
   hub:check:
     desc: Run the real validators over the Hub seed in hub/ (G0 M23 D112) - the policy gate with its mutation check, the detection compiler and rule tests, the range format and customer limits, automation validation and simulation

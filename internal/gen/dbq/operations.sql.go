@@ -204,6 +204,68 @@ func (q *Queries) MetricBypassRoutes(ctx context.Context, orgID ids.OrgID) (Metr
 	return i, err
 }
 
+const metricBypassRoutesByOwner = `-- name: MetricBypassRoutesByOwner :many
+SELECT coalesce(a.owner_user_id::text, 'unowned')::text AS owner, count(*)::bigint AS n
+FROM pc.coverage_routes r
+LEFT JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
+WHERE r.org_id = $1 AND r.kind <> 'channel' AND r.observation = 'observed' AND r.last_seen_at >= now() - interval '7 days'
+GROUP BY 1
+ORDER BY (coalesce(a.owner_user_id::text, 'unowned') = 'unowned') DESC, n DESC, 1
+LIMIT 201
+`
+
+type MetricBypassRoutesByOwnerRow struct {
+	Owner string
+	N     int64
+}
+
+// The same routes by who owns their agent; a route of no agent, or of an
+// agent with no owner, is "unowned" (G0 M22 D17, F301). Unowned sorts first
+// and the largest follow, so a cut drops the smallest; one row past the cap
+// says there was a cut.
+func (q *Queries) MetricBypassRoutesByOwner(ctx context.Context, orgID ids.OrgID) ([]MetricBypassRoutesByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, metricBypassRoutesByOwner, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MetricBypassRoutesByOwnerRow{}
+	for rows.Next() {
+		var i MetricBypassRoutesByOwnerRow
+		if err := rows.Scan(&i.Owner, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const metricCoverageStale = `-- name: MetricCoverageStale :one
+SELECT count(*)::bigint AS n
+FROM (SELECT DISTINCT ON (c.agent_id, c.connection_id, c.operation)
+             c.org_id, c.agent_id, c.connection_id, c.expires_at, c.computed_at, c.body
+      FROM pc.coverage_snapshots c
+      WHERE c.org_id = $1
+      ORDER BY c.agent_id, c.connection_id, c.operation, c.id DESC) s
+WHERE s.expires_at <= now()
+   OR EXISTS (SELECT 1 FROM pc.coverage_invalidations i
+              WHERE i.org_id = s.org_id AND i.connection_id = s.connection_id
+                AND (i.agent_id IS NULL OR i.agent_id = s.agent_id) AND i.reassessed_at IS NULL
+                AND NOT (i.occurred_at < s.computed_at AND coalesce(jsonb_exists(s.body -> 'seen', i.id::text), false)))
+`
+
+// Coverage records whose current snapshot no longer holds (D17, F301): it
+// expired, or a change it did not see arrived, as coverage.Lapsed reads it.
+func (q *Queries) MetricCoverageStale(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	row := q.db.QueryRow(ctx, metricCoverageStale, orgID)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
+}
+
 const metricCoverageStates = `-- name: MetricCoverageStates :many
 SELECT s.state, count(*)::bigint AS n
 FROM (SELECT DISTINCT ON (c.agent_id, c.connection_id, c.operation) c.state

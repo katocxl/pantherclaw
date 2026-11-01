@@ -47,6 +47,11 @@ const (
 	ModelServiceDraftAutomationProcedure = "/pantherclaw.v1.ModelService/DraftAutomation"
 	// ModelServiceGetModelDraftProcedure is the procedure name of the ModelService's GetModelDraft RPC.
 	ModelServiceGetModelDraftProcedure = "/pantherclaw.v1.ModelService/GetModelDraft"
+	// ModelServiceListModelDraftsProcedure is the procedure name of the ModelService's ListModelDrafts
+	// RPC.
+	ModelServiceListModelDraftsProcedure = "/pantherclaw.v1.ModelService/ListModelDrafts"
+	// ModelServiceGetModelUsageProcedure is the procedure name of the ModelService's GetModelUsage RPC.
+	ModelServiceGetModelUsageProcedure = "/pantherclaw.v1.ModelService/GetModelUsage"
 )
 
 var (
@@ -108,6 +113,22 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	modelServiceListModelDraftsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_model_proto.Services().ByName("ModelService").Methods().ByName("ListModelDrafts"),
+			Procedure:        ModelServiceListModelDraftsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	modelServiceGetModelUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_model_proto.Services().ByName("ModelService").Methods().ByName("GetModelUsage"),
+			Procedure:        ModelServiceGetModelUsageProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // ModelServiceClient is a client for the pantherclaw.v1.ModelService service.
@@ -146,6 +167,16 @@ type ModelServiceClient interface {
 	// automation.read, as the draft's kind asks.
 	// permission: org.read
 	GetModelDraft(context.Context, *v1.GetModelDraftRequest) (*v1.GetModelDraftResponse, error)
+	// ListModelDrafts lists stored drafts, newest first: only the kinds the
+	// caller may read (policy.read, automation.read). Never a prompt or a
+	// response (HR-554). Business, as drafting is.
+	// permission: org.read
+	ListModelDrafts(context.Context, *v1.ListModelDraftsRequest) (*v1.ListModelDraftsResponse, error)
+	// GetModelUsage sums the organization's model calls: counts and tokens by
+	// task and outcome, never a prompt or a response (HR-554). Business, as
+	// drafting is.
+	// permission: org.read
+	GetModelUsage(context.Context, *v1.GetModelUsageRequest) (*v1.GetModelUsageResponse, error)
 }
 
 // NewModelServiceClient constructs a client for the pantherclaw.v1.ModelService service. Multiple
@@ -190,6 +221,16 @@ type ModelServiceHandler interface {
 	// automation.read, as the draft's kind asks.
 	// permission: org.read
 	GetModelDraft(context.Context, *v1.GetModelDraftRequest) (*v1.GetModelDraftResponse, error)
+	// ListModelDrafts lists stored drafts, newest first: only the kinds the
+	// caller may read (policy.read, automation.read). Never a prompt or a
+	// response (HR-554). Business, as drafting is.
+	// permission: org.read
+	ListModelDrafts(context.Context, *v1.ListModelDraftsRequest) (*v1.ListModelDraftsResponse, error)
+	// GetModelUsage sums the organization's model calls: counts and tokens by
+	// task and outcome, never a prompt or a response (HR-554). Business, as
+	// drafting is.
+	// permission: org.read
+	GetModelUsage(context.Context, *v1.GetModelUsageRequest) (*v1.GetModelUsageResponse, error)
 }
 
 // RegisterModelServiceHandler registers svc as the pantherclaw.v1.ModelService implementation on
@@ -205,6 +246,8 @@ func RegisterModelServiceHandler(server *connect.Server, svc ModelServiceHandler
 		connect.Method{Spec: modelServiceDraftPolicySpec(), Handler: adapter.draftPolicy},
 		connect.Method{Spec: modelServiceDraftAutomationSpec(), Handler: adapter.draftAutomation},
 		connect.Method{Spec: modelServiceGetModelDraftSpec(), Handler: adapter.getModelDraft},
+		connect.Method{Spec: modelServiceListModelDraftsSpec(), Handler: adapter.listModelDrafts},
+		connect.Method{Spec: modelServiceGetModelUsageSpec(), Handler: adapter.getModelUsage},
 	)
 }
 
@@ -241,6 +284,14 @@ func (UnimplementedModelServiceHandler) DraftAutomation(context.Context, *v1.Dra
 
 func (UnimplementedModelServiceHandler) GetModelDraft(context.Context, *v1.GetModelDraftRequest) (*v1.GetModelDraftResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.GetModelDraft is not implemented")
+}
+
+func (UnimplementedModelServiceHandler) ListModelDrafts(context.Context, *v1.ListModelDraftsRequest) (*v1.ListModelDraftsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.ListModelDrafts is not implemented")
+}
+
+func (UnimplementedModelServiceHandler) GetModelUsage(context.Context, *v1.GetModelUsageRequest) (*v1.GetModelUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ModelService.GetModelUsage is not implemented")
 }
 
 type modelServiceClient struct {
@@ -306,6 +357,22 @@ func (c *modelServiceClient) DraftAutomation(ctx context.Context, req *v1.DraftA
 func (c *modelServiceClient) GetModelDraft(ctx context.Context, req *v1.GetModelDraftRequest) (*v1.GetModelDraftResponse, error) {
 	var res v1.GetModelDraftResponse
 	if err := c.client.CallUnary(ctx, modelServiceGetModelDraftSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *modelServiceClient) ListModelDrafts(ctx context.Context, req *v1.ListModelDraftsRequest) (*v1.ListModelDraftsResponse, error) {
+	var res v1.ListModelDraftsResponse
+	if err := c.client.CallUnary(ctx, modelServiceListModelDraftsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *modelServiceClient) GetModelUsage(ctx context.Context, req *v1.GetModelUsageRequest) (*v1.GetModelUsageResponse, error) {
+	var res v1.GetModelUsageResponse
+	if err := c.client.CallUnary(ctx, modelServiceGetModelUsageSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -403,6 +470,30 @@ func (h modelServiceHandler) getModelDraft(ctx context.Context, _ connect.Spec, 
 		return err
 	}
 	res, err := h.svc.GetModelDraft(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h modelServiceHandler) listModelDrafts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListModelDraftsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListModelDrafts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h modelServiceHandler) getModelUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetModelUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetModelUsage(ctx, &req)
 	if err != nil {
 		return err
 	}

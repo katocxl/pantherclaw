@@ -619,6 +619,11 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
+| HR-550 | A graph label is plain text of at most 200 characters, taken only from names the viewer may read, and is empty otherwise. Hidden records stay excluded, and a label is never markup (HR-340). | T-238 | M22 |
+| HR-551 | A causal link appears only with its evidence: `evidence_ref` names the receipt. Without evidence the graph emits a `gap` edge. Predicted, authorized and confirmed stay apart, and observed never reads as possible. | T-239 | M22 |
+| HR-552 | Every graph mode returns its gaps, and collapse never merges or hides one. Every edge carries its source, observed time and freshness. | T-239 | M22 |
+| HR-553 | Rotation over RPC keeps the service's step-up, protected change, audit, permissions and edition, and no rotation RPC or `pclaw` output returns a secret. | T-240 | M22 |
+| HR-554 | Model draft and usage reads return no prompts and no responses. | T-234 | M22 |
 
 ## Easy to adopt: Hub, CI checks and the settings kit (G0 M23)
 

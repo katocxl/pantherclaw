@@ -1,0 +1,20 @@
+{{template "head" .}}
+<h1>New identity provider</h1>
+{{if .CanManage}}
+<p class="note">PantherClaw seals the client secret and never shows it again. The provider stays PENDING and its activation is filed as a protected change. Saving needs your security key.</p>
+<form id="secret-form" data-path="/integrations/identity-providers/new" autocomplete="off">
+<p><label for="name">Name</label> <input id="name" name="name" required maxlength="32"></p>
+<p><label for="issuer">Issuer URL</label> <input id="issuer" name="issuer" type="url" required maxlength="512"></p>
+<p><label for="client_id">Client id</label> <input id="client_id" name="client_id" required maxlength="256" autocomplete="off"></p>
+<p><label for="client_secret">Client secret</label> <input id="client_secret" name="client_secret" type="password" required maxlength="4096" autocomplete="off"></p>
+<p><label><input type="checkbox" name="trust_email"> Trust the email claim without email_verified</label></p>
+<p><button type="submit" class="danger">Save with your security key</button></p>
+</form>
+<p id="secret-change" hidden>Its activation is filed: <a id="secret-change-link">review the protected change</a>. The provider stays PENDING until it is approved.</p>
+{{else}}
+<p class="note">You cannot add a provider: that needs identity_provider.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/integrations.js"></script>
+<script src="/static/secret_forms.js"></script>
+{{template "foot" .}}

@@ -24,7 +24,7 @@ SELECT * FROM pc.redteam_runs WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(
 SELECT * FROM pc.redteam_runs
 WHERE org_id = sqlc.arg(org_id)
   AND (sqlc.narg(range_agent_id)::uuid IS NULL OR range_agent_id = sqlc.narg(range_agent_id))
-  AND (sqlc.arg(before)::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR id < sqlc.arg(before))
+  AND (coalesce(sqlc.arg(before)::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000' OR id < sqlc.arg(before))
 ORDER BY id DESC
 LIMIT sqlc.arg(page_limit);
 
@@ -91,3 +91,10 @@ FROM pc.package_pins pp
 JOIN pc.tool_packages tp ON tp.org_id = pp.org_id AND tp.id = pp.package_id
 WHERE pp.org_id = sqlc.arg(org_id)
 ORDER BY tp.name;
+
+-- RedteamResultCounts counts the stored results of ranges by verdict
+-- (G0 M22 D58). A range with no stored result has no row.
+-- name: RedteamResultCounts :many
+SELECT range_id, verdict, count(*)::int AS results FROM pc.redteam_results
+WHERE org_id = sqlc.arg(org_id) AND range_id = ANY (sqlc.arg(range_ids)::uuid[])
+GROUP BY range_id, verdict;

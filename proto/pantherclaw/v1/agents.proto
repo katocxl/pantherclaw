@@ -155,6 +155,20 @@ message Agent {
   // A range agent (G0 M12, HR-220): marked at creation, never changed; all
   // its runs are simulated and it may use only simulated connections.
   bool range_agent = 16;
+  // What continuous discovery saw of it (G0 M22 D6); unset for an agent no
+  // scan found.
+  AgentScanState scan_state = 17;
+}
+
+// AgentScanState sums up the scan findings of one agent that were not
+// dismissed, across scan sources.
+message AgentScanState {
+  // Complete scans in a row that did not see it: the fewest of any finding.
+  int32 missed_scans = 1;
+  // When a scan last saw it.
+  google.protobuf.Timestamp last_seen_time = 2;
+  // Every finding reached the vanish threshold and people were told.
+  bool vanished = 3;
 }
 
 // Discovery is what a gateway or scan observed about a discovered agent.

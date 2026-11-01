@@ -6,6 +6,8 @@ package coveragerpc
 import (
 	"context"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
@@ -28,11 +30,21 @@ func (h *Handler) GetCoverageGraph(ctx context.Context, req *pantherclawv1.GetCo
 	for _, n := range g.Nodes {
 		out.Nodes = append(out.Nodes, &pantherclawv1.CoverageGraphNode{
 			Id: n.ID, Kind: n.Kind, Label: n.Label, RouteKind: n.RouteKind, RouteStatus: n.RouteStatus, Control: n.Control,
-			ClosureId: n.Closure,
+			ClosureId: n.Closure, EffectGroup: n.EffectGroup,
 		})
 	}
 	for _, e := range g.Edges {
-		out.Edges = append(out.Edges, &pantherclawv1.CoverageGraphEdge{From: e.From, To: e.To})
+		x := &pantherclawv1.CoverageGraphEdge{From: e.From, To: e.To, Reason: e.Reason, InvalidatedBy: e.InvalidatedBy}
+		if e.ValidatedAt != nil {
+			x.ValidatedAt = timestamppb.New(*e.ValidatedAt)
+		}
+		if e.CheckedAt != nil {
+			x.LastCheckedAt = timestamppb.New(*e.CheckedAt)
+		}
+		if e.ExpiresAt != nil {
+			x.ExpiresAt = timestamppb.New(*e.ExpiresAt)
+		}
+		out.Edges = append(out.Edges, x)
 	}
 	return out, nil
 }

@@ -205,6 +205,57 @@ func (q *Queries) InsertModelDraft(ctx context.Context, arg InsertModelDraftPara
 	return err
 }
 
+const listModelDrafts = `-- name: ListModelDrafts :many
+SELECT org_id, version_id, call_id, kind, origin, ambiguities, created_at FROM pc.model_drafts
+WHERE org_id = $1 AND kind = ANY ($2::text[])
+  AND ($3::uuid IS NULL OR version_id < $3::uuid)
+ORDER BY version_id DESC
+LIMIT $4
+`
+
+type ListModelDraftsParams struct {
+	OrgID     ids.OrgID
+	Kinds     []string
+	After     *ids.UUID
+	PageLimit int32
+}
+
+// ListModelDrafts lists stored drafts of the given kinds, newest first (G0
+// M22 D8). Version ids are v7 and each is drafted once, so the id is the page
+// cursor.
+func (q *Queries) ListModelDrafts(ctx context.Context, arg ListModelDraftsParams) ([]PcModelDraft, error) {
+	rows, err := q.db.Query(ctx, listModelDrafts,
+		arg.OrgID,
+		arg.Kinds,
+		arg.After,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcModelDraft{}
+	for rows.Next() {
+		var i PcModelDraft
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.VersionID,
+			&i.CallID,
+			&i.Kind,
+			&i.Origin,
+			&i.Ambiguities,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockModelSettings = `-- name: LockModelSettings :one
 SELECT org_id, enabled, model, key_ciphertext, key_set_at, key_set_by, calls_per_minute, tokens_per_day, enabled_at, enabled_by, enabled_credential, updated_at FROM pc.model_settings WHERE org_id = $1 FOR UPDATE
 `
@@ -227,6 +278,53 @@ func (q *Queries) LockModelSettings(ctx context.Context, orgID ids.OrgID) (PcMod
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const modelUsage = `-- name: ModelUsage :many
+SELECT task, outcome, count(*)::bigint AS calls, COALESCE(sum(input_tokens), 0)::bigint AS input_tokens,
+       COALESCE(sum(output_tokens), 0)::bigint AS output_tokens, COALESCE(sum(reserved_tokens), 0)::bigint AS reserved_tokens
+FROM pc.model_calls
+WHERE org_id = $1 AND created_at >= $2
+GROUP BY task, outcome
+ORDER BY task, outcome
+`
+
+type ModelUsageRow struct {
+	Task           string
+	Outcome        string
+	Calls          int64
+	InputTokens    int64
+	OutputTokens   int64
+	ReservedTokens int64
+}
+
+// ModelUsage sums the org's calls since a time by task and outcome: counts
+// and tokens only (G0 M22 D8). pc.model_calls holds no text.
+func (q *Queries) ModelUsage(ctx context.Context, orgID ids.OrgID, since time.Time) ([]ModelUsageRow, error) {
+	rows, err := q.db.Query(ctx, modelUsage, orgID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ModelUsageRow{}
+	for rows.Next() {
+		var i ModelUsageRow
+		if err := rows.Scan(
+			&i.Task,
+			&i.Outcome,
+			&i.Calls,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.ReservedTokens,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setModelKey = `-- name: SetModelKey :exec

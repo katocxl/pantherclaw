@@ -13,8 +13,8 @@ A merge can start a deployment, so `pc.gitlab` treats the deployment as a conseq
 | has environments | passed at the head | The deployment is predicted for each environment. The grant must cover `gitlab.deployment.trigger`, and a policy or grant can require a release approver. |
 | has environments | anything else | The consequence is unknown and the merge is held (`CONSEQUENCE_UNKNOWN`). |
 | has none, and uses a custom CI configuration path or Auto DevOps | any | The consequence is unknown and the merge is held. |
-| has none, and `.gitlab-ci.yml` at the head mentions `environment` or `include`, has a double-quoted string with a backslash, or could not be read | any | The consequence is unknown and the merge is held. |
-| has none, and no `.gitlab-ci.yml` at the head, or one that does none of that | any | No consequence. The check reads the source head only, so a deploy job on the target branch that is not at the head is not seen. |
+| has none, and `.gitlab-ci.yml` at the head or at the target branch mentions `environment` or `include`, has a double-quoted string with a backslash, or could not be read | any | The consequence is unknown and the merge is held. |
+| has none, and no `.gitlab-ci.yml` at the head or the target branch, or one that does none of that | any | No consequence. |
 
 The check of `.gitlab-ci.yml` is a text check, not a parse, so a comment that mentions either word, or a script with an escape in a double-quoted string, also holds the merge.
 

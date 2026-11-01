@@ -94,8 +94,8 @@ func TestT229_ADeployWithoutAVerifiedPipelineIsHeld(t *testing.T) {
 
 // TestT229_AProjectWithoutAvailableEnvironmentsStillDeploys: a stopped
 // environment is predicted, because a deploying job restarts it, and a new
-// project with no environment is held when its .gitlab-ci.yml at the head
-// mentions environment or include or cannot be read, and when it has a custom
+// project with no environment is held when its .gitlab-ci.yml at the head or
+// the target branch mentions environment or include or cannot be read, and when it has a custom
 // configuration path or Auto DevOps. Only a project with no environment and
 // none of these merges with no consequence (D287, D289, T-229).
 //
@@ -125,6 +125,9 @@ func TestT229_AProjectWithoutAvailableEnvironmentsStillDeploys(t *testing.T) {
 	gl.SetCIConfig(sim.GitLabProject, "include:\n  - project: acme/ci\n")
 	held("a new project that includes")
 	gl.SetCIConfig(sim.GitLabProject, "test:\n  script: go test\n")
+	gl.SetCIConfigAt(sim.GitLabProject, "main", "deploy:\n  script: ./deploy\n  environment: production\n")
+	held("a deploy job on the target branch only")
+	gl.SetCIConfigAt(sim.GitLabProject, "main", "test:\n  script: go test\n")
 	gl.SetFaults(gitlab.Faults{CIConfigError: true})
 	held("an unreadable configuration")
 	gl.SetFaults(gitlab.Faults{})

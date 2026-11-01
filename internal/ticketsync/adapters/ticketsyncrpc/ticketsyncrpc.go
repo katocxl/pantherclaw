@@ -15,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/page"
 	tsapp "github.com/katocxl/pantherclaw/internal/ticketsync/app"
 	"github.com/katocxl/pantherclaw/internal/ticketsync/domain"
 )
@@ -207,4 +208,55 @@ func (h *Handler) GetTicketFieldOwners(ctx context.Context, _ *pantherclawv1.Get
 // SetTicketFieldOwner implements TicketSyncService.
 func (h *Handler) SetTicketFieldOwner(ctx context.Context, req *pantherclawv1.SetTicketFieldOwnerRequest) (*pantherclawv1.SetTicketFieldOwnerResponse, error) {
 	return &pantherclawv1.SetTicketFieldOwnerResponse{}, h.svc.SetFieldOwner(ctx, domain.Field(req.GetField()), domain.Owner(req.GetOwner()))
+}
+
+// ListTicketRefs implements TicketSyncService.
+func (h *Handler) ListTicketRefs(ctx context.Context, req *pantherclawv1.ListTicketRefsRequest) (*pantherclawv1.ListTicketRefsResponse, error) {
+	var refs []tsapp.Ref
+	if raw := req.GetIncidentId(); raw != "" {
+		id, err := idOf(raw)
+		if err != nil {
+			return nil, err
+		}
+		if refs, err = h.svc.RefsOfIncident(ctx, id); err != nil {
+			return nil, err
+		}
+	} else {
+		id, err := idOf(req.GetCaseId())
+		if err != nil {
+			return nil, err
+		}
+		if refs, err = h.svc.RefsOfCase(ctx, id); err != nil {
+			return nil, err
+		}
+	}
+	out := &pantherclawv1.ListTicketRefsResponse{}
+	for _, r := range refs {
+		out.Refs = append(out.Refs, refProto(r))
+	}
+	return out, nil
+}
+
+// ListTicketSyncEvents implements TicketSyncService.
+func (h *Handler) ListTicketSyncEvents(ctx context.Context, req *pantherclawv1.ListTicketSyncEventsRequest) (*pantherclawv1.ListTicketSyncEventsResponse, error) {
+	config, err := idOf(req.GetConfigId())
+	if err != nil {
+		return nil, err
+	}
+	pr, err := page.Parse(req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	events, next, err := h.svc.SyncEvents(ctx, config, pr)
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.ListTicketSyncEventsResponse{NextPageToken: next}
+	for _, e := range events {
+		out.Events = append(out.Events, &pantherclawv1.TicketSyncEvent{
+			Id: e.ID.String(), Direction: e.Direction, OccurTime: timestamppb.New(e.OccurredAt), Status: e.Status, IssueKey: e.IssueKey,
+			Action: e.Action, CaseId: e.CaseID, IncidentId: e.IncidentID, ResultCode: e.ResultCode,
+		})
+	}
+	return out, nil
 }

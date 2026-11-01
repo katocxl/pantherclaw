@@ -89,6 +89,9 @@ type Tx interface {
 	ListRanges(ctx context.Context, agent *ids.UUID, after ids.UUID, limit int32) ([]domain.Range, error)
 	// Results returns the recorded results of a range, in recording order.
 	Results(ctx context.Context, rng ids.UUID) ([]domain.Result, error)
+	// ResultCounts counts the stored results of ranges; a range with none is
+	// absent.
+	ResultCounts(ctx context.Context, ranges []ids.UUID) (map[ids.UUID]domain.Counts, error)
 	// InsertResult appends a result; false when the scenario already has one.
 	InsertResult(ctx context.Context, rng ids.UUID, r domain.Result) (time.Time, bool, error)
 	// Transaction returns the server's record of a transaction, if any.
@@ -547,6 +550,9 @@ func readable(ctx context.Context, c tenancy.Caller, tx Tx, rng domain.Range) er
 type Page struct {
 	Items []domain.Range
 	Next  string
+	// Counts are the stored counts of Items; a range with no stored result is
+	// absent, and that is "not collected", not zero (G0 M22 D58).
+	Counts map[ids.UUID]domain.Counts
 }
 
 // ListRanges lists the ranges whose agents the caller reads (redteam.read).
@@ -580,7 +586,13 @@ func (s *Service) ListRanges(ctx context.Context, agent *ids.UUID, pr page.Reque
 			after = rows[len(rows)-1].ID
 		}
 		out.Items, out.Next = page.Finish(pr, visible, func(r domain.Range) ids.UUID { return r.ID })
-		return nil
+		listed := make([]ids.UUID, len(out.Items))
+		for i, r := range out.Items {
+			listed[i] = r.ID
+		}
+		var err error
+		out.Counts, err = tx.ResultCounts(ctx, listed)
+		return err
 	})
 	return out, err
 }

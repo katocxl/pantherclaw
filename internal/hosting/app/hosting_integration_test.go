@@ -727,3 +727,49 @@ func TestT216_AQueuedRequestFreesItsSlugWhenDeprovisioned(t *testing.T) {
 		t.Fatalf("a freed slug: %v", err)
 	}
 }
+
+// TestHR503_ARepeatDeprovisionChangesNothing: the first call revoked and
+// raised the epoch in one transaction, so a repeat, while deprovisioning or
+// once done, returns the state and moves no epoch: permits held for the
+// org's other gateways keep working (G0 M22 D59).
+func TestHR503_ARepeatDeprovisionChangesNothing(t *testing.T) {
+	e := newEnv(t, billing.Team)
+	host := e.host(t, "h1", 10)
+	a, actx := e.org(t)
+	hosted := e.provisioned(t, a, actx, "acme")
+	epoch := func() int64 {
+		t.Helper()
+		var n int64
+		if err := e.pool.InTenantTx(context.Background(), a, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, "SELECT coalesce((SELECT epoch FROM pc.org_containment WHERE org_id = $1), 0)", a).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := epoch()
+	if _, err := e.svc.Deprovision(actx, hosted, "test"); err != nil {
+		t.Fatal(err)
+	}
+	first := epoch()
+	if first <= before {
+		t.Fatal("the first call did not raise the epoch")
+	}
+	h, err := e.svc.Deprovision(actx, hosted, "again")
+	if err != nil || h.State != domain.StateDeprovisioning {
+		t.Fatalf("repeat while deprovisioning: %+v %v", h, err)
+	}
+	if got := epoch(); got != first {
+		t.Fatalf("the repeat moved the epoch from %d to %d", first, got)
+	}
+	if err := e.svc.Stopped(context.Background(), host, a, hosted); err != nil {
+		t.Fatal(err)
+	}
+	h, err = e.svc.Deprovision(actx, hosted, "again")
+	if err != nil || h.State != domain.StateDeprovisioned {
+		t.Fatalf("repeat once done: %+v %v", h, err)
+	}
+	if got := epoch(); got != first {
+		t.Fatalf("the repeat once done moved the epoch from %d to %d", first, got)
+	}
+}

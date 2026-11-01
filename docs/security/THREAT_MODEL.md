@@ -286,6 +286,9 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 
 | ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
 |---|---|---|---|---|---|---|
+| T-238 | A graph label leaks a hidden name: a node's label, or an agent-written label rendered as markup, shows the viewer the name of a record they may not read | A5, A8, A1 | TB4, TB7 | Hidden record disclosure; console script injection through a label | HR-550, HR-340; labels are plain text, built only from names the viewer may read, otherwise empty | M22 |
+| T-239 | A graph shows a cause with no evidence: a causal edge drawn from inference, a possible path shown as observed, or a gap lost when a view collapses, so that a reviewer believes an unproven account of what happened | A5, A7 | TB4 | False assurance; wrong incident conclusions | HR-551, HR-552; `evidence_ref` on every causal edge, a `gap` edge where evidence is missing, gaps never merged | M22 |
+| T-240 | The rotation RPC skips step-up: a stolen session or API key drives a key rotation through the new RPCs past the checks the service applies, or reads a secret back | A5, A7, A4 | TB4 | Lockout of a connection, or a key the attacker chose placed in custody | HR-553, HR-517..520; the RPCs map one to one onto the service methods, which keep step-up and the protected change; secrets go through a server page and never come back | M22 |
 
 **G0 M23: Hub, CI checks and the settings kit**
 
