@@ -156,13 +156,13 @@ func TestHR459_OnlyACompleteScanCountsAMiss(t *testing.T) {
 	if _, err := w.inv.SubmitScan(ci, "runner", []app.ScanFinding{server("a", "stdio")}, app.ScanMode{Scope: "bad‮scope", Complete: true}); !errors.Is(err, app.ErrScope) {
 		t.Errorf("a bidi scope: %v", err)
 	}
-	// A complete scan that dropped findings (the org's open cap) did not
-	// record all it saw, so it counts nothing.
+	// A complete scan that dropped findings (the scope's open cap, G0 M24
+	// D234) did not record all it saw, so it counts nothing.
 	w.exec(t, w.org, `INSERT INTO pc.agents (org_id, id, name, state, created_by)
 		SELECT $1, gen_random_uuid(), 'filler', 'DISCOVERED', 'test' FROM generate_series(1, $2)`, w.org, app.MaxOpenScanDiscoveries)
 	w.exec(t, w.org, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, scan_scope, scan_principal, observed)
-		SELECT $1, gen_random_uuid(), a.id, 'ci_scan', sha256(a.id::text::bytea), 'filler', 'filler', '{}' FROM pc.agents a
-		WHERE a.org_id = $1 AND a.name = 'filler'`, w.org)
+		SELECT $1, gen_random_uuid(), a.id, 'ci_scan', sha256(a.id::text::bytea), $2, 'filler', '{}' FROM pc.agents a
+		WHERE a.org_id = $1 AND a.name = 'filler'`, w.org, scope)
 	r, err := w.inv.SubmitScan(ci, "runner", []app.ScanFinding{server("new", "stdio")}, app.ScanMode{Scope: scope, Complete: true})
 	if err != nil || r.Dropped != 1 || r.Missed != 0 {
 		t.Fatalf("a complete scan that dropped a finding: %+v %v", r, err)

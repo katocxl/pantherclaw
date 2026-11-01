@@ -17,6 +17,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/exposure/exposuretest"
 	"github.com/katocxl/pantherclaw/internal/exposure/recompute"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	podomain "github.com/katocxl/pantherclaw/internal/posture/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 )
 
@@ -100,6 +102,47 @@ func TestIntRecomputeFollowsTheFeed(t *testing.T) {
 	if n := count(t, o, "SELECT count(*) FROM pc.operational_failures WHERE kind = 'exposure.edition_lapsed'"); n != 1 {
 		t.Fatalf("lapse failures: %d", n)
 	}
+}
+
+// TestIntPostureComputedOnTeam: the ranked queue is Team, so a recomputation
+// on Team produces posture findings too (G0 M24 D201).
+// Covers: F860
+func TestIntPostureComputedOnTeam(t *testing.T) {
+	o := exposuretest.New(t)
+	o.Grant(t, o.Agent, 0, "", "payments.*")
+	hook := &hookCount{}
+	svc := &recompute.Service{Pool: o.P, Ents: edition(billing.Team), Failures: &failures.Sink{}, Findings: hook}
+	if res, err := svc.Run(context.Background(), o.Org); err != nil || !res.Recomputed || res.Posture == nil {
+		t.Fatalf("first run: %+v %v", res, err)
+	}
+	if n := count(t, o, "SELECT count(*) FROM pc.posture_findings"); n == 0 {
+		t.Fatal("no posture findings on Team")
+	}
+	if hook.n != 0 {
+		t.Errorf("Team reached the suggestions' queue %d times: remediation stays Business+ (D201)", hook.n)
+	}
+}
+
+// TestIntSuggestionsFollowFindingsOnBusiness: the other side of the Team
+// check, so an idle hook cannot pass it.
+func TestIntSuggestionsFollowFindingsOnBusiness(t *testing.T) {
+	o := exposuretest.New(t)
+	o.Grant(t, o.Agent, 0, "", "payments.*")
+	hook := &hookCount{}
+	svc := &recompute.Service{Pool: o.P, Ents: edition(billing.Business), Failures: &failures.Sink{}, Findings: hook}
+	if _, err := svc.Run(context.Background(), o.Org); err != nil {
+		t.Fatal(err)
+	}
+	if hook.n == 0 {
+		t.Fatal("Business did not reach the suggestions' queue")
+	}
+}
+
+type hookCount struct{ n int }
+
+func (h *hookCount) FindingChanged(context.Context, db.TenantTx, ids.UUID, podomain.Kind, podomain.ActionKind) error {
+	h.n++
+	return nil
 }
 
 func TestMoves(t *testing.T) {

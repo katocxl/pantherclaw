@@ -31,6 +31,10 @@ const ConfigFormat = "pantherclaw.edge/v1"
 const (
 	ModeSandbox   = "sandbox"
 	ModeConnector = "connector"
+	// ModeInspect is the edge of an MCP server inspection (G0 M24 D214): no
+	// gateway, no key, no token and no uplink, and every request refused and
+	// recorded.
+	ModeInspect = "inspect"
 )
 
 // Config is the edge's configuration file. `pclaw sandbox run` writes it and
@@ -86,6 +90,11 @@ func ReadConfig(path string) (Config, error) {
 		return Config{}, errors.New("edge: a connector's edge needs listen, subnet and binding_file, and has no workload key or token")
 	case c.Mode == ModeConnector:
 		return c, nil
+	case c.Mode == ModeInspect && (c.Listen == "" || c.Subnet == "" || c.KeyFile != "" || c.TokenFile != "" || c.BindingFile != "" ||
+		c.GatewayURL != "" || len(c.Hosts) != 0):
+		return Config{}, errors.New("edge: an inspection's edge needs listen and subnet, and has no gateway, hosts, key, token or binding")
+	case c.Mode == ModeInspect:
+		return c, nil
 	case c.Mode != ModeSandbox:
 		return Config{}, fmt.Errorf("edge: mode %q", c.Mode)
 	case c.Listen == "" || c.Subnet == "" || c.KeyFile == "" || c.TokenFile == "":
@@ -129,10 +138,13 @@ func Run(ctx context.Context, c Config, out io.Writer, log *slog.Logger) error {
 		Session: c.Session, GatewayURL: c.GatewayURL, GatewayAddr: c.GatewayAddr, GatewayCAPin: c.GatewayCAPin, Hosts: c.Hosts,
 		Run: c.Run, CAValidity: time.Duration(c.CAValiditySeconds) * time.Second, Log: log,
 	}
-	if c.Mode == ModeConnector {
+	switch c.Mode {
+	case ModeInspect:
+		o.Inspect = true
+	case ModeConnector:
 		o.Binding = read(c.BindingFile)
 		o.Placeholder = c.Placeholder
-	} else {
+	default:
 		kf, err := workloadclient.ReadKeyFile(c.KeyFile)
 		if err != nil {
 			return err

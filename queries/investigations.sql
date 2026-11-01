@@ -65,10 +65,43 @@ WHERE q.org_id = sqlc.arg(org_id) AND q.subject_kind = 'ACTION'
 ORDER BY q.created_at, q.id
 LIMIT sqlc.arg(max_rows);
 
+-- The first transactions of several child runs in one read (F284): at most
+-- lane_rows each, in rounds so a cut at max_rows shares out evenly. The
+-- columns are InvRunTransactions' with the run and the round.
+-- name: InvLaneTransactions :many
+SELECT x.run_id, x.round, x.id, x.operation, x.decision, x.reason_code, x.mode, x.channel, x.connection_id, x.target_type, x.target_id,
+       x.grant_id, x.effect_state, x.read_class, x.created_at, x.permit_state, x.dispatching_at, x.outcome, x.outcome_at, x.has_receipt,
+       x.destination_class
+FROM unnest(sqlc.arg(run_ids)::uuid[]) AS lane(id)
+CROSS JOIN LATERAL (
+    SELECT t.run_id, (row_number() OVER (ORDER BY t.created_at, t.id))::bigint AS round, t.id, t.operation, t.decision, t.reason_code,
+           t.mode, t.channel, t.connection_id, t.target_type, t.target_id, t.grant_id, t.effect_state, t.read_class, t.created_at,
+           p.state AS permit_state, p.dispatching_at, a.outcome, a.recorded_at AS outcome_at,
+           EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt,
+           c.destination_class
+    FROM pc.transactions t
+    LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+    LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
+    LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+    WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = lane.id
+    ORDER BY t.created_at, t.id
+    LIMIT sqlc.arg(lane_rows)
+) x
+ORDER BY x.round, x.run_id
+LIMIT sqlc.arg(max_rows);
+
+-- The approval requests of several child runs in one read (F284).
+-- name: InvLaneApprovals :many
+SELECT q.id, q.run_id::uuid AS run_id, q.transaction_id, q.operation, q.state, q.created_at, q.approved_at, q.ended_at
+FROM pc.approval_requests q
+WHERE q.org_id = sqlc.arg(org_id) AND q.subject_kind = 'ACTION' AND q.run_id = ANY (sqlc.arg(run_ids)::uuid[])
+ORDER BY q.created_at, q.id
+LIMIT sqlc.arg(max_rows);
+
 -- The run's transactions, oldest first (F284).
 -- name: InvRunTransactions :many
 SELECT t.id, t.operation, t.decision, t.reason_code, t.mode, t.channel, t.connection_id, t.target_type, t.target_id,
-       t.grant_id, t.effect_state, t.created_at,
+       t.grant_id, t.effect_state, t.read_class, t.created_at,
        p.state AS permit_state, p.dispatching_at, a.outcome, a.recorded_at AS outcome_at,
        EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt,
        c.destination_class

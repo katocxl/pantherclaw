@@ -64,6 +64,18 @@ func TestIntCoverageGraphIsTeamAndAboveAndReadsTheAgentsScopes(t *testing.T) {
 	if !slices.ContainsFunc(g.Nodes, func(n app.GraphNode) bool { return n.Kind == app.NodeRoute && n.RouteKind == "target_side" }) {
 		t.Errorf("no target-side route: %+v", g.Nodes)
 	}
+	// Each edge says why, when it was checked and when that stops holding
+	// (F278); a scope names the effect group it belongs to (F277).
+	for _, n := range g.Nodes {
+		if n.Kind == app.NodeScope && n.EffectGroup != "payments.refund.create" {
+			t.Errorf("scope without its effect group: %+v", n)
+		}
+	}
+	for _, e := range g.Edges {
+		if e.Reason == "" || e.CheckedAt == nil || e.CheckedAt.IsZero() {
+			t.Errorf("edge with no reason or check time: %+v", e)
+		}
+	}
 	op := "payments.refund.get"
 	if g, err := f.svc.GetCoverageGraph(auditor, f.agent, app.GraphFilter{Operation: &op}); err != nil || len(g.Nodes) != 1 {
 		t.Fatalf("another operation: %+v (%v)", g, err)

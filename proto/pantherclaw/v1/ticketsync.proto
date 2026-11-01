@@ -63,6 +63,18 @@ service TicketSyncService {
   // for a second person (PROTECTED_CHANGE_PENDING).
   // permission: connection.manage
   rpc SetTicketFieldOwner(SetTicketFieldOwnerRequest) returns (SetTicketFieldOwnerResponse);
+  // ListTicketRefs lists the tickets linked to one case or one incident. For
+  // an incident the caller also needs incident.read.
+  // permission: case.read
+  rpc ListTicketRefs(ListTicketRefsRequest) returns (ListTicketRefsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListTicketSyncEvents lists a configuration's sync log, newest first:
+  // inbound deliveries and outbound calls, without bodies or secrets.
+  // permission: connection.read
+  rpc ListTicketSyncEvents(ListTicketSyncEventsRequest) returns (ListTicketSyncEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // TicketSyncConfig is a sync configuration, without its secrets.
@@ -187,3 +199,65 @@ message SetTicketFieldOwnerRequest {
 }
 
 message SetTicketFieldOwnerResponse {}
+
+// ListTicketRefsRequest names one case or one incident.
+message ListTicketRefsRequest {
+  // The case or the incident.
+  oneof subject {
+    option (buf.validate.oneof).required = true;
+    // Case id.
+    string case_id = 1 [(buf.validate.field).string.uuid = true];
+    // Incident id.
+    string incident_id = 2 [(buf.validate.field).string.uuid = true];
+  }
+}
+
+// ListTicketRefsResponse is the linked tickets.
+message ListTicketRefsResponse {
+  // The links.
+  repeated TicketRef refs = 1;
+}
+
+// ListTicketSyncEventsRequest is one page of a configuration's log.
+message ListTicketSyncEventsRequest {
+  // Configuration id.
+  string config_id = 1 [(buf.validate.field).string.uuid = true];
+  // Page size.
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Page token.
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+// TicketSyncEvent is one entry of the sync log.
+message TicketSyncEvent {
+  // Event id.
+  string id = 1;
+  // INBOUND or OUTBOUND.
+  string direction = 2;
+  // When it was received or queued.
+  google.protobuf.Timestamp occur_time = 3;
+  // Inbound: APPLIED, IGNORED, NOTED, STALE or UNLINKED. Outbound: PENDING,
+  // DONE or FAILED.
+  string status = 4;
+  // Inbound: the ticket key, when the delivery named one.
+  string issue_key = 5;
+  // Outbound: CREATE or COMMENT.
+  string action = 6;
+  // Outbound: the case, if any.
+  string case_id = 7;
+  // Outbound: the incident, if any.
+  string incident_id = 8;
+  // Outbound: the result code, once finished.
+  string result_code = 9;
+}
+
+// ListTicketSyncEventsResponse is a page of the log.
+message ListTicketSyncEventsResponse {
+  // The events.
+  repeated TicketSyncEvent events = 1;
+  // The next page, if any.
+  string next_page_token = 2;
+}

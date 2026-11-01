@@ -225,8 +225,8 @@ func TestJWKSDocument(t *testing.T) {
 	if err := json.Unmarshal(b, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Keys) != 4 {
-		t.Fatalf("JWKS has %d keys, want 4 (checkpoint, access-token and gateway CA keys are not published)", len(doc.Keys))
+	if len(doc.Keys) != 5 {
+		t.Fatalf("JWKS has %d keys, want 5 (checkpoint, access-token and gateway CA keys are not published)", len(doc.Keys))
 	}
 	for _, k := range doc.Keys {
 		for _, hidden := range []Purpose{PurposeCheckpoints, PurposeAccessTokens, PurposeGatewayCA} {

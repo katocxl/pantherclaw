@@ -105,6 +105,8 @@ func (h *Handler) GetMetrics(ctx context.Context, req *pantherclawv1.GetMetricsR
 			mp := &pantherclawv1.MetricPoint{BucketTime: timestamppb.New(p.Bucket), State: string(p.State), Value: p.Value}
 			if p.Drill != nil {
 				mp.DrillQuery, mp.DrillBuiltin = searchrpc.SpecProto(*p.Drill)
+			} else if p.State != operations.PointRestricted {
+				mp.NoDrill = true
 			}
 			ps.Points = append(ps.Points, mp)
 		}

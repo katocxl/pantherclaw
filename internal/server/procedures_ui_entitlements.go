@@ -6,6 +6,7 @@ package server
 import (
 	"maps"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	"github.com/katocxl/pantherclaw/internal/entitlements"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -29,6 +30,9 @@ func init() { maps.Copy(procedurePermissions, uiEntitlementProcedures) }
 // plan keeps only the allow list. Tools that mirror this table read
 // ProcedureMap, which includes the side maps (G0 M22 D9).
 func procedureClass(procedure string) entitlements.Class {
+	if procedure == webhttp.SafetyPage {
+		return entitlements.ClassSafety // the pages with no procedure (G0 M22 D80)
+	}
 	return procedureClasses[procedure] // a missing one is ClassUnknown: a change (fail closed)
 }
 
@@ -347,6 +351,21 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.PostureService/GetPostureFinding":                     entitlements.ClassRead,
 	"/pantherclaw.v1.PostureService/ListPostureFindings":                   entitlements.ClassRead,
 	"/pantherclaw.v1.PostureService/ListPostureRootCauses":                 entitlements.ClassRead,
+	"/pantherclaw.v1.PostureQueueService/ListRankedFindings":               entitlements.ClassRead,
+	"/pantherclaw.v1.PostureQueueService/GetPostureTrends":                 entitlements.ClassRead,
+	"/pantherclaw.v1.McpCatalogService/ProposeServer":                      entitlements.ClassChange,
+	"/pantherclaw.v1.McpCatalogService/ApproveServer":                      entitlements.ClassChange,
+	"/pantherclaw.v1.McpCatalogService/DenyServer":                         entitlements.ClassSafety,
+	"/pantherclaw.v1.McpCatalogService/ListServers":                        entitlements.ClassRead,
+	"/pantherclaw.v1.McpCatalogService/GetServer":                          entitlements.ClassRead,
+	"/pantherclaw.v1.McpCatalogService/GetCatalogSettings":                 entitlements.ClassRead,
+	"/pantherclaw.v1.McpCatalogService/PreviewCatalogMode":                 entitlements.ClassRead,
+	"/pantherclaw.v1.McpCatalogService/SetCatalogMode":                     entitlements.ClassSafety,
+	"/pantherclaw.v1.McpCatalogService/PreviewServerRevoke":                entitlements.ClassRead,
+	"/pantherclaw.v1.McpCatalogService/RevokeServer":                       entitlements.ClassSafety,
+	"/pantherclaw.v1.SupplyChainService/ListSupplyChainFlags":              entitlements.ClassRead,
+	"/pantherclaw.v1.ConnectionService/AddInventoryNote":                   entitlements.ClassChange,
+	"/pantherclaw.v1.ConnectionService/GetConnectionInventoryItem":         entitlements.ClassRead,
 	"/pantherclaw.v1.PostureService/MarkPostureEvidenceIncomplete":         entitlements.ClassSafety,
 	"/pantherclaw.v1.PostureService/ReopenPostureFinding":                  entitlements.ClassSafety,
 	"/pantherclaw.v1.PostureService/StartPostureTesting":                   entitlements.ClassChange,
@@ -543,6 +562,8 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.TicketSyncService/OpenCaseTicket":         entitlements.ClassChange,
 	"/pantherclaw.v1.TicketSyncService/OpenIncidentTicket":     entitlements.ClassChange,
 	"/pantherclaw.v1.TicketSyncService/GetTicketFieldOwners":   entitlements.ClassRead,
+	"/pantherclaw.v1.TicketSyncService/ListTicketRefs":         entitlements.ClassRead,
+	"/pantherclaw.v1.TicketSyncService/ListTicketSyncEvents":   entitlements.ClassRead,
 	"/pantherclaw.v1.TicketSyncService/SetTicketFieldOwner":    entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/ProposeSlackLink":     entitlements.ClassChange,
 	"/pantherclaw.v1.NotificationService/ConfirmChatLink":      entitlements.ClassChange,

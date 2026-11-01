@@ -13,11 +13,11 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND 
 -- name: InsertA2APin :exec
 INSERT INTO pc.a2a_pins (org_id, id, connection_id, card_url, binding, interface_url, pinned_card, card_digest,
                          card_keys, skills, peer_agent_id, peer_bounds, peer_limits, max_answer_bytes,
-                         max_stream_seconds, proposed_by)
+                         max_stream_seconds, proposed_by, public_url)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(card_url), sqlc.arg(binding),
         sqlc.arg(interface_url), sqlc.arg(pinned_card), sqlc.arg(card_digest), sqlc.narg(card_keys), sqlc.arg(skills),
         sqlc.narg(peer_agent_id), sqlc.narg(peer_bounds), sqlc.narg(peer_limits), sqlc.arg(max_answer_bytes),
-        sqlc.arg(max_stream_seconds), sqlc.arg(proposed_by));
+        sqlc.arg(max_stream_seconds), sqlc.arg(proposed_by), sqlc.narg(public_url));
 
 -- name: GetA2APin :one
 SELECT *

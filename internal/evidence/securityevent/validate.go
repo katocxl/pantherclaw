@@ -53,6 +53,27 @@ func Validate(e Event) error {
 
 var machineID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
+var serverName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
+
+// validateServer bounds a revoke's spec. The server's owner checks its meaning when
+// a restore uses it.
+func validateServer(e Event) error {
+	s := e.McpServer
+	if e.Kind != "mcp.catalog.server_revoked" {
+		return errors.New("security event: unexpected server spec")
+	}
+	if !serverName.MatchString(s.Name) || (s.Transport != "http" && s.Transport != "stdio" && s.Transport != "container") {
+		return errors.New("security event: invalid server spec")
+	}
+	if len(s.PackageRef) > 256 || len(s.URLHost) > 261 || len(s.URLPathPrefix) > 512 || len(s.ImageDigest) > 71 {
+		return errors.New("security event: oversized server spec")
+	}
+	if s.PackageRef == "" && s.URLHost == "" && s.ImageDigest == "" {
+		return errors.New("security event: a server spec names nothing")
+	}
+	return nil
+}
+
 func validateObject(e Event) error {
 	if e.Kind == "security.kill_switch_engaged" && e.Object.ID != e.Org.String() {
 		return errors.New("restore: kill switch object is another organization")
@@ -86,6 +107,11 @@ func validateObject(e Event) error {
 			return fmt.Errorf("restore: invalid %s id", e.Object.Type)
 		}
 	}
+	if e.McpServer != nil {
+		if err := validateServer(e); err != nil {
+			return err
+		}
+	}
 	if e.Kind != "response.contain" {
 		if e.Containment != nil {
 			return errors.New("restore: unexpected containment metadata")
@@ -106,6 +132,11 @@ func validateObject(e Event) error {
 	}
 	if c.ScopeID == "" {
 		return errors.New("security event: missing containment scope")
+	}
+	if c.Server != "" {
+		if id, err := ids.ParseUUID(c.Server); err != nil || id.IsZero() || c.ScopeType != "connection" {
+			return errors.New("security event: invalid containment server")
+		}
 	}
 	switch c.Control {
 	case "DENY_ALL", "HOLD_WRITES":

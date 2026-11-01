@@ -37,11 +37,29 @@ function say(text) {
 const messages = {
   no_keys: "You need a security key on your account first (add one on your account page).",
   step_up_required: "Verify with your security key first.",
+  plan_required: "This organization's plan does not allow this. Choose a plan in Settings, Plan and billing.",
   verification_failed: "The security key's answer could not be verified.",
   forbidden: "You cannot activate it: that needs the manage permission and a person's session.",
   not_found: "It does not exist, or you cannot see it.",
   not_pending: "It is no longer waiting for activation. Reload the page.",
   url_refused: "The destination's URL is no longer allowed. Create a new destination.",
+  protected_change_pending: "Your organization protects this change: it now waits for a second person.",
+  rotation_untested: "The new key has not passed its test at GitHub.",
+  rotation_state: "The rotation has moved on. Reload the page.",
+  rollback_closed: "The rollback window is closed.",
+  rotation_reason: "Give a reason of 1 to 500 characters.",
+  invalid_request: "The form could not be read. Reload the page.",
+  edition_required: "Your edition does not include this.",
+  invalid_export_destination: "Check the name, target and data classes.",
+  invalid_export_credential: "Give the credential this kind of destination uses.",
+  export_destination_state: "This destination is disabled, so its credential cannot be replaced.",
+  export_destination_url: "This URL is not allowed.",
+  export_destination_metadata: "This URL is not allowed.",
+  export_destination_exists: "A destination of that name exists.",
+  identity_provider_invalid: "Check the name, issuer URL, client id and client secret.",
+  identity_provider_discovery: "The issuer did not answer as an OpenID provider.",
+  identity_provider_name_taken: "A provider of that name exists.",
+  identity_provider_limit: "This organization has as many providers as it can have.",
 };
 
 function explain(e) { return messages[e.code] || ("Something went wrong (" + e.message + ")."); }
@@ -103,3 +121,21 @@ async function activate(path) {
 
 const activateButton = document.getElementById("activate");
 if (activateButton) { activateButton.addEventListener("click", () => activate(activateButton.dataset.path)); }
+
+// rollBack is activate with the person's reason (G0 M22 D5).
+async function rollBack(path, reason) {
+  try {
+    say("Waiting for your security key…");
+    await stepUp();
+    await post(path, { reason: reason });
+    say("Rolled back.");
+    window.location.reload();
+  } catch (e) {
+    say(e instanceof APIError ? explain(e) : "The security key did not answer (" + e.message + ").");
+  }
+}
+
+const rollbackButton = document.getElementById("rollback");
+if (rollbackButton) {
+  rollbackButton.addEventListener("click", () => rollBack(rollbackButton.dataset.path, document.getElementById("reason").value));
+}

@@ -192,12 +192,38 @@ func (q *Queries) RecommendationIntegrations(ctx context.Context, orgID ids.OrgI
 	return i, err
 }
 
+const recommendationManagedSettingsMissing = `-- name: RecommendationManagedSettingsMissing :one
+SELECT count(*)::int AS discoveries,
+    COALESCE((array_agg(d.id ORDER BY d.id))[1:20], '{}')::uuid[] AS refs
+FROM pc.discoveries d
+JOIN pc.agents a ON a.org_id = d.org_id AND a.id = d.agent_id
+WHERE d.org_id = $1 AND d.state = 'OPEN' AND d.source = 'scan' AND a.state <> 'RETIRED' AND NOT a.range_agent
+  AND d.observed->>'managed_settings' = 'not_found'
+  AND ($2::boolean OR d.agent_id = ANY ($3::uuid[]))
+`
+
+type RecommendationManagedSettingsMissingRow struct {
+	Discoveries int32
+	Refs        []ids.UUID
+}
+
+// The open local scan discoveries on agents the viewer may read that a scan
+// found on a machine with no managed settings file (G0 M23 D114). observed
+// is untrusted: it is compared with one constant and nothing from it is
+// returned. A CI-mode scan (ci_scan) is not a developer's machine.
+func (q *Queries) RecommendationManagedSettingsMissing(ctx context.Context, orgID ids.OrgID, allAgents bool, agentIds []ids.UUID) (RecommendationManagedSettingsMissingRow, error) {
+	row := q.db.QueryRow(ctx, recommendationManagedSettingsMissing, orgID, allAgents, agentIds)
+	var i RecommendationManagedSettingsMissingRow
+	err := row.Scan(&i.Discoveries, &i.Refs)
+	return i, err
+}
+
 const recommendationOpenSecrets = `-- name: RecommendationOpenSecrets :many
 SELECT (d.observed->>'secret_kind')::text AS secret_kind, count(*)::int AS discoveries,
     (array_agg(d.id ORDER BY d.id))[1:20]::uuid[] AS refs
 FROM pc.discoveries d
 JOIN pc.agents a ON a.org_id = d.org_id AND a.id = d.agent_id
-WHERE d.org_id = $1 AND d.state = 'OPEN' AND d.source = 'scan' AND a.state <> 'RETIRED' AND NOT a.range_agent
+WHERE d.org_id = $1 AND d.state = 'OPEN' AND d.source IN ('scan', 'ci_scan') AND a.state <> 'RETIRED' AND NOT a.range_agent
   AND d.observed->>'kind' = 'env_secret' AND d.observed->>'secret_kind' = ANY ($2::text[])
   AND ($3::boolean OR d.agent_id = ANY ($4::uuid[]))
 GROUP BY d.observed->>'secret_kind'

@@ -1,0 +1,56 @@
+name: pc.coding.merge-needs-review
+version: 1.0.0
+kind: policy_template
+title: Merges need an independent review
+summary: >-
+  Every merge into a named repository waits for an independent code reviewer,
+  bound to the head SHA. Bind code_reviewer yourself.
+body:
+  placeholders:
+    repository: {"kind": "repository", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"}
+  rules:
+    - id: mr-merge-review
+      per: repo
+      kind: REQUIRE_APPROVAL
+      summary: an independent code reviewer approves every merge into the repository
+      operations: [github.pull.merge]
+      when: "{{pull_request}}"
+      reason: MERGE_NEEDS_REVIEW
+      approval: {role: code_reviewer, count: 1, independent: true}
+  tests:
+    - {"id": "mr-held", "per": "repo", "summary": "a merge into the repository waits for an independent code reviewer",
+        "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+          "params": {"sha": "1111111111111111111111111111111111111111"}},
+        "given": {"facts": {
+            "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+            "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+            "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+            "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+            "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+            "github.repo.deploy_triggers": {"value": {"object": {"state": "none", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
+          }},
+        "expect": {"decision": "REQUIRE_APPROVAL", "reason": "MERGE_NEEDS_REVIEW"}}
+    - {"id": "mr-other-repo", "per": "repo", "summary": "a merge into a repository the template was not applied to is not this rule's",
+        "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "elsewhere/other#7"},
+          "params": {"sha": "1111111111111111111111111111111111111111"}},
+        "given": {"facts": {
+            "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+            "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+            "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+            "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+            "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+            "github.repo.deploy_triggers": {"value": {"object": {"state": "none", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
+          }},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
+    - {"id": "mr-reviewed", "per": "repo", "summary": "an approved merge goes through",
+        "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+          "params": {"sha": "1111111111111111111111111111111111111111"}},
+        "given": {"approval": "approved", "facts": {
+            "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+            "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+            "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+            "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+            "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+            "github.repo.deploy_triggers": {"value": {"object": {"state": "none", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
+          }},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}

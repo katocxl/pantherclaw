@@ -17,19 +17,25 @@ import (
 // entry (G0 M15 D21).
 const SubjectInventory = "connection_inventory"
 
+// TrustedFlags is the trusted evidence key that holds the supply-chain checks'
+// result on a TOOL_REVIEW entry (G0 M24 D212).
+const TrustedFlags = "supply_chain_flags"
+
 // OpenInventoryReview opens the TOOL_REVIEW entry of a NEW inventory item
 // (F352, G0 M15 D22): what a connection's upstream server lists that no
 // active reviewed package version covers. Only what PantherClaw checked is
 // trusted: the kind, the item and, for a tool, its pattern-checked name. A
 // resource URI or template is upstream text and goes in the untrusted
-// block; the description never goes in the entry (HR-415, D43). It returns
+// block; the description never goes in the entry (HR-415, D43). flags is
+// what the supply-chain checks found, in PantherClaw's own words: check names
+// or "no known flags" (G0 M24 D212, HR-582), which approve nothing. It returns
 // the item's open entry when there is one.
-func OpenInventoryReview(ctx context.Context, tx db.TenantTx, org ids.OrgID, item ids.UUID, kind, name string, toolName bool,
+func OpenInventoryReview(ctx context.Context, tx db.TenantTx, org ids.OrgID, item ids.UUID, kind, name string, toolName bool, flags string,
 	actor evdomain.Actor,
 ) (ids.UUID, error) {
 	e := entry{
 		kind: wdomain.KindToolReview, subjectType: SubjectInventory, subject: item,
-		trusted: map[string]string{"kind": kind, "inventory_item": item.String()},
+		trusted: map[string]string{"kind": kind, "inventory_item": item.String(), TrustedFlags: flags},
 	}
 	if toolName {
 		e.trusted["tool"] = name

@@ -111,6 +111,9 @@ const (
 	// GatewayServiceReportInventoryProcedure is the procedure name of the GatewayService's
 	// ReportInventory RPC.
 	GatewayServiceReportInventoryProcedure = "/pantherclaw.v1.GatewayService/ReportInventory"
+	// GatewayServiceSignAgentCardProcedure is the procedure name of the GatewayService's SignAgentCard
+	// RPC.
+	GatewayServiceSignAgentCardProcedure = "/pantherclaw.v1.GatewayService/SignAgentCard"
 )
 
 var (
@@ -695,6 +698,13 @@ var (
 			Procedure:  GatewayServiceReportInventoryProcedure,
 		}
 	})
+	gatewayServiceSignAgentCardSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("SignAgentCard"),
+			Procedure:  GatewayServiceSignAgentCardProcedure,
+		}
+	})
 )
 
 // GatewayServiceClient is a client for the pantherclaw.v1.GatewayService service.
@@ -803,6 +813,11 @@ type GatewayServiceClient interface {
 	// accepted only for connections the gateway serves (HR-418).
 	// permission: gateway.observe
 	ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error)
+	// SignAgentCard signs a rewritten A2A card the calling gateway serves, with
+	// the platform's a2a_card key (G0 M24 D232). The server rewrites the
+	// connection's active pin itself and signs only an exact match.
+	// permission: gateway.sync
+	SignAgentCard(context.Context, *v1.SignAgentCardRequest) (*v1.SignAgentCardResponse, error)
 }
 
 // NewGatewayServiceClient constructs a client for the pantherclaw.v1.GatewayService service.
@@ -938,6 +953,11 @@ type GatewayServiceHandler interface {
 	// accepted only for connections the gateway serves (HR-418).
 	// permission: gateway.observe
 	ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error)
+	// SignAgentCard signs a rewritten A2A card the calling gateway serves, with
+	// the platform's a2a_card key (G0 M24 D232). The server rewrites the
+	// connection's active pin itself and signs only an exact match.
+	// permission: gateway.sync
+	SignAgentCard(context.Context, *v1.SignAgentCardRequest) (*v1.SignAgentCardResponse, error)
 }
 
 // RegisterGatewayServiceHandler registers svc as the pantherclaw.v1.GatewayService implementation
@@ -964,6 +984,7 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceGetMCPStateSpec(), Handler: adapter.getMCPState},
 		connect.Method{Spec: gatewayServiceDeleteMCPStateSpec(), Handler: adapter.deleteMCPState},
 		connect.Method{Spec: gatewayServiceReportInventorySpec(), Handler: adapter.reportInventory},
+		connect.Method{Spec: gatewayServiceSignAgentCardSpec(), Handler: adapter.signAgentCard},
 	)
 }
 
@@ -1060,6 +1081,10 @@ func (UnimplementedGatewayServiceHandler) DeleteMCPState(context.Context, *v1.De
 
 func (UnimplementedGatewayServiceHandler) ReportInventory(context.Context, *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportInventory is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) SignAgentCard(context.Context, *v1.SignAgentCardRequest) (*v1.SignAgentCardResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.SignAgentCard is not implemented")
 }
 
 type gatewayServiceClient struct {
@@ -1213,6 +1238,14 @@ func (c *gatewayServiceClient) DeleteMCPState(ctx context.Context, req *v1.Delet
 func (c *gatewayServiceClient) ReportInventory(ctx context.Context, req *v1.ReportInventoryRequest) (*v1.ReportInventoryResponse, error) {
 	var res v1.ReportInventoryResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceReportInventorySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) SignAgentCard(ctx context.Context, req *v1.SignAgentCardRequest) (*v1.SignAgentCardResponse, error) {
+	var res v1.SignAgentCardResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceSignAgentCardSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -1438,6 +1471,18 @@ func (h gatewayServiceHandler) reportInventory(ctx context.Context, _ connect.Sp
 		return err
 	}
 	res, err := h.svc.ReportInventory(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) signAgentCard(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SignAgentCardRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SignAgentCard(ctx, &req)
 	if err != nil {
 		return err
 	}

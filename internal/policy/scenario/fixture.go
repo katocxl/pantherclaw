@@ -553,6 +553,10 @@ func wireType(raw jsontext.Value) fdomain.Type {
 	return out
 }
 
+// WireType is the type a fact value's wire form names, or "": how an
+// offline check declares a fact only its fixtures give (G0 M23 D120).
+func WireType(raw jsontext.Value) fdomain.Type { return wireType(raw) }
+
 // SensitiveReads implements pipeline.Reader: a policy test case has no
 // read history.
 func (f *fixture) SensitiveReads(context.Context, ids.OrgID, ids.UUID) ([]pipeline.SensitiveRead, error) {

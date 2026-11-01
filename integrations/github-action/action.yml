@@ -1,0 +1,176 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Joshua Kato
+#
+# PantherClaw policy check (G0 M23 D123, HR-566). It reads files only: no
+# PantherClaw server, no API key, no secret. Inputs reach the shell through
+# env, never through an expression inside a run block.
+name: PantherClaw policy check
+description: Check a PantherClaw policy file offline on a pull request, and fail when it widens what the base allows.
+branding:
+  icon: shield
+  color: orange
+
+inputs:
+  policy:
+    description: Path of the policy bundle (JSON), relative to the repository root.
+    required: true
+  base-ref:
+    description: Commit or branch to compare with. Default, the pull request's base commit.
+    required: false
+    default: ""
+  scenarios:
+    description: Directory of scenario fixtures, relative to the repository root.
+    required: false
+    default: ""
+  packages:
+    description: Directory of package.yaml files, relative to the repository root. Default, the packages built into pclaw.
+    required: false
+    default: ""
+  pclaw-version:
+    description: The pclaw release to run, such as 1.0.0. There is no latest, so a run stays reproducible.
+    required: true
+  comment:
+    description: Set to true to post the report on the pull request. Needs pull-requests write; skipped on forks.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Refuse anything but a pull_request event
+      shell: bash
+      env:
+        POLICY: ${{ inputs.policy }}
+        SCENARIOS: ${{ inputs.scenarios }}
+        PACKAGES: ${{ inputs.packages }}
+        VERSION: ${{ inputs.pclaw-version }}
+      run: |
+        set -euo pipefail
+        if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+          echo "pantherclaw: this action runs on pull_request events only (got $GITHUB_EVENT_NAME)" >&2
+          exit 2
+        fi
+        for p in "$POLICY" "$SCENARIOS" "$PACKAGES"; do
+          case "/$p/" in
+            *//[!/]* | */../*)
+              echo "pantherclaw: a path input must stay inside the repository" >&2
+              exit 2
+              ;;
+          esac
+        done
+        if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+          echo "pantherclaw: pclaw-version must be a release number" >&2
+          exit 2
+        fi
+
+    - name: Check out the base
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ inputs.base-ref || github.event.pull_request.base.sha }}
+        path: .pantherclaw-base
+        persist-credentials: false
+
+    - name: Install pclaw, verified against the release checksums
+      id: install
+      shell: bash
+      env:
+        VERSION: ${{ inputs.pclaw-version }}
+      run: |
+        set -euo pipefail
+        case "$RUNNER_OS" in
+          Linux) os=linux ext=tar.gz ;;
+          macOS) os=darwin ext=tar.gz ;;
+          Windows) os=windows ext=zip ;;
+          *) echo "pantherclaw: no pclaw for $RUNNER_OS" >&2; exit 2 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "pantherclaw: no pclaw for $RUNNER_ARCH" >&2; exit 2 ;;
+        esac
+        dir="$RUNNER_TEMP/pantherclaw"
+        mkdir -p "$dir"
+        cd "$dir"
+        name="pantherclaw_${VERSION}_${os}_${arch}.${ext}"
+        url="https://github.com/katocxl/pantherclaw/releases/download/v${VERSION}"
+        curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o "$name" "$url/$name"
+        curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o checksums.txt "$url/checksums.txt"
+        awk -v f="$name" '$2 == f' checksums.txt > expected.txt
+        if [ "$(wc -l < expected.txt)" -ne 1 ]; then
+          echo "pantherclaw: checksums.txt has no single entry for $name" >&2
+          exit 2
+        fi
+        if command -v sha256sum > /dev/null; then
+          sha256sum --check --strict expected.txt
+        else
+          shasum --algorithm 256 --check --strict expected.txt
+        fi
+        if [ "$ext" = zip ]; then
+          unzip -q -o "$name" pclaw.exe
+          echo "pclaw=$dir/pclaw.exe" >> "$GITHUB_OUTPUT"
+        else
+          tar -xzf "$name" pclaw
+          echo "pclaw=$dir/pclaw" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Check the policy
+      id: check
+      shell: bash
+      env:
+        PCLAW: ${{ steps.install.outputs.pclaw }}
+        POLICY: ${{ inputs.policy }}
+        SCENARIOS: ${{ inputs.scenarios }}
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        set -uo pipefail
+        args=(ci check --policy "$POLICY")
+        if [ -f ".pantherclaw-base/$POLICY" ]; then
+          args+=(--base ".pantherclaw-base/$POLICY")
+        fi
+        if [ -n "$SCENARIOS" ]; then args+=(--scenarios "$SCENARIOS"); fi
+        if [ -n "$PACKAGES" ]; then args+=(--packages "$PACKAGES"); fi
+        report="$RUNNER_TEMP/pantherclaw-report.md"
+        errors="$RUNNER_TEMP/pantherclaw-errors.txt"
+        "$PCLAW" "${args[@]}" --format text 2> "$errors"
+        code=$?
+        # Every error line gets a prefix, so none of them starts a workflow command.
+        sed 's/^/pantherclaw: /' "$errors" >&2
+        "$PCLAW" "${args[@]}" --format markdown > "$report" 2> /dev/null || true
+        cat "$report" >> "$GITHUB_STEP_SUMMARY"
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+
+    - name: Comment on the pull request
+      # Exit 2 means the check did not run, so it has no report to post. A
+      # comment is a courtesy: failing to post one warns, and the check's own
+      # result still decides the job.
+      if: ${{ inputs.comment == 'true' && steps.check.outputs.code != '2' && github.event.pull_request.head.repo.full_name == github.repository }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        NUMBER: ${{ github.event.pull_request.number }}
+        REPORT: ${{ steps.check.outputs.report }}
+      run: |
+        set -uo pipefail
+        post() {
+          local marker='<!-- pantherclaw-ci-check -->'
+          local body="$RUNNER_TEMP/pantherclaw-comment.md"
+          local id
+          { echo "$marker"; cat "$REPORT"; } > "$body" || return 1
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" \
+            --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\")))][0].id // empty" | head -n 1) || return 1
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -F "body=@$body" > /dev/null
+          fi
+        }
+        if ! post; then
+          echo "::warning title=PantherClaw::could not post the report as a comment; it is in the job summary"
+        fi
+
+    - name: Finish with the check's result
+      shell: bash
+      env:
+        CODE: ${{ steps.check.outputs.code }}
+      run: exit "$CODE"

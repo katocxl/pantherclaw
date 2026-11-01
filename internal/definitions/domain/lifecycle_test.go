@@ -14,7 +14,7 @@ func TestLifecycleTransitions(t *testing.T) {
 	allowed := map[[2]State]bool{
 		{StateUnclassified, StateDraft}: true, {StateDraft, StateReviewed}: true, {StateReviewed, StateActive}: true,
 		{StateActive, StateStale}: true, {StateActive, StateQuarantined}: true, {StateStale, StateReviewed}: true,
-		{StateStale, StateQuarantined}: true, {StateQuarantined, StateReviewed}: true,
+		{StateStale, StateQuarantined}: true, {StateQuarantined, StateReviewed}: true, {StateReviewed, StateQuarantined}: true,
 	}
 	for _, s := range Lifecycle.States() {
 		if s != StateRetired {

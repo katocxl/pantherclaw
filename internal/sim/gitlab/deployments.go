@@ -80,6 +80,20 @@ func (s *Server) SetCIConfig(project int, text string) bool {
 	return ok
 }
 
+// SetCIConfigAt replaces a project's .gitlab-ci.yml at one ref, "" for none.
+func (s *Server) SetCIConfigAt(project int, ref, text string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[project]
+	if ok {
+		if p.CIConfigAt == nil {
+			p.CIConfigAt = map[string]string{}
+		}
+		p.CIConfigAt[ref] = text
+	}
+	return ok
+}
+
 // SetCIProject sets a project's custom CI configuration path and its Auto
 // DevOps setting.
 func (s *Server) SetCIProject(project int, path string, autoDevOps bool) bool {
@@ -119,14 +133,19 @@ func (s *Server) deployments(w http.ResponseWriter, r *http.Request, p *Project,
 		}
 		writeJSON(w, http.StatusOK, out)
 	case r.Method == http.MethodGet && len(rest) == 4 && rest[0] == "repository" && rest[1] == "files" && rest[2] == ".gitlab-ci.yml" && rest[3] == "raw":
+		ref := r.URL.Query().Get("ref")
+		text, ok := p.CIConfigAt[ref]
+		if !ok {
+			text = p.CIConfig
+		}
 		switch {
 		case s.faults.CIConfigError:
 			writeJSON(w, http.StatusInternalServerError, msg("500 Internal Server Error"))
-		case p.CIConfig == "" || r.URL.Query().Get("ref") == "":
+		case text == "" || ref == "":
 			writeJSON(w, http.StatusNotFound, msg("404 File Not Found"))
 		default:
 			w.Header().Set("Content-Type", "text/plain")
-			_, _ = w.Write([]byte(p.CIConfig))
+			_, _ = w.Write([]byte(text))
 		}
 	case r.Method == http.MethodGet && len(rest) == 1 && rest[0] == "deployments":
 		out := []map[string]any{}

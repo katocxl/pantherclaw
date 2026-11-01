@@ -77,7 +77,9 @@ type Assignment struct {
 
 // Assignments lists the hosted gateways placed on the host and records
 // that its agent was seen. Each org's row is read in that org's own
-// transaction (HR-051), and only rows naming this host are returned.
+// transaction (HR-051), and only rows naming this host are returned. A
+// DEPROVISIONING record of a deleted org is not returned, so the agent's sweep
+// removes its process once and it is not stopped again every reconcile.
 func (s *Service) Assignments(ctx context.Context, id HostIdentity, agentVersion string) ([]Assignment, error) {
 	var host dbq.PcHostingHost
 	err := s.pool.InGlobalTx(ctx, db.GlobalHosting, func(ctx context.Context, tx db.GlobalTx) error {
@@ -102,7 +104,8 @@ func (s *Service) Assignments(ctx context.Context, id HostIdentity, agentVersion
 	out := make([]Assignment, 0, len(refs))
 	for _, r := range refs {
 		err := s.pool.InTenantTx(ctx, r.Org, func(ctx context.Context, tx db.TenantTx) error {
-			h, err := dbq.New(tx).GetHostedGateway(ctx, r.Org, r.ID)
+			q := dbq.New(tx)
+			h, err := q.GetHostedGateway(ctx, r.Org, r.ID)
 			if db.IsNoRows(err) {
 				return nil
 			} else if err != nil {
@@ -110,6 +113,17 @@ func (s *Service) Assignments(ctx context.Context, id HostIdentity, agentVersion
 			}
 			if h.HostID == nil || *h.HostID != id.Host || h.GatewayID == nil {
 				return nil
+			}
+			if h.State == domain.StateDeprovisioning {
+				// On a deleted org nothing finishes this record: DeleteOrg's
+				// removal takes it, and the agent's sweep removes the process.
+				state, err := q.OrgState(ctx, r.Org)
+				if err != nil {
+					return err
+				}
+				if state == "DELETED" {
+					return nil
+				}
 			}
 			out = append(out, Assignment{
 				Org: h.OrgID, ID: h.ID, Slug: h.Slug, Hostname: domain.Hostname(h.Slug, host.Domain), State: h.State, Gateway: *h.GatewayID,
@@ -221,8 +235,9 @@ func rolloutTarget(reported string, minimum gwapp.Version) *string {
 // process, and frees its slug. Its gateway was revoked before (HR-503). The
 // release commits first and repeats harmlessly, so a retry finishes the
 // record, and a report for a record already finished still releases
-// (D228). A deleted org's record stays as it is: DeleteOrg's removal takes
-// it, so the report is done and the agent stops repeating it (D231).
+// (D228). A deleted org's record stays as it is, and DeleteOrg's removal
+// takes it, so a report on it succeeds and changes only the slug (D231). The
+// agent stops reporting because Assignments no longer lists the record.
 func (s *Service) Stopped(ctx context.Context, id HostIdentity, org ids.OrgID, hosted ids.UUID) error {
 	var h dbq.PcHostedGateway
 	var orgState string

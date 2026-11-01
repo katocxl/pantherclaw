@@ -124,6 +124,9 @@ type Service struct {
 	// ents gates the inventory draft by edition (WithEntitlements, G0 M15
 	// D23); nil refuses it.
 	ents Entitlements
+	// catalog refuses to activate a connection to an unapproved MCP server
+	// (WithCatalog, G0 M24 D223); nil has no catalog.
+	catalog CatalogGate
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are
@@ -443,6 +446,9 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := activeGateway(ctx, q, c.Org, in.Gateway); err != nil {
+			return err
+		}
+		if err := s.checkCatalog(ctx, tx, createdTarget(in.Kind, base, spec)); err != nil {
 			return err
 		}
 		if in.Connector != nil {

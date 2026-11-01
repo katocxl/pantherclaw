@@ -219,6 +219,9 @@ type A2AConfig struct {
 	// MaxAnswerBytes and MaxStreamSeconds cap what is relayed (D31).
 	MaxAnswerBytes   int32 `json:"max_answer_bytes"`
 	MaxStreamSeconds int32 `json:"max_stream_seconds"`
+	// PublicURL is the only URL the server signs this connection's card for
+	// (G0 M24 D247); empty leaves the card unsigned.
+	PublicURL string `json:"public_url,omitempty"`
 }
 
 // A2AInterface is the card interface the gateway calls.
@@ -245,6 +248,7 @@ func (c A2AConfig) Check(simulated bool) (A2AConfig, error) {
 	c.CardDigest = nil
 	switch {
 	case !a2aURL(c.CardURL, simulated), !a2aURL(c.Interface.URL, simulated),
+		c.PublicURL != "" && !a2aURL(c.PublicURL, simulated),
 		c.Interface.Protocol != A2AJSONRPC && c.Interface.Protocol != A2AHTTPJSON,
 		len(c.PinnedCard) > maxA2ACard, len(c.PinnedCard) > 0 && !jsonObject(c.PinnedCard),
 		len(c.CardKeys) > maxA2AKeys, len(c.CardKeys) > 0 && !jsonObject(c.CardKeys),

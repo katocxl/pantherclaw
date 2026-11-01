@@ -14,6 +14,26 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
+// TestHR586_LeavingEnforceIsAlwaysProtected: the catalog mode surface
+// always waits for a second person, needs catalog.manage, and fails closed
+// without a Gate (T-253).
+//
+// Covers: F874
+func TestHR586_LeavingEnforceIsAlwaysProtected(t *testing.T) {
+	s := protect.SurfaceCatalogMode
+	if s != "mcp.catalog.mode" || !s.AlwaysProtected() || s.Permission() != td.PermCatalogManage {
+		t.Fatalf("%s: always %v, permission %s", s, s.AlwaysProtected(), s.Permission())
+	}
+	applied := false
+	var g *protect.Gate
+	held, err := g.Hold(context.Background(), db.TenantTx{}, tenancy.Caller{}, protect.Change{
+		Category: protect.ToolMeaning, Surface: s, Subject: "mode", Widening: []string{"catalog_mode"},
+	}, func(context.Context) error { applied = true; return nil })
+	if !errors.Is(err, protect.ErrUnavailable) || held != nil || applied {
+		t.Fatalf("without a Gate: %v %v applied %v", held, err, applied)
+	}
+}
+
 // TestHR453_CustomerRuleChangesAreAlwaysProtected: the customer
 // consequence rule surface is the one surface that always waits for a
 // second person (G0 M17 D107), needs consequence_rule.manage, and is never

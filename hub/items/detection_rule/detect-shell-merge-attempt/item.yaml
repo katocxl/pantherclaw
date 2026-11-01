@@ -1,0 +1,32 @@
+name: pc.detect.shell-merge-attempt
+version: 1.0.0
+kind: detection_rule
+title: Merge or push tried from the shell
+summary: >-
+  A shell command that merges or pushes was refused. The shell is a quieter
+  route to the same effect as the governed merge.
+body:
+  content: |
+    id: org.hub.shell_merge_attempt
+    version: "1"
+    title: Merge or push tried from the shell
+    description: >-
+      A shell command that merges or pushes was refused. The shell is a
+      quieter route to the same effect as the governed merge.
+    severity: MEDIUM
+    attention: ALERT
+    basis: OBSERVED
+    owasp: [ASI02]
+    edition: business
+    on: [receipt.decision]
+    match: event.decision == "DENY" && event.reason == "SHELL_MERGE_OR_PUSH"
+    group: agent
+    tests:
+      - name: refused push
+        fires: true
+        events:
+          - {kind: receipt.decision, decision: DENY, reason: SHELL_MERGE_OR_PUSH, operation: shell.command.run}
+      - name: other refusal
+        fires: false
+        events:
+          - {kind: receipt.decision, decision: DENY, reason: GRANT_DOES_NOT_COVER, operation: shell.command.run}

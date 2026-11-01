@@ -26,9 +26,10 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// MaxOpenScanDiscoveries is the cap on open discoveries per org, the same
-// as for gateway discoveries (HR-148): the org scans' (github_scan) and
-// all others' each have their own, so neither fills the other's room.
+// MaxOpenScanDiscoveries is the cap on open discoveries, the same as for
+// gateway discoveries (HR-148): per org for the org scans (github_scan), and
+// per (source, scope) for local scans, so a device or repository fills only
+// its own room (G0 M24 D234). What the cap drops is counted and reported.
 const MaxOpenScanDiscoveries = 200
 
 // ScanFinding is one finding of a local `pclaw scan` (PN-001.1). Its
@@ -42,6 +43,9 @@ type ScanFinding struct {
 // ScanResult counts what a submission did.
 type ScanResult struct {
 	Created, Counted, Dropped int
+	// DroppedAttributes counts the attributes the server did not keep (G0 M24
+	// D252).
+	DroppedAttributes int
 	// Reopened counts the created that reopened a dismissed finding.
 	Reopened int
 	// Missed counts the discoveries of the scope a complete CI-mode scan
@@ -70,6 +74,11 @@ var (
 	ErrScopeRequired = pcerr.New(pcerr.InvalidArgument, "SCAN_SCOPE", "a complete scan names its scope (--scope)")
 	// ErrScope refuses a scope that is not plain text of 1 to 256 characters.
 	ErrScope = pcerr.New(pcerr.InvalidArgument, "SCAN_SCOPE", "a scope is 1 to 256 characters of plain text")
+	// ErrScannerScope refuses a holder of agent.scan.submit alone a scan
+	// outside one device's scope, or one that says it read the whole scope
+	// (G0 M24 D236, HR-589).
+	ErrScannerScope = pcerr.New(pcerr.PermissionDenied, "SCANNER_SCOPE",
+		"a scanner key submits device scans only (--device)")
 	// ErrCompleteTooLarge refuses a complete scan of more findings than one
 	// submission carries (D130).
 	ErrCompleteTooLarge = pcerr.New(pcerr.InvalidArgument, "SCAN_TOO_LARGE",
@@ -85,6 +94,23 @@ func (m ScanMode) check(findings int) error {
 	}
 	if m.Complete && findings > MaxCompleteFindings {
 		return ErrCompleteTooLarge
+	}
+	return nil
+}
+
+// permitted is the gate of SubmitScan: agent.manage submits any scan, and
+// agent.scan.submit alone only a partial scan of one device (G0 M24 D236). A
+// complete scan closes what it does not list, so a key taken from a laptop
+// can neither clear findings nor reach a CI scope (HR-589).
+func (m ScanMode) permitted(c tenancy.Caller) error {
+	if c.CanAnywhere(td.PermAgentManage) {
+		return nil
+	}
+	if !c.CanAnywhere(td.PermAgentScanSubmit) {
+		return td.ErrPermissionDenied(td.PermAgentManage)
+	}
+	if m.Complete || !domain.DeviceScope(m.Scope) {
+		return ErrScannerScope
 	}
 	return nil
 }
@@ -133,6 +159,15 @@ func scanName(f ScanFinding) string {
 		s = "GitHub workflow " + f.Attributes["repo"] + " " + f.Attributes["path"]
 	case "github_app":
 		s = "GitHub App " + f.Attributes["app_slug"]
+	case domain.ScanKindHook:
+		s = "hook " + f.Attributes["event"]
+		if e := f.Attributes["executable"]; e != "" {
+			s += " (" + e + ")"
+		}
+	case domain.ScanKindSkill:
+		s = "skill " + f.Attributes["name"]
+	case domain.ScanKindEnvSecret:
+		s = "credential " + f.Attributes["secret_kind"]
 	default:
 		s = "agent project " + filepath.Base(f.Attributes["path"])
 	}
@@ -144,31 +179,48 @@ func scanName(f ScanFinding) string {
 
 // SubmitScan records scan findings as DISCOVERED agents, each with a
 // discovery and an ADMISSION entry (F015); a finding submitted before is
-// only counted. The caller needs agent.manage somewhere in the org. At
-// most MaxOpenScanDiscoveries discoveries are open per org; past that,
-// findings are dropped and counted. Submitting grants nothing.
+// only counted. The caller needs agent.manage somewhere in the org, or
+// agent.scan.submit for one device's scope (HR-589). At
+// most MaxOpenScanDiscoveries discoveries are open per (source, scope); past
+// that, findings are dropped and counted. Submitting grants nothing.
 func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []ScanFinding, mode ScanMode) (ScanResult, error) {
 	for _, f := range findings {
 		if !localKinds[f.Kind] {
 			return ScanResult{}, ErrScanKind
 		}
+		if !domain.ScanAttributesOK(f.Kind, f.Attributes) {
+			return ScanResult{}, ErrScanAttributes
+		}
 	}
 	if err := mode.check(len(findings)); err != nil {
 		return ScanResult{}, err
+	}
+	if err := inv.checkDeviceScope(ctx, mode); err != nil {
+		return ScanResult{}, err
+	}
+	var droppedAttributes int
+	for i := range findings {
+		kept, dropped := domain.CleanScanAttributes(findings[i].Kind, findings[i].Attributes)
+		findings[i].Attributes = kept
+		droppedAttributes += dropped
 	}
 	source := "scan"
 	if mode.Scope != "" {
 		source = "ci_scan"
 	}
-	var res ScanResult
+	res := ScanResult{DroppedAttributes: droppedAttributes}
 	err := inOrg(ctx, inv.pool, func(ctx context.Context, c tenancy.Caller, q *dbq.Queries, tx db.TenantTx) error {
-		if !c.CanAnywhere(td.PermAgentManage) {
-			return td.ErrPermissionDenied(td.PermAgentManage)
+		if err := mode.permitted(c); err != nil {
+			return err
 		}
 		if err := q.LockDiscoveries(ctx, c.Org.String()); err != nil {
 			return err
 		}
-		open, err := q.CountOpenDiscoveriesOfSource(ctx, c.Org, source)
+		var scope *string
+		if mode.Scope != "" {
+			scope = &mode.Scope
+		}
+		open, err := q.CountOpenDiscoveriesOfScope(ctx, c.Org, source, scope)
 		if err != nil {
 			return err
 		}
@@ -375,13 +427,20 @@ func insertFinding(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.
 	return err
 }
 
-// Kinds of findings: a local `pclaw scan` reports MCP servers and agent
-// projects; a gateway's organization scan reports GitHub Apps, workflows
-// and committed MCP configuration (G0 M8, HR-209).
+// Kinds of findings: a local `pclaw scan` reports MCP servers, agent
+// projects, hooks, skills and the presence of credentials; a gateway's
+// organization scan reports GitHub Apps, workflows and committed MCP
+// configuration (G0 M8, HR-209).
 var (
-	localKinds  = map[string]bool{"mcp_server": true, "agent_project": true}
+	localKinds = map[string]bool{
+		"mcp_server": true, "agent_project": true, domain.ScanKindHook: true, domain.ScanKindSkill: true, domain.ScanKindEnvSecret: true,
+	}
 	githubKinds = map[string]bool{"github_app": true, "github_workflow": true, "github_mcp_config": true}
 	// ErrScanKind refuses a finding of the other kind of scan.
 	ErrScanKind = pcerr.New(pcerr.InvalidArgument, "SCAN_KIND",
-		"a local scan reports mcp_server and agent_project findings; github_* findings come only from a gateway's organization scan")
+		"a local scan reports mcp_server, agent_project, hook, skill and env_secret findings; github_* findings come only from a gateway's organization scan")
+	// ErrScanAttributes refuses a finding that carries more than its kind's
+	// metadata (HR-588).
+	ErrScanAttributes = pcerr.New(pcerr.InvalidArgument, "SCAN_ATTRIBUTES",
+		"a hook carries event and executable, a skill name and path, and an env_secret finding a known secret_kind; nothing else")
 )

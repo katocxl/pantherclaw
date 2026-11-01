@@ -1,0 +1,5 @@
+tests:
+  - name: other operation
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: github.pull.merge, subjects: {agent: a1}}

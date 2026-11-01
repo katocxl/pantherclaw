@@ -408,3 +408,20 @@ func (t *txn) Audit(ctx context.Context, ev audit.Event) error {
 	_, err := audit.Record(ctx, t.tx, ev)
 	return err
 }
+
+func (t *txn) ResultCounts(ctx context.Context, ranges []ids.UUID) (map[ids.UUID]domain.Counts, error) {
+	out := map[ids.UUID]domain.Counts{}
+	if len(ranges) == 0 {
+		return out, nil
+	}
+	rows, err := t.q.RedteamResultCounts(ctx, t.org, ranges)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		c := out[r.RangeID]
+		c.Add(domain.Verdict(r.Verdict), int(r.Results))
+		out[r.RangeID] = c
+	}
+	return out, nil
+}

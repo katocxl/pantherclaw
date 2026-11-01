@@ -132,7 +132,7 @@ func TestIntAgentInventory(t *testing.T) {
 		t.Fatalf("summary %+v, %v", s, err)
 	}
 	name := "Claude Code, platform"
-	if _, err := w.inv.Update(ctx, a.ID, &name, nil); err != nil {
+	if _, err := w.inv.Update(ctx, a.ID, &name, nil, domain.RiskPatch{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.inv.TransferOwnership(ctx, a.ID, w.other, ids.UUID{}, "alice moved teams"); err != nil {
@@ -171,7 +171,7 @@ func TestT037_AgentIDOR(t *testing.T) {
 	name := "x"
 	for what, call := range map[string]func() error{
 		"get":      func() error { _, err := w.inv.Get(stranger, a.ID); return err },
-		"update":   func() error { _, err := w.inv.Update(stranger, a.ID, &name, nil); return err },
+		"update":   func() error { _, err := w.inv.Update(stranger, a.ID, &name, nil, domain.RiskPatch{}); return err },
 		"transfer": func() error { _, err := w.inv.TransferOwnership(stranger, a.ID, w.owner, ids.UUID{}, "r"); return err },
 		"suspend":  func() error { _, err := w.inv.Suspend(stranger, a.ID, "r"); return err },
 		"retire":   func() error { _, err := w.inv.Retire(stranger, a.ID, "r"); return err },
@@ -302,7 +302,7 @@ func TestHR002_SuspendAndRetireMoveTheContainmentEpoch(t *testing.T) {
 		}
 	}
 	name := "back"
-	_, err = w.inv.Update(ctx, a.ID, &name, nil)
+	_, err = w.inv.Update(ctx, a.ID, &name, nil, domain.RiskPatch{})
 	wantCode(t, "update a retired agent", err, pcerr.FailedPrecondition, "AGENT_STATE")
 	_, err = w.inv.Suspend(ctx, a.ID, "x")
 	wantCode(t, "suspend a retired agent", err, pcerr.FailedPrecondition, "AGENT_STATE")

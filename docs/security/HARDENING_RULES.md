@@ -614,3 +614,42 @@
 | HR-543 | Only strictly parsed structured output is accepted. | T-235 | M21 |
 | HR-544 | Model output never executes; it is a draft or a shown query. | T-235 | M21 |
 | HR-545 | Every call is audited, and the key is write-only. | T-234 | M21 |
+
+## See it: graph evidence and M15–M21 API gaps (G0 M22)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-550 | A graph label is plain text of at most 200 characters, taken only from names the viewer may read, and is empty otherwise. Hidden records stay excluded, and a label is never markup (HR-340). | T-238 | M22 |
+| HR-551 | A causal link appears only with its evidence: `evidence_ref` names the receipt. Without evidence the graph emits a `gap` edge. Predicted, authorized and confirmed stay apart, and observed never reads as possible. | T-239 | M22 |
+| HR-552 | Every graph mode returns its gaps, and collapse never merges or hides one. Every edge carries its source, observed time and freshness. | T-239 | M22 |
+| HR-553 | Rotation over RPC keeps the service's step-up, protected change, audit, permissions and edition, and no rotation RPC or `pclaw` output returns a secret. | T-240 | M22 |
+| HR-554 | Model draft and usage reads return no prompts and no responses. | T-234 | M22 |
+
+## Easy to adopt: Hub, CI checks and the settings kit (G0 M23)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-560 | A Hub document never verifies as a package document, and a package document never verifies as a Hub document. Hub signatures use their own root, purpose and JWS type; the dev key works on loopback only, and empty roots off loopback give `HUB_NO_ROOT`. | T-242 | M23 |
+| HR-561 | A Hub install is inert: it activates, publishes and enables nothing and sets no agent's tool-version pins. Each kind lands as a draft or goes through its existing import, and the normal gates then apply. A `tool_package` install advances the organization's package anti-rollback state as any import does; the version stays REVIEWED and decides nothing until activated. `range_scenario` is refused on the server (`KIND_LOCAL_ONLY`). | T-242 | M23 |
+| HR-562 | Hub rollback is refused per organization and in the CLI: a lower index version, or the same version with another digest, is `HUB_ROLLBACK`. Re-installing the same digest is idempotent. | T-243 | M23 |
+| HR-563 | Hub items are closed kinds with no code or scripts, within size limits: `policy_template`, `detection_rule`, `range_scenario`, `tool_package`, `automation`. An item is at most 384 KiB, a compact index at most 624 KiB with at most 1,000 items, enforced from one constant in build, CLI and server, refused rather than truncated. Names match the `pc.` pattern, and an index lives at most 180 days. | T-242 | M23 |
+| HR-564 | Customer-authored CX scenarios never enter attested packs and are labelled customer-authored in reports, including those installed from the Hub. | T-204 | M23 |
+| HR-565 | CI check output cannot render markup or mention a person: Markdown output escapes everything from policy files (backticks, `@`, links, HTML) and is capped at 60 KiB. | T-244 | M23 |
+| HR-566 | The CI action needs no secrets, pins every step by SHA, checksum-verifies `pclaw`, and is documented for `pull_request` only, never `pull_request_target`. A comment is skipped on forks and uses `GITHUB_TOKEN` with `pull-requests: write` only. | T-245 | M23 |
+| HR-567 | The settings kit never writes a managed location and never raises coverage: it writes to `--out` or stdout, and generating or finding managed settings changes no coverage state. | T-085 | M23 |
+
+## Agent Posture: findings, supply chain, catalogue and device scans (G0 M24)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-580 | The posture queue is scoped to the viewer before ranking and has no score field. Order comes from a fixed tuple, and `rank_reasons` states which parts applied. | T-042 | M24 |
+| HR-581 | A missing posture day is `NOT_COLLECTED`, never zero. | T-233 | M24 |
+| HR-582 | A supply-chain flag never approves anything, and clean means "no known flags", never "safe", in every string. | T-250, T-251, T-252 | M24 |
+| HR-583 | Flagged tool text stays untrusted data: it is never followed, never rendered as markup and never reaches a decision as an instruction. | T-250 | M24 |
+| HR-584 | `pclaw mcp inspect` runs the server in the sandbox with no credentials and egress denied, on the customer's machine only, never on the server or hosted. | T-250 | M24 |
+| HR-585 | A catalogue approval matches exactly: URL scheme, host, effective port and path prefix, image digest or package reference. There is no fuzzy matching. A denial matches wider: revoke matching and the new-connection refusal compare host and effective port, whatever the scheme. | T-253 | M24 |
+| HR-586 | Weakening ENFORCE always waits for a second person: it goes through the protected surface `mcp.catalog.mode`, which is always protected and has no emergency path. Without a gate it fails `ErrUnavailable`. | T-253 | M24 |
+| HR-587 | A server revoke needs a preview digest and a person, stays inside one organization, and is lifted only by an independent second person. The server stays REVOKED after a lift. While it is REVOKED, a new connection matching it is refused in every mode, including OFF, and resuming or activating a matching connection or a version of its name is refused too (`SERVER_REVOKED`). | T-253 | M24 |
+| HR-588 | A scan sends metadata only: no file content, no prompts and no arguments beyond the package or image token. Home paths become `~`, and a `--device` scan sends no hostname unless `--include-hostname` is passed. | T-255 | M24 |
+| HR-589 | The Scanner role belongs to service accounts only and holds exactly `org.read` and `agent.scan.submit`. It can submit scans for its own scope. Like every role it holds `org.read`, which reaches `GetOrg`, `GetModelSettings` and `GetModelDraft`; none of these carries a secret. It holds no other permission. | T-254 | M24 |
+| HR-590 | A failed signing never serves an invalid card signature: the gateway serves the rewritten card unsigned, as before, and logs it. | T-149 | M24 |

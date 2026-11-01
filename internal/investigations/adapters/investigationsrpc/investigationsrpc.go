@@ -117,7 +117,7 @@ func (h *Handler) GetRunTimeline(ctx context.Context, req *pantherclawv1.GetRunT
 		out.Events = append(out.Events, event(e))
 	}
 	for _, g := range t.Gaps {
-		out.Gaps = append(out.Gaps, &pantherclawv1.TimelineGap{Kind: g.Kind, TransactionId: g.Transaction.String(), Time: timestamppb.New(g.At)})
+		out.Gaps = append(out.Gaps, gap(g))
 	}
 	for _, l := range t.Lanes {
 		out.Lanes = append(out.Lanes, lane(l))
@@ -308,15 +308,28 @@ func delegations(ds []investigations.Delegation) []*pantherclawv1.InvestigationD
 }
 
 func lane(l investigations.Lane) *pantherclawv1.TimelineLane {
-	return &pantherclawv1.TimelineLane{
+	out := &pantherclawv1.TimelineLane{
 		RunId: l.Run.String(), AgentId: l.Agent.String(), State: l.State, CreateTime: timestamppb.New(l.Created), EndTime: ts(l.Ended),
+		EventsTruncated: l.EventsTruncated, EventsNotLoaded: l.EventsNotLoaded,
 	}
+	for _, e := range l.Events {
+		out.Events = append(out.Events, event(e))
+	}
+	for _, g := range l.Gaps {
+		out.Gaps = append(out.Gaps, gap(g))
+	}
+	return out
+}
+
+func gap(g investigations.Gap) *pantherclawv1.TimelineGap {
+	return &pantherclawv1.TimelineGap{Kind: g.Kind, TransactionId: g.Transaction.String(), Time: timestamppb.New(g.At)}
 }
 
 func event(e investigations.Event) *pantherclawv1.TimelineEvent {
 	return &pantherclawv1.TimelineEvent{
 		Time: timestamppb.New(e.At), Kind: e.Kind, TransactionId: str(e.Transaction), ApprovalId: str(e.Approval),
 		GrantId: str(e.Grant), RunId: str(e.Run), Operation: e.Operation, ConnectionId: str(e.Connection), Detail: e.Detail,
+		ReadClass: e.ReadClass,
 	}
 }
 

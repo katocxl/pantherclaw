@@ -23,6 +23,6 @@
 
 Users pin the image digests in `sandbox.images` ([sandbox.md](sandbox.md), "Use the released images"). Images carry GitHub build-provenance attestations; cosign signatures are not added yet. Python/npm packages (from M8) publish via trusted publishing bound to the same environment once Day-0 item 4 is done.
 
-**Upgrade notes:** migration `00246` (M21) backfills and builds its UNIQUE inside the migration's transaction, so automation runs pause while it backfills and builds, in proportion to `pc.automation_step_attempts`.
+**Upgrade notes:** migration `00246` (M21) backfills and builds its UNIQUE inside the migration's transaction, so automation runs pause while it backfills and builds, in proportion to `pc.automation_step_attempts`. Migration `00257` (M22) builds a partial index on `pc.transactions` the same way: the index is small, but the build reads the whole table and new transactions wait until it ends, in proportion to `pc.transactions`.
 
 **If the release job fails under harden-runner block mode:** read the blocked endpoint in the job summary, add it to `allowed-endpoints` in a PR (G1), and re-run by deleting and re-pushing the tag only if no release was published.

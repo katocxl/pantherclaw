@@ -95,6 +95,15 @@ func (s *Detections) custom(ctx context.Context) error {
 	return nil
 }
 
+// CanCreateCustomRule is the permission and edition check CreateCustomRule
+// runs on its caller.
+func (s *Detections) CanCreateCustomRule(ctx context.Context) error {
+	if _, err := detectionManager(ctx); err != nil {
+		return err
+	}
+	return s.custom(ctx)
+}
+
 // ListRules lists the built-in rules and the org's custom rule versions.
 func (s *Detections) ListRules(ctx context.Context) (RuleList, error) {
 	c, err := detectionReader(ctx)

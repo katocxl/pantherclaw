@@ -1,0 +1,64 @@
+name: pc.data.pii-read-then-disclose
+version: 1.0.0
+kind: policy_template
+title: Keep personal data in
+summary: >-
+  One agent reads only public and internal columns, posts to no channel shared
+  outside the organization, and has a pull request on a public destination
+  approved first. PantherClaw's own data-flow hold still covers a disclosure
+  after a pii read.
+body:
+  placeholders:
+    agent: {"kind": "agent", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+  rules:
+    - id: pd-classes
+      per: agent
+      kind: CONSTRAIN
+      summary: the agent reads only public and internal columns
+      operations: [postgres.rows.read]
+      when: "run.agent_id == {{agent}}"
+      reason: PII_READ_WITHHELD
+      constraint: {kind: data_classes, values: [public, internal]}
+    - id: pd-external
+      per: agent
+      kind: FORBID
+      summary: the agent never posts to a Slack channel shared outside the organization
+      operations: [slack.message.disclose]
+      when: "run.agent_id == {{agent}}"
+      reason: EXTERNAL_DISCLOSURE
+    - id: pd-public-pull
+      per: agent
+      kind: REQUIRE_APPROVAL
+      summary: an independent approver reads every pull request the agent opens through a public destination
+      operations: [github.pull.create]
+      when: "run.agent_id == {{agent}} && action.destination_class == 'public'"
+      reason: PUBLIC_DISCLOSURE_NEEDS_APPROVAL
+      approval: {role: approver, count: 1, independent: true}
+  tests:
+    - {"id": "pd-read", "per": "agent", "summary": "the agent's read is limited to public and internal columns",
+        "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "amount"], "limit": "10"}},
+        "given": {"agent": "{{agent}}"},
+        "expect": {"decision": "ALLOW_WITH_OBLIGATIONS", "reason": "PII_READ_WITHHELD"}}
+    - {"id": "pd-read-other-agent", "per": "agent", "summary": "another agent's read is not this rule's",
+        "action": {"operation": "postgres.rows.read", "target": {"type": "pg_table", "id": "shop.orders"}, "params": {"columns": ["id", "amount"], "limit": "10"}},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
+    - {"id": "pd-post-external", "per": "agent", "summary": "the agent's post to a channel shared outside the organization is refused",
+        "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "C0EXAMPLE01"}, "params": {"text": "Draft findings"}},
+        "given": {"grant": {"constraints": [{"kind": "destination_set", "values": ["C0EXAMPLE01"]}]}, "agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": true, "ext_shared": true, "shared": true}}, "age_seconds": 10}}},
+        "expect": {"decision": "DENY", "reason": "EXTERNAL_DISCLOSURE", "rule": "pd-external--{{agent}}"}}
+    - {"id": "pd-post-internal", "per": "agent", "summary": "the agent's post to an internal channel goes through",
+        "action": {"operation": "slack.message.post", "target": {"type": "slack_channel", "id": "C0EXAMPLE01"}, "params": {"text": "Draft findings"}},
+        "given": {"grant": {"constraints": [{"kind": "destination_set", "values": ["C0EXAMPLE01"]}]}, "agent": "{{agent}}", "facts": {"slack.channel.external": {"value": {"object": {"external": false, "ext_shared": false, "shared": false}}, "age_seconds": 10}}},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
+    - {"id": "pd-public-pull", "per": "agent", "summary": "the agent's pull request through a public destination waits for an approver",
+        "action": {"operation": "github.pull.create", "target": {"type": "github.repository", "id": "acme/api"}, "params": {"title": "Results", "body": "Aggregates.", "head": "results", "base": "main"}},
+        "given": {"agent": "{{agent}}", "destination_class": "public"},
+        "expect": {"decision": "REQUIRE_APPROVAL", "reason": "PUBLIC_DISCLOSURE_NEEDS_APPROVAL"}}
+    - {"id": "pd-internal-pull", "per": "agent", "summary": "the agent's pull request through an internal destination goes through",
+        "action": {"operation": "github.pull.create", "target": {"type": "github.repository", "id": "acme/api"}, "params": {"title": "Notes", "body": "Notes.", "head": "notes", "base": "main"}},
+        "given": {"agent": "{{agent}}", "destination_class": "internal"},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
+    - {"id": "pd-other-agent-pull", "per": "agent", "summary": "another agent's public pull request is not this rule's",
+        "action": {"operation": "github.pull.create", "target": {"type": "github.repository", "id": "acme/api"}, "params": {"title": "Results", "body": "Aggregates.", "head": "results", "base": "main"}},
+        "given": {"destination_class": "public"},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}

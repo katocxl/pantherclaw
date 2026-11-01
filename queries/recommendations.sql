@@ -24,7 +24,7 @@ SELECT (d.observed->>'secret_kind')::text AS secret_kind, count(*)::int AS disco
     (array_agg(d.id ORDER BY d.id))[1:20]::uuid[] AS refs
 FROM pc.discoveries d
 JOIN pc.agents a ON a.org_id = d.org_id AND a.id = d.agent_id
-WHERE d.org_id = sqlc.arg(org_id) AND d.state = 'OPEN' AND d.source = 'scan' AND a.state <> 'RETIRED' AND NOT a.range_agent
+WHERE d.org_id = sqlc.arg(org_id) AND d.state = 'OPEN' AND d.source IN ('scan', 'ci_scan') AND a.state <> 'RETIRED' AND NOT a.range_agent
   AND d.observed->>'kind' = 'env_secret' AND d.observed->>'secret_kind' = ANY (sqlc.arg(kinds)::text[])
   AND (sqlc.arg(all_agents)::boolean OR d.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
 GROUP BY d.observed->>'secret_kind'
@@ -40,6 +40,19 @@ JOIN pc.connections c ON c.org_id = s.org_id AND c.id = s.connection_id
 JOIN pc.agents a ON a.org_id = s.org_id AND a.id = s.agent_id
 WHERE s.org_id = sqlc.arg(org_id) AND c.kind = 'postgres' AND c.state = 'ACTIVE' AND a.state <> 'RETIRED' AND NOT a.range_agent
   AND (sqlc.arg(all_agents)::boolean OR s.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]));
+
+-- name: RecommendationManagedSettingsMissing :one
+-- The open local scan discoveries on agents the viewer may read that a scan
+-- found on a machine with no managed settings file (G0 M23 D114). observed
+-- is untrusted: it is compared with one constant and nothing from it is
+-- returned. A CI-mode scan (ci_scan) is not a developer's machine.
+SELECT count(*)::int AS discoveries,
+    COALESCE((array_agg(d.id ORDER BY d.id))[1:20], '{}')::uuid[] AS refs
+FROM pc.discoveries d
+JOIN pc.agents a ON a.org_id = d.org_id AND a.id = d.agent_id
+WHERE d.org_id = sqlc.arg(org_id) AND d.state = 'OPEN' AND d.source = 'scan' AND a.state <> 'RETIRED' AND NOT a.range_agent
+  AND d.observed->>'managed_settings' = 'not_found'
+  AND (sqlc.arg(all_agents)::boolean OR d.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]));
 
 -- name: RecommendationIntegrations :one
 -- What the org has connected, whichever agents the viewer may read.

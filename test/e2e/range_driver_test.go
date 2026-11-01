@@ -144,7 +144,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.postgres = pgtargettest.New(t)
 	}
 	var p idp
-	if requires(sc, "person") || sc.ID == "RT-009" || slackScenario(sc) || needsBrowser(sc) ||
+	// CX-90002 is the Hub seed's customer-authored form of RT-009.
+	ownGrant := sc.ID == "RT-009" || sc.ID == "CX-90002"
+	if requires(sc, "person") || ownGrant || slackScenario(sc) || needsBrowser(sc) ||
 		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) {
 		p = inProcessIdP(t)
 		o.people = &p
@@ -202,7 +204,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if sc.ID == "RT-022" {
 		d.seedReal()
 	}
-	if sc.ID == "RT-009" {
+	if ownGrant {
 		d.ownGrant(`{"operations": ["github.contents.write"], "targets": {"github.branch": {"prefixes": ["acme/payments@"]}}}`, "")
 	}
 	if err := d.extra.setup(d); err != nil {
@@ -220,10 +222,14 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 // setupPayments makes the charges the scenarios refund refundable.
 func (d *rangeDriver) setupPayments() {
 	// The charges a scenario refunds are its own: ch_<nonce>rt<NNN>, with a
-	// letter or n<k> after it for more than one (D38).
-	num := strings.TrimPrefix(d.sc.ID, "RT-")
+	// letter or n<k> after it for more than one (D38). A Hub seed scenario's
+	// are ch_<nonce>cx<NNNNN>.
+	num := "rt" + strings.TrimPrefix(d.sc.ID, "RT-")
+	if n, ok := strings.CutPrefix(d.sc.ID, "CX-"); ok {
+		num = "cx" + n
+	}
 	var charges []string
-	for _, base := range []string{"ch_" + d.fix["nonce"] + "rt" + num} {
+	for _, base := range []string{"ch_" + d.fix["nonce"] + num} {
 		charges = append(charges, base)
 		for _, suf := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 			charges = append(charges, base+suf)
@@ -357,6 +363,7 @@ type callWith struct {
 	Body       jsontext.Value `json:"body"`
 	Instance   string         `json:"instance"`
 	Concurrent int            `json:"concurrent"`
+	RetryOn    string         `json:"retry_on"`
 	ActionOf   string         `json:"action_of"`
 	Fault      string         `json:"fault"`
 	// run is the run the call is made in; empty is the seeded one.
@@ -379,7 +386,7 @@ func (d *rangeDriver) agentCall(ctx context.Context, st domain.Step, _ map[strin
 	return obs, nil
 }
 
-func (d *rangeDriver) concurrent(_ context.Context, st domain.Step, w callWith) (domain.Observation, error) {
+func (d *rangeDriver) concurrent(ctx context.Context, st domain.Step, w callWith) (domain.Observation, error) {
 	each := make([]domain.Observation, w.Concurrent)
 	errs := make([]error, w.Concurrent)
 	var wg sync.WaitGroup
@@ -391,7 +398,10 @@ func (d *rangeDriver) concurrent(_ context.Context, st domain.Step, w callWith) 
 				errs[i] = err
 				return
 			}
-			each[i], _, errs[i] = d.callOnce(one, raw, i+1)
+			each[i], errs[i] = app.Resubmit(ctx, w.RetryOn, func(int) (domain.Observation, error) {
+				o, _, err := d.callOnce(one, raw, i+1)
+				return o, err
+			})
 		})
 	}
 	wg.Wait()

@@ -1,0 +1,32 @@
+name: pc.detect.secret-outbound-refused
+version: 1.0.0
+kind: detection_rule
+title: Outbound text with a secret was refused
+summary: >-
+  A write that held something shaped like a token or a private key was
+  refused. The rule sees the refusal reason, never the text.
+body:
+  content: |
+    id: org.hub.secret_outbound_refused
+    version: "1"
+    title: Outbound text with a secret was refused
+    description: >-
+      A write that held something shaped like a token or a private key was
+      refused. The rule sees the refusal reason, never the text.
+    severity: HIGH
+    attention: ALERT
+    basis: OBSERVED
+    owasp: [ASI02]
+    edition: business
+    on: [receipt.decision]
+    match: event.decision == "DENY" && event.reason == "SECRET_OUTBOUND"
+    group: agent
+    tests:
+      - name: refused write
+        fires: true
+        events:
+          - {kind: receipt.decision, decision: DENY, reason: SECRET_OUTBOUND, operation: slack.message.post}
+      - name: other refusal
+        fires: false
+        events:
+          - {kind: receipt.decision, decision: DENY, reason: TARGET_NOT_GRANTED, operation: slack.message.post}

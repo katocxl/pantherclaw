@@ -92,8 +92,9 @@ type OperationsServiceClient interface {
 	// permission: operations.read
 	GetEvidenceStatus(context.Context, *v1.GetEvidenceStatusRequest) (*v1.GetEvidenceStatusResponse, error)
 	// GetMetrics returns hourly operating metrics (Team): consequential
-	// outcomes, coverage, bypass routes, exposure by resource group and the
-	// reconciliation backlog, each point with its drill-down search. Each
+	// outcomes, coverage and its staleness, bypass routes with their owners,
+	// exposure by resource group and the reconciliation backlog, each point
+	// with its drill-down search or no_drill. Each
 	// metric needs its source's read permission across the organization,
 	// else it reads RESTRICTED. They are
 	// organization-wide, so they need operations.read across the
@@ -124,8 +125,9 @@ type OperationsServiceHandler interface {
 	// permission: operations.read
 	GetEvidenceStatus(context.Context, *v1.GetEvidenceStatusRequest) (*v1.GetEvidenceStatusResponse, error)
 	// GetMetrics returns hourly operating metrics (Team): consequential
-	// outcomes, coverage, bypass routes, exposure by resource group and the
-	// reconciliation backlog, each point with its drill-down search. Each
+	// outcomes, coverage and its staleness, bypass routes with their owners,
+	// exposure by resource group and the reconciliation backlog, each point
+	// with its drill-down search or no_drill. Each
 	// metric needs its source's read permission across the organization,
 	// else it reads RESTRICTED. They are
 	// organization-wide, so they need operations.read across the

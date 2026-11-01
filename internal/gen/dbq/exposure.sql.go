@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -592,7 +593,7 @@ func (q *Queries) GetExposureChanges(ctx context.Context, orgID ids.OrgID) (PcEx
 
 const graphActivity = `-- name: GraphActivity :many
 SELECT t.id, t.run_id, r.agent_id, r.parent_run_id, p.agent_id AS parent_agent_id, r.principal_user_id, t.operation::text AS operation,
-    COALESCE(t.target_type, '')::text AS target_type, t.decision, t.effect_state, t.created_at,
+    COALESCE(t.target_type, '')::text AS target_type, t.decision, t.mode, t.effect_state, t.created_at,
     COALESCE((SELECT a.outcome FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id
      ORDER BY a.id DESC LIMIT 1), '')::text AS outcome,
     EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt
@@ -627,6 +628,7 @@ type GraphActivityRow struct {
 	Operation       string
 	TargetType      string
 	Decision        string
+	Mode            string
 	EffectState     *string
 	CreatedAt       time.Time
 	Outcome         string
@@ -663,6 +665,7 @@ func (q *Queries) GraphActivity(ctx context.Context, arg GraphActivityParams) ([
 			&i.Operation,
 			&i.TargetType,
 			&i.Decision,
+			&i.Mode,
 			&i.EffectState,
 			&i.CreatedAt,
 			&i.Outcome,
@@ -678,11 +681,375 @@ func (q *Queries) GraphActivity(ctx context.Context, arg GraphActivityParams) ([
 	return items, nil
 }
 
+const graphAgentNames = `-- name: GraphAgentNames :many
+
+SELECT id, name FROM pc.agents WHERE org_id = $1 AND id = ANY ($2::uuid[])
+`
+
+type GraphAgentNamesRow struct {
+	ID   ids.UUID
+	Name string
+}
+
+// Graph node names (D11, HR-550): read only for the node types the caller
+// may read names of, and only for nodes already in the viewer's graph.
+func (q *Queries) GraphAgentNames(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]GraphAgentNamesRow, error) {
+	rows, err := q.db.Query(ctx, graphAgentNames, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphAgentNamesRow{}
+	for rows.Next() {
+		var i GraphAgentNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphApprovals = `-- name: GraphApprovals :many
+SELECT r.id, r.transaction_id::uuid AS transaction_id, r.approved_at
+FROM pc.approval_requests r
+WHERE r.org_id = $1 AND r.transaction_id = ANY ($2::uuid[]) AND r.state IN ('APPROVED', 'CONSUMED')
+ORDER BY r.id
+`
+
+type GraphApprovalsRow struct {
+	ID            ids.UUID
+	TransactionID ids.UUID
+	ApprovedAt    *time.Time
+}
+
+// GraphApprovals reads the approved requests of the transactions.
+func (q *Queries) GraphApprovals(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]GraphApprovalsRow, error) {
+	rows, err := q.db.Query(ctx, graphApprovals, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphApprovalsRow{}
+	for rows.Next() {
+		var i GraphApprovalsRow
+		if err := rows.Scan(&i.ID, &i.TransactionID, &i.ApprovedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphAutomationNames = `-- name: GraphAutomationNames :many
+SELECT id, name FROM pc.automations WHERE org_id = $1 AND id = ANY ($2::uuid[])
+`
+
+type GraphAutomationNamesRow struct {
+	ID   ids.UUID
+	Name string
+}
+
+func (q *Queries) GraphAutomationNames(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]GraphAutomationNamesRow, error) {
+	rows, err := q.db.Query(ctx, graphAutomationNames, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphAutomationNamesRow{}
+	for rows.Next() {
+		var i GraphAutomationNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphCausalFacts = `-- name: GraphCausalFacts :many
+
+SELECT t.id, t.grant_id, t.downstream_state, (t.consequence_root IS NOT NULL)::boolean AS is_consequence,
+    p.id AS permit_id, p.dispatching_at, a.id AS attempt_id, a.recorded_at AS attempted_at,
+    (r.attempt_id IS NOT NULL)::boolean AS has_execution_receipt
+FROM pc.transactions t
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
+LEFT JOIN pc.execution_receipts r ON r.org_id = a.org_id AND r.attempt_id = a.id
+WHERE t.org_id = $1 AND t.id = ANY ($2::uuid[])
+`
+
+type GraphCausalFactsRow struct {
+	ID                  ids.UUID
+	GrantID             *ids.UUID
+	DownstreamState     *string
+	IsConsequence       bool
+	PermitID            *ids.UUID
+	DispatchingAt       *time.Time
+	AttemptID           *ids.UUID
+	AttemptedAt         *time.Time
+	HasExecutionReceipt bool
+}
+
+// Causal evidence (G0 M22 D12, HR-551): the records a causal link needs,
+// for transactions already filtered to what the viewer may see.
+// GraphCausalFacts reads each transaction's grant, permit and execution
+// receipt.
+func (q *Queries) GraphCausalFacts(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]GraphCausalFactsRow, error) {
+	rows, err := q.db.Query(ctx, graphCausalFacts, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphCausalFactsRow{}
+	for rows.Next() {
+		var i GraphCausalFactsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GrantID,
+			&i.DownstreamState,
+			&i.IsConsequence,
+			&i.PermitID,
+			&i.DispatchingAt,
+			&i.AttemptID,
+			&i.AttemptedAt,
+			&i.HasExecutionReceipt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphConnectionNames = `-- name: GraphConnectionNames :many
+SELECT id, name FROM pc.connections WHERE org_id = $1 AND id = ANY ($2::uuid[])
+`
+
+type GraphConnectionNamesRow struct {
+	ID   ids.UUID
+	Name string
+}
+
+func (q *Queries) GraphConnectionNames(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]GraphConnectionNamesRow, error) {
+	rows, err := q.db.Query(ctx, graphConnectionNames, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphConnectionNamesRow{}
+	for rows.Next() {
+		var i GraphConnectionNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphConsequences = `-- name: GraphConsequences :many
+SELECT d.transaction_id, d.evaluation, d.position, d.parent_position, d.operation, d.state, d.created_at,
+    c.id AS consequence_id, COALESCE(c.effect_state, '')::text AS effect_state, l.from_transaction_id AS linked_from
+FROM pc.decision_consequences d
+LEFT JOIN pc.transactions c ON c.org_id = d.org_id AND c.consequence_root = d.transaction_id AND c.consequence_position = d.position
+LEFT JOIN pc.transaction_links l ON l.org_id = c.org_id AND l.to_transaction_id = c.id AND l.kind = 'consequence'
+WHERE d.org_id = $1 AND d.transaction_id = ANY ($2::uuid[]) AND d.state <> 'NOT_TRIGGERED'
+  AND d.evaluation = (SELECT max(x.evaluation) FROM pc.decision_consequences x
+                      WHERE x.org_id = d.org_id AND x.transaction_id = d.transaction_id)
+ORDER BY d.transaction_id, d.position
+LIMIT $3
+`
+
+type GraphConsequencesRow struct {
+	TransactionID  ids.UUID
+	Evaluation     int32
+	Position       int32
+	ParentPosition pgtype.Int2
+	Operation      string
+	State          string
+	CreatedAt      time.Time
+	ConsequenceID  *ids.UUID
+	EffectState    string
+	LinkedFrom     *ids.UUID
+}
+
+// GraphConsequences reads what each transaction's latest evaluation said
+// of its consequences, with the transaction opened for each.
+func (q *Queries) GraphConsequences(ctx context.Context, orgID ids.OrgID, ids []ids.UUID, maxRows int32) ([]GraphConsequencesRow, error) {
+	rows, err := q.db.Query(ctx, graphConsequences, orgID, ids, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphConsequencesRow{}
+	for rows.Next() {
+		var i GraphConsequencesRow
+		if err := rows.Scan(
+			&i.TransactionID,
+			&i.Evaluation,
+			&i.Position,
+			&i.ParentPosition,
+			&i.Operation,
+			&i.State,
+			&i.CreatedAt,
+			&i.ConsequenceID,
+			&i.EffectState,
+			&i.LinkedFrom,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphContainment = `-- name: GraphContainment :many
+SELECT a.id AS action_id, a.status AS action_status, a.scope_type AS action_scope_type, a.scope_id AS action_scope_id,
+    a.operation AS action_operation, a.actor, a.requested_at,
+    c.id AS control_id, c.scope_type, c.scope_id, c.operation, c.created_by, c.created_at, c.expires_at, c.lifted_at
+FROM pc.response_actions a
+LEFT JOIN pc.containment_controls c ON c.org_id = a.org_id AND c.action_id = a.id
+WHERE a.org_id = $1
+  AND (a.incident_id = $2::uuid OR a.id = $3::uuid)
+ORDER BY a.requested_at, a.id, c.id
+LIMIT $4
+`
+
+type GraphContainmentParams struct {
+	OrgID      ids.OrgID
+	IncidentID *ids.UUID
+	ActionID   *ids.UUID
+	MaxRows    int32
+}
+
+type GraphContainmentRow struct {
+	ActionID        ids.UUID
+	ActionStatus    string
+	ActionScopeType string
+	ActionScopeID   string
+	ActionOperation *string
+	Actor           string
+	RequestedAt     time.Time
+	ControlID       *ids.UUID
+	ScopeType       *string
+	ScopeID         *string
+	Operation       *string
+	CreatedBy       *string
+	CreatedAt       *time.Time
+	ExpiresAt       *time.Time
+	LiftedAt        *time.Time
+}
+
+// GraphContainment reads the response actions of an incident, or one action,
+// with their controls (D38); an action that placed none has one row.
+func (q *Queries) GraphContainment(ctx context.Context, arg GraphContainmentParams) ([]GraphContainmentRow, error) {
+	rows, err := q.db.Query(ctx, graphContainment,
+		arg.OrgID,
+		arg.IncidentID,
+		arg.ActionID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphContainmentRow{}
+	for rows.Next() {
+		var i GraphContainmentRow
+		if err := rows.Scan(
+			&i.ActionID,
+			&i.ActionStatus,
+			&i.ActionScopeType,
+			&i.ActionScopeID,
+			&i.ActionOperation,
+			&i.Actor,
+			&i.RequestedAt,
+			&i.ControlID,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.Operation,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.LiftedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphEffectReceipts = `-- name: GraphEffectReceipts :many
+SELECT DISTINCT ON (e.transaction_id) e.transaction_id, e.seq, e.state, e.basis, e.created_at
+FROM pc.effect_receipts e
+WHERE e.org_id = $1 AND e.transaction_id = ANY ($2::uuid[])
+ORDER BY e.transaction_id, e.seq DESC
+`
+
+type GraphEffectReceiptsRow struct {
+	TransactionID ids.UUID
+	Seq           int32
+	State         string
+	Basis         string
+	CreatedAt     time.Time
+}
+
+// GraphEffectReceipts reads the latest effect receipt of each transaction.
+func (q *Queries) GraphEffectReceipts(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]GraphEffectReceiptsRow, error) {
+	rows, err := q.db.Query(ctx, graphEffectReceipts, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphEffectReceiptsRow{}
+	for rows.Next() {
+		var i GraphEffectReceiptsRow
+		if err := rows.Scan(
+			&i.TransactionID,
+			&i.Seq,
+			&i.State,
+			&i.Basis,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const graphGrantChanges = `-- name: GraphGrantChanges :many
-SELECT g.id AS grant_id, g.agent_id, r.revision, r.created_by, r.created_at,
+SELECT g.id AS grant_id, g.agent_id, r.revision, r.created_by, r.created_at, r.bounds, b.bounds AS before_bounds,
     (r.revision = g.current_revision AND g.state = 'ACTIVE')::boolean AS current
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id
+LEFT JOIN pc.grant_revisions b ON b.org_id = r.org_id AND b.grant_id = r.grant_id AND b.revision = r.revision - 1
 WHERE g.org_id = $1
   AND ($2::boolean OR g.agent_id = ANY ($3::uuid[]))
   AND r.created_at >= $4 AND r.created_at <= $5
@@ -700,15 +1067,18 @@ type GraphGrantChangesParams struct {
 }
 
 type GraphGrantChangesRow struct {
-	GrantID   ids.UUID
-	AgentID   ids.UUID
-	Revision  int32
-	CreatedBy string
-	CreatedAt time.Time
-	Current   bool
+	GrantID      ids.UUID
+	AgentID      ids.UUID
+	Revision     int32
+	CreatedBy    string
+	CreatedAt    time.Time
+	Bounds       []byte
+	BeforeBounds []byte
+	Current      bool
 }
 
-// GraphGrantChanges lists the revisions of agents' grants in a window.
+// GraphGrantChanges lists the revisions of agents' grants in a window,
+// with the bounds before and after each (F276).
 func (q *Queries) GraphGrantChanges(ctx context.Context, arg GraphGrantChangesParams) ([]GraphGrantChangesRow, error) {
 	rows, err := q.db.Query(ctx, graphGrantChanges,
 		arg.OrgID,
@@ -731,8 +1101,148 @@ func (q *Queries) GraphGrantChanges(ctx context.Context, arg GraphGrantChangesPa
 			&i.Revision,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.Bounds,
+			&i.BeforeBounds,
 			&i.Current,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphGrantDelegations = `-- name: GraphGrantDelegations :many
+SELECT g.id AS child_id, g.parent_id::uuid AS parent_id, g.agent_id AS child_agent_id, p.agent_id AS parent_agent_id, g.created_at
+FROM pc.grants g
+JOIN pc.grants p ON p.org_id = g.org_id AND p.id = g.parent_id
+WHERE g.org_id = $1 AND g.agent_id = ANY ($2::uuid[]) AND g.state = 'ACTIVE'
+ORDER BY g.created_at DESC, g.id
+LIMIT $3
+`
+
+type GraphGrantDelegationsRow struct {
+	ChildID       ids.UUID
+	ParentID      ids.UUID
+	ChildAgentID  ids.UUID
+	ParentAgentID ids.UUID
+	CreatedAt     time.Time
+}
+
+// GraphGrantDelegations reads the active child grants of agents and their
+// parents (F282). Rights collapse by path, so a child under a wider grant of
+// the same agent is not always the grant a right names.
+func (q *Queries) GraphGrantDelegations(ctx context.Context, orgID ids.OrgID, agentIds []ids.UUID, maxRows int32) ([]GraphGrantDelegationsRow, error) {
+	rows, err := q.db.Query(ctx, graphGrantDelegations, orgID, agentIds, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphGrantDelegationsRow{}
+	for rows.Next() {
+		var i GraphGrantDelegationsRow
+		if err := rows.Scan(
+			&i.ChildID,
+			&i.ParentID,
+			&i.ChildAgentID,
+			&i.ParentAgentID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphGrantRevocations = `-- name: GraphGrantRevocations :many
+SELECT g.id AS grant_id, g.agent_id, g.current_revision, g.revoked_at::timestamptz AS revoked_at, r.bounds
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = $1
+  AND ($2::boolean OR g.agent_id = ANY ($3::uuid[]))
+  AND g.revoked_at >= $4 AND g.revoked_at <= $5
+ORDER BY g.revoked_at, g.id
+LIMIT $6
+`
+
+type GraphGrantRevocationsParams struct {
+	OrgID     ids.OrgID
+	AllAgents bool
+	AgentIds  []ids.UUID
+	StartTime *time.Time
+	EndTime   *time.Time
+	MaxRows   int32
+}
+
+type GraphGrantRevocationsRow struct {
+	GrantID         ids.UUID
+	AgentID         ids.UUID
+	CurrentRevision int32
+	RevokedAt       time.Time
+	Bounds          []byte
+}
+
+// GraphGrantRevocations lists the grants of agents revoked in a window,
+// with the revision they ended on (F276).
+func (q *Queries) GraphGrantRevocations(ctx context.Context, arg GraphGrantRevocationsParams) ([]GraphGrantRevocationsRow, error) {
+	rows, err := q.db.Query(ctx, graphGrantRevocations,
+		arg.OrgID,
+		arg.AllAgents,
+		arg.AgentIds,
+		arg.StartTime,
+		arg.EndTime,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphGrantRevocationsRow{}
+	for rows.Next() {
+		var i GraphGrantRevocationsRow
+		if err := rows.Scan(
+			&i.GrantID,
+			&i.AgentID,
+			&i.CurrentRevision,
+			&i.RevokedAt,
+			&i.Bounds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphUserNames = `-- name: GraphUserNames :many
+SELECT id, display_name FROM pc.users WHERE org_id = $1 AND id = ANY ($2::uuid[])
+`
+
+type GraphUserNamesRow struct {
+	ID          ids.UUID
+	DisplayName string
+}
+
+func (q *Queries) GraphUserNames(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]GraphUserNamesRow, error) {
+	rows, err := q.db.Query(ctx, graphUserNames, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphUserNamesRow{}
+	for rows.Next() {
+		var i GraphUserNamesRow
+		if err := rows.Scan(&i.ID, &i.DisplayName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -967,4 +1477,37 @@ ON CONFLICT (org_id) DO UPDATE SET change_seq = GREATEST(pc.exposure_changes.cha
 func (q *Queries) RecordExposureChange(ctx context.Context, orgID ids.OrgID, changeSeq int64) error {
 	_, err := q.db.Exec(ctx, recordExposureChange, orgID, changeSeq)
 	return err
+}
+
+const restrictionAgents = `-- name: RestrictionAgents :many
+SELECT a.id, coalesce(c.scope_id, '')::text AS agent_id
+FROM pc.response_actions a
+LEFT JOIN pc.containment_controls c ON c.org_id = a.org_id AND c.action_id = a.id AND c.scope_type = 'agent'
+WHERE a.org_id = $1 AND a.id = $2
+`
+
+type RestrictionAgentsRow struct {
+	ID      ids.UUID
+	AgentID string
+}
+
+// RestrictionAgents lists the agents a response action's controls hold.
+func (q *Queries) RestrictionAgents(ctx context.Context, orgID ids.OrgID, actionID ids.UUID) ([]RestrictionAgentsRow, error) {
+	rows, err := q.db.Query(ctx, restrictionAgents, orgID, actionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RestrictionAgentsRow{}
+	for rows.Next() {
+		var i RestrictionAgentsRow
+		if err := rows.Scan(&i.ID, &i.AgentID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

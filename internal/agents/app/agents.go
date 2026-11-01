@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/agents/domain"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -35,6 +36,47 @@ type Agent struct {
 	RetiredAt         *time.Time
 	// RangeAgent: all its runs are simulated (G0 M12, HR-220); immutable.
 	RangeAgent bool
+	// What people state about the agent's risk (G0 M24 D230).
+	RiskTier    domain.RiskTier
+	DataClasses []string
+	AIActRole   domain.AIActRole
+	AIActRisk   domain.AIActRisk
+	// ScanState is what continuous discovery saw of it; nil when no scan
+	// found it (G0 M22 D6).
+	ScanState *ScanState
+}
+
+// ScanState sums up an agent's scan findings that were not dismissed.
+type ScanState struct {
+	// MissedScans is the fewest complete scans in a row that missed a finding.
+	MissedScans int32
+	LastSeenAt  time.Time
+	// Vanished: every finding reached the vanish threshold.
+	Vanished bool
+}
+
+// withScanStates fills in the scan states of agents, which the caller may
+// already read.
+func withScanStates(ctx context.Context, q *dbq.Queries, org ids.OrgID, agents []Agent) error {
+	if len(agents) == 0 {
+		return nil
+	}
+	list := make([]ids.UUID, len(agents))
+	for i := range agents {
+		list[i] = agents[i].ID
+	}
+	rows, err := q.AgentScanStates(ctx, org, list)
+	if err != nil {
+		return err
+	}
+	states := make(map[ids.UUID]*ScanState, len(rows))
+	for _, r := range rows {
+		states[r.AgentID] = &ScanState{MissedScans: r.MissedScans, LastSeenAt: r.LastSeenAt, Vanished: r.Vanished}
+	}
+	for i := range agents {
+		agents[i].ScanState = states[agents[i].ID]
+	}
+	return nil
 }
 
 // Discovery is what was observed about a discovered agent. Observed holds
@@ -87,7 +129,8 @@ func agentView(r dbq.PcAgent) Agent {
 	a := Agent{
 		ID: r.ID, Name: r.Name, Purpose: r.Purpose, State: domain.State(r.State), CreatedBy: r.CreatedBy,
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, ClaimedAt: r.ClaimedAt, RetiredAt: r.RetiredAt,
-		RangeAgent: r.RangeAgent,
+		RangeAgent: r.RangeAgent, RiskTier: domain.RiskTier(r.RiskTier), DataClasses: r.DataClasses,
+		AIActRole: domain.AIActRole(r.AiActRole), AIActRisk: domain.AIActRisk(r.AiActRisk),
 	}
 	for dst, src := range map[*ids.UUID]*ids.UUID{
 		&a.TeamID: r.TeamID, &a.EnvironmentID: r.EnvironmentID, &a.OwnerUserID: r.OwnerUserID,
@@ -179,7 +222,11 @@ func (inv *Inventory) Get(ctx context.Context, id ids.UUID) (Summary, error) {
 		if err != nil {
 			return err
 		}
-		a := agentView(r)
+		one := []Agent{agentView(r)}
+		if err := withScanStates(ctx, q, c.Org, one); err != nil {
+			return err
+		}
+		a := one[0]
 		out = Summary{
 			Agent: a, NextAction: a.State.NextAction(),
 			Activity:         domain.Activity(n.EverAdmitted > 0, observed(a.State, a.SuspendedFrom)),
@@ -261,6 +308,9 @@ func (inv *Inventory) List(ctx context.Context, pr page.Request, states []domain
 				out.Items = append(out.Items, agentView(r))
 			}
 		}
+		if err := withScanStates(ctx, q, c.Org, out.Items); err != nil {
+			return err
+		}
 		if len(out.Items) == 0 && pr.After.IsZero() {
 			has, err := q.OrgHasAgents(ctx, c.Org)
 			if err != nil {
@@ -273,9 +323,9 @@ func (inv *Inventory) List(ctx context.Context, pr page.Request, states []domain
 	return out, none, err
 }
 
-// Update changes an agent's name or purpose. The execution context never
-// changes (G0 M3 constraint 16).
-func (inv *Inventory) Update(ctx context.Context, id ids.UUID, name, purpose *string) (Agent, error) {
+// Update changes an agent's name, purpose or stated risk (G0 M24 D230). The
+// execution context never changes (G0 M3 constraint 16).
+func (inv *Inventory) Update(ctx context.Context, id ids.UUID, name, purpose *string, risk domain.RiskPatch) (Agent, error) {
 	if name != nil {
 		if err := domain.ValidateName(*name); err != nil {
 			return Agent{}, invalid(err)
@@ -286,11 +336,24 @@ func (inv *Inventory) Update(ctx context.Context, id ids.UUID, name, purpose *st
 			return Agent{}, invalid(err)
 		}
 	}
+	if err := risk.Validate(defs.DataClasses); err != nil {
+		return Agent{}, invalid(err)
+	}
+	stated := risk.Details()
 	var out Agent
 	err := inOrg(ctx, inv.pool, func(ctx context.Context, c tenancy.Caller, q *dbq.Queries, tx db.TenantTx) error {
 		r, err := load(ctx, c, q, id, td.PermAgentManage, false)
 		if err != nil {
 			return err
+		}
+		if len(stated) > 0 {
+			if r, err = updateRisk(ctx, tx, q, c, r.ID, risk, stated); err != nil {
+				return err
+			}
+		}
+		out = agentView(r)
+		if name == nil && purpose == nil && len(stated) > 0 {
+			return nil
 		}
 		r, err = q.UpdateAgentText(ctx, dbq.UpdateAgentTextParams{OrgID: c.Org, ID: r.ID, Name: name, Purpose: purpose})
 		if err != nil {
@@ -309,6 +372,70 @@ func (inv *Inventory) Update(ctx context.Context, id ids.UUID, name, purpose *st
 		}
 		return record(ctx, tx, c, "agents.agent_updated", r.ID, fields)
 	})
+	return out, err
+}
+
+// updateRisk writes the stated risk fields, with a history entry and an audit
+// record.
+func updateRisk(ctx context.Context, tx db.TenantTx, q *dbq.Queries, c tenancy.Caller, id ids.UUID, risk domain.RiskPatch, stated map[string]string) (dbq.PcAgent, error) {
+	p := dbq.UpdateAgentRiskParams{OrgID: c.Org, ID: id, DataClasses: risk.DataClasses}
+	if risk.Tier != nil {
+		p.RiskTier = ptr(string(*risk.Tier))
+	}
+	if risk.Role != nil {
+		p.AiActRole = ptr(string(*risk.Role))
+	}
+	if risk.Risk != nil {
+		p.AiActRisk = ptr(string(*risk.Risk))
+	}
+	r, err := q.UpdateAgentRisk(ctx, p)
+	if err != nil {
+		return dbq.PcAgent{}, notFound(err, ErrState)
+	}
+	if err := RecordChange(ctx, q, c.Org, id, domain.Change{Kind: domain.ChangeRiskUpdated, Actor: actor(c), Details: stated}); err != nil {
+		return dbq.PcAgent{}, err
+	}
+	return r, record(ctx, tx, c, "agents.risk_updated", id, stated)
+}
+
+// maxCardTools is the most approved tools one card lists.
+const maxCardTools = 500
+
+// ApprovedTool is one operation on an agent's card.
+type ApprovedTool struct {
+	ConnectionID                 ids.UUID
+	Connection, Package, Version string
+	Operation                    string
+}
+
+// Card is the one-page account of an agent (G0 M24 D231).
+type Card struct {
+	Agent
+	Tools []ApprovedTool
+	// Truncated says more approved tools exist than Tools lists.
+	Truncated bool
+}
+
+// Card returns an agent's card, to whoever may read the agent.
+func (inv *Inventory) Card(ctx context.Context, id ids.UUID) (Card, error) {
+	var out Card
+	err := inOrg(ctx, inv.pool, func(ctx context.Context, c tenancy.Caller, q *dbq.Queries, _ db.TenantTx) error {
+		r, err := load(ctx, c, q, id, td.PermAgentRead, false)
+		if err != nil {
+			return err
+		}
+		rows, err := q.ApprovedToolsOfAgent(ctx, c.Org, r.ID, maxCardTools+1)
+		if err != nil {
+			return err
+		}
+		out.Agent, out.Truncated = agentView(r), len(rows) > maxCardTools
+		for _, t := range rows[:min(len(rows), maxCardTools)] {
+			out.Tools = append(out.Tools, ApprovedTool{
+				ConnectionID: t.ConnectionID, Connection: t.ConnectionName, Package: t.Package, Version: t.Version, Operation: t.Operation,
+			})
+		}
+		return nil
+	}, db.ReadOnly())
 	return out, err
 }
 

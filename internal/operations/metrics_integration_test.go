@@ -99,6 +99,63 @@ func TestHR258_MetricsNeverReadAMissingSourceAsZero(t *testing.T) {
 	}
 }
 
+// TestF301_StalenessAndBypassOwnersAreSampledAndEveryPointDrillsOrSaysSo:
+// staleness is sampled (its count over a lapsed record is tested with the
+// coverage jobs), bypass routes count by their agent's owner, and a point
+// carries its search or none, which reads as "no drill" (D17, F301, F302).
+// Covers: F301, F302
+func TestF301_StalenessAndBypassOwnersAreSampledAndEveryPointDrillsOrSaysSo(t *testing.T) {
+	f := newFx(t)
+	gw, conn := ids.NewV7(), ids.NewV7()
+	f.exec(`INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'gw', 'test')`, f.org, gw)
+	f.exec(`INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, created_by, updated_by)
+		VALUES ($1, $2, 'c', 'http', $3, 'pkg', 'https://api.example.com', 'pantherclaw_held', 'test', 'test')`, f.org, conn, gw)
+	f.exec(`INSERT INTO pc.coverage_routes (org_id, id, agent_id, connection_id, kind, locator, observation, source)
+		VALUES ($1, $2, $3, $4, 'host', 'h1', 'observed', 'gateway')`, f.org, ids.NewV7(), f.agentA, conn)
+	f.exec(`INSERT INTO pc.coverage_routes (org_id, id, agent_id, connection_id, kind, locator, observation, source)
+		VALUES ($1, $2, NULL, $3, 'host', 'h2', 'observed', 'gateway')`, f.org, ids.NewV7(), conn)
+	f.d.AdminExec(t, `UPDATE pc.agents SET owner_user_id = $2 WHERE id = $1`, f.agentA, f.user)
+
+	c := &operations.Collector{Pool: f.p, Ents: edition(billing.Team), Failures: &failures.Sink{}}
+	if _, err := c.Collect(context.Background(), f.org); err != nil {
+		t.Fatal(err)
+	}
+	f.s.Ents = edition(billing.Team)
+	now := time.Now().UTC().Truncate(time.Hour)
+	m, err := f.s.GetMetrics(f.orgWide(), nil, now.Add(-time.Hour), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := func(metric, dim string) operations.Point {
+		t.Helper()
+		for _, s := range m.Series {
+			if s.Metric == metric && s.Dimension == dim {
+				return s.Points[0]
+			}
+		}
+		t.Fatalf("no series %s %q in %+v", metric, dim, m.Series)
+		return operations.Point{}
+	}
+	// No search filters these, so neither opens a wider list under the same
+	// number (D40).
+	if p := value(operations.MetricCoverageStale, ""); p.State != operations.Collected || p.Value != 0 || p.Drill != nil {
+		t.Errorf("stale: %+v", p)
+	}
+	if p := value(operations.MetricBypassByOwner, f.user.String()); p.Value != 1 || p.Drill != nil {
+		t.Errorf("owned: %+v", p)
+	}
+	// The backlog counts every mode, so its drill does too (L6).
+	if p := value(operations.MetricReconciliationBacklog, ""); p.Drill == nil || p.Drill.Query == nil || len(p.Drill.Query.Filters.Modes) != 0 {
+		t.Errorf("backlog drill: %+v", p)
+	}
+	if p := value(operations.MetricBypassByOwner, "unowned"); p.Value != 1 {
+		t.Errorf("unowned: %+v", p)
+	}
+	if p := value(operations.MetricEffectsConfirmed, ""); p.Drill == nil || p.Drill.Query == nil || len(p.Drill.Query.Filters.EffectStates) != 1 {
+		t.Errorf("effects drill: %+v", p)
+	}
+}
+
 // TestHR258_EachMetricNeedsItsSourcePermission (D69 M7): a Viewer holds
 // operations.read across the org but neither evidence.read, coverage.read
 // nor exposure.read: those metrics read RESTRICTED, with no dimension or

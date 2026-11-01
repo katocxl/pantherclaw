@@ -47,7 +47,12 @@ func ReapplyControl(ctx context.Context, tx db.TenantTx, metadata securityevent.
 		return err
 	}
 	a := pgresponse.Action{ID: metadata.ActionID, Kind: rdomain.KindContain, ScopeType: c.ScopeType, ScopeID: c.ScopeID, Control: c.Control, Operation: c.Operation, Reason: c.Reason, Actor: actor.Type + ":" + actor.ID, Source: metadata.Source, PreviewDigest: p.Digest, PreviewSummary: summaryOf(p)}
-	added, err := pgresponse.AddControlWithID(ctx, tx, tx.OrgID(), a, metadata.ControlID, nil)
+	if metadata.Server != "" {
+		a.ScopeType, a.ScopeID = rdomain.ScopeMcpServer, metadata.Server
+	}
+	// One action can hold many controls (a revoke's, G0 M24 D264): the first
+	// one back recreates the action, and each adds its own paths.
+	added, err := pgresponse.AddControlWithID(ctx, tx, tx.OrgID(), a, c, metadata.ControlID, nil)
 	if err != nil {
 		return err
 	}

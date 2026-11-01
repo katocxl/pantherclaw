@@ -57,6 +57,12 @@ const (
 	// TicketSyncServiceSetTicketFieldOwnerProcedure is the procedure name of the TicketSyncService's
 	// SetTicketFieldOwner RPC.
 	TicketSyncServiceSetTicketFieldOwnerProcedure = "/pantherclaw.v1.TicketSyncService/SetTicketFieldOwner"
+	// TicketSyncServiceListTicketRefsProcedure is the procedure name of the TicketSyncService's
+	// ListTicketRefs RPC.
+	TicketSyncServiceListTicketRefsProcedure = "/pantherclaw.v1.TicketSyncService/ListTicketRefs"
+	// TicketSyncServiceListTicketSyncEventsProcedure is the procedure name of the TicketSyncService's
+	// ListTicketSyncEvents RPC.
+	TicketSyncServiceListTicketSyncEventsProcedure = "/pantherclaw.v1.TicketSyncService/ListTicketSyncEvents"
 )
 
 var (
@@ -132,6 +138,22 @@ var (
 			Procedure:  TicketSyncServiceSetTicketFieldOwnerProcedure,
 		}
 	})
+	ticketSyncServiceListTicketRefsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_ticketsync_proto.Services().ByName("TicketSyncService").Methods().ByName("ListTicketRefs"),
+			Procedure:        TicketSyncServiceListTicketRefsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	ticketSyncServiceListTicketSyncEventsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_ticketsync_proto.Services().ByName("TicketSyncService").Methods().ByName("ListTicketSyncEvents"),
+			Procedure:        TicketSyncServiceListTicketSyncEventsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // TicketSyncServiceClient is a client for the pantherclaw.v1.TicketSyncService service.
@@ -173,6 +195,14 @@ type TicketSyncServiceClient interface {
 	// for a second person (PROTECTED_CHANGE_PENDING).
 	// permission: connection.manage
 	SetTicketFieldOwner(context.Context, *v1.SetTicketFieldOwnerRequest) (*v1.SetTicketFieldOwnerResponse, error)
+	// ListTicketRefs lists the tickets linked to one case or one incident. For
+	// an incident the caller also needs incident.read.
+	// permission: case.read
+	ListTicketRefs(context.Context, *v1.ListTicketRefsRequest) (*v1.ListTicketRefsResponse, error)
+	// ListTicketSyncEvents lists a configuration's sync log, newest first:
+	// inbound deliveries and outbound calls, without bodies or secrets.
+	// permission: connection.read
+	ListTicketSyncEvents(context.Context, *v1.ListTicketSyncEventsRequest) (*v1.ListTicketSyncEventsResponse, error)
 }
 
 // NewTicketSyncServiceClient constructs a client for the pantherclaw.v1.TicketSyncService service.
@@ -220,6 +250,14 @@ type TicketSyncServiceHandler interface {
 	// for a second person (PROTECTED_CHANGE_PENDING).
 	// permission: connection.manage
 	SetTicketFieldOwner(context.Context, *v1.SetTicketFieldOwnerRequest) (*v1.SetTicketFieldOwnerResponse, error)
+	// ListTicketRefs lists the tickets linked to one case or one incident. For
+	// an incident the caller also needs incident.read.
+	// permission: case.read
+	ListTicketRefs(context.Context, *v1.ListTicketRefsRequest) (*v1.ListTicketRefsResponse, error)
+	// ListTicketSyncEvents lists a configuration's sync log, newest first:
+	// inbound deliveries and outbound calls, without bodies or secrets.
+	// permission: connection.read
+	ListTicketSyncEvents(context.Context, *v1.ListTicketSyncEventsRequest) (*v1.ListTicketSyncEventsResponse, error)
 }
 
 // RegisterTicketSyncServiceHandler registers svc as the pantherclaw.v1.TicketSyncService
@@ -237,6 +275,8 @@ func RegisterTicketSyncServiceHandler(server *connect.Server, svc TicketSyncServ
 		connect.Method{Spec: ticketSyncServiceOpenIncidentTicketSpec(), Handler: adapter.openIncidentTicket},
 		connect.Method{Spec: ticketSyncServiceGetTicketFieldOwnersSpec(), Handler: adapter.getTicketFieldOwners},
 		connect.Method{Spec: ticketSyncServiceSetTicketFieldOwnerSpec(), Handler: adapter.setTicketFieldOwner},
+		connect.Method{Spec: ticketSyncServiceListTicketRefsSpec(), Handler: adapter.listTicketRefs},
+		connect.Method{Spec: ticketSyncServiceListTicketSyncEventsSpec(), Handler: adapter.listTicketSyncEvents},
 	)
 }
 
@@ -281,6 +321,14 @@ func (UnimplementedTicketSyncServiceHandler) GetTicketFieldOwners(context.Contex
 
 func (UnimplementedTicketSyncServiceHandler) SetTicketFieldOwner(context.Context, *v1.SetTicketFieldOwnerRequest) (*v1.SetTicketFieldOwnerResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.TicketSyncService.SetTicketFieldOwner is not implemented")
+}
+
+func (UnimplementedTicketSyncServiceHandler) ListTicketRefs(context.Context, *v1.ListTicketRefsRequest) (*v1.ListTicketRefsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.TicketSyncService.ListTicketRefs is not implemented")
+}
+
+func (UnimplementedTicketSyncServiceHandler) ListTicketSyncEvents(context.Context, *v1.ListTicketSyncEventsRequest) (*v1.ListTicketSyncEventsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.TicketSyncService.ListTicketSyncEvents is not implemented")
 }
 
 type ticketSyncServiceClient struct {
@@ -362,6 +410,22 @@ func (c *ticketSyncServiceClient) GetTicketFieldOwners(ctx context.Context, req 
 func (c *ticketSyncServiceClient) SetTicketFieldOwner(ctx context.Context, req *v1.SetTicketFieldOwnerRequest) (*v1.SetTicketFieldOwnerResponse, error) {
 	var res v1.SetTicketFieldOwnerResponse
 	if err := c.client.CallUnary(ctx, ticketSyncServiceSetTicketFieldOwnerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *ticketSyncServiceClient) ListTicketRefs(ctx context.Context, req *v1.ListTicketRefsRequest) (*v1.ListTicketRefsResponse, error) {
+	var res v1.ListTicketRefsResponse
+	if err := c.client.CallUnary(ctx, ticketSyncServiceListTicketRefsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *ticketSyncServiceClient) ListTicketSyncEvents(ctx context.Context, req *v1.ListTicketSyncEventsRequest) (*v1.ListTicketSyncEventsResponse, error) {
+	var res v1.ListTicketSyncEventsResponse
+	if err := c.client.CallUnary(ctx, ticketSyncServiceListTicketSyncEventsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -483,6 +547,30 @@ func (h ticketSyncServiceHandler) setTicketFieldOwner(ctx context.Context, _ con
 		return err
 	}
 	res, err := h.svc.SetTicketFieldOwner(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h ticketSyncServiceHandler) listTicketRefs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTicketRefsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTicketRefs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h ticketSyncServiceHandler) listTicketSyncEvents(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTicketSyncEventsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTicketSyncEvents(ctx, &req)
 	if err != nil {
 		return err
 	}

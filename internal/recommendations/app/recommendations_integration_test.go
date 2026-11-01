@@ -8,11 +8,13 @@ package app_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"slices"
 	"strings"
 	"testing"
 
+	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
@@ -89,6 +91,56 @@ func discover(t *testing.T, o *exposuretest.Org, agent ids.UUID, kind string) id
 		VALUES ($1, $2, $3, 'scan', $4, jsonb_build_object('kind', 'env_secret', 'secret_kind', $5::text))`,
 		o.Org, id, agent, key, kind)
 	return id
+}
+
+// scanned adds an open discovery of source, with the managed state its scan
+// reported.
+func scanned(t *testing.T, o *exposuretest.Org, agent ids.UUID, source, state string) ids.UUID {
+	t.Helper()
+	id := ids.NewV7()
+	key := make([]byte, 32)
+	copy(key, id[:])
+	var scope, principal *string
+	if source == "ci_scan" {
+		s := "acme/payments"
+		scope, principal = &s, &s
+	}
+	o.Exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, scan_scope, scan_principal, observed)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, jsonb_build_object('kind', 'mcp_server', 'managed_settings', $8::text))`,
+		o.Org, id, agent, source, key, scope, principal, state)
+	return id
+}
+
+// TestHR536_ManagedSettingsMissing: the recommendation rests on open local
+// scan discoveries the viewer may read that say not_found. Any other state,
+// a CI-mode scan and another team's agent do not count; what it returns is
+// a count and ids, and it says what stays unsupported (G0 M23 D114).
+//
+// Covers: F852
+func TestHR536_ManagedSettingsMissing(t *testing.T) {
+	o := exposuretest.New(t)
+	a, b := o.Claim(t, o.Agent), o.Claim(t, o.Other)
+	if _, ok := item(list(orgWide(o), t, o, false), domain.ManagedSettings); ok {
+		t.Fatal("applies with no discovery")
+	}
+	scanned(t, o, o.Agent, "scan", "present")
+	scanned(t, o, o.Agent, "scan", "conflict")
+	scanned(t, o, o.Agent, "scan", `not_found"`)
+	scanned(t, o, o.Agent, "ci_scan", "not_found")
+	if _, ok := item(list(orgWide(o), t, o, false), domain.ManagedSettings); ok {
+		t.Fatal("applies with no missing settings on a person's machine")
+	}
+	hidden := scanned(t, o, o.Other, "scan", "not_found")
+	if _, ok := item(list(team(o, a), t, o, false), domain.ManagedSettings); ok {
+		t.Fatal("team A sees team B's discovery")
+	}
+	it, ok := item(list(team(o, b), t, o, false), domain.ManagedSettings)
+	if !ok || it.Evidence.Count != 1 || records(it)[0] != hidden || it.Evidence.Records[0].Kind != domain.RecordDiscovery {
+		t.Fatalf("team B: %+v %v", it, ok)
+	}
+	if len(it.Entry.StillUnsupported) == 0 || it.Entry.Reach != domain.AgentBacked {
+		t.Fatalf("%+v", it.Entry)
+	}
 }
 
 // useDatabase makes the org's connection a database connection and records
@@ -523,5 +575,30 @@ func TestIntAppChannelsCountOnceActivated(t *testing.T) {
 		activated_at = now() WHERE org_id = $1`, o.Org, o.User, cred)
 	if got := channels(); !slices.Equal(got, []string{"slack_app", "teams_app"}) {
 		t.Fatalf("an activated Teams channel: %v", got)
+	}
+}
+
+// TestF343_SubmittedKeysReachTheCatalogue (D238): what `pclaw scan --submit`
+// sends, from a plain or a device scan, is the signal the model-keys entry
+// reads.
+//
+// Covers: F343
+func TestF343_SubmittedKeysReachTheCatalogue(t *testing.T) {
+	o := exposuretest.New(t)
+	inv := aapp.NewInventory(o.P, edition(billing.Team))
+	submit := as(o, td.RoleAgentOwner, td.Scope{Type: td.ScopeOrg, ID: o.Org.UUID()})
+	key := func(s string) [32]byte { return sha256.Sum256([]byte(s)) }
+	if _, err := inv.SubmitScan(submit, "laptop", []aapp.ScanFinding{{
+		Kind: "env_secret", Key: key("plain"), Attributes: map[string]string{"secret_kind": "openai_api_key"},
+	}}, aapp.ScanMode{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inv.SubmitScan(submit, "laptop", []aapp.ScanFinding{{
+		Kind: "env_secret", Key: key("device"), Attributes: map[string]string{"secret_kind": "anthropic_api_key"},
+	}}, aapp.ScanMode{Scope: "device:0123456789abcdef"}); err != nil {
+		t.Fatal(err)
+	}
+	if it, ok := item(list(orgWide(o), t, o, false), domain.ModelKeys); !ok || it.Evidence.Count != 2 {
+		t.Fatalf("model keys: %+v %v", it, ok)
 	}
 }

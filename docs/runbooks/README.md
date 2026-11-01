@@ -44,3 +44,11 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [installation.md](installation.md) | M13 | Verified releases with `install.sh`, a single node with `pclaw up`, the Helm chart, FIPS builds |
 | [m13-exit.md](m13-exit.md) | M13 | Run the M13 exit journey: locally on every change, and once on hosted staging for the exit (`PC_E2E_STAGING_URL`) |
 | [org-move.md](org-move.md) | M13 | Move the repositories to the GitHub organization: rewrite the module path, the repository links and the image names in one change (F8) |
+| [pclaw-credential-rotation.md](pclaw-credential-rotation.md) | M22 | `pclaw credential rotation`: rotate a GitHub App key with a test at GitHub, activation, rollback and confirmation |
+| [pclaw-hub.md](pclaw-hub.md) | M23 | `pclaw hub`: search, inspect, install and update signed Hub content; installs are drafts |
+| [pclaw-ci-check.md](pclaw-ci-check.md) | M23 | `pclaw ci check`: validate a policy change offline, with the GitHub Action and GitLab component |
+| [pclaw-dev.md](pclaw-dev.md) | M23 | `pclaw dev`: a loopback development node with the simulators |
+| [pclaw-managed-settings.md](pclaw-managed-settings.md) | M23 | `pclaw managed-settings`: generate admin settings files for Claude Code and Copilot |
+| [pclaw-mcp-catalog.md](pclaw-mcp-catalog.md) | M24 | `pclaw mcp catalog`: the organization's approved MCP servers, modes, revoke and export |
+| [pclaw-mcp-inspect.md](pclaw-mcp-inspect.md) | M24 | `pclaw mcp inspect`: run an MCP server in the sandbox on your own machine and check it |
+| [device-scan.md](device-scan.md) | M24 | Scheduled metadata scans on managed devices with Intune or Jamf |

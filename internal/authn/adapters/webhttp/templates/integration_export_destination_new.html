@@ -1,0 +1,28 @@
+{{template "head" .}}
+<h1>New export destination</h1>
+{{if .CanManage}}
+<p class="note">PantherClaw seals the credential and never shows it again. The destination stays PENDING until a person activates it. Saving needs your security key.</p>
+<form id="secret-form" data-path="/integrations/export-destinations/new" autocomplete="off">
+<p><label for="name">Name</label> <input id="name" name="name" required maxlength="63"></p>
+<p><label for="kind">Kind</label> <select id="kind" name="kind"><option value="https_put">HTTPS PUT</option><option value="s3">S3-compatible storage</option></select></p>
+<p><label for="url">URL</label> <input id="url" name="url" type="url" required maxlength="2048"></p>
+<p><label for="bucket">S3 bucket</label> <input id="bucket" name="bucket" maxlength="63"></p>
+<p><label for="region">S3 region</label> <input id="region" name="region" maxlength="32"></p>
+<p><label for="key_prefix">Key prefix</label> <input id="key_prefix" name="key_prefix" maxlength="256"></p>
+<p><label><input type="checkbox" name="path_style"> S3 path-style addressing</label></p>
+<p><label><input type="checkbox" name="internal"> This target may be a private or loopback address</label></p>
+<fieldset><legend>Data sent</legend>
+{{range .DataClasses}}<p><label><input type="checkbox" name="data_classes" value="{{.}}" data-list="1"> <code>{{.}}</code></label></p>{{end}}
+</fieldset>
+<p><label for="bearer_token">Bearer token (HTTPS PUT)</label> <input id="bearer_token" name="bearer_token" type="password" maxlength="4096" autocomplete="off"></p>
+<p><label for="access_key_id">Access key id (S3)</label> <input id="access_key_id" name="access_key_id" maxlength="128" autocomplete="off"></p>
+<p><label for="secret_access_key">Secret access key (S3)</label> <input id="secret_access_key" name="secret_access_key" type="password" maxlength="256" autocomplete="off"></p>
+<p><button type="submit" class="danger">Save with your security key</button></p>
+</form>
+{{else}}
+<p class="note">You cannot add a destination: that needs siem.manage and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/integrations.js"></script>
+<script src="/static/secret_forms.js"></script>
+{{template "foot" .}}

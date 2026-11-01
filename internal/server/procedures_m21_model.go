@@ -14,7 +14,9 @@ import (
 // m21ModelProcedures are ModelService's procedures (G0 M21 D304, D309; G16,
 // F181, F304): changes need org.update, and the use cases accept a person
 // only. Turning drafting on and setting the key are not here: they need a
-// step-up, which only the browser settings page has.
+// step-up, which only the browser settings page has. Listing drafts and
+// reading usage take more than org.read (G0 M24 D95), so a Scanner's key
+// reaches neither (HR-589).
 var m21ModelProcedures = map[string]td.Permission{
 	pantherclawv1connect.ModelServiceGetModelSettingsProcedure:     td.PermOrgRead,
 	pantherclawv1connect.ModelServiceUpdateModelSettingsProcedure:  td.PermOrgUpdate,
@@ -24,6 +26,8 @@ var m21ModelProcedures = map[string]td.Permission{
 	pantherclawv1connect.ModelServiceDraftPolicyProcedure:          td.PermPolicyAuthor,
 	pantherclawv1connect.ModelServiceDraftAutomationProcedure:      td.PermAutomationManage,
 	pantherclawv1connect.ModelServiceGetModelDraftProcedure:        td.PermOrgRead,
+	pantherclawv1connect.ModelServiceListModelDraftsProcedure:      td.PermPolicyRead,
+	pantherclawv1connect.ModelServiceGetModelUsageProcedure:        td.PermAuditRead,
 }
 
 // m21ModelClasses are ModelService's plan-gate classes: turning drafting off
@@ -38,6 +42,8 @@ var m21ModelClasses = map[string]entitlements.Class{
 	pantherclawv1connect.ModelServiceDraftPolicyProcedure:          entitlements.ClassChange,
 	pantherclawv1connect.ModelServiceDraftAutomationProcedure:      entitlements.ClassChange,
 	pantherclawv1connect.ModelServiceGetModelDraftProcedure:        entitlements.ClassRead,
+	pantherclawv1connect.ModelServiceListModelDraftsProcedure:      entitlements.ClassRead,
+	pantherclawv1connect.ModelServiceGetModelUsageProcedure:        entitlements.ClassRead,
 }
 
 func init() {

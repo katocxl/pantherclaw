@@ -1,6 +1,6 @@
 # PantherClaw — Product Features (revised)
 
-PantherClaw is an AI Agent Identity & Runtime Authorization Firewall. It gives every agent workload a verifiable identity and binds each consequential action to an explicit task grant and a deterministic policy decision. It routes that action through a gateway that dispatches only what was authorized, and keeps signed, independently verifiable evidence of what was decided, what was dispatched and what actually happened. This document turns all 802 catalog requirements (F001–F802) into consolidated, testable backend capabilities grouped into 20 commercially framed pillars, which roll up into seven product components ([PRODUCT.md](PRODUCT.md)). It also adds new PantherClaw features (PN-001–PN-026) and the web console, hosted-account and plan rows F803–F830 of milestone UI. Version 1.0 is a Go backend with a Connect-RPC API and the `pclaw` CLI, plus the web console of milestone UI. Each backend row states what the backend must deliver, and the console exposes it. Everything here is planned scope, not a claim that the behaviour is built. Behaviour detail lives in the catalog ([`reference/PantherClaw_Feature_Catalog_F001-F802.md`](reference/PantherClaw_Feature_Catalog_F001-F802.md)), [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`protocol/PAP-1.md`](protocol/PAP-1.md); where they are more specific, they take precedence.
+PantherClaw is an AI Agent Identity & Runtime Authorization Firewall. It gives every agent workload a verifiable identity and binds each consequential action to an explicit task grant and a deterministic policy decision. It routes that action through a gateway that dispatches only what was authorized, and keeps signed, independently verifiable evidence of what was decided, what was dispatched and what actually happened. This document turns all 802 catalog requirements (F001–F802) into consolidated, testable backend capabilities grouped into 20 commercially framed pillars, which roll up into seven product components ([PRODUCT.md](PRODUCT.md)). It also adds new PantherClaw features (PN-001–PN-026) and the web console, hosted-account and plan rows F803–F830 of milestone UI, and the rows F831–F889 of milestones M22–M24. Version 1.0 is a Go backend with a Connect-RPC API and the `pclaw` CLI, plus the web console of milestone UI. Each backend row states what the backend must deliver, and the console exposes it. Everything here is planned scope, not a claim that the behaviour is built. Behaviour detail lives in the catalog ([`reference/PantherClaw_Feature_Catalog_F001-F802.md`](reference/PantherClaw_Feature_Catalog_F001-F802.md)), [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`protocol/PAP-1.md`](protocol/PAP-1.md); where they are more specific, they take precedence.
 
 ## How to read this
 
@@ -39,6 +39,9 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M13 | Commercial & production hardening |
 | M14 | Framework SDKs & business connectors (framework wrappers, Stripe test mode, Slack, Postgres) |
 | UI | Web console, hosted accounts, self-serve organizations, per-organization plans, onboarding, website and interactive demo ([G0 UI](g0/UI.md)) |
+| M22 | See it: API gaps left by M15–M21, graph evidence, every M15–M21 console screen, graph views |
+| M23 | Easy to adopt: Hub, CI checks, `pclaw dev`, the managed-settings kit |
+| M24 | Agent Posture: ranked findings, MCP supply-chain checks, the private MCP catalogue, agent cards, scheduled device scans |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -74,7 +77,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | Core firewall: PAP/1 identity, grants, CEL policy, gateway, waitlist, WebAuthn approvals, kill switch, signed receipts, `pclaw verify` | Yes | Yes | Yes | Yes |
 | Discovery | Local `pclaw scan` | + GitHub organisation scan | + GitHub organisation scan | + GitHub organisation scan |
 | Policy simulation, shadow & pilot rollout; governed automations | — | Yes | Yes | Yes |
-| Investigation cases & breach radius | Search & evidence explorer | Cases, breach radius | + posture queue, automation exposure | + posture queue, automation exposure |
+| Investigation cases & breach radius | Search & evidence explorer | Cases, breach radius, posture findings | + posture trends and remediation, automation exposure | + posture trends and remediation, automation exposure |
 | Transparency anchoring (Rekor v2 + RFC 3161) | — | Yes | Yes | Yes |
 | SIEM export (OCSF 1.9) & SOAR response requests | — | — | Yes | Yes |
 | Threat detections | Core built-ins | Core built-ins | Advanced built-ins + custom rules | Advanced built-ins + custom rules |
@@ -293,7 +296,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | --- | --- | --- | --- | --- | --- | --- |
 | F416 | Access modes | Each connection uses target-enforced, narrow temporary, PantherClaw-held, externally constrained runtime, agent-held reusable or combined access, recorded on every execution receipt. Agent-held access is `PARTIAL` or `UNKNOWN` unless its routes are closed. | MVP | Community | M6 | F416–F422 |
 | F423 | Access source inspection | Shows custodian, target account, scope, audience, expiry, issuer, affected agents, verification basis and residual routes, linked to grants and transactions. Raw secrets are never revealed. | MVP | Community | M6 | F423, F425, F432 |
-| F424 | Access management | Preview dependants, test a connection's custody, revoke or rotate sealed credentials, and remove an agent's direct access by an attested revoke, which closes its bypass routes. Target-confirmed rotation of the GitHub App key: the new key is tested at GitHub through the gateway before activation, rollback stays possible until confirmation, and the old key is revoked only when GitHub refuses it. | MVP | Community | M6/M20 | F424, F429 |
+| F424 | Access management | Preview dependants, test a connection's custody, revoke or rotate sealed credentials, and remove an agent's direct access by an attested revoke, which closes its bypass routes. Target-confirmed rotation of the GitHub App key: the new key is tested at GitHub through the gateway before activation, rollback stays possible until confirmation, and the old key is revoked only when GitHub refuses it. | MVP | Community | M6/M20, M22 (RPC and command line) | F424, F429 |
 | F426 | Revocation completeness | Identity, privilege, credential or target changes trigger reassessment. Revocation reports both the delegated permission removed and any target access still usable. | MVP | Community | M6 | F426, F427 |
 | F431 | Executor trust assurance | States whether protection assumes a trusted executor or contains a compromised one. Checks the actor can skip (hooks, SDK calls) never justify a stronger assurance claim. | MVP | Community | M6 | F431 |
 
@@ -399,7 +402,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F232 | Task-phase timeline | Groups actions into Gather context, Prepare change, Seek approval, Execute and Verify, based on workflow evidence. Inferred phases are marked as inferred; agent notes carry provenance and no authority. | MVP | Team | M10 | F232, F233 |
 | F234 | Typical-run comparison | Diffs a run against a reference period (new destinations, record counts, post-task writes) and states the sample size. Novelty alone is never labelled malicious. | MVP | Business | M10 | F234, F235 |
 | F236 | No transcript requirement | Run inspection works from actions and receipts. Full transcripts and hidden model reasoning are never required. | MVP | Community | M7 | F236 |
-| F284 | Session timeline data | Time-ordered actions, holds, approvals, authority changes, dispatches, results, evidence gaps and parallel child lanes, ready for timeline rendering. | MVP | Community | M10 | F284 |
+| F284 | Session timeline data | Time-ordered actions, holds, approvals, authority changes, dispatches, results, evidence gaps and parallel child lanes, ready for timeline rendering. | MVP | Community | M10, M22 (lane events, read class) | F284 |
 | F715 | Automation execution inspector | Trigger, version, initiating principal, execution identity, grant lineage, current step, elapsed time, per-step decisions and attempts, and linked child agents and external workflows. | MVP | Team | M11 | F715, F716, F717 |
 | F718 | Automation execution results | Budget and human-gate status, partial effects and unresolved work. States are Succeeded, Partially completed, Failed, Cancelled, Waiting and Needs reconciliation; Succeeded requires completion evidence. | MVP | Team | M11 | F718–F722 |
 
@@ -445,7 +448,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F215 | Focused live stream | An SSE stream of first sensitive use, significant writes, new or expanded authority and unexpected denials. Routine reads stay searchable, retries are grouped, and a cursor supports pause and resume. | MVP | Community | M10 | F215–F218 |
 | F219 | Evidence status & gaps | Every item carries a timestamp, freshness and outcome. Missing telemetry shows as a gap with a last-seen time, never as a quiet interval. | MVP | Community | M10 | F219, F220, F640 |
 | F221 | Automation exceptions | Blocked launches, stalled approvals, failed containment, repeated recovery failure and changed authority go to owners, while routine success stays quiet. Usefulness is measured in completed work, not trigger counts. | MVP | Team | M11 | F221, F222, F623, F752, F753 |
-| F301 | Posture & operating metrics | Time series for coverage and staleness, consequential outcomes, bypass-route age, exposure by resource group, reconciliation backlog and automation outcomes, each drillable to its records. | MVP | Team | M10 | F301, F302 |
+| F301 | Posture & operating metrics | Time series for coverage and staleness, consequential outcomes, bypass-route age, exposure by resource group, reconciliation backlog and automation outcomes, each drillable to its records. | MVP | Team | M10, M22 (staleness, bypass owner, drills) | F301, F302 |
 | F537 | Delivery health | Last delivery, delayed and failed records, and retries; stable IDs make retries dedupable. "Configured" is kept separate from "delivery confirmed". Failures that threaten audit coverage surface in Operations. | MVP | Business | M10 | F537–F540, F638 |
 | F603 | Evidence-based grouping | Groups by run, identity, authority change, target or connection failure only when the relationship is supported. Retry groups show first and latest, count and whether any attempt executed. Mere similarity is labelled "possible". | MVP | Team | M10 | F603, F613, F614, F615 |
 | F607 | Attention levels | Six levels: searchable telemetry, live activity, finding, alert, incident and immediate page. Paging is reserved for credible ongoing harm or critical enforcement loss. | MVP | Team | M10 | F607–F612 |
@@ -486,9 +489,9 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F248 | Injection & sensitive-read evidence | Links suspicious external content and sensitive reads to later actions, without asserting causation beyond the evidence. | MVP | Team | M10 | F248, F285 |
 | F249 | Case collaboration & handoff | Owners, annotations, evidence preservation, related-action queries, and export or handoff to existing security workflows. Updates add evidence and never overwrite notes or conclusions. | MVP | Team | M10 | F249, F250 |
 | F251 | Case closure rules | Closure requires containment state, confirmed or explicitly unresolved impact, a follow-up owner, a disposition and evidence. Operational containment can close while forensic questions stay open. | MVP | Team | M10 | F251, F252 |
-| F272 | Activity & causal graph data | Graph APIs for agent–principal–resource activity and for transaction causality (authority, approval, custody, direct and downstream effects). Observed ≠ possible, and causal links need trigger evidence. | MVP | Team | M10 | F272, F273, F279, F280, F281 |
-| F289 | Shared graph semantics | Distinct activity, authority, exposure and change modes. One edge vocabulary (endpoints, decision, coverage, execution, effect, evidence basis, revisions, time, expiry) with explicit edge states. Historical edges are kept but excluded from current authority. | MVP | Team | M10 | F289–F292 |
-| F293 | Graph scope, filters & provenance | Graphs start from one task, agent, incident or resource group, with filters for time, run, agent, operation, decision, outcome and principal. Gaps survive collapsing, and every edge carries freshness and provenance. | MVP | Team | M10 | F293–F297 |
+| F272 | Activity & causal graph data | Graph APIs for agent–principal–resource activity and for transaction causality (authority, approval, custody, direct and downstream effects). Observed ≠ possible, and causal links need trigger evidence. | MVP | Team | M10, M22 (labels, causal edges) | F272, F273, F279, F280, F281 |
+| F289 | Shared graph semantics | Distinct activity, authority, exposure and change modes. One edge vocabulary (endpoints, decision, coverage, execution, effect, evidence basis, revisions, time, expiry) with explicit edge states. Historical edges are kept but excluded from current authority. | MVP | Team | M10, M22 (edge states) | F289–F292 |
+| F293 | Graph scope, filters & provenance | Graphs start from one task, agent, incident or resource group, with filters for time, run, agent, operation, decision, outcome and principal. Gaps survive collapsing, and every edge carries freshness and provenance. | MVP | Team | M10, M22 (gaps, provenance) | F293–F297 |
 | F298 | Permission-safe graph tables | Every graph has an equivalent tabular endpoint. Expansion, counts, summaries and exports apply tenant and data permissions, so hidden records cannot be inferred. | MVP | Community | M10 | F298, F300 |
 | F304 | Structured & natural-language search | Structured search over permission-scoped evidence (MVP). Natural-language queries (Next) show the generated query, environment, range, timezone and event meaning: attempt or confirmed. Rule-based questions stay deterministic; with model drafting enabled (M21, Business), a drafted query is re-resolved under the viewer's permissions and shown, never run. | MVP | Community | M10, M21 (model drafts) | F304, F305 |
 | F306 | Built-in investigative queries | Production access, why an action was allowed, who can write a resource, payment-capable tools, unused grants, actions for a principal, connection dependencies, widest exposure, denials and recent authority changes. | MVP | Community | M10 | F306–F315 |
@@ -513,7 +516,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F262 | Automation latent exposure | Shows each automation's current execution reach and its maximum future grant-issuance ceiling, with a pre-enable blast-radius preview and restriction comparison. A quiet schedule is not treated as low risk. | MVP | Business | M11 | F262, F747–F750, F754 |
 | F265 | Posture remediation queue | Findings for excessive grants, uncovered paths, unowned agents, unsafe delegation, stale credentials, unused authority and unverified sensitive tools, grouped by root cause with history. | MVP | Business | M10 | F265, F266, F267 |
 | F268 | Finding lifecycle & closure | `Open → Assigned → Testing → Remediated`, `Accepted temporarily` or `Evidence incomplete`. Closure requires proof that the change reaches affected paths; dismissing an alert never closes exposure. | MVP | Business | M10 | F268, F269, F270 |
-| F274 | Authority, exposure & change graphs | Graph data for verified issuers and grants, effective vs credential reach, narrowed child delegation, and before/after restriction comparison. | MVP | Team | M10 | F274, F275, F276, F282 |
+| F274 | Authority, exposure & change graphs | Graph data for verified issuers and grants, effective vs credential reach, narrowed child delegation, and before/after restriction comparison. | MVP | Team | M10, M22 (before and after) | F274, F275, F276, F282 |
 | F299 | Evidence-based containment comparison | Earlier reads and impact questions persist after revocation. Removing an edge alone never proves closure. | MVP | Team | M10 | F299 |
 
 ## 15. Proof (evidence)
@@ -566,7 +569,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | --- | --- | --- | --- | --- | --- | --- |
 | PN-008.2 | Sandbox route-closure evidence | Trusted sidecar probes inside the containment sandbox test that every non-gateway route is closed. Passing results can promote coverage to `ENFORCED`, which expires on schedule. | MVP | Community | M9 | F455, F457 |
 | F090 | Uncontrolled-action labelling | Actions outside coverage are labelled observed/uncontrolled, never given an invented allow or deny. A blocked attempt is shown alongside partial coverage when equivalent routes remain. | MVP | Community | M6 | F090, F091 |
-| F277 | Bypass & coverage graph data | A per-route graph of MCP, API, Git/SSH, browser and other routes to the same effect, separating tested control from possible or unverified bypass, with the aggregate boundary state. | MVP | Team | M9 | F277, F278 |
+| F277 | Bypass & coverage graph data | A per-route graph of MCP, API, Git/SSH, browser and other routes to the same effect, separating tested control from possible or unverified bypass, with the aggregate boundary state. | MVP | Team | M9, M22 (reasons, times, effect groups) | F277, F278 |
 | F329 | Scoped coverage card | After onboarding, states which path was tested and names the tools that remain uncovered. | MVP | Community | M9 | F329 |
 | F353 | Capability & enforcement tests | Sensitive capabilities need explicit approval. Harmless tests and deliberately prohibited actions verify that stopping works, and tested coverage is published separately. Drift or failed tests become visible coverage changes. | MVP | Community | M9 | F353–F356, F360 |
 | F433 | Scoped coverage records | Per workload or cohort, target, account, resource class and effect: channels, equivalent routes, controls, validation, exclusions, time, expiry, invalidating changes, owner and next verification. | MVP | Community | M9 | F433, F434 |
@@ -711,6 +714,88 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | F829 | Test access and deployment banner | Development sign-in providers, billing off or faked, and the console's mock mode are adapters chosen by configuration, shown by a permanent banner and refused in production. | MVP | Community | UI | new |
 | F830 | Guided hosted onboarding | Resumable steps from sign-in to a first protected path, guided tests and validation, computed on the server from real records; simulated records never complete a step. | MVP | Team | UI | F322, F325, F335, F336, F341 |
 
+### M22 rows: See it
+
+The graph rows F272, F274, F277, F284, F289, F293 and F301 and the access row F424 keep their numbers; M22 closes their gaps ([G0 M22](g0/M22.md)).
+
+**Limits of those rows after M22 (D12a, D42).** F272: a custody edge does not name the credential version used, and hypotheses (catalog F280) stay on the case page, not in the graph. F293: fleet grouping by team and capability is a console table feature, and common cause is not delivered.
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F831 | Rotation API and command line | `CredentialRotationService` and `pclaw credential rotation` expose each rotation step one to one, keeping the service's step-up, protected change and audit. Secrets enter through a server page; nothing returns one. | Next | Community | M22 | F424 |
+| F832 | Agent scan state | Each agent shows its missed scans, when it was last seen and whether it vanished, read from existing discovery records. | Next | Team | M22 | new |
+| F833 | Ticket link and sync reads | Read-only lists of ticket links by case or incident and of sync events by configuration, under the ticket-sync read permission. | Next | Business | M22 | F545 |
+| F834 | Model draft and usage reads | Paged model drafts and usage from the model call records, under the drafting gate. Prompts and responses are never returned. | Next | Business | M22 | F181, F304 |
+| F835 | Procedure map | `go run ./internal/procmap` prints every procedure's permission and plan class as JSON, and a test checks it against the server's maps, so clients stop parsing Go. | Next | Community | M22 | new |
+| F836 | Graph drawing kit | In-house SVG charts with a title, a plain summary, a keyboard-reachable table and a legend. Meaning never rests on colour alone, gaps stay visible when collapsed, and the content security policy is unchanged. | Next | Team | M22 | F012, F298, F797 |
+| F837 | M15–M21 console screens | Screens for the M15–M21 features under the existing 11 areas, each using the caller's permissions; secret entry links to the server page. An edition gap shows one shared state. | Next | Team | M22 | new |
+| F838 | Run lanes view | Time-ordered actions, holds, approvals and evidence gaps with one lane per child run, each element linked to its evidence, with an equivalent table. | Next | Community | M22 | F284 |
+| F839 | Graph and trend views | Breach radius and exposure, coverage routes, cause and effect, automation paths with the path taken, and trends. Each view has an equivalent table and the edition of its data; could reach and did touch look different. | Next | Team | M22 | F272, F274, F277, F283, F301 |
+
+### M23 rows: Easy to adopt
+
+Hub is a part of Root, not a new component. It publishes PantherClaw's own content, Apache-2.0, with no third-party code ([G0 M23](g0/M23.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F840 | Hub directory format | A static directory: a signed `index.jws` and `items/<sha256>.json`, no archives. Kinds are closed and hold no code. An item is at most 384 KiB, a compact index 624 KiB with 1,000 items; oversize is refused. | Next | Community | M23 | new |
+| F841 | Hub trust root | Hub documents verify under their own root and purpose, never as package documents or the reverse. The development key works on loopback only; empty roots elsewhere refuse with `HUB_NO_ROOT`. | Next | Community | M23 | new |
+| F842 | Hub state and install records | Per organization, the last accepted index version and digest, and one record per installed item, its result and who installed it. | Next | Community | M23 | new |
+| F843 | Hub API | `HubService` installs an item and lists installs and state. Reading needs `hub.read`; installing needs `hub.install`, a person only, and each kind's own gate still applies. | Next | Community | M23 | new |
+| F844 | Inert Hub install | The server verifies again, then each item lands as a draft or goes through package import. Nothing is activated, published or enabled, no agent's pins change, and a detection rule keeps its Business gate. | Next | Community | M23 | new |
+| F845 | Hub refusals and rollback | Stable refusals for signature, expiry, digest, missing root and rollback. A lower version, or the same version with another digest, is refused; the same digest again is idempotent. | Next | Community | M23 | new |
+| F846 | `pclaw hub` | Search, show, install, update and status from a URL or directory, HTTPS only except loopback, with no cross-host redirects. The CLI keeps rollback state; `update` reports and installs nothing; the server never fetches. | Next | Community | M23 | new |
+| F847 | Hub build command | `pclaw-admin hub build` signs a directory into an index and items, with a version and expiry. | Next | Community | M23 | new |
+| F848 | Open Hub content | The `hub/` directory holds items with their tests, Apache-2.0, listed in NOTICE and LICENSE and checked by `tools/licensecheck`. | Next | Community | M23 | new |
+| F849 | Seed Hub content | Six policy templates, eight alert-only detection rules, five range scenarios and three automations; `task hub:check` runs the real validators in `task check`. | Next | Community | M23 | new |
+| F850 | Managed-settings kit | `pclaw managed-settings generate` writes Claude Code or Copilot admin files to a chosen directory or stdout, never to a managed location. It raises no coverage. | Next | Community | M23 | new |
+| F851 | Managed state in `pclaw init` | Reports managed settings as not found, present or in conflict, and says that registry, device-management and server-managed settings cannot be read here. | Next | Community | M23 | new |
+| F852 | Managed-settings signals | Scan adds a `managed_settings` attribute to existing findings. A recommendation says when settings are missing; it is Team and up, the attribute Community. No coverage state changes. | Next | Community | M23 | F801 |
+| F853 | Offline policy checks | Validation, scenarios, policy comparison and simulation run from files, with no server and no network. | Next | Community | M23 | new |
+| F854 | `pclaw ci check` | Checks a policy file and reports validation, scenarios and rule changes by direction, as text, JSON or Markdown, with exit codes for pass, failed check and usage. | Next | Community | M23 | new |
+| F855 | Simulation samples in CI | The check adds outcome samples and says how many were sampled and that an empty sample proves nothing. | Next | Community | M23 | new |
+| F856 | Safe CI report output | Markdown output escapes all policy-file text and is capped at 60 KiB, so a policy cannot mention a person or render markup. | Next | Community | M23 | new |
+| F857 | GitHub Action | A composite action, Apache-2.0, pinned by SHA, that checksum-verifies `pclaw` and needs no secrets. Documented for `pull_request` only; comments are skipped on forks. | Next | Community | M23 | new |
+| F858 | GitLab component | A CI component with a README and licence, Apache-2.0, that runs the same check. | Next | Community | M23 | new |
+| F859 | `pclaw dev` | Starts, stops and reports a loopback development node with the simulators. `pclaw dev env` prints connection settings and never a secret value. | Next | Community | M23 | new |
+
+### M24 rows: Agent Posture
+
+Posture is ranked findings with fixes and no single measure (F797). Clean means "no known flags", never "safe" (F801) ([G0 M24](g0/M24.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F860 | Posture queue | `PostureQueueService` lists findings ranked by consequence, joined from what already exists, scoped to the viewer before ranking. | Next | Team | M24 | F797 |
+| F861 | Finding record | Each finding names its source, kind, root cause, agent, connection, team, severity and its basis, state, age, a fix never linking to a refusal, and the reasons for its rank. | Next | Team | M24 | new |
+| F862 | Explained ranking | Findings sort by severity, reach to production, missing owner, age and a stable id. Each states which applied; sources without a severity use a fixed table. | Next | Team | M24 | F797 |
+| F863 | Joined finding sources | Posture, coverage, suggestions, open agent changes, recommendations, new inventory, supply-chain flags and unapproved servers, capped at 1,000 per source. Truncation is shown, never silent. A source below its needed scope reports `RESTRICTED`. | Next | Team | M24 | F801 |
+| F864 | OWASP ASI mapping | Each finding kind maps to OWASP Agentic Top 10 entries through a pure table. | Next | Team | M24 | new |
+| F865 | Posture trends | Daily open and closed counts by kind, severity and team. A missing day is `NOT_COLLECTED`, never zero. | Next | Business | M24 | F301 |
+| F866 | Findings clear at the source | A finding clears when its source clears, and dismissal goes to the source, so the queue holds no state of its own to drift. | Next | Team | M24 | new |
+| F867 | MCP supply-chain checks | Pure checks for hidden instructions, injection patterns, tool shadowing, over-broad schemas, changes after approval and unknown provenance, each with severity and offsets. Flagged text stays untrusted. | Next | Team | M24 | F388 |
+| F868 | Tool schema reporting | The gateway reports each tool's input schema, capped at 64 KiB, and its digest, stored with the inventory and its flags. Past 768 KiB in one report, a tool sends its digest only, raising `schema_unavailable`. | Next | Team | M24 | new |
+| F869 | Flags in tool review | Checks run in discovery before a tool review opens and at package import. Flags appear on the review item and feed posture; drift quarantine is unchanged. | Next | Team | M24 | new |
+| F870 | Flag wording | Every string says "no known flags" for a clean result and never "safe"; a flag never approves anything. | Next | Team | M24 | F801 |
+| F871 | `pclaw mcp inspect` | Runs a server in the sandbox with no credentials and egress denied, lists its tools and resources, records egress attempts and runs the checks. Customer machine only; images pinned by digest only. | Next | Community | M24 | new |
+| F872 | Private MCP catalogue | One list of an organization's servers, proposed, approved, denied or revoked, with `OFF`, `WATCH` or `ENFORCE` mode; the default is `WATCH`. Mode and revoke need a person and a step-up. | Next | Team | M24 | new |
+| F873 | Exact server matching | An approval matches only on exact URL scheme, host, effective port and path prefix, image digest or package reference. Denials compare host and effective port, whatever the scheme. No fuzzy matching. | Next | Team | M24 | new |
+| F874 | Opt-in catalogue enforcement | `ENFORCE` refuses to activate a connection to an unapproved server, and turning it on previews, then quarantines non-matching connections. Leaving it always waits for a second person. | Next | Team | M24 | new |
+| F875 | Server revoke | A person revokes a server in one organization with a preview digest and reason. Connections get a deny-all control, package versions are quarantined, new matches are refused in every mode. Downgraded organizations can still revoke. | Next | Team to manage; revoke on every edition | M24 | new |
+| F876 | Revoke lift | An independent second person lifts a server revoke, which ends the blocks on connections, each staying in its own state. The server stays revoked, and package versions return only through fresh review. | Next | Team | M24 | F563 |
+| F877 | Scan-only servers | A local server seen only by scans comes back as `not_stoppable_here`, with a deny-list hint, so a revoke never claims to have stopped it. | Next | Team | M24 | F801 |
+| F878 | `pclaw mcp catalog` | List, propose, approve, deny, set the mode, revoke and export, as a managed-settings allow file or a static file in the official registry's shape. No new HTTP endpoint. | Next | Team | M24 | new |
+| F879 | Unapproved server finding | A posture finding for connections to unapproved servers, raised only once the catalogue holds at least one approved server. | Next | Team | M24 | new |
+| F880 | Agent risk and AI Act fields | Risk tier, data classes, EU AI Act role and risk class on the existing agent record; set values are audited and recorded as changes. | Next | Team | M24 | new |
+| F881 | Agent card | `GetAgentCard` shows purpose, owner, those fields and approved tools from pins, under the same permission as reading the agent. | Next | Team | M24 | new |
+| F882 | Signed A2A cards | The server signs A2A cards with an `a2a_card` key in JWKS, only at a card URL a person stored. The gateway caches by digest for an hour. Otherwise, or if signing fails, it is served unsigned. | Next | Team | M24 | new |
+| F883 | Hook and skill findings | `pclaw scan` reports hooks by event and executable basename and skills by name and path, and nothing more. | Next | Community | M24 | F015 |
+| F884 | Package references in scans | For `npx`, `uvx`, `bunx`, `pipx run` and `docker run`, a scan keeps the package or image token only, with no other arguments. | Next | Community | M24 | F015 |
+| F885 | Device scope | Scans carry a `device:<id>` scope, a salted hash of the machine id, and the 200 finding cap applies per source and scope. Dropped findings are still reported. Past org-wide limits on device scopes: `SCAN_DEVICE_LIMIT`. | Next | Community | M24 | new |
+| F886 | All-users scan | `pclaw scan --all-users` reads each home directory under SYSTEM or root, metadata only, and `PANTHERCLAW_API_KEY_FILE` supplies the key. It refuses with `SCAN_BINARY_WRITABLE` if a non-admin can replace the binary. | Next | Community | M24 | new |
+| F887 | Scanner role | A service-account role holding exactly `org.read` and `agent.scan.submit`, so it can submit scans for its scope and write nothing else. | Next | Team | M24 | new |
+| F888 | Scheduled device scans | `pclaw scan schedule` installs, removes and reports a scheduled task, launchd job or systemd timer; a runbook covers Intune and Jamf. | Next | Community | M24 | new |
+| F889 | Environment-secret signal | The `env_secret` recommendation signal works from real input, so that F343 keeps its promise. | Next | Team | M24 | F343 |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.
@@ -765,7 +850,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 
 Checked on 2026-10-09 by a script that parsed every table row with a Source column and expanded the ranges, after ADR-0017, ADR-0018 and ADR-0019 added PN-002.8, PN-016.3, PN-023 and PN-024 and moved four rows to M14; row counts updated on 2026-10-20 after G0 UI added PN-025, PN-026 and the new rows F803–F830.
 
-- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows.
+- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows F831–F889 of M22–M24 come on top of these counts as each milestone lands; they are new rows, not catalog IDs.
 - **Coverage:** 802 of 802 catalog IDs (F001–F802) appear in at least one Source cell. None are missing and none are out of range.
 - **Format checks:** every row ID matches its convention, and no row ID repeats. Every Phase, Edition and Milestone value is valid. Every "What the backend delivers" cell is ≤ 36 words.
 

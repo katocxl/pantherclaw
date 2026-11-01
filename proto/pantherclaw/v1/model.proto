@@ -53,6 +53,20 @@ service ModelService {
   rpc GetModelDraft(GetModelDraftRequest) returns (GetModelDraftResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ListModelDrafts lists stored drafts, newest first: only the kinds the
+  // caller may read (policy.read, automation.read). Never a prompt or a
+  // response (HR-554). Business, as drafting is.
+  // permission: policy.read
+  rpc ListModelDrafts(ListModelDraftsRequest) returns (ListModelDraftsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetModelUsage sums the organization's model calls: counts and tokens by
+  // task and outcome, never a prompt or a response (HR-554). Business, as
+  // drafting is.
+  // permission: audit.read
+  rpc GetModelUsage(GetModelUsageRequest) returns (GetModelUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ModelSettings is an organization's settings, without its key.
@@ -225,4 +239,56 @@ message ModelDraft {
 message GetModelDraftResponse {
   // The mark.
   ModelDraft draft = 1;
+}
+
+// ListModelDraftsRequest is one page.
+message ListModelDraftsRequest {
+  // Page size.
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Page token.
+  string page_token = 2 [(buf.validate.field).string.max_len = 512];
+}
+
+// ListModelDraftsResponse is a page of drafts.
+message ListModelDraftsResponse {
+  // The drafts.
+  repeated ModelDraft drafts = 1;
+  // The next page, if any.
+  string next_page_token = 2;
+}
+
+// GetModelUsageRequest names a period.
+message GetModelUsageRequest {
+  // Days back from now, 1 to 90; 0 means 30.
+  int32 days = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 90
+  }];
+}
+
+// ModelUsageRow is the calls of one task with one outcome.
+message ModelUsageRow {
+  // SEARCH_QUERY, POLICY_DRAFT or AUTOMATION_DRAFT.
+  string task = 1;
+  // PENDING, OK or the refusing reason code.
+  string outcome = 2;
+  // How many calls.
+  int64 calls = 3;
+  // Input tokens used.
+  int64 input_tokens = 4;
+  // Output tokens used.
+  int64 output_tokens = 5;
+  // Tokens still held for calls that gave no usage.
+  int64 reserved_tokens = 6;
+}
+
+// GetModelUsageResponse is the period's usage.
+message GetModelUsageResponse {
+  // Where the period starts.
+  google.protobuf.Timestamp since = 1;
+  // One row per task and outcome.
+  repeated ModelUsageRow rows = 2;
 }

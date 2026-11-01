@@ -361,16 +361,71 @@ enum GraphEdgeState {
   GRAPH_EDGE_STATE_POSSIBLE = 4;
 }
 
+// GraphEdgeStatus is what an edge's evidence says about it (F291), apart
+// from whether it still counts as current (GraphEdgeState).
+enum GraphEdgeStatus {
+  GRAPH_EDGE_STATUS_UNSPECIFIED = 0;
+  // A control in enforce mode stands on the edge.
+  GRAPH_EDGE_STATUS_ENFORCED = 1;
+  GRAPH_EDGE_STATUS_ALLOWED = 2;
+  GRAPH_EDGE_STATUS_APPROVAL_REQUIRED = 3;
+  GRAPH_EDGE_STATUS_DENIED = 4;
+  // Seen happening, with nothing deciding it.
+  GRAPH_EDGE_STATUS_OBSERVED = 5;
+  // A way around the controls that nothing has tested.
+  GRAPH_EDGE_STATUS_POSSIBLE_BYPASS = 6;
+  GRAPH_EDGE_STATUS_UNKNOWN = 7;
+  // Read from a snapshot that predates a recorded change.
+  GRAPH_EDGE_STATUS_STALE = 8;
+  GRAPH_EDGE_STATUS_EFFECT_PARTIAL = 9;
+  GRAPH_EDGE_STATUS_EFFECT_PENDING = 10;
+  GRAPH_EDGE_STATUS_EFFECT_CONFLICTING = 11;
+  GRAPH_EDGE_STATUS_EFFECT_UNVERIFIABLE = 12;
+  // A receipt says no effect happened. Never drawn as something that did.
+  GRAPH_EDGE_STATUS_NO_EFFECT = 13;
+  // A receipt says the effect was undone. Never drawn as one that stands.
+  GRAPH_EDGE_STATUS_COMPENSATED = 14;
+  // Nothing shows it happened, or that it is stopped: a right on observe-only
+  // coverage that nobody used.
+  GRAPH_EDGE_STATUS_POSSIBLE = 15;
+}
+
+// GraphEdgeChange says what a change-mode edge did between two revisions
+// (F276).
+enum GraphEdgeChange {
+  GRAPH_EDGE_CHANGE_UNSPECIFIED = 0;
+  GRAPH_EDGE_CHANGE_ADDED = 1;
+  GRAPH_EDGE_CHANGE_REMOVED = 2;
+  GRAPH_EDGE_CHANGE_KEPT = 3;
+  // The same operation, under different bounds.
+  GRAPH_EDGE_CHANGE_CHANGED = 4;
+}
+
+// GraphTriggerStage is how far a triggered edge has been shown (F280, F281).
+// Each stage is its own claim: a prediction is never a confirmation.
+enum GraphTriggerStage {
+  GRAPH_TRIGGER_STAGE_UNSPECIFIED = 0;
+  // A reviewed rule predicted the consequence; nothing shows it happened.
+  GRAPH_TRIGGER_STAGE_PREDICTED = 1;
+  // A consequence transaction was opened and decided.
+  GRAPH_TRIGGER_STAGE_AUTHORIZED = 2;
+  // An effect receipt confirms the consequence.
+  GRAPH_TRIGGER_STAGE_CONFIRMED = 3;
+}
+
 message GraphNode {
   string type = 1;
   string id = 2;
+  // label is plain text of at most 200 characters, built only from names
+  // the viewer may read, else empty (HR-550). It is never markup.
+  string label = 3;
 }
 
 message GraphEdge {
   GraphNode from = 1;
   GraphNode to = 2;
   // kind: holds, allows, reaches, through, acted, touched, delegated,
-  // then, changed or gap.
+  // then, changed, authorized, approved, custody, effect, triggered or gap.
   string kind = 3;
   ExposureVerb verb = 4;
   string operation = 5;
@@ -385,17 +440,39 @@ message GraphEdge {
   google.protobuf.Timestamp time = 13;
   google.protobuf.Timestamp expire_time = 14;
   string freshness = 15;
+  // provenance is the edge's source; on a gap edge, what is missing.
   string provenance = 16;
   int32 count = 17;
+  // evidence_ref names the record behind a causal edge,
+  // "<kind>:<id>" such as "decision_receipt:<transaction id>" (HR-551).
+  // Empty on a gap edge: no evidence, no link.
+  string evidence_ref = 18;
+  // change is set on change-mode edges that compare two revisions.
+  GraphEdgeChange change = 19;
+  // status is the F291 state of the edge.
+  GraphEdgeStatus status = 20;
+  // trigger_stage is set on triggered edges.
+  GraphTriggerStage trigger_stage = 21;
+  // observe_time is when the edge's source was last read or recorded; it
+  // is always set, where time is only set for an event.
+  google.protobuf.Timestamp observe_time = 22;
+  // assurance: AUTHORITATIVE, TESTED, DECLARED, INFERRED or UNVERIFIED
+  // (F297). Staleness is in freshness.
+  string assurance = 23;
+  // downstream_state is the state of an action's predicted consequences:
+  // PENDING, CONFIRMED, UNCONFIRMED or NOT_VERIFIABLE; empty when nothing
+  // was predicted (F281).
+  string downstream_state = 24;
 }
 
 // GraphScope is where a graph starts (F293).
 message GraphScope {
-  // type: run (a task), agent, incident, resource (a resource group) or
+  // type: run (a task), agent, incident, resource (a resource group),
   // automation (its issued grants and, when asked, its ceiling; authority
-  // and exposure modes, needs automation.read).
+  // and exposure modes, needs automation.read) or restriction (a response
+  // action, by its id).
   string type = 1 [(buf.validate.field).string = {
-    in: ["run", "agent", "incident", "resource", "automation"]
+    in: ["run", "agent", "incident", "resource", "automation", "restriction"]
   }];
   string id = 2 [(buf.validate.field).string = {
     min_len: 1

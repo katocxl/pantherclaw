@@ -115,6 +115,12 @@ func freshStepUp(ctx context.Context, q *dbq.Queries, c tenancy.Caller) (time.Ti
 	return su.StepUpAt, nil
 }
 
+// FreshStepUp is the step-up check for another service's safety action: the
+// same check as a kill switch's.
+func FreshStepUp(ctx context.Context, q *dbq.Queries, c tenancy.Caller) (time.Time, error) {
+	return freshStepUp(ctx, q, c)
+}
+
 func callerActor(c tenancy.Caller) reflexdomain.Subject {
 	t := reflexdomain.SubjectUser
 	if !c.Human() {
