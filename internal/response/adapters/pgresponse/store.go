@@ -85,12 +85,6 @@ func InsertAction(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action) 
 // the containment epoch (HR-248), and records the new epoch on the action.
 // expires may be nil.
 func AddControl(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action, expires *time.Time) (Added, error) {
-	return AddControlWithID(ctx, tx, org, a, ids.NewV7(), expires)
-}
-
-// AddControlWithID preserves a shipped control's identity during a held
-// restore. The caller validates its metadata and checks for prior replay.
-func AddControlWithID(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action, controlID ids.UUID, expires *time.Time) (Added, error) {
 	if a.Kind != rdomain.KindContain {
 		return Added{}, fmt.Errorf("pgresponse: a control comes from a CONTAIN action, not %s", a.Kind)
 	}
@@ -107,10 +101,41 @@ func AddControlWithID(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Acti
 	if _, err := InsertAction(ctx, tx, org, a); err != nil {
 		return Added{}, err
 	}
+	return addControl(ctx, q, org, a, c, ids.NewV7(), expires)
+}
+
+// AddControlWithID preserves a shipped control's identity during a held
+// restore. An action can hold several controls, so the first one back creates
+// it and the rest find it (G0 M24 D264). The caller validates its metadata and
+// checks for prior replay.
+func AddControlWithID(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action, c rdomain.Control, controlID ids.UUID, expires *time.Time) (Added, error) {
+	if a.Kind != rdomain.KindContain {
+		return Added{}, fmt.Errorf("pgresponse: a control comes from a CONTAIN action, not %s", a.Kind)
+	}
+	q := dbq.New(tx)
+	if err := q.InsertContainment(ctx, org); err != nil {
+		return Added{}, err
+	}
+	have, err := q.GetResponseAction(ctx, org, a.ID)
+	switch {
+	case db.IsNoRows(err):
+		if _, err := InsertAction(ctx, tx, org, a); err != nil {
+			return Added{}, err
+		}
+	case err != nil:
+		return Added{}, err
+	case have.Kind != a.Kind, a.ScopeType == rdomain.ScopeMcpServer && (have.ScopeType != a.ScopeType || have.ScopeID != a.ScopeID):
+		return Added{}, fmt.Errorf("pgresponse: action %s is another action", a.ID)
+	}
+	return addControl(ctx, q, org, a, c, controlID, expires)
+}
+
+// addControl adds a control of an action that exists.
+func addControl(ctx context.Context, q *dbq.Queries, org ids.OrgID, a Action, c rdomain.Control, controlID ids.UUID, expires *time.Time) (Added, error) {
 	out := Added{ActionID: a.ID, ControlID: controlID}
 	at, err := q.InsertContainmentControl(ctx, dbq.InsertContainmentControlParams{
-		OrgID: org, ID: out.ControlID, ActionID: a.ID, ScopeType: a.ScopeType, ScopeID: a.ScopeID, Control: a.Control,
-		Operation: opt(a.Operation), Reason: a.Reason, CaseID: a.CaseID, IncidentID: a.IncidentID, CreatedBy: a.Actor,
+		OrgID: org, ID: out.ControlID, ActionID: a.ID, ScopeType: c.ScopeType, ScopeID: c.ScopeID, Control: c.Control,
+		Operation: opt(c.Operation), Reason: a.Reason, CaseID: a.CaseID, IncidentID: a.IncidentID, CreatedBy: a.Actor,
 		ExpiresAt: expires,
 	})
 	if err != nil {

@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/mcpcatalog/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
 	"github.com/katocxl/pantherclaw/internal/postureview/ports"
@@ -568,8 +569,14 @@ func TestF879_UnapprovedServersReachTheQueueOnlyOnceACatalogueExists(t *testing.
 		}
 		return ports.Reach{Agents: []ids.UUID{}}, nil
 	}
-	if got := findings(under); len(got) != 0 {
-		t.Fatalf("without catalog.read: %+v", got)
+	// Below the source's scope the queue says RESTRICTED, never an empty
+	// COMPLETE (D255, D268).
+	if got, _, err := src.Findings(ctx, under, pvdomain.Filter{}); len(got) != 0 || pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Fatalf("without catalog.read: %+v %v", got, err)
+	}
+	unrelated := ports.Viewer{Org: e.org, Posture: ports.Reach{Agents: []ids.UUID{ids.NewV7()}}}
+	if got, _, err := src.Findings(ctx, unrelated, pvdomain.Filter{}); len(got) != 0 || pcerr.CodeOf(err) != pcerr.PermissionDenied {
+		t.Fatalf("no org scope and nothing of theirs: %+v %v", got, err)
 	}
 
 	e.edition.e = billing.Community

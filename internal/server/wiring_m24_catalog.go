@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/mcpcatalog/adapters/catalogrpc"
@@ -36,6 +37,9 @@ func registerM24Catalog(rs *connect.Server, d apiDeps) {
 	}
 	pantherclawv1connect.RegisterMcpCatalogServiceHandler(rs, catalogrpc.New(svc))
 }
+
+// packageCatalogCheck refuses to activate a revoked server's package (D267).
+func packageCatalogCheck() defsapp.CatalogCheck { return catalogapp.Gate{} }
 
 func init() { postureSourceFactories = append(postureSourceFactories, newCatalogPostureSource) }
 

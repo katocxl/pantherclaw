@@ -342,7 +342,8 @@ type ProposeServerRequest struct {
 	Title      string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	Transport  McpServerTransport     `protobuf:"varint,3,opt,name=transport,proto3,enum=pantherclaw.v1.McpServerTransport" json:"transport,omitempty"`
 	PackageRef string                 `protobuf:"bytes,4,opt,name=package_ref,json=packageRef,proto3" json:"package_ref,omitempty"`
-	// A host name or IP literal with an optional port: no wildcard.
+	// A host name or IP literal with an optional port, which means https, or
+	// http://addr:port for a private or loopback address: no wildcard.
 	UrlHost       string `protobuf:"bytes,5,opt,name=url_host,json=urlHost,proto3" json:"url_host,omitempty"`
 	UrlPathPrefix string `protobuf:"bytes,6,opt,name=url_path_prefix,json=urlPathPrefix,proto3" json:"url_path_prefix,omitempty"`
 	ImageDigest   string `protobuf:"bytes,7,opt,name=image_digest,json=imageDigest,proto3" json:"image_digest,omitempty"`

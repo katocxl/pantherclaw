@@ -217,6 +217,19 @@ func TestT036_ImportRefusesUnsignedOrSwappedBytes(t *testing.T) {
 	}
 }
 
+// A REVIEWED version reaches QUARANTINED only through a server's revoke, which
+// moves it in its own transaction (G0 M24 D267): by hand it stays illegal.
+func TestF875_NoOneQuarantinesAReviewedVersionByHand(t *testing.T) {
+	f := newFixture(t)
+	if _, err := f.importVersion("1.0.0", f.targets(1, "1.0.0")); err != nil {
+		t.Fatal(err)
+	}
+	err := f.im.Transition(context.Background(), f.org, "pc.mock-payments", "1.0.0", domain.StateQuarantined, nil)
+	if !errors.Is(err, statemachine.ErrIllegalTransition) {
+		t.Fatalf("REVIEWED → QUARANTINED: %v", err)
+	}
+}
+
 func TestTransitionFollowsTheLifecycle(t *testing.T) {
 	f := newFixture(t)
 	if _, err := f.importVersion("1.0.0", f.targets(1, "1.0.0")); err != nil {

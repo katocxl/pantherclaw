@@ -211,13 +211,12 @@ func catalogExport(ctx context.Context, a *app, args []string) error {
 			break
 		}
 	}
-	doc := registryV0(servers)
+	doc, left := registryV0(servers)
 	if *format == "managed-allow" {
-		var left map[string]string
 		doc, left = managedAllow(servers)
-		for _, name := range slices.Sorted(maps.Keys(left)) {
-			_, _ = fmt.Fprintln(a.stderr, "left out "+name+": "+left[name])
-		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(left)) {
+		_, _ = fmt.Fprintln(a.stderr, "left out "+name+": "+left[name])
 	}
 	b, err := json.Marshal(doc, json.Deterministic(true))
 	if err != nil {
@@ -232,10 +231,14 @@ func catalogExport(ctx context.Context, a *app, args []string) error {
 }
 
 func serverURL(s *pb.McpServer) string {
-	if s.GetUrlHost() == "" {
+	host := s.GetUrlHost()
+	switch {
+	case host == "":
 		return ""
+	case strings.HasPrefix(host, "http://"):
+		return host + s.GetUrlPathPrefix() // the explicit form of a private http server (D266)
 	}
-	return "https://" + s.GetUrlHost() + s.GetUrlPathPrefix()
+	return "https://" + host + s.GetUrlPathPrefix()
 }
 
 // allowName is what the allow file takes as a name (Claude Code's allow list).
@@ -249,15 +252,16 @@ func exactURL(s string) bool {
 }
 
 // managedAllow is the allow file of G0 M23 D113, and the servers it left out,
-// each with why. An entry has one matcher, its URL or else its command as a
-// list. An entry with only a name would allow more than was approved (D225a),
-// and one the file's reader refuses would lose the whole file, so neither is
-// written (D138).
+// each with why. An entry has one matcher. A URL is one; the file's other is a
+// command, and the catalogue records no launch command, only a package or an
+// image, so a server without a URL has nothing true to write (D268). An entry
+// with only a name would allow more than was approved (D225a), and one the
+// file's reader refuses would lose the whole file, so neither is written
+// (D138).
 func managedAllow(servers []*pb.McpServer) (any, map[string]string) {
 	type entry struct {
-		Name    string   `json:"name"`
-		URL     string   `json:"url,omitzero"`
-		Command []string `json:"command,omitzero"`
+		Name string `json:"name"`
+		URL  string `json:"url"`
 	}
 	out := make([]entry, 0, len(servers))
 	left := map[string]string{}
@@ -267,14 +271,12 @@ func managedAllow(servers []*pb.McpServer) (any, map[string]string) {
 		case !allowName.MatchString(e.Name):
 			left[e.Name] = "the allow file takes 1 to 64 letters, digits, hyphens or underscores as a name"
 			continue
-		case e.URL != "" && !exactURL(e.URL):
+		case e.URL == "":
+			left[e.Name] = "the catalogue records no launch command for it, and the allow file needs a URL or a command"
+			continue
+		case !exactURL(e.URL):
 			left[e.Name] = "the allow file takes an exact URL, with no wildcard, credentials or query"
 			continue
-		case e.URL == "" && s.GetPackageRef() == "":
-			left[e.Name] = "the allow file cannot name a server by its image alone"
-			continue
-		case e.URL == "":
-			e.Command = []string{s.GetPackageRef()}
 		}
 		out = append(out, e)
 	}
@@ -295,11 +297,14 @@ func clip(s string) string {
 }
 
 // registryV0 is a static file in the shape of the official MCP registry's
-// server list, checked against its published server.json schema (D225a): a
-// name is namespace/name, so the catalogue's names sit under a namespace of
-// their own; a description and title stop at 100 characters. The catalogue
-// does not version its entries, so each server carries one fixed version.
-func registryV0(servers []*pb.McpServer) any {
+// server list, checked against its published server.json schema, 2025-12-11
+// (D225a, D268): a name is namespace/name, so the catalogue's names sit under
+// a namespace of their own; a description and title stop at 100 characters.
+// The catalogue does not version its entries, so each server carries one fixed
+// version. What the schema cannot say truthfully stays out, listed in what it
+// returns second: a package of unknown registry type, and a bare digest, since
+// an oci identifier is a full image reference. A server left with nothing goes.
+func registryV0(servers []*pb.McpServer) (any, map[string]string) {
 	type remote struct {
 		Type string `json:"type"`
 		URL  string `json:"url"`
@@ -325,6 +330,13 @@ func registryV0(servers []*pb.McpServer) any {
 	}
 	stdio := transport{Type: "stdio"}
 	out := make([]entry, 0, len(servers))
+	left := map[string]string{}
+	leave := func(name, why string) {
+		if left[name] != "" {
+			why = left[name] + "; " + why
+		}
+		left[name] = why
+	}
 	for _, s := range servers {
 		text := clip(s.GetTitle())
 		e := server{Name: registryNamespace + s.GetName(), Description: text, Title: text, Version: "1.0.0"}
@@ -332,19 +344,35 @@ func registryV0(servers []*pb.McpServer) any {
 			e.Remotes = append(e.Remotes, remote{Type: "streamable-http", URL: u})
 		}
 		if r := s.GetPackageRef(); r != "" {
-			e.Packages = append(e.Packages, pack{RegistryType: registryType(r), Identifier: r, Transport: stdio})
+			if t := registryType(r); t != "" {
+				e.Packages = append(e.Packages, pack{RegistryType: t, Identifier: r, Transport: stdio})
+			} else {
+				leave(s.GetName(), "the registry type of its package is unknown")
+			}
 		}
-		if d := s.GetImageDigest(); d != "" {
-			e.Packages = append(e.Packages, pack{RegistryType: "oci", Identifier: d, Transport: stdio})
+		if s.GetImageDigest() != "" {
+			leave(s.GetName(), "a bare digest names no repository")
+		}
+		if len(e.Remotes) == 0 && len(e.Packages) == 0 {
+			continue
 		}
 		out = append(out, entry{Server: e})
 	}
-	return map[string]any{"servers": out, "metadata": map[string]any{"count": len(out)}}
+	return map[string]any{"servers": out, "metadata": map[string]any{"count": len(out)}}, left
 }
 
+// registryType reads a package reference's registry from its form alone: a
+// scoped npm name, or a full image reference with a registry host and a tag or
+// digest. Anything else could be several things, so it is unknown ("").
 func registryType(ref string) string {
-	if strings.HasPrefix(ref, "@") || !strings.Contains(ref, "/") {
+	first, rest, nested := strings.Cut(ref, "/")
+	switch {
+	case !nested:
+		return ""
+	case strings.HasPrefix(first, "@") && !strings.Contains(rest, "/"):
 		return "npm"
+	case strings.ContainsAny(first, ".:") && (strings.Contains(rest, ":") || strings.Contains(rest, "@sha256:")):
+		return "oci"
 	}
-	return "oci"
+	return ""
 }

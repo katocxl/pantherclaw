@@ -107,6 +107,11 @@ func validateObject(e Event) error {
 	if c.ScopeID == "" {
 		return errors.New("security event: missing containment scope")
 	}
+	if c.Server != "" {
+		if id, err := ids.ParseUUID(c.Server); err != nil || id.IsZero() || c.ScopeType != "connection" {
+			return errors.New("security event: invalid containment server")
+		}
+	}
 	switch c.Control {
 	case "DENY_ALL", "HOLD_WRITES":
 		if c.Operation != "" {

@@ -54,6 +54,11 @@ func TestHR585_MatchingIsExact(t *testing.T) {
 		{"a similar package", domain.Spec{PackageRef: "@acme/mcp"}, domain.Candidate{PackageRef: "@acme/mcp-server"}, false},
 		{"package case stays", domain.Spec{PackageRef: "@acme/mcp"}, domain.Candidate{PackageRef: "@Acme/mcp"}, false},
 		{"a package does not cover a URL", domain.Spec{PackageRef: "github"}, domain.URLCandidate("https://evil.test/github"), false},
+		{"the explicit http form", domain.Spec{Host: "http://10.0.0.5:8080"}, domain.URLCandidate("http://10.0.0.5:8080/mcp"), true},
+		{"the explicit http form on 80", domain.Spec{Host: "http://10.0.0.5:80"}, domain.URLCandidate("http://10.0.0.5/mcp"), true},
+		{"the explicit http form is not https", domain.Spec{Host: "http://10.0.0.5:8080"}, domain.URLCandidate("https://10.0.0.5:8080/mcp"), false},
+		{"the explicit http form is its port", domain.Spec{Host: "http://10.0.0.5:8080"}, domain.URLCandidate("http://10.0.0.5:8081/mcp"), false},
+		{"the explicit http form over IPv6", domain.Spec{Host: "http://[fd00::1]:8080"}, domain.URLCandidate("http://[fd00::1]:8080/mcp"), true},
 		{"an empty candidate", host, domain.Candidate{}, false},
 		{"an empty spec", domain.Spec{}, domain.Candidate{}, false},
 	}
@@ -61,6 +66,50 @@ func TestHR585_MatchingIsExact(t *testing.T) {
 		if got := c.spec.Matches(c.c); got != c.want {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// TestF875_ADenialCoversEveryWayToTheSameEndpoint: an approval stays exact, a
+// denial does not: changing the scheme or spelling the port never escapes a
+// revoke, while another host or port is still another server (D266).
+//
+// Covers: F875
+func TestF875_ADenialCoversEveryWayToTheSameEndpoint(t *testing.T) {
+	bare := domain.Spec{Host: "mcp.example.com"}
+	ported := domain.Spec{Host: "mcp.example.com:8443"}
+	cases := []struct {
+		name string
+		spec domain.Spec
+		raw  string
+		want bool
+	}{
+		{"https on 443", bare, "https://mcp.example.com/x", true},
+		{"http on 80", bare, "http://mcp.example.com/x", true},
+		{"http with 80 spelled", bare, "http://mcp.example.com:80/x", true},
+		{"http on 443", bare, "http://mcp.example.com:443/x", true},
+		{"https on 80", bare, "https://mcp.example.com:80/x", true},
+		{"a bare host on another port", bare, "https://mcp.example.com:8443/x", false},
+		{"http on the named port", ported, "http://mcp.example.com:8443/x", true},
+		{"https on the named port", ported, "https://mcp.example.com:8443/x", true},
+		{"a named port is that port", ported, "http://mcp.example.com/x", false},
+		{"another host", bare, "http://mcp.example.org/x", false},
+		{"a host is no prefix of a host", bare, "http://mcp.example.com.evil.test/x", false},
+		{"the path still counts", domain.Spec{Host: "mcp.example.com", PathPrefix: "/a"}, "http://mcp.example.com/b", false},
+		{"under the path", domain.Spec{Host: "mcp.example.com", PathPrefix: "/a"}, "http://mcp.example.com/a/b", true},
+		{"the http form covers https", domain.Spec{Host: "http://10.0.0.5:8080"}, "https://10.0.0.5:8080/x", true},
+		{"an IPv6 host", domain.Spec{Host: "[fd00::1]:8080"}, "http://[fd00::1]:8080/x", true},
+		{"credentials still match nothing", bare, "http://a@mcp.example.com/x", false},
+	}
+	for _, c := range cases {
+		if got := c.spec.Denies(domain.URLCandidate(c.raw)); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+	if !(domain.Spec{Host: "mcp.example.com"}).Denies(domain.Candidate{Host: "mcp.example.com"}) {
+		t.Error("a scan's bare host")
+	}
+	if !(domain.Spec{ImageDigest: digest}).Denies(domain.ImageCandidate(digest)) {
+		t.Error("a denial covers what an approval matches")
 	}
 }
 
@@ -74,6 +123,12 @@ func TestHR585_ASpecHasNoWildcard(t *testing.T) {
 		{Host: "example.*"},
 		{Host: "exa mple.com"},
 		{Host: "https://example.com"},
+		{Host: "http://example.com:8080"},
+		{Host: "http://8.8.8.8:8080"},
+		{Host: "http://10.0.0.5"},
+		{Host: "http://10.0.0.5:0"},
+		{Host: "http://[::ffff:10.0.0.5]:8080"},
+		{Host: "http://169.254.169.254:80"},
 		{Host: "example.com/path"},
 		{PathPrefix: "/mcp"},
 		{Host: "example.com", PathPrefix: "mcp"},

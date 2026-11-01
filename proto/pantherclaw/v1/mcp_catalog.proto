@@ -140,7 +140,8 @@ message ProposeServerRequest {
     not_in: [0]
   }];
   string package_ref = 4 [(buf.validate.field).string.max_len = 256];
-  // A host name or IP literal with an optional port: no wildcard.
+  // A host name or IP literal with an optional port, which means https, or
+  // http://addr:port for a private or loopback address: no wildcard.
   string url_host = 5 [(buf.validate.field).string.max_len = 261];
   string url_path_prefix = 6 [(buf.validate.field).string.max_len = 512];
   string image_digest = 7 [(buf.validate.field).string.max_len = 71];

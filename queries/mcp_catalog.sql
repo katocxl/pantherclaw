@@ -65,13 +65,13 @@ FROM pc.connections c
 WHERE c.org_id = sqlc.arg(org_id) AND c.kind IN ('mcp', 'mcp_container') AND c.state <> 'RETIRED'
 ORDER BY c.id;
 
--- McpPackageVersions reads the versions of a tool package that can be
--- quarantined: only ACTIVE and STALE can (the definition lifecycle).
+-- McpPackageVersions reads the versions of a tool package a revoke quarantines:
+-- all that are or could be activated (G0 M24 D267).
 -- name: McpPackageVersions :many
 SELECT t.name AS package, v.version, v.state
 FROM pc.package_versions v
 JOIN pc.tool_packages t ON t.org_id = v.org_id AND t.id = v.package_id
-WHERE v.org_id = sqlc.arg(org_id) AND t.name = sqlc.arg(name) AND v.state IN ('ACTIVE', 'STALE')
+WHERE v.org_id = sqlc.arg(org_id) AND t.name = sqlc.arg(name) AND v.state IN ('ACTIVE', 'STALE', 'REVIEWED')
 ORDER BY v.version;
 
 -- McpRevocationLive reports whether a control of a server's revocation is
@@ -91,3 +91,9 @@ SELECT id, agent_id, first_seen_at, left(coalesce(observed->>'name', ''), 200)::
 FROM pc.discoveries
 WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND observed->>'kind' = 'mcp_server'
 ORDER BY id;
+
+-- McpPackageRevoked reports whether a REVOKED server names a tool package.
+-- name: McpPackageRevoked :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.mcp_servers s
+    WHERE s.org_id = sqlc.arg(org_id) AND s.status = 'REVOKED' AND s.package_ref = sqlc.arg(name)::text)::boolean AS revoked;

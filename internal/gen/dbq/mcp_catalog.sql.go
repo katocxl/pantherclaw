@@ -321,11 +321,25 @@ func (q *Queries) McpConnections(ctx context.Context, orgID ids.OrgID) ([]McpCon
 	return items, nil
 }
 
+const mcpPackageRevoked = `-- name: McpPackageRevoked :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.mcp_servers s
+    WHERE s.org_id = $1 AND s.status = 'REVOKED' AND s.package_ref = $2::text)::boolean AS revoked
+`
+
+// McpPackageRevoked reports whether a REVOKED server names a tool package.
+func (q *Queries) McpPackageRevoked(ctx context.Context, orgID ids.OrgID, name string) (bool, error) {
+	row := q.db.QueryRow(ctx, mcpPackageRevoked, orgID, name)
+	var revoked bool
+	err := row.Scan(&revoked)
+	return revoked, err
+}
+
 const mcpPackageVersions = `-- name: McpPackageVersions :many
 SELECT t.name AS package, v.version, v.state
 FROM pc.package_versions v
 JOIN pc.tool_packages t ON t.org_id = v.org_id AND t.id = v.package_id
-WHERE v.org_id = $1 AND t.name = $2 AND v.state IN ('ACTIVE', 'STALE')
+WHERE v.org_id = $1 AND t.name = $2 AND v.state IN ('ACTIVE', 'STALE', 'REVIEWED')
 ORDER BY v.version
 `
 
@@ -335,8 +349,8 @@ type McpPackageVersionsRow struct {
 	State   string
 }
 
-// McpPackageVersions reads the versions of a tool package that can be
-// quarantined: only ACTIVE and STALE can (the definition lifecycle).
+// McpPackageVersions reads the versions of a tool package a revoke quarantines:
+// all that are or could be activated (G0 M24 D267).
 func (q *Queries) McpPackageVersions(ctx context.Context, orgID ids.OrgID, name string) ([]McpPackageVersionsRow, error) {
 	rows, err := q.db.Query(ctx, mcpPackageVersions, orgID, name)
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/statemachine"
 )
 
 // ErrMissing is the repository's "no such record" error.
@@ -195,6 +196,9 @@ func (im *Importer) Transition(ctx context.Context, org ids.OrgID, pkg, version 
 	}
 	if err := domain.Lifecycle.Check(from, to); err != nil {
 		return err
+	}
+	if from == domain.StateReviewed && to == domain.StateQuarantined {
+		return fmt.Errorf("%w: only a server's revoke quarantines a REVIEWED version", statemachine.ErrIllegalTransition)
 	}
 	if to == domain.StateActive && im.Keys != nil {
 		k, err := im.Keys.VersionSigner(ctx, org, pkg, version)

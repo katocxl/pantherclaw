@@ -69445,7 +69445,7 @@
             ],
             "title": "url_host",
             "maxLength": 261,
-            "description": "A host name or IP literal with an optional port: no wildcard."
+            "description": "A host name or IP literal with an optional port, which means https, or\n http://addr:port for a private or loopback address: no wildcard."
           },
           "urlPathPrefix": {
             "type": [

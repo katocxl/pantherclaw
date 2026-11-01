@@ -41,18 +41,19 @@ type Quarantiner interface {
 }
 
 // allowed reports whether c may run under ENFORCE: an APPROVED server matches
-// it exactly, and no DENIED or REVOKED server does, so a second entry with
-// the same URL never undoes a decision (HR-585).
+// it exactly, and no DENIED or REVOKED server covers it, so a second entry
+// with the same URL never undoes a decision (HR-585, D266).
 func allowed(servers []dbq.PcMcpServer, c domain.Candidate) bool {
 	ok := false
 	for _, s := range servers {
-		if !specOf(s).Matches(c) {
-			continue
+		switch domain.Status(s.Status) {
+		case domain.StatusDenied, domain.StatusRevoked:
+			if specOf(s).Denies(c) {
+				return false
+			}
+		case domain.StatusApproved:
+			ok = ok || specOf(s).Matches(c)
 		}
-		if domain.Status(s.Status) == domain.StatusDenied || domain.Status(s.Status) == domain.StatusRevoked {
-			return false
-		}
-		ok = ok || domain.Status(s.Status) == domain.StatusApproved
 	}
 	return ok
 }
@@ -110,7 +111,7 @@ func (Gate) CheckActivation(ctx context.Context, tx db.TenantTx, t capp.CatalogT
 	}
 	c := candidate(t)
 	for _, s := range servers {
-		if domain.Status(s.Status) == domain.StatusRevoked && specOf(s).Matches(c) {
+		if domain.Status(s.Status) == domain.StatusRevoked && specOf(s).Denies(c) {
 			return ErrRevoked
 		}
 	}
@@ -119,6 +120,25 @@ func (Gate) CheckActivation(ctx context.Context, tx db.TenantTx, t capp.CatalogT
 	}
 	if !allowed(servers, c) {
 		return ErrNotApproved
+	}
+	return nil
+}
+
+// CheckPackageActivation refuses to activate any version of a package a
+// REVOKED server names, and takes turns with a revoke on the mode row, so a
+// revoke sees a version that won this race and quarantines it (G0 M24 D267).
+// It implements the definitions' CatalogCheck.
+func (Gate) CheckPackageActivation(ctx context.Context, tx db.TenantTx, name string) error {
+	q := dbq.New(tx)
+	if _, err := holdMode(ctx, q, tx.OrgID()); err != nil {
+		return err
+	}
+	revoked, err := q.McpPackageRevoked(ctx, tx.OrgID(), name)
+	if err != nil {
+		return err
+	}
+	if revoked {
+		return ErrRevoked
 	}
 	return nil
 }

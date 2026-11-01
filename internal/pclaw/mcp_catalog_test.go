@@ -83,6 +83,12 @@ func (r *recordCatalog) ListServers(_ context.Context, q *pb.ListServersRequest)
 		Name: "creds", Title: "Creds", UrlHost: "user:pw@example.test",
 	}, {
 		Name: "query", Title: "Query", UrlHost: "example.test", UrlPathPrefix: "/x?y=1",
+	}, {
+		Name: "unknown", Title: "Unknown", PackageRef: "acme/thing",
+	}, {
+		Name: "image", Title: "Image", PackageRef: "ghcr.io/acme/mcp:1.0",
+	}, {
+		Name: "private", Title: "Private", UrlHost: "http://10.0.0.5:8080",
 	}}}, nil
 }
 
@@ -196,12 +202,12 @@ func TestF878_ExportWritesAStaticFileOfApprovedServers(t *testing.T) {
 	}
 	// The rules of the allow file's reader, readAllowFile in S23b's
 	// managedsettings.go: no other member, a name it takes, and exactly one of
-	// an exact URL and a command, here always a list.
+	// an exact URL and a command. The catalogue records no launch command, so
+	// no entry claims one: a package reference is not what runs (D268).
 	var allow struct {
 		Servers []struct {
-			Name    string   `json:"name"`
-			URL     string   `json:"url"`
-			Command []string `json:"command"`
+			Name string `json:"name"`
+			URL  string `json:"url"`
 		} `json:"servers"`
 	}
 	if err := json.Unmarshal(raw, &allow, json.RejectUnknownMembers(true)); err != nil {
@@ -210,17 +216,17 @@ func TestF878_ExportWritesAStaticFileOfApprovedServers(t *testing.T) {
 	names := []string{}
 	for _, s := range allow.Servers {
 		names = append(names, s.Name)
-		if !allowName.MatchString(s.Name) || (s.URL == "") == (len(s.Command) == 0) || (s.URL != "" && !exactURL(s.URL)) {
+		if !allowName.MatchString(s.Name) || !exactURL(s.URL) {
 			t.Fatalf("the reader would refuse %+v", s)
 		}
 	}
-	if got := strings.Join(names, ","); got != "payments,github,both" {
+	if got := strings.Join(names, ","); got != "payments,both,private" {
 		t.Fatalf("allow file %s", raw)
 	}
-	if allow.Servers[1].Command[0] != "@modelcontextprotocol/server-github" || allow.Servers[2].URL != "https://both.example.test" {
+	if allow.Servers[1].URL != "https://both.example.test" || allow.Servers[2].URL != "http://10.0.0.5:8080" {
 		t.Fatalf("allow file %s", raw)
 	}
-	for _, name := range []string{"local", "dotted.name", "wild", "creds", "query"} {
+	for _, name := range []string{"github", "local", "dotted.name", "wild", "creds", "query", "unknown", "image"} {
 		if !strings.Contains(warned, "left out "+name+":") {
 			t.Fatalf("%s was not listed: %q", name, warned)
 		}
@@ -251,10 +257,22 @@ func TestF878_ExportWritesAStaticFileOfApprovedServers(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &reg); err != nil {
 		t.Fatal(err)
 	}
-	if len(reg.Servers) != 8 || reg.Metadata.Count != 8 || reg.Servers[0].Server.Remotes[0].URL != "https://mcp.example.test/v1" ||
-		reg.Servers[1].Server.Packages[0].RegistryType != "npm" || reg.Servers[2].Server.Packages[0].RegistryType != "oci" ||
-		reg.Servers[0].Server.Version == "" {
+	// A bare digest and a package of unknown type stay out, each on stderr, so
+	// the file claims nothing the schema cannot say (D268).
+	if len(reg.Servers) != 9 || reg.Metadata.Count != 9 || reg.Servers[0].Server.Remotes[0].URL != "https://mcp.example.test/v1" ||
+		reg.Servers[1].Server.Packages[0].RegistryType != "npm" || reg.Servers[7].Server.Packages[0].RegistryType != "oci" ||
+		reg.Servers[0].Server.Version == "" || !strings.Contains(stdout, "http://10.0.0.5:8080") {
 		t.Fatalf("registry file %s", stdout)
+	}
+	for _, s := range reg.Servers {
+		if strings.HasSuffix(s.Server.Name, "/local") || strings.HasSuffix(s.Server.Name, "/unknown") {
+			t.Fatalf("registry file %s", stdout)
+		}
+	}
+	for _, want := range []string{"left out local: a bare digest", "left out unknown: the registry type"} {
+		if !strings.Contains(errs, want) {
+			t.Fatalf("%q was not listed: %q", want, errs)
+		}
 	}
 	for _, s := range reg.Servers {
 		if !registryName.MatchString(s.Server.Name) {

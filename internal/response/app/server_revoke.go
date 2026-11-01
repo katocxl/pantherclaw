@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
@@ -72,11 +73,15 @@ func (s *Containment) ContainServerIn(ctx context.Context, tx db.TenantTx, r Ser
 	if _, err := s.settle(ctx, tx, org, a.ID); err != nil {
 		return ServerRevoked{}, err
 	}
-	if err := recordAction(ctx, tx, evActor, "response.contain", a.ID, map[string]string{
-		"action": a.ID.String(), "scope_type": rdomain.ScopeMcpServer, "scope": r.Server.String(), "control": rdomain.DenyAll,
-		"controls": strconv.Itoa(len(controls)), "epoch": strconv.FormatInt(added.Epoch, 10), "source": source,
-	}, r.Reason); err != nil {
-		return ServerRevoked{}, err
+	// One record per control, each naming it: the security log and a restore
+	// read a control from its own record (M13, D264).
+	for i, control := range controls {
+		if err := recordAction(ctx, tx, evActor, "response.contain", a.ID, map[string]string{
+			"action": a.ID.String(), "control_id": control.String(), "scope_type": rdomain.ScopeConnection, "scope": r.Connections[i].String(),
+			"control": rdomain.DenyAll, "epoch": strconv.FormatInt(added.Epoch, 10), "source": source, "server": r.Server.String(),
+		}, r.Reason); err != nil {
+			return ServerRevoked{}, err
+		}
 	}
 	out := ServerRevoked{Action: a.ID, Controls: controls}
 	for part := range slices.Chunk(controls, MaxPlanControls) {
@@ -110,4 +115,16 @@ func union(a, b []ids.UUID) []ids.UUID {
 		}
 	}
 	return a
+}
+
+// serverRevocation reports whether an action is a catalogue server's revoke.
+// Its control on a connection that is not ACTIVE only ends a block: the
+// connection stays as it is, the server stays REVOKED and activating the
+// connection is refused, so nothing starts running on the lift (G0 M24 D265).
+func serverRevocation(ctx context.Context, q *dbq.Queries, org ids.OrgID, action ids.UUID) (bool, error) {
+	a, err := q.GetResponseAction(ctx, org, action)
+	if err != nil {
+		return false, err
+	}
+	return a.ScopeType == rdomain.ScopeMcpServer, nil
 }

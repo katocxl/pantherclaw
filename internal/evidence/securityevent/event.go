@@ -51,6 +51,9 @@ type Containment struct {
 	Control   string   `json:"control"`
 	Operation string   `json:"operation,omitempty"`
 	Source    string   `json:"source"`
+	// Server is the catalogue server a revoke acted for: its controls sit on
+	// connections under one action scoped to that server (G0 M24 D264).
+	Server string `json:"server,omitempty"`
 }
 
 type rule struct{ direction, objectType, detail string }
@@ -81,6 +84,7 @@ var kinds = map[string]rule{
 	"grant.revoked":                      {"tighten", "grant", ""},
 	"identity.issuer_disabled":           {"tighten", "issuer", ""},
 	"response.contain":                   {"tighten", "containment_control", "control_id"},
+	"mcp.catalog.server_revoked":         {"tighten", "mcp_server", ""},
 	"agents.agent_suspended":             {"tighten", "agent", ""},
 	"agents.agent_restored":              {"loosen", "agent", ""},
 	"security.kill_switch_engaged":       {"tighten", "org", ""},
@@ -158,7 +162,7 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 		if err != nil {
 			return Event{}, false, fmt.Errorf("security event: invalid containment control")
 		}
-		e.Containment = &Containment{ActionID: action, ControlID: control, ScopeType: body.Details["scope_type"], ScopeID: body.Details["scope"], Control: body.Details["control"], Operation: body.Details["operation"], Source: body.Details["source"]}
+		e.Containment = &Containment{ActionID: action, ControlID: control, ScopeType: body.Details["scope_type"], ScopeID: body.Details["scope"], Control: body.Details["control"], Operation: body.Details["operation"], Source: body.Details["source"], Server: body.Details["server"]}
 	}
 	if err := Validate(e); err != nil {
 		return Event{}, false, err
@@ -188,7 +192,7 @@ func Emit(ctx context.Context, log *slog.Logger, e Event) {
 		attrs = append(attrs, slog.String("revocation_reason", e.RevocationReason))
 	}
 	if c := e.Containment; c != nil {
-		attrs = append(attrs, slog.Group("containment", slog.String("action_id", c.ActionID.String()), slog.String("control_id", c.ControlID.String()), slog.String("scope_type", c.ScopeType), slog.String("scope_id", c.ScopeID), slog.String("control", c.Control), slog.String("operation", c.Operation), slog.String("source", c.Source)))
+		attrs = append(attrs, slog.Group("containment", slog.String("action_id", c.ActionID.String()), slog.String("control_id", c.ControlID.String()), slog.String("scope_type", c.ScopeType), slog.String("scope_id", c.ScopeID), slog.String("control", c.Control), slog.String("operation", c.Operation), slog.String("source", c.Source), slog.String("server", c.Server)))
 	}
 	if log.Enabled(ctx, slog.LevelInfo) {
 		r := slog.NewRecord(e.Timestamp, slog.LevelInfo, "security_event", 0)

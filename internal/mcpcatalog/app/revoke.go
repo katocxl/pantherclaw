@@ -12,6 +12,7 @@ import (
 
 	ddomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/mcpcatalog/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -98,7 +99,7 @@ func previewRevoke(ctx context.Context, q *dbq.Queries, org ids.OrgID, server db
 	type version struct{ Package, Version, State string }
 	items, versions := []item{}, []version{}
 	for _, c := range conns {
-		if spec.Matches(candidate(target(c))) {
+		if spec.Denies(candidate(target(c))) {
 			p.Connections = append(p.Connections, c)
 			items = append(items, item{c.ID.String(), c.State, deref(c.BaseUrl), c.Image})
 		}
@@ -117,7 +118,7 @@ func previewRevoke(ctx context.Context, q *dbq.Queries, org ids.OrgID, server db
 		return RevokePreview{}, err
 	}
 	for _, l := range locals {
-		if spec.Matches(scanCandidate(l)) {
+		if spec.Denies(scanCandidate(l)) {
 			p.Locals = append(p.Locals, LocalServer{Discovery: l.ID, Name: l.Name, DenyListHint: denyHint(spec)})
 		}
 	}
@@ -148,9 +149,10 @@ func revocable(ctx context.Context, org ids.OrgID, id ids.UUID, read func(contex
 	return s, err
 }
 
-// PreviewRevoke says what revoking a server would do (catalog.read).
+// PreviewRevoke says what revoking a server would do (catalog.read). Like the
+// revoke it serves, it needs no edition (D268).
 func (s *Service) PreviewRevoke(ctx context.Context, id ids.UUID) (RevokePreview, error) {
-	c, err := s.use(ctx, td.PermCatalogRead)
+	c, err := s.caller(ctx, td.PermCatalogRead)
 	if err != nil {
 		return RevokePreview{}, err
 	}
@@ -171,13 +173,15 @@ func (s *Service) PreviewRevoke(ctx context.Context, id ids.UUID) (RevokePreview
 // person holding catalog.manage with a fresh step-up (HR-587). In one
 // transaction of one org it adds a DENY_ALL control per matching connection
 // through the response service, quarantines the package's versions, and sets
-// REVOKED. It holds the mode row, so a connection write and a revoke take
-// turns and nothing connects between the digest and the commit.
+// REVOKED. It needs no edition: stopping a server is Safety class, so a
+// downgraded org can always do it (D268). It holds the mode row, so a
+// connection write and a revoke take turns and nothing connects between the
+// digest and the commit.
 func (s *Service) RevokeServer(ctx context.Context, id ids.UUID, digest []byte, reason string) (RevokeResult, error) {
 	if n := utf8.RuneCountInString(reason); n < 1 || n > rdomain.MaxReason || !utf8.ValidString(reason) {
 		return RevokeResult{}, ErrRevokeReason
 	}
-	c, err := s.use(ctx, td.PermCatalogManage)
+	c, err := s.caller(ctx, td.PermCatalogManage)
 	if err != nil {
 		return RevokeResult{}, err
 	}
@@ -217,14 +221,8 @@ func (s *Service) RevokeServer(ctx context.Context, id ids.UUID, digest []byte, 
 		if err != nil {
 			return err
 		}
-		for _, v := range p.Versions {
-			if err := s.Versions.TransitionTx(ctx, tx, v.Package, v.Version, ddomain.State(v.State), ddomain.StateQuarantined, &audit.Event{
-				Name: "package.transitioned", Actor: c.Actor(), Outcome: audit.Success,
-				Object:  &audit.Object{Type: "package_version", ID: v.Package + "@" + v.Version},
-				Details: map[string]string{"from": v.State, "to": string(ddomain.StateQuarantined), "mcp_server": id.String()},
-			}); err != nil {
-				return err
-			}
+		if err := quarantine(ctx, tx, s.Versions, p.Versions, c.Actor(), id); err != nil {
+			return err
 		}
 		by := c.Principal.String()
 		if p.Server, err = q.DecideMcpServer(ctx, dbq.DecideMcpServerParams{
@@ -238,6 +236,57 @@ func (s *Service) RevokeServer(ctx context.Context, id ids.UUID, digest []byte, 
 		})
 	})
 	return out, err
+}
+
+// ReapplyRevocation brings a revocation back under the restore command's
+// transaction: the server REVOKED and its package's versions quarantined. The
+// controls come back from their own records. It only tightens, and it repeats
+// safely; a server the restored database never held has nothing to change
+// (G0 M24 D264).
+func ReapplyRevocation(ctx context.Context, tx db.TenantTx, id ids.UUID, actor evdomain.Actor, versions Versions) error {
+	org := tx.OrgID()
+	q := dbq.New(tx)
+	server, err := q.LockMcpServer(ctx, org, id)
+	if db.IsNoRows(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if domain.Status(server.Status) != domain.StatusRevoked {
+		by := actor.Type + ":" + actor.ID
+		if _, err := q.DecideMcpServer(ctx, dbq.DecideMcpServerParams{
+			OrgID: org, ID: id, FromStatus: server.Status, ToStatus: string(domain.StatusRevoked), DecidedBy: &by,
+		}); err != nil {
+			return err
+		}
+	}
+	if server.PackageRef == nil {
+		return nil
+	}
+	found, err := q.McpPackageVersions(ctx, org, *server.PackageRef)
+	if err != nil {
+		return err
+	}
+	return quarantine(ctx, tx, versions, found, actor, id)
+}
+
+// quarantine stops versions for a server. Each raises the epoch, and with no
+// connection matched nothing has made the org's containment row yet.
+func quarantine(ctx context.Context, tx db.TenantTx, versions Versions, found []dbq.McpPackageVersionsRow, actor evdomain.Actor, server ids.UUID) error {
+	if err := dbq.New(tx).InsertContainment(ctx, tx.OrgID()); err != nil {
+		return err
+	}
+	for _, v := range found {
+		if err := versions.TransitionTx(ctx, tx, v.Package, v.Version, ddomain.State(v.State), ddomain.StateQuarantined, &audit.Event{
+			Name: "package.transitioned", Actor: actor, Outcome: audit.Success,
+			Object:  &audit.Object{Type: "package_version", ID: v.Package + "@" + v.Version},
+			Details: map[string]string{"from": v.State, "to": string(ddomain.StateQuarantined), "mcp_server": server.String()},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // reapprove is what approving a REVOKED server needs: every control of its
