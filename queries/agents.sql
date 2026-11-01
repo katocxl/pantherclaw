@@ -59,6 +59,32 @@ SET name = coalesce(sqlc.narg(name), name), purpose = coalesce(sqlc.narg(purpose
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'RETIRED'
 RETURNING *;
 
+-- UpdateAgentRisk sets what a person states about an agent (G0 M24 D230).
+-- name: UpdateAgentRisk :one
+UPDATE pc.agents
+SET risk_tier = coalesce(sqlc.narg(risk_tier), risk_tier), data_classes = coalesce(sqlc.narg(data_classes)::text[], data_classes),
+    ai_act_role = coalesce(sqlc.narg(ai_act_role), ai_act_role), ai_act_risk = coalesce(sqlc.narg(ai_act_risk), ai_act_risk),
+    updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'RETIRED'
+RETURNING *;
+
+-- ApprovedToolsOfAgent is what an agent's card lists (G0 M24 D231): the
+-- operations coverage records for the agent that a usable pinned package
+-- version defines, on its active connections. Simulated connections are left
+-- out. One row more than the card shows says the list was cut.
+-- name: ApprovedToolsOfAgent :many
+SELECT DISTINCT c.id AS connection_id, c.name AS connection_name, tp.name AS package, p.version, d.operation
+FROM pc.coverage_snapshots s
+JOIN pc.connections c ON c.org_id = s.org_id AND c.id = s.connection_id
+JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
+JOIN pc.package_pins p ON p.org_id = tp.org_id AND p.package_id = tp.id
+JOIN pc.package_versions v ON v.org_id = p.org_id AND v.id = p.version_id
+JOIN pc.action_definitions d ON d.org_id = p.org_id AND d.version_id = p.version_id AND d.operation = s.operation
+WHERE s.org_id = sqlc.arg(org_id) AND s.agent_id = sqlc.arg(agent_id) AND c.state = 'ACTIVE' AND NOT c.simulated
+  AND v.state IN ('ACTIVE', 'STALE')
+ORDER BY c.name, d.operation, c.id, tp.name, p.version
+LIMIT sqlc.arg(max_rows);
+
 -- name: TransferAgentOwnership :one
 UPDATE pc.agents
 SET owner_user_id = sqlc.arg(owner_user_id), backup_owner_user_id = sqlc.narg(backup_owner_user_id), updated_at = now()
@@ -203,6 +229,25 @@ RETURNING *;
 -- name: CountOpenDiscoveriesOfSource :one
 SELECT count(*)::int FROM pc.discoveries
 WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND source = sqlc.arg(source);
+
+-- CountOpenDiscoveriesOfScope counts the open discoveries of one source and
+-- scan scope: a scan's cap is per (source, scope), so one device or repository
+-- cannot fill another's room (G0 M24 D234). No scope is its own bucket.
+-- name: DeviceScopeKnown :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.discoveries
+    WHERE org_id = sqlc.arg(org_id) AND source = 'ci_scan' AND scan_scope = sqlc.arg(scope)
+);
+
+-- name: CountOpenDeviceScopes :one
+SELECT count(DISTINCT scan_scope)
+FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND source = 'ci_scan' AND state = 'OPEN' AND scan_scope LIKE 'device:%';
+
+-- name: CountOpenDiscoveriesOfScope :one
+SELECT count(*)::int FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND source = sqlc.arg(source)
+  AND scan_scope IS NOT DISTINCT FROM sqlc.narg(scan_scope);
 
 -- GetScanDiscovery is a scan finding by its key within its source.
 -- name: GetScanDiscovery :one

@@ -63,6 +63,8 @@ type m6Services struct {
 	// scans takes a gateway's organization scan findings on the gateway
 	// listener (G0 M8, HR-209); nil leaves SubmitScanFindings unserved there.
 	scans pantherclawv1connect.AgentServiceHandler
+	// cards signs the A2A cards gateways serve (G0 M24 D232).
+	cards gatewaysrpc.CardSigner
 	// rpID is the WebAuthn relying party approver keys are exported for
 	// (HR-038); "" when security keys are off.
 	rpID string
@@ -133,6 +135,9 @@ func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (h
 	}
 	if m.facts != nil {
 		gw = gw.WithFacts(m.facts)
+	}
+	if m.cards != nil {
+		gw = gw.WithCardSigner(m.cards)
 	}
 	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gw)
 	if m.scans != nil {

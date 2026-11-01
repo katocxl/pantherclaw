@@ -8,7 +8,9 @@ import (
 	"errors"
 	"strings"
 
+	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	catalog "github.com/katocxl/pantherclaw/internal/mcpcatalog/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
@@ -79,6 +81,13 @@ func registerCore(r *Registry) {
 	}
 	r.handlers["response.contain"] = func(ctx context.Context, tx db.TenantTx, e Event) error {
 		return rapp.ReapplyControl(ctx, tx, *e.Containment, e.Actor)
+	}
+	r.handlers["mcp.catalog.server_revoked"] = func(ctx context.Context, tx db.TenantTx, e Event) error {
+		id, err := ids.ParseUUID(e.Object.ID)
+		if err != nil {
+			return err
+		}
+		return catalog.ReapplyRevocation(ctx, tx, id, e.McpServer, e.Actor, &defspg.Store{})
 	}
 }
 

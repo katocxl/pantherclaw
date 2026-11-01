@@ -32,6 +32,7 @@ const (
 	PurposeGatewayCA      Purpose = "gateway_ca"      // the internal CA for gateway mTLS (G0 M6); in its certificate, never in the JWKS
 	PurposeActionTokens   Purpose = "action_tokens"   // PAP-Action tokens for target-enforced connections (PAP-1 §10)
 	PurposeEvidencePacks  Purpose = "evidence_packs"  // evidence-pack manifests (G0 M7)
+	PurposeA2ACard        Purpose = "a2a_card"        // A2A cards a gateway serves (G0 M24 D232)
 	// The anchors and checkpoints_pq keys are not Ed25519 (AltKey).
 	PurposeAnchors       Purpose = "anchors"        // ECDSA P-256: the anchored global root (G0 M7, HR-195)
 	PurposeCheckpointsPQ Purpose = "checkpoints_pq" // ML-DSA-65: optional checkpoint and pack co-signatures
@@ -43,7 +44,7 @@ const (
 func Purposes() []Purpose {
 	return []Purpose{
 		PurposeReceipts, PurposePermits, PurposeWorkloadTokens, PurposeCheckpoints, PurposeAccessTokens,
-		PurposeGatewayCA, PurposeActionTokens, PurposeEvidencePacks,
+		PurposeGatewayCA, PurposeActionTokens, PurposeEvidencePacks, PurposeA2ACard,
 	}
 }
 
@@ -239,7 +240,7 @@ func (r *Registry) Keys(purpose Purpose) []SigningKey {
 // published lists the purposes whose public keys appear in the JWKS
 // (PAP-1 §11). Checkpoint keys are verified through `pclaw verify` bundles;
 // the gateway CA is published as its certificate.
-var published = []Purpose{PurposeReceipts, PurposePermits, PurposeWorkloadTokens, PurposeActionTokens}
+var published = []Purpose{PurposeReceipts, PurposePermits, PurposeWorkloadTokens, PurposeActionTokens, PurposeA2ACard}
 
 // JWKSPurposes lists the purposes whose keys the JWKS publishes.
 func JWKSPurposes() []Purpose { return slices.Clone(published) }

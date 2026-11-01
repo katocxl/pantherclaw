@@ -233,6 +233,8 @@ type GatewayHandler struct {
 	facts         Facts
 	// inventories records discovery inventory reports (G0 M15 D20).
 	inventories Inventories
+	// cards signs the A2A cards gateways serve (G0 M24 D232).
+	cards CardSigner
 }
 
 // NewGateway returns the GatewayService handler.

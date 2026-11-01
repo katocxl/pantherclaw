@@ -6,6 +6,8 @@ package server
 import (
 	"errors"
 	"fmt"
+
+	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 )
 
 // LimitsConfig is the API rate limits and the usage meters (G0 M13 D8,
@@ -13,6 +15,17 @@ import (
 type LimitsConfig struct {
 	API   APILimitsConfig   `json:"api"`
 	Usage UsageLimitsConfig `json:"usage"`
+	Scan  ScanLimitsConfig  `json:"scan"`
+}
+
+// ScanLimitsConfig bounds device scans across an org (G0 M24 D246).
+type ScanLimitsConfig struct {
+	// NewDeviceScopesPerKeyPerHour (default 1000) bounds the device scopes one
+	// key may start an hour, counted across replicas.
+	NewDeviceScopesPerKeyPerHour int `json:"new_device_scopes_per_key_per_hour" env:"PC_LIMITS_SCAN_NEW_DEVICE_SCOPES_PER_KEY_PER_HOUR"`
+	// OpenDeviceScopesPerOrg (default 20000) bounds the device scopes with an
+	// open discovery in one organization.
+	OpenDeviceScopesPerOrg int `json:"open_device_scopes_per_org" env:"PC_LIMITS_SCAN_OPEN_DEVICE_SCOPES_PER_ORG"`
 }
 
 // APILimitsConfig bounds authenticated org calls a minute (HR-375). The
@@ -50,6 +63,8 @@ func defaultLimits() LimitsConfig {
 	return LimitsConfig{API: APILimitsConfig{
 		PerOrgPerMinute: defaultAPIPerOrgPerMinute, PerCredentialPerMinute: defaultAPIPerCredentialPerMinute,
 		ExportsPerOrgPerHour: defaultAPIExportsPerOrgPerHour,
+	}, Scan: ScanLimitsConfig{
+		NewDeviceScopesPerKeyPerHour: aapp.DefaultNewDeviceScopesPerKey, OpenDeviceScopesPerOrg: aapp.DefaultOpenDeviceScopesPerOrg,
 	}}
 }
 
@@ -63,6 +78,8 @@ func (c *Config) validateLimits() []error {
 		{"limits.api.per_org_per_minute", c.Limits.API.PerOrgPerMinute},
 		{"limits.api.per_credential_per_minute", c.Limits.API.PerCredentialPerMinute},
 		{"limits.api.exports_per_org_per_hour", c.Limits.API.ExportsPerOrgPerHour},
+		{"limits.scan.new_device_scopes_per_key_per_hour", c.Limits.Scan.NewDeviceScopesPerKeyPerHour},
+		{"limits.scan.open_device_scopes_per_org", c.Limits.Scan.OpenDeviceScopesPerOrg},
 	} {
 		if v.n < 1 || v.n > maxAPILimit {
 			errs = append(errs, fmt.Errorf("%s must be 1 to %d", v.name, maxAPILimit))

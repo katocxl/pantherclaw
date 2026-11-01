@@ -24,7 +24,7 @@ SELECT (d.observed->>'secret_kind')::text AS secret_kind, count(*)::int AS disco
     (array_agg(d.id ORDER BY d.id))[1:20]::uuid[] AS refs
 FROM pc.discoveries d
 JOIN pc.agents a ON a.org_id = d.org_id AND a.id = d.agent_id
-WHERE d.org_id = sqlc.arg(org_id) AND d.state = 'OPEN' AND d.source = 'scan' AND a.state <> 'RETIRED' AND NOT a.range_agent
+WHERE d.org_id = sqlc.arg(org_id) AND d.state = 'OPEN' AND d.source IN ('scan', 'ci_scan') AND a.state <> 'RETIRED' AND NOT a.range_agent
   AND d.observed->>'kind' = 'env_secret' AND d.observed->>'secret_kind' = ANY (sqlc.arg(kinds)::text[])
   AND (sqlc.arg(all_agents)::boolean OR d.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
 GROUP BY d.observed->>'secret_kind'

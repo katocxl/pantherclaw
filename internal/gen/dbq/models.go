@@ -52,6 +52,7 @@ type PcA2aPin struct {
 	DecidedAt           *time.Time
 	DriftedAt           *time.Time
 	ObservedDigest      []byte
+	PublicUrl           *string
 }
 
 type PcAccount struct {
@@ -168,6 +169,10 @@ type PcAgent struct {
 	RetiredAt         *time.Time
 	RangeAgent        bool
 	TaskType          *string
+	RiskTier          string
+	DataClasses       []string
+	AiActRole         string
+	AiActRisk         string
 }
 
 type PcAgentChange struct {
@@ -1163,24 +1168,32 @@ type PcConnectionGithub struct {
 }
 
 type PcConnectionInventory struct {
-	OrgID            ids.OrgID
-	ID               ids.UUID
-	ConnectionID     ids.UUID
-	Kind             string
-	Name             string
-	DisplayName      string
-	MimeType         string
-	DisplayTruncated bool
-	Digest           string
-	Description      string
-	DescriptionScan  string
-	State            string
-	ReviewEntryID    *ids.UUID
-	DismissedBy      *string
-	DismissReason    *string
-	FirstSeen        time.Time
-	LastSeen         time.Time
-	UpdatedAt        time.Time
+	OrgID                ids.OrgID
+	ID                   ids.UUID
+	ConnectionID         ids.UUID
+	Kind                 string
+	Name                 string
+	DisplayName          string
+	MimeType             string
+	DisplayTruncated     bool
+	Digest               string
+	Description          string
+	DescriptionScan      string
+	State                string
+	ReviewEntryID        *ids.UUID
+	DismissedBy          *string
+	DismissReason        *string
+	FirstSeen            time.Time
+	LastSeen             time.Time
+	UpdatedAt            time.Time
+	InputSchema          string
+	InputSchemaDigest    string
+	InputSchemaTruncated bool
+	ListedExtra          string
+	ListedExtraTruncated bool
+	OperatorNote         string
+	OperatorNoteBy       *string
+	OperatorNoteAt       *time.Time
 }
 
 type PcConnectionRoute struct {
@@ -2613,6 +2626,30 @@ type PcLoginRequest struct {
 	ConsumedAt   *time.Time
 }
 
+type PcMcpCatalogSetting struct {
+	OrgID     ids.OrgID
+	Mode      string
+	UpdatedBy *string
+	UpdatedAt time.Time
+}
+
+type PcMcpServer struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Name          string
+	Title         string
+	Status        string
+	Transport     string
+	PackageRef    *string
+	UrlHost       *string
+	UrlPathPrefix *string
+	ImageDigest   *string
+	Notes         string
+	DecidedBy     *string
+	DecidedAt     *time.Time
+	CreatedAt     time.Time
+}
+
 type PcMembership struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID
@@ -3237,6 +3274,23 @@ type PcPostgresConnection struct {
 	UpdatedAt           time.Time
 }
 
+type PcPostureDaily struct {
+	OrgID       ids.OrgID
+	Day         pgtype.Date
+	Kind        string
+	Severity    string
+	TeamID      *ids.UUID
+	OpenCount   int32
+	ClosedCount *int32
+}
+
+type PcPostureDailyRun struct {
+	OrgID            ids.OrgID
+	Day              pgtype.Date
+	TruncatedSources []string
+	CollectedAt      time.Time
+}
+
 type PcPostureFinding struct {
 	OrgID                ids.OrgID
 	ID                   ids.UUID
@@ -3854,6 +3908,23 @@ type PcStreamLease struct {
 	Holder    string
 	ExpiresAt time.Time
 	CreatedAt time.Time
+}
+
+type PcSupplychainFlag struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	ConnectionID     *ids.UUID
+	InventoryID      *ids.UUID
+	PackageVersionID *ids.UUID
+	Tool             string
+	Entry            string
+	Digest           string
+	CheckKind        string
+	Severity         string
+	Detail           []byte
+	FirstSeen        time.Time
+	LastSeen         time.Time
+	State            string
 }
 
 type PcSupportAccessGrant struct {

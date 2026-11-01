@@ -80,6 +80,58 @@ var activityToProto = map[domain.ActivityStatus]pantherclawv1.ActivityStatus{
 	domain.ActivityActive:            pantherclawv1.ActivityStatus_ACTIVITY_STATUS_ACTIVE,
 }
 
+var riskTierToProto = map[domain.RiskTier]pantherclawv1.AgentRiskTier{
+	domain.RiskUnset:    pantherclawv1.AgentRiskTier_AGENT_RISK_TIER_UNSET,
+	domain.RiskLow:      pantherclawv1.AgentRiskTier_AGENT_RISK_TIER_LOW,
+	domain.RiskMedium:   pantherclawv1.AgentRiskTier_AGENT_RISK_TIER_MEDIUM,
+	domain.RiskHigh:     pantherclawv1.AgentRiskTier_AGENT_RISK_TIER_HIGH,
+	domain.RiskCritical: pantherclawv1.AgentRiskTier_AGENT_RISK_TIER_CRITICAL,
+}
+
+var aiActRoleToProto = map[domain.AIActRole]pantherclawv1.AgentAiActRole{
+	domain.AIActRoleUnset:         pantherclawv1.AgentAiActRole_AGENT_AI_ACT_ROLE_UNSET,
+	domain.AIActRoleProvider:      pantherclawv1.AgentAiActRole_AGENT_AI_ACT_ROLE_PROVIDER,
+	domain.AIActRoleDeployer:      pantherclawv1.AgentAiActRole_AGENT_AI_ACT_ROLE_DEPLOYER,
+	domain.AIActRoleNotApplicable: pantherclawv1.AgentAiActRole_AGENT_AI_ACT_ROLE_NOT_APPLICABLE,
+}
+
+var aiActRiskToProto = map[domain.AIActRisk]pantherclawv1.AgentAiActRisk{
+	domain.AIActRiskUnset:   pantherclawv1.AgentAiActRisk_AGENT_AI_ACT_RISK_UNSET,
+	domain.AIActRiskMinimal: pantherclawv1.AgentAiActRisk_AGENT_AI_ACT_RISK_MINIMAL,
+	domain.AIActRiskLimited: pantherclawv1.AgentAiActRisk_AGENT_AI_ACT_RISK_LIMITED,
+	domain.AIActRiskHigh:    pantherclawv1.AgentAiActRisk_AGENT_AI_ACT_RISK_HIGH,
+}
+
+// fromProto returns the key of to whose value is v; an unknown value gives
+// the zero key, which the domain refuses.
+func fromProto[K, V comparable](to map[K]V, v V) K {
+	for k, p := range to {
+		if p == v {
+			return k
+		}
+	}
+	var zero K
+	return zero
+}
+
+// riskPatch is what an UpdateAgent request changes of the stated risk.
+func riskPatch(req *pantherclawv1.UpdateAgentRequest) domain.RiskPatch {
+	var p domain.RiskPatch
+	if req.RiskTier != nil {
+		p.Tier = new(fromProto(riskTierToProto, req.GetRiskTier()))
+	}
+	if req.AiActRole != nil {
+		p.Role = new(fromProto(aiActRoleToProto, req.GetAiActRole()))
+	}
+	if req.AiActRisk != nil {
+		p.Risk = new(fromProto(aiActRiskToProto, req.GetAiActRisk()))
+	}
+	if req.GetDataClasses() != nil {
+		p.DataClasses = append([]string{}, req.GetDataClasses().GetClasses()...)
+	}
+	return p
+}
+
 func contextFromProto(c pantherclawv1.ExecutionContext) domain.ExecutionContext {
 	for k, v := range contextToProto {
 		if v == c {
@@ -117,7 +169,8 @@ func agentProto(a app.Agent) *pantherclawv1.Agent {
 		BackupOwnerUserId: idString(a.BackupOwnerUserID), ExecutionContext: contextToProto[a.Context],
 		State: stateToProto[a.State], SuspendedFrom: stateToProto[a.SuspendedFrom], CreatedBy: a.CreatedBy,
 		CreateTime: ts(a.CreatedAt), UpdateTime: ts(a.UpdatedAt), ClaimTime: tsp(a.ClaimedAt), RetireTime: tsp(a.RetiredAt),
-		RangeAgent: a.RangeAgent,
+		RangeAgent: a.RangeAgent, RiskTier: riskTierToProto[a.RiskTier], DataClasses: a.DataClasses,
+		AiActRole: aiActRoleToProto[a.AIActRole], AiActRisk: aiActRiskToProto[a.AIActRisk],
 	}
 	if s := a.ScanState; s != nil {
 		out.ScanState = &pantherclawv1.AgentScanState{MissedScans: s.MissedScans, LastSeenTime: ts(s.LastSeenAt), Vanished: s.Vanished}
@@ -225,11 +278,35 @@ func (s *Agents) UpdateAgent(ctx context.Context, req *pantherclawv1.UpdateAgent
 	if err != nil {
 		return nil, err
 	}
-	a, err := s.inv.Update(ctx, id, req.Name, req.Purpose)
+	a, err := s.inv.Update(ctx, id, req.Name, req.Purpose, riskPatch(req))
 	if err != nil {
 		return nil, err
 	}
 	return &pantherclawv1.UpdateAgentResponse{Agent: agentProto(a)}, nil
+}
+
+// GetAgentCard implements AgentServiceHandler.
+func (s *Agents) GetAgentCard(ctx context.Context, req *pantherclawv1.GetAgentCardRequest) (*pantherclawv1.GetAgentCardResponse, error) {
+	id, err := parseID(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	c, err := s.inv.Card(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	card := &pantherclawv1.AgentCard{
+		Id: c.ID.String(), Name: c.Name, Purpose: c.Purpose, OwnerUserId: idString(c.OwnerUserID),
+		BackupOwnerUserId: idString(c.BackupOwnerUserID), RiskTier: riskTierToProto[c.RiskTier], DataClasses: c.DataClasses,
+		AiActRole: aiActRoleToProto[c.AIActRole], AiActRisk: aiActRiskToProto[c.AIActRisk], ApprovedToolsTruncated: c.Truncated,
+	}
+	for _, t := range c.Tools {
+		card.ApprovedTools = append(card.ApprovedTools, &pantherclawv1.AgentApprovedTool{
+			ConnectionId: t.ConnectionID.String(), ConnectionName: t.Connection, Package: t.Package,
+			PackageVersion: t.Version, Operation: t.Operation,
+		})
+	}
+	return &pantherclawv1.GetAgentCardResponse{Card: card}, nil
 }
 
 // TransferOwnership implements AgentServiceHandler.
@@ -361,7 +438,8 @@ func findingsOf(req *pantherclawv1.SubmitScanFindingsRequest) ([]app.ScanFinding
 func scanResult(r app.ScanResult) *pantherclawv1.SubmitScanFindingsResponse {
 	return &pantherclawv1.SubmitScanFindingsResponse{
 		Created: int32(r.Created), Counted: int32(r.Counted), Dropped: int32(r.Dropped), //nolint:gosec // G115: at most 200
-		Missed: int32(r.Missed), //nolint:gosec // G115: bounded by the org's discoveries
+		Missed:            int32(r.Missed),            //nolint:gosec // G115: bounded by the org's discoveries
+		DroppedAttributes: int32(r.DroppedAttributes), //nolint:gosec // G115: bounded by one request
 	}
 }
 

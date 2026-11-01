@@ -300,7 +300,7 @@ tasks:
   trace:
     desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M23)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M23"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M24"}}
 
   hub:check:
     desc: Run the real validators over the Hub seed in hub/ (G0 M23 D112) - the policy gate with its mutation check, the detection compiler and rule tests, the range format and customer limits, automation validation and simulation

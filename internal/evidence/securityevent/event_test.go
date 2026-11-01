@@ -16,6 +16,58 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
+// TestHR383_ARevokeCarriesItsSpecAndNothingElse: a restore can rebuild the
+// server from the record, which copies its identifiers and no free text; a
+// spec is bounded and belongs to that one kind (G0 M24 D278).
+func TestHR383_ARevokeCarriesItsSpecAndNothingElse(t *testing.T) {
+	object := ids.NewV7().String()
+	entry := func(details map[string]string) domain.Entry {
+		body, err := domain.CanonicalBody(map[string]any{"outcome": "success", "object": Object{Type: "mcp_server", ID: object}, "details": details})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return domain.Entry{Org: ids.New[ids.Org](), Kind: "audit.mcp.catalog.server_revoked", OccurredAt: time.Now(), Actor: domain.Actor{Type: "user", ID: ids.NewV7().String()}, Body: body}
+	}
+	e, ok, err := FromEntry(entry(map[string]string{
+		"name": "payments", "transport": "http", "url_host": "mcp.example.test", "url_path_prefix": "/v1", "package_ref": "", "image_digest": "", "reason": "never log this free text",
+	}), 1)
+	if err != nil || !ok || e.McpServer == nil || e.McpServer.Name != "payments" || e.McpServer.URLHost != "mcp.example.test" || e.McpServer.URLPathPrefix != "/v1" {
+		t.Fatalf("event %+v %v %v", e, ok, err)
+	}
+	line, err := json.Marshal(e)
+	if err != nil || strings.Contains(string(line), "never log") {
+		t.Fatalf("line %s %v", line, err)
+	}
+	// The path prefix is for replay: the record keeps it, the log line does
+	// not (D290).
+	if !strings.Contains(string(line), `"url_path_prefix":"/v1"`) {
+		t.Fatalf("the record lost its prefix: %s", line)
+	}
+	var output bytes.Buffer
+	Emit(context.Background(), pclog.New(&output, pclog.Options{}), e)
+	if logged := output.String(); strings.Contains(logged, "url_path_prefix") || strings.Contains(logged, "/v1") || !strings.Contains(logged, "mcp.example.test") {
+		t.Fatalf("log line: %s", logged)
+	}
+	if e, ok, err := FromEntry(entry(map[string]string{"name": "payments"}), 1); err != nil || !ok || e.McpServer != nil {
+		t.Fatalf("no matcher: %+v %v %v", e, ok, err)
+	}
+	for name, change := range map[string]func(*Event){
+		"bad name":      func(e *Event) { e.McpServer = &McpServer{Name: "Not A Name", Transport: "http", URLHost: "h"} },
+		"bad transport": func(e *Event) { e.McpServer = &McpServer{Name: "a", Transport: "ftp", URLHost: "h"} },
+		"names nothing": func(e *Event) { e.McpServer = &McpServer{Name: "a", Transport: "http"} },
+		"oversized": func(e *Event) {
+			e.McpServer = &McpServer{Name: "a", Transport: "http", URLHost: strings.Repeat("h", 262)}
+		},
+		"another kind": func(e *Event) { e.Kind, e.Object.Type = "connection.quarantined", "connection" },
+	} {
+		bad := e
+		change(&bad)
+		if Validate(bad) == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
+
 // TestHR383_ClosedSecuritySetCopiesOnlyMachineFields proves the projection
 // cannot ship the reason, account email, payload or arbitrary audit detail.
 func TestHR383_ClosedSecuritySetCopiesOnlyMachineFields(t *testing.T) {

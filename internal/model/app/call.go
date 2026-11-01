@@ -348,7 +348,7 @@ type UsageRow struct {
 }
 
 // Usage sums the organization's model calls since a time, for whoever may
-// read the organization (G0 M22 D8, F834, HR-554).
+// read audit (G0 M22 D8, G0 M24 D95, F834, HR-554).
 func (s *Service) Usage(ctx context.Context, since time.Time) ([]UsageRow, error) {
 	if err := s.inEdition(ctx); err != nil {
 		return nil, err
@@ -357,7 +357,7 @@ func (s *Service) Usage(ctx context.Context, since time.Time) ([]UsageRow, error
 	if err != nil {
 		return nil, err
 	}
-	if err := c.Require(td.PermOrgRead, td.OrgPath(c.Org)); err != nil {
+	if err := c.Require(td.PermAuditRead, td.OrgPath(c.Org)); err != nil {
 		return nil, err
 	}
 	var out []UsageRow

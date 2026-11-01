@@ -68,6 +68,13 @@ func inventoryCommands() map[string]command {
 				return res, err
 			}
 		}),
+		"connection inventory get": rpc("connection inventory get ITEM_ID", 1, func(*flag.FlagSet) call {
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				res, err := c.connections.GetConnectionInventoryItem(ctx, &pb.GetConnectionInventoryItemRequest{Id: a[0]})
+				escapeItem(res.GetItem())
+				return res, err
+			}
+		}),
 		"connection inventory dismiss": rpc("connection inventory dismiss ITEM_ID --reason TEXT", 1, func(fs *flag.FlagSet) call {
 			reason := fs.String("reason", "", "why the item is dismissed (1 to 500 characters)")
 			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
@@ -166,4 +173,6 @@ func escapeItem(it *pb.InventoryItem) {
 	}
 	it.Name, it.DisplayName, it.MimeType = escapeControls(it.Name), escapeControls(it.DisplayName), escapeControls(it.MimeType)
 	it.Description, it.DismissReason = escapeControls(it.Description), escapeControls(it.DismissReason)
+	it.InputSchema, it.OperatorNote = escapeControls(it.InputSchema), escapeControls(it.OperatorNote)
+	it.ListedExtra = escapeControls(it.ListedExtra)
 }

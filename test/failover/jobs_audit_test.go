@@ -95,6 +95,8 @@ var twoWorkerAudit = map[string]string{
 	"operations.metrics_org":                     "unique",
 	"outcomes.rollup_dispatch":                   "fan-out",
 	"outcomes.rollup_org":                        "unique; samples insert ON CONFLICT DO NOTHING",
+	"postureview.rollup_dispatch":                "fan-out",
+	"postureview.rollup_org":                     "unique; the day's run row inserts ON CONFLICT DO NOTHING, and only the insert that wins writes counts",
 	"policy.exception_sweep_dispatch":            "fan-out",
 	"policy.exception_sweep_org":                 "unique",
 	"policy.rollout_sweep_dispatch":              "fan-out",

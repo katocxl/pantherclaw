@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/statemachine"
 )
 
 // ErrMissing is the repository's "no such record" error.
@@ -43,6 +44,9 @@ type Record struct {
 	// that advances is the key's, conditional on the key still being
 	// ACTIVE, and the version records the key.
 	SigningKey *ids.UUID
+	// SigningKID is the kid that signed the metadata, which tells the
+	// development key apart (HR-163).
+	SigningKID string
 	// Package and Raw are the decoded and exact package bytes; FileDigest
 	// is the digest the signed metadata lists.
 	Package    *domain.Package
@@ -140,7 +144,7 @@ func (im *Importer) Import(ctx context.Context, org ids.OrgID, name, version, ta
 	}
 	err = im.Repo.Import(ctx, org, Record{
 		PreviousMetadata: last, Metadata: trust.State{Version: v.Version, PayloadDigest: v.PayloadDigest},
-		MetadataExpiry: v.Expiry, SigningKey: key, Package: p, Raw: raw, FileDigest: digest,
+		MetadataExpiry: v.Expiry, SigningKey: key, SigningKID: v.KID, Package: p, Raw: raw, FileDigest: digest,
 		PreviousPin: cur, Pin: pin, State: domain.StateReviewed,
 		Event: ev,
 	})
@@ -195,6 +199,9 @@ func (im *Importer) Transition(ctx context.Context, org ids.OrgID, pkg, version 
 	}
 	if err := domain.Lifecycle.Check(from, to); err != nil {
 		return err
+	}
+	if from == domain.StateReviewed && to == domain.StateQuarantined {
+		return fmt.Errorf("%w: only a server's revoke quarantines a REVIEWED version", statemachine.ErrIllegalTransition)
 	}
 	if to == domain.StateActive && im.Keys != nil {
 		k, err := im.Keys.VersionSigner(ctx, org, pkg, version)

@@ -374,6 +374,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	wireM20Rotation(pool, m6, verification, bill, log)
 	m6.facts = gatewayFacts(pool)
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill).WithNotify(m5.notifications))
+	m6.cards = newCardSigner(pool, reg)
 
 	g, ctx := errgroup.WithContext(ctx)
 	// The private admin listener, in every role (HR-382).
@@ -468,11 +469,13 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		sup := newSupport(cfg, pool, entsSvc, m5.notifications, log)
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
+			scanLimits: cfg.Limits.Scan,
 			auth: rpcauth.New(authn, procedurePermissions, nil,
 				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log}),
 				cfg.APILimits(pool, log),
 				rpcauth.WithPlanGate(planGate(entsSvc, cfg.Billing.RequirePlan)),
 				rpcauth.WithBrowserSessions(sessions, log),
+				rpcauth.WithAlternatePermissions(m24AlternatePermissions),
 				ui.accountSessions(web, sessions.PublicOrigin()),
 				supportSessions(sup)),
 			support:   sup,
@@ -613,6 +616,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM21OutcomeJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerPostureQueueJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
 		if evidenceJobs, err = registerM11GovernJobs(evidenceJobs, jreg, pool, log); err != nil {
@@ -762,6 +768,8 @@ func publicProcedures() []string {
 // service accounts and API keys. Gateway procedures are refused here: gateways
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
+	// scanLimits bound device scans (G0 M24 D246).
+	scanLimits ScanLimitsConfig
 	// external is the external policy check service (G0 M16 D81).
 	external *externalchecks.Service
 	data     *datarequests.Service
@@ -861,7 +869,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	// autos is the M11 part 2 core, set below once grants and runs exist;
 	// ListAgents reads it only while serving.
 	var autos *automationsCore
-	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing).WithNotify(d.m5.notifications)).
+	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing).WithNotify(d.m5.notifications).
+		WithDeviceLimits(d.scanLimits.NewDeviceScopesPerKeyPerHour, d.scanLimits.OpenDeviceScopesPerOrg)).
 		WithAutomations(func(ctx context.Context) ([]*pantherclawv1.AutomationIdentity, string, error) {
 			return autos.identities(ctx)
 		})))
@@ -917,6 +926,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerReleases(rs, pool, d.m11protect)
 	registerPolicyExceptions(rs, d)
 	registerM21Outcomes(rs, d)
+	registerM24Supply(rs, d)
 	registerM22Rotation(rs, d)
 	mountM10Ops, err := registerM10Ops(rs, d)
 	if err != nil {
@@ -928,6 +938,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerExposure(rs, d)
 	registerSuggestions(rs, d)
 	registerRecommendations(rs, d)
+	registerPostureQueue(rs, d)
 	edges, err := registerM10Edges(rs, d)
 	if err != nil {
 		return nil, err
@@ -962,6 +973,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM11Protect(rs, d, autos)
 	registerM17Rules(rs, d)
 	registerM18IdPs(rs, d)
+	registerM24Catalog(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)
@@ -1268,7 +1280,7 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 	}
 	pantherclawv1connect.RegisterPackageServiceHandler(rs, packagesrpc.New(protectPackages(&defsapp.Admin{
 		Importer: &defsapp.Importer{Roots: roots, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs, Authz: authz,
-		Ents: d.billing, Checks: activationChecks(d.pool, d.cel), Pool: d.pool,
+		Ents: d.billing, Checks: activationChecks(d.pool, d.cel), Pool: d.pool, Catalog: packageCatalogCheck(),
 	}, d)))
 	registerPolicyGate(rs, d)
 	return nil

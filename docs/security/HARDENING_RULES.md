@@ -642,3 +642,14 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
+| HR-580 | The posture queue is scoped to the viewer before ranking and has no score field. Order comes from a fixed tuple, and `rank_reasons` states which parts applied. | T-042 | M24 |
+| HR-581 | A missing posture day is `NOT_COLLECTED`, never zero. | T-233 | M24 |
+| HR-582 | A supply-chain flag never approves anything, and clean means "no known flags", never "safe", in every string. | T-250, T-251, T-252 | M24 |
+| HR-583 | Flagged tool text stays untrusted data: it is never followed, never rendered as markup and never reaches a decision as an instruction. | T-250 | M24 |
+| HR-584 | `pclaw mcp inspect` runs the server in the sandbox with no credentials and egress denied, on the customer's machine only, never on the server or hosted. | T-250 | M24 |
+| HR-585 | A catalogue approval matches exactly: URL scheme, host, effective port and path prefix, image digest or package reference. There is no fuzzy matching. A denial matches wider: revoke matching and the new-connection refusal compare host and effective port, whatever the scheme. | T-253 | M24 |
+| HR-586 | Weakening ENFORCE always waits for a second person: it goes through the protected surface `mcp.catalog.mode`, which is always protected and has no emergency path. Without a gate it fails `ErrUnavailable`. | T-253 | M24 |
+| HR-587 | A server revoke needs a preview digest and a person, stays inside one organization, and is lifted only by an independent second person. The server stays REVOKED after a lift. While it is REVOKED, a new connection matching it is refused in every mode, including OFF, and resuming or activating a matching connection or a version of its name is refused too (`SERVER_REVOKED`). | T-253 | M24 |
+| HR-588 | A scan sends metadata only: no file content, no prompts and no arguments beyond the package or image token. Home paths become `~`, and a `--device` scan sends no hostname unless `--include-hostname` is passed. | T-255 | M24 |
+| HR-589 | The Scanner role belongs to service accounts only and holds exactly `org.read` and `agent.scan.submit`. It can submit scans for its own scope. Like every role it holds `org.read`, which reaches `GetOrg`, `GetModelSettings` and `GetModelDraft`; none of these carries a secret. It holds no other permission. | T-254 | M24 |
+| HR-590 | A failed signing never serves an invalid card signature: the gateway serves the rewritten card unsigned, as before, and logs it. | T-149 | M24 |

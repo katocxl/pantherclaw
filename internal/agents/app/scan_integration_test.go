@@ -15,7 +15,11 @@ import (
 )
 
 func finding(kind, name string) app.ScanFinding {
-	return app.ScanFinding{Kind: kind, Key: sha256.Sum256([]byte(kind + name)), Attributes: map[string]string{"name": name, "client": "cursor"}}
+	attrs := map[string]string{"name": name, "client": "cursor"}
+	if kind == "agent_project" {
+		attrs = map[string]string{"path": name, "manifest": "go.mod"}
+	}
+	return app.ScanFinding{Kind: kind, Key: sha256.Sum256([]byte(kind + name)), Attributes: attrs}
 }
 
 // TestF015_ScanFindingsBecomeDiscoveredAgents (PN-001.1): submitted
@@ -33,7 +37,7 @@ func TestF015_ScanFindingsBecomeDiscoveredAgents(t *testing.T) {
 	if n := w.count(t, `SELECT count(*) FROM pc.agents a JOIN pc.discoveries d ON d.org_id = a.org_id AND d.agent_id = a.id
 		JOIN pc.waitlist_entries e ON e.org_id = a.org_id AND e.subject_id = a.id AND e.subject_type = 'agent'
 		WHERE a.org_id = $1 AND a.state = 'DISCOVERED' AND d.source = 'scan' AND d.observed->>'host' = 'laptop'
-		  AND e.evidence->'untrusted'->>'client' = 'cursor'`, w.org); n != 2 {
+		  AND (e.evidence->'untrusted'->>'client' = 'cursor' OR e.evidence->'untrusted'->>'manifest' = 'go.mod')`, w.org); n != 2 {
 		t.Fatalf("discovered agents with entries: %d", n)
 	}
 	// Each discovery is an audit record too, so it reaches the evidence feed

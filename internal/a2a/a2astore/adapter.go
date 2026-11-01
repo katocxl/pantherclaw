@@ -293,6 +293,7 @@ func ToProto(c *capp.A2AConfig) *pb.A2AConfig {
 		CardUrl: c.CardURL, CardKeys: c.CardKeys, Skills: slices.Clone(c.Skills),
 		Interface:      &pb.A2AInterface{Protocol: c.Interface.Protocol, Url: c.Interface.URL},
 		MaxAnswerBytes: c.MaxAnswerBytes, MaxStreamSeconds: c.MaxStreamSeconds,
+		PublicUrl: c.PublicURL,
 	}
 	if c.PeerAgent != nil && c.PeerScope != nil {
 		out.PeerAgentId = c.PeerAgent.String()

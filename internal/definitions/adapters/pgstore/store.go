@@ -28,6 +28,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/supplychain/adapters/pgflags"
+	scdomain "github.com/katocxl/pantherclaw/internal/supplychain/domain"
 	pgwaitlist "github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
@@ -146,9 +148,17 @@ func (s *Store) Import(ctx context.Context, org ids.OrgID, rec app.Record) error
 		if err != nil {
 			return err
 		}
+		// The supply-chain checks run before the review opens, and their
+		// flags go on it (G0 M24 D212). They inform the person and change no
+		// state (HR-582).
+		supply, err := pgflags.CheckPackage(ctx, tx, org, versionID, rec.Package, trust.IsDevKID(rec.SigningKID))
+		if err != nil {
+			return err
+		}
 		// A version that is not active yet waits for review (G0 M5 part 2).
-		if rec.State != domain.StateActive || flagged {
-			if _, err := pgwaitlist.OpenToolReview(ctx, tx, org, versionID, rec.Package.Name, rec.Package.Version, actorOf(rec.Event)); err != nil {
+		if rec.State != domain.StateActive || flagged || len(supply.Flags) > 0 {
+			if _, err := pgwaitlist.OpenFlaggedToolReview(ctx, tx, org, versionID, rec.Package.Name, rec.Package.Version,
+				scdomain.Summary(supply), actorOf(rec.Event)); err != nil {
 				return err
 			}
 		}
@@ -257,6 +267,11 @@ func (s *Store) TransitionTx(ctx context.Context, tx db.TenantTx, pkg, version s
 	}
 	if err := pgwaitlist.CloseToolReview(ctx, tx, org, row.ID, string(to), actorOf(ev).Type+":"+actorOf(ev).ID); err != nil {
 		return err
+	}
+	if to == domain.StateActive || to == domain.StateQuarantined || to == domain.StateRetired {
+		if err := pgflags.ClearPackage(ctx, tx, org, row.ID); err != nil {
+			return err
+		}
 	}
 	return record(ctx, tx, ev)
 }

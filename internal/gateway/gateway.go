@@ -152,6 +152,9 @@ type Deps struct {
 	// ReportLocalRefusal tells the server of a secret_in_payload refusal (G0
 	// M12, HR-225); nil only logs it.
 	ReportLocalRefusal dispatch.LocalRefusalReporter
+	// SignAgentCard asks the server to sign a rewritten A2A card (G0 M24
+	// D232); nil serves cards unsigned.
+	SignAgentCard a2aface.SignCard
 	// SubmitScan sends an organization scan's findings to the server (G0 M8,
 	// HR-209); nil submits none.
 	SubmitScan ScanSubmitter
@@ -212,6 +215,13 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return err
 		},
 		SubmitScan: controlScans{ctl}.submit,
+		SignAgentCard: func(ctx context.Context, conn string, card []byte) ([]byte, []byte, error) {
+			res, err := ctl.Gateway.SignAgentCard(ctx, &pb.SignAgentCardRequest{ConnectionId: conn, Card: card})
+			if err != nil {
+				return nil, nil, err
+			}
+			return res.GetSignedCard(), res.GetKeys(), nil
+		},
 		ReportStatus: func(ctx context.Context, r *pb.ReportStatusRequest) (int32, error) {
 			res, err := ctl.Gateway.ReportStatus(ctx, r)
 			return res.GetNextReportSeconds(), err
@@ -305,7 +315,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		mcp:  mcp.New(engine, d.Configuration, cfg.PublicURL, log),
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		sdk:  sdk.New(engine, d.Configuration, cfg.PublicURL, log),
-		a2a:  a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log),
+		a2a:  a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log).WithCardSigner(d.SignAgentCard),
 		log:  log, reportDrift: d.ReportDrift, reportInventory: d.ReportInventory, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 		submitScan: d.SubmitScan,

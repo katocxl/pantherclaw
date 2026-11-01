@@ -64,6 +64,7 @@ type row struct {
 	peer                  *ids.UUID
 	bounds, limits        []byte
 	maxAnswer, maxStream  int32
+	publicURL             *string
 }
 
 func toRow(c *pb.A2AConfig) (row, error) {
@@ -80,6 +81,9 @@ func toRow(c *pb.A2AConfig) (row, error) {
 	}
 	if r.skills == nil {
 		r.skills = []string{}
+	}
+	if u := c.GetPublicUrl(); u != "" {
+		r.publicURL = &u
 	}
 	if s := c.GetPeerAgentId(); s != "" {
 		id, err := ids.ParseUUID(s)
@@ -112,7 +116,7 @@ func Propose(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn ids.UUID, 
 	return id, q.InsertA2APin(ctx, dbq.InsertA2APinParams{
 		OrgID: org, ID: id, ConnectionID: conn, CardUrl: r.cardURL, Binding: r.binding, InterfaceUrl: r.url, PinnedCard: r.card,
 		CardDigest: r.digest, CardKeys: r.keys, Skills: r.skills, PeerAgentID: r.peer, PeerBounds: r.bounds,
-		PeerLimits: r.limits, MaxAnswerBytes: r.maxAnswer, MaxStreamSeconds: r.maxStream, ProposedBy: by,
+		PeerLimits: r.limits, MaxAnswerBytes: r.maxAnswer, MaxStreamSeconds: r.maxStream, ProposedBy: by, PublicUrl: r.publicURL,
 	})
 }
 
@@ -133,6 +137,9 @@ func pinOf(r dbq.PcA2aPin) Pin {
 		CardUrl: r.CardUrl, PinnedCard: r.PinnedCard, CardDigest: r.CardDigest, CardKeys: r.CardKeys, Skills: r.Skills,
 		Interface:      &pb.A2AInterface{Protocol: r.Binding, Url: r.InterfaceUrl},
 		MaxAnswerBytes: r.MaxAnswerBytes, MaxStreamSeconds: r.MaxStreamSeconds,
+	}
+	if r.PublicUrl != nil {
+		c.PublicUrl = *r.PublicUrl
 	}
 	if r.PeerAgentID != nil {
 		c.PeerAgentId = r.PeerAgentID.String()

@@ -783,6 +783,12 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Migrations `00260`, `00261` (`00262`–`00269` spare); new permissions `hub.read` and `hub.install`.
 
 ### M24 — Agent Posture
+**HR:** HR-580..590 · **F:** F860–F889 · **ADR:** 0046 · **G0:** [g0/M24.md](g0/M24.md).
+- **Posture** (Team; trends Business): findings joined from what exists, ranked by consequence with the reasons stated and a fix on each, no single number (F797); a finding clears when its source clears.
+- **Supply chain:** pure checks on tool text and schemas in tool review and at package import; clean means "no known flags"; `pclaw mcp inspect` runs a server in the sandbox on the customer's machine.
+- **Catalogue** ([ADR-0046](adr/0046-mcp-server-catalogue.md), Team to manage, revoke on every edition, founder decision H3): exact approvals and wider denials, Watching by default, opt-in enforcement outside the decision path; weakening always waits for a second person; a person revokes a server inside one organization.
+- **Agents and scans:** risk and AI Act fields on the existing record, agent cards, signed A2A cards; hook, skill and package metadata in scans, a Scanner role and scheduled scans, never file contents or prompts.
+- Migrations `00270`–`00273` (`00274`–`00279` spare).
 
 ---
 
