@@ -19,12 +19,15 @@ import (
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 )
 
-// lapsedGate is the plan gate of a lapsed org, by the real class table.
-type lapsedGate struct{ asked *[]string }
+// statusGate is the plan gate of an org in one status, by the real class table.
+type statusGate struct {
+	status entitlements.Status
+	asked  *[]string
+}
 
-func (g lapsedGate) Check(_ context.Context, _ ids.OrgID, procedure string) error {
+func (g statusGate) Check(_ context.Context, _ ids.OrgID, procedure string) error {
 	*g.asked = append(*g.asked, procedure)
-	if !entitlements.Allows(entitlements.StatusLapsed, procedureClass(procedure)) {
+	if !entitlements.Allows(g.status, procedureClass(procedure)) {
 		return entitlements.ErrPlanRequired
 	}
 	return nil
@@ -91,48 +94,50 @@ func sendPost(mux *http.ServeMux, path string) (code int, body string) {
 
 var pathValue = regexp.MustCompile(`\{[a-z]+\}`)
 
-// TestEveryStateChangingPageNamesItsProcedure (G0 M22 D77, HR-356): a lapsed
-// org is refused on a page that stands in for a change, keeps the safety and
-// account pages, and no state-changing page goes unnamed.
+// TestEveryStateChangingPageNamesItsProcedure (G0 M22 D77, D80, HR-356): a lapsed
+// org is refused on a page that stands in for a change and keeps the safety
+// pages, an org with no plan keeps only the allow list and the open pages,
+// and no state-changing page goes unnamed.
 func TestEveryStateChangingPageNamesItsProcedure(t *testing.T) {
-	var asked []string
-	h, _ := uiWebHandler(t)
-	h.WithPlanGate(lapsedGate{asked: &asked})
-	mux := http.NewServeMux()
-	allPages(t, h, mux)
-
 	seen := 0
-	for _, rt := range h.Routes() {
-		if !rt.CSRF || !rt.Session {
-			continue
+	for _, status := range []entitlements.Status{entitlements.StatusLapsed, entitlements.StatusNone} {
+		var asked []string
+		h, _ := uiWebHandler(t)
+		h.WithPlanGate(statusGate{status: status, asked: &asked})
+		mux := http.NewServeMux()
+		allPages(t, h, mux)
+		seen = 0
+		for _, rt := range h.Routes() {
+			if !rt.CSRF || !rt.Session {
+				continue
+			}
+			seen++
+			t.Run(string(status)+rt.Path, func(t *testing.T) {
+				plan, named := webhttp.PagePlanOf(rt.Path)
+				if !named {
+					t.Fatal("this page names no procedure")
+				}
+				if plan.Open != "" && plan.Procedure != "" {
+					t.Fatal("a page is either open or names a procedure")
+				}
+				if plan.Open == "" && plan.Procedure != webhttp.ChangePage && procedureClass(plan.Procedure) == entitlements.ClassUnknown {
+					t.Fatalf("%s is not a classified procedure", plan.Procedure)
+				}
+				want := plan.Open == "" && !entitlements.Allows(status, procedureClass(plan.Procedure))
+				path := pathValue.ReplaceAllString(rt.Path, ids.NewV7().String())
+				asked = nil
+				code, body := sendPost(mux, path)
+				if refused := code == http.StatusConflict && strings.Contains(body, "plan_required"); refused != want {
+					t.Fatalf("refusal wanted %v: %d %s", want, code, body)
+				}
+				if plan.Open != "" && len(asked) != 0 {
+					t.Fatalf("an open page asked the gate: %v", asked)
+				}
+				if plan.Open == "" && (len(asked) != 1 || asked[0] != plan.Procedure) {
+					t.Fatalf("asked the gate %v, want %s", asked, plan.Procedure)
+				}
+			})
 		}
-		seen++
-		t.Run(rt.Path, func(t *testing.T) {
-			plan, named := webhttp.PagePlanOf(rt.Path)
-			if !named {
-				t.Fatal("this page names no procedure")
-			}
-			change := plan.Open == "" && (plan.Procedure == webhttp.ChangePage || procedureClass(plan.Procedure) == entitlements.ClassChange)
-			if plan.Open == "" && plan.Procedure != webhttp.ChangePage && procedureClass(plan.Procedure) == entitlements.ClassUnknown {
-				t.Fatalf("%s is not a classified procedure", plan.Procedure)
-			}
-			if plan.Open != "" && plan.Procedure != "" {
-				t.Fatal("a page is either open or names a procedure")
-			}
-			path := pathValue.ReplaceAllString(rt.Path, ids.NewV7().String())
-			asked = nil
-			code, body := sendPost(mux, path)
-			refused := code == http.StatusConflict && strings.Contains(body, "plan_required")
-			if refused != change {
-				t.Fatalf("a lapsed org, change page %v: %d %s", change, code, body)
-			}
-			if plan.Open != "" && len(asked) != 0 {
-				t.Fatalf("an open page asked the gate: %v", asked)
-			}
-			if plan.Open == "" && (len(asked) != 1 || asked[0] != plan.Procedure) {
-				t.Fatalf("asked the gate %v, want %s", asked, plan.Procedure)
-			}
-		})
 	}
 
 	// Every registration in the package is in the walk above, so a new page

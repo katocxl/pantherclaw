@@ -6,6 +6,7 @@ package server
 import (
 	"maps"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	"github.com/katocxl/pantherclaw/internal/entitlements"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -29,6 +30,9 @@ func init() { maps.Copy(procedurePermissions, uiEntitlementProcedures) }
 // plan keeps only the allow list. Tools that mirror this table read
 // ProcedureMap, which includes the side maps (G0 M22 D9).
 func procedureClass(procedure string) entitlements.Class {
+	if procedure == webhttp.SafetyPage {
+		return entitlements.ClassSafety // the pages with no procedure (G0 M22 D80)
+	}
 	return procedureClasses[procedure] // a missing one is ClassUnknown: a change (fail closed)
 }
 

@@ -39,21 +39,25 @@ func (h *Handler) WithPlanGate(g PlanGate) *Handler {
 // confirmed ceremony. The gate has no class for it, and treats it as a change.
 const ChangePage = "page/change"
 
+// SafetyPage names safety work no procedure stands for: approving, a
+// reconciliation release, the kill switch, declining a policy change. The
+// gate classes it as safety, so a lapsed org keeps it and an org with no
+// plan does not (G0 M22 D80).
+const SafetyPage = "page/safety"
+
 // PagePlan says how a state-changing page meets the plan gate.
 type PagePlan struct {
 	// Procedure is what the gate is asked about, by the page's stand-in
-	// procedure, or ChangePage.
+	// procedure, or ChangePage or SafetyPage.
 	Procedure string
-	// Open is why the gate does not apply: the page has no procedure and
-	// belongs to the account, to support staff, or to the safety work every
-	// plan keeps (D43).
+	// Open is why the gate does not apply: the page belongs to the account or
+	// to support staff.
 	Open string
 }
 
 const (
 	openAccount = "a person's own session and keys, which every org state keeps"
 	openStaff   = "support staff, whose org is not the one the plan belongs to"
-	openSafety  = "safety work with no procedure: every plan keeps it (D43)"
 )
 
 func on(procedure string) PagePlan { return PagePlan{Procedure: procedure} }
@@ -70,20 +74,20 @@ var pagePlans = map[string]PagePlan{
 	authnapp.AccountPath + "/keys/{id}/remove":             open(openAccount),
 	authnapp.AccountPath + "/step-up-options":              open(openAccount),
 	authnapp.AccountPath + "/step-up":                      open(openAccount),
-	authnapp.ApprovalsPath + "/batch-options":              open(openSafety),
-	authnapp.ApprovalsPath + "/batch":                      open(openSafety),
-	authnapp.ApprovalsPath + "/{id}/approve-options":       open(openSafety),
-	authnapp.ApprovalsPath + "/{id}/approve":               open(openSafety),
+	authnapp.ApprovalsPath + "/batch-options":              on(SafetyPage),
+	authnapp.ApprovalsPath + "/batch":                      on(SafetyPage),
+	authnapp.ApprovalsPath + "/{id}/approve-options":       on(SafetyPage),
+	authnapp.ApprovalsPath + "/{id}/approve":               on(SafetyPage),
 	authnapp.ApprovalsPath + "/{id}/decline":               on(pantherclawv1connect.ApprovalServiceDeclineApprovalRequestProcedure),
 	authnapp.ApprovalsPath + "/{id}/evidence-request":      on(pantherclawv1connect.ApprovalServiceRequestApprovalEvidenceProcedure),
 	authnapp.ApprovalsPath + "/{id}/narrower":              on(pantherclawv1connect.ApprovalServiceProposeNarrowerActionProcedure),
-	authnapp.ReconciliationsPath + "/{id}/release-options": open(openSafety),
-	authnapp.ReconciliationsPath + "/{id}/release":         open(openSafety),
+	authnapp.ReconciliationsPath + "/{id}/release-options": on(SafetyPage),
+	authnapp.ReconciliationsPath + "/{id}/release":         on(SafetyPage),
 
-	rapp.PagePath + "/kill-switch/engage":               open(openSafety),
-	rapp.PagePath + "/kill-switch/restore":              open(openSafety),
-	rapp.PagePath + "/kill-switch/restore/{id}/confirm": open(openSafety),
-	rapp.PagePath + "/kill-switch/restore/{id}/cancel":  open(openSafety),
+	rapp.PagePath + "/kill-switch/engage":               on(SafetyPage),
+	rapp.PagePath + "/kill-switch/restore":              on(SafetyPage),
+	rapp.PagePath + "/kill-switch/restore/{id}/confirm": on(SafetyPage),
+	rapp.PagePath + "/kill-switch/restore/{id}/cancel":  on(SafetyPage),
 
 	changes.Path + "/{id}/confirm-options": on(ChangePage),
 	changes.Path + "/{id}/confirm":         on(ChangePage),
@@ -91,7 +95,7 @@ var pagePlans = map[string]PagePlan{
 
 	policyapp.ChangesPath + "/{id}/confirm-options": on(pantherclawv1connect.PolicyServicePublishPolicyVersionProcedure),
 	policyapp.ChangesPath + "/{id}/confirm":         on(pantherclawv1connect.PolicyServicePublishPolicyVersionProcedure),
-	policyapp.ChangesPath + "/{id}/decline":         open(openSafety),
+	policyapp.ChangesPath + "/{id}/decline":         on(SafetyPage),
 
 	signals.PlaybookPath + "/{id}/confirm-options": on(pantherclawv1connect.SharedSignalsServiceRequestIdentityPlaybookChangeProcedure),
 	signals.PlaybookPath + "/{id}/confirm":         on(pantherclawv1connect.SharedSignalsServiceRequestIdentityPlaybookChangeProcedure),
