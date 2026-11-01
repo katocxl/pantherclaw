@@ -72,7 +72,9 @@ END $$;
 ALTER TABLE pc.response_actions
     DROP CONSTRAINT response_actions_scope_type_check,
     ADD CONSTRAINT response_actions_scope_type_check CHECK (scope_type IN ('agent', 'run', 'grant', 'connection', 'resource', 'principal',
-                                                                           'credential', 'transaction', 'mcp_server'));
+                                                                           'credential', 'transaction', 'mcp_server')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.response_actions VALIDATE CONSTRAINT response_actions_scope_type_check;
 
 -- +goose Down
 ALTER TABLE pc.response_actions

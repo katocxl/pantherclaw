@@ -35,8 +35,8 @@ var scanAttributes = map[string][]string{
 // scanNamedAttributes are the attributes the server keeps of the other local
 // kinds. Any other attribute of theirs is dropped and counted (D252).
 var scanNamedAttributes = map[string][]string{
-	"mcp_server":    {"client", "config", "name", "transport", "command", "package_ref", "url_host", "env_names", "header_names"},
-	"agent_project": {"path", "manifest", "frameworks"},
+	"mcp_server":    {"client", "config", "name", "transport", "command", "package_ref", "url_host", "env_names", "header_names", "managed_settings"},
+	"agent_project": {"path", "manifest", "frameworks", "managed_settings"},
 }
 
 // maxScanValue is the longest attribute value, in bytes (the API's limit).

@@ -109,9 +109,10 @@ func TestIntServeAPIAndWorkers(t *testing.T) {
 		t.Fatalf("/readyz = %d %s", code, body)
 	}
 	code, jwks := get("/.well-known/pantherclaw/jwks.json")
-	// Receipts, permits, workload tokens and action tokens (M6); never the
+	// Receipts, permits, workload tokens and action tokens (M6) and A2A cards
+	// (M24 D232); never the
 	// gateway CA, checkpoint or access-token keys, never private parts.
-	if code != http.StatusOK || strings.Count(jwks, `"kid"`) != 4 || strings.Contains(jwks, `"d"`) || strings.Contains(jwks, "gateway-ca-") {
+	if code != http.StatusOK || strings.Count(jwks, `"kid"`) != 5 || strings.Contains(jwks, `"d"`) || strings.Contains(jwks, "gateway-ca-") {
 		t.Fatalf("JWKS = %d %s", code, jwks)
 	}
 	client := pantherclawv1connect.NewSystemServiceClient(connect.NewClient(connecthttp.NewTransport(hc, base)))
