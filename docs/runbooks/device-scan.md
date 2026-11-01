@@ -1,6 +1,6 @@
 # Runbook — Scheduled device scans
 
-**Milestone:** M24 ([G0 M24](../g0/M24.md) D233–D237). **Audience:** IT and security teams that manage laptops. This page follows the brief and was written before the commands landed. Nothing here has been run on a real Intune or Jamf tenant; the M24 exit status records any change.
+**Milestone:** M24 ([G0 M24](../g0/M24.md) D233–D237, D246–D254). **Audience:** IT and security teams that manage laptops. This page follows the brief and was written before the commands landed. Nothing here has been run on a real Intune or Jamf tenant; the M24 exit status records any change.
 
 A scheduled `pclaw scan` finds MCP configurations, hooks, skills and held keys on managed devices and submits them as metadata, so that discovery stays current without an installed service.
 
@@ -14,7 +14,9 @@ Metadata only:
 | Skill | Name and path |
 | Package-run server (`npx`, `uvx`, `bunx`, `pipx run`, `docker run`) | The package or image token; no other arguments |
 
-A scan never sends file contents or prompts. Tell the people whose devices you scan what it reads. `--all-users` reads every home directory on the device, with the same limits. Local law or a works agreement may apply to this; that check is yours.
+A scan never sends file contents or prompts. Home paths always become `~`, so no user name leaves the machine, and a `--device` scan sends no hostname unless you pass `--include-hostname`. Tell the people whose devices you scan what it reads. `--all-users` reads every home directory on the device, with the same limits. Local law or a works agreement may apply to this; that check is yours.
+
+`--all-users` refuses with `SCAN_BINARY_WRITABLE` unless a non-admin cannot replace the `pclaw` binary, because it runs as SYSTEM or root. On Unix the binary must be root-owned, with no group or world write up the path. On Windows it must be under `%ProgramFiles%` or `%SystemRoot%`.
 
 "Not observed" is not "absent": a scan sees what its readers cover on that device, on that day.
 
@@ -28,9 +30,11 @@ A key on many laptops is easy to steal, so plan for it: rotate on a schedule, an
 
 ## 3. Scope
 
-Each device gets the scope `device:<id>`: the first 16 hex of SHA-256 over the machine id and a local salt, kept in the `pclaw` config directory. The 200-finding cap applies per source and scope, and dropped findings are still reported.
+Each device gets the scope `device:<id>`: the first 16 hex of SHA-256 over the machine id and a local salt. The salt is kept in a machine-wide directory when it can be (`%ProgramData%\PantherClaw`, `/var/lib/pantherclaw`), so SYSTEM and user runs agree, and otherwise in the `pclaw` config directory. The 200-finding cap applies per source and scope, and dropped findings are still reported.
 
-If the `pclaw` config directory is wiped, the device gets a new salt and looks like a new device.
+If the salt is wiped, the device gets a new salt and looks like a new device.
+
+Two org-wide limits apply, both set in configuration: at most 1,000 new device scopes per key per hour, and 20,000 open device scopes per organization. Past either one, a scan is refused with `SCAN_DEVICE_LIMIT`, with one audit record per window. A large first rollout can reach the hourly limit, so stagger it.
 
 ## 4. Schedule
 
@@ -42,7 +46,7 @@ pclaw scan schedule status
 pclaw scan schedule remove
 ```
 
-This creates a scheduled task on Windows, a launchd job on macOS and a systemd timer on Linux.
+This creates a scheduled task on Windows, a launchd job on macOS and a systemd timer on Linux. A Windows task cannot carry environment, so it passes `--server`, `--key-file` and `--config-dir` as flags, never the key value.
 
 Submitted complete scans are compared against inventory (PN-001.3): a material change on an open or claimed discovery notifies its owner, and a discovery missed by 3 complete scans is flagged as vanished, without changing any agent's state or authority.
 
