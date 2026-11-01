@@ -204,13 +204,14 @@ func TestHR543_NoConditionCanNameAnEnvironment(t *testing.T) {
 	refused := []string{
 		"forbid refunds in production", "if prod, wait for approval", "only on Staging", "any environment", "when env is dev", "not in QA",
 		"only on prod1", "in preprod", "for nonprod", "on stg", "in the sandbox", "across sandboxes", "only prod_eu",
+		"only production_eu", "in staging_eu", "on dev_eu", "on stage", "in live",
 	}
 	for _, text := range refused {
 		if err := CheckEnvironment(text); !errors.Is(err, ErrEnvironmentCondition) {
 			t.Errorf("%q: %v", text, err)
 		}
 	}
-	for _, text := range []string{"forbid refunds", automationText, "products over 100", "developers may approve", "the devil"} {
+	for _, text := range []string{"forbid refunds", automationText, "products over 100", "developers may approve", "the devil", "delivery", "a staged rollout", "alive"} {
 		if err := CheckEnvironment(text); err != nil {
 			t.Errorf("%q: %v", text, err)
 		}

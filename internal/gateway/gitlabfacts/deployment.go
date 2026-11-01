@@ -97,14 +97,13 @@ func ProjectCI(status int, body []byte, project int) string {
 
 // NoEnvironments is the value of MergeRequestDeployment for a project with
 // no environment yet, which its first deployment creates, from GET
-// /projects/:id/repository/files/.gitlab-ci.yml/raw at the head (D287). No
+// /projects/:id/repository/files/.gitlab-ci.yml/raw at one ref (D287): the
+// gateway reads the head and the target branch, and both must read none. No
 // file deploys nothing (state none). A file that mentions environment or
 // include may deploy, a double-quoted scalar holding a backslash may spell
 // either (D294), and one that could not be read may too: all are unread, so
 // the merge is held. This is a text check, not a YAML parse: a comment that
-// mentions either word, or a script with an escape, holds a merge too. It
-// reads the source head only, so a deploy job on the target branch that is
-// not at the head is not seen.
+// mentions either word, or a script with an escape, holds a merge too.
 func NoEnvironments(status int, body []byte) map[string]any {
 	none := map[string]any{"state": "none", "environments": []any{}}
 	if status == 404 {

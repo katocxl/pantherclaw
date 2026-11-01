@@ -326,12 +326,12 @@ func chainPlatform(t *testing.T, s *Service) {
 }
 
 // TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug: the freeze
-// marks the org's hosted gateway for stopping while the host can still see
-// it, and the finished deletion leaves no record and no customer-chosen
-// name behind. The host's stop report during the deletion succeeds, so its
-// agent stops re-reporting, and the record goes with the deletion. The host
-// agent removes a process with no record
-// (TestAProcessNoAssignmentNamesIsRemoved) (D228, D231).
+// marks the org's hosted gateway as stopping and takes it off its host's
+// assignments, and the finished deletion leaves no record and no
+// customer-chosen name behind. A stop report during the deletion still
+// succeeds, and the record goes with the deletion. The host agent removes a
+// process no assignment names (TestAProcessNoAssignmentNamesIsRemoved)
+// (D228, D231).
 //
 // Covers: PN-010.4
 func TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug(t *testing.T) {
@@ -342,6 +342,12 @@ func TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug(t *testing.T) {
 		VALUES ($1, $2, 'acme', 'RUNNING', $3, $4, 500, 256, 128, 'test')`, org, hosted, gateway, host)
 	d.AdminExec(t, `INSERT INTO pc.hosting_slugs (slug, org_id, hosted_id) VALUES ('acme', $1, $2)`, org, hosted)
 	d.AdminExec(t, `INSERT INTO pc.hosting_slugs (slug, org_id, hosted_id) VALUES ('other', $1, $2)`, ids.NewV7(), ids.NewV7())
+	d.AdminExec(t, `INSERT INTO pc.hosting_hosts (id, name, domain, capacity, milli_cpus, memory_mib)
+		VALUES ($1, 'host-1', 'hosts.example.test', 10, 8000, 8192)`, host)
+	hosting := hostingapp.New(s.Pool, nil, nil, nil, "", nil)
+	if got, err := hosting.Assignments(t.Context(), hostingapp.HostIdentity{Host: host}, "1.0.0"); err != nil || len(got) != 1 {
+		t.Fatalf("before the deletion the host lists its gateway: %+v, %v", got, err)
+	}
 	id := deletionRequest(t, s, org, time.Now().Add(-time.Hour))
 	if err := s.DeleteOrg(t.Context(), org, id); !errors.Is(err, ErrAwaitingSecurityCopy) {
 		t.Fatalf("first erasure must wait for external intent: %v", err)
@@ -351,7 +357,9 @@ func TestHR390_DeletingAnOrgEndsItsHostedGatewayAndFreesItsSlug(t *testing.T) {
 	if state != "DEPROVISIONING" {
 		t.Fatalf("after the freeze: %s", state)
 	}
-	hosting := hostingapp.New(s.Pool, nil, nil, nil, "", nil)
+	if got, err := hosting.Assignments(t.Context(), hostingapp.HostIdentity{Host: host}, "1.0.0"); err != nil || len(got) != 0 {
+		t.Fatalf("the host still lists the deleted org's record: %+v, %v", got, err)
+	}
 	if err := hosting.Stopped(t.Context(), hostingapp.HostIdentity{Host: host}, org, hosted); err != nil {
 		t.Fatalf("the stop report during the deletion: %v", err)
 	}
