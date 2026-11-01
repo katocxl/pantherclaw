@@ -42,6 +42,10 @@ const (
 	MaxConcurrent = 50
 )
 
+// RetryBudgetBusy is the only value of agent.call's retry_on: the reason an
+// agent may resubmit after, because the call reserved nothing (HR-505).
+const RetryBudgetBusy = "BUDGET_BUSY"
+
 // Scenario is one attack scenario file.
 type Scenario struct {
 	APIVersion  string   `json:"apiVersion"`

@@ -14,7 +14,7 @@ Hub is a static directory of signed content published by PantherClaw: policy tem
 | `pclaw hub show` | Shows one item |
 | `pclaw hub install` | Installs an item; the server verifies it again |
 | `pclaw hub update` | Reports newer versions of installed items; it installs nothing |
-| `pclaw hub status` | Shows the accepted index and whether updates exist |
+| `pclaw hub status` | Shows the accepted index and whether updates exist. It also lists failed installs as `name@ver  FAILED  "reason"`; the reason is at most 500 characters and shows the error code and public message |
 
 | Flag | Meaning |
 |---|---|
@@ -25,7 +25,7 @@ Hub is a static directory of signed content published by PantherClaw: policy tem
 
 Installing needs the permission `hub.install`, which only a person can hold; reading needs `hub.read`. OrgAdmin, SecurityAdmin, PolicyAuthor and AutomationAuthor hold both, and Auditor holds `hub.read`. Each kind's own gate still applies. Installing is in every edition, but a detection rule keeps its Business gate.
 
-An item is at most 384 KiB and a compact index at most 640 KiB, with at most 1,000 items. Anything larger is refused, never cut short.
+An item is at most 384 KiB and a compact index at most 624 KiB, with at most 1,000 items. Anything larger is refused, never cut short.
 
 ## What each kind becomes
 
@@ -50,9 +50,7 @@ An item is at most 384 KiB and a compact index at most 640 KiB, with at most 1,0
 | `HUB_ENVIRONMENT` | No single active environment has that slug |
 | `HUB_INSTALL_BUSY` | The same install is already in progress |
 
-Installing the same digest again is idempotent. The server never fetches the index: `pclaw` carries it, and keeps its own rollback state and cache in its config directory.
-
-A crash during an install can leave one unused draft. A retry reuses the draft when it still matches. If a policy retry can't match it, for example because the published policy moved, the retry makes a new draft and the install records that one; the first draft stays inert.
+Installing the same digest again is idempotent. A crash during a policy install can leave one unused draft: a retry that cannot match it makes a new draft and records that one, and the first stays inert. An automation install accepts a leftover draft, including one an admin already validated or tested, so retrying picks it up, and nothing activates. One that finds a retired or published leftover ends FAILED, with a reason naming that automation. The server never fetches the index: `pclaw` carries it, and keeps its own rollback state and cache in its config directory.
 
 ## Building an index
 

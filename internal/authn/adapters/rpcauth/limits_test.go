@@ -184,7 +184,10 @@ func TestHR375_EnforcementIsNeverRateLimited(t *testing.T) {
 // the management API is refused past its own limit and cannot use up its
 // org's, so the org's other credentials keep working (HR-375).
 func TestT170_AFloodingCredentialIsContained(t *testing.T) {
-	limits := rpcauth.APILimits{PerOrg: 60, PerCredential: 12, Limiter: ratelimit.NewMemory(nil)}
+	// A stopped clock: 500 calls on a loaded runner can span two windows, and
+	// the count below is of one.
+	stopped := clock.NewFake(time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC))
+	limits := rpcauth.APILimits{PerOrg: 60, PerCredential: 12, Limiter: ratelimit.NewMemory(stopped)}
 	who := pantherclawv1connect.AccessServiceWhoAmIProcedure
 	call := limitServer(t, map[string]td.Permission{who: td.PermAuthenticated}, nil, limits, nil)
 	allowed := 0
