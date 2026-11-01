@@ -1,0 +1,5 @@
+tests:
+  - name: allowed command
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: shell.command.run}

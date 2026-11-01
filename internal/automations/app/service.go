@@ -267,6 +267,15 @@ func (s *Service) edition(ctx context.Context) error {
 	return nil
 }
 
+// CanCreateDraft is the permission and edition check CreateDraftTx runs on
+// its caller.
+func (s *Service) CanCreateDraft(ctx context.Context) error {
+	if _, err := manager(ctx); err != nil {
+		return err
+	}
+	return s.edition(ctx)
+}
+
 func (s *Service) entitled(ctx context.Context, x autodomain.Edition) bool {
 	if s.Editions == nil {
 		return false

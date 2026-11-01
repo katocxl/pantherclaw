@@ -23,6 +23,10 @@ type DevConfig struct {
 	// only from this machine (localOnly). It has no environment variable:
 	// only a configuration file turns it on.
 	PackageKeyFile string `json:"package_key_file"`
+	// HubKeyFile is the public JWKS of the development Hub key (G0 M23
+	// D101). The API then also trusts that key for a Hub index. It is
+	// refused like PackageKeyFile unless the server is local only; file only.
+	HubKeyFile string `json:"hub_key_file"`
 	// SlackAPIURL points slack_app channels at a simulated Slack Web API
 	// (pantherclaw-sim slack, G0 M14 D22) instead of https://slack.com/api.
 	// Loopback only, and refused unless the server is local only; file only.
@@ -46,10 +50,18 @@ func devPrivateKeyFile(public string) string {
 }
 
 func (c *Config) validateDev() []error {
-	if c.Dev.PackageKeyFile == "" {
-		return nil
-	}
 	var errs []error
+	if c.Dev.HubKeyFile != "" {
+		if !strings.HasSuffix(c.Dev.HubKeyFile, devPublicSuffix) {
+			errs = append(errs, errors.New("dev.hub_key_file must name the .pub.json file of the development Hub key"))
+		}
+		if err := c.localOnly(); err != nil {
+			errs = append(errs, fmt.Errorf("dev.hub_key_file is development-only (D101): %w", err))
+		}
+	}
+	if c.Dev.PackageKeyFile == "" {
+		return errs
+	}
 	if !strings.HasSuffix(c.Dev.PackageKeyFile, devPublicSuffix) {
 		errs = append(errs, errors.New("dev.package_key_file must name the .pub.json file of the development package key"))
 	}

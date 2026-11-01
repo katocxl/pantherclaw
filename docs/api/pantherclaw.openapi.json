@@ -16587,6 +16587,168 @@
         }
       }
     },
+    "/pantherclaw.v1.HubService/InstallHubItem": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HubService"
+        ],
+        "summary": "InstallHubItem",
+        "description": "InstallHubItem verifies the index and the item and installs the item as\n an inert draft. Installing the same digest again changes nothing. Only a\n person may call it.\n permission: hub.install",
+        "operationId": "pantherclaw.v1.HubService.InstallHubItem",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.InstallHubItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.InstallHubItemResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HubService/ListHubInstalls": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HubService"
+        ],
+        "summary": "ListHubInstalls",
+        "description": "ListHubInstalls lists the org's installs, newest first.\n permission: hub.read",
+        "operationId": "pantherclaw.v1.HubService.ListHubInstalls",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListHubInstallsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListHubInstallsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.HubService/GetHubState": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.HubService"
+        ],
+        "summary": "GetHubState",
+        "description": "GetHubState returns the highest Hub index the org accepted.\n permission: hub.read",
+        "operationId": "pantherclaw.v1.HubService.GetHubState",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetHubStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetHubStateResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.IdentityService/CreateEnrollmentToken": {
       "post": {
         "tags": [
@@ -66157,6 +66319,256 @@
         "additionalProperties": false,
         "description": "RequestHostedGatewayResponse returns the record."
       },
+      "pantherclaw.v1.HubInstallStatus": {
+        "type": "string",
+        "title": "HubInstallStatus",
+        "enum": [
+          "HUB_INSTALL_STATUS_UNSPECIFIED",
+          "HUB_INSTALL_STATUS_PENDING",
+          "HUB_INSTALL_STATUS_INSTALLED",
+          "HUB_INSTALL_STATUS_FAILED"
+        ]
+      },
+      "pantherclaw.v1.HubItemKind": {
+        "type": "string",
+        "title": "HubItemKind",
+        "enum": [
+          "HUB_ITEM_KIND_UNSPECIFIED",
+          "HUB_ITEM_KIND_POLICY_TEMPLATE",
+          "HUB_ITEM_KIND_DETECTION_RULE",
+          "HUB_ITEM_KIND_RANGE_SCENARIO",
+          "HUB_ITEM_KIND_TOOL_PACKAGE",
+          "HUB_ITEM_KIND_AUTOMATION"
+        ],
+        "description": "HubItemKind is a closed list: an item holds data, never code (HR-563)."
+      },
+      "pantherclaw.v1.GetHubStateRequest": {
+        "type": "object",
+        "title": "GetHubStateRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetHubStateResponse": {
+        "type": "object",
+        "properties": {
+          "present": {
+            "type": "boolean",
+            "title": "present",
+            "description": "present is false until the org accepted an index."
+          },
+          "indexVersion": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "index_version",
+            "format": "int64"
+          },
+          "indexDigest": {
+            "type": "string",
+            "title": "index_digest",
+            "description": "index_digest is the hex SHA-256 of the index payload."
+          },
+          "updatedAt": {
+            "title": "updated_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetHubStateResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.HubInstall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "version": {
+            "type": "string",
+            "title": "version"
+          },
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.HubItemKind"
+          },
+          "itemSha256": {
+            "type": "string",
+            "title": "item_sha256",
+            "description": "item_sha256 is the hex SHA-256 of the item's exact bytes."
+          },
+          "indexVersion": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "index_version",
+            "format": "int64"
+          },
+          "resultKind": {
+            "type": "string",
+            "title": "result_kind",
+            "description": "result_kind and result_ref name what the install made: policy_version,\n custom_rule, automation or package_version, and its id. Empty until the\n install ends."
+          },
+          "resultRef": {
+            "type": "string",
+            "title": "result_ref"
+          },
+          "installedBy": {
+            "type": "string",
+            "title": "installed_by"
+          },
+          "installedAt": {
+            "title": "installed_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "status": {
+            "title": "status",
+            "$ref": "#/components/schemas/pantherclaw.v1.HubInstallStatus"
+          },
+          "failureReason": {
+            "type": "string",
+            "title": "failure_reason",
+            "description": "failure_reason says why a FAILED install failed: its error's reason and\n client-facing message, at most 500 characters. Empty otherwise."
+          }
+        },
+        "title": "HubInstall",
+        "additionalProperties": false,
+        "description": "HubInstall is one item installed in the org."
+      },
+      "pantherclaw.v1.InstallHubItemRequest": {
+        "type": "object",
+        "properties": {
+          "indexJws": {
+            "type": "string",
+            "title": "index_jws",
+            "maxLength": 638976,
+            "minLength": 1,
+            "description": "index_jws is the signed index, compact JWS."
+          },
+          "item": {
+            "type": "string",
+            "title": "item",
+            "maxLength": 393216,
+            "minLength": 1,
+            "format": "byte",
+            "description": "item is the exact bytes of items/\u003csha256\u003e.json."
+          },
+          "params": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "title": "params",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "title": "value",
+              "maxLength": 4096
+            },
+            "description": "params fill a policy template's placeholders: repos, default_branch,\n workspace, time_zone, payees, customers, slack_channels and environment."
+          }
+        },
+        "title": "InstallHubItemRequest",
+        "additionalProperties": false,
+        "required": [
+          "indexJws",
+          "item"
+        ]
+      },
+      "pantherclaw.v1.InstallHubItemRequest.ParamsEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "ParamsEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.InstallHubItemResponse": {
+        "type": "object",
+        "properties": {
+          "install": {
+            "title": "install",
+            "$ref": "#/components/schemas/pantherclaw.v1.HubInstall"
+          },
+          "alreadyInstalled": {
+            "type": "boolean",
+            "title": "already_installed",
+            "description": "already_installed: this digest was installed before; nothing changed."
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "skipped",
+            "description": "skipped are per-agent rules a policy template left out."
+          },
+          "replaced": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "replaced",
+            "description": "replaced are the rule and test ids of the published policy this draft\n changes."
+          }
+        },
+        "title": "InstallHubItemResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListHubInstallsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 200
+          }
+        },
+        "title": "ListHubInstallsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListHubInstallsResponse": {
+        "type": "object",
+        "properties": {
+          "installs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.HubInstall"
+            },
+            "title": "installs"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListHubInstallsResponse",
+        "additionalProperties": false
+      },
       "pantherclaw.v1.EnrollmentPath": {
         "type": "string",
         "title": "EnrollmentPath",
@@ -94368,6 +94780,10 @@
     {
       "name": "pantherclaw.v1.HostedGatewayIdentityService",
       "description": "HostedGatewayIdentityService is what a hosted gateway calls on the gateway\n listener over its own mTLS identity (G0 M19 D210)."
+    },
+    {
+      "name": "pantherclaw.v1.HubService",
+      "description": "HubService installs items of PantherClaw Hub, a signed static index of\n PantherClaw's own content (G0 M23 D100–D107; HR-560–HR-563; Community\n edition).\n\n The server never fetches the index and makes no outbound call: the caller\n sends the signed index and the item's exact bytes, and the server verifies\n both itself. pclaw is only the transport.\n\n Install is always inert (HR-561): an item becomes a DRAFT policy version, a\n DRAFT custom detection rule, a DRAFT automation or a REVIEWED package\n version, through that kind's own use case and its own permission and\n edition. Nothing is activated, published or enabled. Each org keeps the\n highest index it accepted, and an older index, or another under the same\n version, is refused (HR-562)."
     },
     {
       "name": "pantherclaw.v1.IdentityService",

@@ -353,6 +353,13 @@ func sameJSON(a, b any) bool {
 	return err1 == nil && err2 == nil && string(x) == string(y)
 }
 
+// RenderOptions turns parameters into render options for a template that is
+// not a pack's (a Hub policy template, G0 M23 D104), by the rules a pack's
+// parameters follow.
+func RenderOptions(name string, placeholders map[string]render.Spec, params map[string]string) (render.Options, error) {
+	return Pack{Name: name, Template: name, Placeholders: placeholders}.options(params)
+}
+
 // options turns a pack's parameters into render options; the template's
 // own checks run when it is rendered.
 func (p Pack) options(params map[string]string) (render.Options, error) {

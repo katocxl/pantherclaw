@@ -1,0 +1,68 @@
+name: pc.automation.new-agent-intake
+version: 1.0.0
+kind: automation
+title: New agent intake
+summary: >-
+  Prepare a newly discovered agent for a person to claim: propose an owner,
+  inspect its routes, draft a baseline and run safe tests. Proposals only.
+body:
+  automation_name: hub-new-agent-intake
+  purpose: Prepare every newly discovered agent for a person to claim, with proposals only.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Prepare every newly discovered agent for a person to claim, with proposals only."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: agent.discovered
+        params:
+          agent: {from: subjects.agent, type: uuid}
+      dedupe:
+        key: "{{params.agent}}"
+        window: 30d
+    authority:
+      principal: self
+      platform:
+        - step: propose_owner
+          scopes: [TRIGGER_AGENT]
+        - step: inspect_routes
+          scopes: [TRIGGER_AGENT]
+        - step: draft_baseline
+          scopes: [TRIGGER_AGENT]
+        - step: run_safe_tests
+          scopes: [TRIGGER_AGENT]
+        - step: notify
+          scopes: [OWNER]
+        - step: wait_claim
+          scopes: [TRIGGER_AGENT]
+    do:
+      - id: propose
+        step: propose_owner
+      - id: routes
+        step: inspect_routes
+      - id: baseline
+        step: draft_baseline
+        with:
+          from: "COHORT_BASELINE"
+      - id: safe_tests
+        step: run_safe_tests
+      - id: tell
+        step: notify
+        with:
+          to: [OWNER]
+          message:
+            title: A new agent is waiting to be claimed
+            body: "Agent {{params.agent}} was discovered. Its proposed owner, routes, baseline and test results are ready; claim it to take it into use."
+      - id: claim
+        step: wait_claim
+        with:
+          timeout: "3d"
+    finish_when:
+      - step: claim
+        condition: AGENT_CLAIMED
+      - step: baseline
+        condition: PROPOSAL_RECORDED
+    limits:
+      deadline: 7d

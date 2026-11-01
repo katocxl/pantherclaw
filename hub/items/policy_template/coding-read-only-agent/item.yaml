@@ -1,0 +1,41 @@
+name: pc.coding.read-only-agent
+version: 1.0.0
+kind: policy_template
+title: A read-only coding agent
+summary: >-
+  One agent reads GitHub and changes nothing there: no branches, contents,
+  pull requests, merges, settings or deployments. It says nothing about what
+  the agent does from a shell.
+body:
+  placeholders:
+    agent: {"kind": "agent", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+  rules:
+    - id: ro-writes
+      per: agent
+      kind: FORBID
+      summary: the agent changes nothing on GitHub
+      operations:
+        - github.branch.create
+        - github.contents.write
+        - github.pull.create
+        - github.pull.merge
+        - github.repo.settings.update
+        - github.deployment.trigger
+      when: "run.agent_id == {{agent}}"
+      reason: READ_ONLY_AGENT
+  tests:
+    - {"id": "ro-write-refused", "per": "agent", "summary": "the agent's contents write is refused",
+        "action": {"operation": "github.contents.write", "target": {"type": "github.branch", "id": "acme/api@refs/heads/feature"},
+          "params": {"path": "README.md", "content": "aGk=", "message": "update"}},
+        "given": {"agent": "{{agent}}", "facts": {"github.branch.deploy_triggers": {"value": {"object": {"state": "none", "branch": "feature", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}}},
+        "expect": {"decision": "DENY", "reason": "READ_ONLY_AGENT"}}
+    - {"id": "ro-other-agent", "per": "agent", "summary": "another agent's contents write is not this rule's",
+        "action": {"operation": "github.contents.write", "target": {"type": "github.branch", "id": "acme/api@refs/heads/feature"},
+          "params": {"path": "README.md", "content": "aGk=", "message": "update"}},
+        "given": {"facts": {"github.branch.deploy_triggers": {"value": {"object": {"state": "none", "branch": "feature", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}}},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}
+    - {"id": "ro-read", "per": "agent", "summary": "the agent reads",
+        "action": {"operation": "github.contents.read", "target": {"type": "github.repository", "id": "acme/api"},
+          "params": {"path": "README.md"}},
+        "given": {"agent": "{{agent}}"},
+        "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}}

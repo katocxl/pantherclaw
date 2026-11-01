@@ -1,0 +1,5 @@
+tests:
+  - name: same reason but held
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: REQUIRE_APPROVAL, reason: SECRET_OUTBOUND, operation: slack.message.post}

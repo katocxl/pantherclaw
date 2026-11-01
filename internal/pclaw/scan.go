@@ -27,8 +27,12 @@ func init() {
 	}
 }
 
-// submitBatch is the most findings one SubmitScanFindings call carries.
-const submitBatch = 200
+const (
+	// submitBatch is the most findings one SubmitScanFindings call carries.
+	submitBatch = 200
+	// managedSettingsAttr is the finding attribute holding the managed state.
+	managedSettingsAttr = "managed_settings"
+)
 
 // scanCmd runs the local shadow-agent scan (PN-001.1). Results stay on the
 // machine unless --submit sends the metadata of what it found to the org as
@@ -108,6 +112,15 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 		}
 		findings = scan.Run(o)
 	}
+	// What this machine's managed settings hold, on every finding: a signal
+	// for a recommendation, never coverage (G0 M23 D114, HR-567).
+	state := platformManagedState()
+	for i := range findings {
+		if findings[i].Attributes == nil {
+			findings[i].Attributes = map[string]string{}
+		}
+		findings[i].Attributes[managedSettingsAttr] = state
+	}
 	if *asJSON {
 		b, err := json.Marshal(findings, json.Deterministic(true))
 		if err != nil {
@@ -117,6 +130,8 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 			return err
 		}
 	} else if err := printFindings(a, findings); err != nil {
+		return err
+	} else if _, err := fmt.Fprintf(a.stdout, "Managed settings: %s (%s)\n", state, managedLimits); err != nil {
 		return err
 	}
 	if !*submit {

@@ -108,7 +108,7 @@ func with(ps ...[]Permission) []Permission {
 var roles = []Role{
 	{
 		Name: RoleOrgAdmin, Title: "Org Admin", Scopes: orgScope,
-		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, automations, detections, incidents, cases, exposure, posture, operations, search, integrations and the MCP server catalog, and simulates policy versions over recorded decisions. Registers AuthZEN enforcement points (human only) and reads the runs peer agents made for requesters. Proposes changes to the org's own identity providers, each confirmed by a second person (human only), and reads them. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
+		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, automations, detections, incidents, cases, exposure, posture, operations, search, integrations and the MCP server catalog, and simulates policy versions over recorded decisions. Registers AuthZEN enforcement points (human only) and reads the runs peer agents made for requesters. Proposes changes to the org's own identity providers, each confirmed by a second person (human only), and reads them. Installs PantherClaw Hub items as drafts (human only). Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
 		Permissions: with(basicReads, []Permission{
 			PermOrgUpdate, PermBusinessUnitManage, PermTeamManage, PermTeamMembersManage, PermEnvironmentManage,
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
@@ -119,11 +119,12 @@ var roles = []Role{
 			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun, PermPolicySimulate, PermAutomationRead,
 			PermEnforcementPointManage, PermA2APeerRunRead, PermIdentityProviderRead, PermIdentityProviderManage,
 			PermCatalogRead,
+			PermHubRead, PermHubInstall,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only), AuthZEN enforcement points (human only), external policy checks (human only), the org's customer consequence rules, each confirmed by a second person (human only), and the MCP server catalog; reads automations, the runs peer agents made for requesters and the org's identity providers.",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only), AuthZEN enforcement points (human only), external policy checks (human only), the org's customer consequence rules, each confirmed by a second person (human only), and the MCP server catalog; installs PantherClaw Hub items as drafts (human only); reads automations, the runs peer agents made for requesters and the org's identity providers.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
@@ -136,6 +137,7 @@ var roles = []Role{
 			PermConsequenceRuleManage,
 			PermIdentityProviderRead,
 			PermCatalogRead, PermCatalogManage,
+			PermHubRead, PermHubInstall,
 		}),
 	},
 	{
@@ -148,8 +150,8 @@ var roles = []Role{
 	},
 	{
 		Name: RolePolicyAuthor, Title: "Policy Author", Scopes: anyScope,
-		Description: "Drafts policies and grants in scope, simulates policy versions over recorded decisions and asks for policy exceptions (human only); cannot publish them.",
-		Permissions: with(basicReads, []Permission{PermAgentRead, PermPolicyAuthor, PermPolicySimulate, PermFactRead, PermPolicyExceptionRequest}, authorityReads),
+		Description: "Drafts policies and grants in scope, simulates policy versions over recorded decisions, asks for policy exceptions and installs PantherClaw Hub items as drafts (human only); cannot publish them.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermPolicyAuthor, PermPolicySimulate, PermFactRead, PermPolicyExceptionRequest, PermHubRead, PermHubInstall}, authorityReads),
 	},
 	{
 		Name: RolePolicyPublisher, Title: "Policy Publisher", Scopes: anyScope,
@@ -174,12 +176,12 @@ var roles = []Role{
 	},
 	{
 		Name: RoleAuditor, Title: "Auditor", Scopes: orgScope,
-		Description: "Reads configuration, audit and evidence, restricted evidence included, the runs peer agents made for requesters, the org's identity providers and the MCP server catalog, and exports evidence packs (human only); changes nothing.",
+		Description: "Reads configuration, audit and evidence, restricted evidence included, the runs peer agents made for requesters, the org's identity providers, the MCP server catalog and its PantherClaw Hub installs, and exports evidence packs (human only); changes nothing.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
 			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead, PermAutomationRead,
-			PermA2APeerRunRead, PermIdentityProviderRead, PermCatalogRead,
+			PermA2APeerRunRead, PermIdentityProviderRead, PermCatalogRead, PermHubRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
@@ -263,8 +265,8 @@ var roles = []Role{
 	},
 	{
 		Name: RoleAutomationAuthor, Title: "Automation Author", Scopes: anyScope,
-		Description: "Creates automations and authors their versions, manages inbound event sources and automation destinations, asks for a version to be enabled, and narrows, pauses, resumes, retires or revokes the authority of automations in scope (human only); opens the work queue. Cannot confirm an enabling: that needs an Automation Publisher.",
-		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationManage, PermAutomationEndpointsManage, PermOperationsRead}, authorityReads),
+		Description: "Creates automations and authors their versions, manages inbound event sources and automation destinations, asks for a version to be enabled, narrows, pauses, resumes, retires or revokes the authority of automations in scope, and installs PantherClaw Hub items as drafts (human only); opens the work queue. Cannot confirm an enabling: that needs an Automation Publisher.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermAutomationRead, PermAutomationManage, PermAutomationEndpointsManage, PermOperationsRead, PermHubRead, PermHubInstall}, authorityReads),
 	},
 	{
 		Name: RoleAutomationPublisher, Title: "Automation Publisher", Scopes: anyScope,

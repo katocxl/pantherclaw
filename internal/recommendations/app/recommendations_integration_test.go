@@ -93,6 +93,56 @@ func discover(t *testing.T, o *exposuretest.Org, agent ids.UUID, kind string) id
 	return id
 }
 
+// scanned adds an open discovery of source, with the managed state its scan
+// reported.
+func scanned(t *testing.T, o *exposuretest.Org, agent ids.UUID, source, state string) ids.UUID {
+	t.Helper()
+	id := ids.NewV7()
+	key := make([]byte, 32)
+	copy(key, id[:])
+	var scope, principal *string
+	if source == "ci_scan" {
+		s := "acme/payments"
+		scope, principal = &s, &s
+	}
+	o.Exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, scan_scope, scan_principal, observed)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, jsonb_build_object('kind', 'mcp_server', 'managed_settings', $8::text))`,
+		o.Org, id, agent, source, key, scope, principal, state)
+	return id
+}
+
+// TestHR536_ManagedSettingsMissing: the recommendation rests on open local
+// scan discoveries the viewer may read that say not_found. Any other state,
+// a CI-mode scan and another team's agent do not count; what it returns is
+// a count and ids, and it says what stays unsupported (G0 M23 D114).
+//
+// Covers: F852
+func TestHR536_ManagedSettingsMissing(t *testing.T) {
+	o := exposuretest.New(t)
+	a, b := o.Claim(t, o.Agent), o.Claim(t, o.Other)
+	if _, ok := item(list(orgWide(o), t, o, false), domain.ManagedSettings); ok {
+		t.Fatal("applies with no discovery")
+	}
+	scanned(t, o, o.Agent, "scan", "present")
+	scanned(t, o, o.Agent, "scan", "conflict")
+	scanned(t, o, o.Agent, "scan", `not_found"`)
+	scanned(t, o, o.Agent, "ci_scan", "not_found")
+	if _, ok := item(list(orgWide(o), t, o, false), domain.ManagedSettings); ok {
+		t.Fatal("applies with no missing settings on a person's machine")
+	}
+	hidden := scanned(t, o, o.Other, "scan", "not_found")
+	if _, ok := item(list(team(o, a), t, o, false), domain.ManagedSettings); ok {
+		t.Fatal("team A sees team B's discovery")
+	}
+	it, ok := item(list(team(o, b), t, o, false), domain.ManagedSettings)
+	if !ok || it.Evidence.Count != 1 || records(it)[0] != hidden || it.Evidence.Records[0].Kind != domain.RecordDiscovery {
+		t.Fatalf("team B: %+v %v", it, ok)
+	}
+	if len(it.Entry.StillUnsupported) == 0 || it.Entry.Reach != domain.AgentBacked {
+		t.Fatalf("%+v", it.Entry)
+	}
+}
+
 // useDatabase makes the org's connection a database connection and records
 // coverage of it for agent.
 func useDatabase(t *testing.T, o *exposuretest.Org, agent ids.UUID) {

@@ -624,6 +624,27 @@ func ReadInfo(name string) (Info, error) {
 	return info, nil
 }
 
+// RenderItems fills in rules and tests given as data, not read from a
+// template's files (a Hub policy template, G0 M23 D104), with the same checks
+// Render applies: every placeholder is declared, every value checked, and a
+// value in a condition is only ever a quoted literal.
+func RenderItems(o Options, spec map[string]Spec, rules, tests []map[string]any) (Data, error) {
+	var out Data
+	r := Renderer{O: o, Spec: spec}
+	if err := r.checkValues(); err != nil {
+		return out, err
+	}
+	var err error
+	if out.Rules, out.Skipped, _, err = r.items(rules, "rule"); err != nil {
+		return out, fmt.Errorf("template %s: %w", o.Name, err)
+	}
+	if out.Tests, _, _, err = r.items(tests, "test"); err != nil {
+		return out, fmt.Errorf("template %s: %w", o.Name, err)
+	}
+	out.Placeholders = spec
+	return out, nil
+}
+
 // Render reads the template's files and fills in the options.
 func Render(o Options) (Data, error) {
 	var out Data

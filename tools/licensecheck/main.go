@@ -34,7 +34,7 @@ const (
 )
 
 // apachePrefixes are repository-relative directories licensed Apache-2.0 (see NOTICE).
-var apachePrefixes = []string{"sdk/", "integrations/", "docs/protocol/"}
+var apachePrefixes = []string{"sdk/", "integrations/", "docs/protocol/", "hub/"}
 
 // skipDirs are never scanned.
 var skipDirs = map[string]bool{
@@ -82,14 +82,79 @@ func run(args []string, stdout, stderr io.Writer) int {
 	for _, f := range fixed {
 		_, _ = fmt.Fprintf(stdout, "added header: %s\n", f)
 	}
-	for _, p := range problems {
+	listed := CheckListed(os.DirFS(*root))
+	for _, p := range append(problems, listed...) {
 		_, _ = fmt.Fprintf(stdout, "%s: %s\n", p.Path, p.Reason)
 	}
 	if len(problems) > 0 {
 		_, _ = fmt.Fprintf(stderr, "licensecheck: %d file(s) without a valid licence header (run with -fix)\n", len(problems))
+	}
+	if len(listed) > 0 {
+		_, _ = fmt.Fprintf(stderr, "licensecheck: %d problem(s) with the directories NOTICE lists\n", len(listed))
+	}
+	if len(problems)+len(listed) > 0 {
 		return 1
 	}
 	return 0
+}
+
+// CheckListed checks NOTICE's "Separately Licensed Components" list (G0 M23
+// D111, F848): every directory it names has its own LICENSE, and every
+// directory under integrations/ is named. A tree without a NOTICE file holds
+// no list to check.
+func CheckListed(fsys fs.FS) []Problem {
+	notice, err := fs.ReadFile(fsys, "NOTICE")
+	if err != nil {
+		return nil
+	}
+	listed := ListedDirs(notice)
+	if len(listed) == 0 {
+		return []Problem{{"NOTICE", "lists no separately licensed directories"}}
+	}
+	var problems []Problem
+	for _, dir := range listed {
+		if !isApache(dir) {
+			problems = append(problems, Problem{dir, "NOTICE lists it, but this check does not treat it as Apache-2.0"})
+		}
+		if _, err := fs.Stat(fsys, dir+"LICENSE"); err != nil {
+			problems = append(problems, Problem{dir, "NOTICE lists it, but it has no LICENSE file"})
+		}
+	}
+	entries, err := fs.ReadDir(fsys, "integrations")
+	if err != nil {
+		return problems
+	}
+	for _, e := range entries {
+		if dir := "integrations/" + e.Name() + "/"; e.IsDir() && !slices.Contains(listed, dir) {
+			problems = append(problems, Problem{dir, "not listed in NOTICE"})
+		}
+	}
+	return problems
+}
+
+// ListedDirs returns the directories in NOTICE's "Separately Licensed
+// Components" list, each with its trailing slash. The list ends at the next
+// heading.
+func ListedDirs(notice []byte) []string {
+	_, rest, ok := strings.Cut(strings.ReplaceAll(string(notice), "\r\n", "\n"), "Separately Licensed Components")
+	if !ok {
+		return nil
+	}
+	rest, _, _ = strings.Cut(rest, "Reference documents")
+	var dirs []string
+	for line := range strings.SplitSeq(rest, "\n") {
+		if !strings.HasPrefix(line, "  ") {
+			continue
+		}
+		if fields := strings.Fields(line); len(fields) > 0 && strings.HasSuffix(fields[0], "/") {
+			dirs = append(dirs, fields[0])
+		}
+	}
+	return dirs
+}
+
+func isApache(p string) bool {
+	return slices.ContainsFunc(apachePrefixes, func(pre string) bool { return strings.HasPrefix(p, pre) })
 }
 
 // Check scans fsys. When fix is true, files missing a header get one written
@@ -135,10 +200,8 @@ func Check(fsys fs.FS, rootDir string, fix bool) (problems []Problem, fixed []st
 
 // ExpectedLicense returns the SPDX identifier required for a repository-relative path.
 func ExpectedLicense(p string) string {
-	for _, pre := range apachePrefixes {
-		if strings.HasPrefix(p, pre) {
-			return spdxApache
-		}
+	if isApache(p) {
+		return spdxApache
 	}
 	return spdxBUSL
 }

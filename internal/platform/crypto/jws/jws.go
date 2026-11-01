@@ -82,6 +82,7 @@ func (s *Signer) Sign(typ string, payload []byte) (string, error) {
 type Verifier struct {
 	typ  string
 	keys map[string]ed25519.PublicKey
+	max  int
 }
 
 // NewVerifier returns a Verifier that accepts only tokens whose typ header
@@ -95,7 +96,16 @@ func NewVerifier(typ string, keys map[string]ed25519.PublicKey) (*Verifier, erro
 			return nil, fmt.Errorf("jws: invalid Ed25519 public key for kid %q", kid)
 		}
 	}
-	return &Verifier{typ: typ, keys: maps.Clone(keys)}, nil
+	return &Verifier{typ: typ, keys: maps.Clone(keys), max: MaxCompactBytes}, nil
+}
+
+// WithMaxBytes returns a copy of v accepting tokens of at most n bytes
+// instead of MaxCompactBytes, for a signed document larger than a token (the
+// Hub index, G0 M23 D100).
+func (v *Verifier) WithMaxBytes(n int) *Verifier {
+	out := *v
+	out.max = n
+	return &out
 }
 
 // header is the only protected header shape we accept. Any other member
@@ -109,7 +119,7 @@ type header struct {
 
 // Verify checks the token and returns its payload and kid.
 func (v *Verifier) Verify(compact string) (payload []byte, kid string, err error) {
-	h, err := parseHeader(compact)
+	h, err := parseHeader(compact, v.max)
 	if err != nil {
 		return nil, "", err
 	}
@@ -165,16 +175,16 @@ func Canonical(compact string) (string, bool) {
 // Unverified returns the kid and typ of a token without verifying it, for
 // routing to the right verifier. Never trust anything else from it.
 func Unverified(compact string) (kid, typ string, err error) {
-	h, err := parseHeader(compact)
+	h, err := parseHeader(compact, MaxCompactBytes)
 	if err != nil {
 		return "", "", err
 	}
 	return h.Kid, h.Typ, nil
 }
 
-func parseHeader(compact string) (header, error) {
+func parseHeader(compact string, maxBytes int) (header, error) {
 	var h header
-	if len(compact) > MaxCompactBytes || strings.ContainsAny(compact, " \t\r\n") || strings.Count(compact, ".") != 2 {
+	if len(compact) > maxBytes || strings.ContainsAny(compact, " \t\r\n") || strings.Count(compact, ".") != 2 {
 		return h, fmt.Errorf("%w: malformed compact serialization", ErrInvalid)
 	}
 	raw, err := base64.RawURLEncoding.Strict().DecodeString(compact[:strings.IndexByte(compact, '.')])

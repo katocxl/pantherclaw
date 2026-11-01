@@ -34,9 +34,16 @@ type OutcomeChange struct {
 // is expanded exposure). A nil base is no policy. It is sample-based
 // (R-25): an empty result does not prove the versions decide alike.
 func (v *Validator) OutcomeDiff(ctx context.Context, org ids.OrgID, base, next *pdomain.Bundle) ([]OutcomeChange, error) {
+	out, _, err := v.OutcomeSample(ctx, org, base, next)
+	return out, err
+}
+
+// OutcomeSample is OutcomeDiff with how many samples both versions decided
+// (G0 M23 D121): a report says how little an empty result rests on.
+func (v *Validator) OutcomeSample(ctx context.Context, org ids.OrgID, base, next *pdomain.Bundle) ([]OutcomeChange, int, error) {
 	in, err := v.read(ctx, org)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	engine := &papp.Engine{Limits: v.limits, Facts: in.catalog, Subjects: in.subjects}
 	compile := func(b *pdomain.Bundle) (*papp.Compiled, error) {
@@ -51,11 +58,11 @@ func (v *Validator) OutcomeDiff(ctx context.Context, org ids.OrgID, base, next *
 	}
 	before, err := compile(base)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	after, err := compile(next)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var rules []pdomain.Rule
 	for _, b := range []*pdomain.Bundle{base, next} {
@@ -66,6 +73,7 @@ func (v *Validator) OutcomeDiff(ctx context.Context, org ids.OrgID, base, next *
 	ds, facts := operations(rules, in)
 	g := &generator{lit: collect(rules), catalog: in.catalog, now: v.now(), budget: v.Budget}
 	var out []OutcomeChange
+	sampled := 0
 	for _, d := range ds {
 		for _, s := range g.samples(d, facts[d.Digest]) {
 			bd, br, okB := decide(ctx, before, s)
@@ -73,6 +81,7 @@ func (v *Validator) OutcomeDiff(ctx context.Context, org ids.OrgID, base, next *
 			if !okB || !okA {
 				continue
 			}
+			sampled++
 			if cat := replay.Classify(bd, ad, br, ar); cat != replay.Unchanged {
 				out = append(out, OutcomeChange{
 					Operation: d.Operation, Example: s.example(), BeforeDecision: bd, BeforeReason: br, AfterDecision: ad, AfterReason: ar, Category: cat,
@@ -80,7 +89,7 @@ func (v *Validator) OutcomeDiff(ctx context.Context, org ids.OrgID, base, next *
 			}
 		}
 	}
-	return out, nil
+	return out, sampled, nil
 }
 
 // decide is the policy's decision and decisive reason on a sample: ALLOW

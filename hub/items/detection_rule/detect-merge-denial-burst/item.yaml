@@ -1,0 +1,39 @@
+name: pc.detect.merge-denial-burst
+version: 1.0.0
+kind: detection_rule
+title: Burst of refused merges in a run
+summary: >-
+  One run had three or more merges refused within ten minutes. An agent
+  retrying a merge it may not make looks like this.
+body:
+  content: |
+    id: org.hub.merge_denial_burst
+    version: "1"
+    title: Burst of refused merges in a run
+    description: >-
+      One run had three or more merges refused within ten minutes. An agent
+      retrying a merge it may not make looks like this.
+    severity: MEDIUM
+    attention: ALERT
+    basis: INFERRED
+    owasp: [ASI02, ASI10]
+    edition: business
+    on: [receipt.decision]
+    match: event.decision in ["DENY", "CANNOT_AUTHORIZE"] && event.operation == "github.pull.merge"
+    window:
+      duration: 10m
+      group_by: [subjects.run]
+      count: 3
+    group: run
+    tests:
+      - name: three refusals
+        fires: true
+        events:
+          - {kind: receipt.decision, decision: DENY, operation: github.pull.merge, subjects: {run: r1}}
+          - {kind: receipt.decision, decision: DENY, operation: github.pull.merge, subjects: {run: r1}, at: 1m}
+          - {kind: receipt.decision, decision: CANNOT_AUTHORIZE, operation: github.pull.merge, subjects: {run: r1}, at: 2m}
+      - name: two refusals
+        fires: false
+        events:
+          - {kind: receipt.decision, decision: DENY, operation: github.pull.merge, subjects: {run: r1}}
+          - {kind: receipt.decision, decision: DENY, operation: github.pull.merge, subjects: {run: r1}, at: 1m}
