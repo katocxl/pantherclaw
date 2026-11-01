@@ -57,7 +57,7 @@ func TestD282_AContainedReadFollowsNoLink(t *testing.T) {
 			t.Error(err)
 		}
 	})()
-	if got := scan.ReadContained(path); got != nil {
+	if got := scan.ReadContained(dir, path); got != nil {
 		t.Fatalf("followed a link: %q", got)
 	}
 }

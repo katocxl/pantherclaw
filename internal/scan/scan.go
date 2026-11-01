@@ -77,6 +77,9 @@ type Options struct {
 	// Contained reads only inside Home and follows no symbolic link there:
 	// the scan of another person's home, as root or SYSTEM (D235).
 	Contained bool
+
+	// root is Home, open for the length of a contained scan (D291).
+	root *os.Root
 }
 
 func key(parts ...string) string {
@@ -100,6 +103,13 @@ func clip(s string) string {
 
 // Run scans and returns the findings, sorted by kind and key.
 func Run(o Options) []Finding {
+	if o.Contained {
+		// Without the root nothing in the home is read; the environment still is.
+		if root, err := os.OpenRoot(o.Home); err == nil {
+			defer func() { _ = root.Close() }()
+			o.root = root
+		}
+	}
 	var out []Finding
 	var read []os.FileInfo
 	for _, c := range clientConfigs(o) {
@@ -215,10 +225,12 @@ var afterCheck = func() {}
 // openRegular opens path and checks the open file, or returns nil: what is
 // read is what was checked, whatever replaces the name meanwhile (G0 M24
 // D254). Opening does not wait, so a FIFO cannot hang the scan.
-func openRegular(path string) *os.File { return openChecked(path, 0) }
+func openRegular(path string) *os.File {
+	return checkedFile(os.OpenFile(path, os.O_RDONLY|openNoWait, 0)) //nolint:gosec // G304: scanning the user's own configuration
+}
 
-func openChecked(path string, flags int) *os.File {
-	f, err := os.OpenFile(path, os.O_RDONLY|openNoWait|flags, 0) //nolint:gosec // G304: scanning the user's own configuration
+// checkedFile keeps a file just opened if it is regular and within MaxFileSize.
+func checkedFile(f *os.File, err error) *os.File {
 	if err != nil {
 		return nil
 	}
@@ -247,8 +259,10 @@ var afterLstat = func() {}
 // readContained is readFile for a scan of another person's home: that person
 // can swap the file between Options.allowed and the open, so the file opened
 // must be the regular file that was looked at, and never a link (G0 M24 D282).
-func readContained(path string) []byte {
-	before, err := os.Lstat(path)
+// root is the home and rel the path inside it: root refuses a path that leaves
+// it, whatever a parent directory has become (D291).
+func readContained(root *os.Root, rel string) []byte {
+	before, err := root.Lstat(rel)
 	if err != nil || !before.Mode().IsRegular() {
 		return nil
 	}
@@ -256,7 +270,7 @@ func readContained(path string) []byte {
 	// take it now, or it would describe whatever replaced the file.
 	os.SameFile(before, before)
 	afterLstat()
-	f := openChecked(path, openNoFollow)
+	f := checkedFile(root.OpenFile(rel, os.O_RDONLY|openNoWait, 0))
 	if f == nil {
 		return nil
 	}
@@ -267,17 +281,20 @@ func readContained(path string) []byte {
 	return readOpen(f)
 }
 
-// reader is how the scan reads a configuration file. A contained read stays
-// inside the home, with no link in any part of the path (G0 M24 D287).
+// reader is how the scan reads a configuration file. A contained read first
+// checks that no part of the path is a link (G0 M24 D287), then opens the file
+// through the home's os.Root, so a parent swapped after that check cannot take
+// the read out of the home (D291).
 func (o Options) reader() func(string) []byte {
 	if !o.Contained {
 		return readFile
 	}
 	return func(path string) []byte {
-		if !o.allowed(path) {
+		rel, err := filepath.Rel(o.Home, path)
+		if o.root == nil || err != nil || !o.allowed(path) {
 			return nil
 		}
-		return readContained(path)
+		return readContained(o.root, rel)
 	}
 }
 

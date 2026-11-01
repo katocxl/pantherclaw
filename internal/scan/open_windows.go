@@ -8,6 +8,4 @@ package scan
 const (
 	// openNoWait is empty here: opening a file never waits on Windows.
 	openNoWait = 0
-	// openNoFollow is empty here: os.SameFile catches a link in readContained.
-	openNoFollow = 0
 )

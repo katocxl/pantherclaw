@@ -242,6 +242,9 @@ func TestTildeHome(t *testing.T) {
 		"file://localhost/Users/x/y":        "file://localhost~/y",
 		"file:///C:/Users/x/y":              "file:///~/y",
 		"see /mnt/d/users/x":                "see ~",
+		"/mnt/c/Users/John Smith":           "~",
+		"/mnt/c/Users/John Smith/x":         "~/x",
+		"/mnt/c/Users/a b /mnt/c/Users/c d": "~ ~",
 		"/data/var/home/x":                  "/data/var/home/x",
 		"python":                            "python",
 	} {
@@ -310,22 +313,23 @@ func TestD249_WhoCanReplaceTheBinary(t *testing.T) {
 	if unixBinaryProtected("pclaw", stat(safe)) {
 		t.Error("a relative path passed")
 	}
-	roots := windowsBinaryRoots(`C:\Program Files`, `C:\Program Files (x86)`, `C:\Windows`)
 	for exe, want := range map[string]bool{
-		`C:\Program Files\PantherClaw\pclaw.exe`: true,
-		`C:\Program Files (x86)\pc\pclaw.exe`:    true,
-		`c:\windows\system32\pclaw.exe`:          true,
-		`C:\Windows\Tasks\pclaw.exe`:             false,
-		`C:\Windows\pclaw.exe`:                   false,
-		`C:\Program Files Extra\pclaw.exe`:       false,
-		`C:\Users\jo\pclaw.exe`:                  false,
-		`C:\Program Files\..\Users\pclaw.exe`:    false,
+		`C:\Program Files\PantherClaw\pclaw.exe`:            true,
+		`C:\Program Files (x86)\pc\pclaw.exe`:               true,
+		`C:\Program Files\pc\bin\x64\pclaw.exe`:             true,
+		`c:\windows\system32\pclaw.exe`:                     true,
+		`C:\Windows\System32\spool\drivers\color\pclaw.exe`: false,
+		`C:\Windows\Tasks\pclaw.exe`:                        false,
+		`C:\Windows\pclaw.exe`:                              false,
+		`C:\Program Files Extra\pclaw.exe`:                  false,
+		`C:\Users\jo\pclaw.exe`:                             false,
+		`C:\Program Files\..\Users\pclaw.exe`:               false,
 	} {
-		if got := windowsBinaryProtected(exe, roots...); got != want {
+		if got := windowsBinaryProtected(exe, `C:\Program Files`, `C:\Program Files (x86)`, `C:\Windows`); got != want {
 			t.Errorf("%s = %v", exe, got)
 		}
 	}
-	if windowsBinaryProtected(`C:\x\pclaw.exe`, windowsBinaryRoots("", "", "")...) {
+	if windowsBinaryProtected(`C:\x\pclaw.exe`, "", "", "") {
 		t.Error("an empty root passed")
 	}
 }

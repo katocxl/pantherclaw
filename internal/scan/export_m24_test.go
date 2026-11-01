@@ -3,11 +3,27 @@
 
 package scan
 
+import (
+	"os"
+	"path/filepath"
+)
+
 // ReadFile is readFile for tests.
 var ReadFile = readFile
 
-// ReadContained is readContained for tests.
-var ReadContained = readContained
+// ReadContained is readContained for tests, with home as the root.
+func ReadContained(home, path string) []byte {
+	root, err := os.OpenRoot(home)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = root.Close() }()
+	rel, err := filepath.Rel(home, path)
+	if err != nil {
+		return nil
+	}
+	return readContained(root, rel)
+}
 
 // SetAfterLstat runs f between a contained read's Lstat and its open, and
 // returns what restores the seam.

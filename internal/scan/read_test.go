@@ -48,7 +48,7 @@ func TestD282_AContainedReadRefusesASwappedFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := scan.ReadContained(path); string(got) != `{}` {
+	if got := scan.ReadContained(filepath.Dir(path), path); string(got) != `{}` {
 		t.Fatalf("an untouched file: %q", got)
 	}
 	defer scan.SetAfterLstat(func() {
@@ -59,8 +59,31 @@ func TestD282_AContainedReadRefusesASwappedFile(t *testing.T) {
 			t.Error(err)
 		}
 	})()
-	if got := scan.ReadContained(path); got != nil {
+	if got := scan.ReadContained(filepath.Dir(path), path); got != nil {
 		t.Fatalf("read the swapped file: %q", got)
+	}
+}
+
+// TestD291_AContainedReadStaysInTheHome: a parent directory swapped for a link
+// once the path was allowed cannot take the read out of the home.
+// Covers: F886
+func TestD291_AContainedReadStaysInTheHome(t *testing.T) {
+	root := t.TempDir()
+	home, outside := filepath.Join(root, "home"), filepath.Join(root, "outside")
+	path := filepath.Join(home, ".claude", "settings.json")
+	write(t, path, `{}`)
+	write(t, filepath.Join(outside, "settings.json"), `{"secret":1}`)
+	if got := scan.ReadContained(home, path); string(got) != `{}` {
+		t.Fatalf("a file in the home: %q", got)
+	}
+	if err := os.Rename(filepath.Dir(path), filepath.Join(home, "old")); err != nil {
+		t.Fatal(err)
+	}
+	if err := dirLink(filepath.Dir(path), outside); err != nil {
+		t.Skipf("no directory links here: %v", err)
+	}
+	if got := scan.ReadContained(home, path); got != nil {
+		t.Fatalf("left the home: %q", got)
 	}
 }
 

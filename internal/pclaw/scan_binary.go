@@ -50,36 +50,36 @@ func unixBinaryProtected(exe string, stat func(string) (uid uint32, mode fs.File
 	}
 }
 
-// windowsBinaryRoots are the directories only an admin writes to (G0 M24
-// D282). %SystemRoot% as a whole is not one: people may write to
-// %SystemRoot%\Tasks.
-func windowsBinaryRoots(programFiles, programFilesX86, systemRoot string) []string {
-	roots := []string{programFiles, programFilesX86}
-	if systemRoot != "" {
-		roots = append(roots, strings.TrimRight(systemRoot, `\/`)+`\System32`)
-	}
-	return roots
-}
-
-// windowsBinaryProtected reports whether exe is under one of roots, the
-// directories only an admin writes to.
-func windowsBinaryProtected(exe string, roots ...string) bool {
+// windowsBinaryProtected reports whether only an admin can replace exe: it is
+// under %ProgramFiles% or %ProgramFiles(x86)%, or directly in System32 (G0 M24
+// D282, D292). %SystemRoot% as a whole does not count, people may write to
+// %SystemRoot%\Tasks, and nor does all of System32: they may write to
+// System32\spool\drivers\color.
+func windowsBinaryProtected(exe, programFiles, programFilesX86, systemRoot string) bool {
 	clean := func(s string) string { return strings.ToLower(strings.TrimRight(strings.ReplaceAll(s, "/", `\`), `\`)) }
 	exe = clean(exe)
 	if strings.Contains(exe, `\..\`) {
 		return false
 	}
-	return slices.ContainsFunc(roots, func(root string) bool {
+	if slices.ContainsFunc([]string{programFiles, programFilesX86}, func(root string) bool {
 		return root != "" && strings.HasPrefix(exe, clean(root)+`\`)
-	})
+	}) {
+		return true
+	}
+	if systemRoot == "" {
+		return false
+	}
+	name, in := strings.CutPrefix(exe, clean(systemRoot)+`\system32\`)
+	return in && !strings.Contains(name, `\`)
 }
 
 // Paths under a home that another machine's rules also recognize, anywhere in
 // a value: /home/x, /var/home/x, /Users/x, /mnt/<drive>/Users/x, C:\Users\x,
-// and each as a file:// URL (D282).
+// and each as a file:// URL (D282). A name under /mnt/<drive>/Users is a Windows
+// name, so it runs to the next / with any spaces in it (D293).
 var (
 	windowsHome = regexp.MustCompile(`(?i)\b[a-z]:[\\/]users[\\/][^\\/]+`)
-	unixHome    = regexp.MustCompile(`(?i)(^|[\s:=,"'(]|file://(?:localhost)?)(?:/mnt/[a-z]|/var)?/(?:home|users)/[^/\s]+`)
+	unixHome    = regexp.MustCompile(`(?i)(^|[\s:=,"'(]|file://(?:localhost)?)(?:/mnt/[a-z]/users/[^/]*[^/\s]|(?:/mnt/[a-z]|/var)?/(?:home|users)/[^/\s]+)`)
 )
 
 // tildeHome replaces a home directory in v with ~: one of homes at its start,
