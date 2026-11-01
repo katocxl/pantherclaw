@@ -198,7 +198,7 @@ func Check(t Tool, k Known) Result {
 // unavailable is the schema_unavailable check: a field left out at a size limit
 // was not checked, so it never passes by silence (D240, D270).
 func unavailable(t Tool) *Flag {
-	note := ""
+	var note string
 	switch {
 	case t.SchemaOmitted && t.ExtraCut:
 		note = "The input schema and another listed field did not fit and were not checked."

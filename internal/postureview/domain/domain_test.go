@@ -14,6 +14,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/posture/domain"
 	"github.com/katocxl/pantherclaw/internal/postureview/domain"
+	scdomain "github.com/katocxl/pantherclaw/internal/supplychain/domain"
 )
 
 var now = time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
@@ -115,6 +116,11 @@ func TestOWASPValuesAreKnown(t *testing.T) {
 			t.Errorf("posture kind %s is not mapped", k)
 		}
 	}
+	for _, k := range scdomain.Kinds() {
+		if len(domain.OWASP(string(k))) == 0 {
+			t.Errorf("supply-chain kind %s is not mapped", k)
+		}
+	}
 	if got := domain.OWASP("identity.ci_workload"); !slices.Equal(got, []string{"ASI03"}) {
 		t.Errorf("identity recommendation: %v", got)
 	}
@@ -166,6 +172,13 @@ func TestD258_FixWithoutRemediation(t *testing.T) {
 		f := domain.PostureFix(string(k), "grant:x", "id")
 		if got := f.WithoutRemediation(); got != f {
 			t.Errorf("%s changed: %+v", k, got)
+		}
+	}
+	// What the supply-chain and catalog sources point at, served on Team (D263).
+	for _, target := range []string{"connection_inventory:x", "package_version:x", "connection:x", "discovery:x"} {
+		f := domain.Fix{Kind: domain.FixReviewTool, TargetID: target, Label: "L"}
+		if got := f.WithoutRemediation(); got != f {
+			t.Errorf("%s changed: %+v", target, got)
 		}
 	}
 	for _, f := range []domain.Fix{

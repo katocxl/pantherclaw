@@ -36,6 +36,7 @@ var owaspByKind = map[string][]string{
 	"overbroad_schema":   {"ASI02"},
 	"rug_pull":           {"ASI04"},
 	"provenance_unknown": {"ASI04"},
+	"schema_unavailable": {"ASI04"},
 	KindUnapprovedServer: {"ASI04"},
 }
 

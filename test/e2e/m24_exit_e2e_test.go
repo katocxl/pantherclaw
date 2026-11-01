@@ -35,8 +35,10 @@ import (
 // TestE2E_M24_PostureAndSupplyChain is M24's exit journey (G0 M24 D207). The
 // stack's server answers the ranked queue and its trends; on the stack's
 // database a finding shows with its fix, and a rescan after the fix clears
-// it, because a finding clears when its source clears.
-// Covers: F860, F861, F862, F866
+// it, because a finding clears when its source clears. A poisoned tool is
+// flagged in review, a person revokes a server across its connections, and a
+// second person lifts it.
+// Covers: F860, F861, F862, F866, F869, F875, F876, F879
 func TestE2E_M24_PostureAndSupplyChain(t *testing.T) {
 	p := inProcessIdP(t)
 	s := start(t, options{budget: "1000.00", billing: true, people: &p})
@@ -44,6 +46,8 @@ func TestE2E_M24_PostureAndSupplyChain(t *testing.T) {
 	t.Run("the queue answers through the server", func(t *testing.T) { s.m24Server(t, p) })
 	o := exposuretest.NewIn(t, s.db, s.pool)
 	t.Run("a finding, its fix, and a rescan clearing it", func(t *testing.T) { m24FixClears(t, o) })
+	supply := exposuretest.NewIn(t, s.db, s.pool)
+	t.Run("a poisoned tool flagged, a server revoked, a lift by a second person", func(t *testing.T) { m24SupplyChain(t, supply) })
 }
 
 // m24Server: each procedure refuses an anonymous caller, where an unmounted
@@ -59,7 +63,7 @@ func (s *stack) m24Server(t *testing.T, p idp) {
 			t.Fatal(err)
 		}
 		r.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(r)
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(r)
 		if err != nil {
 			t.Fatal(err)
 		}
