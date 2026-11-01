@@ -532,16 +532,22 @@ func TestT205_LongLivedEntraTokens(t *testing.T) {
 	agent := w.agent(t, adomain.ContextService)
 	w.activeEntry(t, agent, app.Binding{AzureMI: &issuers.AzureMIBinding{TenantID: azTenant, AppID: azApp, ObjectID: azObject}}, true)
 	stolen := azAtt(time.Now().Add(-time.Hour), nil)
+	// The window is stamped by the service's clock, which is this process's;
+	// accepted_at is the database's, so comparing the two races their skew.
+	// The microsecond truncation matches what the column stores.
+	before := time.Now().Truncate(time.Microsecond)
 	if _, err := w.attestEnroll(t, w.svc, newWorkload(), "", stolen); err != nil {
 		t.Fatal(err)
 	}
+	after := time.Now()
 	// Replayed by the thief from another key: refused for the rest of
 	// the token's day.
 	_, err := w.attestEnroll(t, w.svc, newWorkload(), "", stolen)
 	wantPAP(t, "replayed token", err, pap.CodeInvalidToken)
+	// The hour starts at the attestation, not at the token's iat.
 	if n := w.count(t, `SELECT count(*) FROM pc.attestations WHERE org_id = $1
-		AND expires_at <= accepted_at + interval '1 hour' AND expires_at <= issued_at + interval '1 hour'`, w.org); n != 1 {
-		t.Errorf("%d attestations bounded by an hour, want 1", n)
+		AND issued_at BETWEEN $2 AND $3 AND expires_at <= issued_at + interval '1 hour'`, w.org, before, after); n != 1 {
+		t.Errorf("%d attestations bounded by an hour from the attestation, want 1", n)
 	}
 
 	// Another org, even with the same tenant and app pinned in its own
