@@ -160,7 +160,11 @@ func (h *Handler) ListRanges(ctx context.Context, r *pantherclawv1.ListRangesReq
 	}
 	out := &pantherclawv1.ListRangesResponse{NextPageToken: p.Next}
 	for _, rg := range p.Items {
-		out.Ranges = append(out.Ranges, rangePB(rg, domain.Counts{}))
+		pb := rangePB(rg, p.Counts[rg.ID])
+		if _, stored := p.Counts[rg.ID]; !stored {
+			pb.Counts = nil // "not collected", not zero
+		}
+		out.Ranges = append(out.Ranges, pb)
 	}
 	return out, nil
 }
