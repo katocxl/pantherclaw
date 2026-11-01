@@ -86,6 +86,7 @@ type (
 		Body       jsontext.Value `json:"body,omitempty"`
 		Instance   string         `json:"instance,omitempty"`
 		Concurrent int            `json:"concurrent,omitempty"`
+		RetryOn    string         `json:"retry_on,omitempty"`
 		ActionOf   string         `json:"action_of,omitempty"`
 		Fault      string         `json:"fault,omitempty"`
 	}
@@ -508,6 +509,9 @@ func (w *callWith) validate(top bool, earlier map[string]bool) error {
 	}
 	if w.Concurrent != 0 && (w.Concurrent < 2 || w.Concurrent > MaxConcurrent) {
 		return fmt.Errorf("concurrent must be 2..%d", MaxConcurrent)
+	}
+	if w.RetryOn != "" && (w.RetryOn != RetryBudgetBusy || w.Concurrent == 0) {
+		return fmt.Errorf("retry_on must be %s and only with concurrent", RetryBudgetBusy)
 	}
 	if w.ActionOf != "" {
 		if err := needEarlier("action_of", w.ActionOf, earlier); err != nil {

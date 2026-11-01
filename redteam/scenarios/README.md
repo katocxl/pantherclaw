@@ -31,6 +31,7 @@ Values saved with `save:` (for example `pr` and `head` from the pull request a s
 
 - `agent.call` with `action_of` is sent under that step's action id (where the agent chooses it).
 - `concurrent: N` sends N calls at once, `${n}` is 1..N; `max_allow` bounds how many may be ALLOW.
+- `retry_on: BUDGET_BUSY` (only with `concurrent`) sends a call again, a bounded number of times, while the answer is BUDGET_BUSY, as an agent may: such a call reserved nothing. Each call's last answer is what the expectation judges.
 - Object ids come from `save` or generated fixtures, never literals; the driver types a numeric string (`pullNumber`) as an integer for MCP tools.
 - `person.approve` approves with every role the hold needs (`as: approver`); `launcher` and `developer` are the persons who must be refused.
 - `server.read` with `org: other` reads an id of that kind that exists in the second organisation.

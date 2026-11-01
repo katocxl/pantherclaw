@@ -357,6 +357,7 @@ type callWith struct {
 	Body       jsontext.Value `json:"body"`
 	Instance   string         `json:"instance"`
 	Concurrent int            `json:"concurrent"`
+	RetryOn    string         `json:"retry_on"`
 	ActionOf   string         `json:"action_of"`
 	Fault      string         `json:"fault"`
 	// run is the run the call is made in; empty is the seeded one.
@@ -379,7 +380,7 @@ func (d *rangeDriver) agentCall(ctx context.Context, st domain.Step, _ map[strin
 	return obs, nil
 }
 
-func (d *rangeDriver) concurrent(_ context.Context, st domain.Step, w callWith) (domain.Observation, error) {
+func (d *rangeDriver) concurrent(ctx context.Context, st domain.Step, w callWith) (domain.Observation, error) {
 	each := make([]domain.Observation, w.Concurrent)
 	errs := make([]error, w.Concurrent)
 	var wg sync.WaitGroup
@@ -391,7 +392,10 @@ func (d *rangeDriver) concurrent(_ context.Context, st domain.Step, w callWith) 
 				errs[i] = err
 				return
 			}
-			each[i], _, errs[i] = d.callOnce(one, raw, i+1)
+			each[i], errs[i] = app.Resubmit(ctx, w.RetryOn, func(int) (domain.Observation, error) {
+				o, _, err := d.callOnce(one, raw, i+1)
+				return o, err
+			})
 		})
 	}
 	wg.Wait()

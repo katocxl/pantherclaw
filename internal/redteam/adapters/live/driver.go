@@ -240,6 +240,7 @@ type callWith struct {
 	Body       jsontext.Value `json:"body"`
 	Instance   string         `json:"instance"`
 	Concurrent int            `json:"concurrent"`
+	RetryOn    string         `json:"retry_on"`
 	ActionOf   string         `json:"action_of"`
 	Fault      string         `json:"fault"`
 	// run overrides the run of the call (a child run).
@@ -300,7 +301,11 @@ func (d *Driver) agentCall(ctx context.Context, s domain.Scenario, st domain.Ste
 				errs[i] = err
 				return
 			}
-			each[i], _, errs[i] = d.one(ctx, s, st.ID, i+1, wi)
+			each[i], errs[i] = app.Resubmit(ctx, w.RetryOn, func(attempt int) (domain.Observation, error) {
+				// A resubmit is a new call: another number keeps its id unique.
+				o, _, err := d.one(ctx, s, st.ID, i+1+attempt*w.Concurrent, wi)
+				return o, err
+			})
 		}()
 	}
 	wg.Wait()
