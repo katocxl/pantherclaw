@@ -4,6 +4,7 @@
 package pclaw
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -36,28 +37,47 @@ var (
 // first 16 hex digits of SHA-256 over the machine id and a local salt, so the
 // id means nothing off this machine.
 func deviceScope(env Env) (string, error) {
+	s, _, err := deviceIdentity(env)
+	return s, err
+}
+
+// deviceIdentity is the machine's scope and its salt.
+func deviceIdentity(env Env) (string, []byte, error) {
 	id, err := machineID()
 	if err != nil {
-		return "", fmt.Errorf("pclaw: reading the machine id: %w", err)
+		id = "" // The salt alone tells this machine apart.
 	}
-	salt, err := deviceSalt(env)
+	salt, err := deviceSalt(env, id)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	h := sha256.New()
 	h.Write([]byte("pantherclaw device scope v1\x00"))
 	h.Write(salt)
 	h.Write([]byte{0})
 	h.Write([]byte(id))
-	return "device:" + hex.EncodeToString(h.Sum(nil))[:16], nil
+	return "device:" + hex.EncodeToString(h.Sum(nil))[:16], salt, nil
 }
 
-// deviceSalt reads the local salt, creating it on first use. It lives in a
-// machine-wide directory when it can, so a run as SYSTEM or root and a
-// person's run give one device id (D251), and in the pclaw configuration
-// directory otherwise. It says nothing without the machine id, so everyone on
-// the machine may read it.
-func deviceSalt(env Env) ([]byte, error) {
+// deviceKey is a finding's key as a device scan sends it: the raw key is a
+// plain hash of the host and full path, so it stays here (G0 M24 D282).
+func deviceKey(salt []byte, key string) string {
+	mac := hmac.New(sha256.New, salt)
+	mac.Write([]byte("pantherclaw device finding key v1\x00"))
+	mac.Write([]byte(key))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// deviceSalt derives the salt from the machine's own id, which only an admin
+// can change, so a person cannot move SYSTEM's scope and every account agrees
+// (D251, D283). A cloned image that keeps its id shares its scope. With no
+// readable id, the salt is a file: in a machine-wide directory when it can be,
+// otherwise in the pclaw configuration directory.
+func deviceSalt(env Env, id string) ([]byte, error) {
+	if id != "" {
+		sum := sha256.Sum256([]byte("pantherclaw device salt v1\x00" + id))
+		return sum[:], nil
+	}
 	if dir := machineSaltDir(); dir != "" {
 		if salt, err := readSalt(filepath.Join(dir, "device-salt"), 0o755, 0o644); err == nil {
 			return salt, nil

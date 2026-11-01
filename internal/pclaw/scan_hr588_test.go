@@ -207,15 +207,12 @@ func TestScanDeviceScope(t *testing.T) {
 	if err != nil || again != first {
 		t.Fatalf("second read = %q, %v; want %q", again, err, first)
 	}
-	other, err := deviceScope(func(k string) (string, bool) {
-		if k == "PANTHERCLAW_CONFIG_DIR" {
-			return t.TempDir(), true
-		}
-		return "", false
-	})
+	machineID = func() (string, error) { return "machine-5678", nil }
+	other, err := deviceScope(env)
 	if err != nil || other == first {
-		t.Fatalf("another salt = %q, %v", other, err)
+		t.Fatalf("another machine = %q, %v", other, err)
 	}
+	machineID = func() (string, error) { return "machine-1234", nil }
 	for _, args := range [][]string{{"scan", "--device"}, {"scan", "--submit", "--device", "--scope", "x"}, {"scan", "--submit", "--device", "--complete"}} {
 		if code, out, errs := run(t, env, args...); code == 0 {
 			t.Errorf("%v = %d %q %q", args, code, out, errs)

@@ -7,5 +7,9 @@ package scan
 
 import "syscall"
 
-// openNoWait keeps open from waiting for a FIFO's other end.
-const openNoWait = syscall.O_NONBLOCK
+const (
+	// openNoWait keeps open from waiting for a FIFO's other end.
+	openNoWait = syscall.O_NONBLOCK
+	// openNoFollow refuses a link in the path's last part.
+	openNoFollow = syscall.O_NOFOLLOW
+)

@@ -50,6 +50,17 @@ func unixBinaryProtected(exe string, stat func(string) (uid uint32, mode fs.File
 	}
 }
 
+// windowsBinaryRoots are the directories only an admin writes to (G0 M24
+// D282). %SystemRoot% as a whole is not one: people may write to
+// %SystemRoot%\Tasks.
+func windowsBinaryRoots(programFiles, programFilesX86, systemRoot string) []string {
+	roots := []string{programFiles, programFilesX86}
+	if systemRoot != "" {
+		roots = append(roots, strings.TrimRight(systemRoot, `\/`)+`\System32`)
+	}
+	return roots
+}
+
 // windowsBinaryProtected reports whether exe is under one of roots, the
 // directories only an admin writes to.
 func windowsBinaryProtected(exe string, roots ...string) bool {
@@ -63,10 +74,12 @@ func windowsBinaryProtected(exe string, roots ...string) bool {
 	})
 }
 
-// Paths under a home that another machine's rules also recognize.
+// Paths under a home that another machine's rules also recognize, anywhere in
+// a value: /home/x, /var/home/x, /Users/x, /mnt/<drive>/Users/x, C:\Users\x,
+// and each as a file:// URL (D282).
 var (
 	windowsHome = regexp.MustCompile(`(?i)\b[a-z]:[\\/]users[\\/][^\\/]+`)
-	unixHome    = regexp.MustCompile(`(^|[\s:=,"'(])/(?:home|Users)/[^/\s]+`)
+	unixHome    = regexp.MustCompile(`(?i)(^|[\s:=,"'(]|file://(?:localhost)?)(?:/mnt/[a-z]|/var)?/(?:home|users)/[^/\s]+`)
 )
 
 // tildeHome replaces a home directory in v with ~: one of homes at its start,
@@ -83,6 +96,27 @@ func tildeHome(v string, homes []string) string {
 	}
 	v = windowsHome.ReplaceAllString(v, "~")
 	return unixHome.ReplaceAllString(v, "${1}~")
+}
+
+// machineIDFromFiles is the first non-empty id among paths.
+func machineIDFromFiles(paths ...string) (string, error) {
+	for _, p := range paths {
+		if b, err := os.ReadFile(p); err == nil && strings.TrimSpace(string(b)) != "" { //nolint:gosec // G304: fixed paths
+			return strings.TrimSpace(string(b)), nil
+		}
+	}
+	return "", errors.New("no machine id")
+}
+
+var ioPlatformUUID = regexp.MustCompile(`"IOPlatformUUID"\s*=\s*"([0-9A-Fa-f-]{36})"`)
+
+// parseIOPlatformUUID finds the hardware UUID in ioreg's output.
+func parseIOPlatformUUID(out []byte) (string, error) {
+	m := ioPlatformUUID.FindSubmatch(out)
+	if m == nil {
+		return "", errors.New("no IOPlatformUUID")
+	}
+	return string(m[1]), nil
 }
 
 // envWith is env with the non-empty settings on top.

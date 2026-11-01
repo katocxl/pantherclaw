@@ -6,6 +6,7 @@
 package scan_test
 
 import (
+	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -31,5 +32,29 @@ func TestD254_AFIFODoesNotHangTheScan(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the scan waits on a FIFO")
+	}
+}
+
+// TestD282_AContainedReadFollowsNoLink: a link put in place after the Lstat is
+// refused at the open.
+// Covers: F886
+func TestD282_AContainedReadFollowsNoLink(t *testing.T) {
+	dir := t.TempDir()
+	path, secret := filepath.Join(dir, "settings.json"), filepath.Join(dir, "secret")
+	for _, p := range []string{path, secret} {
+		if err := os.WriteFile(p, []byte(`{}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer scan.SetAfterLstat(func() {
+		if err := os.Remove(path); err != nil {
+			t.Error(err)
+		}
+		if err := os.Symlink(secret, path); err != nil {
+			t.Error(err)
+		}
+	})()
+	if got := scan.ReadContained(path); got != nil {
+		t.Fatalf("followed a link: %q", got)
 	}
 }

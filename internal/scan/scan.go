@@ -113,14 +113,14 @@ func Run(o Options) []Finding {
 			continue
 		}
 		read = append(read, info)
-		out = append(out, mcpFindings(o.Host, c.client, c.path, c.servers)...)
+		out = append(out, mcpFindings(o.Host, c.client, c.path, c.servers, o.reader())...)
 	}
 	for _, p := range o.Paths {
 		out = append(out, projects(o, p)...)
 	}
 	for _, path := range hookFiles(o) {
 		if o.allowed(path) {
-			out = append(out, hookFindings(o.Host, path)...)
+			out = append(out, hookFindings(o.Host, path, o.reader())...)
 		}
 	}
 	for _, dir := range skillDirs(o) {
@@ -213,8 +213,10 @@ var afterCheck = func() {}
 // openRegular opens path and checks the open file, or returns nil: what is
 // read is what was checked, whatever replaces the name meanwhile (G0 M24
 // D254). Opening does not wait, so a FIFO cannot hang the scan.
-func openRegular(path string) *os.File {
-	f, err := os.OpenFile(path, os.O_RDONLY|openNoWait, 0) //nolint:gosec // G304: scanning the user's own configuration
+func openRegular(path string) *os.File { return openChecked(path, 0) }
+
+func openChecked(path string, flags int) *os.File {
+	f, err := os.OpenFile(path, os.O_RDONLY|openNoWait|flags, 0) //nolint:gosec // G304: scanning the user's own configuration
 	if err != nil {
 		return nil
 	}
@@ -233,6 +235,45 @@ func readFile(path string) []byte {
 		return nil
 	}
 	defer func() { _ = f.Close() }()
+	return readOpen(f)
+}
+
+// afterLstat runs between a contained read's Lstat and its open; tests
+// replace it.
+var afterLstat = func() {}
+
+// readContained is readFile for a scan of another person's home: that person
+// can swap the file between Options.allowed and the open, so the file opened
+// must be the regular file that was looked at, and never a link (G0 M24 D282).
+func readContained(path string) []byte {
+	before, err := os.Lstat(path)
+	if err != nil || !before.Mode().IsRegular() {
+		return nil
+	}
+	// On Windows a FileInfo reads its file id by path at the first SameFile, so
+	// take it now, or it would describe whatever replaced the file.
+	os.SameFile(before, before)
+	afterLstat()
+	f := openChecked(path, openNoFollow)
+	if f == nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	if info, err := f.Stat(); err != nil || !os.SameFile(before, info) {
+		return nil
+	}
+	return readOpen(f)
+}
+
+// reader is how the scan reads a configuration file.
+func (o Options) reader() func(string) []byte {
+	if o.Contained {
+		return readContained
+	}
+	return readFile
+}
+
+func readOpen(f *os.File) []byte {
 	afterCheck()
 	b, err := io.ReadAll(io.LimitReader(f, MaxFileSize+1))
 	if err != nil || len(b) > MaxFileSize {
@@ -243,8 +284,9 @@ func readFile(path string) []byte {
 
 // readConfig reads a JSON, JSONC, TOML (Codex) or JetBrains XML file into
 // an object; anything else is skipped.
-func readConfig(path string) map[string]any {
-	b := readFile(path)
+func readConfig(path string) map[string]any { return configOf(path, readFile(path)) }
+
+func configOf(path string, b []byte) map[string]any {
 	if b == nil {
 		return nil
 	}
@@ -325,8 +367,8 @@ func member(v map[string]any, path []string) map[string]any {
 	return v
 }
 
-func mcpFindings(host, client, path string, serversAt []string) []Finding {
-	doc := readConfig(path)
+func mcpFindings(host, client, path string, serversAt []string, read func(string) []byte) []Finding {
+	doc := configOf(path, read(path))
 	if doc == nil {
 		return nil
 	}

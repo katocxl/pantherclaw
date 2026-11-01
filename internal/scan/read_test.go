@@ -38,3 +38,27 @@ func TestD254_ADirectoryIsNotRead(t *testing.T) {
 		t.Fatalf("read %q", got)
 	}
 }
+
+// TestD282_AContainedReadRefusesASwappedFile: a file replaced after it was
+// looked at is not read, in another person's home.
+// Covers: F886
+func TestD282_AContainedReadRefusesASwappedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := scan.ReadContained(path); string(got) != `{}` {
+		t.Fatalf("an untouched file: %q", got)
+	}
+	defer scan.SetAfterLstat(func() {
+		if err := os.Remove(path); err != nil {
+			t.Error(err)
+		}
+		if err := os.WriteFile(path, []byte(`{"swapped":1}`), 0o600); err != nil {
+			t.Error(err)
+		}
+	})()
+	if got := scan.ReadContained(path); got != nil {
+		t.Fatalf("read the swapped file: %q", got)
+	}
+}

@@ -4,6 +4,7 @@
 package pclaw
 
 import (
+	"bytes"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -33,6 +34,13 @@ func TestD248_AWindowsTaskCarriesItsSettingsAsFlags(t *testing.T) {
 	}
 	if strings.Contains(cmd, "--api-key") {
 		t.Errorf("a key in the task: %q", cmd)
+	}
+	s.env["PANTHERCLAW_CONFIG_DIR"] = `C:\pc\`
+	if spec, err = s.spec(); err != nil {
+		t.Fatal(err)
+	}
+	if cmd := strings.Join(spec.install[0], " "); !strings.Contains(cmd, `--config-dir "C:\pc\\"`) {
+		t.Errorf("a trailing backslash escapes the closing quote: %q", cmd)
 	}
 	s.env["PANTHERCLAW_SERVER"] = `https://x" /RU "attacker`
 	if _, err := s.spec(); err == nil {
@@ -85,12 +93,88 @@ func configDir(dir string) Env {
 	}
 }
 
-// TestD251_SystemAndAUserGetOneDeviceID: two accounts with their own config
-// directories agree through the machine-wide salt; with none, each keeps its
-// own.
+// TestD283_TheMachinesIDIsTheSalt: two accounts agree with nothing on disk,
+// and a person who can write a directory cannot move the scope.
 // Covers: F885
-func TestD251_SystemAndAUserGetOneDeviceID(t *testing.T) {
+func TestD283_TheMachinesIDIsTheSalt(t *testing.T) {
+	dir := t.TempDir()
+	saltDirs(t, dir)
+	first, salt, err := deviceIdentity(configDir(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTree(t, dir, map[string]string{"device-salt": strings.Repeat("ab", 32) + "\n"})
+	second, again, err := deviceIdentity(configDir(t.TempDir()))
+	if err != nil || second != first || !bytes.Equal(salt, again) {
+		t.Fatalf("a planted salt moved the scope: %q, %q, %v", first, second, err)
+	}
+	machineID = func() (string, error) { return "machine-5678", nil }
+	if other, _, err := deviceIdentity(configDir(t.TempDir())); err != nil || other == first {
+		t.Fatalf("another machine: %q, %v", other, err)
+	}
+}
+
+// TestD283_TheMachineIDIsReadFromItsFile uses sample files for the sources a
+// Windows host does not have.
+// Covers: F885
+func TestD283_TheMachineIDIsReadFromItsFile(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{"empty": "  \n", "machine-id": "0123abcd\n"})
+	got, err := machineIDFromFiles(filepath.Join(dir, "gone"), filepath.Join(dir, "empty"), filepath.Join(dir, "machine-id"))
+	if err != nil || got != "0123abcd" {
+		t.Fatalf("%q, %v", got, err)
+	}
+	if _, err := machineIDFromFiles(filepath.Join(dir, "gone")); err == nil {
+		t.Error("no id, no error")
+	}
+	sample := `+-o J316sAP  <class IOPlatformExpertDevice>
+    {
+      "IOPlatformUUID" = "12345678-ABCD-4321-9876-0123456789AB"
+    }`
+	if got, err := parseIOPlatformUUID([]byte(sample)); err != nil || got != "12345678-ABCD-4321-9876-0123456789AB" {
+		t.Fatalf("%q, %v", got, err)
+	}
+	if _, err := parseIOPlatformUUID([]byte("nothing")); err == nil {
+		t.Error("no UUID, no error")
+	}
+}
+
+// TestD282_ADeviceScanKeepsItsRawKey: a device scan's key is keyed with the
+// salt, stable on the machine and different on another.
+// Covers: F885
+func TestD282_ADeviceScanKeepsItsRawKey(t *testing.T) {
 	saltDirs(t, t.TempDir())
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{".mcp.json": `{"mcpServers": {"s": {"command": "python"}}}`})
+	rec, _, env := scanServer(t)
+	keyOf := func(args ...string) string {
+		t.Helper()
+		all := append([]string{"scan", "--path", dir, "--no-user-config", "--no-env", "--submit"}, args...)
+		if code, out, errs := run(t, env, all...); code != 0 {
+			t.Fatalf("scan = %d %q %q", code, out, errs)
+		}
+		return rec.req.GetFindings()[0].GetKey()
+	}
+	raw, device := keyOf(), keyOf("--device")
+	if raw == device || len(device) != len(raw) {
+		t.Fatalf("raw %q, device %q", raw, device)
+	}
+	if again := keyOf("--device"); again != device {
+		t.Fatalf("not stable: %q, %q", device, again)
+	}
+	machineID = func() (string, error) { return "machine-5678", nil }
+	if other := keyOf("--device"); other == device {
+		t.Fatal("another machine sends the same key")
+	}
+}
+
+// TestD251_WithNoMachineIDTheSaltIsAMachineWideFile: two accounts with their
+// own config directories agree through the file; a directory nobody may write
+// falls back to the account's.
+// Covers: F885
+func TestD251_WithNoMachineIDTheSaltIsAMachineWideFile(t *testing.T) {
+	saltDirs(t, t.TempDir())
+	machineID = func() (string, error) { return "", errors.New("no machine id") }
 	system, err := deviceScope(configDir(t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +187,7 @@ func TestD251_SystemAndAUserGetOneDeviceID(t *testing.T) {
 	blocked := filepath.Join(t.TempDir(), "file")
 	writeTree(t, filepath.Dir(blocked), map[string]string{"file": "x"})
 	saltDirs(t, filepath.Join(blocked, "PantherClaw"))
+	machineID = func() (string, error) { return "", errors.New("no machine id") }
 	if _, err := deviceScope(configDir(t.TempDir())); err != nil {
 		t.Fatalf("no fallback: %v", err)
 	}
@@ -151,6 +236,13 @@ func TestTildeHome(t *testing.T) {
 		`D:/Users/carol/x`:                  `~/x`,
 		"config=/home/dan/x":                "config=~/x",
 		"/opt/home/x/y":                     "/opt/home/x/y",
+		"/mnt/c/Users/x/y":                  "~/y",
+		"/var/home/x/y":                     "~/y",
+		"file:///home/x/y":                  "file://~/y",
+		"file://localhost/Users/x/y":        "file://localhost~/y",
+		"file:///C:/Users/x/y":              "file:///~/y",
+		"see /mnt/d/users/x":                "see ~",
+		"/data/var/home/x":                  "/data/var/home/x",
 		"python":                            "python",
 	} {
 		if got := tildeHome(in, homes); got != want {
@@ -218,19 +310,22 @@ func TestD249_WhoCanReplaceTheBinary(t *testing.T) {
 	if unixBinaryProtected("pclaw", stat(safe)) {
 		t.Error("a relative path passed")
 	}
-	pf, sr := `C:\Program Files`, `C:\Windows`
+	roots := windowsBinaryRoots(`C:\Program Files`, `C:\Program Files (x86)`, `C:\Windows`)
 	for exe, want := range map[string]bool{
 		`C:\Program Files\PantherClaw\pclaw.exe`: true,
+		`C:\Program Files (x86)\pc\pclaw.exe`:    true,
 		`c:\windows\system32\pclaw.exe`:          true,
+		`C:\Windows\Tasks\pclaw.exe`:             false,
+		`C:\Windows\pclaw.exe`:                   false,
 		`C:\Program Files Extra\pclaw.exe`:       false,
 		`C:\Users\jo\pclaw.exe`:                  false,
 		`C:\Program Files\..\Users\pclaw.exe`:    false,
 	} {
-		if got := windowsBinaryProtected(exe, pf, sr); got != want {
+		if got := windowsBinaryProtected(exe, roots...); got != want {
 			t.Errorf("%s = %v", exe, got)
 		}
 	}
-	if windowsBinaryProtected(`C:\x\pclaw.exe`, "", "") {
+	if windowsBinaryProtected(`C:\x\pclaw.exe`, windowsBinaryRoots("", "", "")...) {
 		t.Error("an empty root passed")
 	}
 }

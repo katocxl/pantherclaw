@@ -20,5 +20,5 @@ func platformMachineDir() string {
 }
 
 func platformBinaryProtected(exe string) bool {
-	return windowsBinaryProtected(exe, os.Getenv("ProgramFiles"), os.Getenv("SystemRoot"))
+	return windowsBinaryProtected(exe, windowsBinaryRoots(os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("SystemRoot"))...)
 }

@@ -63,6 +63,12 @@ type scanSchedule struct {
 // in a file, never in a scheduler's definition.
 var scheduledEnv = []string{"PANTHERCLAW_API_KEY_FILE", "PANTHERCLAW_SERVER", "PANTHERCLAW_CONFIG_DIR"}
 
+// taskQuote quotes v for a task's command: backslashes before the closing
+// quote are doubled, or they would escape it (D282).
+func taskQuote(v string) string {
+	return `"` + v + strings.Repeat(`\`, len(v)-len(strings.TrimRight(v, `\`))) + `"`
+}
+
 // scheduledFlags are scheduledEnv as `pclaw scan` flags.
 var scheduledFlags = []struct{ env, flag string }{
 	{"PANTHERCLAW_API_KEY_FILE", "--key-file"}, {"PANTHERCLAW_SERVER", "--server"}, {"PANTHERCLAW_CONFIG_DIR", "--config-dir"},
@@ -108,7 +114,7 @@ func (s scanSchedule) schtasks() (scheduleSpec, error) {
 			if strings.Contains(v, `"`) {
 				return scheduleSpec{}, fmt.Errorf("%s holds a quotation mark", f.env)
 			}
-			tr += " " + f.flag + ` "` + v + `"`
+			tr += " " + f.flag + " " + taskQuote(v)
 		}
 	}
 	if len(tr) > maxTaskCommand {

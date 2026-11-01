@@ -43,8 +43,8 @@ func hookFiles(o Options) []string {
 // hookFindings reports each hook of a settings file: its event and the
 // basename of what it runs. Everything else stays here: the rest of the
 // command line, a matcher, and a prompt or URL hook's text.
-func hookFindings(host, path string) []Finding {
-	hooks, _ := readConfig(path)["hooks"].(map[string]any)
+func hookFindings(host, path string, read func(string) []byte) []Finding {
+	hooks, _ := configOf(path, read(path))["hooks"].(map[string]any)
 	var out []Finding
 	for event, entries := range hooks {
 		list, _ := entries.([]any)

@@ -66,15 +66,16 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 	if *complete && *scope == "" && !*device {
 		return errCompleteScope
 	}
+	var salt []byte // Set for a device scan: its keys are keyed with it (D282).
 	if *device {
 		if *complete {
 			return errCompleteDevice
 		}
-		s, err := deviceScope(a.env)
+		s, k, err := deviceIdentity(a.env)
 		if err != nil {
 			return err
 		}
-		*scope = s
+		*scope, salt = s, k
 	}
 	host, _ := os.Hostname()
 	var findings []scan.Finding
@@ -124,7 +125,7 @@ func scanCmd(ctx context.Context, a *app, args []string) error {
 	if *device && !*includeHost {
 		host = "" // A device scan names no machine unless it is asked to (D250).
 	}
-	return submitFindings(ctx, a, host, homes, findings, *scope, *complete)
+	return submitFindings(ctx, a, scanSubmission{host: host, homes: homes, salt: salt, scope: *scope, complete: *complete}, findings)
 }
 
 var (
@@ -212,12 +213,24 @@ func submission(f scan.Finding, homes []string) (*pantherclawv1.ScanFinding, boo
 	return &pantherclawv1.ScanFinding{Kind: f.Kind, Key: f.Key, Attributes: attrs}, true
 }
 
+// scanSubmission is how one scan's findings are sent.
+type scanSubmission struct {
+	host, scope string
+	homes       []string
+	salt        []byte
+	complete    bool
+}
+
 // submitFindings sends the findings' metadata; credential values, file
 // contents, prompts and other arguments stay on the machine.
-func submitFindings(ctx context.Context, a *app, host string, homes []string, findings []scan.Finding, scope string, complete bool) error {
+func submitFindings(ctx context.Context, a *app, sub scanSubmission, findings []scan.Finding) error {
+	host, scope, complete := sub.host, sub.scope, sub.complete
 	var send []*pantherclawv1.ScanFinding
 	for _, f := range findings {
-		if s, ok := submission(f, homes); ok {
+		if s, ok := submission(f, sub.homes); ok {
+			if sub.salt != nil {
+				s.Key = deviceKey(sub.salt, s.GetKey())
+			}
 			send = append(send, s)
 		}
 	}
