@@ -811,8 +811,30 @@ Posture is ranked findings with fixes and no single measure (F797). Clean means 
 
 ### M27 rows: Agent Detection & Response
 
+Analytics use PantherClaw's own transactions and never contain automatically (F787, F800). Content signals are opt-in and restrict-only, with no safety claim (F789, [ADR-0050](adr/0050-content-signals-boundary-amendment.md)) ([G0 M27](g0/M27.md)).
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
+| F930 | Behaviour profiles | A `BehaviorProfile` per agent from PantherClaw's own `pc.transactions`, never the ledger or outside logs. It extends `pc.drift.behavior` and is labelled inference. | Next | Business | M27 | F399, F787 |
+| F931 | Profile job | A background job builds profiles, following the outcome metrics job. | Next | Business | M27 | new |
+| F932 | Simulated history | A labelled generator of history, split from real history. | Next | Business | M27 | F630 |
+| F933 | Unvalidated thresholds | `definition_status` gains UNVALIDATED, shown until real data exists. | Next | Business | M27 | F801 |
+| F934 | Approval context | "Never done X" shows beside the approval display, outside the binding, labelled inference. No decision reads it. | Next | Business | M27 | new |
+| F935 | Alert basis | `reflex.alert` gains `basis`. Automation validation refuses a contain step on an INFERRED alert. A customer's own SOAR on exported alerts is outside PantherClaw's control. | Next | Business | M27 | F800 |
+| F936 | Content signals | Opt-in, restrict-only signals on tool results and outbound bodies, with no safety claim. A written amendment to F789 (ADR-0050). Core protection works the same with signals off. | Next | Business | M27 | F789 |
+| F937 | Content classifier port | `ContentClassifier` in `internal/contentsignals/ports`, with built-in Go regex and entropy checks. | Next | Business | M27 | new |
+| F938 | Outside classifier | An out-of-process adapter to a customer-run local service. No third-party API adapter and no in-process model. | Next | Business | M27 | new |
+| F939 | Gateway content scan | `internal/gateway/contentscan` scans tool results and outbound bodies, bounded at 64 KiB, stored nowhere. A finding keeps kind and location, never value. | Next | Business | M27 | new |
+| F940 | Restrict-only facts | A flag becomes a fact on the run, read by later decisions: hold or deny, never allow. Alerts are labelled inference. | Next | Business | M27 | F793 |
+| F941 | Content signal rollout | Opt-in per organization, Watching first, ACTIVE by step-up. It stays on at lapse until a person turns it off. It says "no known flags", and hook, SDK and delegated faces show as not inspected. | Next | Business | M27 | F801 |
+| F942 | Playbook library | Six governed playbooks in `hub/`: leaked key, poisoned MCP server, compromised laptop, rogue sub-agent, data-flow hold escalation, offboarded owner. Install makes a draft, and each is range tested. | Next | Team | M27 | F793 |
+| F943 | Custom playbooks | Customer-made playbooks. A contain step on an INFERRED alert is refused. | Next | Business | M27 | F800 |
+| F944 | SIEM packs | `integrations/siem/` for Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, Apache-2.0, built on OCSF export. | Next | Business | M27 | new |
+| F945 | Golden OCSF samples | Each pack is tested on golden OCSF samples. No store certification is claimed. | Next | Business | M27 | F801 |
+| F946 | `pclaw mcp self` | A stdio MCP server with tools `search`, `explain_decision`, `run_timeline` and `breach_radius`. | Next | Team | M27 | new |
+| F947 | Closed read list | The server reaches a closed allow-list of read procedures, tested so that no write is reachable. | Next | Team | M27 | new |
+| F948 | Investigator role | A read-only service role, `investigator`, and all record text labelled untrusted. | Next | Team | M27 | new |
+| F949 | Server-side audit | The server audits every call of that set by that role, so a client can't skip it. | Next | Team | M27 | new |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
@@ -822,7 +844,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 | --- | --- | --- | --- |
 | F786 | Connected boundary only | Governs only connected, supported enforcement points, and discloses uncontrolled tools, credentials, routes and exclusions. | F786 |
 | F787 | Not an identity provider or log warehouse | Uses existing human identity sources. Stores attributable actions and their consequences, not unrestricted log collection. | F787, F788 |
-| F789 | No prompt-safety guarantee, no surveillance | Makes no claim that instructions, plans or model outputs are safe. Never requires raw conversations or hidden reasoning for core protection. | F789, F792 |
+| F789 | No prompt-safety guarantee, no surveillance | Makes no claim that instructions, plans or model outputs are safe. Never requires raw conversations or hidden reasoning for core protection. Opt-in, restrict-only content signals (F936, ADR-0050) add no safety claim. | F789, F792 |
 | F790 | Not an agent builder | Customers bring their own agents. Governed automations coordinate them; they are not an unrestricted builder or orchestration platform. | F790 |
 | F791 | No universal rollback | Completed transfers, deletions and disclosures may be irreversible. Compensation is a new, separately authorized action. | F791 |
 | F793 | No self-widening authority | Suggestions and automations cannot widen their own response authority. Production permission changes go through governed publication, and a denial never leads to more privilege. | F793, F794, F795 |

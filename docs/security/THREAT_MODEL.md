@@ -324,6 +324,14 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 
 | ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
 |---|---|---|---|---|---|---|
+| T-274 | Inference drives containment: an automation contains on an inferred alert, so an attacker who shapes an agent's behaviour can trigger a response | A1, A5 | TB4 | Disruption from a guess | HR-640; a `basis` on alerts and a validation refusal | M27 |
+| T-275 | Inference misleads: "never done X" sways an approver or enters a binding, simulated history reads as real, outside logs creep in, or an unproven threshold reads as tested | A1, A5 | TB4 | A wrong approval; false assurance | HR-641, HR-642, HR-643, HR-644; context outside the binding, labels, UNVALIDATED | M27 |
+| T-276 | A content scan leaks what it finds: a secret's value lands in a finding, a store or a third party | A1, A7 | TB2 | Disclosure of the secret it found | HR-647, HR-652; kind and location only, stored nowhere, no third-party API | M27 |
+| T-277 | A content signal is trusted too far: a flag allows something, no flag reads as clean, a face not inspected looks covered, it starts without consent, or it goes quiet at lapse | A2, A1, A5 | TB2, TB11 | False assurance; weakened enforcement | HR-648, HR-649, HR-650, HR-651; restrict only, a step-up, honest wording | M27 |
+| T-278 | A playbook widens authority: a Hub item activates itself, or a contain step runs on an unconfirmed alert or beyond the trigger's run or grant | A10, A5 | TB4 | Containment too wide, or from a tampered item | HR-653, HR-654; a draft on install, CONFIRMED alerts, range tests | M27 |
+| T-279 | Record text steers the SOC's own agent: injected text in a run's records reaches an investigating agent as if it were an instruction | A2, A1 | TB11 | The SOC's agent is misled | HR-658; all record text labelled untrusted | M27 |
+| T-280 | The MCP server reaches a write, through a procedure off the list or a role that holds too much | A1, A4 | TB4 | An investigating agent changes what it should only read | HR-655, HR-656; a closed allow-list and a read-only role | M27 |
+| T-281 | A client skips the audit, so an investigating agent reads records with no trace | A4, A1 | TB4 | Reads go unrecorded | HR-657; the server audits, not the client | M27 |
 
 ## 8. Residual risks (accepted, owner: founder, reviewed quarterly)
 

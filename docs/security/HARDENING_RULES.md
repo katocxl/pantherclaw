@@ -668,3 +668,20 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
+| HR-640 | Automation validation refuses a contain step on an alert whose `basis` is INFERRED. | T-274 | M27 |
+| HR-641 | "Never done X" shows beside the approval display, outside the binding, labelled inference. No decision reads it. HR-030, HR-034 and HR-240 are unchanged. | T-275 | M27 |
+| HR-642 | Behaviour profiles read PantherClaw's own transactions in `pc.transactions`, never the ledger and never outside logs. | T-275 | M27 |
+| HR-643 | Simulated history comes from a labelled generator and stays split from real history (F630, HR-222). | T-275 | M27 |
+| HR-644 | A profile definition without real data shows `definition_status` UNVALIDATED (F801). | T-275 | M27 |
+| HR-647 | A content finding keeps kind and location, never value. Scans are bounded at 64 KiB and stored nowhere. | T-276 | M27 |
+| HR-648 | A content flag is a restrict-only fact on the run: later decisions may hold or deny on it, never allow. | T-277 | M27 |
+| HR-649 | Content signals are opt-in per organization, Watching first, and become ACTIVE only by step-up. | T-277 | M27 |
+| HR-650 | Content signals say "no known flags", never "clean", and hook, SDK and delegated faces show as not inspected. | T-277 | M27 |
+| HR-651 | On lapse an enabled restrict signal stays on until a person turns it off (HR-357). | T-277 | M27 |
+| HR-652 | Content classification has no third-party API adapter and no in-process model: built-in regex and entropy, or a customer-run local service out of process. | T-276 | M27 |
+| HR-653 | A Hub playbook installs as a draft. Its contain steps run only on CONFIRMED alerts, on the trigger's run or grant. | T-278 | M27 |
+| HR-654 | Every Hub playbook is range tested. | T-278 | M27 |
+| HR-655 | `pclaw mcp self` reaches only a closed allow-list of read procedures, and a test shows no write is reachable. | T-280 | M27 |
+| HR-656 | The `investigator` service role is read-only. | T-280 | M27 |
+| HR-657 | The server audits every call of the allow-listed set by the `investigator` role, so a client can't skip it. | T-281 | M27 |
+| HR-658 | The MCP server labels all record text untrusted (HR-583). | T-279 | M27 |
