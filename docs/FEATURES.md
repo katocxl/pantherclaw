@@ -740,7 +740,7 @@ Hub is a part of Root, not a new component. It publishes PantherClaw's own conte
 | F852 | Managed-settings signals | Scan adds a `managed_settings` attribute to existing findings. A recommendation says when settings are missing; it is Team and up, the attribute Community. No coverage state changes. | Next | Community | M23 | F801 |
 | F853 | Offline policy checks | Validation, scenarios, policy comparison and simulation run from files, with no server and no network. | Next | Community | M23 | new |
 | F854 | `pclaw ci check` | Checks a policy file and reports validation, scenarios and rule changes by direction, as text, JSON or Markdown, with exit codes for pass, failed check and usage. | Next | Community | M23 | new |
-| F855 | Simulation samples in CI | The check adds outcome samples and says how many were sampled and that an empty sample proves nothing. | Next | Team | M23 | new |
+| F855 | Simulation samples in CI | The check adds outcome samples and says how many were sampled and that an empty sample proves nothing. | Next | Community | M23 | new |
 | F856 | Safe CI report output | Markdown output escapes all policy-file text and is capped at 60 KiB, so a policy cannot mention a person or render markup. | Next | Community | M23 | new |
 | F857 | GitHub Action | A composite action, Apache-2.0, pinned by SHA, that checksum-verifies `pclaw` and needs no secrets. Documented for `pull_request` only; comments are skipped on forks. | Next | Community | M23 | new |
 | F858 | GitLab component | A CI component with a README and licence, Apache-2.0, that runs the same check. | Next | Community | M23 | new |
