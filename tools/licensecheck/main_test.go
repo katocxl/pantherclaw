@@ -143,9 +143,8 @@ func TestRunExitCodes(t *testing.T) {
 
 const noticeHead = "PantherClaw\n\nSeparately Licensed Components\n----\nThe following:\n\n"
 
-// TestCheckListed (G0 M23 D111): every directory NOTICE lists has a LICENSE,
-// every integration is listed, and only the directories still to be built may
-// be absent.
+// TestCheckListed (G0 M23 D111, D139): every directory NOTICE lists has a
+// LICENSE, every integration is listed, and none of them may be absent.
 //
 // Covers: F848
 func TestCheckListed(t *testing.T) {
@@ -153,9 +152,10 @@ func TestCheckListed(t *testing.T) {
 
 	root := t.TempDir()
 	write(t, root, "NOTICE", noticeHead+
-		"  sdk/go/   Go SDK\n  hub/   content\n  integrations/x/ x\n  integrations/github-action/ pending\n\nReference documents\n---\n  docs/reference/ not licensed separately\n")
+		"  sdk/go/   Go SDK\n  hub/   content\n  integrations/x/ x\n  integrations/github-action/ x\n\nReference documents\n---\n  docs/reference/ not licensed separately\n")
 	write(t, root, "sdk/go/LICENSE", "apache")
 	write(t, root, "integrations/x/LICENSE", "apache")
+	write(t, root, "integrations/github-action/LICENSE", "apache")
 	got := CheckListed(os.DirFS(root))
 	if len(got) != 1 || got[0].Path != "hub/" || !strings.Contains(got[0].Reason, "no LICENSE") {
 		t.Fatalf("a listed directory without a LICENSE: %+v", got)
@@ -164,9 +164,11 @@ func TestCheckListed(t *testing.T) {
 	if got := CheckListed(os.DirFS(root)); len(got) != 0 {
 		t.Fatalf("every listed directory is licensed: %+v", got)
 	}
-	write(t, root, "integrations/github-action/action.yml", "x")
+	if err := os.RemoveAll(filepath.Join(root, "integrations", "github-action")); err != nil {
+		t.Fatal(err)
+	}
 	if got := CheckListed(os.DirFS(root)); len(got) != 1 || got[0].Path != "integrations/github-action/" {
-		t.Fatalf("a built directory that was pending needs a LICENSE: %+v", got)
+		t.Fatalf("a listed integration that is absent: %+v", got)
 	}
 	write(t, root, "integrations/github-action/LICENSE", "apache")
 	write(t, root, "integrations/y/LICENSE", "apache")

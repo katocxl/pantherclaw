@@ -36,11 +36,6 @@ const (
 // apachePrefixes are repository-relative directories licensed Apache-2.0 (see NOTICE).
 var apachePrefixes = []string{"sdk/", "integrations/", "docs/protocol/", "hub/"}
 
-// notBuiltYet are directories NOTICE lists ahead of the code (G0 M23 D123,
-// D124): absent is allowed for these, and once one exists it needs a LICENSE
-// like any other.
-var notBuiltYet = []string{"integrations/github-action/", "integrations/gitlab/"}
-
 // skipDirs are never scanned.
 var skipDirs = map[string]bool{
 	".git": true, "node_modules": true, "bin": true, "dist": true, "vendor": true,
@@ -120,9 +115,6 @@ func CheckListed(fsys fs.FS) []Problem {
 	for _, dir := range listed {
 		if !isApache(dir) {
 			problems = append(problems, Problem{dir, "NOTICE lists it, but this check does not treat it as Apache-2.0"})
-		}
-		if _, err := fs.Stat(fsys, strings.TrimSuffix(dir, "/")); err != nil && slices.Contains(notBuiltYet, dir) {
-			continue
 		}
 		if _, err := fs.Stat(fsys, dir+"LICENSE"); err != nil {
 			problems = append(problems, Problem{dir, "NOTICE lists it, but it has no LICENSE file"})

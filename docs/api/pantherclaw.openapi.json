@@ -65001,6 +65001,11 @@
           "status": {
             "title": "status",
             "$ref": "#/components/schemas/pantherclaw.v1.HubInstallStatus"
+          },
+          "failureReason": {
+            "type": "string",
+            "title": "failure_reason",
+            "description": "failure_reason says why a FAILED install failed: its error's reason and\n client-facing message, at most 500 characters. Empty otherwise."
           }
         },
         "title": "HubInstall",
