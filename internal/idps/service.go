@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/protect"
+	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -514,4 +515,17 @@ func reader(ctx context.Context) (tenancy.Caller, error) {
 		return tenancy.Caller{}, err
 	}
 	return c, c.Require(td.PermIdentityProviderRead, td.OrgPath(c.Org))
+}
+
+// CreateOnPage is Create for the server page (G0 M22 D57): the person's
+// fresh step-up of this browser session first.
+func (s *Service) CreateOnPage(ctx context.Context, in Input, su stepup.StepUp) (Provider, Filed, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return Provider{}, Filed{}, err
+	}
+	if err := stepup.Verify(ctx, s.Pool, c, su); err != nil {
+		return Provider{}, Filed{}, err
+	}
+	return s.Create(ctx, in)
 }

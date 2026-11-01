@@ -15,7 +15,7 @@ import (
 
 var credentialStates = map[string]pb.SealedCredentialState{
 	"ACTIVE": pb.SealedCredentialState_SEALED_CREDENTIAL_STATE_ACTIVE, "SUPERSEDED": pb.SealedCredentialState_SEALED_CREDENTIAL_STATE_SUPERSEDED,
-	"REVOKED": pb.SealedCredentialState_SEALED_CREDENTIAL_STATE_REVOKED,
+	"REVOKED": pb.SealedCredentialState_SEALED_CREDENTIAL_STATE_REVOKED, "CANDIDATE": pb.SealedCredentialState_SEALED_CREDENTIAL_STATE_CANDIDATE,
 }
 
 func credentialOf(m credapp.Metadata) *pb.ConnectionCredential {

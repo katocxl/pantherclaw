@@ -24,6 +24,8 @@ var m21ModelProcedures = map[string]td.Permission{
 	pantherclawv1connect.ModelServiceDraftPolicyProcedure:          td.PermPolicyAuthor,
 	pantherclawv1connect.ModelServiceDraftAutomationProcedure:      td.PermAutomationManage,
 	pantherclawv1connect.ModelServiceGetModelDraftProcedure:        td.PermOrgRead,
+	pantherclawv1connect.ModelServiceListModelDraftsProcedure:      td.PermOrgRead,
+	pantherclawv1connect.ModelServiceGetModelUsageProcedure:        td.PermOrgRead,
 }
 
 // m21ModelClasses are ModelService's plan-gate classes: turning drafting off
@@ -38,6 +40,8 @@ var m21ModelClasses = map[string]entitlements.Class{
 	pantherclawv1connect.ModelServiceDraftPolicyProcedure:          entitlements.ClassChange,
 	pantherclawv1connect.ModelServiceDraftAutomationProcedure:      entitlements.ClassChange,
 	pantherclawv1connect.ModelServiceGetModelDraftProcedure:        entitlements.ClassRead,
+	pantherclawv1connect.ModelServiceListModelDraftsProcedure:      entitlements.ClassRead,
+	pantherclawv1connect.ModelServiceGetModelUsageProcedure:        entitlements.ClassRead,
 }
 
 func init() {

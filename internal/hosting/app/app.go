@@ -219,13 +219,19 @@ func (s *Service) Deprovision(ctx context.Context, id ids.UUID, reason string) (
 		} else if err != nil {
 			return err
 		}
+		if h.State == domain.StateDeprovisioning || h.State == domain.StateDeprovisioned {
+			// Revoked in the transaction that set this state: a repeat changes
+			// nothing, and a new epoch would fail permits for nothing (G0 M22 D59).
+			out = h
+			return nil
+		}
 		revoked, err := revokeFirst(ctx, q, c.Org, h, c.Principal.String(), reason)
 		if err != nil {
 			return err
 		}
 		out, err = q.StartDeprovisionHostedGateway(ctx, c.Org, id)
 		if db.IsNoRows(err) {
-			out = h // already deprovisioning or done: nothing more
+			out = h // FAILED: never placed, so nothing to stop
 			return nil
 		} else if err != nil {
 			return err

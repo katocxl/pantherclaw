@@ -98,6 +98,16 @@ func (f *fake) Results(_ context.Context, rng ids.UUID) ([]domain.Result, error)
 	return f.results[rng], nil
 }
 
+func (f *fake) ResultCounts(_ context.Context, ranges []ids.UUID) (map[ids.UUID]domain.Counts, error) {
+	out := map[ids.UUID]domain.Counts{}
+	for _, id := range ranges {
+		if rs := f.results[id]; len(rs) > 0 {
+			out[id] = domain.Count(rs)
+		}
+	}
+	return out, nil
+}
+
 func (f *fake) InsertResult(_ context.Context, rng ids.UUID, r domain.Result) (time.Time, bool, error) {
 	for _, have := range f.results[rng] {
 		if have.Scenario.ID == r.Scenario.ID {

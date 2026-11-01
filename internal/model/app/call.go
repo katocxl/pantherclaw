@@ -19,6 +19,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/page"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -284,8 +285,94 @@ func (s *Service) GetDraft(ctx context.Context, version ids.UUID) (StoredDraft, 
 		if err := c.Require(draftReaders[row.Kind], td.OrgPath(c.Org)); err != nil {
 			return err
 		}
-		out = StoredDraft{Version: row.VersionID, Kind: row.Kind, Origin: row.Origin, Call: row.CallID, CreatedAt: row.CreatedAt}
-		return json.Unmarshal(row.Ambiguities, &out.Ambiguities)
+		out, err = storedDraft(row)
+		return err
+	}, db.ReadOnly())
+	return out, err
+}
+
+func storedDraft(row dbq.PcModelDraft) (StoredDraft, error) {
+	out := StoredDraft{Version: row.VersionID, Kind: row.Kind, Origin: row.Origin, Call: row.CallID, CreatedAt: row.CreatedAt}
+	return out, json.Unmarshal(row.Ambiguities, &out.Ambiguities)
+}
+
+// ListDrafts returns a page of stored drafts, newest first, of the kinds the
+// caller may read (G0 M22 D8, F834, HR-554). A draft's row holds its mark and
+// thresholds; the prompt and the response are not stored.
+func (s *Service) ListDrafts(ctx context.Context, pr page.Request) ([]StoredDraft, string, error) {
+	if err := s.entitled(ctx); err != nil {
+		return nil, "", err
+	}
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	var kinds []string
+	for kind, need := range draftReaders {
+		if c.Can(need, td.OrgPath(c.Org)) {
+			kinds = append(kinds, kind)
+		}
+	}
+	if len(kinds) == 0 {
+		return nil, "", c.Require(td.PermPolicyRead, td.OrgPath(c.Org))
+	}
+	var after *ids.UUID
+	if !pr.After.IsZero() {
+		after = &pr.After
+	}
+	var out []StoredDraft
+	var next string
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := dbq.New(tx).ListModelDrafts(ctx, dbq.ListModelDraftsParams{OrgID: c.Org, Kinds: kinds, After: after, PageLimit: pr.Limit()})
+		if err != nil {
+			return err
+		}
+		rows, next = page.Finish(pr, rows, func(r dbq.PcModelDraft) ids.UUID { return r.VersionID })
+		for _, r := range rows {
+			d, err := storedDraft(r)
+			if err != nil {
+				return err
+			}
+			out = append(out, d)
+		}
+		return nil
+	}, db.ReadOnly())
+	return out, next, err
+}
+
+// UsageRow is the calls of one task with one outcome: counts and tokens, no
+// text and no caller.
+type UsageRow struct {
+	Task, Outcome                                    string
+	Calls, InputTokens, OutputTokens, ReservedTokens int64
+}
+
+// Usage sums the organization's model calls since a time, for whoever may
+// read the organization (G0 M22 D8, F834, HR-554).
+func (s *Service) Usage(ctx context.Context, since time.Time) ([]UsageRow, error) {
+	if err := s.entitled(ctx); err != nil {
+		return nil, err
+	}
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Require(td.PermOrgRead, td.OrgPath(c.Org)); err != nil {
+		return nil, err
+	}
+	var out []UsageRow
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := dbq.New(tx).ModelUsage(ctx, c.Org, since)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			out = append(out, UsageRow{
+				Task: r.Task, Outcome: r.Outcome, Calls: r.Calls, InputTokens: r.InputTokens, OutputTokens: r.OutputTokens,
+				ReservedTokens: r.ReservedTokens,
+			})
+		}
+		return nil
 	}, db.ReadOnly())
 	return out, err
 }

@@ -322,12 +322,12 @@ func TestStepExtensionsAreValidated(t *testing.T) {
 	call := func(extra string) string {
 		return "  - {id: a, do: operator.revoke_grant}\n  - {id: b, do: agent.call, with: {face: hook, connection: g, tool: t" + extra + "}, expect: {outcome: ALLOW}}\n"
 	}
-	for _, ok := range []string{", concurrent: 2", ", concurrent: 50, args: {n: \"${n}\"}", ", action_of: a", ", fault: gateway_unreachable"} {
+	for _, ok := range []string{", concurrent: 2", ", concurrent: 2, retry_on: BUDGET_BUSY", ", concurrent: 50, args: {n: \"${n}\"}", ", action_of: a", ", fault: gateway_unreachable"} {
 		if err := parseSteps(call(ok)); err != nil {
 			t.Errorf("%s: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{", concurrent: 1", ", concurrent: 51", ", action_of: later", ", action_of: b", ", fault: other", ", fault: 1"} {
+	for _, bad := range []string{", concurrent: 1", ", concurrent: 51", ", retry_on: BUDGET_BUSY", ", concurrent: 2, retry_on: DENY", ", action_of: later", ", action_of: b", ", fault: other", ", fault: 1"} {
 		if err := parseSteps(call(bad)); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%s: want ErrInvalid, got %v", bad, err)
 		}

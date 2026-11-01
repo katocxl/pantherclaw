@@ -737,3 +737,32 @@ func boolString(b bool) string {
 	}
 	return "false"
 }
+
+// DataClasses lists the artifacts a destination can receive.
+func DataClasses() []string { return slices.Clone(dataClasses) }
+
+// CreateOnPage is Create for the server page (G0 M22 D57): the person's
+// fresh step-up of this browser session first.
+func (s *Service) CreateOnPage(ctx context.Context, in NewDestination, su stepup.StepUp) (Destination, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return Destination{}, err
+	}
+	if err := stepup.Verify(ctx, s.pool, c, su); err != nil {
+		return Destination{}, err
+	}
+	return s.Create(ctx, in)
+}
+
+// ReplaceCredentialOnPage is ReplaceCredential for the server page (G0 M22
+// D57): the person's fresh step-up of this browser session first.
+func (s *Service) ReplaceCredentialOnPage(ctx context.Context, id ids.UUID, cred Credential, su stepup.StepUp) (Destination, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return Destination{}, err
+	}
+	if err := stepup.Verify(ctx, s.pool, c, su); err != nil {
+		return Destination{}, err
+	}
+	return s.ReplaceCredential(ctx, id, cred)
+}

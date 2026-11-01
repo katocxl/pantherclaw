@@ -518,6 +518,83 @@ func (q *Queries) ListTicketSyncConfigs(ctx context.Context, orgID ids.OrgID) ([
 	return items, nil
 }
 
+const listTicketSyncEvents = `-- name: ListTicketSyncEvents :many
+SELECT e.id::uuid AS id, e.direction::text AS direction, e.occurred_at::timestamptz AS occurred_at, e.status::text AS status,
+       COALESCE(e.issue_key, '')::text AS issue_key, COALESCE(e.action, '')::text AS action,
+       COALESCE(e.case_id::text, '')::text AS case_id, COALESCE(e.incident_id::text, '')::text AS incident_id,
+       COALESCE(e.result_code, '')::text AS result_code
+FROM (
+    SELECT i.id, 'INBOUND' AS direction, i.received_at AS occurred_at, i.outcome AS status, i.issue_key, NULL AS action,
+           NULL::uuid AS case_id, NULL::uuid AS incident_id, NULL AS result_code
+    FROM pc.ticket_inbound_events i
+    WHERE i.org_id = $1 AND i.config_id = $2
+    UNION ALL
+    SELECT o.id, 'OUTBOUND', o.created_at, o.state, NULL, o.action, o.case_id, o.incident_id, o.result_code
+    FROM pc.ticket_outbound o
+    WHERE o.org_id = $1 AND o.config_id = $2
+) e
+WHERE $3::uuid IS NULL OR e.id < $3::uuid
+ORDER BY e.id DESC
+LIMIT $4
+`
+
+type ListTicketSyncEventsParams struct {
+	OrgID     ids.OrgID
+	ConfigID  ids.UUID
+	After     *ids.UUID
+	PageLimit int32
+}
+
+type ListTicketSyncEventsRow struct {
+	ID         ids.UUID
+	Direction  string
+	OccurredAt time.Time
+	Status     string
+	IssueKey   string
+	Action     string
+	CaseID     string
+	IncidentID string
+	ResultCode string
+}
+
+// ListTicketSyncEvents is a configuration's sync log, newest first: the
+// inbound log and the outbound calls (G0 M22 D7). Both use v7 ids, so the id
+// orders them and is the page cursor. Bodies and secrets are not here.
+func (q *Queries) ListTicketSyncEvents(ctx context.Context, arg ListTicketSyncEventsParams) ([]ListTicketSyncEventsRow, error) {
+	rows, err := q.db.Query(ctx, listTicketSyncEvents,
+		arg.OrgID,
+		arg.ConfigID,
+		arg.After,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTicketSyncEventsRow{}
+	for rows.Next() {
+		var i ListTicketSyncEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Direction,
+			&i.OccurredAt,
+			&i.Status,
+			&i.IssueKey,
+			&i.Action,
+			&i.CaseID,
+			&i.IncidentID,
+			&i.ResultCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rotateTicketSyncSecret = `-- name: RotateTicketSyncSecret :execrows
 UPDATE pc.ticket_sync_configs
 SET prev_webhook_secret = $1, prev_secret_expires_at = now() + interval '24 hours',
