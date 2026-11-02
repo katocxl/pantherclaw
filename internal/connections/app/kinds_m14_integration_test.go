@@ -235,6 +235,56 @@ func (g *gatedKind) CheckGateway(_ context.Context, _ db.TenantTx, _ ids.OrgID, 
 	return nil
 }
 
+// pinnedKind is a fakeKind that reads its current pin: none.
+type pinnedKind struct{ fakeKind }
+
+func (*pinnedKind) CurrentPin(context.Context, db.TenantTx, ids.OrgID, ids.UUID) (any, string, error) {
+	return nil, "", nil
+}
+
+// TestD97_APublicURLChangeNeedsAPinnedA2AConnection: another kind is refused
+// as a shape error, an a2a connection without a pin with A2A_NOT_PINNED, and
+// a new connection whose card keys hold a private key is never created.
+// Covers: F882
+func TestD97_APublicURLChangeNeedsAPinnedA2AConnection(t *testing.T) {
+	e := newEnv(t)
+	e.pin(t, "test.m14-kinds", "1.0.0", []byte(m14Kinds))
+	kinds := &ports.KindConfigs{}
+	kinds.Register(app.KindPostgres, &fakeKind{})
+	kinds.Register(app.KindA2A, &pinnedKind{})
+	e.svc.WithKindConfigs(kinds)
+	pg := pgConfig()
+	shop, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "shop-db", Kind: app.KindPostgres, Package: "test.m14-kinds", Gateway: e.gateway, AccessMode: app.AccessHeld, Postgres: &pg,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.SetA2APublicURL(e.admin, shop.ID, "https://gateway.example.test/a2a", shop.Revision); !is(err, app.ErrShape) {
+		t.Fatalf("a postgres connection: %v", err)
+	}
+	peer := a2aConfig()
+	p, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "peer", Kind: app.KindA2A, Package: "test.m14-kinds", Gateway: e.gateway, AccessMode: app.AccessHeld, A2A: &peer,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.SetA2APublicURL(e.admin, p.ID, "https://gateway.example.test/a2a", p.Revision); !is(err, app.ErrA2ANotPinned) {
+		t.Fatalf("an unpinned connection: %v", err)
+	}
+	private := a2aConfig()
+	private.CardKeys = []byte(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","d":"nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A"}]}`)
+	if _, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "peer-2", Kind: app.KindA2A, Package: "test.m14-kinds", Gateway: e.gateway, AccessMode: app.AccessHeld, A2A: &private,
+	}); !is(err, app.ErrA2AKeyPrivate) {
+		t.Fatalf("a new connection with a private key: %v", err)
+	}
+	if n := e.int64(t, "SELECT count(*) FROM pc.connections WHERE org_id = $1 AND name = 'peer-2'", e.org); n != 0 {
+		t.Fatalf("created %d connections with a private key", n)
+	}
+}
+
 // TestM14_AMoveIsValidatedByTheKind: moving a postgres or a2a connection to
 // another gateway asks its kind's store about the new gateway in the same
 // transaction; a refusal leaves the connection where it was (G0 M14 D105).

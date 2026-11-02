@@ -105,6 +105,10 @@ var (
 	// ErrA2ANotPinned: the connection has no pin to change.
 	ErrA2ANotPinned = pcerr.New(pcerr.FailedPrecondition, "A2A_NOT_PINNED",
 		"this a2a connection has no pin to change")
+	// ErrA2AURLUnchanged: the public URL is already the one asked for, so
+	// nothing is fetched, held or proposed.
+	ErrA2AURLUnchanged = pcerr.New(pcerr.FailedPrecondition, "A2A_URL_UNCHANGED",
+		"the public URL is already set to that value")
 )
 
 // identRE is a manifest identifier: lower case, never quoted (D15).
@@ -397,7 +401,8 @@ func (s *Service) WithKindConfigs(k *ports.KindConfigs) *Service {
 // SetA2APublicURL changes only an a2a connection's public URL, at the revision
 // the caller read: a weakening update like any change of its configuration,
 // saved as a new proposal that serves once a person confirms it. Empty leaves
-// the card unsigned.
+// the card unsigned. The save reads the peer's card again, so the proposal pins
+// the card as read now. The URL already set is refused before any of that.
 func (s *Service) SetA2APublicURL(ctx context.Context, id ids.UUID, publicURL string, revision int32) (Connection, error) {
 	return s.Update(ctx, UpdateInput{ID: id, Revision: revision, A2APublicURL: &publicURL})
 }
