@@ -26,8 +26,12 @@ import (
 var Events = []string{
 	"action.decided", "action.held", "action.denied", "effect.recorded", "run.ended", "grant.issued", "grant.revoked",
 	"coverage.lost", "alert.raised", "incident.opened", "case.closed", "agent.discovered", "approval.expired",
-	"automation.finished", "agent.discovery_changed", "agent.discovery_vanished",
+	"automation.finished", "agent.discovery_changed", "agent.discovery_vanished", EventAlertInferred,
 }
+
+// EventAlertInferred is a raised alert that rests on an inference or
+// hypothesis. A contain step never starts from it (H4, G0 M27 D500).
+const EventAlertInferred = "alert.inferred"
 
 // Probes is the closed condition-probe vocabulary (D19).
 var Probes = []string{"grant.expiring", "approval.waiting", "coverage.below", "run.long_running", "agent.unclaimed"}
@@ -563,6 +567,12 @@ func (v *validator) steps() {
 	}
 }
 
+// startsOnInference reports a trigger that names an inferred alert.
+func (v *validator) startsOnInference() bool {
+	w := v.d.When
+	return (w.Event != nil && w.Event.On == EventAlertInferred) || (w.Threshold != nil && w.Threshold.On == EventAlertInferred)
+}
+
 func (v *validator) step(at string, s StepSpec, seen map[string]int, compensation bool) {
 	if !stepIDFormat.MatchString(s.ID) {
 		v.err(CodeLimitRange, at+"/id", "a step id is a lowercase slug")
@@ -573,6 +583,9 @@ func (v *validator) step(at string, s StepSpec, seen map[string]int, compensatio
 	if !ok {
 		v.err(CodeUnsupportedCapability, at+"/step", "%q is not a step kind", s.Step)
 		return
+	}
+	if v.startsOnInference() && s.containing() {
+		v.err(CodeContainOnInferred, at+"/step", "an inferred alert never contains automatically: open a case or notify a person, who contains")
 	}
 	if !v.env.Edition(k.Edition) {
 		v.err(CodeUnsupportedCapability, at+"/step", "%s needs the %s edition", s.Step, strings.ToLower(string(k.Edition)))

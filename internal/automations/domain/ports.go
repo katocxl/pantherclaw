@@ -47,6 +47,28 @@ type TriggerRef struct {
 	Ancestry   []ids.UUID
 	Depth      int
 	OccurredAt time.Time
+	// Inferred marks a trigger that rests on an inferred alert or incident:
+	// a step that would contain acts on nothing (G0 M27 D500).
+	Inferred bool
+	// Confirmed marks a trigger that rests on CONFIRMED alerts: one alert
+	// or incident whose basis was observed or matched by a rule, or a
+	// threshold that counted only such signals. A contain step runs on
+	// nothing else (G0 M27 D514).
+	Confirmed bool
+}
+
+// UnconfirmedSkip is the result of a contain step on a trigger that isn't a
+// CONFIRMED alert: it acts on nothing and the rest of the execution goes on,
+// so a person contains (G0 M27 D514).
+func UnconfirmedSkip() StepResult {
+	return StepResult{State: StepSkipped, Reason: ReasonUnconfirmedSignal, Effect: EffectNone}
+}
+
+// InferredSkip is the result of a step that would contain on an inferred
+// signal: it acts on nothing, and the rest of the execution goes on, so a
+// person hears of the signal (H4, G0 M27 D500).
+func InferredSkip() StepResult {
+	return StepResult{State: StepSkipped, Reason: ReasonInferredSignal, Effect: EffectNone}
 }
 
 // PauseSelector chooses the automations a Pause affects.

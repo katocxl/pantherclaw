@@ -21,6 +21,15 @@ WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id) AND 
 -- name: GetAutomationExecution :one
 SELECT * FROM pc.automation_executions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
+-- name: AutomationTriggerBasis :one
+-- The basis the feed kept on a trigger of a Reflex signal, and whether it is
+-- a CONFIRMED alert (G0 M27 D500, D514). Only the platform feed sets either.
+SELECT CASE WHEN authenticity = 'PLATFORM_FEED' THEN coalesce(authenticity_detail ->> 'basis', '') ELSE '' END::text AS basis,
+       (authenticity = 'PLATFORM_FEED' AND kind = 'EVENT'
+        AND coalesce(authenticity_detail ->> 'confirmed', '') = 'true')::boolean AS confirmed
+FROM pc.automation_triggers
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
 -- name: LockAutomationExecution :one
 SELECT * FROM pc.automation_executions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR UPDATE;
 

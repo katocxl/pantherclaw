@@ -6,7 +6,9 @@
 # that (HR-284) - and every signal opens a case. A containment that fails or
 # holds only in part escalates to the owner (the contain step also opens a
 # case with the unresolved paths). Signals below the criteria are not acted
-# on: the contain step is skipped and only the case is opened.
+# on: the contain step is skipped and only the case is opened. The contain
+# step runs only on a CONFIRMED alert, whose basis was observed or matched by
+# a rule: on an inferred one it is skipped too (G0 M27 D500, D514).
 #
 # The finish condition is CASE_OPENED for both paths: finish_when is a
 # conjunction and a skipped step never meets it, so "CONTAINMENT_CONFIRMED or

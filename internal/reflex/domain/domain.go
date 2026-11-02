@@ -156,6 +156,16 @@ func (b Basis) Valid() bool {
 	return b == BasisObserved || b == BasisRuleMatch || b == BasisInferred || b == BasisHypothesis
 }
 
+// Inferred reports a basis that is only an inference or a hypothesis, or
+// that names nothing firm: such a signal never contains anything
+// automatically (H4, G0 M27 D500). It fails closed on an unknown basis.
+func (b Basis) Inferred() bool { return !b.Confirmed() }
+
+// Confirmed reports a basis that rests on what was seen or on a rule that
+// matched it: only a signal on such a basis is a CONFIRMED alert, and only
+// one can start a contain step (G0 M27 D500, D514).
+func (b Basis) Confirmed() bool { return b == BasisObserved || b == BasisRuleMatch }
+
 // Evidence reference kinds.
 const (
 	EvidenceLedger      = "ledger"
@@ -191,9 +201,12 @@ const (
 	// SourceAutomation: governed automations (G0 M11 part 2 D11), e.g. the
 	// automation.loop rule.
 	SourceAutomation = "automation"
+	// SourceBehavior: behaviour analytics (G0 M27 D502). Every such signal
+	// is labelled inference.
+	SourceBehavior = "behavior"
 )
 
-var sources = []string{SourceDetection, SourceResponse, SourceSIEM, SourceSignals, SourceCoverage, SourceSystem, SourceAutomation}
+var sources = []string{SourceDetection, SourceResponse, SourceSIEM, SourceSignals, SourceCoverage, SourceSystem, SourceAutomation, SourceBehavior}
 
 // Signal is something worth attention, raised by a detection rule or by
 // another part of the product (response, SIEM delivery, Shared Signals,
@@ -259,8 +272,10 @@ func (s Signal) Validate() error {
 		return bad("no org")
 	case !slices.Contains(sources, s.Source):
 		return bad("unknown source %q", s.Source)
-	case s.Source == SourceDetection && (s.RuleID == "" || s.RuleDigest == ""):
+	case (s.Source == SourceDetection || s.Source == SourceBehavior) && (s.RuleID == "" || s.RuleDigest == ""):
 		return bad("a detection names its rule and digest")
+	case s.Source == SourceBehavior && (s.Basis != BasisInferred || s.Attention.AtLeast(AttentionIncident)):
+		return bad("behaviour analytics raise labelled inference, at most ALERT")
 	case len(s.RuleID) > MaxRuleIDSize || len(s.RuleVersion) > 64 || len(s.RuleDigest) > 128 || len(s.PackVersion) > 64:
 		return bad("rule reference too long")
 	case s.Title == "" || len(s.Title) > MaxTitle || len(s.Summary) > MaxSummary:
