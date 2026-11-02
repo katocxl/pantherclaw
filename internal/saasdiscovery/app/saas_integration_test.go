@@ -77,7 +77,7 @@ func (e *env) as(id ids.UUID, kind td.PrincipalKind) context.Context {
 	return tenancy.WithCaller(context.Background(), tenancy.Caller{
 		Subject: td.Subject{
 			Org: e.org, Principal: td.PrincipalRef{Kind: kind, ID: id},
-			Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}},
+			Bindings: []td.Binding{{Role: td.RoleAgentOwner, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}},
 		},
 		Credential: tenancy.CredBrowserSession, Session: ids.NewV7(),
 	})
@@ -357,10 +357,10 @@ func TestF928_TheQueueShowsUnownedAgentsAndGapsInFixedText(t *testing.T) {
 	}
 }
 
-// connection is an active connection of pkg served by gateway.
-func (e *env) connection(t *testing.T, gateway ids.UUID, pkg, kind string) ids.UUID {
+// brokerKey is gateway's active broker key.
+func (e *env) brokerKey(t *testing.T, gateway ids.UUID) ids.UUID {
 	t.Helper()
-	cert, key, conn := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	cert, key := ids.NewV7(), ids.NewV7()
 	serial, pub := make([]byte, 16), make([]byte, 1216)
 	_, _ = rand.Read(serial)
 	_, _ = rand.Read(pub)
@@ -368,7 +368,15 @@ func (e *env) connection(t *testing.T, gateway ids.UUID, pkg, kind string) ids.U
 		VALUES ($1, $2, $3, $4, $5, 'ENROLL', now(), now() + interval '24 hours')`, e.org, cert, gateway, serial, strings.Repeat("A", 43))
 	e.exec(t, `INSERT INTO pc.broker_keys (org_id, id, gateway_id, version, public_key, fingerprint, cert_id)
 		VALUES ($1, $2, $3, (SELECT coalesce(max(version), 0) + 1 FROM pc.broker_keys WHERE gateway_id = $3), $4, $5, $6)`,
-		e.org, key, gateway, pub, "sha256:"+strings.Repeat("0", 64), cert)
+		e.org, key, gateway, pub, "sha256:"+strings.Repeat("0", 32)+strings.ReplaceAll(key.String(), "-", ""), cert)
+	return key
+}
+
+// connection is an active connection of pkg served by gateway, its credential
+// sealed to key.
+func (e *env) connection(t *testing.T, gateway, key ids.UUID, pkg, kind string) ids.UUID {
+	t.Helper()
+	conn := ids.NewV7()
 	e.exec(t, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, allowed_hosts, default_mode,
 		credential_header, credential_scheme, created_by, updated_by) VALUES ($1, $2, $3, 'http', $4, $5, 'https://api.vendor.test',
 		'pantherclaw_held', ARRAY['api.vendor.test'], 'enforce', 'Authorization', 'Bearer', 'test', 'test')`, e.org, conn, "c-"+conn.String(), gateway, pkg)
@@ -386,8 +394,9 @@ func TestT273_AGatewayScanRunsUnderItsLease(t *testing.T) {
 		e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, $3, 'test')", e.org, g, "gw-"+g.String())
 	}
 	collector, _ := domain.CollectorOf(domain.SourceChatGPTEnterprise)
-	conn := e.connection(t, gateway, collector.Package, collector.CredentialKind)
-	wrong := e.connection(t, gateway, "pc.github", "github_app")
+	key := e.brokerKey(t, gateway)
+	conn := e.connection(t, gateway, key, collector.Package, collector.CredentialKind)
+	wrong := e.connection(t, gateway, key, "pc.github", "github_app")
 
 	if _, err := e.svc.Start(e.as(ids.NewV7(), td.KindServiceAccount), conn, domain.SourceChatGPTEnterprise, tenant); !errors.Is(err, app.ErrHumanOnly) {
 		t.Fatalf("a machine: %v", err)
@@ -455,7 +464,7 @@ func TestT273_AGatewayScanRunsUnderItsLease(t *testing.T) {
 	}
 	var task ids.UUID
 	e.d.AdminQueryRow(t, "SELECT verification_id FROM pc.saas_scan_runs WHERE org_id = $1 AND id = $2", []any{e.org, next.ID}, &task)
-	e.exec(t, "UPDATE pc.verifications SET state = 'EXPIRED' WHERE org_id = $1 AND id = $2", e.org, task)
+	e.exec(t, "UPDATE pc.verifications SET state = 'EXPIRED', finished_at = now() WHERE org_id = $1 AND id = $2", e.org, task)
 	if got, _ := e.svc.Get(e.admin, next.ID); got.State != "FAILED" {
 		t.Fatalf("expired: %s", got.State)
 	}

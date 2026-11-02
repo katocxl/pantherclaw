@@ -42,10 +42,10 @@ func (rangeBusiness) Current(context.Context) (billing.Entitlements, error) {
 func (d *rangeDriver) rangeSaaS() (*saasapp.Service, *aapp.Inventory, context.Context, ids.UUID) {
 	org, user := d.s.org, ids.NewV7()
 	d.s.db.AdminExec(d.t, "INSERT INTO pc.users(org_id,id,issuer,subject,email) VALUES($1,$2,'https://range.test',$3,'saas@range.test')", org, user, user.String())
-	d.s.db.AdminExec(d.t, "INSERT INTO pc.role_bindings(org_id,id,role,user_id,scope_type,created_by) VALUES($1,$2,'org_admin',$3,'ORG','range')", org, ids.NewV7(), user)
+	d.s.db.AdminExec(d.t, "INSERT INTO pc.role_bindings(org_id,id,role,user_id,scope_type,created_by) VALUES($1,$2,'agent_owner',$3,'ORG','range')", org, ids.NewV7(), user)
 	inv := aapp.NewInventory(d.s.pool, nil)
 	ctx := tapp.WithCaller(context.Background(), tapp.Caller{
-		Subject:    td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: user}, Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}},
+		Subject:    td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: user}, Bindings: []td.Binding{{Role: td.RoleAgentOwner, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}}},
 		Credential: tapp.CredBrowserSession, Session: ids.NewV7(),
 	})
 	return &saasapp.Service{Pool: d.s.pool, Inventory: inv, Editions: rangeBusiness{}}, inv, ctx, user
