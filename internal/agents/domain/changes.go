@@ -50,6 +50,10 @@ const (
 // agent's risk (G0 M24 D230).
 const ChangeRiskUpdated ChangeKind = "agent.risk_updated"
 
+// ChangeExternalOwnerSet records that a person named the owner of an external
+// agent (G0 M26 D407, HR-639). It sets the owner and nothing else.
+const ChangeExternalOwnerSet ChangeKind = "agent.external_owner_set"
+
 // VanishAfterMisses is how many complete scans in a row must miss a
 // discovery before people are told it vanished (G3, HR-458).
 const VanishAfterMisses = 3

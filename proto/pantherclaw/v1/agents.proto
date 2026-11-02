@@ -216,6 +216,10 @@ message Agent {
   // What continuous discovery saw of it (G0 M22 D6); unset for an agent no
   // scan found.
   AgentScanState scan_state = 17;
+  // An agent that lives in a SaaS tenant (G0 M26 D407, HR-639): found by SaaS
+  // discovery, it stays DISCOVERED and observe-only, with no key, token or
+  // grant. Naming its owner is the only claim it takes.
+  bool external = 22;
 }
 
 // AgentScanState sums up the scan findings of one agent that were not
@@ -628,7 +632,8 @@ message ScanFinding {
   // "mcp_server", "agent_project", "hook", "skill" or "env_secret" from a
   // local scan (env_secret carries the credential's kind and nothing of its
   // value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,
-  // HR-209), "github_app", "github_workflow" or "github_mcp_config".
+  // HR-209), "github_app", "github_workflow" or "github_mcp_config"; from a
+  // gateway's SaaS scan (G0 M26 D407), "copilot_studio_agent" or "chatgpt_gpt".
   string kind = 1 [(buf.validate.field).string = {
     in: [
       "mcp_server",
@@ -638,7 +643,9 @@ message ScanFinding {
       "env_secret",
       "github_app",
       "github_workflow",
-      "github_mcp_config"
+      "github_mcp_config",
+      "copilot_studio_agent",
+      "chatgpt_gpt"
     ]
   }];
   // Stable key of the finding on the scanning machine (hex SHA-256), so a

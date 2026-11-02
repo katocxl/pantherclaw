@@ -449,7 +449,11 @@ type Agent struct {
 	AiActRisk AgentAiActRisk `protobuf:"varint,21,opt,name=ai_act_risk,json=aiActRisk,proto3,enum=pantherclaw.v1.AgentAiActRisk" json:"ai_act_risk,omitempty"`
 	// What continuous discovery saw of it (G0 M22 D6); unset for an agent no
 	// scan found.
-	ScanState     *AgentScanState `protobuf:"bytes,17,opt,name=scan_state,json=scanState,proto3" json:"scan_state,omitempty"`
+	ScanState *AgentScanState `protobuf:"bytes,17,opt,name=scan_state,json=scanState,proto3" json:"scan_state,omitempty"`
+	// An agent that lives in a SaaS tenant (G0 M26 D407, HR-639): found by SaaS
+	// discovery, it stays DISCOVERED and observe-only, with no key, token or
+	// grant. Naming its owner is the only claim it takes.
+	External      bool `protobuf:"varint,22,opt,name=external,proto3" json:"external,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -629,6 +633,13 @@ func (x *Agent) GetScanState() *AgentScanState {
 		return x.ScanState
 	}
 	return nil
+}
+
+func (x *Agent) GetExternal() bool {
+	if x != nil {
+		return x.External
+	}
+	return false
 }
 
 // AgentScanState sums up the scan findings of one agent that were not
@@ -2662,7 +2673,8 @@ type ScanFinding struct {
 	// "mcp_server", "agent_project", "hook", "skill" or "env_secret" from a
 	// local scan (env_secret carries the credential's kind and nothing of its
 	// value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,
-	// HR-209), "github_app", "github_workflow" or "github_mcp_config".
+	// HR-209), "github_app", "github_workflow" or "github_mcp_config"; from a
+	// gateway's SaaS scan (G0 M26 D407), "copilot_studio_agent" or "chatgpt_gpt".
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Stable key of the finding on the scanning machine (hex SHA-256), so a
 	// later scan of the same thing is only counted.
@@ -3032,7 +3044,7 @@ var File_pantherclaw_v1_agents_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpantherclaw/v1/agents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/automations.proto\"\xee\a\n" +
+	"\x1bpantherclaw/v1/agents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/automations.proto\"\x8a\b\n" +
 	"\x05Agent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -3062,7 +3074,8 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\vai_act_role\x18\x14 \x01(\x0e2\x1e.pantherclaw.v1.AgentAiActRoleR\taiActRole\x12>\n" +
 	"\vai_act_risk\x18\x15 \x01(\x0e2\x1e.pantherclaw.v1.AgentAiActRiskR\taiActRisk\x12=\n" +
 	"\n" +
-	"scan_state\x18\x11 \x01(\v2\x1e.pantherclaw.v1.AgentScanStateR\tscanState\"\x91\x01\n" +
+	"scan_state\x18\x11 \x01(\v2\x1e.pantherclaw.v1.AgentScanStateR\tscanState\x12\x1a\n" +
+	"\bexternal\x18\x16 \x01(\bR\bexternal\"\x91\x01\n" +
 	"\x0eAgentScanState\x12!\n" +
 	"\fmissed_scans\x18\x01 \x01(\x05R\vmissedScans\x12@\n" +
 	"\x0elast_seen_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12\x1a\n" +
@@ -3238,12 +3251,12 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"y\n" +
 	"\x18ListAgentChangesResponse\x125\n" +
 	"\achanges\x18\x01 \x03(\v2\x1b.pantherclaw.v1.AgentChangeR\achanges\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe6\x02\n" +
-	"\vScanFinding\x12}\n" +
-	"\x04kind\x18\x01 \x01(\tBi\xbaHfrdR\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x8d\x03\n" +
+	"\vScanFinding\x12\xa3\x01\n" +
+	"\x04kind\x18\x01 \x01(\tB\x8e\x01\xbaH\x8a\x01r\x87\x01R\n" +
 	"mcp_serverR\ragent_projectR\x04hookR\x05skillR\n" +
 	"env_secretR\n" +
-	"github_appR\x0fgithub_workflowR\x11github_mcp_configR\x04kind\x12'\n" +
+	"github_appR\x0fgithub_workflowR\x11github_mcp_configR\x14copilot_studio_agentR\vchatgpt_gptR\x04kind\x12'\n" +
 	"\x03key\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x03key\x12p\n" +
 	"\n" +
 	"attributes\x18\x03 \x03(\v2+.pantherclaw.v1.ScanFinding.AttributesEntryB#\xbaH \x9a\x01\x1d\x10\x10\"\x12r\x102\x0e^[a-z_]{1,32}$*\x05r\x03\x18\x80\x02R\n" +

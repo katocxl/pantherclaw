@@ -36,6 +36,9 @@ type Agent struct {
 	RetiredAt         *time.Time
 	// RangeAgent: all its runs are simulated (G0 M12, HR-220); immutable.
 	RangeAgent bool
+	// External: it lives in a SaaS tenant and is only observed (G0 M26 D407,
+	// HR-639). It stays DISCOVERED, with no key path.
+	External bool
 	// What people state about the agent's risk (G0 M24 D230).
 	RiskTier    domain.RiskTier
 	DataClasses []string
@@ -130,7 +133,7 @@ func agentView(r dbq.PcAgent) Agent {
 		ID: r.ID, Name: r.Name, Purpose: r.Purpose, State: domain.State(r.State), CreatedBy: r.CreatedBy,
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, ClaimedAt: r.ClaimedAt, RetiredAt: r.RetiredAt,
 		RangeAgent: r.RangeAgent, RiskTier: domain.RiskTier(r.RiskTier), DataClasses: r.DataClasses,
-		AIActRole: domain.AIActRole(r.AiActRole), AIActRisk: domain.AIActRisk(r.AiActRisk),
+		AIActRole: domain.AIActRole(r.AiActRole), AIActRisk: domain.AIActRisk(r.AiActRisk), External: r.External,
 	}
 	for dst, src := range map[*ids.UUID]*ids.UUID{
 		&a.TeamID: r.TeamID, &a.EnvironmentID: r.EnvironmentID, &a.OwnerUserID: r.OwnerUserID,

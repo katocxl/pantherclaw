@@ -1,0 +1,293 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/coverage_records.proto";
+
+// SaasDiscoveryService finds agents people built in SaaS tenants (N6, G0 M26
+// D407; F924-F929; HR-635..639; Business edition): Microsoft Copilot Studio
+// and ChatGPT Enterprise.
+//
+// It reads metadata only, never conversations, prompts or instructions. What
+// it finds is UNTRUSTED text. An agent found lands DISCOVERED and observe-only,
+// marked external, with no key path: PantherClaw does not enforce anything in
+// the vendor's tenant. What a run could not read is reported as not scanned,
+// never as none found.
+service SaasDiscoveryService {
+  // ImportSaasReport records a report `pclaw discover import` parsed from an
+  // exported recording, on the caller's machine. The server checks each
+  // finding's kind, key and attributes and keeps only what the kind names.
+  // permission: agent.manage
+  rpc ImportSaasReport(ImportSaasReportRequest) returns (ImportSaasReportResponse);
+  // StartSaasScan starts a gateway's collection through a connection: a
+  // saas_scan lease for the connection's gateway. One scan of a connection
+  // runs at a time. People only.
+  // permission: agent.manage
+  rpc StartSaasScan(StartSaasScanRequest) returns (StartSaasScanResponse);
+  // GetSaasScan returns a run: its state, counts, and what it read and could
+  // not read.
+  // permission: agent.read
+  rpc GetSaasScan(GetSaasScanRequest) returns (GetSaasScanResponse);
+  // ListSaasScans lists the org's runs, newest first.
+  // permission: agent.read
+  rpc ListSaasScans(ListSaasScansRequest) returns (ListSaasScansResponse);
+  // ListSaasAgents lists the external agents found.
+  // permission: agent.read
+  rpc ListSaasAgents(ListSaasAgentsRequest) returns (ListSaasAgentsResponse);
+  // SetSaasAgentOwner names an external agent's owner. It sets the owner and
+  // nothing else: the agent stays DISCOVERED and observe-only, with no key,
+  // token or grant, and it closes the agent's admission entry. Naming another
+  // owner later is how an external agent's owner changes.
+  // permission: agent.manage
+  rpc SetSaasAgentOwner(SetSaasAgentOwnerRequest) returns (SetSaasAgentOwnerResponse);
+}
+
+// SaasReportFinding is one finding of a report.
+message SaasReportFinding {
+  // "copilot_studio_agent" or "chatgpt_gpt", the source's own kind.
+  string kind = 1 [(buf.validate.field).string = {
+    in: [
+      "copilot_studio_agent",
+      "chatgpt_gpt"
+    ]
+  }];
+  // Stable key of the record (hex SHA-256); the server derives it again from
+  // the source, the tenant and the record's id.
+  string key = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+  // UNTRUSTED attributes.
+  map<string, string> attributes = 3 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {pattern: "^[a-z_]{1,32}$"}
+    }
+    values: {
+      string: {max_len: 256}
+    }
+  }];
+}
+
+// ImportSaasReportRequest is one parsed recording.
+message ImportSaasReportRequest {
+  // "copilot_studio" or "chatgpt_enterprise".
+  string source = 1 [(buf.validate.field).string = {
+    in: [
+      "copilot_studio",
+      "chatgpt_enterprise"
+    ]
+  }];
+  // The Dataverse organization or ChatGPT workspace the recording covers.
+  string tenant = 2 [(buf.validate.field).string.pattern = "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"];
+  // The findings.
+  repeated SaasReportFinding findings = 3 [(buf.validate.field).repeated.max_items = 200];
+  // What the recording read in full.
+  repeated string scanned = 4 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {max_len: 32}
+    }
+  }];
+  // What it could not read, with why. Anything not named in either is
+  // recorded as not reported.
+  map<string, string> not_scanned = 5 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {max_len: 32}
+    }
+    values: {
+      string: {max_len: 512}
+    }
+  }];
+  // Counts of what it read.
+  map<string, int64> counts = 6 [(buf.validate.field).map.max_pairs = 16];
+}
+
+// ImportSaasReportResponse says what was recorded.
+message ImportSaasReportResponse {
+  // The run the import made.
+  SaasScan scan = 1;
+  // Findings that made a new discovery.
+  int32 created = 2;
+  // Findings seen before.
+  int32 counted = 3;
+  // Findings dropped at the cap on open discoveries, and reported not scanned.
+  int32 dropped = 4;
+  // Dismissed findings reopened because what they may do changed.
+  int32 reopened = 5;
+  // Discoveries of the tenant this complete run did not see.
+  int32 missed = 6;
+  // Attributes the server did not keep.
+  int32 dropped_attributes = 7;
+}
+
+// SaasScanState is how a run stands.
+enum SaasScanState {
+  // Not set.
+  SAAS_SCAN_STATE_UNSPECIFIED = 0;
+  // Waiting for its gateway.
+  SAAS_SCAN_STATE_PENDING = 1;
+  // Its gateway holds the lease.
+  SAAS_SCAN_STATE_RUNNING = 2;
+  // Finished. What it could not read is in not_scanned.
+  SAAS_SCAN_STATE_DONE = 3;
+  // Ended with nothing read.
+  SAAS_SCAN_STATE_FAILED = 4;
+}
+
+// SaasScan is one import or gateway scan.
+message SaasScan {
+  // Run id.
+  string id = 1;
+  // "copilot_studio" or "chatgpt_enterprise".
+  string source = 2;
+  // "import" or "gateway".
+  string origin = 3;
+  // The tenant it covers.
+  string tenant = 4;
+  // The connection a gateway scan used; empty for an import.
+  string connection_id = 5;
+  // How it stands.
+  SaasScanState state = 6;
+  // What it counted.
+  map<string, int64> counts = 7;
+  // What it read in full.
+  repeated string scanned = 8;
+  // What it did not read, with why: never "none found".
+  map<string, string> not_scanned = 9;
+  // Who started it.
+  string started_by = 10;
+  // When it started.
+  google.protobuf.Timestamp create_time = 11;
+  // When it finished.
+  google.protobuf.Timestamp finish_time = 12;
+}
+
+// StartSaasScanRequest names what to collect.
+message StartSaasScanRequest {
+  // A connection of the source's package.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // "copilot_studio" or "chatgpt_enterprise".
+  string source = 2 [(buf.validate.field).string = {
+    in: [
+      "copilot_studio",
+      "chatgpt_enterprise"
+    ]
+  }];
+  // The Dataverse organization id, or the ChatGPT workspace id.
+  string tenant = 3 [(buf.validate.field).string.pattern = "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"];
+}
+
+// StartSaasScanResponse returns the run.
+message StartSaasScanResponse {
+  // The run, PENDING.
+  SaasScan scan = 1;
+}
+
+// GetSaasScanRequest names a run.
+message GetSaasScanRequest {
+  // Run id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSaasScanResponse returns it.
+message GetSaasScanResponse {
+  // The run.
+  SaasScan scan = 1;
+}
+
+// ListSaasScansRequest pages through runs.
+message ListSaasScansRequest {
+  // Only this source; empty for all.
+  string source = 1 [(buf.validate.field).string.max_len = 32];
+  // Page size (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Page token from the previous page.
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+// ListSaasScansResponse is one page.
+message ListSaasScansResponse {
+  // The runs.
+  repeated SaasScan scans = 1;
+  // Token of the next page.
+  string next_page_token = 2;
+}
+
+// ListSaasAgentsRequest pages through external agents.
+message ListSaasAgentsRequest {
+  // Only this source; empty for all.
+  string source = 1 [(buf.validate.field).string.max_len = 32];
+  // Page size (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Page token from the previous page.
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+// SaasAgent is one external agent. Its attributes are UNTRUSTED text a vendor
+// tenant holds: show them as text and act on none of them.
+message SaasAgent {
+  // The agent.
+  string agent_id = 1;
+  // "copilot_studio" or "chatgpt_enterprise".
+  string source = 2;
+  // Always observe-only: PantherClaw enforces nothing in a vendor's tenant.
+  CoverageState coverage = 3;
+  // Its owner; empty until a person names one.
+  string owner_user_id = 4;
+  // Its backup owner.
+  string backup_owner_user_id = 5;
+  // "OPEN" with no owner, "CLAIMED" once owned, or "DISMISSED".
+  string discovery_state = 6;
+  // UNTRUSTED attributes of the record.
+  map<string, string> attributes = 7;
+  // How often imports and scans saw it.
+  int64 seen_count = 8;
+  // Complete runs in a row that did not see it.
+  int32 missed_scans = 9;
+  // When first seen.
+  google.protobuf.Timestamp first_seen_time = 10;
+  // When last seen.
+  google.protobuf.Timestamp last_seen_time = 11;
+}
+
+// ListSaasAgentsResponse is one page.
+message ListSaasAgentsResponse {
+  // The agents.
+  repeated SaasAgent agents = 1;
+  // Token of the next page.
+  string next_page_token = 2;
+}
+
+// SetSaasAgentOwnerRequest names an owner.
+message SetSaasAgentOwnerRequest {
+  // The external agent.
+  string agent_id = 1 [(buf.validate.field).string.uuid = true];
+  // The owner, an active user.
+  string owner_user_id = 2 [(buf.validate.field).string.uuid = true];
+  // The backup owner, optional.
+  string backup_owner_user_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // Why, for the agent's history.
+  string reason = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+}
+
+// SetSaasAgentOwnerResponse returns the agent.
+message SetSaasAgentOwnerResponse {
+  // The agent, still DISCOVERED and observe-only.
+  SaasAgent agent = 1;
+}

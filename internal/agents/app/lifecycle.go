@@ -69,6 +69,9 @@ func (inv *Inventory) Claim(ctx context.Context, id ids.UUID, d *domain.Details,
 		if domain.State(r.State) != domain.StateDiscovered {
 			return pcerr.Wrap(domain.ErrNotDiscovered, pcerr.FailedPrecondition, "AGENT_STATE", domain.ErrNotDiscovered.Error())
 		}
+		if r.External {
+			return ErrExternalClaim // neither claimed nor merged: it stays observe-only (HR-639)
+		}
 		decider := ptr(string(actor(c)))
 		if d != nil {
 			out, err = inv.claimAsNew(ctx, c, q, r, *d, reason)

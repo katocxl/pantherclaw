@@ -44,6 +44,8 @@ Usage:
                        [--rate-limit 0] [--invalid-auth] [--not-found]
   pantherclaw-sim gitlab [--addr 127.0.0.1:9097] [--token-file FILE] [--approved] [--rate-limit 0] [--invalid-auth] [--not-found]
   pantherclaw-sim teams [--addr 127.0.0.1:9098] [--client-file FILE] [--rate-limit 0] [--invalid-client] [--blocked]
+  pantherclaw-sim copilot-studio [--addr 127.0.0.1:9100] [--deny-components]
+  pantherclaw-sim chatgpt-enterprise [--addr 127.0.0.1:9101] [--key-file FILE] [--deny]
   pantherclaw-sim aws --secret-file FILE [--addr 127.0.0.1:9099] [--external-id ID] [--role-actions *] [--throttle 0] [--deny-assume-role]
                       [--long-sessions]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
@@ -82,6 +84,10 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runGitLab(ctx, args[1:], stderr)
 	case "teams":
 		err = runTeams(ctx, args[1:], stderr)
+	case "copilot-studio":
+		err = runCopilotStudio(ctx, args[1:], stderr)
+	case "chatgpt-enterprise":
+		err = runChatGPTEnterprise(ctx, args[1:], stderr)
 	case "aws":
 		err = runAWS(ctx, args[1:], stderr)
 	case "load":

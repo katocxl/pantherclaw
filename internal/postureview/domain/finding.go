@@ -29,6 +29,7 @@ const (
 	SourceInventory       Source = "inventory"
 	SourceSupplyChain     Source = "supply_chain"
 	SourceCatalog         Source = "catalog"
+	SourceSaaS            Source = "saas"
 )
 
 // MaxPerSource is how many findings one source returns (D204). A source

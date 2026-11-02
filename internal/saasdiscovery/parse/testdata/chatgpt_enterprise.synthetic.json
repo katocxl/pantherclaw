@@ -1,0 +1,51 @@
+{
+  "_fixture": {
+    "label": "SYNTHETIC",
+    "note": "Written by hand. No real capture exists yet: no workspace, person or GPT here is real, and every id is made up.",
+    "uncertain_fields": [
+      "OpenAI's Compliance API reference sits behind an enterprise sign-in and could not be read (2026-11-01). OpenAI's public pages say only that it covers workspace GPT configuration and metadata.",
+      "The path GET /v1/compliance/workspaces/{workspace_id}/gpts and the host api.chatgpt.com are recalled from third-party connector documents, not confirmed.",
+      "The list shape (data, has_more, last_id, cursor paging by after) is assumed from OpenAI's other list endpoints.",
+      "owner_id and created_at appear in a third party's summary; their exact spelling and created_at's type (number or string) are assumed. Both types are accepted.",
+      "sharing.visibility is assumed. A third party lists Shared Recipients, which this parser does not keep.",
+      "latest_config.data[0].name, .tools and the tool members type and domain are assumed. A tools shape that does not match is reported as not scanned and the GPT is marked tools_incomplete.",
+      "The recording wrapper (workspace_id, gpts) is PantherClaw's own."
+    ]
+  },
+  "workspace_id": "synthetic-workspace-0001",
+  "gpts": {
+    "object": "list",
+    "has_more": false,
+    "last_id": "g-synthetic0002",
+    "data": [
+      {
+        "object": "compliance.workspace.gpt",
+        "id": "g-synthetic0001",
+        "created_at": 1788000000,
+        "owner_id": "user-synthetic0001",
+        "owner_email": "synthetic-owner-never-kept@example.invalid",
+        "sharing": {"visibility": "workspace", "recipients": ["synthetic-recipient-never-kept@example.invalid"]},
+        "latest_config": {
+          "data": [
+            {
+              "name": "SYNTHETIC sales notes",
+              "description": "SYNTHETIC-DESCRIPTION-NEVER-KEPT",
+              "instructions": "SYNTHETIC-INSTRUCTIONS-NEVER-KEPT",
+              "conversation_starters": ["SYNTHETIC-STARTER-NEVER-KEPT"],
+              "tools": {"data": [{"type": "browser"}, {"type": "action", "domain": "https://crm.example.invalid/v1/notes?token=SYNTHETIC-NEVER-KEPT"}]}
+            }
+          ]
+        }
+      },
+      {
+        "object": "compliance.workspace.gpt",
+        "id": "g-synthetic0002",
+        "created_at": "2026-08-20T10:00:00Z",
+        "owner_id": "user-synthetic0002",
+        "sharing": {"visibility": "invite_only"},
+        "name": "SYNTHETIC private drafts",
+        "latest_config": {"data": [{"tools": []}]}
+      }
+    ]
+  }
+}

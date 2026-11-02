@@ -170,7 +170,7 @@ func agentProto(a app.Agent) *pantherclawv1.Agent {
 		State: stateToProto[a.State], SuspendedFrom: stateToProto[a.SuspendedFrom], CreatedBy: a.CreatedBy,
 		CreateTime: ts(a.CreatedAt), UpdateTime: ts(a.UpdatedAt), ClaimTime: tsp(a.ClaimedAt), RetireTime: tsp(a.RetiredAt),
 		RangeAgent: a.RangeAgent, RiskTier: riskTierToProto[a.RiskTier], DataClasses: a.DataClasses,
-		AiActRole: aiActRoleToProto[a.AIActRole], AiActRisk: aiActRiskToProto[a.AIActRisk],
+		AiActRole: aiActRoleToProto[a.AIActRole], AiActRisk: aiActRiskToProto[a.AIActRisk], External: a.External,
 	}
 	if s := a.ScanState; s != nil {
 		out.ScanState = &pantherclawv1.AgentScanState{MissedScans: s.MissedScans, LastSeenTime: ts(s.LastSeenAt), Vanished: s.Vanished}

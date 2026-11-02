@@ -1008,9 +1008,9 @@ const file_pantherclaw_v1_posture_queue_proto_rawDesc = "" +
 	"\x13PostureSourceStatus\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x128\n" +
 	"\x05state\x18\x02 \x01(\x0e2\".pantherclaw.v1.PostureSourceStateR\x05state\x12\x1a\n" +
-	"\bfindings\x18\x03 \x01(\x05R\bfindings\"\xa5\x04\n" +
-	"\x19ListRankedFindingsRequest\x12}\n" +
-	"\x06source\x18\x01 \x01(\tBe\xbaHbr`R\x00R\apostureR\bcoverageR\vsuggestionsR\tdiscoveryR\x0frecommendationsR\tinventoryR\fsupply_chainR\acatalogR\x06source\x12-\n" +
+	"\bfindings\x18\x03 \x01(\x05R\bfindings\"\xac\x04\n" +
+	"\x19ListRankedFindingsRequest\x12\x83\x01\n" +
+	"\x06source\x18\x01 \x01(\tBk\xbaHhrfR\x00R\apostureR\bcoverageR\vsuggestionsR\tdiscoveryR\x0frecommendationsR\tinventoryR\fsupply_chainR\acatalogR\x04saasR\x06source\x12-\n" +
 	"\x04kind\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[a-zA-Z0-9_.]*$R\x04kind\x12F\n" +
 	"\bseverity\x18\x03 \x01(\tB*\xbaH'r%R\x00R\x04INFOR\x03LOWR\x06MEDIUMR\x04HIGHR\bCRITICALR\bseverity\x124\n" +
 	"\ateam_id\x18\x04 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\x06teamId\x126\n" +
