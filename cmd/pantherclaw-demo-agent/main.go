@@ -39,6 +39,8 @@ Commands:
 
 Without --branch and --file, allowed names its branch and file with a random suffix, so that it can run again on the same repository; it prints the names it chose.
   dial ADDR...                     tries each HOST:PORT directly over TCP and as HTTP through the sandbox's proxy
+  listen ADDR                      outside a sandbox: a stand-in relay listening on HOST:PORT, printing "accepted
+                                   REMOTE" for every connection (tests run it on a container network)
   help, -h, --help                 this text
 
 One line per attempt: "name STATUS body" for HTTP, "ssh ADDRESS reached|blocked" for SSH.
@@ -70,6 +72,14 @@ func main() {
 			dial(addr)
 		}
 		return
+	}
+	if cmd == "listen" {
+		if len(args) != 1 {
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(2)
+		}
+		listen(args[0])
+		os.Exit(1)
 	}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -177,6 +187,30 @@ func dial(addr string) {
 		refused = "-"
 	}
 	say("proxy", addr, refused, answer(res, nil))
+}
+
+// listen is a stand-in for a relay on a container network: it prints
+// "accepted REMOTE" for every connection and answers it, so that a test can
+// count from the container's log what reached it (D543 R-L4). It returns
+// only on an error.
+func listen(addr string) {
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", addr)
+	if err != nil {
+		say("listen", addr, "error", err)
+		return
+	}
+	say("listening", ln.Addr())
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			say("accept error", err)
+			return
+		}
+		say("accepted", c.RemoteAddr())
+		_ = c.SetDeadline(time.Now().Add(5 * time.Second))
+		_, _ = io.WriteString(c, "HTTP/1.1 200 OK\r\nContent-Length: 22\r\nConnection: close\r\n\r\nreached-relay-address\n")
+		_ = c.Close()
+	}
 }
 
 // found returns the first line of path that starts with prefix, without it.

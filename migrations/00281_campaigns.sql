@@ -145,15 +145,24 @@ CREATE TRIGGER campaigns_forward BEFORE UPDATE ON pc.campaigns
 
 -- A run of the twin created while a step is open belongs to that step (D525
 -- M1): the server binds it at creation, set once, and the runner never says
--- which run backs which scenario. Every bound run counts.
+-- which run backs which scenario. A simulated child of a bound run, of
+-- whatever agent, belongs to its parent's step, so every descendant of a
+-- bound run is bound too (D543 R-M1). Every bound run counts.
 -- +goose StatementBegin
 CREATE FUNCTION pc.campaign_bind_run() RETURNS trigger
     LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
 BEGIN
     IF NEW.simulated THEN
         INSERT INTO pc.campaign_runs (org_id, campaign_id, run_id, scenario_id, model_host)
-        SELECT c.org_id, c.id, NEW.id, c.open_step, c.model_host FROM pc.campaigns c
-        WHERE c.org_id = NEW.org_id AND c.range_agent_id = NEW.agent_id AND c.state = 'RUNNING' AND c.open_step IS NOT NULL;
+        SELECT DISTINCT ON (x.campaign_id) x.org_id, x.campaign_id, NEW.id, x.scenario_id, x.model_host FROM (
+            SELECT 0 AS pick, b.org_id, b.campaign_id, b.scenario_id, b.model_host
+            FROM pc.campaign_runs b JOIN pc.campaigns c ON c.org_id = b.org_id AND c.id = b.campaign_id
+            WHERE NEW.parent_run_id IS NOT NULL AND b.org_id = NEW.org_id AND b.run_id = NEW.parent_run_id AND c.state = 'RUNNING'
+            UNION ALL
+            SELECT 1, c.org_id, c.id, c.open_step, c.model_host FROM pc.campaigns c
+            WHERE c.org_id = NEW.org_id AND c.range_agent_id = NEW.agent_id AND c.state = 'RUNNING' AND c.open_step IS NOT NULL
+        ) x
+        ORDER BY x.campaign_id, x.pick;
     END IF;
     RETURN NULL;
 END
@@ -162,17 +171,21 @@ $$;
 CREATE TRIGGER runs_campaign_bind AFTER INSERT ON pc.runs
     FOR EACH ROW EXECUTE FUNCTION pc.campaign_bind_run();
 
--- Whoever inserts a binding, it is only ever the one the trigger above makes:
--- a simulated run of the campaign's twin, to the running campaign's open
--- step, with its model host. Its scenario is never updated (no grant).
+-- Whoever inserts a binding, it is only ever one the trigger above makes: a
+-- simulated run of the campaign's twin to the running campaign's open step,
+-- or a simulated child of a run bound to the same step, with the campaign's
+-- model host. Its scenario is never updated (no grant).
 -- +goose StatementBegin
 CREATE FUNCTION pc.campaign_run_bound() RETURNS trigger
     LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
 BEGIN
     IF NOT EXISTS (
-        SELECT FROM pc.campaigns c JOIN pc.runs r ON r.org_id = c.org_id AND r.agent_id = c.range_agent_id
+        SELECT FROM pc.campaigns c JOIN pc.runs r ON r.org_id = c.org_id
         WHERE c.org_id = NEW.org_id AND c.id = NEW.campaign_id AND r.id = NEW.run_id AND r.simulated
-          AND c.state = 'RUNNING' AND c.open_step = NEW.scenario_id AND c.model_host = NEW.model_host
+          AND c.state = 'RUNNING' AND c.model_host = NEW.model_host
+          AND ((r.agent_id = c.range_agent_id AND c.open_step = NEW.scenario_id)
+            OR EXISTS (SELECT FROM pc.campaign_runs p WHERE p.org_id = r.org_id AND p.campaign_id = c.id
+                AND p.run_id = r.parent_run_id AND p.scenario_id = NEW.scenario_id))
     ) THEN
         RAISE EXCEPTION 'run % is not a run of campaign %''s open step', NEW.run_id, NEW.campaign_id USING ERRCODE = 'check_violation';
     END IF;

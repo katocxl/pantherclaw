@@ -8,6 +8,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json/v2"
 	"encoding/pem"
 	"io"
@@ -61,7 +62,7 @@ func (w *keyWatch) grepTree(root, what string) {
 		if err != nil || d.IsDir() {
 			return nil //nolint:nilerr // a file removed under the walk is no leak
 		}
-		if b, err := os.ReadFile(p); err == nil && bytes.Contains(b, []byte(m25ModelKey)) { //nolint:gosec // the test's own temp files
+		if b, err := os.ReadFile(p); err == nil && bytes.Contains(b, []byte(m25ModelKey)) {
 			w.leak(what + " " + p)
 		}
 		return nil
@@ -310,6 +311,53 @@ func TestE2E_M25_ACampaignRunsAgainstARangeTwin(t *testing.T) {
 		}
 		if strings.Contains(out, "reached-relay-address") || accepted.Load() != 0 {
 			t.Fatalf("HIGH: the relay's listen address took %d connections from the sandbox:\n%s", accepted.Load(), out)
+		}
+	})
+
+	// D543 R-L4: nor a relay on a private address of a container network. A
+	// stand-in relay listens on Docker's default bridge (a private address);
+	// a plain container on that bridge reaches it first, so a pass is not a
+	// listener nothing could reach. A host LAN address is not tested: on
+	// Docker Desktop the host's firewall may drop the connection on its own,
+	// which would pass for the sandbox's doing (runbook facts).
+	t.Run("a sandbox cannot reach a relay on a private bridge address", func(t *testing.T) {
+		ctx := t.Context()
+		name := "s25b-relay-" + strings.ToLower(rand.Text()[:8])
+		if out, err := exec.CommandContext(ctx, "docker", "run", "-d", "--rm", "--name", name, "--network", "bridge", standIn, "listen", "0.0.0.0:8099").CombinedOutput(); err != nil {
+			t.Fatalf("docker run the stand-in relay: %v\n%s", err, out)
+		}
+		t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() })
+		ip, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.NetworkSettings.IPAddress}}", name).Output()
+		if err != nil || strings.TrimSpace(string(ip)) == "" {
+			t.Fatalf("the stand-in relay's address: %q %v", ip, err)
+		}
+		target := net.JoinHostPort(strings.TrimSpace(string(ip)), "8099")
+		accepts := func() int {
+			logs, _ := exec.CommandContext(ctx, "docker", "logs", name).CombinedOutput()
+			return strings.Count(string(logs), "accepted ")
+		}
+		// The control: outside any sandbox, the bridge address is reachable.
+		if out, err := exec.CommandContext(ctx, "docker", "run", "--rm", "--network", "bridge", standIn, "dial", target).CombinedOutput(); err != nil ||
+			!strings.Contains(string(out), "dial "+target+" reached") {
+			t.Fatalf("the control container did not reach the stand-in relay: %v\n%s", err, out)
+		}
+		before := accepts()
+		if before == 0 {
+			t.Fatal("the stand-in relay logged no connection from the control")
+		}
+		m.agentImage = standIn
+		code, out, errs := m.sandbox(t, pclaw.Options{}, "dial", target)
+		if code != 0 && code != 3 {
+			t.Fatalf("sandbox run = %d\n%s\n%s", code, out, errs)
+		}
+		if !strings.Contains(out, "dial "+target+" blocked") {
+			t.Errorf("HIGH: the agent dialed %s directly:\n%s", target, out)
+		}
+		if !strings.Contains(out, "proxy "+target+" ") {
+			t.Errorf("no proxy attempt for %s:\n%s", target, out)
+		}
+		if after := accepts(); strings.Contains(out, "reached-relay-address") || after != before {
+			t.Fatalf("HIGH: the bridge relay took %d connections from the sandbox:\n%s", after-before, out)
 		}
 	})
 }

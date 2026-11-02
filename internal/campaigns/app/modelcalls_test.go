@@ -133,8 +133,10 @@ func TestHR614_AStaleCampaignAndTheRunTotalCloseTheRoute(t *testing.T) {
 	if _, err := w.svc.AuthorizeModelCall(w.ctx, w.org(), call); err != nil {
 		t.Fatalf("after the answers settled: %v", err)
 	}
-	w2, _, gw2, run2 := modelWorld(t)
-	w2.svc.Now = func() time.Time { return c.Started.Add(app.MaxCampaignAge) }
+	// The stale clock is set from the second world's own campaign: the
+	// first one started earlier, so its age would fall short.
+	w2, c2, gw2, run2 := modelWorld(t)
+	w2.svc.Now = func() time.Time { return c2.Started.Add(app.MaxCampaignAge) }
 	if _, err := w2.svc.AuthorizeModelCall(w2.ctx, w2.org(), app.ModelCall{Gateway: gw2, Connection: w2.relay, Run: run2, ModelHost: modelHost}); !errors.Is(err, app.ErrModelRoute) {
 		t.Fatalf("a stale campaign: %v", err)
 	}

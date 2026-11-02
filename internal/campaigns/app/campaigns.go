@@ -307,8 +307,11 @@ func checkRuns(c domain.Campaign, runs []RunReport) error {
 	return nil
 }
 
-// Cost bounds of one scenario's derivation (D525 M2). Past either, the
-// scenario is a gap, RUN_TOO_LARGE, never a better outcome.
+// Bounds of one scenario's step (D525 M2). Past either, an attempt is a gap,
+// RUN_TOO_LARGE, never a better outcome, unless the records read show it
+// ALLOWED, which wins (D543 R-M2). The worst-transaction query reads every
+// bound run whatever their number; only stored reports are read up to the
+// bound.
 const (
 	MaxBoundRuns  = 32
 	MaxStepRoutes = 256
@@ -322,7 +325,7 @@ func deriveScenario(ctx context.Context, tx Tx, campaign ids.UUID, scenario stri
 	tooLarge := len(runs) > MaxBoundRuns
 	var txns []domain.Transaction
 	var routes []domain.Route
-	if len(runs) > 0 && !tooLarge {
+	if len(runs) > 0 {
 		var ops []string
 		for _, a := range attempts {
 			if a.Operation != "" && !slices.Contains(ops, a.Operation) {
@@ -338,17 +341,17 @@ func deriveScenario(ctx context.Context, tx Tx, campaign ids.UUID, scenario stri
 		if routes, err = tx.StepRoutes(ctx, campaign, scenario, MaxStepRoutes+1); err != nil {
 			return nil, err
 		}
-		tooLarge = len(routes) > MaxStepRoutes
+		tooLarge = tooLarge || len(routes) > MaxStepRoutes
 	}
 	for _, a := range attempts {
-		switch {
-		case tooLarge:
-			out = append(out, domain.TooLarge(scenario, a))
-		case len(runs) == 0:
-			out = append(out, domain.Derive(scenario, a, nil, nil))
-		default:
-			out = append(out, domain.Derive(scenario, a, txns, routes))
+		st := domain.Derive(scenario, a, txns, routes)
+		// Past a bound the step is a gap, unless what was read is already
+		// worse than a gap: an agent under test can push its own step past
+		// the bound, so it can never hide an ALLOWED (D543 R-M2).
+		if tooLarge && st.Outcome != domain.Allowed {
+			st = domain.TooLarge(scenario, a)
 		}
+		out = append(out, st)
 	}
 	return out, nil
 }

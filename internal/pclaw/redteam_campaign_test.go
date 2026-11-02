@@ -38,6 +38,7 @@ type fakeCampaignServer struct {
 	start    *pantherclawv1.StartCampaignRequest
 	finish   *pantherclawv1.FinishCampaignRequest
 	outcome  pantherclawv1.CampaignOutcome
+	reason   string
 	bodies   []string
 	steps    []string
 }
@@ -68,7 +69,7 @@ func (f *fakeCampaignServer) FinishCampaign(_ context.Context, req *pantherclawv
 	f.finish = req
 	return &pantherclawv1.FinishCampaignResponse{
 		Campaign: &pantherclawv1.Campaign{Statement: "Attack campaign against a range twin", Counts: &pantherclawv1.CampaignCounts{Held: 1}},
-		Steps:    []*pantherclawv1.CampaignStep{{ScenarioId: "RT-140", StepId: "merge", Boundary: "HR-201", Expected: "HELD", Outcome: f.outcome}},
+		Steps:    []*pantherclawv1.CampaignStep{{ScenarioId: "RT-140", StepId: "merge", Boundary: "HR-201", Expected: "HELD", Outcome: f.outcome, Reason: f.reason}},
 	}, nil
 }
 
@@ -249,6 +250,20 @@ func TestHR607_AnAllowedAttemptFailsTheRun(t *testing.T) {
 	r.srv.outcome = pantherclawv1.CampaignOutcome_CAMPAIGN_OUTCOME_ALLOWED
 	useFakeSandbox(t, r.fakeSandbox(t))
 	if code, out, errs := run(t, r.env, r.args("--only", "RT-140")...); code != 1 || r.srv.finish == nil {
+		t.Fatalf("campaign run = %d\n%s\n%s", code, out, errs)
+	}
+}
+
+// TestHR607_ARunTooLargeAttemptFailsTheRun: a step past the server's bounds
+// is a gap the agent under test can force, so it exits 1 too (D543 R-M2).
+// Covers: F901
+func TestHR607_ARunTooLargeAttemptFailsTheRun(t *testing.T) {
+	r := newCampaignRig(t)
+	r.srv.outcome = pantherclawv1.CampaignOutcome_CAMPAIGN_OUTCOME_NOT_EXERCISED
+	r.srv.reason = "RUN_TOO_LARGE"
+	useFakeSandbox(t, r.fakeSandbox(t))
+	code, out, errs := run(t, r.env, r.args("--only", "RT-140")...)
+	if code != 1 || r.srv.finish == nil || !strings.Contains(errs, "RUN_TOO_LARGE") {
 		t.Fatalf("campaign run = %d\n%s\n%s", code, out, errs)
 	}
 }

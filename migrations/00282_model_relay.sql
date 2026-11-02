@@ -5,11 +5,13 @@
 -- campaign. It has no package and no routes, so no other face serves it. The
 -- mark is set at creation and never changes: pc_app gets no UPDATE on it.
 -- +goose Up
--- The CHECK is NOT VALID: every existing row has the new column false, which
--- satisfies it, and every write from now on is checked.
+-- The CHECK is added NOT VALID and validated at once: every existing row has
+-- the new column false, so the validation scan is short and takes no long lock.
 ALTER TABLE pc.connections ADD COLUMN model_relay boolean NOT NULL DEFAULT false;
 ALTER TABLE pc.connections ADD CONSTRAINT connections_model_relay
     CHECK (NOT model_relay OR (simulated AND kind = 'http')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.connections VALIDATE CONSTRAINT connections_model_relay;
 
 -- A campaign's relay carries the mark, in the database too.
 -- +goose StatementBegin

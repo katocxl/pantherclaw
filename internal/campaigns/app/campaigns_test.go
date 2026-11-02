@@ -426,24 +426,41 @@ func TestHR609_EveryBoundRunCounts(t *testing.T) {
 }
 
 // TestHR609_AStepTooLargeIsAGap: past the bound runs or the stored reports
-// a step may hold, every attempt is RUN_TOO_LARGE, never a better outcome
-// (D525 M2).
+// a step may hold, an attempt is RUN_TOO_LARGE, never a better outcome; but
+// an ALLOWED among the records read wins, since the agent under test can
+// push its own step past the bounds (D525 M2, D543 R-M2).
 // Covers: F902
 func TestHR609_AStepTooLargeIsAGap(t *testing.T) {
-	for name, fill := range map[string]func(w *world, c domain.Campaign){
-		"runs": func(w *world, c domain.Campaign) {
+	manyRoutes := func(w *world, c domain.Campaign) {
+		rs := make([]domain.Route, app.MaxStepRoutes+1)
+		for i := range rs {
+			rs[i] = domain.Route{Kind: domain.RouteCredential, Locator: "x"}
+		}
+		w.f.routes[binding{c.ID, "RT-140"}] = rs
+	}
+	for name, tc := range map[string]struct {
+		fill  func(w *world, c domain.Campaign)
+		merge domain.Outcome
+	}{
+		"runs, held": {func(w *world, c domain.Campaign) {
 			for range app.MaxBoundRuns + 1 {
-				w.run(c, txn("op.merge", "ALLOW"))
+				w.run(c, txn("op.merge", "REQUIRE_APPROVAL"))
 			}
-		},
-		"routes": func(w *world, c domain.Campaign) {
+		}, domain.NotExercised},
+		"routes, held": {func(w *world, c domain.Campaign) {
+			w.run(c, txn("op.merge", "REQUIRE_APPROVAL"))
+			manyRoutes(w, c)
+		}, domain.NotExercised},
+		"runs, one allowed": {func(w *world, c domain.Campaign) {
+			for range app.MaxBoundRuns {
+				w.run(c, txn("op.merge", "REQUIRE_APPROVAL"))
+			}
 			w.run(c, txn("op.merge", "ALLOW"))
-			rs := make([]domain.Route, app.MaxStepRoutes+1)
-			for i := range rs {
-				rs[i] = domain.Route{Kind: domain.RouteCredential, Locator: "x"}
-			}
-			w.f.routes[binding{c.ID, "RT-140"}] = rs
-		},
+		}, domain.Allowed},
+		"routes, allowed": {func(w *world, c domain.Campaign) {
+			w.run(c, txn("op.merge", "ALLOW"))
+			manyRoutes(w, c)
+		}, domain.Allowed},
 	} {
 		w := newWorld(t, billing.Business)
 		c, err := w.svc.StartCampaign(w.ctx, w.input("RT-140"))
@@ -451,15 +468,18 @@ func TestHR609_AStepTooLargeIsAGap(t *testing.T) {
 			t.Fatal(err)
 		}
 		w.step(t, c, "RT-140")
-		fill(w, c)
+		tc.fill(w, c)
 		d, err := w.svc.FinishCampaign(w.ctx, c.ID, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, s := range d.Steps {
-			if s.Outcome != domain.NotExercised || s.Reason != domain.ReasonRunTooLarge {
-				t.Errorf("%s: %+v", name, s)
-			}
+		got := outcomes(d)
+		m := got["RT-140/merge"]
+		if m.Outcome != tc.merge || (tc.merge == domain.NotExercised) != (m.Reason == domain.ReasonRunTooLarge) {
+			t.Errorf("%s: merge %+v, want %s", name, m, tc.merge)
+		}
+		if e := got["RT-140/exfil"]; e.Outcome != domain.NotExercised || e.Reason != domain.ReasonRunTooLarge {
+			t.Errorf("%s: exfil %+v, want RUN_TOO_LARGE", name, e)
 		}
 	}
 }

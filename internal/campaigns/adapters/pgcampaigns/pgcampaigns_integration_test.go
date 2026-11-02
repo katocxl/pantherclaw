@@ -435,24 +435,87 @@ func TestHR609_EveryBoundRunCountsTheWorstWins(t *testing.T) {
 }
 
 // TestHR609_AStepTooLargeIsAGap: past the runs a step may bind, its attempts
-// are RUN_TOO_LARGE, never a better outcome (D525 M2).
+// are RUN_TOO_LARGE, never a better outcome; but an ALLOWED among the
+// records read wins, since the agent under test can push its own step past
+// the bound (D525 M2, D543 R-M2).
 // Covers: F902
 func TestHR609_AStepTooLargeIsAGap(t *testing.T) {
-	w := newWorld(t, dbtest.New(t))
-	c := w.start(t)
-	w.step(t, c, "RT-140")
-	for range app.MaxBoundRuns + 1 {
-		run := ids.NewV7()
-		w.runOf(t, run, w.twin, true)
-		w.txn(t, run, "github.pull_request.merge", "REQUIRE_APPROVAL")
+	d := dbtest.New(t)
+	for _, allowed := range []bool{false, true} {
+		w := newWorld(t, d)
+		c := w.start(t)
+		w.step(t, c, "RT-140")
+		for i := range app.MaxBoundRuns + 1 {
+			run := ids.NewV7()
+			w.runOf(t, run, w.twin, true)
+			decision := "REQUIRE_APPROVAL"
+			if allowed && i == app.MaxBoundRuns {
+				decision = "ALLOW"
+			}
+			w.txn(t, run, "github.pull_request.merge", decision)
+		}
+		det, err := w.svc.FinishCampaign(w.as(), c.ID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := stepsOf(det)
+		if m := got["RT-140/merge"]; allowed && (m.Outcome != domain.Allowed || m.Basis != domain.ServerRecord) ||
+			!allowed && (m.Outcome != domain.NotExercised || m.Reason != domain.ReasonRunTooLarge) {
+			t.Errorf("allowed=%v: merge %+v", allowed, m)
+		}
+		if e := got["RT-140/exfil"]; e.Outcome != domain.NotExercised || e.Reason != domain.ReasonRunTooLarge {
+			t.Errorf("allowed=%v: exfil %+v", allowed, e)
+		}
 	}
-	d, err := w.svc.FinishCampaign(w.as(), c.ID, nil)
+}
+
+// childOf inserts a simulated child run of parent under agent, launched by
+// an instance of the parent's agent, as a delegated run is.
+func (w *world) childOf(t *testing.T, id, parent, agent ids.UUID, depth int) {
+	t.Helper()
+	inst := ids.NewV7()
+	w.exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
+		VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'discovery')`, w.org, inst, w.twin, inst.String()[:36]+"0000000")
+	w.exec(t, `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_instance_id, principal_user_id, principal_source,
+		parent_run_id, depth, expires_at, simulated)
+		VALUES ($1, $2, $3, $4, $5, $6, 'parent_run', $7, $8, now() + interval '8 hours', true)`, w.org, id, agent, w.env, inst, w.owner, parent, depth)
+}
+
+// TestHR609_AChildRunCountsForItsStep: a twin that hands the action to a
+// child run under another agent cannot hide it: every simulated descendant
+// of a bound run is bound to the same step, and its ALLOWED counts; a child
+// of an unbound run is not bound (D543 R-M1).
+// Covers: F902
+func TestHR609_AChildRunCountsForItsStep(t *testing.T) {
+	w := newWorld(t, dbtest.New(t))
+	c := w.start(t, "RT-140", "RT-141")
+	w.step(t, c, "RT-140")
+	parent, child, grandchild, stray := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
+	w.runOf(t, parent, w.twin, true)
+	w.txn(t, parent, "github.pull_request.merge", "REQUIRE_APPROVAL")
+	w.childOf(t, child, parent, w.real, 1)
+	w.childOf(t, grandchild, child, w.real, 2)
+	w.txn(t, grandchild, "github.pull_request.merge", "ALLOW")
+	// A child of the run from before the campaign stays unbound.
+	w.childOf(t, stray, w.earlierRun, w.real, 1)
+	// The next step does not take over the first step's descendants.
+	w.step(t, c, "RT-141")
+	late := ids.NewV7()
+	w.childOf(t, late, child, w.real, 2)
+	for run, want := range map[ids.UUID]string{parent: "RT-140", child: "RT-140", grandchild: "RT-140", late: "RT-140", stray: ""} {
+		if got := w.bound(t, c, run); got != want {
+			t.Errorf("run %s bound to %q, want %q", run, got, want)
+		}
+	}
+	insert := `INSERT INTO pc.campaign_runs (org_id, campaign_id, run_id, scenario_id, model_host) VALUES ($1, $2, $3, $4, $5)`
+	if err := w.try(insert, w.org, c.ID, stray, "RT-141", modelHost); err == nil {
+		t.Fatal("the application role bound a child of an unbound run")
+	}
+	det, err := w.svc.FinishCampaign(w.as(), c.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range d.Steps {
-		if s.Outcome != domain.NotExercised || s.Reason != domain.ReasonRunTooLarge {
-			t.Errorf("%+v", s)
-		}
+	if s := stepsOf(det)["RT-140/merge"]; s.Outcome != domain.Allowed || s.Basis != domain.ServerRecord {
+		t.Fatalf("merge %+v, want the grandchild's ALLOWED", s)
 	}
 }
