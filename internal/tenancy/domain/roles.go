@@ -144,7 +144,7 @@ var roles = []Role{
 	},
 	{
 		Name: RoleAgentOwner, Title: "Agent Owner", Scopes: anyScope,
-		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them; reads and reassesses their coverage and their behaviour profiles, and runs them in the containment sandbox.",
+		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them; reads and reassesses their coverage and their behavior profiles, and runs them in the containment sandbox.",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermAgentManage, PermRunRead, PermRunStart, PermRunManage, PermWaitlistRead, PermAgentEnroll,
 			PermGrantRevoke, PermApprovalRead, PermEvidenceRead, PermCoverageRead, PermCoverageReassess, PermSandboxRun, PermRedteamRun, PermRedteamRead,
@@ -166,12 +166,12 @@ var roles = []Role{
 	},
 	{
 		Name: RoleApprover, Title: "Approver", Scopes: anyScope,
-		Description: "Approves held actions in scope with a security key, or declines them (human only); sees the approval requests and waitlist entries routed to them, with the agent's behaviour context beside each request.",
+		Description: "Approves held actions in scope with a security key, or declines them (human only); sees the approval requests and waitlist entries routed to them, with the agent's behavior context beside each request.",
 		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve, PermBehaviorRead}),
 	},
 	{
 		Name: RoleResponder, Title: "Responder", Scopes: anyScope,
-		Description: "Investigates and contains incidents in scope, manages incidents, cases and posture findings, reads agents' behaviour profiles, and restores suspended agents with a security key (human only).",
+		Description: "Investigates and contains incidents in scope, manages incidents, cases and posture findings, reads agents' behavior profiles, and restores suspended agents with a security key (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage, PermGrantRead, PermGrantRevoke,
 			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
@@ -179,7 +179,7 @@ var roles = []Role{
 	},
 	{
 		Name: RoleAuditor, Title: "Auditor", Scopes: orgScope,
-		Description: "Reads configuration, audit and evidence, restricted evidence included, the runs peer agents made for requesters, the org's identity providers, the MCP server catalog and its PantherClaw Hub installs, agents' behaviour profiles, and exports evidence packs (human only); changes nothing.",
+		Description: "Reads configuration, audit and evidence, restricted evidence included, the runs peer agents made for requesters, the org's identity providers, the MCP server catalog and its PantherClaw Hub installs, agents' behavior profiles, and exports evidence packs (human only); changes nothing.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,

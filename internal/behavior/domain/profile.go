@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package domain is behaviour analytics' pure core (G0 M27 D502, D506; F930;
+// Package domain is behavior analytics' pure core (G0 M27 D502, D506; F930;
 // HR-641 to HR-644): a BehaviorProfile of what an agent usually does, built
 // from its own transactions, and the deviations of newer actions from it.
 //

@@ -22,7 +22,7 @@ import (
 // API errors of the service.
 var (
 	ErrEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
-		"behaviour analytics need the Business edition or above")
+		"behavior analytics need the Business edition or above")
 	// ErrNotFound answers for what the viewer can't read as well as for what
 	// doesn't exist.
 	ErrNotFound = pcerr.New(pcerr.NotFound, "NOT_FOUND", "no such record")
@@ -59,7 +59,7 @@ func (s *Service) caller(ctx context.Context) (tenancy.Caller, error) {
 	return c, s.entitled(ctx)
 }
 
-// visible reports whether c may read agent's behaviour.
+// visible reports whether c may read agent's behavior.
 func visible(ctx context.Context, c tenancy.Caller, q *dbq.Queries, agent ids.UUID) (bool, error) {
 	v, err := exapp.VisibleAgents(ctx, c, q, td.PermBehaviorRead)
 	if err != nil {

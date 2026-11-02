@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package app runs behaviour analytics (G0 M27 D501, D502, D506; F930-F934):
+// Package app runs behavior analytics (G0 M27 D501, D502, D506; F930-F934):
 // a rollup job over an org's own pc.transactions and the two reads of
 // BehaviorService. The job is off the decision path and nothing on that path
 // imports this package (HR-641). What it raises is labelled inference,
@@ -133,7 +133,7 @@ func (r *Rollup) lapsed(ctx context.Context, tx db.TenantTx, org ids.OrgID) erro
 	}
 	_, err = r.Failures.Report(ctx, tx.Pgx(), reflexdomain.Failure{
 		Org: org, Kind: failureLapsed, DedupeKey: failureLapsed,
-		Summary:  "Behaviour analytics stopped: the edition no longer includes them. Earlier profiles are kept.",
+		Summary:  "Behavior analytics stopped: the edition no longer includes them. Earlier profiles are kept.",
 		NextStep: "Renew a Business or higher licence to resume the rollup.",
 		Deadline: time.Now().Add(7 * 24 * time.Hour),
 	})
@@ -399,7 +399,7 @@ func (r *Rollup) overflow(ctx context.Context, tx db.TenantTx, origin bdomain.Or
 	}
 	_, err := r.Failures.Report(ctx, tx.Pgx(), reflexdomain.Failure{
 		Org: tx.OrgID(), Kind: failureOverflow, DedupeKey: failureOverflow + ":" + string(origin),
-		Summary:  fmt.Sprintf("Behaviour analytics found %d more %s deviations than one run raises.", more, strings.ToLower(string(origin))),
+		Summary:  fmt.Sprintf("Behavior analytics found %d more %s deviations than one run raises.", more, strings.ToLower(string(origin))),
 		NextStep: "Look at the agents already flagged: a burst this wide usually shares a cause.",
 		Deadline: now.Add(7 * 24 * time.Hour),
 	})
@@ -415,7 +415,7 @@ func (r *Rollup) capReached(ctx context.Context, tx db.TenantTx, origin bdomain.
 	slices.Sort(what)
 	_, err := r.Failures.Report(ctx, tx.Pgx(), reflexdomain.Failure{
 		Org: tx.OrgID(), Kind: FailureCapReached, DedupeKey: FailureCapReached + ":" + string(origin),
-		Summary: fmt.Sprintf("BEHAVIOR_CAP_REACHED: behaviour analytics reached a bound on %s activity (%s). "+
+		Summary: fmt.Sprintf("BEHAVIOR_CAP_REACHED: behavior analytics reached a bound on %s activity (%s). "+
 			"A capped page is carried on by the next run; a capped baseline keeps only the newest actions.",
 			strings.ToLower(string(origin)), strings.Join(slices.Compact(what), ", ")),
 		NextStep: "Read the affected profiles as truncated. If this repeats, the org's volume outruns the method's bounds.",

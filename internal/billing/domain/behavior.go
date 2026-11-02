@@ -3,6 +3,6 @@
 
 package domain
 
-// BehaviorAnalytics reports the behaviour profiles, their inferred alerts and
+// BehaviorAnalytics reports the behavior profiles, their inferred alerts and
 // approval context (Business and Enterprise; G0 M27 D502, H3).
 func (e Entitlements) BehaviorAnalytics() bool { return e.businessPlus() }

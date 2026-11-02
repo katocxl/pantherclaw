@@ -206,7 +206,7 @@ func TestHR642_RealAndSimulatedNeverMeet(t *testing.T) {
 		t.Fatalf("simulated new-tool alerts = %d", n)
 	}
 	if n := f.count("SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND source = 'behavior' AND (basis <> 'INFERRED' OR incident_id IS NOT NULL OR attention IN ('INCIDENT', 'PAGE'))", f.org); n != 0 {
-		t.Fatalf("%d behaviour alerts claim more than inference", n)
+		t.Fatalf("%d behavior alerts claim more than inference", n)
 	}
 	if n := f.count("SELECT count(*) FROM pc.incidents WHERE org_id = $1", f.org); n != 0 {
 		t.Fatalf("%d incidents", n)
@@ -361,7 +361,7 @@ func TestHR645_ApprovalContextIsOutsideTheBinding(t *testing.T) {
 	if c.Agent != f.agent || c.Profile.State != bdomain.StateCollected || len(c.Lines) != 1 || c.Lines[0].Kind != bdomain.KindNewTool {
 		t.Fatalf("context = %+v", c)
 	}
-	// Another person who is a Responder may read the agent's behaviour but
+	// Another person who is a Responder may read the agent's behavior but
 	// not the approval (not its launcher, principal or a decider): the
 	// context isn't found for them (D526 P5).
 	bob := ids.NewV7()

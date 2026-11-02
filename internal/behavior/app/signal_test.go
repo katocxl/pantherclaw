@@ -19,7 +19,7 @@ var allKinds = []bdomain.Kind{
 }
 
 // TestHR644_EverySignalIsLabelledInferenceAtMostAnAlert: whatever the kind,
-// a behaviour signal is valid, rests on INFERRED, says UNVALIDATED and the
+// a behavior signal is valid, rests on INFERRED, says UNVALIDATED and the
 // label, extends pc.drift.behavior, never asks for more than ALERT, and is
 // never a CONFIRMED alert, so it can't start a contain step (HR-640). A
 // simulated one is a test signal (HR-222, HR-642). Covers: F932, F933
@@ -60,7 +60,7 @@ func TestHR644_EverySignalIsLabelledInferenceAtMostAnAlert(t *testing.T) {
 }
 
 // TestHR644_ABehaviorSignalAboveAlertOrNotInferredIsRefused: Reflex itself
-// refuses a behaviour signal that claims more. Covers: F932
+// refuses a behavior signal that claims more. Covers: F932
 func TestHR644_ABehaviorSignalAboveAlertOrNotInferredIsRefused(t *testing.T) {
 	a := bdomain.Action{ID: ids.NewV7(), Agent: ids.NewV7(), Run: ids.NewV7(), Operation: "x", At: time.Now()}
 	ok := signal(ids.New[ids.Org](), bdomain.OriginReal, found{Deviation: bdomain.Deviation{Kind: bdomain.KindNewTool, Value: "x", Action: a, Text: "x"}})

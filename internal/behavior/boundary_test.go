@@ -21,7 +21,7 @@ var decisionPath = []string{"internal/authority", "internal/approvals", "interna
 // TestHR641_TheDecisionPathNeverReachesBehavior: no package of the decision
 // path imports internal/behavior, directly or through any other package of
 // this module, so no decision can read a profile, a deviation or an
-// approval's behaviour context (HR-641, HR-645). Covers: F930, F934
+// approval's behavior context (HR-641, HR-645). Covers: F930, F934
 func TestHR641_TheDecisionPathNeverReachesBehavior(t *testing.T) {
 	here, err := os.Getwd()
 	if err != nil {

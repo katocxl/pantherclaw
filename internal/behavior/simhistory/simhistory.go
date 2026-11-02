@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package simhistory gives a range agent a labelled, made-up history, so
-// behaviour analytics can be shown and tested without weeks of real work
+// behavior analytics can be shown and tested without weeks of real work
 // (G0 M27 D502; F931; HR-642, HR-222, F630). The same seed gives the same
 // history. Rows go to pc.behavior_simulated_actions, never pc.transactions,
 // and the database refuses them for any agent but a range agent. Nothing
@@ -11,8 +11,9 @@ package simhistory
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
-	"math/rand/v2"
 	"time"
 
 	bdomain "github.com/katocxl/pantherclaw/internal/behavior/domain"
@@ -44,7 +45,7 @@ type Spec struct {
 
 // Actions makes the history. It is a pure function of the spec.
 func Actions(s Spec) []bdomain.Action {
-	rng := rand.New(rand.NewPCG(s.Seed, 0x4e3133)) //nolint:gosec // repeatable made-up data, nothing secret
+	rng := &stream{seed: s.Seed}
 	uuid := func() ids.UUID { return seeded(rng) }
 	var out []bdomain.Action
 	day := s.End.UTC().Truncate(24 * time.Hour)
@@ -52,7 +53,7 @@ func Actions(s Spec) []bdomain.Action {
 		base := day.AddDate(0, 0, -d).Add(time.Duration(s.Hour) * time.Hour)
 		for r := range s.RunsPerDay {
 			run := uuid()
-			at := base.Add(time.Duration(r*7+rng.IntN(5)) * time.Minute)
+			at := base.Add(time.Duration(r*7+int(rng.next()%5)) * time.Minute)
 			for i, op := range s.Operations {
 				out = append(out, bdomain.Action{
 					ID: uuid(), Agent: s.Agent, Run: run, Operation: op, Connection: s.Connection, DestClass: s.DestClass,
@@ -71,11 +72,33 @@ func Actions(s Spec) []bdomain.Action {
 	return out
 }
 
+// stream is a repeatable byte stream: SHA-256 of the seed and a counter.
+// Made-up history must repeat for a seed, so it is derived, not random;
+// nothing about it is secret.
+type stream struct {
+	seed, n uint64
+	buf     []byte
+}
+
+func (r *stream) next() byte {
+	if len(r.buf) == 0 {
+		var in [16]byte
+		binary.BigEndian.PutUint64(in[:8], r.seed)
+		binary.BigEndian.PutUint64(in[8:], r.n)
+		r.n++
+		sum := sha256.Sum256(in[:])
+		r.buf = sum[:]
+	}
+	b := r.buf[0]
+	r.buf = r.buf[1:]
+	return b
+}
+
 // seeded is a repeatable version 4 UUID.
-func seeded(rng *rand.Rand) ids.UUID {
+func seeded(rng *stream) ids.UUID {
 	var b [16]byte
 	for i := range b {
-		b[i] = byte(rng.UintN(256)) //nolint:gosec // below 256
+		b[i] = rng.next()
 	}
 	b[6] = b[6]&0x0f | 0x40
 	b[8] = b[8]&0x3f | 0x80

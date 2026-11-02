@@ -45,7 +45,7 @@ import (
 // TestE2E_M27_SimulatedIncidentDetectedExplainedContained is M27's exit
 // journey (G0 M27 D502, D514). A range agent gets a fortnight of labelled,
 // generated history; the rollup builds its SIMULATED profile, and when the
-// agent then uses a tool it never used, behaviour analytics raise a test
+// agent then uses a tool it never used, behavior analytics raise a test
 // alert: labelled inference, UNVALIDATED, at most ALERT, never a CONFIRMED
 // alert. The stack's server shows the alert and explains it with the
 // agent's profile, and a person contains the run. Nothing contained it
@@ -57,7 +57,7 @@ func TestE2E_M27_SimulatedIncidentDetectedExplainedContained(t *testing.T) {
 	activePlan(t, s.pool, s.org)
 	ctx := context.Background()
 
-	// The behaviour procedures are mounted and refuse an anonymous caller.
+	// The behavior procedures are mounted and refuse an anonymous caller.
 	for _, path := range []string{
 		"/pantherclaw.v1.BehaviorService/GetAgentProfile",
 		"/pantherclaw.v1.BehaviorService/GetBehaviorContext",
