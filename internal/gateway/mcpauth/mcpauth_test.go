@@ -94,9 +94,9 @@ func TestHR626_TheOAuthRouteForwardsBearerTokensOnly(t *testing.T) {
 
 	wantChallenge := `Bearer resource_metadata="` + gw + `/.well-known/oauth-protected-resource/mcp-oauth/github"`
 	for name, hdr := range map[string]map[string]string{
-		"no token":         nil,
-		"a PAP/1 token":    {"Authorization": "PAP x"},
-		"a bearer + proof": {"Authorization": "Bearer x", dispatch.HeaderProof: "p"},
+		"no token":              nil,
+		"a PAP/1 token":         {"Authorization": "PAP x"},
+		"a bearer + proof":      {"Authorization": "Bearer x", dispatch.HeaderProof: "p"},
 		"a token naming no run": {"Authorization": "Bearer " + token("")},
 	} {
 		f.got = nil
