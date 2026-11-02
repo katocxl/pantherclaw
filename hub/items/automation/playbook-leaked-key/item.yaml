@@ -1,0 +1,58 @@
+name: pc.playbook.leaked-key
+version: 1.0.0
+kind: automation
+title: "Playbook: leaked key"
+summary: >-
+  When a confirmed alert says a workload key was used from a new network, or a
+  secret was refused on its way out, suspend the run behind it and open a case
+  to rotate the key. On an inferred alert only the case opens. The contain step
+  needs Business.
+body:
+  automation_name: hub-playbook-leaked-key
+  purpose: Suspend the run behind a confirmed leaked-key alert and open a case so a person rotates the key.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Suspend the run behind a confirmed leaked-key alert and open a case so a person rotates the key."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: alert.raised
+        where: event.attrs["rule"] in ["pc.identity.key_new_network", "org.hub.secret_outbound_refused"]
+        params:
+          signal: {from: attrs.id, type: uuid}
+          basis: {from: attrs.basis, type: enum, values: [OBSERVED, RULE_MATCH, INFERRED, HYPOTHESIS], required: false}
+      dedupe:
+        key: "{{params.signal}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: contain
+          scopes: [TRIGGER_RUN]
+        - step: open_case
+          scopes: [TRIGGER_SUBJECTS]
+    do:
+      - id: contain
+        step: contain
+        when: '"basis" in trigger.params && trigger.params.basis in ["OBSERVED", "RULE_MATCH"]'
+        with:
+          action: SUSPEND_RUN
+          subject: TRIGGER_RUN
+          reason: "Leaked key playbook: confirmed signal {{params.signal}}."
+        timeout: 15m
+        on_failure: ESCALATE
+      - id: case
+        step: open_case
+        with:
+          title: "Rotate the key behind signal {{params.signal}}"
+          questions:
+            - Which credential or workload key leaked, and where else is it used?
+            - Has a person rotated or revoked it?
+            - Can the suspended run be lifted once the key is rotated?
+    finish_when:
+      - step: case
+        condition: CASE_OPENED
+    limits:
+      deadline: 1h

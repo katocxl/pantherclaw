@@ -1,0 +1,59 @@
+name: pc.playbook.compromised-laptop
+version: 1.0.0
+kind: automation
+title: "Playbook: compromised laptop"
+summary: >-
+  When a high or critical incident opens on a confirmed signal, suspend the run
+  behind it and open a case to check the machine it ran from. An incident a
+  person opened, or one that rests on an inference, only opens the case.
+  Rotating keys and wiping the machine stay a person's steps. The contain step
+  needs Business.
+body:
+  automation_name: hub-playbook-compromised-laptop
+  purpose: Suspend the run behind a confirmed severe incident and open a case so a person checks the machine it ran from.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Suspend the run behind a confirmed severe incident and open a case so a person checks the machine it ran from."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: incident.opened
+        where: event.attrs["severity"] in ["HIGH", "CRITICAL"]
+        params:
+          signal: {from: attrs.id, type: uuid}
+          basis: {from: attrs.basis, type: enum, values: [OBSERVED, RULE_MATCH, INFERRED, HYPOTHESIS], required: false}
+      dedupe:
+        key: "{{params.signal}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: contain
+          scopes: [TRIGGER_RUN]
+        - step: open_case
+          scopes: [TRIGGER_SUBJECTS]
+    do:
+      - id: contain
+        step: contain
+        when: '"basis" in trigger.params && trigger.params.basis in ["OBSERVED", "RULE_MATCH"]'
+        with:
+          action: SUSPEND_RUN
+          subject: TRIGGER_RUN
+          reason: "Compromised laptop playbook: confirmed incident {{params.signal}}."
+        timeout: 15m
+        on_failure: ESCALATE
+      - id: case
+        step: open_case
+        with:
+          title: "Check the machine behind incident {{params.signal}}"
+          questions:
+            - Which machine and workload key did the run use?
+            - Which other agents and keys live on that machine?
+            - Has a person rotated those keys and checked the machine?
+    finish_when:
+      - step: case
+        condition: CASE_OPENED
+    limits:
+      deadline: 1h

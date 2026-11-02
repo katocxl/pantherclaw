@@ -1,0 +1,49 @@
+- name: a_confirmed_alert_suspends_the_run_and_opens_a_case
+  kind: NORMAL
+  trigger:
+    params: {signal: 0192f942-0000-7000-8000-000000000101, basis: OBSERVED}
+    subjects: [{type: run, id: 0192f942-0000-7000-8000-000000000102}]
+  stubs:
+    contain: [{state: WAITING}, {state: DONE, effect: CHANGED, refs: [response_action]}]
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+  expect:
+    state: SUCCEEDED
+    steps: {contain: DONE, case: DONE}
+- name: an_inferred_alert_only_opens_a_case
+  kind: CUSTOM
+  trigger:
+    params: {signal: 0192f942-0000-7000-8000-000000000103, basis: INFERRED}
+  stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+  expect:
+    state: SUCCEEDED
+    steps: {contain: SKIPPED, case: DONE}
+- name: the_containment_is_refused
+  kind: DENIED
+  trigger:
+    params: {signal: 0192f942-0000-7000-8000-000000000104, basis: OBSERVED}
+  stubs:
+    contain: [{state: FAILED, reason: CONTAINMENT_UNSUPPORTED}]
+  expect:
+    state: FAILED
+    reason: CONTAINMENT_UNSUPPORTED
+    steps: {contain: FAILED}
+- name: the_containment_does_not_hold_in_time
+  kind: TIMEOUT
+  trigger:
+    params: {signal: 0192f942-0000-7000-8000-000000000105, basis: RULE_MATCH}
+  stubs:
+    contain: [{state: WAITING}]
+  expect:
+    state: FAILED
+    reason: TIMEOUT
+    steps: {contain: FAILED}
+- name: the_same_alert_twice_starts_one_execution
+  kind: DUPLICATE
+  trigger:
+    params: {signal: 0192f942-0000-7000-8000-000000000106, basis: OBSERVED}
+  stubs:
+    contain: [{state: DONE, effect: CHANGED, refs: [response_action]}]
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+  expect:
+    state: SUCCEEDED
