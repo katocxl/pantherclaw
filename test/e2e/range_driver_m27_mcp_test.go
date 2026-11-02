@@ -92,7 +92,7 @@ func (d *rangeDriver) selfMCPPoisoned() (domain.Observation, error) {
 	// The read went through the real stack's gate, so the org's ledger
 	// holds exactly one audit.self_mcp.read of this account (HR-657).
 	n := d.s.row(d.t, `SELECT count(*)::text FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.self_mcp.read'
-		AND position(convert_to($2::text, 'UTF8') IN body) > 0
+		AND actor_type = 'service_account' AND actor_id = $2::text
 		AND position(convert_to($3::text, 'UTF8') IN body) > 0`,
 		d.s.org, sa.String(), pantherclawv1connect.SearchServiceSearchProcedure)
 	if n != "1" {
