@@ -79,15 +79,13 @@ func (s *Sink) Observe(ctx context.Context, tx db.TenantTx, o Observed) error {
 	return s.tell(ctx, tx, o, found, now)
 }
 
-// normal keeps a finding a gateway sent only as what it is allowed to say: an
-// unknown kind is a classifier's flag, so it still restricts.
+// normal keeps a finding a gateway sent only as what it is allowed to say: a
+// kind outside the closed list is a scan_incomplete, so it still restricts
+// and is never stored as sent (D533).
 func normal(in []domain.Finding) []domain.Finding {
 	out := make([]domain.Finding, 0, len(in))
 	for _, f := range in {
-		if !domain.ValidKind(f.Kind) {
-			f.Kind = domain.KindClassifierFlag
-		}
-		out = append(out, f)
+		out = append(out, domain.Closed(f))
 	}
 	return domain.Pick(out)
 }

@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/contentsignals/domain"
@@ -83,6 +84,9 @@ func (Classifier) Classify(ctx context.Context, in ports.Input) ([]domain.Findin
 	base := in.Location
 	if !plainRe.MatchString(base) {
 		base = "body"
+	}
+	if events, ok := sseData(in.Content); ok {
+		return classifyEvents(base, events)
 	}
 	var found []domain.Finding
 	finished, err := walk(in.Content, func(pointer, text string) {
@@ -220,4 +224,84 @@ func Entropy(s string) float64 {
 		}
 	}
 	return e
+}
+
+// PlainLocation reports whether loc is base, or base followed by segments the
+// built-in itself would keep: indices, "*" and plain-word member names that
+// say nothing of a value (D533). A classifier's location must be one.
+func PlainLocation(base, loc string) bool {
+	if loc == base {
+		return true
+	}
+	rest, ok := strings.CutPrefix(loc, base+"/")
+	if !ok || len(loc) > domain.MaxLocation {
+		return false
+	}
+	for seg := range strings.SplitSeq(rest, "/") {
+		if seg != "*" && !keep(seg) {
+			return false
+		}
+	}
+	return true
+}
+
+// sseData un-frames a server-sent events body, as an MCP server may answer
+// (D533): the data of each event, its data lines joined. ok is false for a
+// body that is not one, which is read as it is.
+func sseData(raw []byte) ([][]byte, bool) {
+	t := bytes.TrimLeft(raw, " \t\r\n")
+	if !bytes.HasPrefix(t, []byte("event:")) && !bytes.HasPrefix(t, []byte("data:")) &&
+		!bytes.HasPrefix(t, []byte("id:")) && !bytes.HasPrefix(t, []byte(":")) {
+		return nil, false
+	}
+	var events [][]byte
+	var cur []byte
+	have := false
+	flush := func() {
+		if have {
+			events = append(events, cur)
+		}
+		cur, have = nil, false
+	}
+	for line := range bytes.SplitSeq(raw, []byte("\n")) {
+		line = bytes.TrimSuffix(line, []byte("\r"))
+		if len(line) == 0 {
+			flush()
+			continue
+		}
+		data, ok := bytes.CutPrefix(line, []byte("data:"))
+		if !ok {
+			continue
+		}
+		data = bytes.TrimPrefix(data, []byte(" "))
+		if have {
+			cur = append(cur, '\n')
+		}
+		cur, have = append(cur, data...), true
+	}
+	flush()
+	return events, true
+}
+
+// classifyEvents walks each event's data as JSON, under its index, and reads
+// what is not JSON as text.
+func classifyEvents(base string, events [][]byte) ([]domain.Finding, error) {
+	var found []domain.Finding
+	for i, data := range events {
+		prefix := "/" + strconv.Itoa(i)
+		finished, err := walk(data, func(pointer, text string) {
+			for _, k := range Kinds(text) {
+				found = append(found, domain.Finding{Kind: k, Location: location(base, prefix+pointer)})
+			}
+		})
+		if err != nil {
+			return domain.Pick(found), err
+		}
+		if !finished {
+			for _, k := range Kinds(string(data)) {
+				found = append(found, domain.Finding{Kind: k, Location: location(base, prefix)})
+			}
+		}
+	}
+	return domain.Pick(found), nil
 }

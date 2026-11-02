@@ -10,7 +10,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/contentsignals/app"
-	"github.com/katocxl/pantherclaw/internal/contentsignals/domain"
+	csdomain "github.com/katocxl/pantherclaw/internal/contentsignals/domain"
 	"github.com/katocxl/pantherclaw/internal/contentsignals/ports"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -34,7 +34,7 @@ func (s *snapshot) ContentSignals(ctx context.Context, org ids.OrgID, run ids.UU
 		return pipeline.ContentState{}, err
 	}
 	out := pipeline.ContentState{Mode: mode}
-	if domain.Mode(mode) == domain.ModeOff || run.IsZero() {
+	if csdomain.Mode(mode) == csdomain.ModeOff || run.IsZero() {
 		return out, nil
 	}
 	st, err := q.ContentRunState(ctx, org, run)
@@ -43,24 +43,42 @@ func (s *snapshot) ContentSignals(ctx context.Context, org ids.OrgID, run ids.UU
 	} else if err != nil {
 		return out, err
 	}
-	out.Kinds, _ = domain.ParseFlag(st.Flag)
+	out.Kinds, _ = csdomain.ParseFlag(st.Flag)
 	return out, nil
 }
 
 // contentResult lands a tool result's flags on the run, in the outcome's
 // transaction: the outcome and the flag later decisions read commit together
-// (HR-648). A delegated outcome is not inspected and carries none.
+// (HR-648). A declared unscanned face (hook, SDK, local; a delegated outcome
+// comes through the SDK) carries none. Any other result without the
+// gateway's word that it was scanned is a scan_incomplete (not_scanned): a
+// gateway from before M27 or with a stale configuration fails closed (D533).
+// The sink keeps nothing at OFF.
 func (s *Store) contentResult(ctx context.Context, tx db.TenantTx, org ids.OrgID, e finalize.Execution, txn ids.UUID) error {
-	if s.Content == nil || len(e.ContentFindings) == 0 {
+	if s.Content == nil || (len(e.ContentFindings) == 0 && e.ContentScan == csdomain.ScanScanned) {
 		return nil
 	}
-	run, err := dbq.New(tx).ContentTransactionRun(ctx, org, txn)
+	row, err := dbq.New(tx).ContentTransactionRun(ctx, org, txn)
 	if err != nil {
 		return err
 	}
+	found := findings(e.ContentFindings)
+	if e.ContentScan != csdomain.ScanScanned && !csdomain.DeclaredUnscanned(deref(row.Channel), deref(row.ConnectionKind)) {
+		found = append(found, csdomain.Unscanned)
+	}
+	if len(found) == 0 {
+		return nil
+	}
 	return s.Content.Observe(ctx, tx, app.Observed{
-		Org: org, Run: run, Transaction: txn, Surface: ports.SurfaceResult, Findings: findings(e.ContentFindings),
+		Org: org, Run: row.RunID, Transaction: txn, Surface: ports.SurfaceResult, Findings: found,
 	})
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // ContentOutbound records an outbound payload's findings, after its decision.
@@ -71,12 +89,12 @@ func (s *Store) ContentOutbound(ctx context.Context, org ids.OrgID, txn ids.UUID
 		return
 	}
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		run, err := dbq.New(tx).ContentTransactionRun(ctx, org, txn)
+		row, err := dbq.New(tx).ContentTransactionRun(ctx, org, txn)
 		if err != nil {
 			return err
 		}
 		return s.Content.Observe(ctx, tx, app.Observed{
-			Org: org, Run: run, Transaction: txn, Surface: ports.SurfaceOutbound, Findings: findings(found),
+			Org: org, Run: row.RunID, Transaction: txn, Surface: ports.SurfaceOutbound, Findings: findings(found),
 		})
 	})
 	if err != nil {
@@ -84,10 +102,10 @@ func (s *Store) ContentOutbound(ctx context.Context, org ids.OrgID, txn ids.UUID
 	}
 }
 
-func findings(in []pipeline.PayloadFinding) []domain.Finding {
-	out := make([]domain.Finding, 0, len(in))
+func findings(in []pipeline.PayloadFinding) []csdomain.Finding {
+	out := make([]csdomain.Finding, 0, len(in))
 	for _, f := range in {
-		out = append(out, domain.Finding{Kind: f.Kind, Location: f.Location})
+		out = append(out, csdomain.Finding{Kind: f.Kind, Location: f.Location})
 	}
 	return out
 }

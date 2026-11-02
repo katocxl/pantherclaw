@@ -22,7 +22,12 @@ func TestHR651_NoWordingClaimsSafety(t *testing.T) {
 			t.Errorf("%q claims safety", s)
 		}
 	}
-	if !slices.Equal(NotInspectedFaces, []string{"hook", "sdk", "local", "delegated"}) {
+	for _, says := range []string{"Hook", "SDK", "AuthZEN", "local", "delegated", "re-encoded", "split", "paraphrased"} {
+		if !strings.Contains(NotScanned, says) {
+			t.Errorf("the settings note does not say %q", says)
+		}
+	}
+	if !slices.Equal(NotInspectedFaces, []string{"hook", "sdk", "authzen", "local", "delegated"}) {
 		t.Fatalf("faces %v", NotInspectedFaces)
 	}
 }

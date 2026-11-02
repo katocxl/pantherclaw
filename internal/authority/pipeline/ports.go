@@ -56,6 +56,10 @@ type Request struct {
 	// ContentFindings are the outbound payload's content flags (G0 M27 D507),
 	// sorted, capped, never a value.
 	ContentFindings []PayloadFinding
+	// ContentScan is what the gateway says it did with the outbound body
+	// (G0 M27 D533): csdomain.ScanScanned, ScanOff, ScanFaceNotScanned, or
+	// empty from a gateway before M27.
+	ContentScan string
 }
 
 // PayloadFinding is one credential-shaped value in an action's payload: its

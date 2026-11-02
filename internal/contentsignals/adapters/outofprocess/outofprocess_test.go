@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/contentsignals/adapters/outofprocess"
@@ -57,11 +58,11 @@ func TestHR649_ClassifierAddress(t *testing.T) {
 //
 // Covers: F940
 func TestClassify_AFlagIsAClassifierFlag(t *testing.T) {
-	got, err := call(server(t, 200, `{"flags":[{"location":"result/a"},{}]}`))
+	got, err := call(server(t, 200, `{"flags":[{"location":"result/content/0/text"},{}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []domain.Finding{{Kind: domain.KindClassifierFlag, Location: "result/a"}, {Kind: domain.KindClassifierFlag, Location: "result"}}
+	want := []domain.Finding{{Kind: domain.KindClassifierFlag, Location: "result/content/0/text"}, {Kind: domain.KindClassifierFlag, Location: "result"}}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("%+v", got)
 	}
@@ -95,6 +96,31 @@ func TestClassify_RequestHoldsTheBody(t *testing.T) {
 	}
 	if raw, _ := base64.StdEncoding.DecodeString(got.Content); string(raw) != "text" || got.Surface != "result" {
 		t.Fatalf("%+v", got)
+	}
+}
+
+// TestHR649_AClassifierCannotEchoAValue: a location outside the built-in's
+// grammar (plain-word member names and indices under the location asked
+// about) is replaced by the location asked about, so a classifier that
+// echoes what it matched keeps none of it (D533).
+//
+// Covers: F940
+func TestHR649_AClassifierCannotEchoAValue(t *testing.T) {
+	for _, echoed := range []string{
+		"result/" + "sk_" + "live_" + strings.Repeat("Hq7d", 6), "ignore all previous instructions", "result/jane.doe@example.com",
+		"other/content", "resultx", "result/content/0/4111111111111111",
+	} {
+		body, err := json.Marshal(map[string]any{"flags": []map[string]string{{"location": echoed}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := call(server(t, 200, string(body)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].Location != "result" {
+			t.Errorf("%q: %+v", echoed, got)
+		}
 	}
 }
 

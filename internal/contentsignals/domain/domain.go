@@ -52,7 +52,43 @@ const (
 	IncompleteOverBound  = "over_bound"
 	IncompleteClassifier = "classifier_unavailable"
 	IncompleteBuiltin    = "builtin_failed"
+	// IncompleteNotScanned: a gateway-carried body came without the
+	// gateway's word that it was scanned (D533).
+	IncompleteNotScanned = "not_scanned"
+	// IncompleteUnknownKind: a gateway sent a kind outside the closed list
+	// (D533).
+	IncompleteUnknownKind = "unknown_kind"
 )
+
+// Scan markers: what a gateway says it did with a body (D533). Only
+// ScanScanned counts as scanned.
+const (
+	ScanScanned        = "SCANNED"
+	ScanOff            = "OFF"
+	ScanFaceNotScanned = "FACE_NOT_SCANNED"
+)
+
+// DeclaredUnscanned reports whether a call's face is one content signals
+// declare unscanned (D504, D532): the hook, SDK and AuthZEN channels (an
+// AuthZEN caller dispatches itself), and local connections. Delegated
+// outcomes come through the SDK. Only these need no scan marker (D533).
+func DeclaredUnscanned(channel, connectionKind string) bool {
+	return channel == "hook" || channel == "sdk" || channel == "authzen" || connectionKind == "local"
+}
+
+// Unscanned is the finding of a gateway-carried body that came without a
+// scan marker (D533).
+var Unscanned = Finding{Kind: KindScanIncomplete, Location: IncompleteNotScanned}
+
+// Closed maps a finding from a gateway onto the closed list (D533): a kind
+// outside it, or an invalid location, becomes a scan_incomplete, never
+// stored as sent.
+func Closed(f Finding) Finding {
+	if !f.Valid() {
+		return Finding{Kind: KindScanIncomplete, Location: IncompleteUnknownKind}
+	}
+	return f
+}
 
 const (
 	// MaxBody bounds one scanned body (D507, HR-649). A longer one is a
@@ -91,7 +127,7 @@ func (f Finding) Valid() bool { return ValidKind(f.Kind) && locationRe.MatchStri
 func (f Finding) Reason() string {
 	if f.Kind == KindScanIncomplete {
 		switch f.Location {
-		case IncompleteOverBound, IncompleteClassifier, IncompleteBuiltin:
+		case IncompleteOverBound, IncompleteClassifier, IncompleteBuiltin, IncompleteNotScanned, IncompleteUnknownKind:
 			return f.Location
 		}
 	}
@@ -155,7 +191,9 @@ func ParseFlag(raw []byte) ([]string, int64) {
 }
 
 // NotInspectedFaces are the faces the gateway cannot see into (D504, D532).
-var NotInspectedFaces = []string{"hook", "sdk", "local", "delegated"}
+var NotInspectedFaces = []string{"hook", "sdk", "authzen", "local", "delegated"}
 
-// NotScanned is what the settings say of them, plainly (D532).
-const NotScanned = "Hook, SDK and local connections are not scanned, and delegated outcomes are not inspected: what comes through them is not inspected, never \"no known flags\"."
+// NotScanned is what the settings say of them and of what scanning misses,
+// plainly (D532, D533).
+const NotScanned = "Hook, SDK, AuthZEN and local connections are not scanned, and delegated outcomes are not inspected: what comes through them is not inspected, never \"no known flags\". " +
+	"Where content is scanned, only listed phrases and formats are known: re-encoded, split or paraphrased content passes."

@@ -108,6 +108,7 @@ func (r *Reader) Request() (pipeline.Request, error) {
 	for _, f := range r.rec.Request.ContentFindings {
 		req.ContentFindings = append(req.ContentFindings, pipeline.PayloadFinding{Kind: f.Kind, Location: f.Location})
 	}
+	req.ContentScan = r.rec.Request.ContentScan
 	return req, nil
 }
 

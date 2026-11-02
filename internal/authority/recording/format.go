@@ -71,6 +71,8 @@ type Request struct {
 	PayloadFindings []PayloadFinding `json:"payload_findings,omitzero"`
 	// ContentFindings are the outbound content flags (G0 M27 D507).
 	ContentFindings []PayloadFinding `json:"content_findings,omitzero"`
+	// ContentScan is the gateway's scan marker (G0 M27 D533).
+	ContentScan string `json:"content_scan,omitzero"`
 }
 
 // PayloadFinding is a credential format and where it was found.

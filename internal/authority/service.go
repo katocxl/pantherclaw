@@ -120,15 +120,15 @@ type Result struct {
 // Every decision is counted by its outcome (pc_decisions_total, G0 M13
 // D30).
 func (s *Service) Authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, findings ...pipeline.PayloadFinding) (Result, error) {
-	return s.authorizeContent(ctx, gw, raw, creds, nil, findings...)
+	return s.authorizeContent(ctx, gw, raw, creds, nil, "", findings...)
 }
 
 // authorizeContent is Authorize with the outbound payload's content flags (G0
 // M27 D507).
-func (s *Service) authorizeContent(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, content []pipeline.PayloadFinding,
+func (s *Service) authorizeContent(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, content []pipeline.PayloadFinding, scan string,
 	findings ...pipeline.PayloadFinding,
 ) (Result, error) {
-	res, err := s.authorize(ctx, gw, raw, creds, content, findings...)
+	res, err := s.authorize(ctx, gw, raw, creds, content, scan, findings...)
 	if err == nil {
 		telemetry.Decision(ctx, string(res.Decision))
 		if s.contentOutbound != nil && !res.Repeat && !res.TransactionID.IsZero() {
@@ -144,7 +144,7 @@ func (s *Service) WithContentOutbound(fn func(ctx context.Context, org ids.OrgID
 	s.contentOutbound = fn
 }
 
-func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, content []pipeline.PayloadFinding,
+func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, content []pipeline.PayloadFinding, scan string,
 	findings ...pipeline.PayloadFinding,
 ) (Result, error) {
 	if s.held {
@@ -178,7 +178,7 @@ func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *
 		return Result{}, errors.New("authority: the decision pipeline is not configured")
 	}
 	res, err := s.decider.Authorize(ctx, gw.final(), pipeline.Request{
-		Org: gw.Org, Action: p, PayloadFindings: findings, ContentFindings: content,
+		Org: gw.Org, Action: p, PayloadFindings: findings, ContentFindings: content, ContentScan: scan,
 		Identity: pipeline.Identity{InstanceID: id.Instance.Instance, AgentID: id.Instance.Agent, AttestationLevel: id.Level, JKT: id.JKT},
 	})
 	if err != nil {

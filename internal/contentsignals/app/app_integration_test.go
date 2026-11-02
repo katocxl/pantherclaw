@@ -392,7 +392,8 @@ func TestHR650_ActiveCountsNothingAndStillFails(t *testing.T) {
 }
 
 // TestHR649_AFlagKeepsNoValue: what the fact stores is kinds, a count and a
-// time, and an unknown kind from a gateway restricts as a classifier flag.
+// time, and an unknown kind from a gateway restricts as a scan_incomplete
+// (D533).
 //
 // Covers: F937
 func TestHR649_AFlagKeepsNoValue(t *testing.T) {
@@ -400,7 +401,7 @@ func TestHR649_AFlagKeepsNoValue(t *testing.T) {
 	run := e.run(t, ids.UUID{})
 	e.set(t, domain.ModeWatching)
 	e.observe(t, &app.Sink{}, run, ports.SurfaceResult, domain.Finding{Kind: "something new", Location: "result/key"})
-	if k := e.kinds(t, run); !slices.Equal(k, []string{domain.KindClassifierFlag}) {
+	if k := e.kinds(t, run); !slices.Equal(k, []string{domain.KindScanIncomplete}) {
 		t.Fatalf("flag %v", k)
 	}
 	if raw := string(e.flag(t, run)); strings.Contains(raw, "result/key") || strings.Contains(raw, "something new") {

@@ -320,6 +320,9 @@ type Execution struct {
 	// ContentFindings are the tool result's content flags (G0 M27 D507), kinds
 	// and locations only.
 	ContentFindings []pipeline.PayloadFinding
+	// ContentScan is the gateway's word on the tool result (G0 M27 D533):
+	// csdomain.ScanScanned and the rest, or empty from a gateway before M27.
+	ContentScan string
 }
 
 // DataScopeApplied is what applying a read's data scope did to its answer:

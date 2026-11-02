@@ -73,6 +73,7 @@ func request(req pipeline.Request) Request {
 	for _, f := range req.ContentFindings {
 		out.ContentFindings = append(out.ContentFindings, PayloadFinding{Kind: f.Kind, Location: f.Location})
 	}
+	out.ContentScan = req.ContentScan
 	return out
 }
 

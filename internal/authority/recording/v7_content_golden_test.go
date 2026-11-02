@@ -57,6 +57,7 @@ func writeV7Golden(t *testing.T) {
 	policy(t, s, holdOver50)
 	s.W.SetContentSignals("ACTIVE", "injection_phrase")
 	req := refund(s, s.Run(g.ID, s.Alice), "ch_1", "20.00")
+	req.ContentScan = "SCANNED"
 	rec := recording.NewRecorder(s.W, req)
 	ev, err := (&pipeline.Pipeline{}).EvaluateWith(t.Context(), rec, req)
 	if err != nil {

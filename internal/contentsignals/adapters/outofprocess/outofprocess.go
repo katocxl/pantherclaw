@@ -29,13 +29,19 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/katocxl/pantherclaw/internal/contentsignals/builtin"
 	"github.com/katocxl/pantherclaw/internal/contentsignals/domain"
 	"github.com/katocxl/pantherclaw/internal/contentsignals/ports"
 )
 
 // maxAnswer bounds a classifier's answer.
 const maxAnswer = 64 << 10
+
+// clientTimeout is the client's own backstop, whatever the caller's context
+// allows (D533): the scan's timeout is at most 5 s too.
+const clientTimeout = 5 * time.Second
 
 // ErrAddress refuses a classifier that is not on this machine or a private
 // network, named by IP.
@@ -76,6 +82,7 @@ func New(raw string) (*Classifier, error) {
 	t := tr.Clone()
 	t.Proxy = nil
 	return &Classifier{url: raw, client: &http.Client{
+		Timeout:       clientTimeout,
 		Transport:     t,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}, nil
@@ -130,8 +137,10 @@ func (c *Classifier) Classify(ctx context.Context, in ports.Input) ([]domain.Fin
 	}
 	var out []domain.Finding
 	for _, f := range *a.Flags {
+		// A location that is not the built-in's own grammar may carry a
+		// value: the location asked about stands in for it (D533, HR-649).
 		loc := f.Location
-		if loc == "" {
+		if !builtin.PlainLocation(in.Location, loc) {
 			loc = in.Location
 		}
 		out = append(out, domain.Finding{Kind: domain.KindClassifierFlag, Location: loc})

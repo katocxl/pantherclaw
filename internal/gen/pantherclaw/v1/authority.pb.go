@@ -149,6 +149,65 @@ func (DecisionPresentation) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{1}
 }
 
+// ContentScan is whether the gateway scanned a body for content signals (G0
+// M27 D533). Only SCANNED counts as scanned; the Authority decides for
+// itself which faces are declared unscanned.
+type ContentScan int32
+
+const (
+	// A gateway from before M27, or one that said nothing.
+	ContentScan_CONTENT_SCAN_UNSPECIFIED ContentScan = 0
+	// The body was scanned; its findings, if any, are in content_findings.
+	ContentScan_CONTENT_SCAN_SCANNED ContentScan = 1
+	// The gateway runs with content signals off.
+	ContentScan_CONTENT_SCAN_OFF ContentScan = 2
+	// A face the gateway does not scan: hook, SDK, local or delegated.
+	ContentScan_CONTENT_SCAN_FACE_NOT_SCANNED ContentScan = 3
+)
+
+// Enum value maps for ContentScan.
+var (
+	ContentScan_name = map[int32]string{
+		0: "CONTENT_SCAN_UNSPECIFIED",
+		1: "CONTENT_SCAN_SCANNED",
+		2: "CONTENT_SCAN_OFF",
+		3: "CONTENT_SCAN_FACE_NOT_SCANNED",
+	}
+	ContentScan_value = map[string]int32{
+		"CONTENT_SCAN_UNSPECIFIED":      0,
+		"CONTENT_SCAN_SCANNED":          1,
+		"CONTENT_SCAN_OFF":              2,
+		"CONTENT_SCAN_FACE_NOT_SCANNED": 3,
+	}
+)
+
+func (x ContentScan) Enum() *ContentScan {
+	p := new(ContentScan)
+	*p = x
+	return p
+}
+
+func (x ContentScan) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ContentScan) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_authority_proto_enumTypes[2].Descriptor()
+}
+
+func (ContentScan) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_authority_proto_enumTypes[2]
+}
+
+func (x ContentScan) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ContentScan.Descriptor instead.
+func (ContentScan) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{2}
+}
+
 // ConsequenceState is what a consequence rule said about an action
 // (HR-206).
 type ConsequenceState int32
@@ -191,11 +250,11 @@ func (x ConsequenceState) String() string {
 }
 
 func (ConsequenceState) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_authority_proto_enumTypes[2].Descriptor()
+	return file_pantherclaw_v1_authority_proto_enumTypes[3].Descriptor()
 }
 
 func (ConsequenceState) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_authority_proto_enumTypes[2]
+	return &file_pantherclaw_v1_authority_proto_enumTypes[3]
 }
 
 func (x ConsequenceState) Number() protoreflect.EnumNumber {
@@ -204,7 +263,7 @@ func (x ConsequenceState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConsequenceState.Descriptor instead.
 func (ConsequenceState) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{3}
 }
 
 // ConsequenceSource is where a consequence rule comes from (G0 M17 D106).
@@ -243,11 +302,11 @@ func (x ConsequenceSource) String() string {
 }
 
 func (ConsequenceSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_authority_proto_enumTypes[3].Descriptor()
+	return file_pantherclaw_v1_authority_proto_enumTypes[4].Descriptor()
 }
 
 func (ConsequenceSource) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_authority_proto_enumTypes[3]
+	return &file_pantherclaw_v1_authority_proto_enumTypes[4]
 }
 
 func (x ConsequenceSource) Number() protoreflect.EnumNumber {
@@ -256,7 +315,7 @@ func (x ConsequenceSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConsequenceSource.Descriptor instead.
 func (ConsequenceSource) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{4}
 }
 
 // WaitState is the state of a held action's approval request as a waiter
@@ -327,11 +386,11 @@ func (x WaitState) String() string {
 }
 
 func (WaitState) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_authority_proto_enumTypes[4].Descriptor()
+	return file_pantherclaw_v1_authority_proto_enumTypes[5].Descriptor()
 }
 
 func (WaitState) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_authority_proto_enumTypes[4]
+	return &file_pantherclaw_v1_authority_proto_enumTypes[5]
 }
 
 func (x WaitState) Number() protoreflect.EnumNumber {
@@ -340,7 +399,7 @@ func (x WaitState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WaitState.Descriptor instead.
 func (WaitState) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{5}
 }
 
 // DispatchMode is how a route treats decisions (PN-013).
@@ -380,11 +439,11 @@ func (x DispatchMode) String() string {
 }
 
 func (DispatchMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_authority_proto_enumTypes[5].Descriptor()
+	return file_pantherclaw_v1_authority_proto_enumTypes[6].Descriptor()
 }
 
 func (DispatchMode) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_authority_proto_enumTypes[5]
+	return &file_pantherclaw_v1_authority_proto_enumTypes[6]
 }
 
 func (x DispatchMode) Number() protoreflect.EnumNumber {
@@ -393,7 +452,7 @@ func (x DispatchMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DispatchMode.Descriptor instead.
 func (DispatchMode) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{6}
 }
 
 // ChecklistStatus is the outcome of one checklist item.
@@ -458,11 +517,11 @@ func (x ChecklistStatus) String() string {
 }
 
 func (ChecklistStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_authority_proto_enumTypes[6].Descriptor()
+	return file_pantherclaw_v1_authority_proto_enumTypes[7].Descriptor()
 }
 
 func (ChecklistStatus) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_authority_proto_enumTypes[6]
+	return &file_pantherclaw_v1_authority_proto_enumTypes[7]
 }
 
 func (x ChecklistStatus) Number() protoreflect.EnumNumber {
@@ -471,7 +530,7 @@ func (x ChecklistStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ChecklistStatus.Descriptor instead.
 func (ChecklistStatus) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{7}
 }
 
 // Outcome of a dispatch (PAP-1 §7.4).
@@ -517,11 +576,11 @@ func (x Outcome) String() string {
 }
 
 func (Outcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_authority_proto_enumTypes[7].Descriptor()
+	return file_pantherclaw_v1_authority_proto_enumTypes[8].Descriptor()
 }
 
 func (Outcome) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_authority_proto_enumTypes[7]
+	return &file_pantherclaw_v1_authority_proto_enumTypes[8]
 }
 
 func (x Outcome) Number() protoreflect.EnumNumber {
@@ -530,7 +589,7 @@ func (x Outcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Outcome.Descriptor instead.
 func (Outcome) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{8}
 }
 
 // CaptureDirection is which body of a dispatch a payload capture holds.
@@ -569,11 +628,11 @@ func (x CaptureDirection) String() string {
 }
 
 func (CaptureDirection) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_authority_proto_enumTypes[8].Descriptor()
+	return file_pantherclaw_v1_authority_proto_enumTypes[9].Descriptor()
 }
 
 func (CaptureDirection) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_authority_proto_enumTypes[8]
+	return &file_pantherclaw_v1_authority_proto_enumTypes[9]
 }
 
 func (x CaptureDirection) Number() protoreflect.EnumNumber {
@@ -582,7 +641,7 @@ func (x CaptureDirection) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CaptureDirection.Descriptor instead.
 func (CaptureDirection) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{9}
 }
 
 // ConsequenceLabel is what a consequence is, apart from what was
@@ -641,11 +700,11 @@ func (x ConsequenceLabel) String() string {
 }
 
 func (ConsequenceLabel) Descriptor() protoreflect.EnumDescriptor {
-	return file_pantherclaw_v1_authority_proto_enumTypes[9].Descriptor()
+	return file_pantherclaw_v1_authority_proto_enumTypes[10].Descriptor()
 }
 
 func (ConsequenceLabel) Type() protoreflect.EnumType {
-	return &file_pantherclaw_v1_authority_proto_enumTypes[9]
+	return &file_pantherclaw_v1_authority_proto_enumTypes[10]
 }
 
 func (x ConsequenceLabel) Number() protoreflect.EnumNumber {
@@ -654,7 +713,7 @@ func (x ConsequenceLabel) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConsequenceLabel.Descriptor instead.
 func (ConsequenceLabel) EnumDescriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{10}
 }
 
 // AgentExplanation is all a decision tells the agent about why (F330,
@@ -898,8 +957,12 @@ type AuthorizeRequest struct {
 	// HR-648): the Authority reads the org's mode itself, and a flag can only
 	// add a hold. At most 16, sorted, never the value.
 	ContentFindings []*ContentFinding `protobuf:"bytes,4,rep,name=content_findings,json=contentFindings,proto3" json:"content_findings,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Whether the gateway scanned the outbound body (G0 M27 D533). In ACTIVE a
+	// call on a gateway-carried channel without CONTENT_SCAN_SCANNED is a
+	// scan_incomplete (not_scanned) and holds.
+	ContentScan   ContentScan `protobuf:"varint,5,opt,name=content_scan,json=contentScan,proto3,enum=pantherclaw.v1.ContentScan" json:"content_scan,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AuthorizeRequest) Reset() {
@@ -958,6 +1021,13 @@ func (x *AuthorizeRequest) GetContentFindings() []*ContentFinding {
 		return x.ContentFindings
 	}
 	return nil
+}
+
+func (x *AuthorizeRequest) GetContentScan() ContentScan {
+	if x != nil {
+		return x.ContentScan
+	}
+	return ContentScan_CONTENT_SCAN_UNSPECIFIED
 }
 
 // ContentFinding is one content flag: a kind and a location, never a value
@@ -1961,8 +2031,12 @@ type RecordExecutionRequest struct {
 	// run, for later decisions. Empty for a delegated outcome, which is not
 	// inspected. At most 16, sorted, never the value.
 	ContentFindings []*ContentFinding `protobuf:"bytes,10,rep,name=content_findings,json=contentFindings,proto3" json:"content_findings,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Whether the gateway scanned the tool result (G0 M27 D533). In ACTIVE a
+	// gateway-carried result without CONTENT_SCAN_SCANNED flags the run as
+	// scan_incomplete (not_scanned).
+	ContentScan   ContentScan `protobuf:"varint,11,opt,name=content_scan,json=contentScan,proto3,enum=pantherclaw.v1.ContentScan" json:"content_scan,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordExecutionRequest) Reset() {
@@ -2063,6 +2137,13 @@ func (x *RecordExecutionRequest) GetContentFindings() []*ContentFinding {
 		return x.ContentFindings
 	}
 	return nil
+}
+
+func (x *RecordExecutionRequest) GetContentScan() ContentScan {
+	if x != nil {
+		return x.ContentScan
+	}
+	return ContentScan_CONTENT_SCAN_UNSPECIFIED
 }
 
 // DataScopeApplied is what applying a read's data scope did to its answer
@@ -3615,12 +3696,13 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x14\n" +
 	"\x05check\x18\x02 \x01(\tR\x05check\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1a\n" +
-	"\bdecisive\x18\x04 \x01(\bR\bdecisive\"\xa7\x02\n" +
+	"\bdecisive\x18\x04 \x01(\bR\bdecisive\"\xe7\x02\n" +
 	"\x10AuthorizeRequest\x12(\n" +
 	"\taction_ir\x18\x01 \x01(\fB\v\xbaH\bz\x06\x10\x02\x18\x80\x80@R\bactionIr\x12?\n" +
 	"\bworkload\x18\x02 \x01(\v2#.pantherclaw.v1.WorkloadCredentialsR\bworkload\x12S\n" +
 	"\x10payload_findings\x18\x03 \x03(\v2\x1e.pantherclaw.v1.PayloadFindingB\b\xbaH\x05\x92\x01\x02\x10\x10R\x0fpayloadFindings\x12S\n" +
-	"\x10content_findings\x18\x04 \x03(\v2\x1e.pantherclaw.v1.ContentFindingB\b\xbaH\x05\x92\x01\x02\x10\x10R\x0fcontentFindings\"n\n" +
+	"\x10content_findings\x18\x04 \x03(\v2\x1e.pantherclaw.v1.ContentFindingB\b\xbaH\x05\x92\x01\x02\x10\x10R\x0fcontentFindings\x12>\n" +
+	"\fcontent_scan\x18\x05 \x01(\x0e2\x1b.pantherclaw.v1.ContentScanR\vcontentScan\"n\n" +
 	"\x0eContentFinding\x12)\n" +
 	"\x04kind\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^[a-z_]{1,32}$R\x04kind\x121\n" +
 	"\blocation\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[!-~]{1,128}$R\blocation\"U\n" +
@@ -3705,7 +3787,7 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\foutbound_url\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\voutboundUrl\x129\n" +
 	"\x14outbound_body_sha256\x18\x05 \x01(\fB\a\xbaH\x04z\x02\x18 R\x12outboundBodySha256\":\n" +
 	"\x15BeginDispatchResponse\x12!\n" +
-	"\faction_token\x18\x01 \x01(\tR\vactionToken\"\xed\x04\n" +
+	"\faction_token\x18\x01 \x01(\tR\vactionToken\"\xad\x05\n" +
 	"\x16RecordExecutionRequest\x12%\n" +
 	"\tpermit_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bpermitId\x12=\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x17.pantherclaw.v1.OutcomeB\n" +
@@ -3722,7 +3804,8 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\n" +
 	"data_scope\x18\t \x01(\v2 .pantherclaw.v1.DataScopeAppliedR\tdataScope\x12S\n" +
 	"\x10content_findings\x18\n" +
-	" \x03(\v2\x1e.pantherclaw.v1.ContentFindingB\b\xbaH\x05\x92\x01\x02\x10\x10R\x0fcontentFindings\"\xcc\x01\n" +
+	" \x03(\v2\x1e.pantherclaw.v1.ContentFindingB\b\xbaH\x05\x92\x01\x02\x10\x10R\x0fcontentFindings\x12>\n" +
+	"\fcontent_scan\x18\v \x01(\x0e2\x1b.pantherclaw.v1.ContentScanR\vcontentScan\"\xcc\x01\n" +
 	"\x10DataScopeApplied\x12B\n" +
 	"\vrecords_key\x18\x01 \x01(\tB!\xbaH\x1er\x1c2\x1a^([a-z_][a-z0-9_]{0,62})?$R\n" +
 	"recordsKey\x12\x1f\n" +
@@ -3879,7 +3962,12 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x1fDECISION_PRESENTATION_CONSTRAIN\x10\x02\x12\x1e\n" +
 	"\x1aDECISION_PRESENTATION_HOLD\x10\x03\x12\x1e\n" +
 	"\x1aDECISION_PRESENTATION_DENY\x10\x04\x12*\n" +
-	"&DECISION_PRESENTATION_CANNOT_AUTHORIZE\x10\x05*\x9a\x01\n" +
+	"&DECISION_PRESENTATION_CANNOT_AUTHORIZE\x10\x05*~\n" +
+	"\vContentScan\x12\x1c\n" +
+	"\x18CONTENT_SCAN_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14CONTENT_SCAN_SCANNED\x10\x01\x12\x14\n" +
+	"\x10CONTENT_SCAN_OFF\x10\x02\x12!\n" +
+	"\x1dCONTENT_SCAN_FACE_NOT_SCANNED\x10\x03*\x9a\x01\n" +
 	"\x10ConsequenceState\x12!\n" +
 	"\x1dCONSEQUENCE_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCONSEQUENCE_STATE_PREDICTED\x10\x01\x12\x1d\n" +
@@ -3955,122 +4043,125 @@ func file_pantherclaw_v1_authority_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_authority_proto_rawDescData
 }
 
-var file_pantherclaw_v1_authority_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_pantherclaw_v1_authority_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
 var file_pantherclaw_v1_authority_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_pantherclaw_v1_authority_proto_goTypes = []any{
 	(Decision)(0),                         // 0: pantherclaw.v1.Decision
 	(DecisionPresentation)(0),             // 1: pantherclaw.v1.DecisionPresentation
-	(ConsequenceState)(0),                 // 2: pantherclaw.v1.ConsequenceState
-	(ConsequenceSource)(0),                // 3: pantherclaw.v1.ConsequenceSource
-	(WaitState)(0),                        // 4: pantherclaw.v1.WaitState
-	(DispatchMode)(0),                     // 5: pantherclaw.v1.DispatchMode
-	(ChecklistStatus)(0),                  // 6: pantherclaw.v1.ChecklistStatus
-	(Outcome)(0),                          // 7: pantherclaw.v1.Outcome
-	(CaptureDirection)(0),                 // 8: pantherclaw.v1.CaptureDirection
-	(ConsequenceLabel)(0),                 // 9: pantherclaw.v1.ConsequenceLabel
-	(*AgentExplanation)(nil),              // 10: pantherclaw.v1.AgentExplanation
-	(*NextAction)(nil),                    // 11: pantherclaw.v1.NextAction
-	(*Reason)(nil),                        // 12: pantherclaw.v1.Reason
-	(*AuthorizeRequest)(nil),              // 13: pantherclaw.v1.AuthorizeRequest
-	(*ContentFinding)(nil),                // 14: pantherclaw.v1.ContentFinding
-	(*PayloadFinding)(nil),                // 15: pantherclaw.v1.PayloadFinding
-	(*AuthorizeResponse)(nil),             // 16: pantherclaw.v1.AuthorizeResponse
-	(*Consequence)(nil),                   // 17: pantherclaw.v1.Consequence
-	(*WaitInfo)(nil),                      // 18: pantherclaw.v1.WaitInfo
-	(*ChecklistItem)(nil),                 // 19: pantherclaw.v1.ChecklistItem
-	(*Obligation)(nil),                    // 20: pantherclaw.v1.Obligation
-	(*BeginDispatchRequest)(nil),          // 21: pantherclaw.v1.BeginDispatchRequest
-	(*BeginDispatchResponse)(nil),         // 22: pantherclaw.v1.BeginDispatchResponse
-	(*RecordExecutionRequest)(nil),        // 23: pantherclaw.v1.RecordExecutionRequest
-	(*DataScopeApplied)(nil),              // 24: pantherclaw.v1.DataScopeApplied
-	(*CredentialAccess)(nil),              // 25: pantherclaw.v1.CredentialAccess
-	(*PayloadCapture)(nil),                // 26: pantherclaw.v1.PayloadCapture
-	(*RecordExecutionResponse)(nil),       // 27: pantherclaw.v1.RecordExecutionResponse
-	(*WorkloadCredentials)(nil),           // 28: pantherclaw.v1.WorkloadCredentials
-	(*GetNonceRequest)(nil),               // 29: pantherclaw.v1.GetNonceRequest
-	(*GetNonceResponse)(nil),              // 30: pantherclaw.v1.GetNonceResponse
-	(*ReportUnknownWorkloadRequest)(nil),  // 31: pantherclaw.v1.ReportUnknownWorkloadRequest
-	(*ReportUnknownWorkloadResponse)(nil), // 32: pantherclaw.v1.ReportUnknownWorkloadResponse
-	(*VerifyWorkloadRequest)(nil),         // 33: pantherclaw.v1.VerifyWorkloadRequest
-	(*VerifyWorkloadResponse)(nil),        // 34: pantherclaw.v1.VerifyWorkloadResponse
-	(*RecordToolObservationRequest)(nil),  // 35: pantherclaw.v1.RecordToolObservationRequest
-	(*RecordToolObservationResponse)(nil), // 36: pantherclaw.v1.RecordToolObservationResponse
-	(*DecisionExplanation)(nil),           // 37: pantherclaw.v1.DecisionExplanation
-	(*ExplainedAction)(nil),               // 38: pantherclaw.v1.ExplainedAction
-	(*ExplainedGrant)(nil),                // 39: pantherclaw.v1.ExplainedGrant
-	(*ExplainedBudget)(nil),               // 40: pantherclaw.v1.ExplainedBudget
-	(*ExplainedConsequence)(nil),          // 41: pantherclaw.v1.ExplainedConsequence
-	nil,                                   // 42: pantherclaw.v1.CredentialAccess.RequestedEntry
-	nil,                                   // 43: pantherclaw.v1.CredentialAccess.GrantedEntry
-	nil,                                   // 44: pantherclaw.v1.ExplainedAction.MaterialValuesEntry
-	(*timestamppb.Timestamp)(nil),         // 45: google.protobuf.Timestamp
+	(ContentScan)(0),                      // 2: pantherclaw.v1.ContentScan
+	(ConsequenceState)(0),                 // 3: pantherclaw.v1.ConsequenceState
+	(ConsequenceSource)(0),                // 4: pantherclaw.v1.ConsequenceSource
+	(WaitState)(0),                        // 5: pantherclaw.v1.WaitState
+	(DispatchMode)(0),                     // 6: pantherclaw.v1.DispatchMode
+	(ChecklistStatus)(0),                  // 7: pantherclaw.v1.ChecklistStatus
+	(Outcome)(0),                          // 8: pantherclaw.v1.Outcome
+	(CaptureDirection)(0),                 // 9: pantherclaw.v1.CaptureDirection
+	(ConsequenceLabel)(0),                 // 10: pantherclaw.v1.ConsequenceLabel
+	(*AgentExplanation)(nil),              // 11: pantherclaw.v1.AgentExplanation
+	(*NextAction)(nil),                    // 12: pantherclaw.v1.NextAction
+	(*Reason)(nil),                        // 13: pantherclaw.v1.Reason
+	(*AuthorizeRequest)(nil),              // 14: pantherclaw.v1.AuthorizeRequest
+	(*ContentFinding)(nil),                // 15: pantherclaw.v1.ContentFinding
+	(*PayloadFinding)(nil),                // 16: pantherclaw.v1.PayloadFinding
+	(*AuthorizeResponse)(nil),             // 17: pantherclaw.v1.AuthorizeResponse
+	(*Consequence)(nil),                   // 18: pantherclaw.v1.Consequence
+	(*WaitInfo)(nil),                      // 19: pantherclaw.v1.WaitInfo
+	(*ChecklistItem)(nil),                 // 20: pantherclaw.v1.ChecklistItem
+	(*Obligation)(nil),                    // 21: pantherclaw.v1.Obligation
+	(*BeginDispatchRequest)(nil),          // 22: pantherclaw.v1.BeginDispatchRequest
+	(*BeginDispatchResponse)(nil),         // 23: pantherclaw.v1.BeginDispatchResponse
+	(*RecordExecutionRequest)(nil),        // 24: pantherclaw.v1.RecordExecutionRequest
+	(*DataScopeApplied)(nil),              // 25: pantherclaw.v1.DataScopeApplied
+	(*CredentialAccess)(nil),              // 26: pantherclaw.v1.CredentialAccess
+	(*PayloadCapture)(nil),                // 27: pantherclaw.v1.PayloadCapture
+	(*RecordExecutionResponse)(nil),       // 28: pantherclaw.v1.RecordExecutionResponse
+	(*WorkloadCredentials)(nil),           // 29: pantherclaw.v1.WorkloadCredentials
+	(*GetNonceRequest)(nil),               // 30: pantherclaw.v1.GetNonceRequest
+	(*GetNonceResponse)(nil),              // 31: pantherclaw.v1.GetNonceResponse
+	(*ReportUnknownWorkloadRequest)(nil),  // 32: pantherclaw.v1.ReportUnknownWorkloadRequest
+	(*ReportUnknownWorkloadResponse)(nil), // 33: pantherclaw.v1.ReportUnknownWorkloadResponse
+	(*VerifyWorkloadRequest)(nil),         // 34: pantherclaw.v1.VerifyWorkloadRequest
+	(*VerifyWorkloadResponse)(nil),        // 35: pantherclaw.v1.VerifyWorkloadResponse
+	(*RecordToolObservationRequest)(nil),  // 36: pantherclaw.v1.RecordToolObservationRequest
+	(*RecordToolObservationResponse)(nil), // 37: pantherclaw.v1.RecordToolObservationResponse
+	(*DecisionExplanation)(nil),           // 38: pantherclaw.v1.DecisionExplanation
+	(*ExplainedAction)(nil),               // 39: pantherclaw.v1.ExplainedAction
+	(*ExplainedGrant)(nil),                // 40: pantherclaw.v1.ExplainedGrant
+	(*ExplainedBudget)(nil),               // 41: pantherclaw.v1.ExplainedBudget
+	(*ExplainedConsequence)(nil),          // 42: pantherclaw.v1.ExplainedConsequence
+	nil,                                   // 43: pantherclaw.v1.CredentialAccess.RequestedEntry
+	nil,                                   // 44: pantherclaw.v1.CredentialAccess.GrantedEntry
+	nil,                                   // 45: pantherclaw.v1.ExplainedAction.MaterialValuesEntry
+	(*timestamppb.Timestamp)(nil),         // 46: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_authority_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.AgentExplanation.presentation:type_name -> pantherclaw.v1.DecisionPresentation
-	11, // 1: pantherclaw.v1.AgentExplanation.next_actions:type_name -> pantherclaw.v1.NextAction
-	28, // 2: pantherclaw.v1.AuthorizeRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	15, // 3: pantherclaw.v1.AuthorizeRequest.payload_findings:type_name -> pantherclaw.v1.PayloadFinding
-	14, // 4: pantherclaw.v1.AuthorizeRequest.content_findings:type_name -> pantherclaw.v1.ContentFinding
-	0,  // 5: pantherclaw.v1.AuthorizeResponse.decision:type_name -> pantherclaw.v1.Decision
-	12, // 6: pantherclaw.v1.AuthorizeResponse.reasons:type_name -> pantherclaw.v1.Reason
-	19, // 7: pantherclaw.v1.AuthorizeResponse.checklist:type_name -> pantherclaw.v1.ChecklistItem
-	20, // 8: pantherclaw.v1.AuthorizeResponse.obligations:type_name -> pantherclaw.v1.Obligation
-	18, // 9: pantherclaw.v1.AuthorizeResponse.wait:type_name -> pantherclaw.v1.WaitInfo
-	5,  // 10: pantherclaw.v1.AuthorizeResponse.mode:type_name -> pantherclaw.v1.DispatchMode
-	17, // 11: pantherclaw.v1.AuthorizeResponse.consequences:type_name -> pantherclaw.v1.Consequence
-	10, // 12: pantherclaw.v1.AuthorizeResponse.agent_explanation:type_name -> pantherclaw.v1.AgentExplanation
-	2,  // 13: pantherclaw.v1.Consequence.state:type_name -> pantherclaw.v1.ConsequenceState
-	3,  // 14: pantherclaw.v1.Consequence.source:type_name -> pantherclaw.v1.ConsequenceSource
-	9,  // 15: pantherclaw.v1.Consequence.label:type_name -> pantherclaw.v1.ConsequenceLabel
-	45, // 16: pantherclaw.v1.WaitInfo.deadline_time:type_name -> google.protobuf.Timestamp
-	4,  // 17: pantherclaw.v1.WaitInfo.state:type_name -> pantherclaw.v1.WaitState
-	45, // 18: pantherclaw.v1.WaitInfo.consume_by_time:type_name -> google.protobuf.Timestamp
-	45, // 19: pantherclaw.v1.WaitInfo.evidence_deadline_time:type_name -> google.protobuf.Timestamp
-	6,  // 20: pantherclaw.v1.ChecklistItem.status:type_name -> pantherclaw.v1.ChecklistStatus
-	7,  // 21: pantherclaw.v1.RecordExecutionRequest.outcome:type_name -> pantherclaw.v1.Outcome
-	26, // 22: pantherclaw.v1.RecordExecutionRequest.captures:type_name -> pantherclaw.v1.PayloadCapture
-	25, // 23: pantherclaw.v1.RecordExecutionRequest.credential_access:type_name -> pantherclaw.v1.CredentialAccess
-	24, // 24: pantherclaw.v1.RecordExecutionRequest.data_scope:type_name -> pantherclaw.v1.DataScopeApplied
-	14, // 25: pantherclaw.v1.RecordExecutionRequest.content_findings:type_name -> pantherclaw.v1.ContentFinding
-	42, // 26: pantherclaw.v1.CredentialAccess.requested:type_name -> pantherclaw.v1.CredentialAccess.RequestedEntry
-	43, // 27: pantherclaw.v1.CredentialAccess.granted:type_name -> pantherclaw.v1.CredentialAccess.GrantedEntry
-	45, // 28: pantherclaw.v1.CredentialAccess.expire_time:type_name -> google.protobuf.Timestamp
-	8,  // 29: pantherclaw.v1.PayloadCapture.direction:type_name -> pantherclaw.v1.CaptureDirection
-	45, // 30: pantherclaw.v1.GetNonceResponse.expire_time:type_name -> google.protobuf.Timestamp
-	28, // 31: pantherclaw.v1.ReportUnknownWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	28, // 32: pantherclaw.v1.VerifyWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	45, // 33: pantherclaw.v1.VerifyWorkloadResponse.run_expires_at:type_name -> google.protobuf.Timestamp
-	28, // 34: pantherclaw.v1.RecordToolObservationRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	0,  // 35: pantherclaw.v1.DecisionExplanation.decision:type_name -> pantherclaw.v1.Decision
-	1,  // 36: pantherclaw.v1.DecisionExplanation.presentation:type_name -> pantherclaw.v1.DecisionPresentation
-	19, // 37: pantherclaw.v1.DecisionExplanation.decisive:type_name -> pantherclaw.v1.ChecklistItem
-	38, // 38: pantherclaw.v1.DecisionExplanation.action:type_name -> pantherclaw.v1.ExplainedAction
-	39, // 39: pantherclaw.v1.DecisionExplanation.grant:type_name -> pantherclaw.v1.ExplainedGrant
-	40, // 40: pantherclaw.v1.DecisionExplanation.budgets:type_name -> pantherclaw.v1.ExplainedBudget
-	11, // 41: pantherclaw.v1.DecisionExplanation.next_actions:type_name -> pantherclaw.v1.NextAction
-	41, // 42: pantherclaw.v1.DecisionExplanation.consequences:type_name -> pantherclaw.v1.ExplainedConsequence
-	44, // 43: pantherclaw.v1.ExplainedAction.material_values:type_name -> pantherclaw.v1.ExplainedAction.MaterialValuesEntry
-	45, // 44: pantherclaw.v1.ExplainedGrant.expire_time:type_name -> google.protobuf.Timestamp
-	9,  // 45: pantherclaw.v1.ExplainedConsequence.label:type_name -> pantherclaw.v1.ConsequenceLabel
-	13, // 46: pantherclaw.v1.AuthorityService.Authorize:input_type -> pantherclaw.v1.AuthorizeRequest
-	21, // 47: pantherclaw.v1.AuthorityService.BeginDispatch:input_type -> pantherclaw.v1.BeginDispatchRequest
-	23, // 48: pantherclaw.v1.AuthorityService.RecordExecution:input_type -> pantherclaw.v1.RecordExecutionRequest
-	29, // 49: pantherclaw.v1.AuthorityService.GetNonce:input_type -> pantherclaw.v1.GetNonceRequest
-	31, // 50: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:input_type -> pantherclaw.v1.ReportUnknownWorkloadRequest
-	33, // 51: pantherclaw.v1.AuthorityService.VerifyWorkload:input_type -> pantherclaw.v1.VerifyWorkloadRequest
-	35, // 52: pantherclaw.v1.AuthorityService.RecordToolObservation:input_type -> pantherclaw.v1.RecordToolObservationRequest
-	16, // 53: pantherclaw.v1.AuthorityService.Authorize:output_type -> pantherclaw.v1.AuthorizeResponse
-	22, // 54: pantherclaw.v1.AuthorityService.BeginDispatch:output_type -> pantherclaw.v1.BeginDispatchResponse
-	27, // 55: pantherclaw.v1.AuthorityService.RecordExecution:output_type -> pantherclaw.v1.RecordExecutionResponse
-	30, // 56: pantherclaw.v1.AuthorityService.GetNonce:output_type -> pantherclaw.v1.GetNonceResponse
-	32, // 57: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:output_type -> pantherclaw.v1.ReportUnknownWorkloadResponse
-	34, // 58: pantherclaw.v1.AuthorityService.VerifyWorkload:output_type -> pantherclaw.v1.VerifyWorkloadResponse
-	36, // 59: pantherclaw.v1.AuthorityService.RecordToolObservation:output_type -> pantherclaw.v1.RecordToolObservationResponse
-	53, // [53:60] is the sub-list for method output_type
-	46, // [46:53] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	12, // 1: pantherclaw.v1.AgentExplanation.next_actions:type_name -> pantherclaw.v1.NextAction
+	29, // 2: pantherclaw.v1.AuthorizeRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	16, // 3: pantherclaw.v1.AuthorizeRequest.payload_findings:type_name -> pantherclaw.v1.PayloadFinding
+	15, // 4: pantherclaw.v1.AuthorizeRequest.content_findings:type_name -> pantherclaw.v1.ContentFinding
+	2,  // 5: pantherclaw.v1.AuthorizeRequest.content_scan:type_name -> pantherclaw.v1.ContentScan
+	0,  // 6: pantherclaw.v1.AuthorizeResponse.decision:type_name -> pantherclaw.v1.Decision
+	13, // 7: pantherclaw.v1.AuthorizeResponse.reasons:type_name -> pantherclaw.v1.Reason
+	20, // 8: pantherclaw.v1.AuthorizeResponse.checklist:type_name -> pantherclaw.v1.ChecklistItem
+	21, // 9: pantherclaw.v1.AuthorizeResponse.obligations:type_name -> pantherclaw.v1.Obligation
+	19, // 10: pantherclaw.v1.AuthorizeResponse.wait:type_name -> pantherclaw.v1.WaitInfo
+	6,  // 11: pantherclaw.v1.AuthorizeResponse.mode:type_name -> pantherclaw.v1.DispatchMode
+	18, // 12: pantherclaw.v1.AuthorizeResponse.consequences:type_name -> pantherclaw.v1.Consequence
+	11, // 13: pantherclaw.v1.AuthorizeResponse.agent_explanation:type_name -> pantherclaw.v1.AgentExplanation
+	3,  // 14: pantherclaw.v1.Consequence.state:type_name -> pantherclaw.v1.ConsequenceState
+	4,  // 15: pantherclaw.v1.Consequence.source:type_name -> pantherclaw.v1.ConsequenceSource
+	10, // 16: pantherclaw.v1.Consequence.label:type_name -> pantherclaw.v1.ConsequenceLabel
+	46, // 17: pantherclaw.v1.WaitInfo.deadline_time:type_name -> google.protobuf.Timestamp
+	5,  // 18: pantherclaw.v1.WaitInfo.state:type_name -> pantherclaw.v1.WaitState
+	46, // 19: pantherclaw.v1.WaitInfo.consume_by_time:type_name -> google.protobuf.Timestamp
+	46, // 20: pantherclaw.v1.WaitInfo.evidence_deadline_time:type_name -> google.protobuf.Timestamp
+	7,  // 21: pantherclaw.v1.ChecklistItem.status:type_name -> pantherclaw.v1.ChecklistStatus
+	8,  // 22: pantherclaw.v1.RecordExecutionRequest.outcome:type_name -> pantherclaw.v1.Outcome
+	27, // 23: pantherclaw.v1.RecordExecutionRequest.captures:type_name -> pantherclaw.v1.PayloadCapture
+	26, // 24: pantherclaw.v1.RecordExecutionRequest.credential_access:type_name -> pantherclaw.v1.CredentialAccess
+	25, // 25: pantherclaw.v1.RecordExecutionRequest.data_scope:type_name -> pantherclaw.v1.DataScopeApplied
+	15, // 26: pantherclaw.v1.RecordExecutionRequest.content_findings:type_name -> pantherclaw.v1.ContentFinding
+	2,  // 27: pantherclaw.v1.RecordExecutionRequest.content_scan:type_name -> pantherclaw.v1.ContentScan
+	43, // 28: pantherclaw.v1.CredentialAccess.requested:type_name -> pantherclaw.v1.CredentialAccess.RequestedEntry
+	44, // 29: pantherclaw.v1.CredentialAccess.granted:type_name -> pantherclaw.v1.CredentialAccess.GrantedEntry
+	46, // 30: pantherclaw.v1.CredentialAccess.expire_time:type_name -> google.protobuf.Timestamp
+	9,  // 31: pantherclaw.v1.PayloadCapture.direction:type_name -> pantherclaw.v1.CaptureDirection
+	46, // 32: pantherclaw.v1.GetNonceResponse.expire_time:type_name -> google.protobuf.Timestamp
+	29, // 33: pantherclaw.v1.ReportUnknownWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	29, // 34: pantherclaw.v1.VerifyWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	46, // 35: pantherclaw.v1.VerifyWorkloadResponse.run_expires_at:type_name -> google.protobuf.Timestamp
+	29, // 36: pantherclaw.v1.RecordToolObservationRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	0,  // 37: pantherclaw.v1.DecisionExplanation.decision:type_name -> pantherclaw.v1.Decision
+	1,  // 38: pantherclaw.v1.DecisionExplanation.presentation:type_name -> pantherclaw.v1.DecisionPresentation
+	20, // 39: pantherclaw.v1.DecisionExplanation.decisive:type_name -> pantherclaw.v1.ChecklistItem
+	39, // 40: pantherclaw.v1.DecisionExplanation.action:type_name -> pantherclaw.v1.ExplainedAction
+	40, // 41: pantherclaw.v1.DecisionExplanation.grant:type_name -> pantherclaw.v1.ExplainedGrant
+	41, // 42: pantherclaw.v1.DecisionExplanation.budgets:type_name -> pantherclaw.v1.ExplainedBudget
+	12, // 43: pantherclaw.v1.DecisionExplanation.next_actions:type_name -> pantherclaw.v1.NextAction
+	42, // 44: pantherclaw.v1.DecisionExplanation.consequences:type_name -> pantherclaw.v1.ExplainedConsequence
+	45, // 45: pantherclaw.v1.ExplainedAction.material_values:type_name -> pantherclaw.v1.ExplainedAction.MaterialValuesEntry
+	46, // 46: pantherclaw.v1.ExplainedGrant.expire_time:type_name -> google.protobuf.Timestamp
+	10, // 47: pantherclaw.v1.ExplainedConsequence.label:type_name -> pantherclaw.v1.ConsequenceLabel
+	14, // 48: pantherclaw.v1.AuthorityService.Authorize:input_type -> pantherclaw.v1.AuthorizeRequest
+	22, // 49: pantherclaw.v1.AuthorityService.BeginDispatch:input_type -> pantherclaw.v1.BeginDispatchRequest
+	24, // 50: pantherclaw.v1.AuthorityService.RecordExecution:input_type -> pantherclaw.v1.RecordExecutionRequest
+	30, // 51: pantherclaw.v1.AuthorityService.GetNonce:input_type -> pantherclaw.v1.GetNonceRequest
+	32, // 52: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:input_type -> pantherclaw.v1.ReportUnknownWorkloadRequest
+	34, // 53: pantherclaw.v1.AuthorityService.VerifyWorkload:input_type -> pantherclaw.v1.VerifyWorkloadRequest
+	36, // 54: pantherclaw.v1.AuthorityService.RecordToolObservation:input_type -> pantherclaw.v1.RecordToolObservationRequest
+	17, // 55: pantherclaw.v1.AuthorityService.Authorize:output_type -> pantherclaw.v1.AuthorizeResponse
+	23, // 56: pantherclaw.v1.AuthorityService.BeginDispatch:output_type -> pantherclaw.v1.BeginDispatchResponse
+	28, // 57: pantherclaw.v1.AuthorityService.RecordExecution:output_type -> pantherclaw.v1.RecordExecutionResponse
+	31, // 58: pantherclaw.v1.AuthorityService.GetNonce:output_type -> pantherclaw.v1.GetNonceResponse
+	33, // 59: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:output_type -> pantherclaw.v1.ReportUnknownWorkloadResponse
+	35, // 60: pantherclaw.v1.AuthorityService.VerifyWorkload:output_type -> pantherclaw.v1.VerifyWorkloadResponse
+	37, // 61: pantherclaw.v1.AuthorityService.RecordToolObservation:output_type -> pantherclaw.v1.RecordToolObservationResponse
+	55, // [55:62] is the sub-list for method output_type
+	48, // [48:55] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_authority_proto_init() }
@@ -4084,7 +4175,7 @@ func file_pantherclaw_v1_authority_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_authority_proto_rawDesc), len(file_pantherclaw_v1_authority_proto_rawDesc)),
-			NumEnums:      10,
+			NumEnums:      11,
 			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,

@@ -37414,6 +37414,17 @@
         ],
         "description": "ConsequenceState is what a consequence rule said about an action\n (HR-206)."
       },
+      "pantherclaw.v1.ContentScan": {
+        "type": "string",
+        "title": "ContentScan",
+        "enum": [
+          "CONTENT_SCAN_UNSPECIFIED",
+          "CONTENT_SCAN_SCANNED",
+          "CONTENT_SCAN_OFF",
+          "CONTENT_SCAN_FACE_NOT_SCANNED"
+        ],
+        "description": "ContentScan is whether the gateway scanned a body for content signals (G0\n M27 D533). Only SCANNED counts as scanned; the Authority decides for\n itself which faces are declared unscanned."
+      },
       "pantherclaw.v1.Decision": {
         "type": "string",
         "title": "Decision",
@@ -37562,6 +37573,18 @@
             "title": "content_findings",
             "maxItems": 16,
             "description": "Content flags the gateway found in the outbound body (G0 M27 D507,\n HR-648): the Authority reads the org's mode itself, and a flag can only\n add a hold. At most 16, sorted, never the value."
+          },
+          "contentScan": {
+            "title": "content_scan",
+            "description": "Whether the gateway scanned the outbound body (G0 M27 D533). In ACTIVE a\n call on a gateway-carried channel without CONTENT_SCAN_SCANNED is a\n scan_incomplete (not_scanned) and holds.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ContentScan"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "AuthorizeRequest",
@@ -38720,6 +38743,18 @@
             "title": "content_findings",
             "maxItems": 16,
             "description": "Content flags on the tool result (G0 M27 D507, HR-648): they land on the\n run, for later decisions. Empty for a delegated outcome, which is not\n inspected. At most 16, sorted, never the value."
+          },
+          "contentScan": {
+            "title": "content_scan",
+            "description": "Whether the gateway scanned the tool result (G0 M27 D533). In ACTIVE a\n gateway-carried result without CONTENT_SCAN_SCANNED flags the run as\n scan_incomplete (not_scanned).",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ContentScan"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "RecordExecutionRequest",

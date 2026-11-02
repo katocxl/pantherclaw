@@ -423,7 +423,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if code := e.simulatorRefusal(ctx, conn); code != "" {
 		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
-	ctx, content := e.outboundContent(ctx, c) // G0 M27 D507
+	ctx, content, scan := e.outboundContent(ctx, c) // G0 M27 D507, D533
 	refusedPayload, findings := e.outboundCheck(ctx, conn, c.Action.Action)
 	if refusedPayload {
 		return Result{Class: CannotAuthorize, Code: CodeSecretInPayload, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
@@ -458,7 +458,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if read, unreported := e.reportGitLabFacts(ctx, conn, c.Action.Action); read && unreported != nil {
 		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
-	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content})
+	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content, ContentScan: scan})
 	t.lap("authz")
 	if err != nil {
 		e.log.ErrorContext(ctx, "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
@@ -1185,7 +1185,7 @@ func (e *Engine) record(ctx context.Context, r Result, want permitWant, outcome 
 		PermitId: want.PermitID, Outcome: outcome, TargetStatus: int32(min(status, 599)), ResponseDigest: digest, //nolint:gosec // G115: clamped
 		DispatchMs: int32(min(elapsed.Milliseconds(), 600000)), //nolint:gosec // G115: clamped
 	}
-	req.ContentFindings = e.resultContent(ctx, r) // G0 M27 D507
+	req.ContentFindings, req.ContentScan = e.resultContent(ctx, r) // G0 M27 D507, D533
 	for _, f := range extra {
 		f(req)
 	}

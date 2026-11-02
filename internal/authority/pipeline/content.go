@@ -55,8 +55,30 @@ func (p *Pipeline) contentSignals(ctx context.Context, s *state) bool {
 		st.Kinds = nil // a flag is the agent's own run's
 	}
 	s.content = st
-	s.ev.ContentFindings = payloadFindings(s.req.ContentFindings)
+	found := make([]PayloadFinding, 0, len(s.req.ContentFindings)+1)
+	for _, f := range s.req.ContentFindings {
+		c := csdomain.Closed(csdomain.Finding{Kind: f.Kind, Location: f.Location}) // D533
+		found = append(found, PayloadFinding{Kind: c.Kind, Location: c.Location})
+	}
+	// A gateway-carried call without the gateway's word that it scanned is
+	// not known to have no flags: a gateway from before M27, or one whose
+	// configuration is stale, fails closed (D533). The declared unscanned
+	// faces need no word; the Authority decides which they are.
+	if csdomain.Mode(st.Mode).Scans() && s.req.ContentScan != csdomain.ScanScanned && !s.declaredUnscanned() {
+		found = append(found, PayloadFinding{Kind: csdomain.Unscanned.Kind, Location: csdomain.Unscanned.Location})
+	}
+	s.ev.ContentFindings = payloadFindings(found)
 	return true
+}
+
+// declaredUnscanned reports whether the call comes through a face content
+// signals declare unscanned (D504, D532).
+func (s *state) declaredUnscanned() bool {
+	kind := ""
+	if s.conn != nil {
+		kind = s.conn.Kind
+	}
+	return csdomain.DeclaredUnscanned(s.a.Channel, kind)
 }
 
 // runContentFlags are the flags policy sees as `run.content_flags`: the run

@@ -52,6 +52,9 @@ SELECT root.id::uuid AS root, f.value AS flag
 FROM root LEFT JOIN pc.facts f ON f.org_id = sqlc.arg(org_id) AND f.name = 'pc.content.flag' AND f.subject_type = 'run'
     AND f.subject_id = root.id::text AND f.connection_id IS NULL;
 
--- ContentTransactionRun is a transaction's run.
+-- ContentTransactionRun is a transaction's run, and its channel and
+-- connection kind, which say whether its face is declared unscanned (D533).
 -- name: ContentTransactionRun :one
-SELECT t.run_id FROM pc.transactions t WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
+SELECT t.run_id, t.channel, c.kind AS connection_kind
+FROM pc.transactions t LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);

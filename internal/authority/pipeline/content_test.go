@@ -15,6 +15,7 @@ import (
 const (
 	active   = "ACTIVE"
 	watching = "WATCHING"
+	scanned  = "SCANNED"
 )
 
 var injected = []pipeline.PayloadFinding{{Kind: "injection_phrase", Location: "arg/note"}}
@@ -22,7 +23,7 @@ var injected = []pipeline.PayloadFinding{{Kind: "injection_phrase", Location: "a
 func (f *fx) contentEval(findings ...pipeline.PayloadFinding) *pipeline.Evaluation {
 	f.t.Helper()
 	req := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
-	req.ContentFindings = findings
+	req.ContentFindings, req.ContentScan = findings, scanned
 	return f.eval(req)
 }
 
@@ -129,7 +130,7 @@ func TestHR648_NoFlagEverAllowsOrLifts(t *testing.T) {
 			set(f)
 			req := func(fs ...pipeline.PayloadFinding) *pipeline.Evaluation {
 				r := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
-				r.ContentFindings = fs
+				r.ContentFindings, r.ContentScan = fs, scanned
 				if name == "payload" {
 					r.PayloadFindings = []pipeline.PayloadFinding{{Kind: "private_key", Location: "arg/k"}}
 				}
@@ -164,7 +165,7 @@ func TestHR648_AReadPassesAFlagOnTheRun(t *testing.T) {
 	f.w.SetContentSignals("OFF")
 	read := func(fs ...pipeline.PayloadFinding) *pipeline.Evaluation {
 		r := f.parse(f.run, ids.NewV7(), "get_refund", `{"refund":"re_1"}`)
-		r.ContentFindings = fs
+		r.ContentFindings, r.ContentScan = fs, scanned
 		return f.eval(r)
 	}
 	base := read().Decision
@@ -178,8 +179,101 @@ func TestHR648_AReadPassesAFlagOnTheRun(t *testing.T) {
 		t.Fatalf("a read's own flag: %s %+v", ev.Decision, ev.Checklist)
 	}
 	write := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
+	write.ContentScan = scanned
 	if ev := f.eval(write); ev.Decision != adomain.RequireApproval {
 		t.Fatalf("a write on the flagged run: %s", ev.Decision)
+	}
+}
+
+// TestHR650_AnUnmarkedGatewayCallHolds: in ACTIVE, a call on a gateway-carried
+// channel without the gateway's scan marker is a scan_incomplete
+// (not_scanned) and holds, so a gateway from before M27 or with a stale
+// configuration fails closed; SCANNED with no flags passes, and WATCHING only
+// notes it (D533).
+//
+// Covers: F939
+func TestHR650_AnUnmarkedGatewayCallHolds(t *testing.T) {
+	f := newFx(t)
+	f.w.SetContentSignals("OFF")
+	base := f.contentEval().Decision
+	f.w.SetContentSignals(active)
+	for _, marker := range []string{"", "OFF", "FACE_NOT_SCANNED"} {
+		req := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
+		req.ContentScan = marker
+		ev := f.eval(req)
+		it, ok := itemOf(ev, pipeline.ReasonContentFlagHold)
+		if ev.Decision != adomain.RequireApproval || !ok || !strings.Contains(it.Detail, "scan_incomplete at not_scanned") {
+			t.Fatalf("marker %q: %s %+v", marker, ev.Decision, it)
+		}
+	}
+	if ev := f.contentEval(); ev.Decision != base {
+		t.Fatalf("scanned, no flags: %s, without content signals %s", ev.Decision, base)
+	}
+	f.w.SetContentSignals(watching)
+	req := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
+	if ev := f.eval(req); ev.Decision != base {
+		t.Fatalf("watching decided %s", ev.Decision)
+	} else if _, ok := itemOf(ev, pipeline.ReasonContentFlagWatching); !ok {
+		t.Fatal("watching did not note the unmarked call")
+	}
+}
+
+// TestHR651_DeclaredUnscannedFacesNeedNoMarker: the hook channel on a local
+// connection and the SDK channel are declared unscanned, so a call through
+// them needs no marker and gets no not_scanned flag (D504, D532, D533).
+//
+// Covers: F939
+func TestHR651_DeclaredUnscannedFacesNeedNoMarker(t *testing.T) {
+	for _, face := range []string{"hook", "sdk"} {
+		t.Run(face, func(t *testing.T) {
+			f := newFx(t)
+			f.w.SetContentSignals(active)
+			var ev *pipeline.Evaluation
+			if face == "hook" {
+				gw := ids.NewV7()
+				c := connection(gw)
+				c.Kind = "local"
+				f.w.PutConnection(c)
+				ev = f.onChannel(gw, c, face)
+			} else {
+				req := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
+				req.Action.Action.Channel = face
+				ev = f.eval(req)
+			}
+			if !reachedFacts(ev) {
+				t.Fatalf("the fixture stops %s before content signals: %+v", face, ev.Checklist)
+			}
+			if len(ev.ContentFindings) != 0 {
+				t.Fatalf("findings %+v", ev.ContentFindings)
+			}
+			if _, ok := itemOf(ev, pipeline.ReasonContentFlagHold); ok {
+				t.Fatalf("held: %+v", ev.Checklist)
+			}
+		})
+	}
+}
+
+// reachedFacts reports whether the evaluation knew the meaning, so step 6
+// read content signals.
+func reachedFacts(ev *pipeline.Evaluation) bool {
+	_, ok := itemOf(ev, pipeline.ReasonMeaningExact)
+	return ok
+}
+
+// TestHR648_AnUnknownMeaningWithAFlagIsHeld: a call whose meaning is not
+// known (an agent-chosen dedupe key) stops before content signals are read,
+// and an outbound flag on it in ACTIVE still leaves it no looser than a hold:
+// CANNOT_AUTHORIZE (D533 C3).
+//
+// Covers: F939
+func TestHR648_AnUnknownMeaningWithAFlagIsHeld(t *testing.T) {
+	f := newFx(t)
+	f.w.SetContentSignals(active, "injection_phrase")
+	req := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
+	req.Action.Action.DedupeKey = "sha256:" + strings.Repeat("0", 64)
+	req.ContentFindings, req.ContentScan = injected, scanned
+	if ev := f.eval(req); rank(ev.Decision) < rank(adomain.RequireApproval) {
+		t.Fatalf("decision %s", ev.Decision)
 	}
 }
 

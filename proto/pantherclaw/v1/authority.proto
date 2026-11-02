@@ -133,6 +133,10 @@ message AuthorizeRequest {
   // HR-648): the Authority reads the org's mode itself, and a flag can only
   // add a hold. At most 16, sorted, never the value.
   repeated ContentFinding content_findings = 4 [(buf.validate.field).repeated.max_items = 16];
+  // Whether the gateway scanned the outbound body (G0 M27 D533). In ACTIVE a
+  // call on a gateway-carried channel without CONTENT_SCAN_SCANNED is a
+  // scan_incomplete (not_scanned) and holds.
+  ContentScan content_scan = 5;
 }
 
 // ContentFinding is one content flag: a kind and a location, never a value
@@ -144,6 +148,20 @@ message ContentFinding {
   // Where, such as result/content/0/text; for scan_incomplete, over_bound,
   // classifier_unavailable or builtin_failed.
   string location = 2 [(buf.validate.field).string.pattern = "^[!-~]{1,128}$"];
+}
+
+// ContentScan is whether the gateway scanned a body for content signals (G0
+// M27 D533). Only SCANNED counts as scanned; the Authority decides for
+// itself which faces are declared unscanned.
+enum ContentScan {
+  // A gateway from before M27, or one that said nothing.
+  CONTENT_SCAN_UNSPECIFIED = 0;
+  // The body was scanned; its findings, if any, are in content_findings.
+  CONTENT_SCAN_SCANNED = 1;
+  // The gateway runs with content signals off.
+  CONTENT_SCAN_OFF = 2;
+  // A face the gateway does not scan: hook, SDK, local or delegated.
+  CONTENT_SCAN_FACE_NOT_SCANNED = 3;
 }
 
 // PayloadFinding is one credential-shaped value in an action's payload.
@@ -487,6 +505,10 @@ message RecordExecutionRequest {
   // run, for later decisions. Empty for a delegated outcome, which is not
   // inspected. At most 16, sorted, never the value.
   repeated ContentFinding content_findings = 10 [(buf.validate.field).repeated.max_items = 16];
+  // Whether the gateway scanned the tool result (G0 M27 D533). In ACTIVE a
+  // gateway-carried result without CONTENT_SCAN_SCANNED flags the run as
+  // scan_incomplete (not_scanned).
+  ContentScan content_scan = 11;
 }
 
 // DataScopeApplied is what applying a read's data scope did to its answer

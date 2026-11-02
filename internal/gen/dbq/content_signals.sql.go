@@ -64,15 +64,24 @@ func (q *Queries) ContentSignalMode(ctx context.Context, orgID ids.OrgID) (strin
 }
 
 const contentTransactionRun = `-- name: ContentTransactionRun :one
-SELECT t.run_id FROM pc.transactions t WHERE t.org_id = $1 AND t.id = $2
+SELECT t.run_id, t.channel, c.kind AS connection_kind
+FROM pc.transactions t LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+WHERE t.org_id = $1 AND t.id = $2
 `
 
-// ContentTransactionRun is a transaction's run.
-func (q *Queries) ContentTransactionRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+type ContentTransactionRunRow struct {
+	RunID          ids.UUID
+	Channel        *string
+	ConnectionKind *string
+}
+
+// ContentTransactionRun is a transaction's run, and its channel and
+// connection kind, which say whether its face is declared unscanned (D533).
+func (q *Queries) ContentTransactionRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ContentTransactionRunRow, error) {
 	row := q.db.QueryRow(ctx, contentTransactionRun, orgID, iD)
-	var run_id ids.UUID
-	err := row.Scan(&run_id)
-	return run_id, err
+	var i ContentTransactionRunRow
+	err := row.Scan(&i.RunID, &i.Channel, &i.ConnectionKind)
+	return i, err
 }
 
 const contentWouldHolds = `-- name: ContentWouldHolds :many
