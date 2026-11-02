@@ -34,7 +34,7 @@ func start(t *testing.T) (*okta.Sim, *httptest.Server) {
 
 func post(t *testing.T, u string, form url.Values) map[string]any {
 	t.Helper()
-	resp, err := http.Post(u, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	resp, err := (&http.Client{}).Post(u, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatal(err)
 	}

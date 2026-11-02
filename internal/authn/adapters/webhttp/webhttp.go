@@ -114,6 +114,9 @@ type Handler struct {
 	// modelDrafting is the model drafting settings page (G0 M21 D309); nil
 	// when not mounted.
 	modelDrafting ModelDrafting
+	// mcpConsent is the MCP consent page (G0 M26 D408.4); nil when not
+	// mounted.
+	mcpConsent McpConsent
 	// playbook is the identity playbook page (G0 M10 D38); nil when not
 	// mounted.
 	playbook         PlaybookRequests
@@ -182,6 +185,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountCredentialRotations(mux)
 	h.mountSecretPages(mux)
 	h.mountModelDrafting(mux)
+	h.mountMcpConsent(mux)
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)
 	h.mountPromotions(mux)

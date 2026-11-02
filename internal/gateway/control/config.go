@@ -34,6 +34,10 @@ type Config struct {
 	Org string
 	// ByName and ByID index the connections (active and quarantined).
 	ByName, ByID map[string]*Connection
+	// McpIssuer is the org's authorization server issuer while its MCP
+	// authorization is on (G0 M26 D402); "" keeps the MCP face's OAuth
+	// route closed.
+	McpIssuer string
 }
 
 // Connection is one connection with its package and credential.
@@ -216,7 +220,10 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 	for _, c := range res.GetCredentials() {
 		creds[c.GetConnectionId()] = c
 	}
-	cfg := &Config{Version: res.GetVersion(), Org: s.org, ByName: map[string]*Connection{}, ByID: map[string]*Connection{}}
+	cfg := &Config{
+		Version: res.GetVersion(), Org: s.org, ByName: map[string]*Connection{}, ByID: map[string]*Connection{},
+		McpIssuer: res.GetMcpAccess().GetIssuer(),
+	}
 	for _, gc := range res.GetConnections() {
 		pkg, ok := pkgs[gc.GetPackage()+"@"+gc.GetPackageVersion()]
 		if !ok {

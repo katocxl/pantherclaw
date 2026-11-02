@@ -85,7 +85,7 @@ func (e *env) count(t *testing.T, sql string, args ...any) int {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	var h http.Handler
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(w, r) }))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(w, r) }))
 	t.Cleanup(srv.Close)
 	sim, err := okta.New(srv.URL, okta.Faults{}, nil)
 	if err != nil {

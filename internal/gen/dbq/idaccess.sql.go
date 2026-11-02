@@ -216,6 +216,17 @@ func (q *Queries) AssertionClientLive(ctx context.Context, orgID ids.OrgID, iD i
 	return column_1, err
 }
 
+const bumpOrgGatewaysConfig = `-- name: BumpOrgGatewaysConfig :exec
+UPDATE pc.gateways SET config_version = config_version + 1 WHERE org_id = $1
+`
+
+// Every gateway of the org gets a new configuration: its OAuth route
+// follows the org's MCP authorization (D402).
+func (q *Queries) BumpOrgGatewaysConfig(ctx context.Context, orgID ids.OrgID) error {
+	_, err := q.db.Exec(ctx, bumpOrgGatewaysConfig, orgID)
+	return err
+}
+
 const deleteExpiredMcpAuthorizationCodes = `-- name: DeleteExpiredMcpAuthorizationCodes :execrows
 DELETE FROM pc.mcp_authorization_codes WHERE org_id = $1 AND expires_at < now() - interval '1 hour'
 `

@@ -32,7 +32,7 @@ import (
 
 // GrantJWTBearer is the RFC 7523 grant type an ID-JAG is presented with
 // (draft -06 §4.4).
-const GrantJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+const GrantJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer" //nolint:gosec // G101: a grant type URN, not a credential
 
 // GrantProfileIDJAG is advertised in the authorization server metadata
 // (draft -06 §7.2).

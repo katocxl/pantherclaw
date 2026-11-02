@@ -41,9 +41,9 @@ import (
 
 // Token and grant type URIs (RFC 8693, draft -06 §4.3).
 const (
-	GrantTokenExchange = "urn:ietf:params:oauth:grant-type:token-exchange"
+	GrantTokenExchange = "urn:ietf:params:oauth:grant-type:token-exchange" //nolint:gosec // G101: a grant type URN, not a credential
 	TypeIDJAG          = "urn:ietf:params:oauth:token-type:id-jag"
-	TypeIDToken        = "urn:ietf:params:oauth:token-type:id_token"
+	TypeIDToken        = "urn:ietf:params:oauth:token-type:id_token" //nolint:gosec // G101: a token type URN, not a credential
 	// JAGType is the JWS typ of an ID-JAG.
 	JAGType = "oauth-id-jag+jwt"
 	// KeyID names the simulator's signing key.

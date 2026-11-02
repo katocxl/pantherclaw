@@ -95,6 +95,11 @@ INSERT INTO pc.org_mcp_access (org_id, enabled, gateway_url, updated_by)
 VALUES (sqlc.arg(org_id), true, sqlc.arg(gateway_url), sqlc.arg(updated_by))
 ON CONFLICT (org_id) DO UPDATE SET enabled = true, gateway_url = excluded.gateway_url, updated_by = excluded.updated_by, updated_at = now();
 
+-- Every gateway of the org gets a new configuration: its OAuth route
+-- follows the org's MCP authorization (D402).
+-- name: BumpOrgGatewaysConfig :exec
+UPDATE pc.gateways SET config_version = config_version + 1 WHERE org_id = sqlc.arg(org_id);
+
 -- name: DisableOrgMcpAccess :one
 UPDATE pc.org_mcp_access SET enabled = false, updated_by = sqlc.arg(updated_by), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND enabled

@@ -28,7 +28,7 @@ import (
 )
 
 // TokenType is the JWS typ of an MCP access token.
-const TokenType = "pap-mcp+jwt"
+const TokenType = "pap-mcp+jwt" //nolint:gosec // G101: a JWS type, not a credential
 
 // ProofBearer is the workload.proof a call with this token carries (HR-627).
 const ProofBearer = "bearer"

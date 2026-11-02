@@ -404,6 +404,9 @@ func (s *Admin) DisableMcpAccess(ctx context.Context) (McpAccess, error) {
 		if row.GatewayUrl != nil {
 			out.GatewayURL = *row.GatewayUrl
 		}
+		if err := dbq.New(tx).BumpOrgGatewaysConfig(ctx, c.Org); err != nil {
+			return err
+		}
 		return s.removed(ctx, tx, c.Actor(), "idaccess.mcp_access_disabled", "org", c.Org.UUID())
 	})
 	return out, err
@@ -628,6 +631,9 @@ func (s *Admin) applyMcpAccess(ctx context.Context, tx db.TenantTx, author tenan
 		return err
 	}
 	if err := dbq.New(tx).EnableOrgMcpAccess(ctx, tx.OrgID(), &p.GatewayURL, author.Principal.ID); err != nil {
+		return err
+	}
+	if err := dbq.New(tx).BumpOrgGatewaysConfig(ctx, tx.OrgID()); err != nil {
 		return err
 	}
 	return s.applied(ctx, tx, author, protect.SurfaceMcpAccess)

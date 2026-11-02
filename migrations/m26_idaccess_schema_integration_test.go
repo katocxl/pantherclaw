@@ -6,8 +6,13 @@
 package migrations_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 )
@@ -69,7 +74,7 @@ func TestTenancy_org_assertion_issuers(t *testing.T) {
 			t.Fatalf("another org: %s = %d", sql, n)
 		}
 	}
-	b.want(t, m5Denied, "an issuer in another org", m26idaIssuer, a.org, m5ID(), "other", "https://x.okta.com", b.user)
+	b.want(t, m5Check, "an issuer in another org (org write guard)", m26idaIssuer, a.org, m5ID(), "other", "https://x.okta.com", b.user)
 }
 
 // TestTenancy_mcp_clients: the MCP tables are invisible to another org, the
@@ -94,8 +99,18 @@ func TestTenancy_mcp_clients(t *testing.T) {
 	a.want(t, m5Check, "a client URL without a path", m26idaMcpClient, a.org, m5ID(), "https://client.example.com", agent2, inst2, a.user)
 	a.want(t, m5Check, "on without a gateway URL",
 		"INSERT INTO pc.org_mcp_access (org_id, enabled, updated_by) VALUES ($1, true, $2)", a.org, a.user)
-	a.want(t, m5Check, "an attested client instance",
-		"UPDATE pc.agent_instances SET att_level = 2, attested_until = now(), issuer_revision_id = NULL WHERE id = $1", inst)
+	// The app role cannot write attestation columns at all; the owner is
+	// refused by the constraint itself, which fires before the foreign key.
+	var attested error
+	d.AdminDo(t, func(c *pgx.Conn) error {
+		_, attested = c.Exec(context.Background(),
+			`UPDATE pc.agent_instances SET issuer_revision_id = gen_random_uuid(), binding = '{"k":"v"}' WHERE id = $1`, inst)
+		return nil
+	})
+	var pe *pgconn.PgError
+	if !errors.As(attested, &pe) || pe.Code != m5Check || pe.ConstraintName != "agent_instances_mcp_client" {
+		t.Errorf("an attested client instance: %v", attested)
+	}
 	a.mustExec(t, "INSERT INTO pc.org_mcp_access (org_id, enabled, gateway_url, updated_by) VALUES ($1, true, 'https://gw.example.com', $2)", a.org, a.user)
 
 	a.want(t, m5Check, "a code living past a minute", `INSERT INTO pc.mcp_authorization_codes
@@ -111,7 +126,7 @@ func TestTenancy_mcp_clients(t *testing.T) {
 			t.Fatalf("another org: %s = %d", sql, n)
 		}
 	}
-	b.want(t, m5Denied, "a client in another org", m26idaMcpClient, a.org, m5ID(), url+"3", agent, inst, b.user)
+	b.want(t, m5Check, "a client in another org (org write guard)", m26idaMcpClient, a.org, m5ID(), url+"3", agent, inst, b.user)
 
 	var code, token bool
 	d.AdminQueryRow(t, `SELECT has_column_privilege('pc_audit_ro', 'pc.mcp_authorization_codes', 'code_hash', 'SELECT'),
