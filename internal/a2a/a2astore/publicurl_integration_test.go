@@ -254,7 +254,10 @@ func TestD97_SetA2APublicUrlIsRefused(t *testing.T) {
 func TestD97_AHeldChangeCarriesOnlyTheURL(t *testing.T) {
 	w := newPublicURLWorld(t)
 	held := capp.New(w.pool, nil, "https://pc.test", "https://gw.test").WithKindConfigs(w.kinds)
-	held.WithProtect(&protect.Gate{Requests: protect.Ceremony{Changes: changes.New(w.pool, "https://pc.test")}})
+	ceremony := changes.New(w.pool, "https://pc.test")
+	gate := &protect.Gate{Requests: protect.Ceremony{Changes: ceremony}}
+	protect.Register(ceremony, gate, nil)
+	held.WithProtect(gate)
 	w.tx(t, func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
 		_, err := tx.Exec(ctx, `INSERT INTO pc.protected_change_settings (org_id, category, mode, updated_by) VALUES ($1, 'CUSTODY', 'DISTINCT_PUBLISHER', $2)`, w.org, w.user)
 		return err
