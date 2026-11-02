@@ -59,11 +59,7 @@ ALTER TABLE pc.cases
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.cases VALIDATE CONSTRAINT cases_source_check;
 
--- The job reads an org's transactions by time; nothing else does. Not
--- concurrent, as no migration here is (G0 M21 D322, M22 D33a): writes wait
--- during the build, as release.md says.
--- squawk-ignore require-concurrent-index-creation
-CREATE INDEX transactions_behavior ON pc.transactions (org_id, created_at);
+-- The job's index on pc.transactions is built concurrently in 00303.
 
 -- +goose StatementBegin
 DO $$
@@ -103,16 +99,16 @@ $$;
 -- +goose StatementEnd
 
 -- +goose Down
-DROP INDEX pc.transactions_behavior;
-DELETE FROM pc.cases WHERE source = 'behavior';
+-- Behaviour alerts and cases are kept: evidence, events and suppression
+-- breaks (00120) and case entries refer to them, and they are part of the
+-- record. The older checks come back NOT VALID, so they bind new rows only.
 ALTER TABLE pc.cases
     DROP CONSTRAINT cases_source_check,
     ADD CONSTRAINT cases_source_check
-        CHECK (source IN ('detection', 'response', 'siem', 'signals', 'coverage', 'system', 'manual', 'automation'));
-DELETE FROM pc.alerts WHERE source = 'behavior';
+        CHECK (source IN ('detection', 'response', 'siem', 'signals', 'coverage', 'system', 'manual', 'automation')) NOT VALID;
 ALTER TABLE pc.alerts
     DROP CONSTRAINT alerts_source_check,
     ADD CONSTRAINT alerts_source_check
-        CHECK (source IN ('detection', 'response', 'siem', 'signals', 'coverage', 'system', 'automation'));
+        CHECK (source IN ('detection', 'response', 'siem', 'signals', 'coverage', 'system', 'automation')) NOT VALID;
 DROP TABLE pc.behavior_profiles;
 DROP TABLE pc.behavior_cursors;

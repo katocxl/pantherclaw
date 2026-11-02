@@ -195,6 +195,12 @@ func (s *Detections) compile(content string) (*engine.Compiled, error) {
 	if r.Builtin() {
 		return nil, invalidRule("a custom rule id starts with org.")
 	}
+	if r.Basis.Confirmed() {
+		// M10's alert-only rule, made exact in M27 (D526 P6): a custom rule's
+		// alerts are inference, so no automation contains on them. A person
+		// still can.
+		return nil, invalidRule("a custom rule's basis is at most INFERRED: its alerts never drive automated containment, a person contains")
+	}
 	c, err := engine.Compile(s.Env, r, hex.EncodeToString(sum[:]), "")
 	if err != nil {
 		return nil, invalidRule(err.Error())

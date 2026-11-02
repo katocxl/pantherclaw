@@ -56,7 +56,7 @@ func Actions(s Spec) []bdomain.Action {
 			for i, op := range s.Operations {
 				out = append(out, bdomain.Action{
 					ID: uuid(), Agent: s.Agent, Run: run, Operation: op, Connection: s.Connection, DestClass: s.DestClass,
-					At: at.Add(time.Duration(i) * time.Minute),
+					At: at.Add(time.Duration(i) * time.Minute), Generated: true, Known: true,
 				})
 			}
 		}
@@ -64,7 +64,7 @@ func Actions(s Spec) []bdomain.Action {
 			amount := s.Amount
 			out = append(out, bdomain.Action{
 				ID: uuid(), Agent: s.Agent, Run: uuid(), Operation: s.SpendOperation, Connection: s.Connection, DestClass: s.DestClass,
-				At: base.Add(30 * time.Minute), Spent: &amount, Currency: s.Currency,
+				At: base.Add(30 * time.Minute), Spent: &amount, Currency: s.Currency, Generated: true, Known: true,
 			})
 		}
 	}

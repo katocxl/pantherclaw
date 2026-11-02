@@ -42,20 +42,23 @@ func (q *Queries) AdvanceBehaviorCursor(ctx context.Context, arg AdvanceBehavior
 	return result.RowsAffected(), nil
 }
 
-const behaviorActions = `-- name: BehaviorActions :many
-
-SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id,
-       coalesce(c.destination_class, '')::text AS destination_class, t.created_at, t.decision, t.amount, t.currency
-FROM pc.transactions t
-JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
-WHERE t.org_id = $1 AND t.simulated = $2::boolean
-  AND t.created_at >= $3 AND t.created_at < $4
-ORDER BY t.created_at DESC, t.id DESC
+const behaviorAgents = `-- name: BehaviorAgents :many
+SELECT DISTINCT a.agent_id
+FROM (SELECT r.agent_id
+      FROM pc.transactions t
+      JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+      WHERE t.org_id = $1 AND t.simulated = $2::boolean
+        AND t.created_at >= $3 AND t.created_at < $4
+      UNION ALL
+      SELECT h.agent_id
+      FROM pc.behavior_simulated_actions h
+      WHERE $2::boolean AND h.org_id = $1
+        AND h.occurred_at >= $3 AND h.occurred_at < $4) a
+ORDER BY a.agent_id
 LIMIT $5
 `
 
-type BehaviorActionsParams struct {
+type BehaviorAgentsParams struct {
 	OrgID     ids.OrgID
 	Simulated bool
 	Since     time.Time
@@ -63,28 +66,10 @@ type BehaviorActionsParams struct {
 	MaxRows   int32
 }
 
-type BehaviorActionsRow struct {
-	ID               ids.UUID
-	RunID            ids.UUID
-	AgentID          ids.UUID
-	Operation        string
-	ConnectionID     *ids.UUID
-	DestinationClass string
-	CreatedAt        time.Time
-	Decision         string
-	Amount           *money.Decimal
-	Currency         *string
-}
-
-// SPDX-License-Identifier: BUSL-1.1
-// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
-//
-// Behaviour analytics (G0 M27 D502). It reads pc.transactions, never the
-// ledger, and real and simulated rows never meet in one result (HR-642).
-// An org's transactions of one kind in a range, newest first: a cap keeps
-// the most recent. Every decision counts: an attempt is behaviour.
-func (q *Queries) BehaviorActions(ctx context.Context, arg BehaviorActionsParams) ([]BehaviorActionsRow, error) {
-	rows, err := q.db.Query(ctx, behaviorActions,
+// The agents with activity of one kind in a range: their transactions, and
+// for the SIMULATED origin their generated history too (HR-642).
+func (q *Queries) BehaviorAgents(ctx context.Context, arg BehaviorAgentsParams) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, behaviorAgents,
 		arg.OrgID,
 		arg.Simulated,
 		arg.Since,
@@ -95,24 +80,13 @@ func (q *Queries) BehaviorActions(ctx context.Context, arg BehaviorActionsParams
 		return nil, err
 	}
 	defer rows.Close()
-	items := []BehaviorActionsRow{}
+	items := []ids.UUID{}
 	for rows.Next() {
-		var i BehaviorActionsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.RunID,
-			&i.AgentID,
-			&i.Operation,
-			&i.ConnectionID,
-			&i.DestinationClass,
-			&i.CreatedAt,
-			&i.Decision,
-			&i.Amount,
-			&i.Currency,
-		); err != nil {
+		var agent_id ids.UUID
+		if err := rows.Scan(&agent_id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, agent_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -159,6 +133,89 @@ func (q *Queries) BehaviorApprovalAction(ctx context.Context, orgID ids.OrgID, i
 	return i, err
 }
 
+const behaviorBatch = `-- name: BehaviorBatch :many
+
+SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id,
+       coalesce(c.destination_class, '')::text AS destination_class, t.created_at, t.decision, t.state, t.amount,
+       t.currency
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+WHERE t.org_id = $1 AND t.simulated = $2::boolean
+  AND t.created_at >= $3 AND t.created_at < $4
+ORDER BY t.created_at, t.id
+LIMIT $5
+`
+
+type BehaviorBatchParams struct {
+	OrgID     ids.OrgID
+	Simulated bool
+	Since     time.Time
+	Until     time.Time
+	MaxRows   int32
+}
+
+type BehaviorBatchRow struct {
+	ID               ids.UUID
+	RunID            ids.UUID
+	AgentID          ids.UUID
+	Operation        string
+	ConnectionID     *ids.UUID
+	DestinationClass string
+	CreatedAt        time.Time
+	Decision         string
+	State            string
+	Amount           *money.Decimal
+	Currency         *string
+}
+
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+//
+// Behaviour analytics (G0 M27 D502). It reads pc.transactions, never the
+// ledger, and real and simulated rows never meet in one result (HR-642).
+// An org's transactions of one kind since the cursor, oldest first: a page
+// the rollup compares, then moves the cursor over (D526). Every decision is
+// read: an attempt is behaviour, though only a known action shapes a
+// profile.
+func (q *Queries) BehaviorBatch(ctx context.Context, arg BehaviorBatchParams) ([]BehaviorBatchRow, error) {
+	rows, err := q.db.Query(ctx, behaviorBatch,
+		arg.OrgID,
+		arg.Simulated,
+		arg.Since,
+		arg.Until,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BehaviorBatchRow{}
+	for rows.Next() {
+		var i BehaviorBatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.AgentID,
+			&i.Operation,
+			&i.ConnectionID,
+			&i.DestinationClass,
+			&i.CreatedAt,
+			&i.Decision,
+			&i.State,
+			&i.Amount,
+			&i.Currency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const behaviorCollectionStarted = `-- name: BehaviorCollectionStarted :one
 SELECT EXISTS (SELECT FROM pc.behavior_cursors WHERE org_id = $1)::boolean
 `
@@ -167,6 +224,110 @@ SELECT EXISTS (SELECT FROM pc.behavior_cursors WHERE org_id = $1)::boolean
 func (q *Queries) BehaviorCollectionStarted(ctx context.Context, orgID ids.OrgID) (bool, error) {
 	row := q.db.QueryRow(ctx, behaviorCollectionStarted, orgID)
 	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const behaviorKnownActions = `-- name: BehaviorKnownActions :many
+SELECT t.id, t.run_id, t.operation, t.connection_id,
+       coalesce(c.destination_class, '')::text AS destination_class, t.created_at, t.amount, t.currency
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+WHERE t.org_id = $1 AND r.agent_id = $2 AND t.simulated = $3::boolean
+  AND t.created_at >= $4 AND t.created_at < $5
+  AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS') AND t.state = 'FINAL'
+ORDER BY t.created_at DESC, t.id DESC
+LIMIT $6
+`
+
+type BehaviorKnownActionsParams struct {
+	OrgID     ids.OrgID
+	AgentID   ids.UUID
+	Simulated bool
+	Since     time.Time
+	Until     time.Time
+	MaxRows   int32
+}
+
+type BehaviorKnownActionsRow struct {
+	ID               ids.UUID
+	RunID            ids.UUID
+	Operation        string
+	ConnectionID     *ids.UUID
+	DestinationClass string
+	CreatedAt        time.Time
+	Amount           *money.Decimal
+	Currency         *string
+}
+
+// One agent's known actions of one kind in a range, newest first: allowed
+// and run, the transaction FINAL (D526). A hold, a denial or a retry of
+// either is never known. The cap is per agent and keeps the most recent.
+func (q *Queries) BehaviorKnownActions(ctx context.Context, arg BehaviorKnownActionsParams) ([]BehaviorKnownActionsRow, error) {
+	rows, err := q.db.Query(ctx, behaviorKnownActions,
+		arg.OrgID,
+		arg.AgentID,
+		arg.Simulated,
+		arg.Since,
+		arg.Until,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BehaviorKnownActionsRow{}
+	for rows.Next() {
+		var i BehaviorKnownActionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.Operation,
+			&i.ConnectionID,
+			&i.DestinationClass,
+			&i.CreatedAt,
+			&i.Amount,
+			&i.Currency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const behaviorNotAllowedCount = `-- name: BehaviorNotAllowedCount :one
+SELECT count(*)::bigint
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND r.agent_id = $2 AND t.simulated = $3::boolean
+  AND t.created_at >= $4 AND t.created_at < $5
+  AND NOT (t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS') AND t.state = 'FINAL')
+`
+
+type BehaviorNotAllowedCountParams struct {
+	OrgID     ids.OrgID
+	AgentID   ids.UUID
+	Simulated bool
+	Since     time.Time
+	Until     time.Time
+}
+
+// One agent's other actions of one kind in a range: held, denied, refused
+// or still open. Counted apart, never known (D526).
+func (q *Queries) BehaviorNotAllowedCount(ctx context.Context, arg BehaviorNotAllowedCountParams) (int64, error) {
+	row := q.db.QueryRow(ctx, behaviorNotAllowedCount,
+		arg.OrgID,
+		arg.AgentID,
+		arg.Simulated,
+		arg.Since,
+		arg.Until,
+	)
+	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
 }
@@ -183,15 +344,17 @@ func (q *Queries) BehaviorScannedTo(ctx context.Context, orgID ids.OrgID, origin
 }
 
 const behaviorSimulatedHistory = `-- name: BehaviorSimulatedHistory :many
-SELECT id, run_ref, agent_id, operation, connection_id, destination_class, occurred_at, amount, currency
+SELECT id, run_ref, operation, connection_id, destination_class, occurred_at, amount, currency
 FROM pc.behavior_simulated_actions
-WHERE org_id = $1 AND occurred_at >= $2 AND occurred_at < $3
+WHERE org_id = $1 AND agent_id = $2
+  AND occurred_at >= $3 AND occurred_at < $4
 ORDER BY occurred_at DESC, id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type BehaviorSimulatedHistoryParams struct {
 	OrgID   ids.OrgID
+	AgentID ids.UUID
 	Since   time.Time
 	Until   time.Time
 	MaxRows int32
@@ -200,7 +363,6 @@ type BehaviorSimulatedHistoryParams struct {
 type BehaviorSimulatedHistoryRow struct {
 	ID               ids.UUID
 	RunRef           ids.UUID
-	AgentID          ids.UUID
 	Operation        string
 	ConnectionID     *ids.UUID
 	DestinationClass string
@@ -209,11 +371,12 @@ type BehaviorSimulatedHistoryRow struct {
 	Currency         *string
 }
 
-// Generated history (HR-642), newest first. Only the SIMULATED origin reads
-// it.
+// One agent's generated history (HR-642), newest first, capped per agent.
+// Only the SIMULATED origin reads it.
 func (q *Queries) BehaviorSimulatedHistory(ctx context.Context, arg BehaviorSimulatedHistoryParams) ([]BehaviorSimulatedHistoryRow, error) {
 	rows, err := q.db.Query(ctx, behaviorSimulatedHistory,
 		arg.OrgID,
+		arg.AgentID,
 		arg.Since,
 		arg.Until,
 		arg.MaxRows,
@@ -228,7 +391,6 @@ func (q *Queries) BehaviorSimulatedHistory(ctx context.Context, arg BehaviorSimu
 		if err := rows.Scan(
 			&i.ID,
 			&i.RunRef,
-			&i.AgentID,
 			&i.Operation,
 			&i.ConnectionID,
 			&i.DestinationClass,

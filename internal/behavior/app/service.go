@@ -8,6 +8,7 @@ import (
 	"encoding/json/v2"
 	"slices"
 
+	apapp "github.com/katocxl/pantherclaw/internal/approvals/app"
 	bdomain "github.com/katocxl/pantherclaw/internal/behavior/domain"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -115,10 +116,11 @@ type ApprovalContext struct {
 	Lines   []bdomain.Deviation
 }
 
-// Context reads what stands out about the action behind an approval request.
-// It never writes, and nothing the approval binds or decides reads it
-// (HR-645). A simulated action is set against the simulated profile
-// (HR-642).
+// Context reads what stands out about the action behind an approval request,
+// against a baseline of the agent's actions that were allowed and ran
+// before it (D526). It never writes, and nothing the approval binds or
+// decides reads it (HR-645). The caller must be able to read the approval
+// itself. A simulated action is set against simulated activity (HR-642).
 func (s *Service) Context(ctx context.Context, approval ids.UUID) (ApprovalContext, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
@@ -127,6 +129,13 @@ func (s *Service) Context(ctx context.Context, approval ids.UUID) (ApprovalConte
 	var out ApprovalContext
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		// The approval itself must be one the caller may read (D526 P5).
+		if ok, err := apapp.Readable(ctx, q, c, approval); err != nil || !ok {
+			if err != nil {
+				return err
+			}
+			return ErrNotFound
+		}
 		r, err := q.BehaviorApprovalAction(ctx, c.Org, approval)
 		if db.IsNoRows(err) {
 			return ErrNotFound
@@ -145,10 +154,14 @@ func (s *Service) Context(ctx context.Context, approval ids.UUID) (ApprovalConte
 		if r.Simulated {
 			origin = bdomain.OriginSimulated
 		}
-		p, err := stored(ctx, q, c.Org, r.AgentID, origin)
+		// The baseline is the agent's known actions before the held one, not
+		// the stored profile: a hold, its retries or a later rollup never
+		// make the held action look usual (D526).
+		p, _, err := baseline(ctx, q, c.Org, r.AgentID, origin, r.CreatedAt.Add(-bdomain.Window), r.CreatedAt, MaxBaseline)
 		if err != nil {
 			return err
 		}
+		p.AsOf = r.CreatedAt
 		a := bdomain.Action{ID: r.ID, Agent: r.AgentID, Run: r.RunID, Operation: r.Operation, DestClass: r.DestinationClass, At: r.CreatedAt}
 		if r.ConnectionID != nil {
 			a.Connection = *r.ConnectionID

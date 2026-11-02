@@ -31,13 +31,13 @@ func usual(t *testing.T) []bdomain.Action {
 			run := ids.NewV7()
 			at := start.AddDate(0, 0, d).Add(9*time.Hour + time.Duration(r)*10*time.Minute)
 			out = append(out,
-				bdomain.Action{ID: ids.NewV7(), Agent: agent, Run: run, Operation: "repo.read", Connection: conn, DestClass: "internal", At: at},
-				bdomain.Action{ID: ids.NewV7(), Agent: agent, Run: run, Operation: "repo.write", Connection: conn, DestClass: "internal", At: at.Add(time.Minute)},
+				bdomain.Action{ID: ids.NewV7(), Agent: agent, Run: run, Operation: "repo.read", Connection: conn, DestClass: "internal", At: at, Known: true},
+				bdomain.Action{ID: ids.NewV7(), Agent: agent, Run: run, Operation: "repo.write", Connection: conn, DestClass: "internal", At: at.Add(time.Minute), Known: true},
 			)
 		}
 		out = append(out, bdomain.Action{
 			ID: ids.NewV7(), Agent: agent, Run: ids.NewV7(), Operation: "payments.refund", Connection: conn, DestClass: "internal",
-			At: start.AddDate(0, 0, d).Add(10 * time.Hour), Spent: &ten, Currency: "USD",
+			At: start.AddDate(0, 0, d).Add(10 * time.Hour), Spent: &ten, Currency: "USD", Known: true,
 		})
 	}
 	return out
@@ -102,6 +102,32 @@ func TestHR643_TooLittleHistoryInfersNothing(t *testing.T) {
 	busy := bdomain.Build(agent, bdomain.OriginReal, slices.Repeat(few[:1], 60), start, start.AddDate(0, 0, 20), false)
 	if busy.State != bdomain.StateInsufficient {
 		t.Errorf("60 actions on one day: %s", busy.State)
+	}
+}
+
+// TestHR643_OnlyAllowedActionsBecomeKnown: held, denied and retried actions
+// are counted apart and never make a tool known, however often they repeat
+// (D526). Covers: F930
+func TestHR643_OnlyAllowedActionsBecomeKnown(t *testing.T) {
+	history := usual(t)
+	at := start.AddDate(0, 0, 19).Add(9 * time.Hour)
+	for i := range 30 {
+		history = append(history, bdomain.Action{
+			Agent: agent, Run: ids.NewV7(), Operation: "secrets.dump", Connection: conn, At: at.Add(time.Duration(i) * time.Second),
+		})
+	}
+	p := bdomain.Build(agent, bdomain.OriginReal, history, start, start.AddDate(0, 0, 20), false)
+	if p.Actions != 100 || p.Body.NotAllowed != 30 {
+		t.Fatalf("actions = %d, not allowed = %d", p.Actions, p.Body.NotAllowed)
+	}
+	for _, tool := range p.Body.Tools {
+		if tool.Operation == "secrets.dump" {
+			t.Fatalf("a refused action became known: %+v", p.Body.Tools)
+		}
+	}
+	ds := bdomain.Context(p, bdomain.Action{Agent: agent, Run: ids.NewV7(), Operation: "secrets.dump", Connection: conn, At: at.AddDate(0, 0, 2)})
+	if !slices.Contains(kinds(ds), bdomain.KindNewTool) {
+		t.Fatalf("a retried hold no longer stands out: %+v", ds)
 	}
 }
 
@@ -179,14 +205,14 @@ func TestCompare_ACutListSaysNothing(t *testing.T) {
 	for d := range 10 {
 		for i := range bdomain.MaxTools {
 			many = append(many, bdomain.Action{
-				Agent: agent, Run: ids.NewV7(), Operation: "op." + time.Duration(i).String(), At: start.AddDate(0, 0, d).Add(9 * time.Hour),
+				Agent: agent, Run: ids.NewV7(), Operation: "op." + time.Duration(i).String(), At: start.AddDate(0, 0, d).Add(9 * time.Hour), Known: true,
 			})
 		}
 		many = append(many, bdomain.Action{
-			Agent: agent, Run: ids.NewV7(), Operation: "op.one-more", At: start.AddDate(0, 0, d).Add(9 * time.Hour),
+			Agent: agent, Run: ids.NewV7(), Operation: "op.one-more", At: start.AddDate(0, 0, d).Add(9 * time.Hour), Known: true,
 		})
 	}
-	many = append(many, bdomain.Action{Agent: agent, Run: ids.NewV7(), Operation: "op.rare", At: start.Add(9 * time.Hour)})
+	many = append(many, bdomain.Action{Agent: agent, Run: ids.NewV7(), Operation: "op.rare", At: start.Add(9 * time.Hour), Known: true})
 	p := bdomain.Build(agent, bdomain.OriginReal, many, start, start.AddDate(0, 0, 20), false)
 	if !p.Body.CutTools || !p.Truncated {
 		t.Fatalf("cut = %v truncated = %v", p.Body.CutTools, p.Truncated)

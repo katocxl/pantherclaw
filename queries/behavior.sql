@@ -4,25 +4,71 @@
 -- Behaviour analytics (G0 M27 D502). It reads pc.transactions, never the
 -- ledger, and real and simulated rows never meet in one result (HR-642).
 
--- name: BehaviorActions :many
--- An org's transactions of one kind in a range, newest first: a cap keeps
--- the most recent. Every decision counts: an attempt is behaviour.
+-- name: BehaviorBatch :many
+-- An org's transactions of one kind since the cursor, oldest first: a page
+-- the rollup compares, then moves the cursor over (D526). Every decision is
+-- read: an attempt is behaviour, though only a known action shapes a
+-- profile.
 SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id,
-       coalesce(c.destination_class, '')::text AS destination_class, t.created_at, t.decision, t.amount, t.currency
+       coalesce(c.destination_class, '')::text AS destination_class, t.created_at, t.decision, t.state, t.amount,
+       t.currency
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.simulated = sqlc.arg(simulated)::boolean
   AND t.created_at >= sqlc.arg(since) AND t.created_at < sqlc.arg(until)
+ORDER BY t.created_at, t.id
+LIMIT sqlc.arg(max_rows);
+
+-- name: BehaviorAgents :many
+-- The agents with activity of one kind in a range: their transactions, and
+-- for the SIMULATED origin their generated history too (HR-642).
+SELECT DISTINCT a.agent_id
+FROM (SELECT r.agent_id
+      FROM pc.transactions t
+      JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+      WHERE t.org_id = sqlc.arg(org_id) AND t.simulated = sqlc.arg(simulated)::boolean
+        AND t.created_at >= sqlc.arg(since) AND t.created_at < sqlc.arg(until)
+      UNION ALL
+      SELECT h.agent_id
+      FROM pc.behavior_simulated_actions h
+      WHERE sqlc.arg(simulated)::boolean AND h.org_id = sqlc.arg(org_id)
+        AND h.occurred_at >= sqlc.arg(since) AND h.occurred_at < sqlc.arg(until)) a
+ORDER BY a.agent_id
+LIMIT sqlc.arg(max_rows);
+
+-- name: BehaviorKnownActions :many
+-- One agent's known actions of one kind in a range, newest first: allowed
+-- and run, the transaction FINAL (D526). A hold, a denial or a retry of
+-- either is never known. The cap is per agent and keeps the most recent.
+SELECT t.id, t.run_id, t.operation, t.connection_id,
+       coalesce(c.destination_class, '')::text AS destination_class, t.created_at, t.amount, t.currency
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+WHERE t.org_id = sqlc.arg(org_id) AND r.agent_id = sqlc.arg(agent_id) AND t.simulated = sqlc.arg(simulated)::boolean
+  AND t.created_at >= sqlc.arg(since) AND t.created_at < sqlc.arg(until)
+  AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS') AND t.state = 'FINAL'
 ORDER BY t.created_at DESC, t.id DESC
 LIMIT sqlc.arg(max_rows);
 
+-- name: BehaviorNotAllowedCount :one
+-- One agent's other actions of one kind in a range: held, denied, refused
+-- or still open. Counted apart, never known (D526).
+SELECT count(*)::bigint
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND r.agent_id = sqlc.arg(agent_id) AND t.simulated = sqlc.arg(simulated)::boolean
+  AND t.created_at >= sqlc.arg(since) AND t.created_at < sqlc.arg(until)
+  AND NOT (t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS') AND t.state = 'FINAL');
+
 -- name: BehaviorSimulatedHistory :many
--- Generated history (HR-642), newest first. Only the SIMULATED origin reads
--- it.
-SELECT id, run_ref, agent_id, operation, connection_id, destination_class, occurred_at, amount, currency
+-- One agent's generated history (HR-642), newest first, capped per agent.
+-- Only the SIMULATED origin reads it.
+SELECT id, run_ref, operation, connection_id, destination_class, occurred_at, amount, currency
 FROM pc.behavior_simulated_actions
-WHERE org_id = sqlc.arg(org_id) AND occurred_at >= sqlc.arg(since) AND occurred_at < sqlc.arg(until)
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id)
+  AND occurred_at >= sqlc.arg(since) AND occurred_at < sqlc.arg(until)
 ORDER BY occurred_at DESC, id DESC
 LIMIT sqlc.arg(max_rows);
 

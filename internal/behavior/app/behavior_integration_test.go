@@ -217,6 +217,53 @@ func TestHR642_RealAndSimulatedNeverMeet(t *testing.T) {
 	}
 }
 
+// TestHR643_TheRollupPagesAndReportsItsCaps: a run compares at most its page
+// of actions since the cursor and moves the cursor over that page only; the
+// next runs carry on, so every new action is compared once. A cap that bites,
+// on the page or on an agent's baseline, is reported as BEHAVIOR_CAP_REACHED
+// (D526). Covers: F930, F931
+func TestHR643_TheRollupPagesAndReportsItsCaps(t *testing.T) {
+	f := newFx(t)
+	f.history()
+	f.rollup()
+	f.roll.MaxBatch = 3
+	at := time.Now()
+	for i := range 5 {
+		f.txn(f.run, false, "odd.tool"+string(rune('a'+i)), "ALLOW", at.Add(time.Duration(i)*time.Millisecond))
+	}
+	// The first page is a, b and c: c's instant is left for the next run.
+	const cursor = `SELECT count(*) FROM pc.behavior_cursors WHERE org_id = $1 AND origin = 'REAL'
+		AND scanned_to = (SELECT created_at FROM pc.transactions WHERE org_id = $1 AND operation = 'odd.toolc')`
+	const capped = `SELECT count(*) FROM pc.operational_failures WHERE org_id = $1 AND kind = 'behavior.cap_reached' AND state = 'OPEN'`
+	f.rollup()
+	if n := f.count(cursor, f.org); n != 1 {
+		t.Fatal("the cursor moved past what the first page processed")
+	}
+	if n := f.count(capped, f.org); n != 1 {
+		t.Fatalf("cap failures = %d", n)
+	}
+	f.rollup()
+	f.rollup()
+	const tools = `SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND rule_id = 'pc.drift.behavior.new_tool' AND facts ->> 'value' LIKE 'odd.tool%'`
+	if n := f.count(tools, f.org); n != 5 {
+		t.Fatalf("new-tool alerts after paging = %d, want 5", n)
+	}
+
+	// A baseline cap is per agent, and reported too.
+	g := newFx(t)
+	g.history()
+	g.roll.MaxBaseline = 10
+	if res := g.rollup(); res.Profiles != 1 {
+		t.Fatalf("profiles = %+v", res)
+	}
+	if p, err := g.svc.Profile(g.responder(), g.agent, bdomain.OriginReal); err != nil || p.Actions != 10 || !p.Truncated {
+		t.Fatalf("capped baseline: %+v %v", p, err)
+	}
+	if n := g.count(capped, g.org); n != 1 {
+		t.Fatalf("baseline cap failures = %d", n)
+	}
+}
+
 // TestHR643_NotCollectedIsNeverZero: before any rollup a profile is
 // NOT_COLLECTED, and an agent with little history is INSUFFICIENT_HISTORY
 // and raises nothing, however odd its next action. Covers: F930
@@ -291,6 +338,20 @@ func TestHR645_ApprovalContextIsOutsideTheBinding(t *testing.T) {
 		}
 		return s
 	}
+	// The hold, a denied retry and a rollup after them: none makes the held
+	// tool known (D526).
+	f.txn(f.run, false, "repo.delete", "DENY", time.Now())
+	f.rollup()
+	stored, err := f.svc.Profile(f.responder(), f.agent, bdomain.OriginReal)
+	if err != nil || stored.Body.NotAllowed != 2 || stored.Actions != 60 {
+		t.Fatalf("stored profile: %+v %v", stored, err)
+	}
+	for _, tool := range stored.Body.Tools {
+		if tool.Operation == "repo.delete" {
+			t.Fatalf("a held action became known: %+v", stored.Body.Tools)
+		}
+	}
+
 	before := read()
 	approver := f.as(td.RoleApprover, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
 	c, err := f.svc.Context(approver, req)
@@ -299,6 +360,21 @@ func TestHR645_ApprovalContextIsOutsideTheBinding(t *testing.T) {
 	}
 	if c.Agent != f.agent || c.Profile.State != bdomain.StateCollected || len(c.Lines) != 1 || c.Lines[0].Kind != bdomain.KindNewTool {
 		t.Fatalf("context = %+v", c)
+	}
+	// Another person who is a Responder may read the agent's behaviour but
+	// not the approval (not its launcher, principal or a decider): the
+	// context isn't found for them (D526 P5).
+	bob := ids.NewV7()
+	f.exec("INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'bob')", f.org, bob)
+	responder := tenancy.WithCaller(context.Background(), tenancy.Caller{Subject: td.Subject{
+		Org: f.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: bob},
+		Bindings: []td.Binding{{Role: td.RoleResponder, Scope: td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()}}},
+	}})
+	if _, err := f.svc.Profile(responder, f.agent, bdomain.OriginReal); err != nil {
+		t.Fatalf("responder reads the profile: %v", err)
+	}
+	if _, err := f.svc.Context(responder, req); !errors.Is(err, bapp.ErrNotFound) {
+		t.Fatalf("responder without approval.read: %v", err)
 	}
 	if after := read(); after != before {
 		t.Fatal("reading the context changed the request")

@@ -209,6 +209,29 @@ func heldParams(row dbq.PcApprovalRequest) apdomain.Untrusted {
 	return apdomain.Clean("params", string(a.Params), maxParams)
 }
 
+// Readable reports whether c may see request id, by the rule View applies
+// (design decision 10, T-037): false for a request that doesn't exist too.
+// Other services that show something about a request check it first
+// (G0 M27 D526 P5).
+func Readable(ctx context.Context, q *dbq.Queries, c tenancy.Caller, id ids.UUID) (bool, error) {
+	row, err := q.GetApprovalRequest(ctx, c.Org, id)
+	if db.IsNoRows(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var users []ids.UUID
+	if c.Human() {
+		users = []ids.UUID{c.Principal.ID}
+	}
+	e, err := pgapprovals.LoadEligibility(ctx, q, c.Org, id, users)
+	if err != nil {
+		return false, err
+	}
+	return visible(ctx, q, c, locked{row: row, elig: e})
+}
+
 // View reads one request for the calling person.
 func (s *Service) View(ctx context.Context, id ids.UUID) (View, error) {
 	c, err := tenancy.CallerFrom(ctx)

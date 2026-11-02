@@ -32,9 +32,14 @@ import (
 
 // Bounds of one org's rollup.
 const (
-	// MaxActions is the most actions one origin reads; the newest are kept
-	// and the profile says it was truncated.
-	MaxActions = 50_000
+	// MaxBatch is the most actions one run compares per origin, oldest
+	// first; the cursor stops where they end and the next run goes on.
+	MaxBatch = 20_000
+	// MaxBaseline is the most known actions read per agent and origin for a
+	// baseline; the newest are kept and the profile says it was truncated.
+	MaxBaseline = 20_000
+	// MaxAgents is the most agents one run profiles per origin.
+	MaxAgents = 2_000
 	// MaxSignals is the most alerts one rollup raises per origin. The rest
 	// report one owned failure.
 	MaxSignals = 200
@@ -49,6 +54,9 @@ const (
 const (
 	failureLapsed   = "behavior.edition_lapsed"
 	failureOverflow = "behavior.signal_overflow"
+	// FailureCapReached is BEHAVIOR_CAP_REACHED (D526) in the owned-failure
+	// kind format.
+	FailureCapReached = "behavior.cap_reached"
 )
 
 // Entitlements reads the org's licence.
@@ -64,6 +72,9 @@ type Rollup struct {
 	Failures reflexports.FailureSink
 	// Settle overrides settleAfter; tests set it.
 	Settle time.Duration
+	// MaxBatch, MaxBaseline and MaxAgents override the bounds; tests set
+	// them.
+	MaxBatch, MaxBaseline, MaxAgents int
 }
 
 // Result says what a run did.
@@ -129,6 +140,10 @@ func (r *Rollup) lapsed(ctx context.Context, tx db.TenantTx, org ids.OrgID) erro
 	return err
 }
 
+// origin rolls up one origin: it compares the page of actions since the
+// cursor, each agent's against its known actions before the cursor, saves
+// each active agent's profile as of the page's end, and moves the cursor
+// over what it processed and no further (D526).
 func (r *Rollup) origin(ctx context.Context, tx db.TenantTx, origin bdomain.Origin, now time.Time) (Result, error) {
 	q := dbq.New(tx)
 	org := tx.OrgID()
@@ -137,38 +152,83 @@ func (r *Rollup) origin(ctx context.Context, tx db.TenantTx, origin bdomain.Orig
 	if err != nil && !first {
 		return Result{}, err
 	}
-	start := now.Add(-bdomain.Window)
-	actions, cut, err := loadActions(ctx, q, org, origin, start, now)
-	if err != nil {
-		return Result{}, err
-	}
-	byAgent := map[ids.UUID][]bdomain.Action{}
-	for _, a := range actions {
-		byAgent[a.Agent] = append(byAgent[a.Agent], a)
-	}
-	var res Result
+	var capped []string
+	to := now
 	var deviations []found
-	for _, agent := range sortedAgents(byAgent) {
-		all := byAgent[agent]
-		if !first {
-			// Generated history is never a new action, however it is dated.
-			newer := func(a bdomain.Action) bool { return !a.At.Before(scanned) && !a.Generated }
-			older := slices.DeleteFunc(slices.Clone(all), newer)
-			batch := slices.DeleteFunc(slices.Clone(all), func(a bdomain.Action) bool { return !newer(a) })
-			p := bdomain.Build(agent, origin, older, start, scanned, cut)
-			for _, d := range bdomain.Compare(p, batch) {
+	if !first {
+		batch, cutoff, cut, err := loadBatch(ctx, q, org, origin, scanned, now, cmp.Or(r.MaxBatch, MaxBatch))
+		if err != nil {
+			return Result{}, err
+		}
+		if cut {
+			capped = append(capped, "the actions one run compares")
+		}
+		to = cutoff
+		byAgent := map[ids.UUID][]bdomain.Action{}
+		for _, a := range batch {
+			byAgent[a.Agent] = append(byAgent[a.Agent], a)
+		}
+		for _, agent := range sortedAgents(byAgent) {
+			p, cut, err := baseline(ctx, q, org, agent, origin, scanned.Add(-bdomain.Window), scanned, cmp.Or(r.MaxBaseline, MaxBaseline))
+			if err != nil {
+				return Result{}, err
+			}
+			if cut {
+				capped = append(capped, "an agent's baseline")
+			}
+			for _, d := range bdomain.Compare(p, byAgent[agent]) {
 				deviations = append(deviations, found{Deviation: d, profile: p})
 			}
 		}
-		if err := saveProfile(ctx, q, org, bdomain.Build(agent, origin, all, start, now, cut)); err != nil {
-			return Result{}, err
-		}
-		res.Profiles++
 	}
+	res, more, err := r.profiles(ctx, q, org, origin, to)
+	if err != nil {
+		return Result{}, err
+	}
+	capped = append(capped, more...)
 	if res.Signals, err = r.raise(ctx, tx, origin, deviations, now); err != nil {
 		return Result{}, err
 	}
-	return res, advance(ctx, q, org, origin, first, scanned, now)
+	if len(capped) > 0 {
+		if err := r.capReached(ctx, tx, origin, capped, now); err != nil {
+			return Result{}, err
+		}
+	}
+	return res, advance(ctx, q, org, origin, first, scanned, to)
+}
+
+// profiles saves the profile, as of until, of each agent active in the
+// window before it, at most MaxAgents.
+func (r *Rollup) profiles(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomain.Origin, until time.Time) (Result, []string, error) {
+	since := until.Add(-bdomain.Window)
+	maxAgents := cmp.Or(r.MaxAgents, MaxAgents)
+	agents, err := q.BehaviorAgents(ctx, dbq.BehaviorAgentsParams{
+		OrgID: org, Simulated: origin == bdomain.OriginSimulated, Since: since, Until: until, MaxRows: int32(maxAgents), //nolint:gosec // a small bound
+	})
+	if err != nil {
+		return Result{}, nil, err
+	}
+	var capped []string
+	if len(agents) == maxAgents {
+		capped = append(capped, "the agents one run profiles")
+	}
+	var res Result
+	baselineCut := false
+	for _, agent := range agents {
+		p, cut, err := baseline(ctx, q, org, agent, origin, since, until, cmp.Or(r.MaxBaseline, MaxBaseline))
+		if err != nil {
+			return Result{}, nil, err
+		}
+		baselineCut = baselineCut || cut
+		if err := saveProfile(ctx, q, org, p); err != nil {
+			return Result{}, nil, err
+		}
+		res.Profiles++
+	}
+	if baselineCut {
+		capped = append(capped, "an agent's baseline")
+	}
+	return res, capped, nil
 }
 
 func advance(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomain.Origin, first bool, from, to time.Time) error {
@@ -194,42 +254,65 @@ func sortedAgents(m map[ids.UUID][]bdomain.Action) []ids.UUID {
 	return out
 }
 
-// loadActions reads one origin's actions, newest first, and whether a cap
-// cut them. A real read never touches the simulated table.
-func loadActions(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomain.Origin, since, until time.Time) ([]bdomain.Action, bool, error) {
-	rows, err := q.BehaviorActions(ctx, dbq.BehaviorActionsParams{
-		OrgID: org, Simulated: origin == bdomain.OriginSimulated, Since: since, Until: until, MaxRows: MaxActions,
+// loadBatch reads one origin's actions in [since, until), oldest first, at
+// most maxRows of them. It returns the actions it processes, the time the
+// cursor may move to, and whether the cap bit. When it bites, the last
+// instant of the page is left for the next run, so no action is skipped;
+// only a page that is all one instant is taken whole and the cursor moves
+// past that instant.
+func loadBatch(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomain.Origin, since, until time.Time, maxRows int) (
+	[]bdomain.Action, time.Time, bool, error,
+) {
+	rows, err := q.BehaviorBatch(ctx, dbq.BehaviorBatchParams{
+		OrgID: org, Simulated: origin == bdomain.OriginSimulated, Since: since, Until: until, MaxRows: int32(maxRows), //nolint:gosec // a small bound
 	})
 	if err != nil {
-		return nil, false, err
+		return nil, time.Time{}, false, err
+	}
+	cutoff, cut := until, len(rows) == maxRows
+	if cut {
+		last := rows[len(rows)-1].CreatedAt
+		if before := slices.IndexFunc(rows, func(x dbq.BehaviorBatchRow) bool { return x.CreatedAt.Equal(last) }); before > 0 {
+			rows, cutoff = rows[:before], last
+		} else {
+			cutoff = last.Add(time.Microsecond)
+		}
 	}
 	out := make([]bdomain.Action, 0, len(rows))
 	for _, x := range rows {
 		a := bdomain.Action{
 			ID: x.ID, Agent: x.AgentID, Run: x.RunID, Operation: x.Operation, DestClass: x.DestinationClass, At: x.CreatedAt,
+			Known: known(x.Decision, x.State),
 		}
 		if x.ConnectionID != nil {
 			a.Connection = *x.ConnectionID
 		}
-		if allowed(x.Decision) && x.Amount != nil && x.Currency != nil {
+		if a.Known && x.Amount != nil && x.Currency != nil {
 			a.Spent, a.Currency = x.Amount, *x.Currency
 		}
 		out = append(out, a)
 	}
-	cut := len(rows) == MaxActions
-	if origin != bdomain.OriginSimulated {
-		return out, cut, nil
-	}
-	hist, err := q.BehaviorSimulatedHistory(ctx, dbq.BehaviorSimulatedHistoryParams{
-		OrgID: org, Since: since, Until: until, MaxRows: MaxActions,
+	return out, cutoff, cut, nil
+}
+
+// baseline is the profile of one agent's known actions of one origin in
+// [since, until): allowed and run, plus generated history for SIMULATED
+// (HR-642). Held, denied and open actions are only counted. At most maxRows
+// of each kind are read, the newest; cut says the cap bit (D526).
+func baseline(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent ids.UUID, origin bdomain.Origin, since, until time.Time,
+	maxRows int,
+) (bdomain.BehaviorProfile, bool, error) {
+	simulated := origin == bdomain.OriginSimulated
+	rows, err := q.BehaviorKnownActions(ctx, dbq.BehaviorKnownActionsParams{
+		OrgID: org, AgentID: agent, Simulated: simulated, Since: since, Until: until, MaxRows: int32(maxRows), //nolint:gosec // a small bound
 	})
 	if err != nil {
-		return nil, false, err
+		return bdomain.BehaviorProfile{}, false, err
 	}
-	for _, x := range hist {
+	actions := make([]bdomain.Action, 0, len(rows))
+	for _, x := range rows {
 		a := bdomain.Action{
-			ID: x.ID, Agent: x.AgentID, Run: x.RunRef, Operation: x.Operation, DestClass: x.DestinationClass, At: x.OccurredAt,
-			Generated: true,
+			ID: x.ID, Agent: agent, Run: x.RunID, Operation: x.Operation, DestClass: x.DestinationClass, At: x.CreatedAt, Known: true,
 		}
 		if x.ConnectionID != nil {
 			a.Connection = *x.ConnectionID
@@ -237,13 +320,45 @@ func loadActions(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdom
 		if x.Amount != nil && x.Currency != nil {
 			a.Spent, a.Currency = x.Amount, *x.Currency
 		}
-		out = append(out, a)
+		actions = append(actions, a)
 	}
-	return out, cut || len(hist) == MaxActions, nil
+	cut := len(rows) == maxRows
+	if simulated {
+		hist, err := q.BehaviorSimulatedHistory(ctx, dbq.BehaviorSimulatedHistoryParams{
+			OrgID: org, AgentID: agent, Since: since, Until: until, MaxRows: int32(maxRows), //nolint:gosec // a small bound
+		})
+		if err != nil {
+			return bdomain.BehaviorProfile{}, false, err
+		}
+		for _, x := range hist {
+			a := bdomain.Action{
+				ID: x.ID, Agent: agent, Run: x.RunRef, Operation: x.Operation, DestClass: x.DestinationClass, At: x.OccurredAt,
+				Generated: true, Known: true,
+			}
+			if x.ConnectionID != nil {
+				a.Connection = *x.ConnectionID
+			}
+			if x.Amount != nil && x.Currency != nil {
+				a.Spent, a.Currency = x.Amount, *x.Currency
+			}
+			actions = append(actions, a)
+		}
+		cut = cut || len(hist) == maxRows
+	}
+	other, err := q.BehaviorNotAllowedCount(ctx, dbq.BehaviorNotAllowedCountParams{
+		OrgID: org, AgentID: agent, Simulated: simulated, Since: since, Until: until,
+	})
+	if err != nil {
+		return bdomain.BehaviorProfile{}, false, err
+	}
+	p := bdomain.Build(agent, origin, actions, since, until, cut)
+	p.Body.NotAllowed += other
+	return p, cut, nil
 }
 
-func allowed(decision string) bool {
-	return decision == "ALLOW" || decision == "ALLOW_WITH_OBLIGATIONS"
+// known: allowed and ran. An OPEN transaction is still being evaluated.
+func known(decision, state string) bool {
+	return (decision == "ALLOW" || decision == "ALLOW_WITH_OBLIGATIONS") && state == "FINAL"
 }
 
 func saveProfile(ctx context.Context, q *dbq.Queries, org ids.OrgID, p bdomain.BehaviorProfile) error {
@@ -286,6 +401,24 @@ func (r *Rollup) overflow(ctx context.Context, tx db.TenantTx, origin bdomain.Or
 		Org: tx.OrgID(), Kind: failureOverflow, DedupeKey: failureOverflow + ":" + string(origin),
 		Summary:  fmt.Sprintf("Behaviour analytics found %d more %s deviations than one run raises.", more, strings.ToLower(string(origin))),
 		NextStep: "Look at the agents already flagged: a burst this wide usually shares a cause.",
+		Deadline: now.Add(7 * 24 * time.Hour),
+	})
+	return err
+}
+
+// capReached reports BEHAVIOR_CAP_REACHED: a bound of the method bit, so
+// this run left something out (D526).
+func (r *Rollup) capReached(ctx context.Context, tx db.TenantTx, origin bdomain.Origin, what []string, now time.Time) error {
+	if r.Failures == nil {
+		return nil
+	}
+	slices.Sort(what)
+	_, err := r.Failures.Report(ctx, tx.Pgx(), reflexdomain.Failure{
+		Org: tx.OrgID(), Kind: FailureCapReached, DedupeKey: FailureCapReached + ":" + string(origin),
+		Summary: fmt.Sprintf("BEHAVIOR_CAP_REACHED: behaviour analytics reached a bound on %s activity (%s). "+
+			"A capped page is carried on by the next run; a capped baseline keeps only the newest actions.",
+			strings.ToLower(string(origin)), strings.Join(slices.Compact(what), ", ")),
+		NextStep: "Read the affected profiles as truncated. If this repeats, the org's volume outruns the method's bounds.",
 		Deadline: now.Add(7 * 24 * time.Hour),
 	})
 	return err

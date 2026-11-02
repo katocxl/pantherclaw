@@ -50,7 +50,9 @@ const Method = "n13.1"
 const (
 	Basis            = "INFERRED"
 	DefinitionStatus = "UNVALIDATED"
-	Label            = "Inferred from this agent's own recorded actions. The thresholds are unvalidated. This is not evidence of misuse."
+	Label            = "Inferred from this agent's own recorded actions. The thresholds are unvalidated. This is not evidence of misuse, " +
+		"and a quiet result is not a clean one: the agent shapes its own baseline, and activity outside PantherClaw and the " +
+		"arguments of its actions are not seen."
 )
 
 // The method's bounds and thresholds. They are unvalidated (F801): none was
@@ -88,6 +90,11 @@ type Action struct {
 	Currency string
 	// Generated marks made-up history: no transaction backs it (HR-642).
 	Generated bool
+	// Known marks an action that was allowed and ran (decision ALLOW or
+	// ALLOW_WITH_OBLIGATIONS, transaction FINAL), or generated history. Only
+	// a known action makes a tool, connection, hour or sequence known: a
+	// hold, a denial or a retry of either never does (D526).
+	Known bool
 }
 
 // Tool is one operation and how often the agent ran it.
@@ -136,6 +143,10 @@ type Body struct {
 	Spend        []Spend       `json:"spend"`
 	// The lists that were cut: a value missing from a cut list says nothing.
 	CutTools, CutDestinations, CutSequences bool `json:",omitzero"`
+	// NotAllowed counts the actions in the window that were not allowed and
+	// run: held, denied, refused or still open. They are counted apart and
+	// none of them is in the lists above (D526).
+	NotAllowed int64 `json:"not_allowed"`
 }
 
 // BehaviorProfile is what an agent usually does.
@@ -156,9 +167,18 @@ type BehaviorProfile struct {
 func spendKey(day, currency string) string { return day + "|" + currency }
 
 // Build is the profile of one agent's actions in [start, end). It reads the
-// actions in time order, so sequences follow each run.
+// actions in time order, so sequences follow each run. Only known actions
+// shape it; the others are counted in Body.NotAllowed and nothing more.
 func Build(agent ids.UUID, origin Origin, actions []Action, start, end time.Time, truncated bool) BehaviorProfile {
-	sorted := slices.Clone(actions)
+	sorted := make([]Action, 0, len(actions))
+	var notAllowed int64
+	for _, a := range actions {
+		if a.Known {
+			sorted = append(sorted, a)
+		} else {
+			notAllowed++
+		}
+	}
 	slices.SortStableFunc(sorted, func(a, b Action) int { return a.At.Compare(b.At) })
 
 	tools := map[string]int64{}
@@ -191,7 +211,7 @@ func Build(agent ids.UUID, origin Origin, actions []Action, start, end time.Time
 		}
 	}
 
-	body := Body{Hours: hours, Volumes: volumes(days, hourly), Spend: spends(spentDay, spentCurrencies)}
+	body := Body{Hours: hours, Volumes: volumes(days, hourly), Spend: spends(spentDay, spentCurrencies), NotAllowed: notAllowed}
 	body.Tools, body.CutTools = topTools(tools)
 	body.Destinations, body.CutDestinations = topDestinations(dests)
 	body.Sequences, body.CutSequences = topSequences(seqs)
