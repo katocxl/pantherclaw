@@ -5,6 +5,7 @@ package packs_test
 
 import (
 	"bytes"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"flag"
 	"maps"
@@ -131,6 +132,84 @@ func TestSamples_AreWhatTheExporterWrites(t *testing.T) {
 	}
 	if len(files) != len(events) {
 		t.Errorf("%d sample files for %d events", len(files), len(events))
+	}
+	// The batch: every sample, in name order, in the body the exporter posts.
+	var b ocsf.Builder
+	for _, name := range slices.Sorted(maps.Keys(events)) {
+		enc, err := ocsf.Encode(ocsf.Map(events[name], "1.0.0"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok, err := b.Add(enc); !ok || err != nil {
+			t.Fatalf("batch: %v %v", ok, err)
+		}
+	}
+	body, err := b.Body(batchID, 1026, 1042)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = append(body, '\n')
+	if *update {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(packRoot, batchFile)), 0o755); err != nil { //nolint:gosec // a public repository directory
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(packRoot, batchFile), body, 0o644); err != nil { //nolint:gosec // a sample is a public repository file
+			t.Fatal(err)
+		}
+		return
+	}
+	if got := read(t, batchFile); !bytes.Equal(got, body) {
+		t.Errorf("%s differs from the exporter's batch:\n got %s\nwant %s", batchFile, got, body)
+	}
+}
+
+// batchFile holds every sample in one export batch, as the exporter posts it.
+const (
+	batchFile = "samples/batch/batch.json"
+	batchID   = "0192f944-0000-7000-8000-0000000000f1"
+)
+
+// sampleOrder is the sample names in the batch's order.
+func sampleOrder() []string { return slices.Sorted(maps.Keys(sampleEvents())) }
+
+// sampleBytes is one sample's line, without its newline.
+func sampleBytes(t *testing.T, name string) []byte {
+	t.Helper()
+	return bytes.TrimSuffix(read(t, "samples/"+name+".json"), []byte("\n"))
+}
+
+// batchEvents is the golden batch's data.events, each as raw JSON.
+func batchEvents(t *testing.T) []jsontext.Value {
+	t.Helper()
+	var doc struct {
+		Type string `json:"type"`
+		Data struct {
+			Events []jsontext.Value `json:"events"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(read(t, batchFile), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Type != ocsf.BatchType {
+		t.Fatalf("batch type %q", doc.Type)
+	}
+	return doc.Data.Events
+}
+
+// TestSamples_TheBatchHoldsEverySample: the golden batch's events are the
+// samples, byte for byte and in name order, so a split that yields them
+// yields what the rules were tested on.
+//
+// Covers: F945
+func TestSamples_TheBatchHoldsEverySample(t *testing.T) {
+	evs, names := batchEvents(t), sampleOrder()
+	if len(evs) != len(names) {
+		t.Fatalf("%d events in the batch, %d samples", len(evs), len(names))
+	}
+	for i, name := range names {
+		if !bytes.Equal(evs[i], sampleBytes(t, name)) {
+			t.Errorf("batch event %d is not %s", i, name)
+		}
 	}
 }
 

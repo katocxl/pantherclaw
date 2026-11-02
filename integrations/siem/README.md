@@ -4,10 +4,10 @@ Detection content for six SIEMs, built on the OCSF 1.9 events PantherClaw export
 
 | Pack | Format |
 |---|---|
-| [splunk](splunk/README.md) | App directory: saved searches, a macro, a sourcetype |
-| [sentinel](sentinel/README.md) | ARM template of scheduled analytics rules, table schema |
-| [chronicle](chronicle/README.md) | YARA-L rules, a parser and the field map |
-| [elastic](elastic/README.md) | Detection rule export, ingest pipeline, index template |
+| [splunk](splunk/README.md) | App directory: saved searches, a macro, an event and a batch sourcetype |
+| [sentinel](sentinel/README.md) | ARM template of scheduled analytics rules, table schema, data collection rule |
+| [chronicle](chronicle/README.md) | YARA-L rules, a batch parser and the field map |
+| [elastic](elastic/README.md) | Detection rule export, ingest pipeline, index template, Logstash batch pipeline |
 | [wazuh](wazuh/README.md) | Rules file |
 | [sigma](sigma/README.md) | Sigma rules |
 
@@ -42,7 +42,18 @@ PantherClaw posts batches to one HTTPS URL. Each POST is signed with Standard We
 {"type": "pantherclaw.ocsf.batch", "data": {"batch": "…", "from_seq": 1, "to_seq": 2, "events": [{"class_uid": 2004}]}}
 ```
 
-None of these SIEMs reads that as it stands. Run a small collector of your own in front of yours. It verifies the signature, refuses an old timestamp, drops duplicates on `metadata.uid`, then writes each entry of `data.events` to the SIEM as one event. No collector is included here. The rules assume each event arrives with its OCSF field names unchanged.
+The rules read one OCSF event at a time, with its field names unchanged. Each pack's README has an Ingest section that turns a batch into those events, where the SIEM can:
+
+| Pack | Split |
+|---|---|
+| Splunk | `pantherclaw:ocsf:batch` sourcetype on HEC's raw endpoint |
+| Elastic | Logstash pipeline (an ingest pipeline can't split) |
+| Chronicle | The custom parser loops over `data.events` |
+| Sentinel | Not possible: a data collection rule returns one row per record |
+| Wazuh | Not possible: a decoder reads one line into one event |
+| Sigma | Not applicable: the README states the field layout the rules expect |
+
+**The signature is not verified inside any SIEM.** None of them reads the Standard Webhooks headers. Anyone who can post to the ingest endpoint can therefore write events the rules will trust, and nothing refuses an old timestamp or drops a duplicate `metadata.uid`. Several SIEMs also want a token or key that the export doesn't send. A forwarder that verifies the signature and adds those is a later piece of PantherClaw; it is not here. Until then, keep each ingest endpoint reachable only from PantherClaw or from something you run that checks the signature.
 
 ## Acting on what these rules find
 

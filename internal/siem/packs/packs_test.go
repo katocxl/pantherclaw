@@ -670,6 +670,11 @@ func TestHR654_ReadmesSayWhatWasNotChecked(t *testing.T) {
 		if !bytes.Contains(raw, []byte("## What was not checked")) {
 			t.Errorf("%s: no \"What was not checked\" section", pack)
 		}
+		// Every pack says how a batch gets in, and that the SIEM doesn't
+		// verify its signature.
+		if !bytes.Contains(raw, []byte("## Ingest")) || !bytes.Contains(raw, []byte("signature is not verified")) {
+			t.Errorf("%s: no Ingest section saying the signature is not verified", pack)
+		}
 		if m := claims.Find(raw); m != nil {
 			t.Errorf("%s: claims %q", pack, m)
 		}

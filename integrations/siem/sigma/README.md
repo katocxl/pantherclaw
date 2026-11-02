@@ -4,7 +4,19 @@
 
 ## Use
 
-Convert them for your SIEM with the Sigma tools you already use. You need a processing pipeline that maps this log source to where your PantherClaw events live, and that is yours to write, as it depends on your backend. Sigma rules run nothing by themselves.
+Convert them for your SIEM with the Sigma tools you already use. You need a processing pipeline that maps this log source to where your PantherClaw events live. That pipeline is yours to write, as it depends on your backend. Sigma rules run nothing by themselves.
+
+## Ingest
+
+Sigma doesn't ingest anything. The rules expect each OCSF event stored as its own record, with the layout of the files in `../samples/`:
+
+- Top-level fields such as `class_uid`, `activity_id`, `severity_id` and `status_id` are at the root.
+- Nested fields are reached by their dotted path, for example `metadata.event_code`, `metadata.labels` and `unmapped.pantherclaw_uncertainty`.
+- Numbers stay numbers and names are not renamed.
+
+PantherClaw posts batches: `{"type":"pantherclaw.ocsf.batch","data":{…,"events":[…]}}`. Splitting `data.events` into those records is the job of your SIEM's ingest. The Splunk and Elastic packs show one way, and the Sentinel and Wazuh packs say where their SIEMs can't. If your pipeline nests the event under a prefix, map the fields in your Sigma processing pipeline.
+
+**The webhook signature is not verified** by any converted rule, and Sigma never sees it. A verifying forwarder that ships with PantherClaw is a later piece.
 
 ## What was not checked
 
