@@ -51,15 +51,19 @@ var (
 	ErrSignInUnavailable = errors.New("provisioning: sign-in unavailable")
 )
 
-// Token is an authenticated SCIM token: what it provisions, nothing more.
-type Token struct {
-	ID, OrgID string
-	// Issuer is the one issuer whose users and groups this token sees.
-	Issuer string
-	// SubjectAttribute is "userName" or "externalId": the attribute that
-	// holds the identity's subject at sign-in.
-	SubjectAttribute string
-}
+// Token is an authenticated SCIM token, opaque to the protocol code (D528):
+// it carries the bearer the request presented, and the core looks the token
+// up again on every call, so what it provisions (org, issuer, subject
+// attribute) is never the caller's to say, and a revocation holds even
+// mid-request. Only Authenticate makes a usable one.
+type Token struct{ bearer string }
+
+// NewToken wraps a bearer. The core uses it; a Token made from anything but
+// a valid bearer authenticates nothing.
+func NewToken(bearer string) Token { return Token{bearer: bearer} }
+
+// Bearer returns the wrapped bearer, for the core.
+func (t Token) Bearer() string { return t.bearer }
 
 // User is a user as SCIM sees it.
 type User struct {
@@ -68,10 +72,11 @@ type User struct {
 	CreatedAt, UpdatedAt                         time.Time
 }
 
-// UserInput creates a user.
+// UserInput creates or replaces a user. A nil Active means active on
+// create, and the stored state on replace (D528).
 type UserInput struct {
 	UserName, ExternalID, Email, DisplayName string
-	Active                                   bool
+	Active                                   *bool
 }
 
 // UserChange changes a user; a nil field stays as it is.
@@ -137,7 +142,10 @@ type Directory interface {
 	// ReplaceUser sets every field of UserInput (PUT).
 	ReplaceUser(ctx context.Context, t Token, id string, in UserInput) (User, error)
 	// ChangeUser applies a partial change (PATCH). Active false deprovisions:
-	// it ends the user's sessions and API keys, or fails with ErrLastAdmin.
+	// it ends the user's sessions, or fails with ErrLastAdmin. Removals
+	// apply in every edition; below Enterprise a request that also adds
+	// applies its removals only and returns the stored user, and one with no
+	// removal is ErrEdition (D528).
 	ChangeUser(ctx context.Context, t Token, id string, c UserChange) (User, error)
 	// DeleteUser deprovisions like ChangeUser, drops the user's group
 	// memberships and hides the user from this directory. The record of who
@@ -178,18 +186,22 @@ type Started struct {
 type Pending struct {
 	// RequestID must equal the response's InResponseTo.
 	RequestID string
-	// Next is the validated page to open after sign-in.
-	Next string
+	// Handle is the core's record of this consumed sign-in: its org,
+	// connection and next page. RecordAssertion and FinishSignIn take it
+	// back; only the core makes one, and FinishSignIn accepts it once, after
+	// RecordAssertion accepted its assertion (D528).
+	Handle SignInHandle
 }
+
+// SignInHandle is a consumed sign-in, opaque to the protocol code.
+type SignInHandle interface{ SignInHandle() }
 
 // Verified is an assertion the protocol code has fully checked.
 type Verified struct {
-	OrgID, ConnectionID string
 	// Subject is the NameID.
 	Subject, Email, DisplayName string
-	// Next comes from ConsumeSignIn.
-	Next string
 	// AuthenticatedAt is the assertion's AuthnInstant; zero when absent.
+	// The core refuses one more than five minutes ahead (D528).
 	AuthenticatedAt time.Time
 }
 
@@ -205,12 +217,13 @@ type SignIn interface {
 	// follows: ErrSignInUnavailable when it is unknown, used, expired, of
 	// another connection or of another browser.
 	ConsumeSignIn(ctx context.Context, orgID, connectionID, relayState, binding string) (Pending, error)
-	// RecordAssertion accepts an assertion id once until notOnOrAfter:
-	// ErrReplayed the second time.
-	RecordAssertion(ctx context.Context, orgID, connectionID, assertionID string, notOnOrAfter time.Time) error
+	// RecordAssertion accepts an assertion id of the handle's connection
+	// once until notOnOrAfter: ErrReplayed the second time.
+	RecordAssertion(ctx context.Context, h SignInHandle, assertionID string, notOnOrAfter time.Time) error
 	// FinishSignIn answers the browser: it opens a session for the verified
 	// identity with the core's cookie and page, or the core's refusal when
-	// the identity is no enabled user of the org. Only the core sets a
-	// session cookie.
-	FinishSignIn(w http.ResponseWriter, r *http.Request, v Verified)
+	// the identity is no enabled user of the org, the handle is not one the
+	// core made, its assertion was not recorded, or it was used already.
+	// Only the core sets a session cookie.
+	FinishSignIn(w http.ResponseWriter, r *http.Request, h SignInHandle, v Verified)
 }

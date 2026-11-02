@@ -93,7 +93,7 @@ var extensionKind = regexp.MustCompile(`^(billing|scim|saml)\.[a-z][a-z0-9_]*(\.
 const maxExtensionKind = 64
 
 func validExtensionKind(kind string) bool {
-	return len(kind) <= maxExtensionKind && extensionKind.MatchString(kind)
+	return len(kind) <= maxExtensionKind && extensionKind.MatchString(kind) && !extension.CoreAuditKinds[kind]
 }
 
 // extAudit is extension.AuditRecorder.

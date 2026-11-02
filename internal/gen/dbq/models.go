@@ -3753,14 +3753,15 @@ type PcScimToken struct {
 }
 
 type PcScimUser struct {
-	OrgID          ids.OrgID
-	UserID         ids.UUID
-	UserName       *string
-	ExternalID     *string
-	DisabledByScim bool
-	DeletedAt      *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	OrgID           ids.OrgID
+	UserID          ids.UUID
+	UserName        *string
+	ExternalID      *string
+	DisabledByScim  bool
+	DeprovisionedAt *time.Time
+	DeletedAt       *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type PcSecurityEventOutbox struct {

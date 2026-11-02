@@ -49,12 +49,15 @@ SELECT (EXISTS (SELECT FROM pc.org_identity_providers p
                 WHERE c.org_id = sqlc.arg(org_id) AND c.issuer = sqlc.arg(issuer) AND c.state IN ('PENDING', 'ACTIVE')))::bool AS in_use;
 
 -- name: CountDirectoryUsers :one
+-- userName is not case-exact (RFC 7643 4.1.1): subject_ci and user_name
+-- match without case; subject and external_id match exactly.
 SELECT count(*)
 FROM pc.users u
 LEFT JOIN pc.scim_users s ON s.org_id = u.org_id AND s.user_id = u.id
 WHERE u.org_id = sqlc.arg(org_id) AND u.issuer = sqlc.arg(issuer) AND s.deleted_at IS NULL
   AND (sqlc.narg(subject)::text IS NULL OR u.subject = sqlc.narg(subject))
-  AND (sqlc.narg(user_name)::text IS NULL OR s.user_name = sqlc.narg(user_name))
+  AND (sqlc.narg(subject_ci)::text IS NULL OR lower(u.subject) = lower(sqlc.narg(subject_ci)))
+  AND (sqlc.narg(user_name)::text IS NULL OR lower(s.user_name) = lower(sqlc.narg(user_name)))
   AND (sqlc.narg(external_id)::text IS NULL OR s.external_id = sqlc.narg(external_id));
 
 -- name: ListDirectoryUsers :many
@@ -63,7 +66,8 @@ FROM pc.users u
 LEFT JOIN pc.scim_users s ON s.org_id = u.org_id AND s.user_id = u.id
 WHERE u.org_id = sqlc.arg(org_id) AND u.issuer = sqlc.arg(issuer) AND s.deleted_at IS NULL
   AND (sqlc.narg(subject)::text IS NULL OR u.subject = sqlc.narg(subject))
-  AND (sqlc.narg(user_name)::text IS NULL OR s.user_name = sqlc.narg(user_name))
+  AND (sqlc.narg(subject_ci)::text IS NULL OR lower(u.subject) = lower(sqlc.narg(subject_ci)))
+  AND (sqlc.narg(user_name)::text IS NULL OR lower(s.user_name) = lower(sqlc.narg(user_name)))
   AND (sqlc.narg(external_id)::text IS NULL OR s.external_id = sqlc.narg(external_id))
 ORDER BY u.id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
@@ -110,14 +114,21 @@ WHERE org_id = sqlc.arg(org_id) AND user_id = sqlc.arg(user_id) AND disabled_by_
 UPDATE pc.scim_users SET user_name = NULL, external_id = NULL, updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND user_id = sqlc.arg(user_id);
 
+-- name: MarkSCIMDeprovisioned :exec
+INSERT INTO pc.scim_users (org_id, user_id, deprovisioned_at) VALUES (sqlc.arg(org_id), sqlc.arg(user_id), now())
+ON CONFLICT (org_id, user_id) DO UPDATE SET deprovisioned_at = now(), updated_at = now();
+
 -- name: ActiveKeysOfDeprovisioned :many
--- API keys a person made who SCIM deprovisioned: they stay active until a
--- person rotates them (D409), so the posture queue lists them.
-SELECT k.id, k.name, k.hint, k.service_account_id, k.expires_at, u.id AS user_id, s.updated_at AS deprovisioned_at
+-- API keys a person made before SCIM deprovisioned them: they stay active
+-- until a person rotates or revokes them (D409), so the posture queue lists
+-- them while they are active, whatever later happens to the person (D528).
+SELECT k.id, k.name, k.hint, k.service_account_id, k.expires_at, u.id AS user_id,
+       coalesce(s.deprovisioned_at, s.updated_at)::timestamptz AS deprovisioned_at
 FROM pc.scim_users s
 JOIN pc.users u ON u.org_id = s.org_id AND u.id = s.user_id
 JOIN pc.api_keys k ON k.org_id = s.org_id AND k.created_by = 'user:' || u.id::text
-WHERE s.org_id = sqlc.arg(org_id) AND s.disabled_by_scim AND u.state = 'DISABLED' AND k.state = 'ACTIVE' AND k.expires_at > now()
+WHERE s.org_id = sqlc.arg(org_id) AND s.deprovisioned_at IS NOT NULL AND k.created_at <= s.deprovisioned_at
+  AND k.state = 'ACTIVE' AND k.expires_at > now()
 ORDER BY u.id, k.name
 LIMIT sqlc.arg(page_limit);
 
@@ -190,7 +201,8 @@ WHERE m.org_id = sqlc.arg(org_id) AND m.user_id = sqlc.arg(user_id);
 SELECT * FROM pc.role_bindings WHERE org_id = sqlc.arg(org_id) AND user_id = sqlc.arg(user_id) AND provisioned;
 
 -- name: InsertProvisionedBinding :execrows
--- A binding a person already made stays theirs: nothing happens.
+-- A person's identical binding is another row (the source is in the key,
+-- D528): each one's removal leaves the other.
 INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, business_unit_id, team_id, environment_id, created_by, provisioned)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(role), sqlc.arg(user_id), sqlc.arg(scope_type), sqlc.narg(business_unit_id),
         sqlc.narg(team_id), sqlc.narg(environment_id), 'scim:group', true)

@@ -117,11 +117,11 @@ func members(ctx context.Context, q *dbq.Queries, t token, in []string) ([]ids.U
 
 // CreateGroup creates a group of the token's issuer (F919).
 func (s *Service) CreateGroup(ctx context.Context, pt ports.Token, in ports.GroupInput) (ports.Group, error) {
-	if err := s.entitledSCIM(ctx); err != nil {
-		return ports.Group{}, err
-	}
 	var out ports.Group
 	err := s.inDir(ctx, pt, func(ctx context.Context, tx db.TenantTx, q *dbq.Queries, t token) error {
+		if err := s.entitledSCIM(ctx); err != nil { // the org's plan: ctx names the org
+			return err
+		}
 		if attr(in.DisplayName, true) != nil || attr(in.ExternalID, false) != nil {
 			return ports.ErrInvalid
 		}
@@ -139,7 +139,9 @@ func (s *Service) CreateGroup(ctx context.Context, pt ports.Token, in ports.Grou
 		g, err := q.InsertGroup(ctx, dbq.InsertGroupParams{
 			OrgID: t.org, ID: ids.NewV7(), Issuer: t.Issuer, DisplayName: in.DisplayName, ExternalID: optional(in.ExternalID),
 		})
-		if err != nil {
+		if db.IsUniqueViolation(err) {
+			return ports.ErrConflict // a concurrent create of the same name
+		} else if err != nil {
 			return err
 		}
 		added, removed, err := s.setMembers(ctx, q, t, g.ID, add, nil)
@@ -163,20 +165,20 @@ func (s *Service) ReplaceGroup(ctx context.Context, pt ports.Token, id string, i
 }
 
 // ChangeGroup applies a partial change (PATCH). Removing members works in
-// every edition; anything else needs Enterprise.
+// every edition. Below Enterprise a request that removes applies its
+// removals only, records the parts it dropped and returns the stored
+// group; one that does not remove is ErrEdition (D528).
 func (s *Service) ChangeGroup(ctx context.Context, pt ports.Token, id string, c ports.GroupChange) (ports.Group, error) {
 	return s.changeGroup(ctx, pt, id, nil, c)
 }
 
 func (s *Service) changeGroup(ctx context.Context, pt ports.Token, id string, replace *ports.GroupInput, c ports.GroupChange) (ports.Group, error) {
-	removeOnly := replace == nil && c.DisplayName == nil && c.ExternalID == nil && len(c.AddMembers) == 0
-	if !removeOnly {
-		if err := s.entitledSCIM(ctx); err != nil {
-			return ports.Group{}, err
-		}
-	}
 	var out ports.Group
 	err := s.inDir(ctx, pt, func(ctx context.Context, tx db.TenantTx, q *dbq.Queries, t token) error {
+		full, err := s.fullEdition(ctx)
+		if err != nil {
+			return err
+		}
 		g, err := lockGroup(ctx, q, t, id)
 		if err != nil {
 			return err
@@ -191,6 +193,26 @@ func (s *Service) changeGroup(ctx context.Context, pt ports.Token, id string, re
 		if attr(name, true) != nil || attr(ext, false) != nil {
 			return ports.ErrInvalid
 		}
+		add, remove, err := memberChange(ctx, q, t, g.ID, replace, c)
+		if err != nil {
+			return err
+		}
+		var parts []string
+		if !full {
+			if len(remove) == 0 {
+				return ports.ErrEdition
+			}
+			if name != g.DisplayName {
+				parts = append(parts, "displayName")
+			}
+			if ext != deref(g.ExternalID) {
+				parts = append(parts, "externalId")
+			}
+			if len(add) > 0 {
+				parts = append(parts, "members_added")
+			}
+			name, ext, add = g.DisplayName, deref(g.ExternalID), nil
+		}
 		if name != g.DisplayName {
 			n, err := q.CountDirectoryGroups(ctx, dbq.CountDirectoryGroupsParams{OrgID: t.org, Issuer: t.Issuer, DisplayName: &name})
 			if err != nil {
@@ -201,41 +223,11 @@ func (s *Service) changeGroup(ctx context.Context, pt ports.Token, id string, re
 			}
 		}
 		if name != g.DisplayName || ext != deref(g.ExternalID) {
-			if g, err = q.SetGroup(ctx, dbq.SetGroupParams{DisplayName: name, ExternalID: optional(ext), OrgID: t.org, ID: g.ID}); err != nil {
+			g, err = q.SetGroup(ctx, dbq.SetGroupParams{DisplayName: name, ExternalID: optional(ext), OrgID: t.org, ID: g.ID})
+			if db.IsUniqueViolation(err) {
+				return ports.ErrConflict
+			} else if err != nil {
 				return err
-			}
-		}
-		var add, remove []ids.UUID
-		if replace != nil {
-			want, err := members(ctx, q, t, replace.Members)
-			if err != nil {
-				return err
-			}
-			have, err := q.GroupMemberIDs(ctx, t.org, g.ID)
-			if err != nil {
-				return err
-			}
-			for _, w := range want {
-				if !slices.Contains(have, w) {
-					add = append(add, w)
-				}
-			}
-			for _, h := range have {
-				if !slices.Contains(want, h) {
-					remove = append(remove, h)
-				}
-			}
-		} else {
-			if add, err = members(ctx, q, t, c.AddMembers); err != nil {
-				return err
-			}
-			for _, r := range c.RemoveUsers {
-				if u, err := ids.ParseUUID(r); err == nil && !slices.Contains(remove, u) {
-					remove = append(remove, u) // removing someone who is not a member is no error
-				}
-			}
-			if len(remove) > MaxMembers {
-				return ports.ErrInvalid
 			}
 		}
 		added, removed, err := s.setMembers(ctx, q, t, g.ID, add, remove)
@@ -248,10 +240,50 @@ func (s *Service) changeGroup(ctx context.Context, pt ports.Token, id string, re
 		}); err != nil {
 			return err
 		}
+		if err := s.dropped(ctx, tx, t, "group", g.ID, parts); err != nil {
+			return err
+		}
 		out, err = s.groupOut(ctx, q, g)
 		return err
 	})
 	return out, err
+}
+
+// memberChange is who a change adds and removes.
+func memberChange(ctx context.Context, q *dbq.Queries, t token, group ids.UUID, replace *ports.GroupInput, c ports.GroupChange) (add, remove []ids.UUID, err error) {
+	if replace != nil {
+		want, err := members(ctx, q, t, replace.Members)
+		if err != nil {
+			return nil, nil, err
+		}
+		have, err := q.GroupMemberIDs(ctx, t.org, group)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, w := range want {
+			if !slices.Contains(have, w) {
+				add = append(add, w)
+			}
+		}
+		for _, h := range have {
+			if !slices.Contains(want, h) {
+				remove = append(remove, h)
+			}
+		}
+		return add, remove, nil
+	}
+	if add, err = members(ctx, q, t, c.AddMembers); err != nil {
+		return nil, nil, err
+	}
+	for _, r := range c.RemoveUsers {
+		if u, err := ids.ParseUUID(r); err == nil && !slices.Contains(remove, u) {
+			remove = append(remove, u) // removing someone who is not a member is no error
+		}
+	}
+	if len(remove) > MaxMembers {
+		return nil, nil, ports.ErrInvalid
+	}
+	return add, remove, nil
 }
 
 // DeleteGroup deletes a group, its members and its role mappings; the

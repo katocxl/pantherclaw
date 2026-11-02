@@ -47,66 +47,100 @@ const (
 	browserReason = "REVOKED"
 )
 
-// token is an authenticated SCIM token in the core's types.
+// token is a SCIM token as the core looked it up, in the core's types.
 type token struct {
-	ports.Token
 	org ids.OrgID
 	id  ids.UUID
+	// Issuer is the one issuer whose users and groups the token sees.
+	Issuer string
+	// SubjectAttribute is "userName" or "externalId" (HR-629).
+	SubjectAttribute string
 }
 
 func (t token) actor() evdomain.Actor { return evdomain.Actor{Type: "scim_token", ID: t.id.String()} }
 
-func parseToken(t ports.Token) (token, error) {
-	org, err := ids.Parse[ids.Org](t.OrgID)
-	if err != nil {
+// lookUp finds an acting token by its bearer's hash: only an ACTIVE,
+// unexpired token of an active org is one. A PENDING token, whose
+// activation a second person has not approved, is unknown (D409).
+func lookUp(ctx context.Context, q *dbq.Queries, cred credential.Token) (token, error) {
+	row, err := q.SCIMTokenByHash(ctx, cred.Org(), cred.Hash())
+	if db.IsNoRows(err) {
 		return token{}, ports.ErrUnauthenticated
+	} else if err != nil {
+		return token{}, err
 	}
-	id, err := ids.ParseUUID(t.ID)
-	if err != nil || t.Issuer == "" {
-		return token{}, ports.ErrUnauthenticated
-	}
-	if t.SubjectAttribute != domain.SubjectUserName && t.SubjectAttribute != domain.SubjectExternalID {
-		return token{}, ports.ErrUnauthenticated
-	}
-	return token{Token: t, org: org, id: id}, nil
+	return token{org: cred.Org(), id: row.ID, Issuer: row.Issuer, SubjectAttribute: row.SubjectAttribute}, nil
 }
 
-// Authenticate resolves a SCIM bearer token (HR-629): only its hash is
-// looked up, and only an ACTIVE, unexpired token of an active org is one.
-// A PENDING token, whose activation a second person has not approved, is
-// unknown here (D409).
+func parseBearer(pt ports.Token) (credential.Token, error) {
+	cred, err := credential.Parse(credential.SCIMToken, pt.Bearer())
+	if err != nil {
+		return credential.Token{}, ports.ErrUnauthenticated
+	}
+	return cred, nil
+}
+
+// Authenticate resolves a SCIM bearer token (HR-629) and records its use.
+// The Token it returns is opaque: every later call looks the token up again
+// (D528).
 func (s *Service) Authenticate(ctx context.Context, bearer string) (ports.Token, error) {
-	tok, err := credential.Parse(credential.SCIMToken, bearer)
+	pt := ports.NewToken(bearer)
+	cred, err := parseBearer(pt)
 	if err != nil {
-		return ports.Token{}, ports.ErrUnauthenticated
+		return ports.Token{}, err
 	}
-	var out ports.Token
-	err = s.Pool.InTenantTx(ctx, tok.Org(), func(ctx context.Context, tx db.TenantTx) error {
+	err = s.Pool.InTenantTx(ctx, cred.Org(), func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		row, err := q.SCIMTokenByHash(ctx, tok.Org(), tok.Hash())
-		if db.IsNoRows(err) {
-			return ports.ErrUnauthenticated
-		} else if err != nil {
+		t, err := lookUp(ctx, q, cred)
+		if err != nil {
 			return err
 		}
-		if err := q.TouchSCIMToken(ctx, tok.Org(), row.ID); err != nil {
-			return err
-		}
-		out = ports.Token{ID: row.ID.String(), OrgID: tok.Org().String(), Issuer: row.Issuer, SubjectAttribute: row.SubjectAttribute}
-		return nil
+		return q.TouchSCIMToken(ctx, t.org, t.id)
 	})
-	return out, err
+	if err != nil {
+		return ports.Token{}, err
+	}
+	return pt, nil
 }
 
-// inDir runs fn in a transaction of the token's org.
+// inDir runs fn in a transaction of the token's org, with the token looked
+// up again inside it: what it provisions is the core's to say, and a token
+// revoked a moment ago does nothing (D528).
 func (s *Service) inDir(ctx context.Context, pt ports.Token, fn func(ctx context.Context, tx db.TenantTx, q *dbq.Queries, t token) error, opts ...db.TxOption) error {
-	t, err := parseToken(pt)
+	cred, err := parseBearer(pt)
 	if err != nil {
 		return err
 	}
-	return s.Pool.InTenantTx(ctx, t.org, func(ctx context.Context, tx db.TenantTx) error {
-		return fn(ctx, tx, dbq.New(tx), t)
+	return s.Pool.InTenantTx(ctx, cred.Org(), func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		t, err := lookUp(ctx, q, cred)
+		if err != nil {
+			return err
+		}
+		return fn(ctx, tx, q, t)
 	}, opts...)
+}
+
+// fullEdition reports whether the token's org may add through SCIM. It is
+// called inside inDir: the transaction's context names the org, so the
+// org's own plan decides, never the deployment's licence (D528).
+func (s *Service) fullEdition(ctx context.Context) (bool, error) {
+	err := s.entitledSCIM(ctx)
+	if errors.Is(err, ports.ErrEdition) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// dropped records the parts of a request below Enterprise that were not
+// applied: only its removals were (D528).
+func (s *Service) dropped(ctx context.Context, tx db.TenantTx, t token, objType string, obj ids.UUID, parts []string) error {
+	if len(parts) == 0 {
+		return nil
+	}
+	return s.record(ctx, tx, t, "scim.parts_dropped", objType, obj, map[string]string{
+		"parts": strings.Join(parts, ","), "reason": "EDITION_REQUIRED",
+	})
 }
 
 func (s *Service) entitledSCIM(ctx context.Context) error {
@@ -215,14 +249,15 @@ func lockedUser(t token, r dbq.LockDirectoryUserRow) ports.User {
 func (s *Service) ListUsers(ctx context.Context, pt ports.Token, f ports.UserFilter, p ports.Page) (ports.Users, error) {
 	var out ports.Users
 	err := s.inDir(ctx, pt, func(ctx context.Context, _ db.TenantTx, q *dbq.Queries, t token) error {
-		var subject, userName, externalID *string
+		// userName matches without case (RFC 7643 4.1.1), externalId exactly.
+		var subject, subjectCI, userName, externalID *string
 		if t.SubjectAttribute == domain.SubjectExternalID {
 			subject, userName = optional(f.ExternalID), optional(f.UserName)
 		} else {
-			subject, externalID = optional(f.UserName), optional(f.ExternalID)
+			subjectCI, externalID = optional(f.UserName), optional(f.ExternalID)
 		}
 		n, err := q.CountDirectoryUsers(ctx, dbq.CountDirectoryUsersParams{
-			OrgID: t.org, Issuer: t.Issuer, Subject: subject, UserName: userName, ExternalID: externalID,
+			OrgID: t.org, Issuer: t.Issuer, Subject: subject, SubjectCi: subjectCI, UserName: userName, ExternalID: externalID,
 		})
 		if err != nil {
 			return err
@@ -233,7 +268,7 @@ func (s *Service) ListUsers(ctx context.Context, pt ports.Token, f ports.UserFil
 			return nil
 		}
 		rows, err := q.ListDirectoryUsers(ctx, dbq.ListDirectoryUsersParams{
-			OrgID: t.org, Issuer: t.Issuer, Subject: subject, UserName: userName, ExternalID: externalID,
+			OrgID: t.org, Issuer: t.Issuer, Subject: subject, SubjectCi: subjectCI, UserName: userName, ExternalID: externalID,
 			PageOffset: offset, PageLimit: limit,
 		})
 		if err != nil {
@@ -306,11 +341,12 @@ func taken(ctx context.Context, q *dbq.Queries, t token, self ids.UUID, userName
 // A user SCIM deleted comes back as the same user; any other user with the
 // identity is a conflict.
 func (s *Service) CreateUser(ctx context.Context, pt ports.Token, in ports.UserInput) (ports.User, error) {
-	if err := s.entitledSCIM(ctx); err != nil {
-		return ports.User{}, err
-	}
 	var out ports.User
+	active := in.Active == nil || *in.Active
 	err := s.inDir(ctx, pt, func(ctx context.Context, tx db.TenantTx, q *dbq.Queries, t token) error {
+		if err := s.entitledSCIM(ctx); err != nil { // the org's plan: ctx names the org
+			return err
+		}
 		if err := attr(in.UserName, true); err != nil {
 			return err
 		}
@@ -326,21 +362,23 @@ func (s *Service) CreateUser(ctx context.Context, pt ports.Token, in ports.UserI
 			return err
 		}
 		state := td.Disabled
-		if in.Active {
+		if active {
 			state = td.Enabled
 			if err := s.memberLimit(ctx, q, t.org); err != nil {
 				return err
 			}
 		}
 		var id ids.UUID
-		scimDisabled, deprovision := !in.Active, false
+		scimDisabled, deprovision := !active, false
 		prior, err := q.DirectoryUserBySubject(ctx, t.org, t.Issuer, subject)
 		switch {
 		case db.IsNoRows(err):
 			u, err := q.InsertProvisionedUser(ctx, dbq.InsertProvisionedUserParams{
 				OrgID: t.org, ID: ids.NewV7(), Issuer: t.Issuer, Subject: subject, Email: email, DisplayName: name, State: string(state),
 			})
-			if err != nil {
+			if db.IsUniqueViolation(err) {
+				return ports.ErrConflict // a concurrent create of the same identity
+			} else if err != nil {
 				return err
 			}
 			id = u.ID
@@ -361,16 +399,16 @@ func (s *Service) CreateUser(ctx context.Context, pt ports.Token, in ports.UserI
 			}
 			enabled := r.State == string(td.Enabled)
 			switch {
-			case in.Active && !enabled:
+			case active && !enabled:
 				if !r.DisabledByScim {
 					return ports.ErrDisabledHere
 				}
 				if _, err := q.SetUserState(ctx, string(td.Enabled), t.org, id); err != nil {
 					return err
 				}
-			case !in.Active && enabled:
+			case !active && enabled:
 				deprovision = true
-			case !in.Active:
+			case !active:
 				scimDisabled = r.DisabledByScim // a person's decision stays theirs
 			}
 		}
@@ -384,7 +422,7 @@ func (s *Service) CreateUser(ctx context.Context, pt ports.Token, in ports.UserI
 		}); err != nil {
 			return err
 		}
-		if err := s.record(ctx, tx, t, "scim.user_created", "user", id, map[string]string{"active": strconv.FormatBool(in.Active)}); err != nil {
+		if err := s.record(ctx, tx, t, "scim.user_created", "user", id, map[string]string{"active": strconv.FormatBool(active)}); err != nil {
 			return err
 		}
 		r, err := q.LockDirectoryUser(ctx, t.org, t.Issuer, id)
@@ -400,28 +438,36 @@ func (s *Service) CreateUser(ctx context.Context, pt ports.Token, in ports.UserI
 // ReplaceUser sets every field (PUT).
 func (s *Service) ReplaceUser(ctx context.Context, pt ports.Token, id string, in ports.UserInput) (ports.User, error) {
 	return s.ChangeUser(ctx, pt, id, ports.UserChange{
-		UserName: &in.UserName, ExternalID: &in.ExternalID, Email: &in.Email, DisplayName: &in.DisplayName, Active: &in.Active,
+		UserName: &in.UserName, ExternalID: &in.ExternalID, Email: &in.Email, DisplayName: &in.DisplayName, Active: in.Active,
 	})
 }
 
 // ChangeUser applies a partial change (PATCH). The subject never changes
 // (ErrImmutable). Active false deprovisions (HR-632); active true re-enables
 // only a user SCIM disabled, never one a person disabled (ErrDisabledHere).
-// Removing works in every edition; anything else needs Enterprise.
+// Removing (active false) works in every edition. Below Enterprise a
+// request that removes applies its removal only, records the parts it
+// dropped and returns the stored user; one that does not remove is
+// ErrEdition (D528).
 func (s *Service) ChangeUser(ctx context.Context, pt ports.Token, id string, c ports.UserChange) (ports.User, error) {
-	removeOnly := c.UserName == nil && c.ExternalID == nil && c.Email == nil && c.DisplayName == nil && c.Active != nil && !*c.Active
-	if !removeOnly {
-		if err := s.entitledSCIM(ctx); err != nil {
-			return ports.User{}, err
-		}
-	}
 	var out ports.User
 	err := s.inDir(ctx, pt, func(ctx context.Context, tx db.TenantTx, q *dbq.Queries, t token) error {
+		full, err := s.fullEdition(ctx)
+		if err != nil {
+			return err
+		}
+		removal := c.Active != nil && !*c.Active
+		if !full && !removal {
+			return ports.ErrEdition
+		}
 		r, err := lockUser(ctx, q, t, id)
 		if err != nil {
 			return err
 		}
 		cur := lockedUser(t, r)
+		if !full {
+			return s.removeOnly(ctx, tx, q, t, r, cur, c, &out)
+		}
 		userName, externalID := cur.UserName, cur.ExternalID
 		if t.SubjectAttribute == domain.SubjectExternalID && r.UserName == nil {
 			userName = "" // shown as the email, not stored
@@ -500,6 +546,47 @@ func (s *Service) ChangeUser(ctx context.Context, pt ports.Token, id string, c p
 	return out, s.refused(ctx, pt, err)
 }
 
+// removeOnly applies the one removal a request below Enterprise may make,
+// deprovisioning, and records what else it asked for (D528).
+func (s *Service) removeOnly(ctx context.Context, tx db.TenantTx, q *dbq.Queries, t token, r dbq.LockDirectoryUserRow, cur ports.User, c ports.UserChange, out *ports.User) error {
+	var parts []string
+	differs := func(p *string, v string) bool { return p != nil && *p != v }
+	if differs(c.UserName, cur.UserName) {
+		parts = append(parts, "userName")
+	}
+	if differs(c.ExternalID, cur.ExternalID) {
+		parts = append(parts, "externalId")
+	}
+	if differs(c.Email, cur.Email) {
+		parts = append(parts, "email")
+	}
+	if differs(c.DisplayName, cur.DisplayName) {
+		parts = append(parts, "displayName")
+	}
+	if r.State == string(td.Enabled) {
+		if err := s.deprovision(ctx, tx, q, t, r.ID); err != nil {
+			return err
+		}
+		if err := q.PutSCIMUser(ctx, dbq.PutSCIMUserParams{
+			OrgID: t.org, UserID: r.ID, UserName: r.UserName, ExternalID: r.ExternalID, DisabledByScim: true,
+		}); err != nil {
+			return err
+		}
+		if err := s.record(ctx, tx, t, "scim.user_changed", "user", r.ID, map[string]string{"active": "false"}); err != nil {
+			return err
+		}
+	}
+	if err := s.dropped(ctx, tx, t, "user", r.ID, parts); err != nil {
+		return err
+	}
+	u, err := q.LockDirectoryUser(ctx, t.org, t.Issuer, r.ID)
+	if err != nil {
+		return err
+	}
+	*out = lockedUser(t, u)
+	return nil
+}
+
 // DeleteUser deprovisions the user, drops their group memberships (and so
 // the bindings those gave) and hides them from SCIM. Works in every edition.
 func (s *Service) DeleteUser(ctx context.Context, pt ports.Token, id string) error {
@@ -548,6 +635,9 @@ func (s *Service) deprovision(ctx context.Context, tx db.TenantTx, q *dbq.Querie
 		return err
 	}
 	if _, err := q.SetUserState(ctx, string(td.Disabled), t.org, user); err != nil {
+		return err
+	}
+	if err := q.MarkSCIMDeprovisioned(ctx, t.org, user); err != nil {
 		return err
 	}
 	cliReason, browserReason := cliReason, browserReason
@@ -609,12 +699,16 @@ func (s *Service) refused(ctx context.Context, pt ports.Token, err error) error 
 	if !errors.Is(err, ports.ErrLastAdmin) {
 		return err
 	}
-	t, perr := parseToken(pt)
+	cred, perr := parseBearer(pt)
 	if perr != nil {
 		return err
 	}
-	rerr := s.Pool.InTenantTx(ctx, t.org, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := audit.Record(ctx, tx, audit.Event{
+	rerr := s.Pool.InTenantTx(ctx, cred.Org(), func(ctx context.Context, tx db.TenantTx) error {
+		t, err := lookUp(ctx, dbq.New(tx), cred)
+		if err != nil {
+			return err
+		}
+		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: "scim.user_deprovision_refused", Actor: t.actor(), Outcome: audit.Denied, ReasonCode: "LAST_ORG_ADMIN",
 			Object: &audit.Object{Type: "scim_token", ID: t.id.String()}, Details: map[string]string{"issuer": trimDetail(t.Issuer)},
 		})

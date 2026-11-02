@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
@@ -145,7 +146,27 @@ func (s *SignIn) ConsumeSignIn(ctx context.Context, orgID, connectionID, relaySt
 	} else if err != nil {
 		return ports.Pending{}, err
 	}
-	return ports.Pending{RequestID: requestID, Next: next}, nil
+	return ports.Pending{RequestID: requestID, Handle: &pending{org: org, conn: id, next: next}}, nil
+}
+
+// pending is the core's record of one consumed sign-in (D528): only this
+// package makes one, RecordAssertion marks its assertion accepted, and
+// FinishSignIn takes it once after that.
+type pending struct {
+	org      ids.OrgID
+	conn     ids.UUID
+	next     string
+	mu       sync.Mutex
+	recorded bool
+	finished bool
+}
+
+func (*pending) SignInHandle() {}
+
+// handleOf is the core's own handle, or nil for anything else.
+func handleOf(h ports.SignInHandle) *pending {
+	p, _ := h.(*pending)
+	return p
 }
 
 func hashed(s string) string {
@@ -153,12 +174,18 @@ func hashed(s string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// RecordAssertion accepts an assertion id of the connection once.
-func (s *SignIn) RecordAssertion(ctx context.Context, orgID, connectionID, assertionID string, notOnOrAfter time.Time) error {
-	org, id, err := parseConn(orgID, connectionID)
-	if err != nil {
-		return err
+// RecordAssertion accepts an assertion id of the handle's connection once.
+func (s *SignIn) RecordAssertion(ctx context.Context, h ports.SignInHandle, assertionID string, notOnOrAfter time.Time) error {
+	p := handleOf(h)
+	if p == nil {
+		return ports.ErrSignInUnavailable
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.recorded || p.finished {
+		return ports.ErrReplayed // one assertion per sign-in
+	}
+	org, id := p.org, p.conn
 	if assertionID == "" || len(assertionID) > 256 {
 		return ports.ErrReplayed
 	}
@@ -169,7 +196,7 @@ func (s *SignIn) RecordAssertion(ctx context.Context, orgID, connectionID, asser
 	if notOnOrAfter.After(now.Add(maxReplayWindow)) {
 		notOnOrAfter = now.Add(maxReplayWindow)
 	}
-	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		r, err := q.GetSAMLConnection(ctx, org, id)
 		if db.IsNoRows(err) {
@@ -188,7 +215,15 @@ func (s *SignIn) RecordAssertion(ctx context.Context, orgID, connectionID, asser
 		}
 		return nil
 	})
+	if err == nil {
+		p.recorded = true
+	}
+	return err
 }
+
+// maxAuthnAhead is how far ahead an AuthnInstant may be, as for an OpenID
+// auth_time; one within it counts as now (D528).
+const maxAuthnAhead = 5 * time.Minute
 
 func (s *SignIn) now() time.Time {
 	if s.Clock == nil {
@@ -200,25 +235,42 @@ func (s *SignIn) now() time.Time {
 // FinishSignIn opens a session for a verified identity of an ACTIVE
 // connection: the identity's issuer is the connection's, so an assertion
 // signs in only users of that connection.
-func (s *SignIn) FinishSignIn(w http.ResponseWriter, r *http.Request, v ports.Verified) {
+func (s *SignIn) FinishSignIn(w http.ResponseWriter, r *http.Request, h ports.SignInHandle, v ports.Verified) {
 	ctx := r.Context()
-	org, id, err := parseConn(v.OrgID, v.ConnectionID)
-	if err != nil {
+	p := handleOf(h)
+	if p == nil {
 		s.Web.FinishExternalSignIn(w, r, authnapp.BrowserSignIn{}, authnapp.ErrSignInUnavailable)
 		return
 	}
-	conn, err := s.active(ctx, org, id)
+	p.mu.Lock()
+	ok := p.recorded && !p.finished
+	p.finished = true
+	p.mu.Unlock()
+	if !ok {
+		s.Web.FinishExternalSignIn(w, r, authnapp.BrowserSignIn{}, authnapp.ErrSignInUnavailable)
+		return
+	}
+	now := s.now()
+	authTime := v.AuthenticatedAt
+	if authTime.After(now.Add(maxAuthnAhead)) {
+		s.Web.FinishExternalSignIn(w, r, authnapp.BrowserSignIn{}, authnapp.ErrSignInUnavailable)
+		return
+	}
+	if authTime.After(now) {
+		authTime = now
+	}
+	conn, err := s.active(ctx, p.org, p.conn)
 	if err != nil {
 		s.Web.FinishExternalSignIn(w, r, authnapp.BrowserSignIn{}, authnapp.ErrSignInUnavailable)
 		return
 	}
 	claims := authnapp.IDClaims{
-		Issuer: *conn.Issuer, Subject: v.Subject, Email: v.Email, Name: v.DisplayName, AuthTime: v.AuthenticatedAt,
+		Issuer: *conn.Issuer, Subject: v.Subject, Email: v.Email, Name: v.DisplayName, AuthTime: authTime,
 	}
 	if claims.Email == "" || claims.Name == "" {
-		s.fillProfile(ctx, org, &claims)
+		s.fillProfile(ctx, p.org, &claims)
 	}
-	out, err := s.Browser.FinishExternal(ctx, org, provider(conn), claims, v.Next, s.Web.ClientMeta(r))
+	out, err := s.Browser.FinishExternal(ctx, p.org, provider(conn), claims, p.next, s.Web.ClientMeta(r))
 	s.Web.FinishExternalSignIn(w, r, out, err)
 }
 

@@ -98,6 +98,10 @@ CREATE TABLE pc.scim_users (
     user_name        text        CHECK (char_length(user_name) BETWEEN 1 AND 256),
     external_id      text        CHECK (char_length(external_id) BETWEEN 1 AND 256),
     disabled_by_scim boolean     NOT NULL DEFAULT false,
+    -- When SCIM last deprovisioned the user. Never cleared: the API keys
+    -- the person made before it stay a finding while they are active,
+    -- whatever later happens to the person (D528).
+    deprovisioned_at timestamptz,
     deleted_at       timestamptz,
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
@@ -110,6 +114,20 @@ CREATE TABLE pc.scim_users (
 -- role that stays in PantherClaw (D406, D409).
 ALTER TABLE pc.role_bindings ADD COLUMN provisioned boolean NOT NULL DEFAULT false
     CONSTRAINT role_bindings_provisioned_role CHECK (NOT provisioned OR role NOT IN ('org_admin', 'security_admin', 'scope_admin', 'emergency_responder'));
+
+-- A person's grant and a group's grant of the same role coexist: the source
+-- is part of the key, so neither one's removal takes the other (D528).
+-- +goose StatementBegin
+DO $$
+DECLARE c text;
+BEGIN
+    SELECT conname INTO STRICT c FROM pg_constraint
+    WHERE conrelid = 'pc.role_bindings'::regclass AND contype = 'u';
+    EXECUTE format('ALTER TABLE pc.role_bindings DROP CONSTRAINT %I', c);
+END $$;
+-- +goose StatementEnd
+ALTER TABLE pc.role_bindings ADD CONSTRAINT role_bindings_grant_key
+    UNIQUE NULLS NOT DISTINCT (org_id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, provisioned);
 
 -- +goose StatementBegin
 DO $$
@@ -135,13 +153,18 @@ GRANT SELECT, INSERT, DELETE ON pc.groups, pc.group_members, pc.group_role_mappi
 GRANT SELECT, INSERT ON pc.scim_tokens, pc.scim_users TO pc_app;
 GRANT UPDATE (display_name, external_id, updated_at) ON pc.groups TO pc_app;
 GRANT UPDATE (state, activated_at, revoked_at, last_used_at) ON pc.scim_tokens TO pc_app;
-GRANT UPDATE (user_name, external_id, disabled_by_scim, deleted_at, updated_at) ON pc.scim_users TO pc_app;
+GRANT UPDATE (user_name, external_id, disabled_by_scim, deprovisioned_at, deleted_at, updated_at) ON pc.scim_users TO pc_app;
 -- The hash stays out of the auditors' read.
 GRANT SELECT (org_id, id, name, issuer, subject_attribute, hint, state, created_by, created_at, expires_at, activated_at, revoked_at, last_used_at)
     ON pc.scim_tokens TO pc_audit_ro;
 GRANT SELECT ON pc.groups, pc.group_members, pc.group_role_mappings, pc.scim_users TO pc_audit_ro;
 
 -- +goose Down
+-- A group gave these: without the mappings they are no person's grant.
+DELETE FROM pc.role_bindings WHERE provisioned;
+ALTER TABLE pc.role_bindings DROP CONSTRAINT role_bindings_grant_key;
+ALTER TABLE pc.role_bindings
+    ADD UNIQUE NULLS NOT DISTINCT (org_id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id);
 ALTER TABLE pc.role_bindings DROP COLUMN provisioned;
 DROP TABLE pc.scim_users;
 DROP TABLE pc.scim_tokens;

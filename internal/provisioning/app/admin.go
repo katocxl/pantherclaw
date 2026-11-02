@@ -289,7 +289,19 @@ func (s *Service) ApplyTokenActivate(ctx context.Context, tx db.TenantTx, author
 	if err := s.entitled(ctx, scim); err != nil {
 		return err
 	}
-	n, err := dbq.New(tx).ActivateSCIMToken(ctx, tx.OrgID(), id)
+	q := dbq.New(tx)
+	// The provider may have been turned off since the token was filed: a
+	// token activates only for an issuer that is still known (D528).
+	tok, err := q.LockSCIMToken(ctx, tx.OrgID(), id)
+	if db.IsNoRows(err) {
+		return ErrState
+	} else if err != nil {
+		return err
+	}
+	if err := s.knownIssuer(ctx, q, tx.OrgID(), tok.Issuer); err != nil {
+		return err
+	}
+	n, err := q.ActivateSCIMToken(ctx, tx.OrgID(), id)
 	if err != nil {
 		return err
 	}

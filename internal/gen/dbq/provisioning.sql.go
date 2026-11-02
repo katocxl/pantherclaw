@@ -29,11 +29,13 @@ func (q *Queries) ActivateSCIMToken(ctx context.Context, orgID ids.OrgID, iD ids
 }
 
 const activeKeysOfDeprovisioned = `-- name: ActiveKeysOfDeprovisioned :many
-SELECT k.id, k.name, k.hint, k.service_account_id, k.expires_at, u.id AS user_id, s.updated_at AS deprovisioned_at
+SELECT k.id, k.name, k.hint, k.service_account_id, k.expires_at, u.id AS user_id,
+       coalesce(s.deprovisioned_at, s.updated_at)::timestamptz AS deprovisioned_at
 FROM pc.scim_users s
 JOIN pc.users u ON u.org_id = s.org_id AND u.id = s.user_id
 JOIN pc.api_keys k ON k.org_id = s.org_id AND k.created_by = 'user:' || u.id::text
-WHERE s.org_id = $1 AND s.disabled_by_scim AND u.state = 'DISABLED' AND k.state = 'ACTIVE' AND k.expires_at > now()
+WHERE s.org_id = $1 AND s.deprovisioned_at IS NOT NULL AND k.created_at <= s.deprovisioned_at
+  AND k.state = 'ACTIVE' AND k.expires_at > now()
 ORDER BY u.id, k.name
 LIMIT $2
 `
@@ -48,8 +50,9 @@ type ActiveKeysOfDeprovisionedRow struct {
 	DeprovisionedAt  time.Time
 }
 
-// API keys a person made who SCIM deprovisioned: they stay active until a
-// person rotates them (D409), so the posture queue lists them.
+// API keys a person made before SCIM deprovisioned them: they stay active
+// until a person rotates or revokes them (D409), so the posture queue lists
+// them while they are active, whatever later happens to the person (D528).
 func (q *Queries) ActiveKeysOfDeprovisioned(ctx context.Context, orgID ids.OrgID, pageLimit int32) ([]ActiveKeysOfDeprovisionedRow, error) {
 	rows, err := q.db.Query(ctx, activeKeysOfDeprovisioned, orgID, pageLimit)
 	if err != nil {
@@ -183,23 +186,28 @@ FROM pc.users u
 LEFT JOIN pc.scim_users s ON s.org_id = u.org_id AND s.user_id = u.id
 WHERE u.org_id = $1 AND u.issuer = $2 AND s.deleted_at IS NULL
   AND ($3::text IS NULL OR u.subject = $3)
-  AND ($4::text IS NULL OR s.user_name = $4)
-  AND ($5::text IS NULL OR s.external_id = $5)
+  AND ($4::text IS NULL OR lower(u.subject) = lower($4))
+  AND ($5::text IS NULL OR lower(s.user_name) = lower($5))
+  AND ($6::text IS NULL OR s.external_id = $6)
 `
 
 type CountDirectoryUsersParams struct {
 	OrgID      ids.OrgID
 	Issuer     string
 	Subject    *string
+	SubjectCi  *string
 	UserName   *string
 	ExternalID *string
 }
 
+// userName is not case-exact (RFC 7643 4.1.1): subject_ci and user_name
+// match without case; subject and external_id match exactly.
 func (q *Queries) CountDirectoryUsers(ctx context.Context, arg CountDirectoryUsersParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countDirectoryUsers,
 		arg.OrgID,
 		arg.Issuer,
 		arg.Subject,
+		arg.SubjectCi,
 		arg.UserName,
 		arg.ExternalID,
 	)
@@ -539,7 +547,8 @@ type InsertProvisionedBindingParams struct {
 	EnvironmentID  *ids.UUID
 }
 
-// A binding a person already made stays theirs: nothing happens.
+// A person's identical binding is another row (the source is in the key,
+// D528): each one's removal leaves the other.
 func (q *Queries) InsertProvisionedBinding(ctx context.Context, arg InsertProvisionedBindingParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertProvisionedBinding,
 		arg.OrgID,
@@ -851,16 +860,18 @@ FROM pc.users u
 LEFT JOIN pc.scim_users s ON s.org_id = u.org_id AND s.user_id = u.id
 WHERE u.org_id = $1 AND u.issuer = $2 AND s.deleted_at IS NULL
   AND ($3::text IS NULL OR u.subject = $3)
-  AND ($4::text IS NULL OR s.user_name = $4)
-  AND ($5::text IS NULL OR s.external_id = $5)
+  AND ($4::text IS NULL OR lower(u.subject) = lower($4))
+  AND ($5::text IS NULL OR lower(s.user_name) = lower($5))
+  AND ($6::text IS NULL OR s.external_id = $6)
 ORDER BY u.id
-LIMIT $7 OFFSET $6
+LIMIT $8 OFFSET $7
 `
 
 type ListDirectoryUsersParams struct {
 	OrgID      ids.OrgID
 	Issuer     string
 	Subject    *string
+	SubjectCi  *string
 	UserName   *string
 	ExternalID *string
 	PageOffset int32
@@ -884,6 +895,7 @@ func (q *Queries) ListDirectoryUsers(ctx context.Context, arg ListDirectoryUsers
 		arg.OrgID,
 		arg.Issuer,
 		arg.Subject,
+		arg.SubjectCi,
 		arg.UserName,
 		arg.ExternalID,
 		arg.PageOffset,
@@ -1141,6 +1153,16 @@ func (q *Queries) LockSCIMToken(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 		&i.LastUsedAt,
 	)
 	return i, err
+}
+
+const markSCIMDeprovisioned = `-- name: MarkSCIMDeprovisioned :exec
+INSERT INTO pc.scim_users (org_id, user_id, deprovisioned_at) VALUES ($1, $2, now())
+ON CONFLICT (org_id, user_id) DO UPDATE SET deprovisioned_at = now(), updated_at = now()
+`
+
+func (q *Queries) MarkSCIMDeprovisioned(ctx context.Context, orgID ids.OrgID, userID ids.UUID) error {
+	_, err := q.db.Exec(ctx, markSCIMDeprovisioned, orgID, userID)
+	return err
 }
 
 const provisionedBindings = `-- name: ProvisionedBindings :many

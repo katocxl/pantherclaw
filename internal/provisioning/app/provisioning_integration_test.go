@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"math/big"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
+	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/idps"
@@ -30,6 +32,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
 	pvports "github.com/katocxl/pantherclaw/internal/postureview/ports"
 	"github.com/katocxl/pantherclaw/internal/protect"
@@ -84,19 +87,35 @@ func (n notes) Enqueue(_ context.Context, _ db.TenantTx, m napp.Message) (napp.E
 	return napp.Enqueued{}, nil
 }
 
+// edition is the org's plan, as the billing service reads it: from the org
+// the context names (a tenant transaction, else the caller), and Community
+// for any other context, as the deployment's licence would be (D528 M1).
 type edition struct {
-	e billing.Edition
+	org ids.OrgID
+	e   billing.Edition
 	// maxMembers is the member limit; zero means none.
 	maxMembers int
 }
 
-func (e *edition) Current(context.Context) (billing.Entitlements, error) {
+func (e *edition) Current(ctx context.Context) (billing.Entitlements, error) {
+	org, ok := tenantctx.Org(ctx)
+	if !ok {
+		if c, err := tapp.CallerFrom(ctx); err == nil {
+			org, ok = c.Org, true
+		}
+	}
+	ed := billing.Community
+	if ok && org == e.org {
+		ed = e.e
+	}
 	l := billing.CommunityLimits
 	if e.maxMembers != 0 {
 		l.MaxMembers = e.maxMembers
 	}
-	return billing.Entitlements{Edition: e.e, Limits: l}, nil
+	return billing.Entitlements{Edition: ed, Limits: l}, nil
 }
+
+func ptr[T any](v T) *T { return &v }
 
 type env struct {
 	pool    *db.Pool
@@ -114,7 +133,7 @@ func newEnv(t *testing.T) *env {
 	d := dbtest.New(t)
 	e := &env{pool: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), bob: ids.NewV7()}
 	e.gate = &protect.Gate{Requests: &requests{opened: map[ids.UUID]protect.Request{}, voided: map[ids.UUID]string{}}}
-	e.edition = &edition{e: billing.Enterprise}
+	e.edition = &edition{org: e.org, e: billing.Enterprise}
 	e.svc = &app.Service{
 		Pool: e.pool, Gate: e.gate, Editions: e.edition, Notify: notes{t: t},
 		IdPs:     &idps.Store{Deployment: []idps.Deployment{{Name: "corp", Issuer: oidcIssuer}}},
@@ -156,11 +175,31 @@ func (e *env) bind(t *testing.T, u ids.UUID, role td.RoleName) {
 		e.org, ids.NewV7(), string(role), u)
 }
 
-func (e *env) admin(user ids.UUID) context.Context {
-	return tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
+func (e *env) caller(user ids.UUID, role td.RoleName) tapp.Caller {
+	return tapp.Caller{Subject: td.Subject{
 		Org: e.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: user},
-		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}},
-	}, Credential: tapp.CredBrowserSession})
+		Bindings: []td.Binding{{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}},
+	}, Credential: tapp.CredBrowserSession}
+}
+
+func (e *env) admin(user ids.UUID) context.Context {
+	return tapp.WithCaller(context.Background(), e.caller(user, td.RoleOrgAdmin))
+}
+
+// ledger counts the org's audit records of kind.
+func (e *env) ledger(t *testing.T, kind string) int {
+	t.Helper()
+	return e.count(t, "SELECT count(*)::int FROM pc.ledger_entries WHERE org_id = $1 AND kind = $2", e.org, "audit."+kind)
+}
+
+// findings are the posture findings of SCIM-deprovisioned users' keys.
+func (e *env) findings(t *testing.T) []pvdomain.Finding {
+	t.Helper()
+	fs, _, err := app.Source{Pool: e.pool}.Findings(context.Background(), pvports.Viewer{Org: e.org, Posture: pvports.Reach{All: true, Org: true}}, pvdomain.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fs
 }
 
 func (e *env) confirm(t *testing.T, f app.Filed, user ids.UUID) error {
@@ -211,8 +250,13 @@ func TestHR629_SCIMTokenHeldAndBound(t *testing.T) {
 	if _, err := e.svc.Authenticate(context.Background(), secret); !errors.Is(err, ports.ErrUnauthenticated) {
 		t.Fatalf("a PENDING token authenticated: %v", err)
 	}
-	if n := e.count(t, "SELECT count(*) FROM pc.scim_tokens WHERE secret_hash = $1", []byte(secret)); n != 0 {
-		t.Fatal("the secret is stored in the clear")
+	// Stored as the hash of the bearer, never the bearer.
+	cred, err := credential.Parse(credential.SCIMToken, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.scim_tokens WHERE org_id = $1 AND id = $2 AND secret_hash = $3", e.org, tk.ID, cred.Hash()); n != 1 {
+		t.Fatal("the token is not stored as its bearer's hash")
 	}
 	if err := e.confirm(t, f, e.alice); err == nil {
 		t.Fatal("the author confirmed their own token")
@@ -221,8 +265,8 @@ func TestHR629_SCIMTokenHeldAndBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	tok, err := e.svc.Authenticate(context.Background(), secret)
-	if err != nil || tok.Issuer != oidcIssuer {
-		t.Fatalf("an approved token: %+v %v", tok, err)
+	if err != nil {
+		t.Fatalf("an approved token: %v", err)
 	}
 
 	// The token sees its issuer's users only.
@@ -241,6 +285,31 @@ func TestHR629_SCIMTokenHeldAndBound(t *testing.T) {
 	}
 	if _, err := e.svc.Authenticate(context.Background(), secret); !errors.Is(err, ports.ErrUnauthenticated) {
 		t.Fatalf("a revoked token authenticated: %v", err)
+	}
+	// A Token made from a revoked bearer does nothing: every call looks the
+	// token up again (D528).
+	if _, err := e.svc.ListUsers(context.Background(), tok, ports.UserFilter{}, ports.Page{StartIndex: 1, Count: 10}); !errors.Is(err, ports.ErrUnauthenticated) {
+		t.Fatalf("a revoked token listed: %v", err)
+	}
+	if _, err := e.svc.GetUser(context.Background(), ports.NewToken("pc_scim_forged"), e.alice.String()); !errors.Is(err, ports.ErrUnauthenticated) {
+		t.Fatalf("a forged token: %v", err)
+	}
+
+	// Approving re-checks that the issuer is still a known provider (D528).
+	_, secret2, f2, err := e.svc.CreateToken(e.admin(e.alice), app.TokenInput{
+		Name: "sync2", Issuer: oidcIssuer, SubjectAttribute: domain.SubjectUserName, TTLDays: 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	known := e.svc.IdPs
+	e.svc.IdPs = &idps.Store{Deployment: []idps.Deployment{{Name: "other", Issuer: "https://other.example.com"}}}
+	if err := e.confirm(t, f2, e.bob); !errors.Is(err, app.ErrIssuer) {
+		t.Fatalf("a token of an unknown issuer was approved: %v", err)
+	}
+	e.svc.IdPs = known
+	if _, err := e.svc.Authenticate(context.Background(), secret2); !errors.Is(err, ports.ErrUnauthenticated) {
+		t.Fatalf("the refused token authenticated: %v", err)
 	}
 }
 
@@ -280,10 +349,18 @@ func TestHR630_GroupsCarryNoAdminRole(t *testing.T) {
 	if provisioned(e.alice) != 1 {
 		t.Fatal("the member did not get the mapped role")
 	}
-	// bob holds viewer from a person; joining and leaving the group keeps it.
+	// bob holds viewer from a person; the provisioned viewer binding sits
+	// beside it while he is a member (the source is in the binding's key),
+	// and leaving the group takes only the provisioned one (D528).
+	viewers := func(u ids.UUID) int {
+		return e.count(t, "SELECT count(*) FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2 AND role = 'viewer'", e.org, u)
+	}
 	e.bind(t, e.bob, td.RoleViewer)
 	if _, err := e.svc.ChangeGroup(context.Background(), tok, g.ID, ports.GroupChange{AddMembers: []string{e.bob.String()}}); err != nil {
 		t.Fatal(err)
+	}
+	if viewers(e.bob) != 2 || provisioned(e.bob) != 1 {
+		t.Fatalf("bob's bindings in the group: %d", viewers(e.bob))
 	}
 	if _, err := e.svc.ChangeGroup(context.Background(), tok, g.ID, ports.GroupChange{RemoveUsers: []string{e.alice.String(), e.bob.String()}}); err != nil {
 		t.Fatal(err)
@@ -291,8 +368,164 @@ func TestHR630_GroupsCarryNoAdminRole(t *testing.T) {
 	if provisioned(e.alice) != 0 {
 		t.Fatal("the binding stayed after the member left")
 	}
-	if n := e.count(t, "SELECT count(*) FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2 AND role = 'viewer'", e.org, e.bob); n != 1 {
-		t.Fatalf("bob's own binding: %d", n)
+	if viewers(e.bob) != 1 || provisioned(e.bob) != 0 {
+		t.Fatalf("bob's own binding: %d", viewers(e.bob))
+	}
+
+	// Below Enterprise a removal still applies: only the removal, and the
+	// dropped parts are recorded; a change with no removal is refused (D528).
+	if _, err := e.svc.ChangeGroup(context.Background(), tok, g.ID, ports.GroupChange{AddMembers: []string{e.alice.String()}}); err != nil {
+		t.Fatal(err)
+	}
+	e.edition.e = billing.Business
+	renamed := "eng-renamed"
+	if _, err := e.svc.ChangeGroup(context.Background(), tok, g.ID, ports.GroupChange{DisplayName: &renamed, AddMembers: []string{e.bob.String()}}); !errors.Is(err, ports.ErrEdition) {
+		t.Fatalf("a change with no removal below Enterprise: %v", err)
+	}
+	got, err := e.svc.ChangeGroup(context.Background(), tok, g.ID, ports.GroupChange{
+		DisplayName: &renamed, AddMembers: []string{e.bob.String()}, RemoveUsers: []string{e.alice.String()},
+	})
+	if err != nil || got.DisplayName != "eng" || len(got.Members) != 0 {
+		t.Fatalf("a removal below Enterprise: %+v %v", got, err)
+	}
+	if provisioned(e.alice) != 0 || provisioned(e.bob) != 0 {
+		t.Fatal("the removal below Enterprise left or added a binding")
+	}
+	if n := e.ledger(t, "scim.parts_dropped"); n != 1 {
+		t.Fatalf("%d dropped parts recorded", n)
+	}
+	if _, err := e.svc.ReplaceGroup(context.Background(), tok, g.ID, ports.GroupInput{DisplayName: "eng", Members: []string{e.bob.String()}}); !errors.Is(err, ports.ErrEdition) {
+		t.Fatalf("a replace that only adds below Enterprise: %v", err)
+	}
+}
+
+// TestHR631_MappingChangesHeldAndRecheckedAsAsker: removing a mapping is
+// held for a second person like adding one, and a held mapping applies only
+// if every check still passes for the person who asked, never for the one
+// who confirmed (D409 point 6).
+//
+// Covers: F920
+func TestHR631_MappingChangesHeldAndRecheckedAsAsker(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tok, _ := e.token(t, oidcIssuer, domain.SubjectUserName)
+	g, err := e.svc.CreateGroup(ctx, tok, ports.GroupInput{DisplayName: "ops", Members: []string{e.alice.String()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gid, _ := ids.ParseUUID(g.ID)
+	org := td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}
+	mappings := func() int {
+		return e.count(t, "SELECT count(*) FROM pc.group_role_mappings WHERE org_id = $1", e.org)
+	}
+	provisioned := func() int {
+		return e.count(t, "SELECT count(*) FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2 AND provisioned", e.org, e.alice)
+	}
+	f, err := e.svc.AddMapping(e.admin(e.alice), gid, td.RoleViewer, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.confirm(t, f, e.bob); err != nil {
+		t.Fatal(err)
+	}
+	var mapping ids.UUID
+	if err := e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT id FROM pc.group_role_mappings WHERE org_id = $1", e.org).Scan(&mapping)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The removal is held.
+	rf, err := e.svc.RemoveMapping(e.admin(e.alice), mapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mappings() != 1 || provisioned() != 1 {
+		t.Fatal("a mapping removal applied before it was confirmed")
+	}
+	if err := e.confirm(t, rf, e.alice); err == nil {
+		t.Fatal("the author confirmed their own removal")
+	}
+	if err := e.confirm(t, rf, e.bob); err != nil {
+		t.Fatal(err)
+	}
+	if mappings() != 0 || provisioned() != 0 {
+		t.Fatal("the confirmed removal left the mapping or its binding")
+	}
+
+	// The apply checks the bind ceiling of the person who asked: one who
+	// cannot bind the role gets nothing.
+	payload, err := json.Marshal(map[string]any{
+		"id": ids.NewV7(), "group_id": gid, "role": td.RoleViewer, "scope_type": td.ScopeOrg, "scope_id": ids.UUID{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	apply := func(author tapp.Caller) error {
+		return e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+			return e.svc.ApplyMappingAdd(ctx, tx, author, payload)
+		})
+	}
+	if err := apply(e.caller(e.alice, td.RoleViewer)); err == nil {
+		t.Fatalf("applied for an asker without role.bind: %v", err)
+	}
+	if mappings() != 0 || provisioned() != 0 {
+		t.Fatal("a mapping applied above the asker's ceiling")
+	}
+
+	// alice asks, then loses Org Admin: bob's confirmation does not apply it.
+	f, err = e.svc.AddMapping(e.admin(e.alice), gid, td.RoleViewer, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.exec(t, "DELETE FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2 AND role = 'org_admin'", e.org, e.alice)
+	if err := e.confirm(t, f, e.bob); err == nil {
+		t.Fatal("a mapping applied for an asker who lost the authority")
+	}
+	if mappings() != 0 || provisioned() != 0 {
+		t.Fatal("a mapping applied for an asker who lost the authority")
+	}
+
+	// The same payload applies for an asker within the ceiling.
+	if err := apply(e.caller(e.bob, td.RoleOrgAdmin)); err != nil {
+		t.Fatal(err)
+	}
+	if mappings() != 1 || provisioned() != 1 {
+		t.Fatal("the mapping did not apply for an asker within the ceiling")
+	}
+}
+
+// TestSCIMGroupNameRace: two creates of the same group name at once give
+// one group and a conflict, from the table's constraint (D528).
+//
+// Covers: F919
+func TestSCIMGroupNameRace(t *testing.T) {
+	e := newEnv(t)
+	tok, _ := e.token(t, oidcIssuer, domain.SubjectUserName)
+	const n = 4
+	errs := make(chan error, n)
+	var start sync.WaitGroup
+	start.Add(1)
+	for range n {
+		go func() {
+			start.Wait()
+			_, err := e.svc.CreateGroup(context.Background(), tok, ports.GroupInput{DisplayName: "race"})
+			errs <- err
+		}()
+	}
+	start.Done()
+	created := 0
+	for range n {
+		switch err := <-errs; {
+		case err == nil:
+			created++
+		case errors.Is(err, ports.ErrConflict):
+		default:
+			t.Errorf("a concurrent create: %v", err)
+		}
+	}
+	if created != 1 {
+		t.Fatalf("%d groups created", created)
 	}
 }
 
@@ -315,20 +548,33 @@ func TestHR632_Deprovision(t *testing.T) {
 		e.org, key, sa, make([]byte, 32), "user:"+e.bob.String())
 	e.exec(t, `INSERT INTO pc.sessions (org_id, id, user_id, secret_hash, provider, roles_digest, expires_at)
 		VALUES ($1, $2, $3, $4, 'corp', $4, now() + interval '12 hours')`, e.org, ids.NewV7(), e.bob, make([]byte, 32))
+	e.exec(t, `INSERT INTO pc.cli_sessions (org_id, id, user_id, device_jkt, device_jwk, refresh_hash, expires_at)
+		VALUES ($1, $2, $3, repeat('d', 43), '{}', $4, now() + interval '8 hours')`, e.org, ids.NewV7(), e.bob, make([]byte, 32))
+	if e.count(t, "SELECT count(*) FROM pc.sessions WHERE org_id = $1 AND user_id = $2 AND state = 'ACTIVE'", e.org, e.bob) != 1 ||
+		e.count(t, "SELECT count(*) FROM pc.cli_sessions WHERE org_id = $1 AND user_id = $2 AND state = 'ACTIVE'", e.org, e.bob) != 1 {
+		t.Fatal("the sessions are not set up")
+	}
 	off := false
 	if _, err := e.svc.ChangeUser(ctx, tok, e.bob.String(), ports.UserChange{Active: &off}); err != nil {
 		t.Fatal(err)
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.sessions WHERE org_id = $1 AND user_id = $2 AND state = 'ACTIVE'", e.org, e.bob); n != 0 {
-		t.Fatal("a deprovisioned user's session is active")
+		t.Fatal("a deprovisioned user's browser session is active")
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.cli_sessions WHERE org_id = $1 AND user_id = $2 AND state = 'ACTIVE'", e.org, e.bob); n != 0 {
+		t.Fatal("a deprovisioned user's CLI session is active")
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.api_keys WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE'", e.org, key); n != 1 {
 		t.Fatal("deprovisioning revoked the person's API key")
 	}
-	fs, _, err := app.Source{Pool: e.pool}.Findings(ctx, pvports.Viewer{Org: e.org, Posture: pvports.Reach{All: true, Org: true}}, pvdomain.Filter{})
-	if err != nil || len(fs) != 1 || fs[0].SourceID != key.String() || fs[0].Fix.Kind != pvdomain.FixRotateSecret {
-		t.Fatalf("posture findings %+v %v", fs, err)
+	finding := func(when string) {
+		t.Helper()
+		fs := e.findings(t)
+		if len(fs) != 1 || fs[0].SourceID != key.String() || fs[0].Fix.Kind != pvdomain.FixRotateSecret {
+			t.Fatalf("posture findings %s: %+v", when, fs)
+		}
 	}
+	finding("after deprovisioning")
 
 	// Alice is the last admin: refused, rolled back, recorded.
 	if _, err := e.svc.ChangeUser(ctx, tok, e.alice.String(), ports.UserChange{Active: &off}); !errors.Is(err, ports.ErrLastAdmin) {
@@ -340,21 +586,45 @@ func TestHR632_Deprovision(t *testing.T) {
 	if n := e.count(t, "SELECT count(*) FROM pc.users WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE'", e.org, e.alice); n != 1 {
 		t.Fatal("the refused change was kept")
 	}
-	if n := e.count(t, "SELECT count(*)::int FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.scim.user_deprovision_refused'", e.org); n != 2 {
+	if n := e.ledger(t, "scim.user_deprovision_refused"); n != 2 {
+		t.Fatalf("%d refusals recorded", n)
+	}
+
+	// An admin remains, but none with a way to sign in: carl's provider is
+	// gone. Refused the same way (HR-484).
+	carl := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://gone.example.com', 'carl')", e.org, carl)
+	e.bind(t, carl, td.RoleOrgAdmin)
+	if _, err := e.svc.ChangeUser(ctx, tok, e.alice.String(), ports.UserChange{Active: &off}); !errors.Is(err, ports.ErrLastAdmin) {
+		t.Fatalf("the last admin with a sign-in path was deprovisioned: %v", err)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.users WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE'", e.org, e.alice); n != 1 {
+		t.Fatal("the refused change was kept")
+	}
+	if n := e.ledger(t, "scim.user_deprovision_refused"); n != 3 {
 		t.Fatalf("%d refusals recorded", n)
 	}
 
 	// SCIM re-enables the user it disabled, never one a person disabled.
+	// The key stays in the posture queue whatever happens to the person
+	// later, while it is active (D528).
 	on := true
 	if _, err := e.svc.ChangeUser(ctx, tok, e.bob.String(), ports.UserChange{Active: &on}); err != nil {
 		t.Fatal(err)
 	}
+	finding("after SCIM re-enabled the user")
 	if _, err := e.svc.ChangeUser(ctx, tok, e.bob.String(), ports.UserChange{Active: &off}); err != nil {
 		t.Fatal(err)
 	}
-	e.exec(t, "UPDATE pc.scim_users SET disabled_by_scim = false WHERE org_id = $1 AND user_id = $2", e.org, e.bob)
+	e.exec(t, "UPDATE pc.scim_users SET disabled_by_scim = false, updated_at = now() WHERE org_id = $1 AND user_id = $2", e.org, e.bob)
 	if _, err := e.svc.ChangeUser(ctx, tok, e.bob.String(), ports.UserChange{Active: &on}); !errors.Is(err, ports.ErrDisabledHere) {
 		t.Fatalf("SCIM re-enabled a user a person disabled: %v", err)
+	}
+	e.exec(t, "UPDATE pc.users SET state = 'ACTIVE' WHERE org_id = $1 AND id = $2", e.org, e.bob)
+	finding("after a person re-enabled the user")
+	e.exec(t, "UPDATE pc.api_keys SET state = 'REVOKED', revoked_at = now() WHERE org_id = $1 AND id = $2", e.org, key)
+	if fs := e.findings(t); len(fs) != 0 {
+		t.Fatalf("a revoked key is still a finding: %+v", fs)
 	}
 }
 
@@ -366,11 +636,12 @@ func TestSCIMUsersAndEditions(t *testing.T) {
 	e := newEnv(t)
 	tok, _ := e.token(t, oidcIssuer, domain.SubjectUserName)
 	ctx := context.Background()
-	u, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "carol", ExternalID: "c-1", Email: "carol@example.com", Active: true})
+	// No active given: a created user is active.
+	u, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "carol", ExternalID: "c-1", Email: "carol@example.com"})
 	if err != nil || u.UserName != "carol" || u.ExternalID != "c-1" || !u.Active {
 		t.Fatalf("created %+v %v", u, err)
 	}
-	if _, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "carol", Active: true}); !errors.Is(err, ports.ErrConflict) {
+	if _, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "carol", Active: ptr(true)}); !errors.Is(err, ports.ErrConflict) {
 		t.Fatalf("a second carol: %v", err)
 	}
 	other := "dave"
@@ -381,17 +652,53 @@ func TestSCIMUsersAndEditions(t *testing.T) {
 	if err != nil || us.Total != 1 || us.Items[0].ID != u.ID {
 		t.Fatalf("filtered %+v %v", us, err)
 	}
+	// userName is not case-exact (RFC 7643 4.1.1).
+	us, err = e.svc.ListUsers(ctx, tok, ports.UserFilter{UserName: "CaRoL"}, ports.Page{StartIndex: 1, Count: 10})
+	if err != nil || us.Total != 1 || us.Items[0].ID != u.ID {
+		t.Fatalf("filtered by userName in another case %+v %v", us, err)
+	}
+
+	// A PUT without active keeps the stored state (D528).
+	if _, err := e.svc.ChangeUser(ctx, tok, u.ID, ports.UserChange{Active: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := e.svc.ReplaceUser(ctx, tok, u.ID, ports.UserInput{UserName: "carol", ExternalID: "c-1", Email: "carol@example.org"})
+	if err != nil || r.Active || r.Email != "carol@example.org" {
+		t.Fatalf("a PUT without active: %+v %v", r, err)
+	}
+	if r, err = e.svc.ChangeUser(ctx, tok, u.ID, ports.UserChange{Active: ptr(true)}); err != nil || !r.Active {
+		t.Fatalf("re-enabled %+v %v", r, err)
+	}
 
 	// An active user counts against the plan's member limit (HR-360).
 	e.edition.maxMembers = 3 // alice, bob, carol
-	if _, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "erin", Active: true}); !errors.Is(err, ports.ErrPlanLimit) {
+	if _, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "erin", Active: ptr(true)}); !errors.Is(err, ports.ErrPlanLimit) {
 		t.Fatalf("created past the member limit: %v", err)
 	}
 	e.edition.maxMembers = 0
 
+	// Below Enterprise: adding is refused; a request with a removal applies
+	// the removal only, answers with the stored user and records what it
+	// dropped (D528).
 	e.edition.e = billing.Business
-	if _, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "erin", Active: true}); !errors.Is(err, ports.ErrEdition) {
+	if _, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "erin", Active: ptr(true)}); !errors.Is(err, ports.ErrEdition) {
 		t.Fatalf("created below Enterprise: %v", err)
+	}
+	if _, err := e.svc.ChangeUser(ctx, tok, u.ID, ports.UserChange{Email: ptr("x@example.com")}); !errors.Is(err, ports.ErrEdition) {
+		t.Fatalf("a change with no removal below Enterprise: %v", err)
+	}
+	if _, err := e.svc.ReplaceUser(ctx, tok, u.ID, ports.UserInput{UserName: "carol", ExternalID: "c-1", Email: "x@example.com", Active: ptr(true)}); !errors.Is(err, ports.ErrEdition) {
+		t.Fatalf("a PUT with no removal below Enterprise: %v", err)
+	}
+	r, err = e.svc.ReplaceUser(ctx, tok, u.ID, ports.UserInput{UserName: "carol", ExternalID: "c-1", Email: "x@example.com", Active: ptr(false)})
+	if err != nil || r.Active || r.Email != "carol@example.org" {
+		t.Fatalf("a deprovisioning PUT below Enterprise: %+v %v", r, err)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.users WHERE org_id = $1 AND id::text = $2 AND state = 'DISABLED'", e.org, u.ID); n != 1 {
+		t.Fatal("the removal below Enterprise did not apply")
+	}
+	if n := e.ledger(t, "scim.parts_dropped"); n != 1 {
+		t.Fatalf("%d dropped parts recorded", n)
 	}
 	if err := e.svc.DeleteUser(ctx, tok, u.ID); err != nil {
 		t.Fatalf("deleting below Enterprise: %v", err)
@@ -418,12 +725,20 @@ func testCert(t *testing.T) string {
 	return base64.StdEncoding.EncodeToString(der)
 }
 
-type web struct{ out authnapp.BrowserSignIn }
+type web struct {
+	out authnapp.BrowserSignIn
+	err error
+}
 
-func (w *web) FinishExternalSignIn(_ http.ResponseWriter, _ *http.Request, out authnapp.BrowserSignIn, _ error) {
-	w.out = out
+func (w *web) FinishExternalSignIn(_ http.ResponseWriter, _ *http.Request, out authnapp.BrowserSignIn, err error) {
+	w.out, w.err = out, err
 }
 func (w *web) ClientMeta(*http.Request) authnapp.ClientMeta { return authnapp.ClientMeta{} }
+
+// forged is a sign-in handle the core did not make.
+type forged struct{}
+
+func (forged) SignInHandle() {}
 
 // TestHR633_634_SAMLConnectionAndSignIn: a connection is a held change; an
 // ACTIVE one starts a single-use sign-in bound to the browser, accepts an
@@ -458,34 +773,89 @@ func TestHR633_634_SAMLConnectionAndSignIn(t *testing.T) {
 	if _, err := si.ConsumeSignIn(ctx, e.org.String(), c.ID.String(), st.RelayState, "another-browser"); !errors.Is(err, ports.ErrSignInUnavailable) {
 		t.Fatalf("another browser consumed the sign-in: %v", err)
 	}
-	st, _ = si.StartSignIn(ctx, e.org.String(), c.ID.String(), "_req2", "/app/", "")
-	p, err := si.ConsumeSignIn(ctx, e.org.String(), c.ID.String(), st.RelayState, st.Binding)
-	if err != nil || p.RequestID != "_req2" {
-		t.Fatalf("consumed %+v %v", p, err)
+	consume := func(req string) ports.SignInHandle {
+		t.Helper()
+		st, err := si.StartSignIn(ctx, e.org.String(), c.ID.String(), req, "/app/", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := si.ConsumeSignIn(ctx, e.org.String(), c.ID.String(), st.RelayState, st.Binding)
+		if err != nil || p.RequestID != req || p.Handle == nil {
+			t.Fatalf("consumed %+v %v", p, err)
+		}
+		if _, err := si.ConsumeSignIn(ctx, e.org.String(), c.ID.String(), st.RelayState, st.Binding); !errors.Is(err, ports.ErrSignInUnavailable) {
+			t.Fatalf("a sign-in was consumed twice: %v", err)
+		}
+		return p.Handle
 	}
-	if _, err := si.ConsumeSignIn(ctx, e.org.String(), c.ID.String(), st.RelayState, st.Binding); !errors.Is(err, ports.ErrSignInUnavailable) {
-		t.Fatalf("a sign-in was consumed twice: %v", err)
+	w := si.Web.(*web)
+	r := httptest.NewRequest(http.MethodPost, "/app/ext/saml/acs", nil)
+	finish := func(h ports.SignInHandle, v ports.Verified) {
+		*w = web{}
+		si.FinishSignIn(httptest.NewRecorder(), r, h, v)
+	}
+	refused := func(what string) {
+		t.Helper()
+		if !errors.Is(w.err, authnapp.ErrSignInUnavailable) || w.out.Secret != "" {
+			t.Fatalf("%s: %+v %v", what, w.out, w.err)
+		}
 	}
 	exp := time.Now().Add(5 * time.Minute)
-	if err := si.RecordAssertion(ctx, e.org.String(), c.ID.String(), "_a1", exp); err != nil {
+	e.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, $3, 'frank')", e.org, ids.NewV7(), samlIssuer)
+	frank := ports.Verified{Subject: "frank"}
+
+	// A handle the core did not make does nothing (D528).
+	if err := si.RecordAssertion(ctx, forged{}, "_a0", exp); !errors.Is(err, ports.ErrSignInUnavailable) {
+		t.Fatalf("a forged handle recorded: %v", err)
+	}
+	finish(forged{}, frank)
+	refused("a forged handle")
+
+	// One assertion per sign-in; an unknown subject is refused; a used
+	// sign-in does not finish again.
+	h := consume("_req2")
+	if err := si.RecordAssertion(ctx, h, "_a1", exp); err != nil {
 		t.Fatal(err)
 	}
-	if err := si.RecordAssertion(ctx, e.org.String(), c.ID.String(), "_a1", exp); !errors.Is(err, ports.ErrReplayed) {
+	if err := si.RecordAssertion(ctx, h, "_a9", exp); !errors.Is(err, ports.ErrReplayed) {
+		t.Fatalf("a second assertion for one sign-in: %v", err)
+	}
+	finish(h, ports.Verified{Subject: "nobody"})
+	if w.out.Reason != "NOT_A_MEMBER" {
+		t.Fatalf("an unknown subject: %+v %v", w.out, w.err)
+	}
+	finish(h, frank)
+	refused("a used sign-in")
+
+	// A sign-in whose assertion was not recorded does not finish, and is
+	// spent.
+	h = consume("_req3")
+	finish(h, frank)
+	refused("an unrecorded sign-in")
+	if err := si.RecordAssertion(ctx, h, "_a2", exp); !errors.Is(err, ports.ErrReplayed) {
+		t.Fatalf("recorded after a refused finish: %v", err)
+	}
+
+	// An assertion id is accepted once, across sign-ins.
+	if err := si.RecordAssertion(ctx, consume("_req4"), "_a1", exp); !errors.Is(err, ports.ErrReplayed) {
 		t.Fatalf("a replayed assertion: %v", err)
 	}
 
-	// Existing users only: an unknown subject is refused, a user of the
-	// connection's issuer signs in.
-	w := si.Web.(*web)
-	r := httptest.NewRequest(http.MethodPost, "/app/ext/saml/acs", nil)
-	si.FinishSignIn(httptest.NewRecorder(), r, ports.Verified{OrgID: e.org.String(), ConnectionID: c.ID.String(), Subject: "nobody", Next: "/app/"})
-	if w.out.Reason != "NOT_A_MEMBER" {
-		t.Fatalf("an unknown subject: %+v", w.out)
+	// An AuthnInstant more than five minutes ahead is refused; one within
+	// it signs in (D528).
+	h = consume("_req5")
+	if err := si.RecordAssertion(ctx, h, "_a3", exp); err != nil {
+		t.Fatal(err)
 	}
-	e.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, $3, 'frank')", e.org, ids.NewV7(), samlIssuer)
-	si.FinishSignIn(httptest.NewRecorder(), r, ports.Verified{OrgID: e.org.String(), ConnectionID: c.ID.String(), Subject: "frank", Next: "/app/"})
-	if w.out.Reason != "" || w.out.Secret == "" {
-		t.Fatalf("a member: %+v", w.out)
+	finish(h, ports.Verified{Subject: "frank", AuthenticatedAt: time.Now().Add(10 * time.Minute)})
+	refused("an AuthnInstant ten minutes ahead")
+	h = consume("_req6")
+	if err := si.RecordAssertion(ctx, h, "_a4", exp); err != nil {
+		t.Fatal(err)
+	}
+	finish(h, ports.Verified{Subject: "frank", AuthenticatedAt: time.Now().Add(time.Minute)})
+	if w.err != nil || w.out.Reason != "" || w.out.Secret == "" {
+		t.Fatalf("a member: %+v %v", w.out, w.err)
 	}
 
 	// Disabling the connection is a held change too, and the sign-in stops.
