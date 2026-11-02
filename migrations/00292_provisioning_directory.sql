@@ -126,6 +126,10 @@ BEGIN
     EXECUTE format('ALTER TABLE pc.role_bindings DROP CONSTRAINT %I', c);
 END $$;
 -- +goose StatementEnd
+-- The key replaces the one dropped above in the same transaction, so it
+-- cannot be added NOT VALID or built concurrently; role_bindings is small
+-- (a row per grant).
+-- squawk-ignore constraint-missing-not-valid, disallowed-unique-constraint
 ALTER TABLE pc.role_bindings ADD CONSTRAINT role_bindings_grant_key
     UNIQUE NULLS NOT DISTINCT (org_id, role, user_id, service_account_id, scope_type, business_unit_id, team_id, environment_id, provisioned);
 

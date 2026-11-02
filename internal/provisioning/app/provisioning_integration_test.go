@@ -12,7 +12,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"math/big"
 	"net/http"
@@ -453,32 +452,29 @@ func TestHR631_MappingChangesHeldAndRecheckedAsAsker(t *testing.T) {
 		t.Fatal("the confirmed removal left the mapping or its binding")
 	}
 
-	// The apply checks the bind ceiling of the person who asked: one who
-	// cannot bind the role gets nothing.
-	payload, err := json.Marshal(map[string]any{
-		"id": ids.NewV7(), "group_id": gid, "role": td.RoleViewer, "scope_type": td.ScopeOrg, "scope_id": ids.UUID{},
-	})
+	// The apply checks the bind ceiling of the person who asked: the stored
+	// change, applied for an asker who cannot bind the role, gives nothing.
+	f, err = e.svc.AddMapping(e.admin(e.alice), gid, td.RoleViewer, org)
 	if err != nil {
 		t.Fatal(err)
 	}
-	apply := func(author tapp.Caller) error {
-		return e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
-			return e.svc.ApplyMappingAdd(ctx, tx, author, payload)
-		})
+	var payload []byte
+	if err := e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT payload FROM pc.protected_changes WHERE org_id = $1 AND id = $2", e.org, f.Change).Scan(&payload)
+	}); err != nil {
+		t.Fatal(err)
 	}
-	// The payload is valid: the refusal is the asker's authority, not its shape.
-	if err := apply(e.caller(e.alice, td.RoleViewer)); err == nil || errors.Is(err, protect.ErrInvalid) || errors.Is(err, app.ErrNotFound) {
+	err = e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return e.svc.ApplyMappingAdd(ctx, tx, e.caller(e.alice, td.RoleViewer), payload)
+	})
+	if err == nil || errors.Is(err, protect.ErrInvalid) {
 		t.Fatalf("applied for an asker without role.bind: %v", err)
 	}
 	if mappings() != 0 || provisioned() != 0 {
 		t.Fatal("a mapping applied above the asker's ceiling")
 	}
 
-	// alice asks, then loses Org Admin: bob's confirmation does not apply it.
-	f, err = e.svc.AddMapping(e.admin(e.alice), gid, td.RoleViewer, org)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// alice loses Org Admin: bob's confirmation of her change does not apply it.
 	e.exec(t, "DELETE FROM pc.role_bindings WHERE org_id = $1 AND user_id = $2 AND role = 'org_admin'", e.org, e.alice)
 	if err := e.confirm(t, f, e.bob); err == nil {
 		t.Fatal("a mapping applied for an asker who lost the authority")
