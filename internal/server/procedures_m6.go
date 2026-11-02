@@ -36,6 +36,7 @@ var m6Procedures = map[string]td.Permission{
 	pantherclawv1connect.ConnectionServiceGetConnectionProcedure:                  "connection.read",
 	pantherclawv1connect.ConnectionServiceListConnectionsProcedure:                "connection.read",
 	pantherclawv1connect.ConnectionServiceUpdateConnectionProcedure:               "connection.manage",
+	pantherclawv1connect.ConnectionServiceSetA2APublicUrlProcedure:                "connection.manage",
 	pantherclawv1connect.ConnectionServiceSetRouteModeProcedure:                   "connection.manage",
 	pantherclawv1connect.ConnectionServiceQuarantineConnectionProcedure:           "connection.manage",
 	pantherclawv1connect.ConnectionServiceRestoreConnectionProcedure:              "connection.manage",
