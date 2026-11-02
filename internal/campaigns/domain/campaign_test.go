@@ -80,7 +80,7 @@ func TestHR609_NotExercisedIsAGap(t *testing.T) {
 	}
 }
 
-// TestHR610_ARouteReportStaysAReport: an edge report is labelled as one, and
+// TestHR610_ARouteReportStaysAReport: an edge report is labeled as one, and
 // the server's record wins over it.
 // Covers: F903
 func TestHR610_ARouteReportStaysAReport(t *testing.T) {

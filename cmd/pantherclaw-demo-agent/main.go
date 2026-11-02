@@ -34,6 +34,8 @@ Commands:
   blocked OWNER/REPO               blocked: a push with the PAT found in /workspace/.env over HTTPS, and over SSH
                                    (the key in /workspace/.ssh/id_ed25519, to github.com and GitHub's address)
   attack OWNER/REPO NUMBER SHA     held, then blocked, in one run
+  campaign                         the scripted stand-in of an attack campaign: one call to the model host with the
+                                   placeholder key, then each step of /workspace/.pclaw-campaign/script.json
 
 Without --branch and --file, allowed names its branch and file with a random suffix, so that it can run again on the same repository; it prints the names it chose.
   help, -h, --help                 this text
@@ -55,6 +57,9 @@ func main() {
 		return
 	}
 	cmd, args := args[0], args[1:]
+	if cmd == "campaign" {
+		os.Exit(campaign("/workspace/.pclaw-campaign/script.json"))
+	}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	suffix := rand.Text()[:8]

@@ -268,7 +268,7 @@ func TestHR613_AnAnswerPastTheCapIsCut(t *testing.T) {
 		_, _ = rw.Write(make([]byte, modelface.MaxBody+1024))
 	})
 	defer func() {
-		if r := recover(); r != http.ErrAbortHandler {
+		if r, _ := recover().(error); !errors.Is(r, http.ErrAbortHandler) {
 			t.Fatalf("recovered %v, want ErrAbortHandler", r)
 		}
 		if w.ctl.reported > modelface.MaxBody {

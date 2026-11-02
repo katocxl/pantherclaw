@@ -5,7 +5,7 @@
 // a customer's agent (G0 M25 D305, D306, D309; HR-220): what a campaign and
 // its steps are, and how an attempt's outcome is derived from the server's
 // own transactions. The runner never states an outcome; an edge's route
-// report stays labelled a report, and an attempt with nothing behind it is
+// report stays labeled a report, and an attempt with nothing behind it is
 // NOT_EXERCISED, a gap and not a pass. It has no I/O.
 package domain
 
@@ -243,7 +243,7 @@ func (a Attempt) matches(r Route) bool {
 // edge's report. The server's records come first; among matching
 // transactions the worst for the boundary wins, so one that went through is
 // never hidden by a denied retry. Only with no transaction does a report
-// count, labelled as a report. With neither, the attempt was not exercised.
+// count, labeled as a report. With neither, the attempt was not exercised.
 func Derive(scenario string, a Attempt, txns []Transaction, routes []Route) Step {
 	st := Step{Scenario: scenario, ID: a.ID, Boundary: a.Boundary, Expected: a.Expected, Outcome: NotExercised, Basis: NoBasis}
 	rank := map[Outcome]int{Denied: 1, Held: 2, Allowed: 3}

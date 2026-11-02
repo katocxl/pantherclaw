@@ -131,8 +131,9 @@ func listenAddr(s string) (netip.Addr, error) {
 	return a, nil
 }
 
-// New starts a relay. It takes ownership of o.Key.
-func New(o Options) (*Relay, error) {
+// New starts a relay, listening under ctx; Close stops it. It takes
+// ownership of o.Key.
+func New(ctx context.Context, o Options) (*Relay, error) {
 	addr, err := listenAddr(o.Listen)
 	if err != nil {
 		return nil, err
@@ -153,7 +154,7 @@ func New(o Options) (*Relay, error) {
 	if o.Log == nil {
 		o.Log = pclog.Discard()
 	}
-	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", o.Listen)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", o.Listen)
 	if err != nil {
 		return nil, fmt.Errorf("relay: %w", err)
 	}
