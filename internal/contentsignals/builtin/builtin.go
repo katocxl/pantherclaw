@@ -33,8 +33,6 @@ const (
 	// entropyMin is the least bits per character of a high-entropy token.
 	// Hex tops out at 4, so a digest or a commit id never reaches it.
 	entropyMin = 4.5
-	// tokenMin is the shortest token measured.
-	tokenMin = 32
 	// tokenMax is the most of a token measured.
 	tokenMax = 512
 )
@@ -63,7 +61,8 @@ var patterns = []pattern{
 }
 
 var (
-	cardRe  = regexp.MustCompile(`\b[0-9](?:[ -]?[0-9]){12,18}\b`)
+	cardRe = regexp.MustCompile(`\b[0-9](?:[ -]?[0-9]){12,18}\b`)
+	// tokenRe finds tokens of 32 characters or more, the shortest measured.
 	tokenRe = regexp.MustCompile(`[A-Za-z0-9+/_=-]{32,}`)
 	plainRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,24}$`)
 	indexRe = regexp.MustCompile(`^[0-9]{1,6}$`)
@@ -113,7 +112,7 @@ func walk(raw []byte, see func(pointer, text string)) (bool, error) {
 	for {
 		tok, err := dec.ReadToken()
 		if err != nil {
-			return errors.Is(err, io.EOF), nil //nolint:nilerr // broken JSON is scanned as text
+			return errors.Is(err, io.EOF), nil // broken JSON is scanned as text
 		}
 		if tok.Kind() != '"' {
 			continue

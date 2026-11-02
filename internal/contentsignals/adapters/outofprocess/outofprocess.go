@@ -49,7 +49,7 @@ func CheckURL(raw string) error {
 		return ErrAddress
 	}
 	ip, err := netip.ParseAddr(strings.Trim(u.Hostname(), "[]"))
-	if err != nil || !(ip.IsLoopback() || ip.IsPrivate()) {
+	if err != nil || (!ip.IsLoopback() && !ip.IsPrivate()) {
 		return ErrAddress
 	}
 	return nil
@@ -106,11 +106,11 @@ func (c *Classifier) Classify(ctx context.Context, in ports.Input) ([]domain.Fin
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	res, err := c.client.Do(req) //nolint:gosec // G704: the address is the operator's, checked by CheckURL
+	res, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close() //nolint:errcheck // read-only
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("outofprocess: status %d", res.StatusCode)
 	}

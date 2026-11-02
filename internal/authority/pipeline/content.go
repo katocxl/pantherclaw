@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
-	csdomain "github.com/katocxl/pantherclaw/internal/contentsignals/domain"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	csdomain "github.com/katocxl/pantherclaw/internal/contentsignals/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"

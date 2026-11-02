@@ -271,7 +271,7 @@ type state struct {
 	gAction *gdomain.Action
 	facts   map[string]fdomain.Value
 	// risk is the open identity-risk signal policy sees (G0 M16 D82).
-	risk    *papp.Risk
+	risk *papp.Risk
 	// content is the org's content signal mode and the run tree's flags (G0
 	// M27 D507).
 	content ContentState

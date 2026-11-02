@@ -106,10 +106,12 @@ func TestBrokenJSONIsReadAsText(t *testing.T) {
 	}
 }
 
-// TestTooManyStringsIsAnError: the caller makes it a scan_incomplete (HR-650).
+// TestT277_ADrainingBodyIsAnError: a body built to drain the gateway is an
+// error, never a partial scan; the caller makes it a scan_incomplete
+// (HR-650).
 //
 // Covers: F937
-func TestTooManyStringsIsAnError(t *testing.T) {
+func TestT277_ADrainingBodyIsAnError(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteByte('[')
 	for range 5000 {

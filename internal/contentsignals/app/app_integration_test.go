@@ -201,12 +201,12 @@ func TestHR647_OnlyAPersonSetsAMode(t *testing.T) {
 	}
 }
 
-// TestHR652_LeavingActiveWaitsForASecondPerson: leaving ACTIVE changes
+// TestT276_OneStolenSessionCannotSwitchActiveOff: leaving ACTIVE changes
 // nothing until someone other than its author confirms it, and without a Gate
-// it fails closed.
+// it fails closed (HR-652).
 //
 // Covers: F936
-func TestHR652_LeavingActiveWaitsForASecondPerson(t *testing.T) {
+func TestT276_OneStolenSessionCannotSwitchActiveOff(t *testing.T) {
 	e := newEnv(t)
 	e.set(t, domain.ModeWatching)
 	e.set(t, domain.ModeActive)

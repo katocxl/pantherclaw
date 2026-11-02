@@ -132,7 +132,6 @@ func (s *Sink) flag(ctx context.Context, q *dbq.Queries, o Observed, found []dom
 	return err
 }
 
-
 // count adds to what WATCHING would have held, once per reason per body.
 func count(ctx context.Context, q *dbq.Queries, org ids.OrgID, found []domain.Finding) error {
 	var reasons []string

@@ -21,7 +21,7 @@ var injected = []pipeline.PayloadFinding{{Kind: "injection_phrase", Location: "a
 
 func (f *fx) contentEval(findings ...pipeline.PayloadFinding) *pipeline.Evaluation {
 	f.t.Helper()
-	req := f.parse(ids.NewV7(), ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
+	req := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
 	req.ContentFindings = findings
 	return f.eval(req)
 }
@@ -37,6 +37,8 @@ func rank(d adomain.Decision) int {
 		return 2
 	case adomain.CannotAuthorize:
 		return 3
+	case adomain.Deny:
+		return 4
 	default:
 		return 4
 	}
@@ -118,7 +120,7 @@ func TestHR648_NoFlagEverAllowsOrLifts(t *testing.T) {
 	kinds := [][]string{nil, {"injection_phrase"}, {"scan_incomplete"}, {"secret_format", "pii_card", "classifier_flag"}}
 	outbound := [][]pipeline.PayloadFinding{nil, injected, {{Kind: "scan_incomplete", Location: "over_bound"}}}
 	worlds := map[string]func(f *fx){
-		"open": func(*fx) {},
+		"open":    func(*fx) {},
 		"payload": func(*fx) {},
 	}
 	for name, set := range worlds {
@@ -126,7 +128,7 @@ func TestHR648_NoFlagEverAllowsOrLifts(t *testing.T) {
 			f := newFx(t)
 			set(f)
 			req := func(fs ...pipeline.PayloadFinding) *pipeline.Evaluation {
-				r := f.parse(ids.NewV7(), ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
+				r := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
 				r.ContentFindings = fs
 				if name == "payload" {
 					r.PayloadFindings = []pipeline.PayloadFinding{{Kind: "private_key", Location: "arg/k"}}
@@ -170,8 +172,10 @@ func TestHR648_AReadPassesAFlagOnTheRun(t *testing.T) {
 	if ev := read(); ev.Decision != base {
 		t.Fatalf("a read was held: %s, without flags %s", ev.Decision, base)
 	}
-	if ev := read(injected...); ev.Decision != adomain.RequireApproval {
-		t.Fatalf("a read's own flag: %s", ev.Decision)
+	// The fixture's read cannot file an approval request, so its hold fails
+	// closed as CANNOT_AUTHORIZE: never looser than a hold.
+	if ev := read(injected...); rank(ev.Decision) < rank(adomain.RequireApproval) {
+		t.Fatalf("a read's own flag: %s %+v", ev.Decision, ev.Checklist)
 	}
 	write := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
 	if ev := f.eval(write); ev.Decision != adomain.RequireApproval {

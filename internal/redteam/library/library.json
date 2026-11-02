@@ -254,5 +254,21 @@
   "RT-122": {
     "digest": "950ba1c06d24a8e96e4149f952e74c05deb7903b957909e1107531ef59ed3587",
     "tier": "business"
+  },
+  "RT-158": {
+    "digest": "595c103ef147e31a365a82d5bf0473db07a419062167a97fb69d8ea6f91a0df9",
+    "tier": "business"
+  },
+  "RT-159": {
+    "digest": "3409d0a1738be0b6ed0746682b7e0f8ac812f4bfbe014b48cbd28dddb4b2f125",
+    "tier": "business"
+  },
+  "RT-160": {
+    "digest": "2e7312983019a74e8df004e3e3f37eb114163e51bdbb67dbe3d7cf42532f371f",
+    "tier": "business"
+  },
+  "RT-161": {
+    "digest": "fab8930014279e3dd0c27479c7f7205c9cce30854091f4be0e71ea5fde60cf77",
+    "tier": "business"
   }
 }

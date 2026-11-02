@@ -59,10 +59,10 @@ type Service struct {
 	runs      Runs
 	// captures keeps payload captures (captures.go); nil drops them.
 	// observations records tool observations (observations.go).
-	captures     CaptureRecorder
+	captures CaptureRecorder
 	// contentOutbound records an outbound payload's content flags (G0 M27 D507).
 	contentOutbound func(ctx context.Context, org ids.OrgID, txn ids.UUID, found []pipeline.PayloadFinding)
-	observations ToolObservations
+	observations    ToolObservations
 	// held is the operator's maintenance hold (hold.go): no decision.
 	held bool
 	// consoleURL is the console base URL for recovery links (explain.go).

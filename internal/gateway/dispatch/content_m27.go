@@ -23,6 +23,7 @@ func scansContent(c Call) bool {
 	switch c.Connection.ContentSignals {
 	case pb.ContentSignalMode_CONTENT_SIGNAL_MODE_WATCHING, pb.ContentSignalMode_CONTENT_SIGNAL_MODE_ACTIVE:
 		return c.Connection.GetKind() != "local" && !cooperative(c) && c.Action.Action.Channel != string(defs.ChannelHook)
+	case pb.ContentSignalMode_CONTENT_SIGNAL_MODE_UNSPECIFIED, pb.ContentSignalMode_CONTENT_SIGNAL_MODE_OFF:
 	}
 	return false
 }
