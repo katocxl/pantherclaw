@@ -39,8 +39,12 @@ const MaxBytes = 8 << 10
 // Leeway tolerates clock skew between the server's replicas.
 const Leeway = 30 * time.Second
 
-// ErrInvalid is every refusal; the detail is for logs.
-var ErrInvalid = errors.New("mcptoken: invalid token")
+// ErrInvalid is every refusal; the detail is for logs. ErrExpired is the
+// one refusal a client can act on (it gets a new token).
+var (
+	ErrInvalid = errors.New("mcptoken: invalid token")
+	ErrExpired = fmt.Errorf("%w: expired", ErrInvalid)
+)
 
 func bad(format string, a ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, a...))
@@ -163,7 +167,7 @@ func Verify(v *jws.Verifier, issuer, compact, url string, now time.Time) (Token,
 	case c.PAP.V != 1 || c.PAP.Proof != ProofBearer:
 		return Token{}, bad("version")
 	case !now.Before(exp.Add(Leeway)):
-		return Token{}, bad("expired")
+		return Token{}, ErrExpired
 	case nbf.After(now.Add(Leeway)) || iat.After(now.Add(Leeway)) || nbf.Before(iat):
 		return Token{}, bad("not yet valid")
 	case !exp.After(iat) || exp.Sub(iat) > domain.AccessTokenTTL:
