@@ -69,7 +69,7 @@ func TestTenancy_org_assertion_issuers(t *testing.T) {
 			t.Fatalf("another org: %s = %d", sql, n)
 		}
 	}
-	b.want(t, m5Check, "an issuer in another org (org write guard)", m26idaIssuer, a.org, m5ID(), "other", "https://x.okta.com", b.user)
+	b.want(t, m5Denied, "an issuer in another org", m26idaIssuer, a.org, m5ID(), "other", "https://x.okta.com", b.user)
 }
 
 // TestTenancy_mcp_clients: the MCP tables are invisible to another org, the
@@ -111,7 +111,7 @@ func TestTenancy_mcp_clients(t *testing.T) {
 			t.Fatalf("another org: %s = %d", sql, n)
 		}
 	}
-	b.want(t, m5Check, "a client in another org (org write guard)", m26idaMcpClient, a.org, m5ID(), url+"3", agent, inst, b.user)
+	b.want(t, m5Denied, "a client in another org", m26idaMcpClient, a.org, m5ID(), url+"3", agent, inst, b.user)
 
 	var code, token bool
 	d.AdminQueryRow(t, `SELECT has_column_privilege('pc_audit_ro', 'pc.mcp_authorization_codes', 'code_hash', 'SELECT'),

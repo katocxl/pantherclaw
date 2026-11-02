@@ -65,6 +65,9 @@ type Issuer struct {
 	// Tenant, for a multi-tenant issuer, is the tenant the assertion must
 	// carry; empty for a single-tenant issuer.
 	Tenant string
+	// AudTenant is what an assertion's aud_tenant claim, when present, must
+	// say: this organization's id.
+	AudTenant string
 	// Algorithms the issuer may sign with.
 	Algorithms []string
 }

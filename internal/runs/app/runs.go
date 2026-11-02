@@ -113,7 +113,10 @@ type Run struct {
 	// GrantID is the grant whose authority the run uses (nil: none, so its
 	// actions are denied NO_GRANT).
 	GrantID *ids.UUID
-	TaskRef string
+	// ScopeOperations narrow the run within its grant (G0 M26 D400): nil
+	// is the whole grant.
+	ScopeOperations []string
+	TaskRef         string
 	// Simulated runs belong to range agents or descend from one (HR-220);
 	// fixed when the run starts.
 	Simulated bool
@@ -144,7 +147,8 @@ func view(r dbq.PcRun, state string) (Run, error) {
 		Launcher:        actorOf(r.LauncherUserID, r.LauncherSaID, r.LauncherInstanceID),
 		Principal:       actorOf(r.PrincipalUserID, r.PrincipalSaID, nil),
 		PrincipalSource: r.PrincipalSource, ParentRunID: r.ParentRunID, Depth: int(r.Depth), GrantID: r.GrantID, TaskRef: r.TaskRef,
-		Simulated: r.Simulated, State: state, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, EndedAt: r.EndedAt,
+		ScopeOperations: r.ScopeOperations,
+		Simulated:       r.Simulated, State: state, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, EndedAt: r.EndedAt,
 	}
 	if r.SubjectIssuer != nil {
 		out.SubjectIssuer = *r.SubjectIssuer

@@ -48,6 +48,12 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
 	RefreshToken string `json:"refresh_token,omitzero"`
+	// Scope is the granted scope when it differs from the requested one
+	// (RFC 6749 §5.1); IdP-native access tokens always carry it.
+	Scope string `json:"scope,omitzero"`
+	// RunID names the run an IdP-native access token is bound to (G0 M26
+	// D400).
+	RunID string `json:"run_id,omitzero"`
 }
 
 // OAuth implements the token endpoint grants.

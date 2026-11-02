@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/idaccess/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // AssertionVerifier verifies an assertion against an issuer the org trusts.
@@ -35,6 +36,36 @@ type ClientMetadata struct {
 	ClientID     string
 	Name         string
 	RedirectURIs []string
+}
+
+// Client kinds an access token names.
+const (
+	ClientAssertion = "assertion"
+	ClientMcp       = "mcp"
+)
+
+// AccessClaims are what a pap-mcp+jwt says (D402, D408.1): one run of one
+// agent's client instance, at one protected resource.
+type AccessClaims struct {
+	Org         ids.OrgID
+	Environment ids.UUID
+	Agent       ids.UUID
+	Instance    ids.UUID
+	Run         ids.UUID
+	// Connection and Resource are the one gateway server the token is for.
+	Connection string
+	Resource   string
+	// ClientKind and Client name the binding or allow-listed client the
+	// Authority re-checks on every call.
+	ClientKind string
+	Client     ids.UUID
+	// Scope is the run's narrowed operations; empty is the whole grant.
+	Scope []string
+}
+
+// Minter signs access tokens with the mcp_tokens keys.
+type Minter interface {
+	Mint(ctx context.Context, c AccessClaims, now time.Time) (token string, expires time.Time, err error)
 }
 
 // ClientDocuments fetches a client's metadata document over HTTPS through
