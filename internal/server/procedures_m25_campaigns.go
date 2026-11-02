@@ -18,6 +18,9 @@ var m25CampaignProcedures = map[string]td.Permission{
 	pantherclawv1connect.RangeServiceFinishCampaignProcedure: td.PermRedteamRun,
 	pantherclawv1connect.RangeServiceGetCampaignProcedure:    td.PermRedteamRead,
 	pantherclawv1connect.RangeServiceListCampaignsProcedure:  td.PermRedteamRead,
+	// The model face's calls, on the gateway listener (D313).
+	pantherclawv1connect.GatewayServiceAuthorizeModelCallProcedure: "gateway.observe",
+	pantherclawv1connect.GatewayServiceReportModelUsageProcedure:   "gateway.observe",
 }
 
 var m25CampaignClasses = map[string]entitlements.Class{

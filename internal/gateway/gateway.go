@@ -27,6 +27,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/hook"
 	"github.com/katocxl/pantherclaw/internal/gateway/httpproxy"
 	"github.com/katocxl/pantherclaw/internal/gateway/mcp"
+	"github.com/katocxl/pantherclaw/internal/gateway/modelface"
 	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -65,6 +66,7 @@ type Gateway struct {
 	hook        *hook.Handler
 	sdk         *sdk.Handler
 	a2a         *a2aface.Handler
+	model       *modelface.Handler
 	log         *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
@@ -98,6 +100,10 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		if _, ok := sdk.Path(r.URL.EscapedPath()); ok {
 			g.sdk.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.EscapedPath(), modelface.Prefix) {
+			g.model.ServeHTTP(w, r) // G0 M25 D313; "model" is a reserved name
 			return
 		}
 		if _, _, ok := a2aface.Path(r.URL.EscapedPath()); ok {
@@ -163,6 +169,9 @@ type Deps struct {
 	// MCPState keeps the MCP face's holds, tasks and sessions on the server
 	// (G0 M15 D14); nil keeps them in this process's memory.
 	MCPState mcp.StateClient
+	// ModelCalls asks the server about each model face call (G0 M25 D313);
+	// nil refuses every one.
+	ModelCalls modelface.Control
 	// Run is background work (certificate renewal, the containment stream,
 	// configuration sync); nil for none.
 	Run []func(ctx context.Context) error
@@ -226,7 +235,8 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			res, err := ctl.Gateway.ReportStatus(ctx, r)
 			return res.GetNextReportSeconds(), err
 		},
-		MCPState: ctl.Gateway,
+		MCPState:   ctl.Gateway,
+		ModelCalls: controlModelCalls{ctl},
 		ReportRevocation: func(ctx context.Context, conn, purpose string, a broker.Access) error {
 			req := &pb.ReportRevocationFailureRequest{
 				ConnectionId: conn, Purpose: purpose, InstallationId: a.Installation, Repository: a.Repository,
@@ -316,6 +326,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		sdk:  sdk.New(engine, d.Configuration, cfg.PublicURL, log),
 		a2a:  a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log).WithCardSigner(d.SignAgentCard),
+		model: modelface.New(engine, d.ModelCalls, d.Configuration, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, reportInventory: d.ReportInventory, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 		submitScan: d.SubmitScan,

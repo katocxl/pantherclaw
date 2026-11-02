@@ -48,7 +48,7 @@ var (
 	ErrNotFound     = pcerr.New(pcerr.NotFound, "CAMPAIGN_NOT_FOUND", "campaign not found")
 	ErrAgentMissing = pcerr.New(pcerr.NotFound, "AGENT_NOT_FOUND", "agent not found")
 	ErrNotRange     = pcerr.New(pcerr.FailedPrecondition, "NOT_A_RANGE_AGENT", "a campaign runs only against a range twin, never a real agent")
-	ErrRelay        = pcerr.New(pcerr.FailedPrecondition, "CAMPAIGN_RELAY_INVALID", "the relay must be a simulated connection")
+	ErrRelay        = pcerr.New(pcerr.FailedPrecondition, "CAMPAIGN_RELAY_INVALID", "the relay must be a simulated model relay connection")
 	ErrOpen         = pcerr.New(pcerr.AlreadyExists, "CAMPAIGN_OPEN", "this range agent already has an open campaign")
 	ErrNotRunning   = pcerr.New(pcerr.FailedPrecondition, "CAMPAIGN_NOT_RUNNING", "the campaign has finished or was abandoned")
 	ErrScenarios    = pcerr.New(pcerr.InvalidArgument, "INVALID_CAMPAIGNS", "declare 1 to 10 distinct library campaigns, with an image digest and a model host")
@@ -68,8 +68,9 @@ type AgentRef struct {
 
 // ConnectionRef is a connection as a campaign's relay.
 type ConnectionRef struct {
-	ID        ids.UUID
-	Simulated bool
+	ID         ids.UUID
+	Simulated  bool
+	ModelRelay bool
 }
 
 // Usage is a run's model traffic: counts and the host, never content (D313).
@@ -108,6 +109,7 @@ type Tx interface {
 	SetRunScenario(ctx context.Context, c domain.Campaign, run ids.UUID, scenario string) error
 	Usage(ctx context.Context, campaign ids.UUID) ([]Usage, error)
 	Audit(ctx context.Context, ev audit.Event) error
+	ModelTx
 }
 
 // Store runs fn in a tenant transaction for org.
@@ -129,6 +131,8 @@ type Service struct {
 	Editions Editions
 	// Library is library.Campaign unless a test sets it.
 	Library Lookup
+	// Now is time.Now unless a test sets it.
+	Now func() time.Time
 }
 
 func (s *Service) lookup(id string) (library.CampaignEntry, bool) {
@@ -213,7 +217,7 @@ func (s *Service) StartCampaign(ctx context.Context, in StartInput) (domain.Camp
 		if err != nil {
 			return err
 		}
-		if !found || !conn.Simulated {
+		if !found || !conn.Simulated || !conn.ModelRelay {
 			return ErrRelay
 		}
 		if _, open, err := tx.OpenOf(ctx, a.ID); err != nil {

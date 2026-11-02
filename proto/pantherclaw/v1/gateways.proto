@@ -155,6 +155,17 @@ service GatewayService {
   // the gateway serves.
   // permission: gateway.observe
   rpc ReportLocalRefusal(ReportLocalRefusalRequest) returns (ReportLocalRefusalResponse);
+  // AuthorizeModelCall asks whether one model request may cross the model
+  // face (G0 M25 D313), and counts it. It is asked for every request: the
+  // connection must be a simulated model relay this gateway serves, the run
+  // a simulated run of a range agent, and that agent's open campaign must
+  // name this relay and this model host, within the run's total.
+  // permission: gateway.observe
+  rpc AuthorizeModelCall(AuthorizeModelCallRequest) returns (AuthorizeModelCallResponse);
+  // ReportModelUsage adds the bytes of one model answer to the run's count
+  // (G0 M25 D313): counts only, never content.
+  // permission: gateway.observe
+  rpc ReportModelUsage(ReportModelUsageRequest) returns (ReportModelUsageResponse);
   // ReportStatus reports one gateway replica's status (G0 M15 D10,
   // HR-410): its version, build, start time, the config version it serves
   // and each connection's serving state. The org and gateway come from the
@@ -604,6 +615,9 @@ message GatewayConnection {
   PostgresConfig postgres = 24;
   // a2a is an a2a connection's configuration and pinned card (D64).
   A2AConfig a2a = 25;
+  // Whether the connection is a campaign's model relay (G0 M25 D313): it has
+  // no package, and only the model face serves it.
+  bool model_relay = 26;
 }
 
 // RouteModeSetting is one route's mode.
@@ -805,6 +819,46 @@ message ReportLocalRefusalRequest {
 
 // ReportLocalRefusalResponse is empty.
 message ReportLocalRefusalResponse {}
+
+// AuthorizeModelCallRequest describes one model request.
+message AuthorizeModelCallRequest {
+  // The model relay connection: one the calling gateway serves.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // The run, whose workload the Authority has verified.
+  string run_id = 2 [(buf.validate.field).string.uuid = true];
+  // The model host the agent addressed.
+  string model_host = 3 [(buf.validate.field).string = {
+    max_len: 253
+    pattern: "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"
+  }];
+  // The request body's size.
+  int64 bytes_to_model = 4 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 8388608
+  }];
+}
+
+// AuthorizeModelCallResponse names the open campaign the call counts under.
+message AuthorizeModelCallResponse {
+  // The campaign.
+  string campaign_id = 1;
+}
+
+// ReportModelUsageRequest reports one model answer's size.
+message ReportModelUsageRequest {
+  // The campaign the call counted under.
+  string campaign_id = 1 [(buf.validate.field).string.uuid = true];
+  // The run.
+  string run_id = 2 [(buf.validate.field).string.uuid = true];
+  // The answer body's size.
+  int64 bytes_from_model = 3 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 8388608
+  }];
+}
+
+// ReportModelUsageResponse is empty.
+message ReportModelUsageResponse {}
 
 // ClaimVerificationsRequest asks for due verification tasks.
 message ClaimVerificationsRequest {

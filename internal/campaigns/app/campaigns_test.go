@@ -35,6 +35,33 @@ type fake struct {
 	txns      map[ids.UUID][]domain.Transaction
 	marked    map[ids.UUID]string
 	audited   []string
+	relays    map[ids.UUID]app.RelayRef
+	// usage is each run's model traffic: requests, to, from.
+	usage map[ids.UUID][3]int64
+}
+
+func (f *fake) RelayConnection(_ context.Context, id ids.UUID) (app.RelayRef, bool, error) {
+	r, ok := f.relays[id]
+	return r, ok, nil
+}
+
+func (f *fake) AddModelRequest(_ context.Context, _, run ids.UUID, _ string, n, total int64) (bool, error) {
+	u := f.usage[run]
+	if u[0] > 0 && u[1]+u[2]+n > total {
+		return false, nil
+	}
+	f.usage[run] = [3]int64{u[0] + 1, u[1] + n, u[2]}
+	return true, nil
+}
+
+func (f *fake) AddModelAnswer(_ context.Context, _, run ids.UUID, n int64) (bool, error) {
+	u, ok := f.usage[run]
+	if !ok {
+		return false, nil
+	}
+	u[2] += n
+	f.usage[run] = u
+	return true, nil
 }
 
 func (f *fake) InTx(ctx context.Context, _ ids.OrgID, _ bool, fn func(context.Context, app.Tx) error) error {
@@ -151,9 +178,10 @@ func newWorld(t *testing.T, edition billing.Edition) *world {
 	w := &world{agent: ids.NewV7(), relay: ids.NewV7(), f: &fake{
 		agents: map[ids.UUID]app.AgentRef{}, conns: map[ids.UUID]app.ConnectionRef{}, campaigns: map[ids.UUID]domain.Campaign{},
 		steps: map[ids.UUID][]domain.Step{}, runs: map[ids.UUID]domain.RunRecord{}, txns: map[ids.UUID][]domain.Transaction{}, marked: map[ids.UUID]string{},
+		relays: map[ids.UUID]app.RelayRef{}, usage: map[ids.UUID][3]int64{},
 	}}
 	w.f.agents[w.agent] = app.AgentRef{ID: w.agent, RangeAgent: true, Path: td.OrgPath(org)}
-	w.f.conns[w.relay] = app.ConnectionRef{ID: w.relay, Simulated: true}
+	w.f.conns[w.relay] = app.ConnectionRef{ID: w.relay, Simulated: true, ModelRelay: true}
 	lib := map[string]library.CampaignEntry{
 		"RT-140": entry(domain.Attempt{ID: "merge", Boundary: "HR-201", Expected: domain.ExpectHeld, Operation: "op.merge"},
 			domain.Attempt{ID: "exfil", Boundary: "HR-214", Expected: domain.ExpectNotRouted, RouteHost: "evil.example"}),
@@ -202,6 +230,10 @@ func TestHR611_OnlyARangeTwin(t *testing.T) {
 	w.f.conns[in.Relay] = app.ConnectionRef{ID: in.Relay}
 	if _, err := w.svc.StartCampaign(w.ctx, in); !errors.Is(err, app.ErrRelay) {
 		t.Fatalf("a real connection: %v", err)
+	}
+	w.f.conns[in.Relay] = app.ConnectionRef{ID: in.Relay, Simulated: true}
+	if _, err := w.svc.StartCampaign(w.ctx, in); !errors.Is(err, app.ErrRelay) {
+		t.Fatalf("a simulated connection that is no model relay: %v", err)
 	}
 	if _, err := w.svc.StartCampaign(w.ctx, w.input("RT-140")); err != nil {
 		t.Fatal(err)

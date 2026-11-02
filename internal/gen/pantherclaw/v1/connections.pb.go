@@ -657,7 +657,10 @@ type Connection struct {
 	// postgres is a postgres connection's configuration and manifest.
 	Postgres *PostgresConfig `protobuf:"bytes,31,opt,name=postgres,proto3" json:"postgres,omitempty"`
 	// a2a is an a2a connection's configuration and pinned card.
-	A2A           *A2AConfig `protobuf:"bytes,32,opt,name=a2a,proto3" json:"a2a,omitempty"`
+	A2A *A2AConfig `protobuf:"bytes,32,opt,name=a2a,proto3" json:"a2a,omitempty"`
+	// Whether the connection is a campaign's model relay (G0 M25 D313): only
+	// the gateway's model face serves it, and only during an open campaign.
+	ModelRelay    bool `protobuf:"varint,33,opt,name=model_relay,json=modelRelay,proto3" json:"model_relay,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -886,6 +889,13 @@ func (x *Connection) GetA2A() *A2AConfig {
 		return x.A2A
 	}
 	return nil
+}
+
+func (x *Connection) GetModelRelay() bool {
+	if x != nil {
+		return x.ModelRelay
+	}
+	return false
 }
 
 // PostgresConfig is a postgres connection (G0 M14 D15): where the database
@@ -1711,7 +1721,11 @@ type CreateConnectionRequest struct {
 	// postgres is required for, and only for, a postgres connection.
 	Postgres *PostgresConfig `protobuf:"bytes,22,opt,name=postgres,proto3" json:"postgres,omitempty"`
 	// a2a is required for, and only for, an a2a connection.
-	A2A           *A2AConfig `protobuf:"bytes,23,opt,name=a2a,proto3" json:"a2a,omitempty"`
+	A2A *A2AConfig `protobuf:"bytes,23,opt,name=a2a,proto3" json:"a2a,omitempty"`
+	// Creates a campaign's model relay (G0 M25 D313): a simulated http
+	// connection with no package, no agent hosts and no credential. Fixed for
+	// the connection's life.
+	ModelRelay    bool `protobuf:"varint,24,opt,name=model_relay,json=modelRelay,proto3" json:"model_relay,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1870,6 +1884,13 @@ func (x *CreateConnectionRequest) GetA2A() *A2AConfig {
 		return x.A2A
 	}
 	return nil
+}
+
+func (x *CreateConnectionRequest) GetModelRelay() bool {
+	if x != nil {
+		return x.ModelRelay
+	}
+	return false
 }
 
 // CreateConnectionResponse returns the connection.
@@ -5379,7 +5400,8 @@ var File_pantherclaw_v1_connections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\n" +
-	" pantherclaw/v1/connections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fpantherclaw/v1/connectors.proto\x1a\x1bpantherclaw/v1/github.proto\"\xe0\t\n" +
+	" pantherclaw/v1/connections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fpantherclaw/v1/connectors.proto\x1a\x1bpantherclaw/v1/github.proto\"\x81\n" +
+	"\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -5418,7 +5440,9 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x06github\x18\x18 \x01(\v2\".pantherclaw.v1.GitHubInstallationR\x06github\x12\x1c\n" +
 	"\tsimulated\x18\x1e \x01(\bR\tsimulated\x12:\n" +
 	"\bpostgres\x18\x1f \x01(\v2\x1e.pantherclaw.v1.PostgresConfigR\bpostgres\x12+\n" +
-	"\x03a2a\x18  \x01(\v2\x19.pantherclaw.v1.A2AConfigR\x03a2a\"\xfc\x04\n" +
+	"\x03a2a\x18  \x01(\v2\x19.pantherclaw.v1.A2AConfigR\x03a2a\x12\x1f\n" +
+	"\vmodel_relay\x18! \x01(\bR\n" +
+	"modelRelay\"\xfc\x04\n" +
 	"\x0ePostgresConfig\x12P\n" +
 	"\x04host\x18\x01 \x01(\tB<\xbaH9r7\x10\x01\x18\xfd\x0120^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$R\x04host\x12\x1f\n" +
 	"\x04port\x18\x02 \x01(\x05B\v\xbaH\b\x1a\x06\x18\xff\xff\x03(\x00R\x04port\x12:\n" +
@@ -5495,7 +5519,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	" \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12\x12\n" +
-	"\x04kind\x18\f \x01(\tR\x04kind\"\xf6\b\n" +
+	"\x04kind\x18\f \x01(\tR\x04kind\"\x97\t\n" +
 	"\x17CreateConnectionRequest\x12C\n" +
 	"\x04name\x18\x01 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12>\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.ConnectionKindB\n" +
@@ -5521,7 +5545,9 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\tconnector\x18\x14 \x01(\v2\x1d.pantherclaw.v1.ConnectorSpecR\tconnector\x12\x1c\n" +
 	"\tsimulated\x18\x15 \x01(\bR\tsimulated\x12:\n" +
 	"\bpostgres\x18\x16 \x01(\v2\x1e.pantherclaw.v1.PostgresConfigR\bpostgres\x12+\n" +
-	"\x03a2a\x18\x17 \x01(\v2\x19.pantherclaw.v1.A2AConfigR\x03a2a\"V\n" +
+	"\x03a2a\x18\x17 \x01(\v2\x19.pantherclaw.v1.A2AConfigR\x03a2a\x12\x1f\n" +
+	"\vmodel_relay\x18\x18 \x01(\bR\n" +
+	"modelRelay\"V\n" +
 	"\x18CreateConnectionResponse\x12:\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x1a.pantherclaw.v1.ConnectionR\n" +

@@ -26,6 +26,12 @@ func newCampaigns(d apiDeps) *capp.Service {
 	return svc
 }
 
+// modelCalls decides the gateway's model face calls (D313); it needs no
+// licence check, since an open campaign has already passed one.
+func modelCalls(pool *db.Pool) *capp.Service {
+	return &capp.Service{Store: pgcampaigns.Store{Pool: pool}}
+}
+
 // campaignResults is the read port compliance evidence uses (D312).
 func campaignResults(pool *db.Pool) ports.ResultReader { return pgcampaigns.Store{Pool: pool} }
 

@@ -15,6 +15,91 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const addModelAnswer = `-- name: AddModelAnswer :execrows
+UPDATE pc.campaign_runs SET bytes_from_model = bytes_from_model + $1
+WHERE org_id = $2 AND campaign_id = $3 AND run_id = $4
+`
+
+type AddModelAnswerParams struct {
+	Bytes      int64
+	OrgID      ids.OrgID
+	CampaignID ids.UUID
+	RunID      ids.UUID
+}
+
+func (q *Queries) AddModelAnswer(ctx context.Context, arg AddModelAnswerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addModelAnswer,
+		arg.Bytes,
+		arg.OrgID,
+		arg.CampaignID,
+		arg.RunID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const addModelRequest = `-- name: AddModelRequest :one
+INSERT INTO pc.campaign_runs (org_id, campaign_id, run_id, model_host, requests, bytes_to_model)
+VALUES ($1, $2, $3, $4, 1, $5)
+ON CONFLICT (org_id, campaign_id, run_id) DO UPDATE
+SET requests = pc.campaign_runs.requests + 1, bytes_to_model = pc.campaign_runs.bytes_to_model + EXCLUDED.bytes_to_model
+WHERE pc.campaign_runs.bytes_to_model + pc.campaign_runs.bytes_from_model + EXCLUDED.bytes_to_model <= $6
+RETURNING requests
+`
+
+type AddModelRequestParams struct {
+	OrgID      ids.OrgID
+	CampaignID ids.UUID
+	RunID      ids.UUID
+	ModelHost  string
+	Bytes      int64
+	RunTotal   int64
+}
+
+// One model request of a run (D313): counted before it is sent, so the count
+// holds whatever becomes of the answer. No row comes back when the bytes
+// would take the run past its total.
+func (q *Queries) AddModelRequest(ctx context.Context, arg AddModelRequestParams) (int64, error) {
+	row := q.db.QueryRow(ctx, addModelRequest,
+		arg.OrgID,
+		arg.CampaignID,
+		arg.RunID,
+		arg.ModelHost,
+		arg.Bytes,
+		arg.RunTotal,
+	)
+	var requests int64
+	err := row.Scan(&requests)
+	return requests, err
+}
+
+const campaignRelayConnection = `-- name: CampaignRelayConnection :one
+SELECT gateway_id, simulated, model_relay, state FROM pc.connections
+WHERE org_id = $1 AND id = $2
+`
+
+type CampaignRelayConnectionRow struct {
+	GatewayID  ids.UUID
+	Simulated  bool
+	ModelRelay bool
+	State      string
+}
+
+// A connection as the model route needs it (D313).
+func (q *Queries) CampaignRelayConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (CampaignRelayConnectionRow, error) {
+	row := q.db.QueryRow(ctx, campaignRelayConnection, orgID, iD)
+	var i CampaignRelayConnectionRow
+	err := row.Scan(
+		&i.GatewayID,
+		&i.Simulated,
+		&i.ModelRelay,
+		&i.State,
+	)
+	return i, err
+}
+
 const campaignRunRecord = `-- name: CampaignRunRecord :one
 SELECT id, agent_id, simulated, created_at FROM pc.runs
 WHERE org_id = $1 AND id = $2

@@ -1179,6 +1179,7 @@ type PcConnection struct {
 	UpdatedAt        time.Time
 	AgentHosts       []string
 	Simulated        bool
+	ModelRelay       bool
 }
 
 type PcConnectionCapability struct {

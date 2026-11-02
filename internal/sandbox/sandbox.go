@@ -112,6 +112,12 @@ type Options struct {
 	// an open network to show that a failed negative control blocks
 	// promotion. pclaw passes it from its Options, which only tests set.
 	BeforeProbe func(ctx context.Context, container string) error
+	// ModelHost and ModelConnection, set for a campaign (G0 M25 D313), give
+	// the edge its model route: the one model host, to the gateway's model
+	// face for the relay connection's name. ModelPlaceholder is the value of
+	// the agent's model key variables, which the edge drops without
+	// reporting it. The model key itself is never here (HR-607).
+	ModelHost, ModelConnection, ModelPlaceholder string
 }
 
 // Sandbox is a running sandbox: its networks and edge.
@@ -226,6 +232,7 @@ func (s *Sandbox) start(ctx context.Context) error {
 		Format: edge.ConfigFormat, Mode: edge.ModeSandbox, Session: s.o.Session, Listen: ":" + edgePort, Subnet: internal.Subnet(),
 		GatewayURL: s.o.GatewayURL, GatewayAddr: gatewayAddr, GatewayCAPin: s.o.GatewayCAPin, Hosts: s.o.Hosts, Run: s.o.Run,
 		KeyFile: keyPath, TokenFile: tokenDir + "/" + filepath.Base(s.o.TokenFile),
+		ModelHost: s.o.ModelHost, ModelConnection: s.o.ModelConnection, Placeholder: s.o.ModelPlaceholder,
 	}
 	path, err := s.writeJSON("edge.json", cfg)
 	if err != nil {

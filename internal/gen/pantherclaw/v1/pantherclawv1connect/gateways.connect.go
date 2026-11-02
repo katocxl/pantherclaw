@@ -98,6 +98,12 @@ const (
 	// GatewayServiceReportLocalRefusalProcedure is the procedure name of the GatewayService's
 	// ReportLocalRefusal RPC.
 	GatewayServiceReportLocalRefusalProcedure = "/pantherclaw.v1.GatewayService/ReportLocalRefusal"
+	// GatewayServiceAuthorizeModelCallProcedure is the procedure name of the GatewayService's
+	// AuthorizeModelCall RPC.
+	GatewayServiceAuthorizeModelCallProcedure = "/pantherclaw.v1.GatewayService/AuthorizeModelCall"
+	// GatewayServiceReportModelUsageProcedure is the procedure name of the GatewayService's
+	// ReportModelUsage RPC.
+	GatewayServiceReportModelUsageProcedure = "/pantherclaw.v1.GatewayService/ReportModelUsage"
 	// GatewayServiceReportStatusProcedure is the procedure name of the GatewayService's ReportStatus
 	// RPC.
 	GatewayServiceReportStatusProcedure = "/pantherclaw.v1.GatewayService/ReportStatus"
@@ -662,6 +668,20 @@ var (
 			Procedure:  GatewayServiceReportLocalRefusalProcedure,
 		}
 	})
+	gatewayServiceAuthorizeModelCallSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("AuthorizeModelCall"),
+			Procedure:  GatewayServiceAuthorizeModelCallProcedure,
+		}
+	})
+	gatewayServiceReportModelUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportModelUsage"),
+			Procedure:  GatewayServiceReportModelUsageProcedure,
+		}
+	})
 	gatewayServiceReportStatusSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -784,6 +804,17 @@ type GatewayServiceClient interface {
 	// the gateway serves.
 	// permission: gateway.observe
 	ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error)
+	// AuthorizeModelCall asks whether one model request may cross the model
+	// face (G0 M25 D313), and counts it. It is asked for every request: the
+	// connection must be a simulated model relay this gateway serves, the run
+	// a simulated run of a range agent, and that agent's open campaign must
+	// name this relay and this model host, within the run's total.
+	// permission: gateway.observe
+	AuthorizeModelCall(context.Context, *v1.AuthorizeModelCallRequest) (*v1.AuthorizeModelCallResponse, error)
+	// ReportModelUsage adds the bytes of one model answer to the run's count
+	// (G0 M25 D313): counts only, never content.
+	// permission: gateway.observe
+	ReportModelUsage(context.Context, *v1.ReportModelUsageRequest) (*v1.ReportModelUsageResponse, error)
 	// ReportStatus reports one gateway replica's status (G0 M15 D10,
 	// HR-410): its version, build, start time, the config version it serves
 	// and each connection's serving state. The org and gateway come from the
@@ -924,6 +955,17 @@ type GatewayServiceHandler interface {
 	// the gateway serves.
 	// permission: gateway.observe
 	ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error)
+	// AuthorizeModelCall asks whether one model request may cross the model
+	// face (G0 M25 D313), and counts it. It is asked for every request: the
+	// connection must be a simulated model relay this gateway serves, the run
+	// a simulated run of a range agent, and that agent's open campaign must
+	// name this relay and this model host, within the run's total.
+	// permission: gateway.observe
+	AuthorizeModelCall(context.Context, *v1.AuthorizeModelCallRequest) (*v1.AuthorizeModelCallResponse, error)
+	// ReportModelUsage adds the bytes of one model answer to the run's count
+	// (G0 M25 D313): counts only, never content.
+	// permission: gateway.observe
+	ReportModelUsage(context.Context, *v1.ReportModelUsageRequest) (*v1.ReportModelUsageResponse, error)
 	// ReportStatus reports one gateway replica's status (G0 M15 D10,
 	// HR-410): its version, build, start time, the config version it serves
 	// and each connection's serving state. The org and gateway come from the
@@ -979,6 +1021,8 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceReportFactsSpec(), Handler: adapter.reportFacts},
 		connect.Method{Spec: gatewayServiceReportRevocationFailureSpec(), Handler: adapter.reportRevocationFailure},
 		connect.Method{Spec: gatewayServiceReportLocalRefusalSpec(), Handler: adapter.reportLocalRefusal},
+		connect.Method{Spec: gatewayServiceAuthorizeModelCallSpec(), Handler: adapter.authorizeModelCall},
+		connect.Method{Spec: gatewayServiceReportModelUsageSpec(), Handler: adapter.reportModelUsage},
 		connect.Method{Spec: gatewayServiceReportStatusSpec(), Handler: adapter.reportStatus},
 		connect.Method{Spec: gatewayServicePutMCPStateSpec(), Handler: adapter.putMCPState},
 		connect.Method{Spec: gatewayServiceGetMCPStateSpec(), Handler: adapter.getMCPState},
@@ -1061,6 +1105,14 @@ func (UnimplementedGatewayServiceHandler) ReportRevocationFailure(context.Contex
 
 func (UnimplementedGatewayServiceHandler) ReportLocalRefusal(context.Context, *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportLocalRefusal is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) AuthorizeModelCall(context.Context, *v1.AuthorizeModelCallRequest) (*v1.AuthorizeModelCallResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.AuthorizeModelCall is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportModelUsage(context.Context, *v1.ReportModelUsageRequest) (*v1.ReportModelUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportModelUsage is not implemented")
 }
 
 func (UnimplementedGatewayServiceHandler) ReportStatus(context.Context, *v1.ReportStatusRequest) (*v1.ReportStatusResponse, error) {
@@ -1198,6 +1250,22 @@ func (c *gatewayServiceClient) ReportRevocationFailure(ctx context.Context, req 
 func (c *gatewayServiceClient) ReportLocalRefusal(ctx context.Context, req *v1.ReportLocalRefusalRequest) (*v1.ReportLocalRefusalResponse, error) {
 	var res v1.ReportLocalRefusalResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceReportLocalRefusalSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) AuthorizeModelCall(ctx context.Context, req *v1.AuthorizeModelCallRequest) (*v1.AuthorizeModelCallResponse, error) {
+	var res v1.AuthorizeModelCallResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceAuthorizeModelCallSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ReportModelUsage(ctx context.Context, req *v1.ReportModelUsageRequest) (*v1.ReportModelUsageResponse, error) {
+	var res v1.ReportModelUsageResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportModelUsageSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -1411,6 +1479,30 @@ func (h gatewayServiceHandler) reportLocalRefusal(ctx context.Context, _ connect
 		return err
 	}
 	res, err := h.svc.ReportLocalRefusal(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) authorizeModelCall(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AuthorizeModelCallRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AuthorizeModelCall(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) reportModelUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportModelUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportModelUsage(ctx, &req)
 	if err != nil {
 		return err
 	}

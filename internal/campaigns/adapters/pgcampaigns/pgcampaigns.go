@@ -68,7 +68,32 @@ func (t *txn) Connection(ctx context.Context, id ids.UUID) (app.ConnectionRef, b
 	} else if err != nil {
 		return app.ConnectionRef{}, false, err
 	}
-	return app.ConnectionRef{ID: c.ID, Simulated: c.Simulated}, true, nil
+	return app.ConnectionRef{ID: c.ID, Simulated: c.Simulated, ModelRelay: c.ModelRelay}, true, nil
+}
+
+func (t *txn) RelayConnection(ctx context.Context, id ids.UUID) (app.RelayRef, bool, error) {
+	c, err := t.q.CampaignRelayConnection(ctx, t.org, id)
+	if db.IsNoRows(err) {
+		return app.RelayRef{}, false, nil
+	} else if err != nil {
+		return app.RelayRef{}, false, err
+	}
+	return app.RelayRef{Gateway: c.GatewayID, Simulated: c.Simulated, ModelRelay: c.ModelRelay, Active: c.State == "ACTIVE"}, true, nil
+}
+
+func (t *txn) AddModelRequest(ctx context.Context, campaign, run ids.UUID, host string, bytes, total int64) (bool, error) {
+	_, err := t.q.AddModelRequest(ctx, dbq.AddModelRequestParams{
+		OrgID: t.org, CampaignID: campaign, RunID: run, ModelHost: host, Bytes: bytes, RunTotal: total,
+	})
+	if db.IsNoRows(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (t *txn) AddModelAnswer(ctx context.Context, campaign, run ids.UUID, bytes int64) (bool, error) {
+	n, err := t.q.AddModelAnswer(ctx, dbq.AddModelAnswerParams{OrgID: t.org, CampaignID: campaign, RunID: run, Bytes: bytes})
+	return n > 0, err
 }
 
 func campaignOf(c dbq.PcCampaign) domain.Campaign {

@@ -93,3 +93,23 @@ ON CONFLICT (org_id, campaign_id, run_id) DO UPDATE SET scenario_id = EXCLUDED.s
 SELECT * FROM pc.campaign_runs
 WHERE org_id = sqlc.arg(org_id) AND campaign_id = sqlc.arg(campaign_id)
 ORDER BY run_id;
+
+-- A connection as the model route needs it (D313).
+-- name: CampaignRelayConnection :one
+SELECT gateway_id, simulated, model_relay, state FROM pc.connections
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- One model request of a run (D313): counted before it is sent, so the count
+-- holds whatever becomes of the answer. No row comes back when the bytes
+-- would take the run past its total.
+-- name: AddModelRequest :one
+INSERT INTO pc.campaign_runs (org_id, campaign_id, run_id, model_host, requests, bytes_to_model)
+VALUES (sqlc.arg(org_id), sqlc.arg(campaign_id), sqlc.arg(run_id), sqlc.arg(model_host), 1, sqlc.arg(bytes))
+ON CONFLICT (org_id, campaign_id, run_id) DO UPDATE
+SET requests = pc.campaign_runs.requests + 1, bytes_to_model = pc.campaign_runs.bytes_to_model + EXCLUDED.bytes_to_model
+WHERE pc.campaign_runs.bytes_to_model + pc.campaign_runs.bytes_from_model + EXCLUDED.bytes_to_model <= sqlc.arg(run_total)
+RETURNING requests;
+
+-- name: AddModelAnswer :execrows
+UPDATE pc.campaign_runs SET bytes_from_model = bytes_from_model + sqlc.arg(bytes)
+WHERE org_id = sqlc.arg(org_id) AND campaign_id = sqlc.arg(campaign_id) AND run_id = sqlc.arg(run_id);

@@ -120,6 +120,11 @@ type Options struct {
 	// an edge with no gateway and no hosts: it refuses and records every
 	// request, and holds nothing it could forward with.
 	Inspect bool
+	// ModelHost and ModelConnection, set for a campaign (G0 M25 D313), send
+	// the agent's calls to that one host to the gateway's model face for the
+	// relay connection, streaming the answer (model.go). The edge still
+	// dials only the gateway (HR-213), and the host is no agent host.
+	ModelHost, ModelConnection string
 }
 
 // Edge is one session's sidecar.
@@ -130,9 +135,13 @@ type Edge struct {
 	binding               func() string
 	placeholder           string
 	client                *http.Client
-	ca                    *authority
-	log                   *slog.Logger
-	refused, stripped     atomic.Int64
+	// model is the campaign's model route, nil without one; stream is the
+	// client without an overall timeout that it uses.
+	model             *modelRoute
+	stream            *http.Client
+	ca                *authority
+	log               *slog.Logger
+	refused, stripped atomic.Int64
 }
 
 // New returns an edge with a fresh session CA.
@@ -169,6 +178,10 @@ func New(o Options) (*Edge, error) {
 			return nil, fmt.Errorf("edge: host %q → %q", h, c)
 		}
 	}
+	model, err := newModelRoute(o)
+	if err != nil {
+		return nil, err
+	}
 	tlsConf, err := gatewayTLS(o.GatewayCAPin)
 	if err != nil {
 		return nil, err
@@ -177,7 +190,11 @@ func New(o Options) (*Edge, error) {
 	if validity <= 0 {
 		validity = 24 * time.Hour
 	}
-	ca, err := newAuthority(slices.Sorted(maps.Keys(o.Hosts)), validity, time.Now)
+	names := slices.Sorted(maps.Keys(o.Hosts))
+	if model != nil {
+		names = append(names, model.host)
+	}
+	ca, err := newAuthority(names, validity, time.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -207,15 +224,15 @@ func New(o Options) (*Edge, error) {
 	if o.Binding != nil {
 		transport = base // the egress listener checks the binding token
 	}
+	noRedirect := func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse // HR-070
+	}
 	return &Edge{
 		session: o.Session, gateway: u.String(), run: o.Run, hosts: maps.Clone(o.Hosts), token: o.Token, binding: o.Binding, placeholder: o.Placeholder, ca: ca, log: log,
-		client: &http.Client{
-			Transport: transport,
-			Timeout:   requestTimeout,
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse // HR-070
-			},
-		},
+		client: &http.Client{Transport: transport, Timeout: requestTimeout, CheckRedirect: noRedirect},
+		// A stream lasts as long as the model writes; modelTimeout bounds
+		// each call through its context.
+		model: model, stream: &http.Client{Transport: transport, CheckRedirect: noRedirect},
 	}, nil
 }
 
@@ -320,6 +337,9 @@ func (e *Edge) route(authority string) (host, conn string, ok bool) {
 		return "", "", false
 	}
 	h = strings.ToLower(h)
+	if e.model != nil && h == e.model.host {
+		return h, e.model.conn, true
+	}
 	conn, ok = e.hosts[h]
 	return h, conn, ok
 }
@@ -415,6 +435,10 @@ func (e *Edge) tunnel(w http.ResponseWriter, r *http.Request, host, conn string)
 func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string) {
 	if e.binding != nil {
 		e.egress(w, r, host, conn)
+		return
+	}
+	if e.model != nil && host == e.model.host {
+		e.forwardModel(w, r, host)
 		return
 	}
 	e.strip(r, host)
