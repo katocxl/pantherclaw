@@ -5,6 +5,7 @@ package saascollect_test
 
 import (
 	"context"
+	"encoding/json/v2"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/gateway/saascollect"
 	"github.com/katocxl/pantherclaw/internal/saasdiscovery/domain"
+	"github.com/katocxl/pantherclaw/internal/saasdiscovery/parse"
 	"github.com/katocxl/pantherclaw/internal/sim/chatgptenterprise"
 	"github.com/katocxl/pantherclaw/internal/sim/copilotstudio"
 )
@@ -105,6 +107,42 @@ func TestHR635_NoConversationIsEverRead(t *testing.T) {
 	}
 }
 
+// The Compliance API takes no field filter, so a page holds a GPT's
+// instructions: the first decode keeps none of them, and the collector
+// clears the page it read.
+// Covers: F925
+func TestHR635_TheFirstDecodeDropsAGPTsInstructions(t *testing.T) {
+	_, get := chatgpt(t, chatgptenterprise.Faults{})
+	var pages [][]byte
+	keep := func(ctx context.Context, path string) (egress.Response, error) {
+		res, err := get(ctx, path)
+		if strings.Contains(path, "/gpts") {
+			if !strings.Contains(string(res.Body), chatgptenterprise.Instructions) {
+				t.Fatal("the simulator's page should hold instructions")
+			}
+			records, _, err := parse.ChatGPTPage(res.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := json.Marshal(records)
+			if err != nil || strings.Contains(string(decoded), chatgptenterprise.Instructions) {
+				t.Fatalf("the first decode kept instructions: %s %v", decoded, err)
+			}
+			pages = append(pages, res.Body)
+		}
+		return res, err
+	}
+	res := saascollect.ChatGPTEnterprise(context.Background(), keep, chatgptenterprise.WorkspaceID)
+	if !res.Report.Complete() || len(pages) != 2 {
+		t.Fatalf("report %+v, %d pages", res.Report, len(pages))
+	}
+	for _, p := range pages {
+		if strings.Contains(string(p), chatgptenterprise.Instructions) {
+			t.Fatal("a page read stays in memory")
+		}
+	}
+}
+
 // A next link that asks for a content column, or leaves the list, chooses
 // nothing: the collector rebuilds it or stops.
 func TestHR635_ANextLinkNeverChoosesWhatIsRead(t *testing.T) {
@@ -175,10 +213,20 @@ func TestHR637_WhatACollectorCouldNotReadIsNotScanned(t *testing.T) {
 		t.Fatalf("denied: %+v", res.Report)
 	}
 
+	// One GPT's tools of an unknown shape mark that GPT unread, and only it:
+	// the others' tools were read, and the list was read in full.
 	_, get = chatgpt(t, chatgptenterprise.Faults{UnknownTools: true})
 	res = saascollect.ChatGPTEnterprise(bg, get, chatgptenterprise.WorkspaceID)
-	if res.Report.NotScanned[domain.ReadGPTConfigs] == "" || res.Report.Findings[0].Attributes["tools_incomplete"] != "true" {
+	res.Report.MarkUnread()
+	fs := res.Report.Findings
+	if !res.Report.Complete() || res.Report.Counts[domain.CountRecordsUnread] != 1 ||
+		fs[0].Attributes["tools_incomplete"] != "true" || fs[0].Attributes[domain.AttrUnread] != domain.ReadGPTConfigs {
 		t.Fatalf("unknown tools: %+v", res.Report)
+	}
+	for _, f := range fs[1:] {
+		if _, unread := f.Attributes[domain.AttrUnread]; unread || f.Attributes["tools_incomplete"] != "" {
+			t.Fatalf("another GPT: %+v", f)
+		}
 	}
 
 	ctx, cancel := context.WithCancel(bg)

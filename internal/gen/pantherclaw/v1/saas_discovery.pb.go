@@ -166,7 +166,8 @@ type ImportSaasReportRequest struct {
 	// What it could not read, with why. Anything not named in either is
 	// recorded as not reported.
 	NotScanned map[string]string `protobuf:"bytes,5,rep,name=not_scanned,json=notScanned,proto3" json:"not_scanned,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Counts of what it read.
+	// Counts of what it read, each a name from a closed list ("agents",
+	// "records_unread"); any other name is refused.
 	Counts        map[string]int64 `protobuf:"bytes,6,rep,name=counts,proto3" json:"counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -899,7 +900,11 @@ type SaasAgent struct {
 	// When first seen.
 	FirstSeenTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=first_seen_time,json=firstSeenTime,proto3" json:"first_seen_time,omitempty"`
 	// When last seen.
-	LastSeenTime  *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
+	LastSeenTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
+	// What it is in words: "owner set, external agent" once owned (its
+	// discovery reads CLAIMED, but an external agent is never claimed), "no
+	// owner, external agent" or "dismissed, external agent".
+	Status        string `protobuf:"bytes,12,opt,name=status,proto3" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1009,6 +1014,13 @@ func (x *SaasAgent) GetLastSeenTime() *timestamppb.Timestamp {
 		return x.LastSeenTime
 	}
 	return nil
+}
+
+func (x *SaasAgent) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
 }
 
 // ListSaasAgentsResponse is one page.
@@ -1198,15 +1210,15 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"attributes\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd5\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xee\x04\n" +
 	"\x17ImportSaasReportRequest\x12A\n" +
 	"\x06source\x18\x01 \x01(\tB)\xbaH&r$R\x0ecopilot_studioR\x12chatgpt_enterpriseR\x06source\x12A\n" +
 	"\x06tenant\x18\x02 \x01(\tB)\xbaH&r$2\"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$R\x06tenant\x12H\n" +
 	"\bfindings\x18\x03 \x03(\v2!.pantherclaw.v1.SaasReportFindingB\t\xbaH\x06\x92\x01\x03\x10\xc8\x01R\bfindings\x12(\n" +
 	"\ascanned\x18\x04 \x03(\tB\x0e\xbaH\v\x92\x01\b\x10\x10\"\x04r\x02\x18 R\ascanned\x12o\n" +
 	"\vnot_scanned\x18\x05 \x03(\v27.pantherclaw.v1.ImportSaasReportRequest.NotScannedEntryB\x15\xbaH\x12\x9a\x01\x0f\x10\x10\"\x04r\x02\x18 *\x05r\x03\x18\x80\x04R\n" +
-	"notScanned\x12U\n" +
-	"\x06counts\x18\x06 \x03(\v23.pantherclaw.v1.ImportSaasReportRequest.CountsEntryB\b\xbaH\x05\x9a\x01\x02\x10\x10R\x06counts\x1a=\n" +
+	"notScanned\x12n\n" +
+	"\x06counts\x18\x06 \x03(\v23.pantherclaw.v1.ImportSaasReportRequest.CountsEntryB!\xbaH\x1e\x9a\x01\x1b\x10\x10\"\x11r\x0f\x10\x01\x18 2\t^[a-z_]+$*\x04\"\x02(\x00R\x06counts\x1a=\n" +
 	"\x0fNotScannedEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
@@ -1269,7 +1281,7 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"\tpage_size\x18\x02 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12'\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"\xc9\x04\n" +
+	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"\xe1\x04\n" +
 	"\tSaasAgent\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x129\n" +
@@ -1285,7 +1297,8 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"\fmissed_scans\x18\t \x01(\x05R\vmissedScans\x12B\n" +
 	"\x0ffirst_seen_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\rfirstSeenTime\x12@\n" +
-	"\x0elast_seen_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x1a=\n" +
+	"\x0elast_seen_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12\x16\n" +
+	"\x06status\x18\f \x01(\tR\x06status\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"s\n" +

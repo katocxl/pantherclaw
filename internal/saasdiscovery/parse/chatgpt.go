@@ -79,7 +79,7 @@ func chatGPTRecording(raw []byte) (*domain.Report, error) {
 		return nil, ErrTenant
 	}
 	r := domain.NewReport(domain.SourceChatGPTEnterprise, d.Workspace)
-	r.Read(domain.ReadGPTConfigs) // until a record says otherwise
+	r.Read(domain.ReadGPTConfigs) // with the list; a record it could not read is marked on its own
 	if d.GPTs.HasMore {
 		r.Note(domain.ReadGPTs, "the recording stops with more pages to read")
 	} else {
@@ -109,8 +109,11 @@ func ChatGPTPage(raw []byte) ([]GPTRecord, string, error) {
 }
 
 // ChatGPTFindings adds a finding to r for each GPT. One whose tools have a
-// shape this parser does not know is kept, marked tools_incomplete, and
-// gpt_configs is noted.
+// shape this parser does not know is kept, marked tools_incomplete and unread
+// on its own (AttrUnread), so what was recorded of its tools stands and every
+// other GPT's change is still recorded; the report counts it
+// (CountRecordsUnread). One whose tool list was cut at the attribute's bound
+// was read: it is marked tools_incomplete only.
 func ChatGPTFindings(r *domain.Report, gpts []GPTRecord) {
 	refused, unread := 0, 0
 	for i, g := range gpts {
@@ -137,20 +140,24 @@ func ChatGPTFindings(r *domain.Report, gpts []GPTRecord) {
 		if g.Sharing != nil {
 			put(attrs, "visibility", word(g.Sharing.Visibility))
 		}
-		if !gptTools(attrs, tools) {
+		switch read, whole := gptTools(attrs, tools); {
+		case !read:
 			unread++
+			attrs["tools_incomplete"] = "true"
+			attrs[domain.AttrUnread] = domain.ReadGPTConfigs
+		case !whole:
 			attrs["tools_incomplete"] = "true"
 		}
 		r.Findings = append(r.Findings, domain.Finding{
 			Kind: domain.KindCustomGPT, Key: domain.Key(domain.SourceChatGPTEnterprise, r.Tenant, g.ID), Attributes: attrs,
 		})
 	}
-	r.Counts["agents"] = int64(len(r.Findings))
+	r.Counts[domain.CountAgents] = int64(len(r.Findings))
 	if refused > 0 {
 		r.Note(domain.NoteRecords, strconv.Itoa(refused)+" GPTs with no usable id were not read")
 	}
 	if unread > 0 {
-		r.Note(domain.ReadGPTConfigs, strconv.Itoa(unread)+" GPTs whose tools could not be read")
+		r.Counts[domain.CountRecordsUnread] = int64(unread)
 	}
 }
 
@@ -172,10 +179,11 @@ func word(s string) string {
 }
 
 // gptTools keeps a GPT's tool kinds and action hosts, and reports whether it
-// read them. No tools at all is not read: a GPT's configuration was absent.
-func gptTools(attrs map[string]string, raw jsontext.Value) bool {
+// read them, and whether whole (not cut at the attribute's bound). No tools at
+// all is not read: a GPT's configuration was absent.
+func gptTools(attrs map[string]string, raw jsontext.Value) (read, whole bool) {
 	if len(raw) == 0 {
-		return false
+		return false, false
 	}
 	var list []gptTool
 	if json.Unmarshal(raw, &list) != nil {
@@ -183,7 +191,7 @@ func gptTools(attrs map[string]string, raw jsontext.Value) bool {
 			Data *[]gptTool `json:"data"`
 		}
 		if json.Unmarshal(raw, &wrapped) != nil || wrapped.Data == nil {
-			return false
+			return false, false
 		}
 		list = *wrapped.Data
 	}
@@ -200,7 +208,7 @@ func gptTools(attrs map[string]string, raw jsontext.Value) bool {
 	h, overH := joined(hosts)
 	put(attrs, "tool_kinds", k)
 	put(attrs, "action_domains", h)
-	return overK == 0 && overH == 0
+	return true, overK == 0 && overH == 0
 }
 
 // hostOf is the host of an action's domain or URL, and nothing of its path,

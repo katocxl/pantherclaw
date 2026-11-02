@@ -20,11 +20,12 @@ UPDATE pc.saas_scan_runs r
 SET state = 'FAILED', finished_at = now()
 FROM pc.verifications v
 WHERE r.org_id = $1 AND v.org_id = r.org_id AND v.id = r.verification_id AND v.purpose = 'saas_scan'
-  AND v.state = 'EXPIRED' AND r.state IN ('PENDING', 'RUNNING')
+  AND v.state IN ('EXPIRED', 'CANCELLED', 'DONE') AND r.state IN ('PENDING', 'RUNNING')
 `
 
-// FailExpiredSaasScans ends the runs whose lease expired: a scan never stays
-// PENDING.
+// FailExpiredSaasScans ends the runs whose lease ended unreported (expired,
+// cancelled, or done without the run's report): a scan never stays PENDING,
+// and reads FAILED as GetSaasRun derives it.
 func (q *Queries) FailExpiredSaasScans(ctx context.Context, orgID ids.OrgID) (int64, error) {
 	result, err := q.db.Exec(ctx, failExpiredSaasScans, orgID)
 	if err != nil {

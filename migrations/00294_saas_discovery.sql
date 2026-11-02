@@ -85,6 +85,8 @@ $$;
 -- +goose StatementEnd
 CREATE TRIGGER saas_scan_runs_forward BEFORE UPDATE ON pc.saas_scan_runs
     FOR EACH ROW EXECUTE FUNCTION pc.saas_scan_runs_forward();
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.saas_scan_runs
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 ALTER TABLE pc.saas_scan_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.saas_scan_runs FORCE ROW LEVEL SECURITY;

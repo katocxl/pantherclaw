@@ -96,6 +96,28 @@ const (
 // Notes lists them.
 var Notes = []string{NoteFindings, NoteRecords, NoteTenant}
 
+// Counts a report may give: how many agents it found, and how many records it
+// kept whose side read it could not finish (each marked on its own,
+// AttrUnread). Any other name is refused.
+const (
+	CountAgents        = "agents"
+	CountRecordsUnread = "records_unread"
+)
+
+// CountNames lists them.
+var CountNames = []string{CountAgents, CountRecordsUnread}
+
+// CountsOK reports whether every count is one CountNames names, and none is
+// negative.
+func CountsOK(counts map[string]int64) bool {
+	for k, v := range counts {
+		if !slices.Contains(CountNames, k) || v < 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // attributes are the only attributes each kind carries (HR-636). A value not
 // listed here never leaves the parser, and the server drops it if it comes.
 var attributes = map[string][]string{
@@ -280,14 +302,16 @@ func (r *Report) Note(name, why string) {
 }
 
 // MarkUnread marks each finding with the read behind its material attributes
-// when the report did not finish it (AttrUnread).
+// when the report did not finish that read for every record (AttrUnread).
+// A record a parser could not read is already marked on its own, and only it:
+// one bad record never hides another's change (HR-637).
 func (r *Report) MarkUnread() {
-	for _, read := range []string{ReadBotComponents, ReadGPTConfigs} {
-		if _, unread := r.NotScanned[read]; !unread {
-			continue
-		}
-		for i := range r.Findings {
-			r.Findings[i].Attributes[AttrUnread] = read
+	for i := range r.Findings {
+		f := &r.Findings[i]
+		for _, read := range sideReads[f.Kind] {
+			if _, unread := r.NotScanned[read]; unread {
+				f.Attributes[AttrUnread] = read
+			}
 		}
 	}
 }

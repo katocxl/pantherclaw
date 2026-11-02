@@ -166,7 +166,7 @@ func CopilotFindings(r *domain.Report, bots []BotRecord, comps []ComponentRecord
 			knowledge[c.Parent]++
 		}
 	}
-	refused, clipped := 0, false
+	refused := 0
 	for i, b := range bots {
 		if i == MaxRecords {
 			r.Note(domain.ReadBots, "only the first "+strconv.Itoa(MaxRecords)+" agents were kept")
@@ -189,19 +189,17 @@ func CopilotFindings(r *domain.Report, bots []BotRecord, comps []ComponentRecord
 		put(attrs, "modified_at", b.ModifiedOn)
 		put(attrs, "owner_ref", b.OwnerID)
 		if !partial {
-			list, over := joined(skills[b.ID])
+			// Names past the attribute's bound are left out; the count stands
+			// whole, so a cut list is read, not unread.
+			list, _ := joined(skills[b.ID])
 			put(attrs, "skills", list)
 			attrs["skill_count"], attrs["knowledge_count"] = count(len(skills[b.ID])), count(knowledge[b.ID])
-			clipped = clipped || over > 0
 		}
 		r.Findings = append(r.Findings, domain.Finding{
 			Kind: domain.KindCopilotAgent, Key: domain.Key(domain.SourceCopilotStudio, r.Tenant, b.ID), Attributes: attrs,
 		})
 	}
-	r.Counts["agents"] = int64(len(r.Findings))
-	if clipped {
-		r.Note(domain.ReadBotComponents, "skill names past the attribute's bound were left out; their count stands")
-	}
+	r.Counts[domain.CountAgents] = int64(len(r.Findings))
 	if refused > 0 {
 		r.Note(domain.NoteRecords, strconv.Itoa(refused)+" agents with no usable id were not read")
 	}

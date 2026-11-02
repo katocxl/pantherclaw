@@ -727,8 +727,13 @@ type Discovery struct {
 	// UNTRUSTED attributes as observed (gateway, route, client address, user
 	// agent). Never use them to identify the agent.
 	UntrustedObserved map[string]string `protobuf:"bytes,8,rep,name=untrusted_observed,json=untrustedObserved,proto3" json:"untrusted_observed,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// For an external agent's discovery, what it is in words: "owner set,
+	// external agent" once an owner is named (state CLAIMED, though the agent
+	// is never claimed), "no owner, external agent" or "dismissed, external
+	// agent". Empty for any other agent.
+	Status        string `protobuf:"bytes,9,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Discovery) Reset() {
@@ -815,6 +820,13 @@ func (x *Discovery) GetUntrustedObserved() map[string]string {
 		return x.UntrustedObserved
 	}
 	return nil
+}
+
+func (x *Discovery) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
 }
 
 // AgentSummary answers who owns the agent, what it is for, where it runs and
@@ -3079,7 +3091,7 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\x0eAgentScanState\x12!\n" +
 	"\fmissed_scans\x18\x01 \x01(\x05R\vmissedScans\x12@\n" +
 	"\x0elast_seen_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12\x1a\n" +
-	"\bvanished\x18\x03 \x01(\bR\bvanished\"\xbc\x03\n" +
+	"\bvanished\x18\x03 \x01(\bR\bvanished\"\xd4\x03\n" +
 	"\tDiscovery\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12%\n" +
@@ -3089,7 +3101,8 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"seen_count\x18\x05 \x01(\x03R\tseenCount\x12B\n" +
 	"\x0ffirst_seen_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rfirstSeenTime\x12@\n" +
 	"\x0elast_seen_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12_\n" +
-	"\x12untrusted_observed\x18\b \x03(\v20.pantherclaw.v1.Discovery.UntrustedObservedEntryR\x11untrustedObserved\x1aD\n" +
+	"\x12untrusted_observed\x18\b \x03(\v20.pantherclaw.v1.Discovery.UntrustedObservedEntryR\x11untrustedObserved\x12\x16\n" +
+	"\x06status\x18\t \x01(\tR\x06status\x1aD\n" +
 	"\x16UntrustedObservedEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbe\x04\n" +

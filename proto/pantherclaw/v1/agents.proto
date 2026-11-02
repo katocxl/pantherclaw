@@ -252,6 +252,11 @@ message Discovery {
   // UNTRUSTED attributes as observed (gateway, route, client address, user
   // agent). Never use them to identify the agent.
   map<string, string> untrusted_observed = 8;
+  // For an external agent's discovery, what it is in words: "owner set,
+  // external agent" once an owner is named (state CLAIMED, though the agent
+  // is never claimed), "no owner, external agent" or "dismissed, external
+  // agent". Empty for any other agent.
+  string status = 9;
 }
 
 // AgentSummary answers who owns the agent, what it is for, where it runs and

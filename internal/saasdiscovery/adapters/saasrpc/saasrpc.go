@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
+	agentsdomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -83,6 +84,7 @@ func agentProto(a app.Agent) *pantherclawv1.SaasAgent {
 		OwnerUserId: idString(a.OwnerUserID), BackupOwnerUserId: idString(a.BackupOwnerUserID), DiscoveryState: a.DiscoveryState,
 		Attributes: a.Attributes, SeenCount: a.SeenCount, MissedScans: a.MissedScans,
 		FirstSeenTime: timestamppb.New(a.FirstSeenAt), LastSeenTime: timestamppb.New(a.LastSeenAt),
+		Status: agentsdomain.ExternalStatus(a.DiscoveryState),
 	}
 }
 

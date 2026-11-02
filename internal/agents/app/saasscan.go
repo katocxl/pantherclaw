@@ -263,6 +263,9 @@ func (inv *Inventory) ImportSaaS(ctx context.Context, r SaaSReport) (SaaSResult,
 	if err != nil {
 		return SaaSResult{}, err
 	}
+	if !saas.CountsOK(r.Counts) {
+		return SaaSResult{}, ErrSaaSReport
+	}
 	out := SaaSResult{Run: ids.NewV7()}
 	err = inOrg(ctx, inv.pool, func(ctx context.Context, c tenancy.Caller, q *dbq.Queries, tx db.TenantTx) error {
 		if err := c.Require(td.PermAgentManage, td.OrgPath(c.Org)); err != nil {

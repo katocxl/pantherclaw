@@ -93,6 +93,9 @@ type Discovery struct {
 	FirstSeenAt   time.Time
 	LastSeenAt    time.Time
 	Observed      map[string]string
+	// Status words an external agent's discovery ("owner set, external
+	// agent"); "" for any other.
+	Status string
 }
 
 // Summary answers who owns an agent, what it is for and how its identity
@@ -243,6 +246,10 @@ func (inv *Inventory) Get(ctx context.Context, id ids.UUID) (Summary, error) {
 		d, err := q.GetAgentDiscovery(ctx, c.Org, r.ID)
 		if err == nil {
 			out.Discovery = discoveryView(d)
+			if a.External {
+				out.Discovery.Status = domain.ExternalStatus(out.Discovery.State)
+				out.NextAction = domain.ExternalNextAction(out.Discovery.State)
+			}
 		} else if !db.IsNoRows(err) {
 			return err
 		}

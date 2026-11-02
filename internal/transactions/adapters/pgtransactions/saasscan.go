@@ -5,6 +5,7 @@ package pgtransactions
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	saas "github.com/katocxl/pantherclaw/internal/saasdiscovery/domain"
 	"github.com/katocxl/pantherclaw/internal/transactions/app"
 )
 
@@ -52,7 +54,7 @@ func saasScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify agents
 		switch kind {
 		case "counts":
 			n, err := strconv.ParseInt(v, 10, 64)
-			if err != nil || n < 0 {
+			if err != nil || n < 0 || !slices.Contains(saas.CountNames, name) {
 				return app.Applied{}, app.ErrUndeclared
 			}
 			counts[name] = n

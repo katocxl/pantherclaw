@@ -189,7 +189,7 @@ func summaryProto(s app.Summary) *pantherclawv1.AgentSummary {
 	if d := s.Discovery; d != nil {
 		out.Discovery = &pantherclawv1.Discovery{
 			Id: d.ID.String(), Source: d.Source, KeyThumbprint: d.KeyThumbprint, State: d.State, SeenCount: d.SeenCount,
-			FirstSeenTime: ts(d.FirstSeenAt), LastSeenTime: ts(d.LastSeenAt), UntrustedObserved: d.Observed,
+			FirstSeenTime: ts(d.FirstSeenAt), LastSeenTime: ts(d.LastSeenAt), UntrustedObserved: d.Observed, Status: d.Status,
 		}
 	}
 	return out

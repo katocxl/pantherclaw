@@ -18,6 +18,13 @@ import (
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
+	gapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/grants/grantstest"
+	identity "github.com/katocxl/pantherclaw/internal/identity/app"
+	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -35,6 +42,15 @@ import (
 const tenant = "wksp-test"
 
 type edition billing.Edition
+
+// allowAll lets every permission through, so only an agent's state refuses.
+type allowAll struct{}
+
+func (allowAll) Require(tenancy.Caller, td.Permission, td.Path) error { return nil }
+
+type noDefs struct{}
+
+func (noDefs) Active(context.Context, ids.OrgID, string) (*defs.Definition, error) { return nil, nil } //nolint:nilnil // none
 
 func (e edition) Current(context.Context) (billing.Entitlements, error) {
 	return billing.Entitlements{Edition: billing.Edition(e)}, nil
@@ -191,6 +207,10 @@ func TestHR636_TheServerKeepsOnlyWhatAKindNames(t *testing.T) {
 			NotScanned: map[string]string{domain.ReadGPTs: "x"},
 		},
 		"an unknown note": {Source: domain.SourceChatGPTEnterprise, Tenant: tenant, NotScanned: map[string]string{"everything": "x"}},
+		"an unknown count": {
+			Source: domain.SourceChatGPTEnterprise, Tenant: tenant, Scanned: []string{domain.ReadGPTs, domain.ReadGPTConfigs},
+			Counts: map[string]int64{strings.Repeat("x", 400): 1},
+		},
 	} {
 		if _, _, err := e.svc.Import(e.admin, r); !errors.Is(err, aapp.ErrSaaSReport) {
 			t.Errorf("%s: %v", name, err)
@@ -241,6 +261,36 @@ func TestHR637_WhatARunDidNotReadIsNeverNoneFound(t *testing.T) {
 	}
 	if _, state, _, _ := e.discovery(t, "g-seen"); state != "OPEN" {
 		t.Fatalf("state %s", state)
+	}
+}
+
+// TestHR637_OneUnreadRecordHidesNoOtherChange: a GPT whose tools could not be
+// read keeps what was recorded of them, and only it: a changed GPT beside it
+// in the same run is recorded, and the run, its list read in full, counts
+// misses.
+// Covers: F926
+func TestHR637_OneUnreadRecordHidesNoOtherChange(t *testing.T) {
+	e := newEnv(t)
+	if _, _, err := e.svc.Import(e.admin, report(finding("g-bad", nil), finding("g-changed", nil), finding("g-gone", nil))); err != nil {
+		t.Fatal(err)
+	}
+	bad := finding("g-bad", map[string]string{"tools_incomplete": "true", domain.AttrUnread: domain.ReadGPTConfigs})
+	delete(bad.Attributes, "tool_kinds")
+	r := report(bad, finding("g-changed", map[string]string{"tool_kinds": "action,browser", "action_domains": "api.example.test"}))
+	r.Counts[domain.CountRecordsUnread] = 1
+	scan, res, err := e.svc.Import(e.admin, r)
+	if err != nil || res.Missed != 1 || len(scan.NotScanned) != 0 || scan.Counts[domain.CountRecordsUnread] != 1 {
+		t.Fatalf("%+v %+v %v", scan, res, err)
+	}
+	changes := "SELECT count(*) FROM pc.agent_changes WHERE org_id = $1 AND agent_id = $2 AND kind = $3"
+	changed, _, observed, _ := e.discovery(t, "g-changed")
+	if n := e.count(t, changes, e.org, changed, string(adomain.ChangeDiscoveryChanged)); n != 1 || !strings.Contains(observed, "api.example.test") {
+		t.Fatalf("the changed GPT: %d changes, %s", n, observed)
+	}
+	unread, _, observed, _ := e.discovery(t, "g-bad")
+	if n := e.count(t, changes, e.org, unread, string(adomain.ChangeDiscoveryChanged)); n != 0 ||
+		!strings.Contains(observed, `"tool_kinds":"browser"`) || strings.Contains(observed, "tools_incomplete") || strings.Contains(observed, `"unread"`) {
+		t.Fatalf("the unread GPT: %d changes, %s", n, observed)
 	}
 }
 
@@ -298,6 +348,35 @@ func TestHR639_AClaimSetsAnOwnerAndNothingElse(t *testing.T) {
 	}
 	if _, err := e.svc.SetOwner(e.admin, agent, next, ids.UUID{}, "the team moved"); err != nil {
 		t.Fatalf("another owner: %v", err)
+	}
+	// The API words it as what it is (L7): its discovery reads CLAIMED, the
+	// agent is never claimed.
+	if list, _, err := e.svc.ListAgents(e.admin, "", 10, ""); err != nil || len(list) != 1 ||
+		adomain.ExternalStatus(list[0].DiscoveryState) != "owner set, external agent" {
+		t.Fatalf("list %+v %v", list, err)
+	}
+	if s, err := e.inv.Get(e.admin, agent); err != nil || s.Discovery == nil || s.Discovery.Status != "owner set, external agent" ||
+		!strings.HasPrefix(s.NextAction, "none: owner set, external agent") {
+		t.Fatalf("summary %+v %v", s, err)
+	}
+	// It never gets an instance, a token or a grant: an enrollment token, the
+	// only way to an instance and so to a workload token, is refused to its
+	// owner, and a grant is refused with every permission allowed.
+	idsvc := identity.New(e.pool, nil, "https://t.test", clock.System{})
+	if _, err := idsvc.CreateEnrollmentToken(e.as(next, td.KindUser), agent, time.Hour); !errors.Is(err, identity.ErrAgentUnusable) {
+		t.Fatalf("an enrollment token: %v", err)
+	}
+	gstore := &pgstore.Store{Pool: e.pool, Promotions: grantstest.OpenGate{}}
+	gsvc := &gapp.Service{Repo: gstore, Subjects: gstore, Defs: noDefs{}, Authz: allowAll{}, Clock: clock.System{}}
+	if _, err := gsvc.Issue(e.as(e.user, td.KindUser), gapp.IssueRequest{
+		AgentID: agent, Principal: gdomain.Principal{Kind: gdomain.PrincipalUser, ID: e.user}, TaskRef: "x", ExpiresAt: time.Now().Add(time.Hour),
+	}); !errors.Is(err, gapp.ErrAgentNotEligible) {
+		t.Fatalf("a grant: %v", err)
+	}
+	for _, table := range []string{"pc.agent_instances", "pc.enrollment_tokens", "pc.grants"} {
+		if n := e.count(t, "SELECT count(*) FROM "+table+" WHERE org_id = $1 AND agent_id = $2", e.org, agent); n != 0 {
+			t.Fatalf("%s: %d rows", table, n)
+		}
 	}
 	var refused error
 	e.d.AdminDo(t, func(c *pgx.Conn) error {
@@ -401,6 +480,16 @@ func TestT273_AGatewayScanRunsUnderItsLease(t *testing.T) {
 	if _, err := e.svc.Start(e.as(ids.NewV7(), td.KindServiceAccount), conn, domain.SourceChatGPTEnterprise, tenant); !errors.Is(err, app.ErrHumanOnly) {
 		t.Fatalf("a machine: %v", err)
 	}
+	// Each source starts on a connection of its own package (D534) and on no
+	// other.
+	copilot, _ := domain.CollectorOf(domain.SourceCopilotStudio)
+	copilotConn := e.connection(t, gateway, key, copilot.Package, copilot.CredentialKind)
+	if _, err := e.svc.Start(e.admin, copilotConn, domain.SourceChatGPTEnterprise, tenant); !errors.Is(err, app.ErrConnection) {
+		t.Fatalf("a Copilot Studio connection for ChatGPT: %v", err)
+	}
+	if s, err := e.svc.Start(e.admin, copilotConn, domain.SourceCopilotStudio, "c0b11a7e-0000-4000-8000-000000000001"); err != nil || s.State != "PENDING" {
+		t.Fatalf("a Copilot Studio scan: %+v %v", s, err)
+	}
 	if _, err := e.svc.Start(e.admin, wrong, domain.SourceChatGPTEnterprise, tenant); !errors.Is(err, app.ErrConnection) {
 		t.Fatalf("another package: %v", err)
 	}
@@ -413,8 +502,15 @@ func TestT273_AGatewayScanRunsUnderItsLease(t *testing.T) {
 	}
 	store := &pgtransactions.Store{Pool: e.pool}
 	leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
-	if err != nil || len(leases) != 1 || leases[0].Purpose != tdomain.PurposeSaaSScan || leases[0].Connection != conn {
+	// Both scans are leased to the gateway; this test follows the ChatGPT one.
+	if err != nil || len(leases) != 2 || leases[0].Purpose != tdomain.PurposeSaaSScan || leases[1].Purpose != tdomain.PurposeSaaSScan {
 		t.Fatalf("leases %+v %v", leases, err)
+	}
+	if leases[0].Connection != conn {
+		leases[0], leases[1] = leases[1], leases[0]
+	}
+	if leases[0].Connection != conn || leases[1].Connection != copilotConn {
+		t.Fatalf("leases %+v", leases)
 	}
 	if got, _ := e.svc.Get(e.admin, scan.ID); got.State != "RUNNING" {
 		t.Fatalf("leased: %s", got.State)
@@ -440,6 +536,7 @@ func TestT273_AGatewayScanRunsUnderItsLease(t *testing.T) {
 		"a field that is no summary": {"/secrets/production": "x"},
 		"a read of nothing known":    {"/scanned/conversations": "true"},
 		"read and not read":          {"/scanned/gpts": "true", "/not_scanned/gpts": "x"},
+		"a count of no known name":   {"/scanned/gpts": "true", "/counts/" + strings.Repeat("x", 400): "1"},
 	} {
 		if err := reportFields(fields); !errors.Is(err, tapp.ErrUndeclared) {
 			t.Errorf("%s: %v", name, err)
@@ -467,5 +564,22 @@ func TestT273_AGatewayScanRunsUnderItsLease(t *testing.T) {
 	e.exec(t, "UPDATE pc.verifications SET state = 'EXPIRED', finished_at = now() WHERE org_id = $1 AND id = $2", e.org, task)
 	if got, _ := e.svc.Get(e.admin, next.ID); got.State != "FAILED" {
 		t.Fatalf("expired: %s", got.State)
+	}
+	// A lease ended by cancellation fails its run as an expired one does, and the stored
+	// run finishes, so the queue shows it.
+	stopped, err := e.svc.Start(e.admin, conn, domain.SourceChatGPTEnterprise, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.d.AdminQueryRow(t, "SELECT verification_id FROM pc.saas_scan_runs WHERE org_id = $1 AND id = $2", []any{e.org, stopped.ID}, &task)
+	e.exec(t, "UPDATE pc.verifications SET state = 'CANCELLED', finished_at = now() WHERE org_id = $1 AND id = $2", e.org, task)
+	if _, err := store.Expire(context.Background(), e.org, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, run := range []ids.UUID{next.ID, stopped.ID} {
+		if n := e.count(t, "SELECT count(*) FROM pc.saas_scan_runs WHERE org_id = $1 AND id = $2 AND state = 'FAILED' AND finished_at IS NOT NULL",
+			e.org, run); n != 1 {
+			t.Fatalf("run %s did not finish FAILED", run)
+		}
 	}
 }

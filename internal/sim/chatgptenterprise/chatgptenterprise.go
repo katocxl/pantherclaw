@@ -111,6 +111,9 @@ func (s *Server) Stats() Stats {
 // Handler serves the simulator.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/compliance/workspaces", s.authed(func(w http.ResponseWriter, _ *http.Request) {
+		write(w, http.StatusOK, map[string]any{"data": []map[string]string{{"id": WorkspaceID}}, "has_more": false})
+	}))
 	mux.HandleFunc("GET /v1/compliance/workspaces/{workspace}/gpts", s.authed(s.list))
 	mux.HandleFunc("GET /v1/compliance/workspaces/{workspace}/conversations", s.authed(s.conversations))
 	mux.HandleFunc("GET /__sim/stats", func(w http.ResponseWriter, _ *http.Request) { write(w, http.StatusOK, s.Stats()) })

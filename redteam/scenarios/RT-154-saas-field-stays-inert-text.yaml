@@ -7,7 +7,7 @@ tier: business
 attacker: A8
 threats: [T-272, T-273]
 rules: [HR-636, HR-638, HR-639]
-requires: [payments]
+requires: []
 harness_only: true
 steps:
   - id: hostile-field-is-text

@@ -102,8 +102,21 @@ message ImportSaasReportRequest {
       string: {max_len: 512}
     }
   }];
-  // Counts of what it read.
-  map<string, int64> counts = 6 [(buf.validate.field).map.max_pairs = 16];
+  // Counts of what it read, each a name from a closed list ("agents",
+  // "records_unread"); any other name is refused.
+  map<string, int64> counts = 6 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {
+        min_len: 1
+        max_len: 32
+        pattern: "^[a-z_]+$"
+      }
+    }
+    values: {
+      int64: {gte: 0}
+    }
+  }];
 }
 
 // ImportSaasReportResponse says what was recorded.
@@ -258,6 +271,10 @@ message SaasAgent {
   google.protobuf.Timestamp first_seen_time = 10;
   // When last seen.
   google.protobuf.Timestamp last_seen_time = 11;
+  // What it is in words: "owner set, external agent" once owned (its
+  // discovery reads CLAIMED, but an external agent is never claimed), "no
+  // owner, external agent" or "dismissed, external agent".
+  string status = 12;
 }
 
 // ListSaasAgentsResponse is one page.

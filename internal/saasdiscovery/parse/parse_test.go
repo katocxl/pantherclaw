@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -128,6 +129,58 @@ func TestF924_ChatGPTAttributes(t *testing.T) {
 	}
 }
 
+// TestHR637_OneUnreadRecordIsUnreadAlone: a GPT whose tools have an unknown
+// shape, or no configuration, is marked unread on its own, and the report
+// still reads the others in full; a skill list cut at its bound, whose count
+// stands, is read, not unread.
+// Covers: F926
+func TestHR637_OneUnreadRecordIsUnreadAlone(t *testing.T) {
+	for name, bad := range map[string]string{
+		"odd tools": `{"id":"g-1","latest_config":{"data":[{"tools":"browser"}]}}`,
+		"no config": `{"id":"g-1"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			good := `{"id":"g-2","latest_config":{"data":[{"tools":[{"type":"browser"}]}]}}`
+			r, err := parse.Recording(domain.SourceChatGPTEnterprise, []byte(`{"workspace_id":"w","gpts":{"data":[`+bad+`,`+good+`]}}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.MarkUnread()
+			if !r.Complete() || r.Counts[domain.CountRecordsUnread] != 1 || len(r.Findings) != 2 {
+				t.Fatalf("report %+v", r)
+			}
+			if a := r.Findings[0].Attributes; a[domain.AttrUnread] != domain.ReadGPTConfigs || a["tools_incomplete"] != "true" {
+				t.Fatalf("bad GPT %v", a)
+			}
+			if a := r.Findings[1].Attributes; a[domain.AttrUnread] != "" || a["tool_kinds"] != "browser" || a["tools_incomplete"] != "" {
+				t.Fatalf("good GPT %v", a)
+			}
+		})
+	}
+
+	const parent = "00000000-5a5a-4000-8000-0000000000a1"
+	var comps []string
+	for i := range 40 {
+		comps = append(comps, `{"botcomponentid":"c`+strconv.Itoa(i)+`","name":"SYNTHETIC a long skill name number `+strconv.Itoa(i)+
+			`","componenttype":1,"_parentbotid_value":"`+parent+`"}`)
+	}
+	doc := `{"environment":"e-1","bots":{"value":[{"botid":"` + parent + `","name":"x"},{"botid":"00000000-5a5a-4000-8000-0000000000a2"}]},` +
+		`"botcomponents":{"value":[` + strings.Join(comps, ",") + `]}}`
+	r, err := parse.Recording(domain.SourceCopilotStudio, []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.MarkUnread()
+	if !r.Complete() || r.Findings[0].Attributes["skill_count"] != "40" || len(r.Findings[0].Attributes["skills"]) > domain.MaxValue {
+		t.Fatalf("a cut skill list: %+v", r)
+	}
+	for _, f := range r.Findings {
+		if f.Attributes[domain.AttrUnread] != "" {
+			t.Fatalf("marked unread: %v", f.Attributes)
+		}
+	}
+}
+
 // TestHR637_WhatARecordingLacksIsNotScanned: a part missing, a next page left
 // behind, a record refused or a tools shape unknown is reported as not
 // scanned, and a document of another shape is refused, never "none found".
@@ -144,8 +197,6 @@ func TestHR637_WhatARecordingLacksIsNotScanned(t *testing.T) {
 		"next components": {domain.SourceCopilotStudio, `{` + env + `,"bots":{"value":[` + bot + `]},"botcomponents":{"value":[],"@odata.nextLink":"x"}}`, domain.ReadBotComponents, 1},
 		"bad id":          {domain.SourceCopilotStudio, `{` + env + `,"bots":{"value":[{"botid":"../etc"}]},"botcomponents":{"value":[]}}`, domain.NoteRecords, 0},
 		"more GPTs":       {domain.SourceChatGPTEnterprise, `{"workspace_id":"w","gpts":{"data":[],"has_more":true,"last_id":"g-1"}}`, domain.ReadGPTs, 0},
-		"odd tools":       {domain.SourceChatGPTEnterprise, `{"workspace_id":"w","gpts":{"data":[{"id":"g-1","latest_config":{"data":[{"tools":"browser"}]}}]}}`, domain.ReadGPTConfigs, 1},
-		"no config":       {domain.SourceChatGPTEnterprise, `{"workspace_id":"w","gpts":{"data":[{"id":"g-1"}]}}`, domain.ReadGPTConfigs, 1},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

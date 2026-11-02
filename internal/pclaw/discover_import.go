@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"strconv"
 
@@ -22,8 +23,9 @@ import (
 // `pclaw discover import` (G0 M26 D407; F924) parses a recording an admin
 // exported from Microsoft Copilot Studio or ChatGPT Enterprise on this machine
 // and sends the server what the parser kept: metadata, never a conversation.
-// Findings past one request's limit are reported not scanned, never dropped
-// silently.
+// Every finding is sent, in imports of at most maxImportFindings. A recording
+// sent in more than one import says so in each (NoteFindings): no one import
+// saw every agent, so none counts an agent missing.
 
 // maxImportFindings is the most findings one import carries (the API's limit).
 const maxImportFindings = 200
@@ -54,19 +56,28 @@ func discoverImport(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	req := importRequest(r)
 	s, err := a.session()
 	if err != nil {
 		return err
 	}
-	res, err := pantherclawv1connect.NewSaasDiscoveryServiceClient(s.connect()).ImportSaasReport(ctx, req)
-	if err != nil {
-		return err
+	client := pantherclawv1connect.NewSaasDiscoveryServiceClient(s.connect())
+	reqs := importRequests(r)
+	for i, req := range reqs {
+		res, err := client.ImportSaasReport(ctx, req)
+		if err != nil {
+			if i > 0 {
+				_, _ = fmt.Fprintf(a.stderr, "imports 1-%d of %d were recorded; the rest were not sent\n", i, len(reqs))
+			}
+			return err
+		}
+		for name, why := range res.GetScan().GetNotScanned() {
+			_, _ = fmt.Fprintf(a.stderr, "not scanned: %s: %s\n", name, why)
+		}
+		if err := a.print(res); err != nil {
+			return err
+		}
 	}
-	for name, why := range res.GetScan().GetNotScanned() {
-		_, _ = fmt.Fprintf(a.stderr, "not scanned: %s: %s\n", name, why)
-	}
-	return a.print(res)
+	return nil
 }
 
 // readRecording reads at most parse.MaxRecording and one byte more, which the
@@ -84,18 +95,32 @@ func readRecording(path string) ([]byte, error) {
 	return raw, nil
 }
 
-// importRequest is r as the API takes it.
-func importRequest(r *domain.Report) *pb.ImportSaasReportRequest {
-	findings := r.Findings
-	if len(findings) > maxImportFindings {
-		r.Note(domain.NoteFindings, strconv.Itoa(len(findings)-maxImportFindings)+" findings past one import's limit were not sent")
-		findings = findings[:maxImportFindings]
+// importRequests are r as the API takes it: every finding, at most
+// maxImportFindings to an import. More than one import notes, in each, that
+// the recording was sent in parts, so none of them counts misses.
+func importRequests(r *domain.Report) []*pb.ImportSaasReportRequest {
+	r.MarkUnread()
+	parts := max(1, (len(r.Findings)+maxImportFindings-1)/maxImportFindings)
+	notScanned := r.NotScanned
+	if parts > 1 {
+		notScanned = maps.Clone(r.NotScanned)
+		why := strconv.Itoa(len(r.Findings)) + " findings were sent in " + strconv.Itoa(parts) +
+			" imports of at most " + strconv.Itoa(maxImportFindings) + "; no one import saw every agent"
+		if had := notScanned[domain.NoteFindings]; had != "" {
+			why = had + "; " + why
+		}
+		notScanned[domain.NoteFindings] = why
 	}
-	req := &pb.ImportSaasReportRequest{
-		Source: r.Source, Tenant: r.Tenant, Scanned: r.Scanned, NotScanned: r.NotScanned, Counts: r.Counts,
+	reqs := make([]*pb.ImportSaasReportRequest, 0, parts)
+	for part := range parts {
+		req := &pb.ImportSaasReportRequest{
+			Source: r.Source, Tenant: r.Tenant, Scanned: r.Scanned, NotScanned: notScanned, Counts: r.Counts,
+		}
+		lo, hi := min(part*maxImportFindings, len(r.Findings)), min((part+1)*maxImportFindings, len(r.Findings))
+		for _, f := range r.Findings[lo:hi] {
+			req.Findings = append(req.Findings, &pb.SaasReportFinding{Kind: f.Kind, Key: hex.EncodeToString(f.Key[:]), Attributes: f.Attributes})
+		}
+		reqs = append(reqs, req)
 	}
-	for _, f := range findings {
-		req.Findings = append(req.Findings, &pb.SaasReportFinding{Kind: f.Kind, Key: hex.EncodeToString(f.Key[:]), Attributes: f.Attributes})
-	}
-	return req
+	return reqs
 }

@@ -2,9 +2,12 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package saascollect reads SaaS agent metadata through a gateway's
-// connection (G0 M26 D407), page by page, into the parsers' report. It asks
-// only for the columns discovery keeps, so a vendor's prompts, instructions
-// and conversations are never fetched (H3, F789, HR-635). A next-page link is
+// connection (G0 M26 D407), page by page, into the parsers' report. Where the
+// vendor takes a column list (Dataverse's $select) it asks only for the
+// columns discovery keeps, so a bot's prompts are never fetched; where it
+// takes none (the Compliance API) the first decode drops all else. Either
+// way a prompt or instruction is never kept, logged or sent to the server,
+// and a conversation is never asked for (H3, F789, HR-635). A next-page link is
 // taken apart and rebuilt with those same columns: a vendor's link never
 // chooses what is read. What it could not read stays not scanned (HR-637).
 package saascollect
@@ -100,6 +103,10 @@ func pages[T any](ctx context.Context, get Getter, first string, decode func([]b
 			return out, why
 		}
 		list, more, err := decode(res.Body)
+		// The first decode keeps only a record's metadata fields: what else
+		// the page held (a GPT's instructions) goes with the page, never
+		// logged, kept or sent to the server (HR-635).
+		clear(res.Body)
 		if err != nil {
 			return out, "a page had an unknown shape"
 		}
@@ -156,7 +163,11 @@ func CopilotStudio(ctx context.Context, get Getter, tenant string) Result {
 	return Result{Report: r, Reached: true}
 }
 
-// ChatGPTEnterprise reads the custom GPTs of the workspace tenant.
+// ChatGPTEnterprise reads the custom GPTs of the workspace tenant. No field
+// filter of the Compliance API is known (its reference is behind an
+// enterprise sign-in), so a page may carry a GPT's instructions: the first
+// decode (parse.ChatGPTPage, closed structs) drops them before the parser
+// sees a record, and the page is cleared.
 func ChatGPTEnterprise(ctx context.Context, get Getter, tenant string) Result {
 	r := domain.NewReport(domain.SourceChatGPTEnterprise, tenant)
 	list := gptsPrefix + url.PathEscape(tenant) + "/gpts"
@@ -178,7 +189,7 @@ func ChatGPTEnterprise(ctx context.Context, get Getter, tenant string) Result {
 	default:
 		r.Note(domain.ReadGPTs, why)
 	}
-	r.Read(domain.ReadGPTConfigs) // until a record says otherwise
+	r.Read(domain.ReadGPTConfigs) // with the list; a record it could not read is marked on its own
 	parse.ChatGPTFindings(r, gpts)
 	return Result{Report: r, Reached: true}
 }

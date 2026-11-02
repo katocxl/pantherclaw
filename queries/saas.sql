@@ -66,14 +66,15 @@ INSERT INTO pc.verifications (org_id, id, purpose, connection_id, operation, req
 VALUES (sqlc.arg(org_id), sqlc.arg(id), 'saas_scan', sqlc.arg(connection_id), sqlc.arg(operation), sqlc.arg(request), now(),
         now() + interval '30 minutes');
 
--- FailExpiredSaasScans ends the runs whose lease expired: a scan never stays
--- PENDING.
+-- FailExpiredSaasScans ends the runs whose lease ended unreported (expired,
+-- cancelled, or done without the run's report): a scan never stays PENDING,
+-- and reads FAILED as GetSaasRun derives it.
 -- name: FailExpiredSaasScans :execrows
 UPDATE pc.saas_scan_runs r
 SET state = 'FAILED', finished_at = now()
 FROM pc.verifications v
 WHERE r.org_id = sqlc.arg(org_id) AND v.org_id = r.org_id AND v.id = r.verification_id AND v.purpose = 'saas_scan'
-  AND v.state = 'EXPIRED' AND r.state IN ('PENDING', 'RUNNING');
+  AND v.state IN ('EXPIRED', 'CANCELLED', 'DONE') AND r.state IN ('PENDING', 'RUNNING');
 
 -- LeasedSaasScan is a SaaS scan task under a live lease of this gateway, with
 -- its run.
