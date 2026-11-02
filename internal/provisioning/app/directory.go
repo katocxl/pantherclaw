@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -23,6 +24,16 @@ import (
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
+
+// memberLimit checks the plan's member limit (HR-360) for one more active
+// member: ErrPlanLimit when it is reached, any other error as it is.
+func (s *Service) memberLimit(ctx context.Context, q *dbq.Queries, org ids.OrgID) error {
+	err := tenancy.CheckMemberLimit(ctx, s.Editions, q, org)
+	if errors.Is(err, billing.ErrLimitReached) {
+		return ports.ErrPlanLimit
+	}
+	return err
+}
 
 // MaxPage bounds one page of a SCIM list.
 const MaxPage = 100
@@ -317,8 +328,8 @@ func (s *Service) CreateUser(ctx context.Context, pt ports.Token, in ports.UserI
 		state := td.Disabled
 		if in.Active {
 			state = td.Enabled
-			if err := tenancy.CheckMemberLimit(ctx, s.Editions, q, t.org); err != nil {
-				return ports.ErrPlanLimit
+			if err := s.memberLimit(ctx, q, t.org); err != nil {
+				return err
 			}
 		}
 		var id ids.UUID
@@ -457,8 +468,8 @@ func (s *Service) ChangeUser(ctx context.Context, pt ports.Token, id string, c p
 				if !r.DisabledByScim {
 					return ports.ErrDisabledHere
 				}
-				if err := tenancy.CheckMemberLimit(ctx, s.Editions, q, t.org); err != nil {
-					return ports.ErrPlanLimit
+				if err := s.memberLimit(ctx, q, t.org); err != nil {
+					return err
 				}
 				if _, err := q.SetUserState(ctx, string(td.Enabled), t.org, r.ID); err != nil {
 					return err

@@ -84,10 +84,18 @@ func (n notes) Enqueue(_ context.Context, _ db.TenantTx, m napp.Message) (napp.E
 	return napp.Enqueued{}, nil
 }
 
-type edition struct{ e billing.Edition }
+type edition struct {
+	e billing.Edition
+	// maxMembers is the member limit; zero means none.
+	maxMembers int
+}
 
 func (e *edition) Current(context.Context) (billing.Entitlements, error) {
-	return billing.Entitlements{Edition: e.e}, nil
+	l := billing.CommunityLimits
+	if e.maxMembers != 0 {
+		l.MaxMembers = e.maxMembers
+	}
+	return billing.Entitlements{Edition: e.e, Limits: l}, nil
 }
 
 type env struct {
@@ -374,6 +382,13 @@ func TestSCIMUsersAndEditions(t *testing.T) {
 		t.Fatalf("filtered %+v %v", us, err)
 	}
 
+	// An active user counts against the plan's member limit (HR-360).
+	e.edition.maxMembers = 3 // alice, bob, carol
+	if _, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "erin", Active: true}); !errors.Is(err, ports.ErrPlanLimit) {
+		t.Fatalf("created past the member limit: %v", err)
+	}
+	e.edition.maxMembers = 0
+
 	e.edition.e = billing.Business
 	if _, err := e.svc.CreateUser(ctx, tok, ports.UserInput{UserName: "erin", Active: true}); !errors.Is(err, ports.ErrEdition) {
 		t.Fatalf("created below Enterprise: %v", err)
@@ -436,14 +451,14 @@ func TestHR633_634_SAMLConnectionAndSignIn(t *testing.T) {
 		t.Fatalf("connection %+v %v", conn, err)
 	}
 
-	st, err := si.StartSignIn(ctx, e.org.String(), c.ID.String(), "_req1", "/app", "")
+	st, err := si.StartSignIn(ctx, e.org.String(), c.ID.String(), "_req1", "/app/", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := si.ConsumeSignIn(ctx, e.org.String(), c.ID.String(), st.RelayState, "another-browser"); !errors.Is(err, ports.ErrSignInUnavailable) {
 		t.Fatalf("another browser consumed the sign-in: %v", err)
 	}
-	st, _ = si.StartSignIn(ctx, e.org.String(), c.ID.String(), "_req2", "/app", "")
+	st, _ = si.StartSignIn(ctx, e.org.String(), c.ID.String(), "_req2", "/app/", "")
 	p, err := si.ConsumeSignIn(ctx, e.org.String(), c.ID.String(), st.RelayState, st.Binding)
 	if err != nil || p.RequestID != "_req2" {
 		t.Fatalf("consumed %+v %v", p, err)
@@ -463,12 +478,12 @@ func TestHR633_634_SAMLConnectionAndSignIn(t *testing.T) {
 	// connection's issuer signs in.
 	w := si.Web.(*web)
 	r := httptest.NewRequest(http.MethodPost, "/app/ext/saml/acs", nil)
-	si.FinishSignIn(httptest.NewRecorder(), r, ports.Verified{OrgID: e.org.String(), ConnectionID: c.ID.String(), Subject: "nobody", Next: "/app"})
+	si.FinishSignIn(httptest.NewRecorder(), r, ports.Verified{OrgID: e.org.String(), ConnectionID: c.ID.String(), Subject: "nobody", Next: "/app/"})
 	if w.out.Reason != "NOT_A_MEMBER" {
 		t.Fatalf("an unknown subject: %+v", w.out)
 	}
 	e.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, $3, 'frank')", e.org, ids.NewV7(), samlIssuer)
-	si.FinishSignIn(httptest.NewRecorder(), r, ports.Verified{OrgID: e.org.String(), ConnectionID: c.ID.String(), Subject: "frank", Next: "/app"})
+	si.FinishSignIn(httptest.NewRecorder(), r, ports.Verified{OrgID: e.org.String(), ConnectionID: c.ID.String(), Subject: "frank", Next: "/app/"})
 	if w.out.Reason != "" || w.out.Secret == "" {
 		t.Fatalf("a member: %+v", w.out)
 	}

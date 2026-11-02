@@ -124,8 +124,10 @@ func TestConnectionValidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ok := Connection{Name: "okta", EntityID: "https://idp.example.com", SSOURL: "https://idp.example.com/sso",
-		Certificates: []string{cert(t, &ec.PublicKey, ec, now.Add(time.Hour))}}
+	ok := Connection{
+		Name: "okta", EntityID: "https://idp.example.com", SSOURL: "https://idp.example.com/sso",
+		Certificates: []string{cert(t, &ec.PublicKey, ec, now.Add(time.Hour))},
+	}
 	check := func(u string) error {
 		if !strings.HasPrefix(u, "https://") {
 			return errors.New("not https")
