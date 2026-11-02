@@ -97,6 +97,7 @@ func TestHR626_TheOAuthRouteForwardsBearerTokensOnly(t *testing.T) {
 		"no token":         nil,
 		"a PAP/1 token":    {"Authorization": "PAP x"},
 		"a bearer + proof": {"Authorization": "Bearer x", dispatch.HeaderProof: "p"},
+		"a token naming no run": {"Authorization": "Bearer " + token("")},
 	} {
 		f.got = nil
 		w := serve(h, http.MethodPost, "/mcp-oauth/github", hdr)

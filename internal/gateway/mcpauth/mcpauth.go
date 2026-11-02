@@ -99,13 +99,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.challenge(w, conn, "invalid_request")
 		return
 	}
+	run := runOf(token)
+	if run == "" {
+		// Every MCP access token names its run; one that names none is no
+		// MCP access token (a workload token, say), and is not forwarded.
+		h.challenge(w, conn, "invalid_token")
+		return
+	}
 	fwd := r.Clone(mcp.WithOAuth(r.Context(), h.resource(conn)))
 	fwd.Header.Set("Authorization", "PAP "+token)
 	fwd.Header.Del(dispatch.HeaderProof)
-	fwd.Header.Del(dispatch.HeaderRunID)
-	if run := runOf(token); run != "" {
-		fwd.Header.Set(dispatch.HeaderRunID, run)
-	}
+	fwd.Header.Set(dispatch.HeaderRunID, run)
 	fwd.URL.Path, fwd.URL.RawPath = "/mcp/"+conn, ""
 	h.mcp.ServeHTTP(&challenger{ResponseWriter: w, h: h, conn: conn}, fwd)
 }

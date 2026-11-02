@@ -369,73 +369,86 @@ func (f *CodeFlow) AuthorizationCode(ctx context.Context, form url.Values) (auth
 		return authnapp.TokenResponse{}, f.fail(ctx, authnapp.ErrInvalidGrant, "code_malformed")
 	}
 	now := f.Clock.Now()
-	var out authnapp.TokenResponse
+	// The code is spent by the first request naming it, right or wrong: the
+	// spend commits on its own, before anything about the request is checked.
+	var row dbq.PcMcpAuthorizationCode
 	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		// The code is spent by the first request naming it, right or wrong.
-		row, err := q.SpendMcpAuthorizationCode(ctx, org, digest(code))
+		var err error
+		row, err = dbq.New(tx).SpendMcpAuthorizationCode(ctx, org, digest(code))
 		if db.IsNoRows(err) {
 			return refuse(authnapp.ErrInvalidGrant, "code_unknown_used_or_expired")
-		} else if err != nil {
-			return err
 		}
-		client, err := q.GetMcpClient(ctx, org, row.ClientID)
-		if err != nil {
-			return err
-		}
-		switch {
-		case client.ClientUrl != clientURL:
-			return refuse(authnapp.ErrInvalidGrant, "client_mismatch")
-		case client.State != "ACTIVE":
-			return refuse(authnapp.ErrInvalidGrant, "client_removed")
-		case form.Get("redirect_uri") != row.RedirectUri:
-			return refuse(authnapp.ErrInvalidGrant, "redirect_uri_mismatch")
-		case !verifierMatches(form.Get("code_verifier"), row.CodeChallenge):
-			return refuse(authnapp.ErrInvalidGrant, "pkce")
-		case form.Get("resource") != "" && form.Get("resource") != row.Resource:
-			return refuse(authnapp.ErrInvalidGrant, "resource_mismatch")
-		}
-		scope, err := domain.ParseScope(strings.Join(row.ScopeOperations, " "), len(row.ScopeOperations) > 0)
-		if err != nil {
-			return refuse(authnapp.ErrInvalidGrant, "scope")
-		}
-		conn, err := f.liveResource(ctx, q, org, row.Resource)
-		if err != nil {
-			return err
-		}
-		agent, err := q.GetAgent(ctx, org, client.AgentID)
-		if err != nil || agent.EnvironmentID == nil {
-			return refuse(accessDenied(ReasonNoGrant, "no grant covers this agent"), "agent_unusable")
-		}
-		choice, err := chooseGrant(ctx, q, org, agent.ID, *agent.EnvironmentID, row.UserID, client.InstanceID, scope)
-		if err != nil {
-			return err
-		}
-		run, err := f.Runs.StartForIdentityTx(ctx, tx, runs.IdentityRunInput{
-			Org: org, Agent: agent.ID, Instance: client.InstanceID, User: row.UserID,
-			Grant: choice.Grant, Operations: choice.Operations, TaskRef: "mcp " + conn,
-		})
-		if err != nil {
-			return refuse(accessDenied(ReasonNoGrant, "the grant can't be used"), "run_refused: "+err.Error())
-		}
-		out, err = f.issue(ctx, q, org, client, run.ID, run.EnvironmentID, run.ExpiresAt, conn, row.Resource, choice.Operations, ids.NewV7(), now)
-		if err != nil {
-			return err
-		}
-		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "idaccess.token_issued", Actor: evdomain.Actor{Type: "user", ID: row.UserID.String()}, Outcome: audit.Success,
-			Object: &audit.Object{Type: "run", ID: run.ID.String()},
-			Details: map[string]string{
-				"grant": "authorization_code", "client": client.ID.String(), "resource": row.Resource, "grant_id": choice.Grant.String(),
-			},
-		})
 		return err
 	})
+	var out authnapp.TokenResponse
+	if err == nil {
+		err = f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			return f.redeemCode(ctx, tx, org, row, clientURL, form, now, &out)
+		})
+	}
 	var r refusal
 	if errors.As(err, &r) {
 		return authnapp.TokenResponse{}, f.fail(ctx, r.oe, r.reason, slog.String("org", org.String()))
 	}
 	return out, err
+}
+
+// redeemCode checks a spent code's request and issues the tokens.
+func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID, row dbq.PcMcpAuthorizationCode, clientURL string,
+	form url.Values, now time.Time, out *authnapp.TokenResponse,
+) error {
+	q := dbq.New(tx)
+	client, err := q.GetMcpClient(ctx, org, row.ClientID)
+	if err != nil {
+		return err
+	}
+	switch {
+	case client.ClientUrl != clientURL:
+		return refuse(authnapp.ErrInvalidGrant, "client_mismatch")
+	case client.State != "ACTIVE":
+		return refuse(authnapp.ErrInvalidGrant, "client_removed")
+	case form.Get("redirect_uri") != row.RedirectUri:
+		return refuse(authnapp.ErrInvalidGrant, "redirect_uri_mismatch")
+	case !verifierMatches(form.Get("code_verifier"), row.CodeChallenge):
+		return refuse(authnapp.ErrInvalidGrant, "pkce")
+	case form.Get("resource") != "" && form.Get("resource") != row.Resource:
+		return refuse(authnapp.ErrInvalidGrant, "resource_mismatch")
+	}
+	scope, err := domain.ParseScope(strings.Join(row.ScopeOperations, " "), len(row.ScopeOperations) > 0)
+	if err != nil {
+		return refuse(authnapp.ErrInvalidGrant, "scope")
+	}
+	conn, err := f.liveResource(ctx, q, org, row.Resource)
+	if err != nil {
+		return err
+	}
+	agent, err := q.GetAgent(ctx, org, client.AgentID)
+	if err != nil || agent.EnvironmentID == nil {
+		return refuse(accessDenied(ReasonNoGrant, "no grant covers this agent"), "agent_unusable")
+	}
+	choice, err := chooseGrant(ctx, q, org, agent.ID, *agent.EnvironmentID, row.UserID, client.InstanceID, scope)
+	if err != nil {
+		return err
+	}
+	run, err := f.Runs.StartForIdentityTx(ctx, tx, runs.IdentityRunInput{
+		Org: org, Agent: agent.ID, Instance: client.InstanceID, User: row.UserID,
+		Grant: choice.Grant, Operations: choice.Operations, TaskRef: "mcp " + conn,
+	})
+	if err != nil {
+		return refuse(accessDenied(ReasonNoGrant, "the grant can't be used"), "run_refused: "+err.Error())
+	}
+	*out, err = f.issue(ctx, q, org, client, run.ID, run.EnvironmentID, run.ExpiresAt, conn, row.Resource, choice.Operations, ids.NewV7(), now)
+	if err != nil {
+		return err
+	}
+	_, err = audit.Record(ctx, tx, audit.Event{
+		Name: "idaccess.token_issued", Actor: evdomain.Actor{Type: "user", ID: row.UserID.String()}, Outcome: audit.Success,
+		Object: &audit.Object{Type: "run", ID: run.ID.String()},
+		Details: map[string]string{
+			"grant": "authorization_code", "client": client.ID.String(), "resource": row.Resource, "grant_id": choice.Grant.String(),
+		},
+	})
+	return err
 }
 
 // liveResource checks the org's MCP authorization is still on and the
