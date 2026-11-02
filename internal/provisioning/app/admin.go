@@ -26,7 +26,7 @@ import (
 
 // The change codes a request and its notifications name.
 const (
-	ChangeTokenActivate = "scim_token_activate"
+	ChangeTokenActivate = "scim_token_activate" //nolint:gosec // G101: a change code, not a credential
 	ChangeSAMLActivate  = "saml_activate"
 	ChangeSAMLChange    = "saml_change"
 	ChangeSAMLDisable   = "saml_disable"
@@ -255,7 +255,7 @@ func (s *Service) CreateToken(ctx context.Context, in TokenInput) (Token, string
 		}
 		r, err := q.InsertSCIMToken(ctx, dbq.InsertSCIMTokenParams{
 			OrgID: c.Org, ID: ids.NewV7(), Name: in.Name, Issuer: in.Issuer, SubjectAttribute: in.SubjectAttribute,
-			SecretHash: secret.Hash(), Hint: secret.Hint(), CreatedBy: c.Principal.String(), TtlDays: int32(in.TTLDays),
+			SecretHash: secret.Hash(), Hint: secret.Hint(), CreatedBy: c.Principal.String(), TtlDays: int32(in.TTLDays), //nolint:gosec // G115: 1..366, checked above
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrNameTaken
@@ -334,7 +334,7 @@ func tokenState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, er
 func CloseToken(ctx context.Context, tx db.TenantTx, _ ids.UUID, payload []byte) error {
 	id, err := idOf(payload)
 	if err != nil {
-		return nil // nothing of ours to lapse
+		return nil //nolint:nilerr // nothing of ours to lapse
 	}
 	_, err = dbq.New(tx).LapseSCIMToken(ctx, tx.OrgID(), id)
 	return err
@@ -644,7 +644,7 @@ func connectionState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byt
 func CloseConnection(ctx context.Context, tx db.TenantTx, _ ids.UUID, payload []byte) error {
 	id, err := idOf(payload)
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // nothing of ours to lapse
 	}
 	_, err = dbq.New(tx).LapseSAMLConnection(ctx, tx.OrgID(), id)
 	return err

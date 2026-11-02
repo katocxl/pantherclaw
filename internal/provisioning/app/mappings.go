@@ -37,7 +37,7 @@ func (s *Service) DirectoryGroups(ctx context.Context, after ids.UUID, limit int
 	}
 	var out []Group
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		rows, err := dbq.New(tx).ListAllGroups(ctx, c.Org, after, int32(limit))
+		rows, err := dbq.New(tx).ListAllGroups(ctx, c.Org, after, int32(limit)) //nolint:gosec // G115: at most 200
 		for _, r := range rows {
 			out = append(out, Group{ID: r.ID, Issuer: r.Issuer, DisplayName: r.DisplayName, MemberCount: r.MemberCount})
 		}

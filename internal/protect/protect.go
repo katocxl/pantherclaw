@@ -107,7 +107,7 @@ const (
 	// nothing until its activation applies; a SAML connection is an
 	// organization identity provider (HR-481); a mapping gives a group's
 	// members a role, or takes it away.
-	SurfaceSCIMTokenActivate  Surface = "scim.token.activate"
+	SurfaceSCIMTokenActivate  Surface = "scim.token.activate" //nolint:gosec // G101: a surface name, not a credential
 	SurfaceSAMLConnectionPut  Surface = "saml.connection.put"
 	SurfaceSAMLDisable        Surface = "saml.connection.disable"
 	SurfaceGroupMappingAdd    Surface = "group.role_mapping.add"

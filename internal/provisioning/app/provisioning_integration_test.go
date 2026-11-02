@@ -466,7 +466,8 @@ func TestHR631_MappingChangesHeldAndRecheckedAsAsker(t *testing.T) {
 			return e.svc.ApplyMappingAdd(ctx, tx, author, payload)
 		})
 	}
-	if err := apply(e.caller(e.alice, td.RoleViewer)); err == nil {
+	// The payload is valid: the refusal is the asker's authority, not its shape.
+	if err := apply(e.caller(e.alice, td.RoleViewer)); err == nil || errors.Is(err, protect.ErrInvalid) || errors.Is(err, app.ErrNotFound) {
 		t.Fatalf("applied for an asker without role.bind: %v", err)
 	}
 	if mappings() != 0 || provisioned() != 0 {
@@ -486,8 +487,13 @@ func TestHR631_MappingChangesHeldAndRecheckedAsAsker(t *testing.T) {
 		t.Fatal("a mapping applied for an asker who lost the authority")
 	}
 
-	// The same payload applies for an asker within the ceiling.
-	if err := apply(e.caller(e.bob, td.RoleOrgAdmin)); err != nil {
+	// Asked by someone within the ceiling, the same mapping applies.
+	e.bind(t, e.alice, td.RoleOrgAdmin)
+	f, err = e.svc.AddMapping(e.admin(e.bob), gid, td.RoleViewer, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.confirm(t, f, e.alice); err != nil {
 		t.Fatal(err)
 	}
 	if mappings() != 1 || provisioned() != 1 {

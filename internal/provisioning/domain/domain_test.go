@@ -89,7 +89,7 @@ func TestCheckCertificates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	weak, err := rsa.GenerateKey(rand.Reader, 1024) //nolint:gosec // G403: the test of the refusal
+	weak, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
