@@ -17,8 +17,8 @@ type contentScanKey struct{}
 
 // scansContent reports whether a call's content is scanned (G0 M27 D504,
 // D507): the org has content signals on, and the gateway itself carries the
-// call. The hook, the SDK and delegated outcomes are not inspected, and say
-// so where they show.
+// call. Hook, SDK and local connections are not scanned, delegated outcomes
+// are not inspected, and they say so where they show.
 func scansContent(c Call) bool {
 	switch c.Connection.ContentSignals {
 	case pb.ContentSignalMode_CONTENT_SIGNAL_MODE_WATCHING, pb.ContentSignalMode_CONTENT_SIGNAL_MODE_ACTIVE:

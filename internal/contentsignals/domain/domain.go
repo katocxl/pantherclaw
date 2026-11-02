@@ -154,5 +154,8 @@ func ParseFlag(raw []byte) ([]string, int64) {
 	return strings.Split(list, ","), n
 }
 
-// NotInspectedFaces are the faces the gateway cannot see into (D504).
-var NotInspectedFaces = []string{"hook", "sdk", "delegated"}
+// NotInspectedFaces are the faces the gateway cannot see into (D504, D532).
+var NotInspectedFaces = []string{"hook", "sdk", "local", "delegated"}
+
+// NotScanned is what the settings say of them, plainly (D532).
+const NotScanned = "Hook, SDK and local connections are not scanned, and delegated outcomes are not inspected: what comes through them is not inspected, never \"no known flags\"."

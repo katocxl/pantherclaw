@@ -163,11 +163,15 @@ type ContentSignalSettings struct {
 	// What WATCHING would have held, most first: the step-up to ACTIVE shows
 	// it (D512).
 	WouldHold []*ContentWouldHold `protobuf:"bytes,4,rep,name=would_hold,json=wouldHold,proto3" json:"would_hold,omitempty"`
-	// The faces content signals do not see into: hook, sdk and delegated. What
-	// comes through them is not inspected, and never reads as no known flags.
-	NotInspected  []string `protobuf:"bytes,5,rep,name=not_inspected,json=notInspected,proto3" json:"not_inspected,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The faces content signals do not see into: hook, sdk, local and
+	// delegated. What comes through them is not inspected, and never reads as
+	// no known flags.
+	NotInspected []string `protobuf:"bytes,5,rep,name=not_inspected,json=notInspected,proto3" json:"not_inspected,omitempty"`
+	// The settings' plain sentence about them: hook, SDK and local connections
+	// are not scanned (D532).
+	NotInspectedNote string `protobuf:"bytes,6,opt,name=not_inspected_note,json=notInspectedNote,proto3" json:"not_inspected_note,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ContentSignalSettings) Reset() {
@@ -233,6 +237,13 @@ func (x *ContentSignalSettings) GetNotInspected() []string {
 		return x.NotInspected
 	}
 	return nil
+}
+
+func (x *ContentSignalSettings) GetNotInspectedNote() string {
+	if x != nil {
+		return x.NotInspectedNote
+	}
+	return ""
 }
 
 // GetSettingsRequest asks for the settings.
@@ -434,7 +445,7 @@ const file_pantherclaw_v1_content_signals_proto_rawDesc = "" +
 	"\x05count\x18\x02 \x01(\x03R\x05count\x129\n" +
 	"\n" +
 	"first_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tfirstTime\x127\n" +
-	"\tlast_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\blastTime\"\x90\x02\n" +
+	"\tlast_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\blastTime\"\xbe\x02\n" +
 	"\x15ContentSignalSettings\x125\n" +
 	"\x04mode\x18\x01 \x01(\x0e2!.pantherclaw.v1.ContentSignalModeR\x04mode\x12\x1d\n" +
 	"\n" +
@@ -443,7 +454,8 @@ const file_pantherclaw_v1_content_signals_proto_rawDesc = "" +
 	"updateTime\x12?\n" +
 	"\n" +
 	"would_hold\x18\x04 \x03(\v2 .pantherclaw.v1.ContentWouldHoldR\twouldHold\x12#\n" +
-	"\rnot_inspected\x18\x05 \x03(\tR\fnotInspected\"\x14\n" +
+	"\rnot_inspected\x18\x05 \x03(\tR\fnotInspected\x12,\n" +
+	"\x12not_inspected_note\x18\x06 \x01(\tR\x10notInspectedNote\"\x14\n" +
 	"\x12GetSettingsRequest\"X\n" +
 	"\x13GetSettingsResponse\x12A\n" +
 	"\bsettings\x18\x01 \x01(\v2%.pantherclaw.v1.ContentSignalSettingsR\bsettings\"w\n" +

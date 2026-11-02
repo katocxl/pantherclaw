@@ -16,13 +16,13 @@ import (
 //
 // Covers: F941
 func TestHR651_NoWordingClaimsSafety(t *testing.T) {
-	for _, s := range []string{NoKnownFlags, NotInspected} {
+	for _, s := range []string{NoKnownFlags, NotInspected, NotScanned} {
 		l := strings.ToLower(s)
 		if strings.Contains(l, "clean") || strings.Contains(l, "safe") {
 			t.Errorf("%q claims safety", s)
 		}
 	}
-	if !slices.Equal(NotInspectedFaces, []string{"hook", "sdk", "delegated"}) {
+	if !slices.Equal(NotInspectedFaces, []string{"hook", "sdk", "local", "delegated"}) {
 		t.Fatalf("faces %v", NotInspectedFaces)
 	}
 }

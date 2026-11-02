@@ -43,7 +43,7 @@ func modeFrom(m pantherclawv1.ContentSignalMode) domain.Mode {
 }
 
 func settings(s app.Settings) *pantherclawv1.ContentSignalSettings {
-	out := &pantherclawv1.ContentSignalSettings{Mode: modeOf[s.Mode()], NotInspected: domain.NotInspectedFaces}
+	out := &pantherclawv1.ContentSignalSettings{Mode: modeOf[s.Mode()], NotInspected: domain.NotInspectedFaces, NotInspectedNote: domain.NotScanned}
 	if s.Row.UpdatedBy != nil {
 		out.UpdatedBy = *s.Row.UpdatedBy
 		out.UpdateTime = timestamppb.New(s.Row.UpdatedAt)
