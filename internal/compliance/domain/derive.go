@@ -144,19 +144,19 @@ func evaluate(c Control, in Inputs) ControlResult {
 		r.Gaps = append(r.Gaps, ControlGap{Reason: ReasonOutsideRecords, Detail: c.Outside})
 		return r
 	}
-	real, simulated := records(c, in, &r)
+	hasReal, simulated := records(c, in, &r)
 	if tests(c, in, &r) {
 		simulated = true
 	}
 	switch {
-	case real && len(r.Gaps) == 0:
+	case hasReal && len(r.Gaps) == 0:
 		r.State = Evidenced
-	case real || simulated:
+	case hasReal || simulated:
 		r.State = Partial
 	default:
 		r.State = Gap
 	}
-	r.SimulatedOnly = simulated && !real
+	r.SimulatedOnly = simulated && !hasReal
 	return r
 }
 
@@ -194,7 +194,7 @@ func sourceOf(in Inputs, s Source) (SourceCount, bool) {
 
 // records reads a control's production records and says whether any holds
 // real activity and whether any holds only simulated activity.
-func records(c Control, in Inputs, r *ControlResult) (real, simulated bool) {
+func records(c Control, in Inputs, r *ControlResult) (hasReal, simulated bool) {
 	for _, s := range c.Records {
 		n, ok := sourceOf(in, s)
 		switch {
@@ -203,7 +203,7 @@ func records(c Control, in Inputs, r *ControlResult) (real, simulated bool) {
 				Reason: ReasonOutsidePermission, Source: s, Detail: "you may not read these records across the org",
 			})
 		case n.Real > 0:
-			real = true
+			hasReal = true
 			r.Evidence = append(r.Evidence, s)
 		case n.Simulated > 0:
 			simulated = true
@@ -215,7 +215,7 @@ func records(c Control, in Inputs, r *ControlResult) (real, simulated bool) {
 			r.Gaps = append(r.Gaps, ControlGap{Reason: ReasonNoRecords, Source: s, Detail: "no record in the period"})
 		}
 	}
-	return real, simulated
+	return hasReal, simulated
 }
 
 // tests reads a control's tagged test results and says whether anything was

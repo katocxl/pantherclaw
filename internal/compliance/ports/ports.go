@@ -31,18 +31,9 @@ type CampaignStep struct {
 	Outcome string
 }
 
-// CampaignResults reads finished campaign results (S25b exposes it). The
-// caller must already have read permission: coverage checks redteam.read
-// before calling. Truncated says there were more than the source returned.
+// CampaignResults reads finished campaign results. The caller must already
+// have read permission: coverage checks redteam.read before calling.
+// Truncated says there were more than the source returned.
 type CampaignResults interface {
 	CampaignSteps(ctx context.Context, org ids.OrgID, start, end time.Time) (steps []CampaignStep, truncated bool, err error)
-}
-
-// NoCampaigns is a server with no campaign results: the campaign source
-// holds nothing, so tagged controls read as not exercised.
-type NoCampaigns struct{}
-
-// CampaignSteps returns nothing.
-func (NoCampaigns) CampaignSteps(context.Context, ids.OrgID, time.Time, time.Time) ([]CampaignStep, bool, error) {
-	return nil, false, nil
 }

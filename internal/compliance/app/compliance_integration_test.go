@@ -86,8 +86,10 @@ func finishedRange(t *testing.T, o *exposuretest.Org, origin string, results map
 		o.Org, agent, "range-"+id.String()[:8])
 	var scenarios []map[string]any
 	for sid, r := range results {
-		scenarios = append(scenarios, map[string]any{"id": sid, "digest": r.digest, "tier": "community", "category": "boundary",
-			"suite": "coding-agent", "title": sid, "step_count": 1})
+		scenarios = append(scenarios, map[string]any{
+			"id": sid, "digest": r.digest, "tier": "community", "category": "boundary",
+			"suite": "coding-agent", "title": sid, "step_count": 1,
+		})
 	}
 	raw, err := json.Marshal(scenarios)
 	if err != nil {
@@ -255,10 +257,10 @@ func TestHR605_EditionGatesCoverageAndExport(t *testing.T) {
 func TestT260_ClaimsNeverBecomeTestEvidence(t *testing.T) {
 	o := exposuretest.New(t)
 	finishedRange(t, o, "library", map[string]rangeResult{
-		"RT-001": tagged(t, "RT-001", "PASS", "SERVER"),                                  // ASI02: held
-		"RT-012": tagged(t, "RT-012", "PASS", "CLIENT"),                                  // ASI03: a report
-		"RT-028": tagged(t, "RT-028", "FAIL", "SERVER"),                                  // ASI04: failed
-		"RT-049": tagged(t, "RT-049", "SKIPPED", "CLIENT"),                               // ASI07: not exercised
+		"RT-001": tagged(t, "RT-001", "PASS", "SERVER"),                                                  // ASI02: held
+		"RT-012": tagged(t, "RT-012", "PASS", "CLIENT"),                                                  // ASI03: a report
+		"RT-028": tagged(t, "RT-028", "FAIL", "SERVER"),                                                  // ASI04: failed
+		"RT-049": tagged(t, "RT-049", "SKIPPED", "CLIENT"),                                               // ASI07: not exercised
 		"RT-045": {"0000000000000000000000000000000000000000000000000000000000000000", "PASS", "SERVER"}, // ASI09: not the library's
 	})
 	start, end := period()

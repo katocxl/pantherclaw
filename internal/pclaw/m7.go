@@ -33,7 +33,7 @@ type m7Clients struct {
 	transactions    pantherclawv1connect.TransactionServiceClient
 	reconciliations pantherclawv1connect.ReconciliationServiceClient
 	// evidence serves the M7 track B commands (pclaw pack).
-	evidence pantherclawv1connect.EvidenceServiceClient
+	evidence   pantherclawv1connect.EvidenceServiceClient
 	compliance pantherclawv1connect.ComplianceServiceClient
 }
 

@@ -65,7 +65,7 @@ var (
 	// (G0 M25 D311).
 	ErrComplianceEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "this framework needs a higher edition")
 	ErrPacksUnwired      = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
-	errPackNoContent = errors.New("app: a ready pack without content")
+	errPackNoContent     = errors.New("app: a ready pack without content")
 )
 
 // PackEnqueuer enqueues a pack's build job in the creating transaction.

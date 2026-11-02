@@ -70,7 +70,7 @@ func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
 	}
 	auditor := s.boundAuditor(t, "compliance-auditor")
 	export := func(name string) (string, map[string][]byte) {
-		pk, err := svc.CreateEvidencePack(auditor, app.PackRequest{Kind: pack.ScopeCompliance, Framework: string(domain.OWASPASI), From: from, To: to})
+		pk, err := svc.CreateEvidencePack(auditor, app.PackRequest{Kind: pack.ScopeCompliance, Framework: string(domain.OWASPASI), From: &from, To: &to})
 		if err != nil {
 			t.Fatalf("create the report: %v", err)
 		}

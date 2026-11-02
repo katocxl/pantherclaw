@@ -48,15 +48,15 @@ const RetryBudgetBusy = "BUDGET_BUSY"
 
 // Scenario is one attack scenario file.
 type Scenario struct {
-	APIVersion  string   `json:"apiVersion"`
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Category    string   `json:"category"`
-	Suite       string   `json:"suite"`
-	Tier        string   `json:"tier"`
-	Attacker    string   `json:"attacker"`
-	Threats     []string `json:"threats"`
-	Rules       []string `json:"rules"`
+	APIVersion string   `json:"apiVersion"`
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	Category   string   `json:"category"`
+	Suite      string   `json:"suite"`
+	Tier       string   `json:"tier"`
+	Attacker   string   `json:"attacker"`
+	Threats    []string `json:"threats"`
+	Rules      []string `json:"rules"`
 	// ASI are the OWASP agentic risks a library scenario exercises (G0 M25
 	// D304). The server's library holds them, never a runner's claim.
 	ASI         []string `json:"asi,omitempty"`

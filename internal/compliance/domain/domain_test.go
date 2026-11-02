@@ -203,7 +203,7 @@ func TestHR601_StatedIsNeverEvidence(t *testing.T) {
 }
 
 // TestHR602_SimulatedOnlyIsNeverEvidenced: simulated activity is split and
-// labelled, and alone it never makes a control EVIDENCED (F630).
+// labeled, and alone it never makes a control EVIDENCED (F630).
 // Covers: F891
 func TestHR602_SimulatedOnlyIsNeverEvidenced(t *testing.T) {
 	got := control(t, domain.SOC2, allReadable(0, 9), "CC7.2")

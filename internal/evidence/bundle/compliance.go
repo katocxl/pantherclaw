@@ -64,9 +64,9 @@ func verifyCompliance(r *Report, m *pack.Manifest, files map[string][]byte) {
 // verifyComplianceInputs holds the counts to what they can honestly be.
 func verifyComplianceInputs(r *Report, subject string, rep *domain.Report) {
 	bad := 0
-	fail := func(source, format string, args ...any) {
+	fail := func(source, detail string) {
 		bad++
-		r.add("compliance.inputs", source, Failed, format, args...)
+		r.add("compliance.inputs", source, Failed, "%s", detail)
 	}
 	if rep.Split != domain.SplitOf(rep.Inputs) {
 		fail(subject, "the header's real and simulated split differs from the sources")

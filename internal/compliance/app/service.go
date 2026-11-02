@@ -401,8 +401,10 @@ func count(c *domain.TestCount, r rangedomain.Result) {
 		c.Held++
 	case rangedomain.Fail:
 		c.Failed++
-	default:
+	case rangedomain.Errored, rangedomain.Skipped, rangedomain.Missing:
 		c.NotExercised++
+	default:
+		c.NotExercised++ // a verdict this build does not know never held
 	}
 }
 
@@ -431,7 +433,7 @@ func (s *Service) campaigns(ctx context.Context, org ids.OrgID, start, end time.
 			case ports.OutcomeAllowed:
 				c.Failed++
 			case ports.OutcomeNotRoutedReported:
-				c.Reported++ // labelled reported, never proven (D309)
+				c.Reported++ // labeled reported, never proven (D309)
 			default:
 				c.NotExercised++ // D306
 			}
@@ -464,9 +466,7 @@ func (s *Service) ListReports(ctx context.Context, pr page.Request) (ReportPage,
 	}
 	var out ReportPage
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		rows, err := dbq.New(tx).ListComplianceReports(ctx, dbq.ListComplianceReportsParams{
-			OrgID: c.Org, Before: pr.After, PageLimit: pr.Limit(),
-		})
+		rows, err := dbq.New(tx).ListComplianceReports(ctx, c.Org, pr.After, pr.Limit())
 		if err != nil {
 			return err
 		}

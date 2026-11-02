@@ -7,25 +7,17 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/katocxl/pantherclaw/internal/billing"
+	"github.com/katocxl/pantherclaw/internal/compliance/adapters/campaignresults"
 	"github.com/katocxl/pantherclaw/internal/compliance/adapters/compliancerpc"
 	coapp "github.com/katocxl/pantherclaw/internal/compliance/app"
-	"github.com/katocxl/pantherclaw/internal/compliance/ports"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 )
 
-// complianceCampaigns builds the campaign results coverage reads. The stream
-// that owns campaigns sets it from an init in its own wiring file; until then
-// the source holds nothing and tagged controls read as not exercised.
-var complianceCampaigns func(pool *db.Pool) ports.CampaignResults
-
 func complianceService(pool *db.Pool, bill *billing.Service) *coapp.Service {
-	s := &coapp.Service{Pool: pool, Campaigns: ports.NoCampaigns{}}
+	s := &coapp.Service{Pool: pool, Campaigns: campaignresults.Reader{Results: campaignResults(pool), Tags: campaignresults.LibraryTags}}
 	if bill != nil {
 		s.Ents = bill
-	}
-	if complianceCampaigns != nil {
-		s.Campaigns = complianceCampaigns(pool)
 	}
 	return s
 }
