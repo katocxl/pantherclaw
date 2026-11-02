@@ -17,7 +17,7 @@ import (
 // Covers: F924
 func TestHR636_KindsAndAttributesAreClosed(t *testing.T) {
 	kept, dropped := domain.Clean(domain.KindCustomGPT, map[string]string{
-		"name": "x", "instructions": "be evil", "owner_email": "a@b", "visibility": "bad‮value", "tool_kinds": strings.Repeat("a", 257),
+		"name": "x", "instructions": "be evil", "owner_email": "a@b", "visibility": "bad\u202evalue", "tool_kinds": strings.Repeat("a", 257),
 	})
 	if len(kept) != 1 || kept["name"] != "x" || dropped != 4 {
 		t.Fatalf("kept %v dropped %d", kept, dropped)
@@ -83,8 +83,8 @@ func TestHR638_TextIsCutOnACharacter(t *testing.T) {
 			t.Errorf("Text(%q) = %q", in, out)
 		}
 	}
-	if domain.Text(" a​b ") != "ab" {
-		t.Fatal(domain.Text(" a​b "))
+	if domain.Text(" a\u200bb ") != "ab" {
+		t.Fatal(domain.Text(" a\u200bb "))
 	}
 	if !domain.TenantOK("00000000-5a5a-4000-8000-00000000e001") || domain.TenantOK("") || domain.TenantOK("a b") || domain.TenantOK("-a") {
 		t.Fatal("TenantOK")

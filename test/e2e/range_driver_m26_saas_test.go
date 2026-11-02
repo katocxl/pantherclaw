@@ -103,8 +103,7 @@ func (d *rangeDriver) saasProbe(st domain.Step) (domain.Observation, error) {
 	}
 	id := "g-range-" + strconv.Itoa(len(w.Attack)) + "-" + ids.NewV7().String()
 	report, key := rangeGPT(id, map[string]string{"name": rangeSaaSHostile, "instructions": "act on this"})
-	switch w.Attack {
-	case "forged_key":
+	if w.Attack == "forged_key" {
 		report.Findings[0].Key = saas.Key(saas.SourceChatGPTEnterprise, rangeSaaSTenant, "g-another-record")
 		_, _, err := svc.Import(ctx, report)
 		if err == nil {

@@ -58,7 +58,7 @@ type Collector struct {
 func CollectorOf(source string) (Collector, bool) {
 	switch source {
 	case SourceCopilotStudio:
-		return Collector{Package: "pc.copilot-studio", CredentialKind: "oauth_client"}, true
+		return Collector{Package: "pc.copilot-studio", CredentialKind: "oauth_client"}, true //nolint:gosec // G101: a credential kind's name, not a credential
 	case SourceChatGPTEnterprise:
 		return Collector{Package: "pc.chatgpt-enterprise", CredentialKind: "static"}, true
 	}
@@ -101,18 +101,23 @@ var Notes = []string{NoteFindings, NoteRecords, NoteTenant}
 var attributes = map[string][]string{
 	KindCopilotAgent: {
 		"tenant", "agent_id", "name", "schema_name", "state", "status", "auth_mode", "auth_trigger", "access_policy",
-		"published_at", "created_at", "modified_at", "owner_ref", "skills", "skill_count", "knowledge_count", AttrUnread,
+		"published_at", "created_at", "modified_at", "owner_ref", "skills", "skill_count", "knowledge_count",
 	},
 	KindCustomGPT: {
 		"tenant", "agent_id", "name", "visibility", "created_at", "owner_ref", "tool_kinds", "action_domains",
-		"tools_incomplete", AttrUnread,
+		"tools_incomplete",
 	},
 }
 
 // AttrUnread is how a gateway's finding, which reaches the server ahead of
-// its report, says which read it could not finish. The server takes it off
-// and records nothing of it.
+// its report, says which read it could not finish. It is no attribute: its
+// value is one of the kind's side reads, and the server takes it off and
+// records nothing of it.
 const AttrUnread = "unread"
+
+// sideReads are the reads behind a kind's material attributes other than the
+// record itself.
+var sideReads = map[string][]string{KindCopilotAgent: {ReadBotComponents}, KindCustomGPT: {ReadGPTConfigs}}
 
 // materialKeys are the attributes that say what a discovered agent may do or
 // who may reach it. A change of one is recorded and announced, and reopens a
@@ -173,6 +178,10 @@ func Clean(kind string, attrs map[string]string) (map[string]string, int) {
 	names := attributes[kind]
 	kept, dropped := make(map[string]string, len(attrs)), 0
 	for k, v := range attrs {
+		if k == AttrUnread && slices.Contains(sideReads[kind], v) {
+			kept[k] = v // a mark of the server's, never recorded
+			continue
+		}
 		if slices.Contains(names, k) && Plain(v) {
 			kept[k] = v
 		} else {

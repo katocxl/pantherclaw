@@ -99,7 +99,7 @@ func report(findings ...aapp.ScanFinding) aapp.SaaSReport {
 	}
 }
 
-func (e *env) discovery(t *testing.T, id string) (agent ids.UUID, state string, observed string, missed int) {
+func (e *env) discovery(t *testing.T, id string) (agent ids.UUID, state, observed string, missed int) {
 	t.Helper()
 	key := domain.Key(domain.SourceChatGPTEnterprise, tenant, id)
 	e.d.AdminQueryRow(t, `SELECT agent_id, state, observed::text, missed_scans FROM pc.discoveries
