@@ -37,7 +37,7 @@ func TestM7_EvidencePermissionsAndRoles(t *testing.T) {
 			domain.RoleAgentOwner, domain.RoleAuditor, domain.RoleDeveloper, domain.RoleInvestigator, domain.RoleOrgAdmin,
 			domain.RoleReconciler, domain.RoleRecordsManager, domain.RoleResponder, domain.RoleSecurityAdmin,
 		},
-		domain.PermEvidenceExport:         {domain.RoleAuditor, domain.RoleSecurityAdmin},
+		domain.PermEvidenceExport:          {domain.RoleAuditor, domain.RoleSecurityAdmin},
 		domain.PermTransactionReconcile:    {domain.RoleReconciler, domain.RoleSecurityAdmin},
 		domain.PermEvidenceRetentionManage: {domain.RoleRecordsManager},
 		domain.PermEvidenceCaptureManage:   {domain.RoleRecordsManager},

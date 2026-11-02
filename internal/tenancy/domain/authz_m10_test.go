@@ -26,7 +26,7 @@ func TestM10_ReflexPermissionsAndRoles(t *testing.T) {
 		domain.PermCaseRead:       reads,
 		domain.PermCaseManage:     {domain.RoleResponder, domain.RoleSecurityAdmin},
 		domain.PermExposureRead:   append(slices.Clone(reads), domain.RoleInvestigator),
-		domain.PermPostureRead:   reads,
+		domain.PermPostureRead:    reads,
 		domain.PermPostureManage:  {domain.RoleResponder, domain.RoleSecurityAdmin},
 		domain.PermOperationsRead: {
 			domain.RoleAuditor, domain.RoleAutomationAuthor, domain.RoleAutomationOperator, domain.RoleAutomationPublisher,
