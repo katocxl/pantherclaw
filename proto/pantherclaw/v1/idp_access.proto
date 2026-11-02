@@ -1,0 +1,319 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// IdpAccessService manages how an organization's identity provider and
+// standard MCP clients reach its agents (G0 M26 D400-D402, D408; H8):
+// assertion issuers, the client ids they may name, and the allow-list of
+// MCP clients. Nothing here creates authority: an assertion or a sign-in
+// uses or narrows an existing grant, and a person with no grant gets none.
+//
+// Adding or changing anything is a two-person protected change in every
+// protect mode: the call files it and returns its change request, and it
+// applies when a different person holding identity_provider.manage confirms
+// it with a security key. Turning something off applies at once, so a
+// compromised provider can be cut off without waiting (HR-141). Only a
+// person may call a write.
+//
+// Writes that add or change need the Team edition; turning off and reading
+// work in every edition, and what is ACTIVE keeps working after a downgrade.
+service IdpAccessService {
+  // CreateAssertionIssuer stores a PENDING issuer and files its activation.
+  // Its discovery document is read over HTTPS through the egress guard.
+  // permission: identity_provider.manage
+  rpc CreateAssertionIssuer(CreateAssertionIssuerRequest) returns (CreateAssertionIssuerResponse);
+  // DisableAssertionIssuer turns an issuer off at once.
+  // permission: identity_provider.manage
+  rpc DisableAssertionIssuer(DisableAssertionIssuerRequest) returns (DisableAssertionIssuerResponse);
+  // ListAssertionIssuers lists the org's issuers by name (at most 100).
+  // permission: identity_provider.read
+  rpc ListAssertionIssuers(ListAssertionIssuersRequest) returns (ListAssertionIssuersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // BindAssertionClient files that a client id of an issuer acts as one
+  // agent.
+  // permission: identity_provider.manage
+  rpc BindAssertionClient(BindAssertionClientRequest) returns (BindAssertionClientResponse);
+  // RemoveAssertionClient removes a binding at once.
+  // permission: identity_provider.manage
+  rpc RemoveAssertionClient(RemoveAssertionClientRequest) returns (RemoveAssertionClientResponse);
+  // ListAssertionClients lists an issuer's bindings (at most 100).
+  // permission: identity_provider.read
+  rpc ListAssertionClients(ListAssertionClientsRequest) returns (ListAssertionClientsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetMcpAccess returns the org's MCP authorization setting. It is off
+  // until a person turns it on.
+  // permission: identity_provider.read
+  rpc GetMcpAccess(GetMcpAccessRequest) returns (GetMcpAccessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // EnableMcpAccess files turning MCP authorization on.
+  // permission: identity_provider.manage
+  rpc EnableMcpAccess(EnableMcpAccessRequest) returns (EnableMcpAccessResponse);
+  // DisableMcpAccess turns MCP authorization off at once.
+  // permission: identity_provider.manage
+  rpc DisableMcpAccess(DisableMcpAccessRequest) returns (DisableMcpAccessResponse);
+  // AllowMcpClient files that a client URL acts as one enrolled agent.
+  // permission: identity_provider.manage
+  rpc AllowMcpClient(AllowMcpClientRequest) returns (AllowMcpClientResponse);
+  // RemoveMcpClient removes a client at once: its tokens stop on their next
+  // use and its instance is revoked.
+  // permission: identity_provider.manage
+  rpc RemoveMcpClient(RemoveMcpClientRequest) returns (RemoveMcpClientResponse);
+  // ListMcpClients lists the allow-list (at most 100).
+  // permission: identity_provider.read
+  rpc ListMcpClients(ListMcpClientsRequest) returns (ListMcpClientsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// AssertionIssuer is an identity provider whose assertions the org accepts.
+message AssertionIssuer {
+  // Issuer id.
+  string id = 1;
+  // Name.
+  string name = 2;
+  // Issuer URL, fixed once the issuer has been ACTIVE.
+  string issuer = 3;
+  // The audience an assertion must name, fixed once ACTIVE.
+  string audience = 4;
+  // The tenant a multi-tenant issuer's assertion must carry.
+  string tenant = 5;
+  // Allowed signature algorithms.
+  repeated string algorithms = 6;
+  // PENDING, ACTIVE or DISABLED.
+  string state = 7;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 8;
+  // When it first became ACTIVE.
+  google.protobuf.Timestamp activate_time = 9;
+}
+
+// AssertionClient pins a client id of an issuer to one agent.
+message AssertionClient {
+  // Binding id.
+  string id = 1;
+  // The issuer.
+  string issuer_id = 2;
+  // The client id assertions name.
+  string client_id = 3;
+  // The agent it acts as.
+  string agent_id = 4;
+  // PENDING, ACTIVE or REMOVED.
+  string state = 5;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 6;
+}
+
+// McpClient is one allow-listed standard MCP client.
+message McpClient {
+  // Client entry id.
+  string id = 1;
+  // Client ID Metadata Document URL.
+  string client_url = 2;
+  // The enrolled agent it acts as.
+  string agent_id = 3;
+  // The instance it acts through; no PAP/1 proof can use it.
+  string instance_id = 4;
+  // PENDING, ACTIVE or REMOVED.
+  string state = 5;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 6;
+}
+
+// McpAccess is the org's MCP authorization setting.
+message McpAccess {
+  // Whether the gateway's OAuth route is on.
+  bool enabled = 1;
+  // The gateway URL protected resources live under.
+  string gateway_url = 2;
+  // The org's authorization server issuer.
+  string issuer = 3;
+}
+
+// CreateAssertionIssuerRequest adds an issuer.
+message CreateAssertionIssuerRequest {
+  // Name.
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,32}$"];
+  // Issuer URL, HTTPS on a public host.
+  string issuer = 2 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 512
+    uri: true
+    prefix: "https://"
+  }];
+  // The tenant, for a multi-tenant issuer only.
+  string tenant = 3 [(buf.validate.field).string.max_len = 256];
+  // Allowed signature algorithms.
+  repeated string algorithms = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 3
+    unique: true
+    items: {
+      string: {
+        in: [
+          "RS256",
+          "ES256",
+          "EdDSA"
+        ]
+      }
+    }
+  }];
+}
+
+// CreateAssertionIssuerResponse names the issuer and its change request.
+message CreateAssertionIssuerResponse {
+  // The PENDING issuer.
+  AssertionIssuer issuer = 1;
+  // The change request a second person confirms.
+  string request_id = 2;
+}
+
+// DisableAssertionIssuerRequest names an issuer.
+message DisableAssertionIssuerRequest {
+  // Issuer id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DisableAssertionIssuerResponse is the issuer now.
+message DisableAssertionIssuerResponse {
+  // The DISABLED issuer.
+  AssertionIssuer issuer = 1;
+}
+
+// ListAssertionIssuersRequest lists issuers.
+message ListAssertionIssuersRequest {}
+
+// ListAssertionIssuersResponse is the org's issuers.
+message ListAssertionIssuersResponse {
+  // Issuers by name.
+  repeated AssertionIssuer issuers = 1;
+}
+
+// BindAssertionClientRequest pins a client id to an agent.
+message BindAssertionClientRequest {
+  // Issuer id.
+  string issuer_id = 1 [(buf.validate.field).string.uuid = true];
+  // The client id assertions name.
+  string client_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+  // The enrolled agent.
+  string agent_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+// BindAssertionClientResponse names the binding and its change request.
+message BindAssertionClientResponse {
+  // The PENDING binding.
+  AssertionClient client = 1;
+  // The change request a second person confirms.
+  string request_id = 2;
+}
+
+// RemoveAssertionClientRequest names a binding.
+message RemoveAssertionClientRequest {
+  // Binding id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RemoveAssertionClientResponse is the binding now.
+message RemoveAssertionClientResponse {
+  // The REMOVED binding.
+  AssertionClient client = 1;
+}
+
+// ListAssertionClientsRequest names an issuer.
+message ListAssertionClientsRequest {
+  // Issuer id.
+  string issuer_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ListAssertionClientsResponse is the issuer's bindings.
+message ListAssertionClientsResponse {
+  // Bindings.
+  repeated AssertionClient clients = 1;
+}
+
+// GetMcpAccessRequest reads the setting.
+message GetMcpAccessRequest {}
+
+// GetMcpAccessResponse is the setting.
+message GetMcpAccessResponse {
+  // The setting.
+  McpAccess access = 1;
+}
+
+// EnableMcpAccessRequest turns MCP authorization on.
+message EnableMcpAccessRequest {
+  // The gateway URL protected resources live under.
+  string gateway_url = 1 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 512
+    uri: true
+  }];
+}
+
+// EnableMcpAccessResponse names the change request.
+message EnableMcpAccessResponse {
+  // The change request a second person confirms.
+  string request_id = 1;
+}
+
+// DisableMcpAccessRequest turns MCP authorization off.
+message DisableMcpAccessRequest {}
+
+// DisableMcpAccessResponse is the setting now.
+message DisableMcpAccessResponse {
+  // The setting.
+  McpAccess access = 1;
+}
+
+// AllowMcpClientRequest allow-lists a client URL.
+message AllowMcpClientRequest {
+  // Client ID Metadata Document URL: HTTPS with a path.
+  string client_url = 1 [(buf.validate.field).string = {
+    min_len: 10
+    max_len: 1024
+    uri: true
+    prefix: "https://"
+  }];
+  // The enrolled agent.
+  string agent_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// AllowMcpClientResponse names the client and its change request.
+message AllowMcpClientResponse {
+  // The PENDING client.
+  McpClient client = 1;
+  // The change request a second person confirms.
+  string request_id = 2;
+}
+
+// RemoveMcpClientRequest names a client.
+message RemoveMcpClientRequest {
+  // Client entry id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RemoveMcpClientResponse is the client now.
+message RemoveMcpClientResponse {
+  // The REMOVED client.
+  McpClient client = 1;
+}
+
+// ListMcpClientsRequest lists the allow-list.
+message ListMcpClientsRequest {}
+
+// ListMcpClientsResponse is the allow-list.
+message ListMcpClientsResponse {
+  // Clients.
+  repeated McpClient clients = 1;
+}

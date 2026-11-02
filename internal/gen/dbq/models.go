@@ -2626,11 +2626,52 @@ type PcLoginRequest struct {
 	ConsumedAt   *time.Time
 }
 
+type PcMcpAuthorizationCode struct {
+	OrgID           ids.OrgID
+	CodeHash        []byte
+	ClientID        ids.UUID
+	UserID          ids.UUID
+	RedirectUri     string
+	CodeChallenge   string
+	Resource        string
+	ScopeOperations []string
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	UsedAt          *time.Time
+}
+
 type PcMcpCatalogSetting struct {
 	OrgID     ids.OrgID
 	Mode      string
 	UpdatedBy *string
 	UpdatedAt time.Time
+}
+
+type PcMcpClient struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	ClientUrl   string
+	AgentID     ids.UUID
+	InstanceID  ids.UUID
+	State       string
+	CreatedBy   ids.UUID
+	CreatedAt   time.Time
+	ActivatedAt *time.Time
+	RemovedBy   *ids.UUID
+	RemovedAt   *time.Time
+}
+
+type PcMcpRefreshToken struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	FamilyID  ids.UUID
+	TokenHash []byte
+	ClientID  ids.UUID
+	RunID     ids.UUID
+	Resource  string
+	State     string
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 type PcMcpServer struct {
@@ -2799,6 +2840,38 @@ type PcOrg struct {
 	DeletedAt        *time.Time
 }
 
+type PcOrgAssertionClient struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	IssuerID    ids.UUID
+	ClientID    string
+	AgentID     ids.UUID
+	State       string
+	CreatedBy   ids.UUID
+	CreatedAt   time.Time
+	ActivatedAt *time.Time
+	RemovedBy   *ids.UUID
+	RemovedAt   *time.Time
+}
+
+type PcOrgAssertionIssuer struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Name        string
+	Issuer      string
+	Audience    string
+	Tenant      *string
+	Algorithms  []string
+	State       string
+	CreatedBy   ids.UUID
+	CreatedAt   time.Time
+	UpdatedBy   ids.UUID
+	UpdatedAt   time.Time
+	ActivatedAt *time.Time
+	DisabledBy  *ids.UUID
+	DisabledAt  *time.Time
+}
+
 type PcOrgContainment struct {
 	OrgID        ids.OrgID
 	Epoch        int64
@@ -2864,6 +2937,14 @@ type PcOrgIdentityProviderSetting struct {
 	OwnProvidersOnly bool
 	UpdatedBy        ids.UUID
 	UpdatedAt        time.Time
+}
+
+type PcOrgMcpAccess struct {
+	OrgID      ids.OrgID
+	Enabled    bool
+	GatewayUrl *string
+	UpdatedBy  ids.UUID
+	UpdatedAt  time.Time
 }
 
 type PcOrgTermsAcceptance struct {
@@ -3632,6 +3713,7 @@ type PcRun struct {
 	EndedAt               *time.Time
 	Simulated             bool
 	AutomationExecutionID *ids.UUID
+	ScopeOperations       []string
 }
 
 type PcSandboxSession struct {
