@@ -7,6 +7,7 @@ tier: business
 attacker: A1
 threats: [T-176]
 rules: [HR-392]
+asi: [ASI10]
 requires: [payments]
 harness_only: true
 steps:

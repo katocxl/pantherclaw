@@ -19,6 +19,7 @@ var (
 	attackerRE    = regexp.MustCompile(`^A([1-9]|1[0-2])$`)
 	threatRE      = regexp.MustCompile(`^T-[0-9]{3}$`)
 	ruleRE        = regexp.MustCompile(`^HR-[0-9]{3}$`)
+	asiRE         = regexp.MustCompile(`^ASI(0[1-9]|10)$`)
 	fileNameRE    = regexp.MustCompile(`^(RT-[0-9]{3}|CX-[0-9]{3,5})-[a-z0-9]+(-[a-z0-9]+)*\.yaml$`)
 	roleRE        = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 	toolRE        = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,120}$`)
@@ -247,6 +248,13 @@ func (s *Scenario) Validate() error {
 		return err
 	}
 	if err := listOf("rules", s.Rules, ruleRE, !customer); err != nil {
+		return err
+	}
+	// A customer scenario is the customer's word: it maps to no risk (D304).
+	if customer && len(s.ASI) > 0 {
+		return invalid("asi is for library scenarios")
+	}
+	if err := listOf("asi", s.ASI, asiRE, false); err != nil {
 		return err
 	}
 	for _, r := range s.Requires {

@@ -115,6 +115,9 @@ type Service struct {
 	// Executions reads automation executions for packs of scope
 	// automation_execution (G0 M11 part 2 D30); nil fails them.
 	Executions Executions
+	// Compliance derives the report of a pack of scope compliance (G0 M25
+	// D301); nil fails them.
+	Compliance Compliance
 	Clock      clock.Clock
 	Log        *slog.Logger
 }
@@ -227,6 +230,15 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 			return err
 		}
 	}
+	if r.scope.Kind == pack.ScopeCompliance {
+		// Like a range pack: `pclaw verify` checks the receipts it cites.
+		r.include.Receipts = true
+		if b.complianceData, err = b.loadCompliance(); errors.Is(err, errCompliance) {
+			return s.fail(ctx, org, id, CodeComplianceUnavailable)
+		} else if err != nil {
+			return err
+		}
+	}
 	content, manifest, items, err := b.build()
 	switch {
 	case errors.Is(err, pack.ErrTooLarge):
@@ -238,10 +250,18 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 	}
 	msum, csum := sha256.Sum256([]byte(manifest)), sha256.Sum256(content)
 	err = s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		n, err := dbq.New(tx).MarkEvidencePackReady(ctx, dbq.MarkEvidencePackReadyParams{
+		q := dbq.New(tx)
+		n, err := q.MarkEvidencePackReady(ctx, dbq.MarkEvidencePackReadyParams{
 			OrgID: org, ID: id, Manifest: &manifest, ManifestSha256: msum[:], Content: content, ContentSha256: csum[:],
 			ContentSize: pgtype.Int8{Int64: int64(len(content)), Valid: true}, Items: ptr(int32(items)), ReadyAt: &ready, //nolint:gosec // G115: ≤ MaxFiles
 		})
+		if err == nil && n != 1 {
+			return db.ErrLostRace
+		}
+		if err != nil || b.complianceData == nil {
+			return err
+		}
+		n, err = q.SetComplianceReportDigest(ctx, b.complianceData.digest, org, id)
 		if err == nil && n != 1 {
 			return db.ErrLostRace
 		}
@@ -289,6 +309,8 @@ type builder struct {
 	rangeData *rangeData
 	// execData is the execution of a pack of scope automation_execution.
 	execData *execData
+	// complianceData is the report of a pack of scope compliance.
+	complianceData *complianceData
 }
 
 func (b *builder) gap(subject, reason, format string, args ...any) {
@@ -334,6 +356,9 @@ func (b *builder) build() ([]byte, string, int, error) {
 		if err := b.automation(); err != nil {
 			return nil, "", 0, err
 		}
+	}
+	if b.complianceData != nil {
+		b.files = append(b.files, b.complianceData.file)
 	}
 	if r.include.Versions {
 		if err := b.versions(); err != nil {
@@ -426,6 +451,9 @@ func (b *builder) scopeIDs() ([]ids.UUID, bool, error) {
 	}
 	if sc.Kind == pack.ScopeAutomationExecution {
 		return b.execData.transactions, true, nil
+	}
+	if sc.Kind == pack.ScopeCompliance {
+		return b.complianceData.transactions, true, nil
 	}
 	if sc.Kind == pack.ScopeTransactions {
 		out := make([]ids.UUID, 0, len(sc.Transactions))

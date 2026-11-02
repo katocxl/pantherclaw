@@ -61,7 +61,10 @@ var (
 	// ErrRangeCustomer: a range of customer-authored scenarios never goes in
 	// an assurance pack (G0 M17 D126, HR-466).
 	ErrRangeCustomer = pcerr.New(pcerr.FailedPrecondition, "RANGE_CUSTOMER_NOT_ATTESTED", "a range of customer-authored scenarios has no assurance pack")
-	ErrPacksUnwired  = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
+	// ErrComplianceEdition: the framework's edition is above this licence
+	// (G0 M25 D311).
+	ErrComplianceEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "this framework needs a higher edition")
+	ErrPacksUnwired      = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
 	errPackNoContent = errors.New("app: a ready pack without content")
 )
 
@@ -89,6 +92,9 @@ type PackRequest struct {
 	// Execution is the automation execution of a pack of scope
 	// automation_execution (G0 M11 part 2 D30).
 	Execution ids.UUID
+	// Framework is the framework of a pack of scope compliance (G0 M25
+	// D301); From and To are its period.
+	Framework string
 	// From and To bound a time range, or narrow a run or an agent.
 	From, To *time.Time
 	Include  pack.Include
@@ -157,6 +163,10 @@ func (r PackRequest) scope() (pack.Scope, error) {
 		if r.From == nil {
 			return sc, ErrBadPackScope
 		}
+	case pack.ScopeCompliance:
+		if r.From == nil || r.Framework == "" {
+			return sc, ErrBadPackScope
+		}
 	default:
 		return sc, ErrBadPackScope
 	}
@@ -189,6 +199,9 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 	sc, err := req.scope()
 	if err != nil {
 		return Pack{}, err
+	}
+	if req.Kind == pack.ScopeCompliance && !ents.ComplianceFramework(req.Framework) {
+		return Pack{}, ErrComplianceEdition
 	}
 	scopeJSON, err := pack.Canonical(sc)
 	if err != nil {
@@ -239,6 +252,15 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 			OrgID: c.Org, ID: id, CreatedBy: c.Principal.ID, ScopeKind: req.Kind, Scope: scopeJSON, Include: includeJSON,
 		}); err != nil {
 			return err
+		}
+		if req.Kind == pack.ScopeCompliance {
+			// The row outlives the pack (D303).
+			if err := q.InsertComplianceReport(ctx, dbq.InsertComplianceReportParams{
+				OrgID: c.Org, ID: ids.NewV7(), PackID: id, Framework: req.Framework, PeriodStart: req.From.UTC(),
+				PeriodEnd: req.To.UTC(), CreatedBy: c.Principal.ID,
+			}); err != nil {
+				return err
+			}
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
 			Name: "evidence.pack_created", Actor: c.Actor(), Outcome: audit.Success,

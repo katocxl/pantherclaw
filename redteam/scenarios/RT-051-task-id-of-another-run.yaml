@@ -7,6 +7,7 @@ tier: business
 attacker: A1
 threats: [T-148]
 rules: [HR-323]
+asi: [ASI07]
 requires: [a2a.send]
 harness_only: false
 steps:

@@ -7,6 +7,7 @@ tier: business
 attacker: A3
 threats: [T-019, T-088]
 rules: [HR-081]
+asi: [ASI04]
 requires: [mcp]
 harness_only: false
 steps:

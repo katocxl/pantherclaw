@@ -19,6 +19,8 @@ import (
 type Entry struct {
 	Digest string `json:"digest"`
 	Tier   string `json:"tier"`
+	// ASI are the OWASP agentic risks the scenario exercises (G0 M25 D304).
+	ASI []string `json:"asi,omitzero"`
 }
 
 //go:embed library.json

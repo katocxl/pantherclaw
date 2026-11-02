@@ -939,6 +939,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerSuggestions(rs, d)
 	registerRecommendations(rs, d)
 	registerPostureQueue(rs, d)
+	registerCompliance(rs, d)
 	edges, err := registerM10Edges(rs, d)
 	if err != nil {
 		return nil, err

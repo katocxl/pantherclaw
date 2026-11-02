@@ -7,6 +7,7 @@ tier: business
 attacker: A9
 threats: [T-149]
 rules: [HR-322]
+asi: [ASI04, ASI07]
 requires: [a2a.send, a2a.card_swap]
 harness_only: false
 steps:

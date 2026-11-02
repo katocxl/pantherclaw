@@ -7,6 +7,7 @@ tier: business
 attacker: A9
 threats: [T-147]
 rules: [HR-318, HR-319]
+asi: [ASI03]
 requires: [payments, authzen.evaluate]
 harness_only: false
 steps:

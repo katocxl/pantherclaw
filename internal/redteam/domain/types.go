@@ -57,6 +57,9 @@ type Scenario struct {
 	Attacker    string   `json:"attacker"`
 	Threats     []string `json:"threats"`
 	Rules       []string `json:"rules"`
+	// ASI are the OWASP agentic risks a library scenario exercises (G0 M25
+	// D304). The server's library holds them, never a runner's claim.
+	ASI         []string `json:"asi,omitempty"`
 	Requires    []string `json:"requires,omitempty"`
 	HarnessOnly bool     `json:"harness_only,omitzero"`
 	Steps       []Step   `json:"steps"`

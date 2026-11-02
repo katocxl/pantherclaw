@@ -1086,6 +1086,18 @@ type PcCliSession struct {
 	RevokedAt       *time.Time
 }
 
+type PcComplianceReport struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	PackID       ids.UUID
+	Framework    string
+	PeriodStart  time.Time
+	PeriodEnd    time.Time
+	CreatedBy    ids.UUID
+	CreatedAt    time.Time
+	ReportSha256 []byte
+}
+
 type PcCompromiseReview struct {
 	OrgID        ids.OrgID
 	CompromiseID ids.UUID

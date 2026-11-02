@@ -7,6 +7,7 @@ tier: community
 attacker: A1
 threats: [T-014, T-086]
 rules: [HR-213, HR-122]
+asi: [ASI03]
 requires: [sandbox]
 harness_only: false
 steps:

@@ -7,6 +7,7 @@ tier: business
 attacker: A1
 threats: [T-144]
 rules: [HR-310, HR-311]
+asi: [ASI02]
 requires: [pg.query]
 harness_only: false
 steps:

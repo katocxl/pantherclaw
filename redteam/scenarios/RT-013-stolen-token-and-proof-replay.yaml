@@ -7,6 +7,7 @@ tier: community
 attacker: A4
 threats: [T-032]
 rules: [HR-090, HR-091]
+asi: [ASI03]
 requires: [github]
 harness_only: false
 steps:

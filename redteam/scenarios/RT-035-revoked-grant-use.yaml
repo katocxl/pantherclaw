@@ -7,6 +7,7 @@ tier: business
 attacker: A1
 threats: [T-008, T-010]
 rules: [HR-047, HR-002]
+asi: [ASI03, ASI10]
 requires: [payments]
 harness_only: false
 steps:

@@ -7,6 +7,7 @@ tier: business
 attacker: A1
 threats: [T-146]
 rules: [HR-316]
+asi: [ASI02]
 requires: [slack.post]
 harness_only: false
 steps:
