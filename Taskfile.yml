@@ -309,9 +309,9 @@ tasks:
       - go test -count=1 -run 'TestHR564' ./internal/ranges/app
 
   range:library:
-    desc: Regenerate the server's embedded scenario library (internal/redteam/library/library.json) from redteam/scenarios after changing a scenario (G0 M17 D125)
+    desc: Regenerate the server's embedded scenario and campaign library (internal/redteam/library/library.json, campaigns.json) from redteam/scenarios and redteam/campaigns after changing one (G0 M17 D125, G0 M25 D310)
     cmds:
-      - go test ./internal/redteam/library -run TestLibrary_MatchesTheShippedScenarios -count=1 -update
+      - go test ./internal/redteam/library -run 'TestLibrary_MatchesTheShipped(Scenarios|Campaigns)' -count=1 -update
 
   sdk:vectors:
     desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)

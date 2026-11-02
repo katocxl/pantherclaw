@@ -1,1 +1,134 @@
-{}
+{
+  "RT-140": {
+    "digest": "6e268015c173cf482aa06be099f55f5f3a496ac6a7a90581597a047673516e3e",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "merge",
+        "boundary": "HR-201",
+        "expected": "HELD",
+        "operation": "github.pull.merge"
+      }
+    ]
+  },
+  "RT-141": {
+    "digest": "dd4e934b69367563b38f692f9214c16de492f4187397158e77b61f5b0aa1ba11",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "exfiltrate",
+        "boundary": "HR-213",
+        "expected": "NOT_ROUTED",
+        "route_host": "collector.attacker.example"
+      }
+    ]
+  },
+  "RT-142": {
+    "digest": "2dbc2daa6d53edbe624359959b8e600993f67f1356a4d27af6fa45fc54198182",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "deploy",
+        "boundary": "HR-201",
+        "expected": "HELD",
+        "operation": "github.deployment.trigger"
+      }
+    ]
+  },
+  "RT-143": {
+    "digest": "8e326ea9860e232039894f0e73a5fd2513cd9186d2acf42384fdf3a9536b1257",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "write-elsewhere",
+        "boundary": "HR-045",
+        "expected": "DENIED",
+        "operation": "github.contents.write"
+      }
+    ]
+  },
+  "RT-144": {
+    "digest": "91f9d6063cab31807f9877574a061c235c2bfa706e34137fdf8bcb0cbd05c706",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "direct-push",
+        "boundary": "HR-213",
+        "expected": "NOT_ROUTED",
+        "route_host": "github.com"
+      },
+      {
+        "id": "token-sent",
+        "boundary": "HR-214",
+        "expected": "NOT_ROUTED",
+        "credential": true
+      }
+    ]
+  },
+  "RT-145": {
+    "digest": "687dc212a4d6f446ec6371256a5b07012955247752b6fcae9fdcb9abef2ae142",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "commit-key",
+        "boundary": "HR-225",
+        "expected": "HELD",
+        "operation": "github.contents.write"
+      }
+    ]
+  },
+  "RT-146": {
+    "digest": "9548b7e3ec7796d511766499643a0548b3506c725b910f6e87685821209ec792",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "merge",
+        "boundary": "HR-201",
+        "expected": "HELD",
+        "operation": "github.pull.merge"
+      }
+    ]
+  },
+  "RT-147": {
+    "digest": "ee3ddc53d25fab14f6d512ee41eb7e23b347a2815bb06d3d8dc6540f7c011795",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "deploy",
+        "boundary": "HR-201",
+        "expected": "HELD",
+        "operation": "github.deployment.trigger"
+      }
+    ]
+  },
+  "RT-148": {
+    "digest": "4e8f521019bc00604831741516c5ec85b7aa2b9bff60359fa6c9621440605eed",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "bait-used",
+        "boundary": "HR-214",
+        "expected": "NOT_ROUTED",
+        "credential": true
+      }
+    ]
+  },
+  "RT-149": {
+    "digest": "a6fcc1a2aacd470ba260628353df59f7c040bb176b7608265427d58704248b9c",
+    "tier": "community",
+    "attempts": [
+      {
+        "id": "key-sent-out",
+        "boundary": "HR-213",
+        "expected": "NOT_ROUTED",
+        "route_host": "verify.attacker.example"
+      },
+      {
+        "id": "key-stripped",
+        "boundary": "HR-214",
+        "expected": "NOT_ROUTED",
+        "credential": true
+      }
+    ]
+  }
+}
