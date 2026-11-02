@@ -6,6 +6,7 @@ package app_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -42,6 +43,30 @@ func a2aConfig() app.A2AConfig {
 // sslmode require without an internal database and a pinned CA, a
 // private address without internal, a scope key without its column and
 // limits out of range (G0 M14 D15).
+// TestD97_CardKeysCarryNoPrivateMaterial: a JWK with any private member is
+// refused by name; other unknown members stay ignored, and a document that is
+// no JWKS is left to the pin.
+// Covers: F882
+func TestD97_CardKeysCarryNoPrivateMaterial(t *testing.T) {
+	key := `{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k","x":"x"%s}]}`
+	check := func(keys string) error {
+		c := a2aConfig()
+		c.CardKeys = []byte(keys)
+		_, err := c.Check(false)
+		return err
+	}
+	for _, m := range []string{"d", "p", "q", "dp", "dq", "qi", "oth", "k"} {
+		if err := check(fmt.Sprintf(key, `,"`+m+`":"secret"`)); !errors.Is(err, app.ErrA2AKeyPrivate) {
+			t.Errorf("%s: %v", m, err)
+		}
+	}
+	for _, keys := range []string{fmt.Sprintf(key, ""), fmt.Sprintf(key, `,"use":"sig","x5c":[]`), `{"not":"a jwks"}`} {
+		if err := check(keys); err != nil {
+			t.Errorf("%s: %v", keys, err)
+		}
+	}
+}
+
 // TestD247_APublicURLIsAURL: the URL a person stores is checked like the other
 // two, and may be left out.
 // Covers: F882

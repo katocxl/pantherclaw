@@ -39,6 +39,9 @@ const (
 	// ConnectionServiceUpdateConnectionProcedure is the procedure name of the ConnectionService's
 	// UpdateConnection RPC.
 	ConnectionServiceUpdateConnectionProcedure = "/pantherclaw.v1.ConnectionService/UpdateConnection"
+	// ConnectionServiceSetA2APublicUrlProcedure is the procedure name of the ConnectionService's
+	// SetA2APublicUrl RPC.
+	ConnectionServiceSetA2APublicUrlProcedure = "/pantherclaw.v1.ConnectionService/SetA2APublicUrl"
 	// ConnectionServiceSetRouteModeProcedure is the procedure name of the ConnectionService's
 	// SetRouteMode RPC.
 	ConnectionServiceSetRouteModeProcedure = "/pantherclaw.v1.ConnectionService/SetRouteMode"
@@ -118,6 +121,13 @@ var (
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("UpdateConnection"),
 			Procedure:  ConnectionServiceUpdateConnectionProcedure,
+		}
+	})
+	connectionServiceSetA2APublicUrlSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("SetA2APublicUrl"),
+			Procedure:  ConnectionServiceSetA2APublicUrlProcedure,
 		}
 	})
 	connectionServiceSetRouteModeSpec = sync.OnceValue(func() connect.Spec {
@@ -257,6 +267,12 @@ type ConnectionServiceClient interface {
 	// mode, or lowering the default mode to monitor, is a weakening change.
 	// permission: connection.manage
 	UpdateConnection(context.Context, *v1.UpdateConnectionRequest) (*v1.UpdateConnectionResponse, error)
+	// SetA2APublicUrl changes only an a2a connection's public URL. The server
+	// starts from the proposed pin, else the active one, so open edits survive,
+	// and saves a new proposal, a weakening change that serves once a person
+	// confirms it with a security key.
+	// permission: connection.manage
+	SetA2APublicUrl(context.Context, *v1.SetA2APublicUrlRequest) (*v1.SetA2APublicUrlResponse, error)
 	// SetRouteMode sets one route's mode; enforce to monitor is a weakening
 	// change.
 	// permission: connection.manage
@@ -365,6 +381,12 @@ type ConnectionServiceHandler interface {
 	// mode, or lowering the default mode to monitor, is a weakening change.
 	// permission: connection.manage
 	UpdateConnection(context.Context, *v1.UpdateConnectionRequest) (*v1.UpdateConnectionResponse, error)
+	// SetA2APublicUrl changes only an a2a connection's public URL. The server
+	// starts from the proposed pin, else the active one, so open edits survive,
+	// and saves a new proposal, a weakening change that serves once a person
+	// confirms it with a security key.
+	// permission: connection.manage
+	SetA2APublicUrl(context.Context, *v1.SetA2APublicUrlRequest) (*v1.SetA2APublicUrlResponse, error)
 	// SetRouteMode sets one route's mode; enforce to monitor is a weakening
 	// change.
 	// permission: connection.manage
@@ -458,6 +480,7 @@ func RegisterConnectionServiceHandler(server *connect.Server, svc ConnectionServ
 		connect.Method{Spec: connectionServiceGetConnectionSpec(), Handler: adapter.getConnection},
 		connect.Method{Spec: connectionServiceListConnectionsSpec(), Handler: adapter.listConnections},
 		connect.Method{Spec: connectionServiceUpdateConnectionSpec(), Handler: adapter.updateConnection},
+		connect.Method{Spec: connectionServiceSetA2APublicUrlSpec(), Handler: adapter.setA2APublicUrl},
 		connect.Method{Spec: connectionServiceSetRouteModeSpec(), Handler: adapter.setRouteMode},
 		connect.Method{Spec: connectionServiceQuarantineConnectionSpec(), Handler: adapter.quarantineConnection},
 		connect.Method{Spec: connectionServiceRestoreConnectionSpec(), Handler: adapter.restoreConnection},
@@ -494,6 +517,10 @@ func (UnimplementedConnectionServiceHandler) ListConnections(context.Context, *v
 
 func (UnimplementedConnectionServiceHandler) UpdateConnection(context.Context, *v1.UpdateConnectionRequest) (*v1.UpdateConnectionResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.UpdateConnection is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) SetA2APublicUrl(context.Context, *v1.SetA2APublicUrlRequest) (*v1.SetA2APublicUrlResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.SetA2APublicUrl is not implemented")
 }
 
 func (UnimplementedConnectionServiceHandler) SetRouteMode(context.Context, *v1.SetRouteModeRequest) (*v1.SetRouteModeResponse, error) {
@@ -591,6 +618,14 @@ func (c *connectionServiceClient) ListConnections(ctx context.Context, req *v1.L
 func (c *connectionServiceClient) UpdateConnection(ctx context.Context, req *v1.UpdateConnectionRequest) (*v1.UpdateConnectionResponse, error) {
 	var res v1.UpdateConnectionResponse
 	if err := c.client.CallUnary(ctx, connectionServiceUpdateConnectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) SetA2APublicUrl(ctx context.Context, req *v1.SetA2APublicUrlRequest) (*v1.SetA2APublicUrlResponse, error) {
+	var res v1.SetA2APublicUrlResponse
+	if err := c.client.CallUnary(ctx, connectionServiceSetA2APublicUrlSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -768,6 +803,18 @@ func (h connectionServiceHandler) updateConnection(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.UpdateConnection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) setA2APublicUrl(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetA2APublicUrlRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetA2APublicUrl(ctx, &req)
 	if err != nil {
 		return err
 	}

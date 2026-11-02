@@ -39,6 +39,12 @@ service ConnectionService {
   // mode, or lowering the default mode to monitor, is a weakening change.
   // permission: connection.manage
   rpc UpdateConnection(UpdateConnectionRequest) returns (UpdateConnectionResponse);
+  // SetA2APublicUrl changes only an a2a connection's public URL. The server
+  // starts from the proposed pin, else the active one, so open edits survive,
+  // and saves a new proposal, a weakening change that serves once a person
+  // confirms it with a security key.
+  // permission: connection.manage
+  rpc SetA2APublicUrl(SetA2APublicUrlRequest) returns (SetA2APublicUrlResponse);
   // SetRouteMode sets one route's mode; enforce to monitor is a weakening
   // change.
   // permission: connection.manage
@@ -263,8 +269,32 @@ message Connection {
   bool simulated = 30;
   // postgres is a postgres connection's configuration and manifest.
   PostgresConfig postgres = 31;
-  // a2a is an a2a connection's configuration and pinned card.
+  // Not returned: a2a_status is what a read shows of an a2a connection.
   A2AConfig a2a = 32;
+  // An a2a connection's public URL and pin state, on GetConnection and
+  // UpdateConnection; unset on ListConnections.
+  A2AStatus a2a_status = 33;
+}
+
+// A2APinState is where the pin behind an A2AStatus stands.
+enum A2APinState {
+  A2A_PIN_STATE_UNSPECIFIED = 0;
+  // Waiting for a person to confirm it; the active pin, if any, still serves.
+  A2A_PIN_STATE_PROPOSED = 1;
+  // Confirmed, and serving.
+  A2A_PIN_STATE_ACTIVE = 2;
+  // Confirmed, but a re-read found another card: the connection is refused
+  // until a new card is confirmed.
+  A2A_PIN_STATE_DRIFTED = 3;
+}
+
+// A2AStatus is what a read shows of an a2a connection's pin: the proposed pin
+// if there is one, else the active one, drifted included.
+message A2AStatus {
+  // The URL the card is signed for. It may not be serving yet: see pin_state.
+  string public_url = 1;
+  // The state of the pin that public_url comes from.
+  A2APinState pin_state = 2;
 }
 
 // PostgresConfig is a postgres connection (G0 M14 D15): where the database
@@ -708,6 +738,23 @@ message UpdateConnectionRequest {
 
 // UpdateConnectionResponse returns the connection.
 message UpdateConnectionResponse {
+  // The connection.
+  Connection connection = 1;
+}
+
+// SetA2APublicUrlRequest sets an a2a connection's public URL.
+message SetA2APublicUrlRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // The revision the caller read; a stale revision is refused.
+  int32 revision = 2 [(buf.validate.field).int32.gt = 0];
+  // The new URL; empty leaves the card unsigned.
+  string public_url = 3 [(buf.validate.field).string.max_len = 2048];
+}
+
+// SetA2APublicUrlResponse returns the connection; its a2a_status names the pin
+// state, so the console can link the pin page.
+message SetA2APublicUrlResponse {
   // The connection.
   Connection connection = 1;
 }

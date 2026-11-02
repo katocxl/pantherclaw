@@ -7782,6 +7782,60 @@
         }
       }
     },
+    "/pantherclaw.v1.ConnectionService/SetA2APublicUrl": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "SetA2APublicUrl",
+        "description": "SetA2APublicUrl changes only an a2a connection's public URL. The server\n starts from the proposed pin, else the active one, so open edits survive,\n and saves a new proposal, a weakening change that serves once a person\n confirms it with a security key.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.ConnectionService.SetA2APublicUrl",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetA2APublicUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetA2APublicUrlResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ConnectionService/SetRouteMode": {
       "post": {
         "tags": [
@@ -48202,6 +48256,17 @@
         "additionalProperties": false,
         "description": "UnlinkIdentityResponse is empty."
       },
+      "pantherclaw.v1.A2APinState": {
+        "type": "string",
+        "title": "A2APinState",
+        "enum": [
+          "A2A_PIN_STATE_UNSPECIFIED",
+          "A2A_PIN_STATE_PROPOSED",
+          "A2A_PIN_STATE_ACTIVE",
+          "A2A_PIN_STATE_DRIFTED"
+        ],
+        "description": "A2APinState is where the pin behind an A2AStatus stands."
+      },
       "pantherclaw.v1.AccessMode": {
         "type": "string",
         "title": "AccessMode",
@@ -48646,6 +48711,24 @@
           "bounds"
         ]
       },
+      "pantherclaw.v1.A2AStatus": {
+        "type": "object",
+        "properties": {
+          "publicUrl": {
+            "type": "string",
+            "title": "public_url",
+            "description": "The URL the card is signed for. It may not be serving yet: see pin_state."
+          },
+          "pinState": {
+            "title": "pin_state",
+            "description": "The state of the pin that public_url comes from.",
+            "$ref": "#/components/schemas/pantherclaw.v1.A2APinState"
+          }
+        },
+        "title": "A2AStatus",
+        "additionalProperties": false,
+        "description": "A2AStatus is what a read shows of an a2a connection's pin: the proposed pin\n if there is one, else the active one, drifted included."
+      },
       "pantherclaw.v1.AddInventoryNoteRequest": {
         "type": "object",
         "properties": {
@@ -48853,8 +48936,13 @@
           },
           "a2a": {
             "title": "a2a",
-            "description": "a2a is an a2a connection's configuration and pinned card.",
+            "description": "Not returned: a2a_status is what a read shows of an a2a connection.",
             "$ref": "#/components/schemas/pantherclaw.v1.A2AConfig"
+          },
+          "a2aStatus": {
+            "title": "a2a_status",
+            "description": "An a2a connection's public URL and pin state, on GetConnection and\n UpdateConnection; unset on ListConnections.",
+            "$ref": "#/components/schemas/pantherclaw.v1.A2AStatus"
           }
         },
         "title": "Connection",
@@ -50946,6 +51034,53 @@
         "title": "RevokeCredentialResponse",
         "additionalProperties": false,
         "description": "RevokeCredentialResponse confirms it."
+      },
+      "pantherclaw.v1.SetA2APublicUrlRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "revision": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+            "title": "revision",
+            "format": "int32",
+            "description": "The revision the caller read; a stale revision is refused."
+          },
+          "publicUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "public_url",
+            "maxLength": 2048,
+            "description": "The new URL; empty leaves the card unsigned."
+          }
+        },
+        "title": "SetA2APublicUrlRequest",
+        "additionalProperties": false,
+        "description": "SetA2APublicUrlRequest sets an a2a connection's public URL.",
+        "required": [
+          "connectionId",
+          "revision"
+        ]
+      },
+      "pantherclaw.v1.SetA2APublicUrlResponse": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "title": "connection",
+            "description": "The connection.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Connection"
+          }
+        },
+        "title": "SetA2APublicUrlResponse",
+        "additionalProperties": false,
+        "description": "SetA2APublicUrlResponse returns the connection; its a2a_status names the pin\n state, so the console can link the pin page."
       },
       "pantherclaw.v1.SetRouteModeRequest": {
         "type": "object",
