@@ -99,7 +99,8 @@ message OutcomeSeries {
   string measures = 7;
   // The records it cannot see, stated with every read.
   repeated string not_seen = 8;
-  // SIGNED_OFF: the founder signed the definition off (G17).
+  // SIGNED_OFF: the founder signed the definition off (G17). UNVALIDATED: no
+  // one has checked it against real incidents (G0 M27 D502, F801).
   string definition_status = 9;
   repeated OutcomePoint points = 10;
 }

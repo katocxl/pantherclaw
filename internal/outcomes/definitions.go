@@ -29,6 +29,10 @@ const (
 // DefinitionSignedOff marks a definition the founder signed off (G17).
 const DefinitionSignedOff = "SIGNED_OFF"
 
+// DefinitionUnvalidated marks a definition no one has checked against real
+// incidents (G0 M27 D502, F801). Behaviour analytics carry it.
+const DefinitionUnvalidated = "UNVALIDATED"
+
 // ScopeOrganization is what a sample covers (HR-540).
 const ScopeOrganization = "organization"
 
