@@ -4,8 +4,6 @@
 package server
 
 import (
-	"slices"
-
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -22,17 +20,6 @@ var selfMCPReads = []string{
 	pantherclawv1connect.InvestigationServiceGetRunTimelineProcedure,
 	pantherclawv1connect.SearchServiceSearchProcedure,
 	pantherclawv1connect.GraphServiceGetGraphProcedure,
-}
-
-// isInvestigator reports whether the caller holds the role at any scope.
-func isInvestigator(c tapp.Caller) bool {
-	return slices.ContainsFunc(c.Bindings, func(b td.Binding) bool { return b.Role == td.RoleInvestigator })
-}
-
-// withoutInvestigator is the caller as its other bindings leave it.
-func withoutInvestigator(c tapp.Caller) tapp.Caller {
-	c.Bindings = slices.DeleteFunc(slices.Clone(c.Bindings), func(b td.Binding) bool { return b.Role == td.RoleInvestigator })
-	return c
 }
 
 // procedureAdmits is the interceptor's question for one caller: does what it

@@ -130,10 +130,10 @@ func TestHR655_RoleDoesNotCountOutsideTheReads(t *testing.T) {
 	if !ran || err != nil {
 		t.Fatalf("ran=%v err=%v", ran, err)
 	}
-	if isInvestigator(got) || got.CanAnywhere(td.PermEvidenceRead) {
+	if tapp.IsInvestigator(got) || got.CanAnywhere(td.PermEvidenceRead) {
 		t.Errorf("the handler sees %+v", got.Bindings)
 	}
-	if !isInvestigator(c) {
+	if !tapp.IsInvestigator(c) {
 		t.Error("the gate changed the caller's bindings in place")
 	}
 	if ran, _, err := passes(t, c, pantherclawv1connect.EvidenceServiceExportBundleProcedure); ran || !errors.Is(err, errInvestigatorReads) {

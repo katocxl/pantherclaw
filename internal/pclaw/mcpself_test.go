@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 )
@@ -76,13 +77,32 @@ func TestF947_McpSelfServesStdioWithTheKeyFile(t *testing.T) {
 	}
 }
 
-// TestF947_McpSelfRefusesAPersonsLogin: without a service account key it stops
-// before anything is read, on stderr, and stdout stays the protocol's.
+// TestF947_McpSelfRefusesAPersonsLogin: a person's stored login, valid and
+// pointing at a live server, is not used: without a service account key it
+// stops before anything is read, on stderr, and stdout stays the protocol's.
 // Covers: F947
 func TestF947_McpSelfRefusesAPersonsLogin(t *testing.T) {
-	code, out, errs := selfRun(t, map[string]string{"PANTHERCLAW_SERVER": "https://pc.example.test"}, selfCall+"\n")
-	if code == 0 || out != "" || !strings.Contains(errs, "service account key") {
-		t.Errorf("code %d, stdout %q, stderr %q", code, out, errs)
+	s, seen := selfServer(t)
+	dir := t.TempDir()
+	login := Credentials{
+		Server: s.URL, Org: "0194f1a0-0000-7000-8000-0000000000aa",
+		AccessToken: "pc_person_access", AccessExpiry: time.Now().Add(time.Hour), RefreshToken: "pc_person_refresh",
+	}
+	if err := writeCredsFile(filepath.Join(dir, "credentials.json"), storedCreds{Credentials: login}); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"PANTHERCLAW_CONFIG_DIR": dir}
+	if c, err := loadCreds(envOf(env)); err != nil || c.AccessToken != login.AccessToken {
+		t.Fatalf("the stored login is not readable: %v", err)
+	}
+	for _, e := range []map[string]string{env, {"PANTHERCLAW_CONFIG_DIR": dir, "PANTHERCLAW_SERVER": s.URL}} {
+		code, out, errs := selfRun(t, e, selfCall+"\n")
+		if code == 0 || out != "" || !strings.Contains(errs, "service account key") {
+			t.Errorf("code %d, stdout %q, stderr %q", code, out, errs)
+		}
+	}
+	if paths, _ := seen(); len(paths) != 0 {
+		t.Errorf("the stored login reached the server: %v", paths)
 	}
 }
 

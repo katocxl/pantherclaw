@@ -153,7 +153,13 @@ func (s *Server) handle(ctx context.Context, line []byte) []byte {
 		if !ok {
 			return failure(req.ID, codeInvalidParams, "unknown tool")
 		}
-		return success(req.ID, s.call(ctx, t, req.Params.Arguments))
+		// The cap is on the whole line the agent reads (HR-659): text and
+		// structuredContent carry the record twice.
+		line := success(req.ID, s.call(ctx, t, req.Params.Arguments))
+		if len(line) > maxResultBytes {
+			line = success(req.ID, refused(refusalOf(errTooLarge)))
+		}
+		return line
 	}
 	return failure(req.ID, codeMethodNotFound, "method not found")
 }

@@ -130,7 +130,7 @@ func TestF947_ToolsListIsTheFourReads(t *testing.T) {
 
 // TestHR656_EveryToolIsOnTheAllowList: each tool names one listed procedure
 // and all four are used, so a fifth tool or read fails here first.
-// Covers: F946
+// Covers: F947
 func TestHR656_EveryToolIsOnTheAllowList(t *testing.T) {
 	var got []string
 	for _, x := range tools {
@@ -144,7 +144,7 @@ func TestHR656_EveryToolIsOnTheAllowList(t *testing.T) {
 
 // TestHR656_BackendHasOnlyTheFourReads: the interface the tools hold has no
 // other method, so a tool cannot reach another procedure.
-// Covers: F946
+// Covers: F947
 func TestHR656_BackendHasOnlyTheFourReads(t *testing.T) {
 	typ := reflect.TypeFor[Backend]()
 	var got []string
@@ -410,6 +410,44 @@ func TestHR658_RecordTextIsLabelledData(t *testing.T) {
 	if err := json.Unmarshal(as[0].Result.StructuredContent, &structured); err != nil || structured.Label != UntrustedLabel {
 		t.Errorf("structured content %s: %v", as[0].Result.StructuredContent, err)
 	}
+	cleanAfterDecoding(t, "text", []byte(text))
+	cleanAfterDecoding(t, "structuredContent", as[0].Result.StructuredContent)
+}
+
+// cleanAfterDecoding decodes a result and checks every string in it, keys
+// included: escaping alone would pass a check on the raw line, so this one
+// looks at what the agent gets once it has parsed the JSON (HR-658). Markup
+// text may stay in a decoded string: it is data, escaped on the line.
+func cleanAfterDecoding(t *testing.T, name string, b []byte) {
+	t.Helper()
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	n := 0
+	var walk func(any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case string:
+			n++
+			if strings.ContainsAny(x, "\x1b\n\r\u202e\u2066\u200b") {
+				t.Errorf("%s: decoded string kept a control, break, format or bidi character: %q", name, x)
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		case map[string]any:
+			for k, e := range x {
+				walk(k)
+				walk(e)
+			}
+		}
+	}
+	walk(v)
+	if n == 0 {
+		t.Errorf("%s: no strings decoded", name)
+	}
 }
 
 // TestHR658_EveryToolLabels: the four tools take one path out.
@@ -438,6 +476,8 @@ func TestHR658_EveryToolLabels(t *testing.T) {
 		if strings.Contains(text, "\\n") || strings.Contains(text, "<") {
 			t.Errorf("answer %d kept a break or markup: %.200s", i, text)
 		}
+		cleanAfterDecoding(t, names[i]+" text", []byte(text))
+		cleanAfterDecoding(t, names[i]+" structuredContent", a.Result.StructuredContent)
 	}
 }
 
@@ -456,6 +496,20 @@ func TestHR658_LongTextIsCutAndSaysSo(t *testing.T) {
 	as, raw := serve(t, &fakeBackend{graph: big}, callLine(t, "breach_radius", map[string]any{"scope_type": "agent", "scope_id": uuid()}))
 	if !as[0].Result.IsError || !strings.Contains(raw, "RESULT_TOO_LARGE") || strings.Contains(raw, "bbbb") {
 		t.Errorf("answer %.300s", raw)
+	}
+	// A record whose text alone fits but whose line, carrying it twice in
+	// text and structuredContent, does not, is refused too: the cap is on
+	// the line.
+	half := &pb.GetGraphResponse{}
+	for range maxResultBytes * 6 / 10 / maxStringRunes {
+		half.Nodes = append(half.Nodes, &pb.GraphNode{Label: strings.Repeat("c", maxStringRunes)})
+	}
+	if res, err := labelled("breach_radius", half); err != nil || len(res.Content[0].Text) > maxResultBytes {
+		t.Fatalf("the text alone should fit: %v", err)
+	}
+	as, raw = serve(t, &fakeBackend{graph: half}, callLine(t, "breach_radius", map[string]any{"scope_type": "agent", "scope_id": uuid()}))
+	if !as[0].Result.IsError || !strings.Contains(raw, "RESULT_TOO_LARGE") || strings.Contains(raw, "cccc") || len(raw) > maxResultBytes {
+		t.Errorf("line of %d bytes: %.300s", len(raw), raw)
 	}
 }
 

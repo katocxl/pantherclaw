@@ -33,6 +33,10 @@ var (
 	// errSelfMCPAudit: the read's audit record could not be written, so
 	// the read is not answered (HR-657).
 	errSelfMCPAudit = pcerr.New(pcerr.Unavailable, "AUDIT_UNAVAILABLE", "the read could not be audited; try again")
+	// errSelfMCPEntitlements: the org's entitlements could not be read, so
+	// the edition is unknown and the read is not answered.
+	errSelfMCPEntitlements = pcerr.New(pcerr.Unavailable, "ENTITLEMENT_UNAVAILABLE",
+		"the organization's edition could not be checked; try again")
 )
 
 // selfMCPAuditName is the event of one read by the role: kind
@@ -74,8 +78,9 @@ func poolRecorder(pool *db.Pool) selfMCPRecorder {
 // selfMCPGate runs after authentication and validation, with the caller in
 // the context. Outside selfMCPReads the role does not count: the call goes on
 // with the caller's other bindings, or is refused when those do not admit
-// it. On the reads, a holder of the role is audited; one admitted by the role
-// alone also needs the edition. A nil editions or record fails closed.
+// it. On the reads, a holder of the role needs the edition, whatever else it
+// holds, and is audited. Every refusal the gate makes to a holder is audited
+// too. A nil editions or record fails closed.
 type selfMCPGate struct {
 	editions selfMCPEditions
 	record   selfMCPRecorder
@@ -85,23 +90,40 @@ type selfMCPGate struct {
 func (g *selfMCPGate) intercept(next connect.ServerFunc) connect.ServerFunc {
 	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		c, err := tapp.CallerFrom(ctx)
-		if err != nil || !isInvestigator(c) {
+		if err != nil || !tapp.IsInvestigator(c) {
 			return next(ctx, spec, stream) // public, workload and gateway calls carry no caller here
 		}
-		rest := withoutInvestigator(c)
+		rest := tapp.WithoutInvestigator(c)
 		if !slices.Contains(selfMCPReads, spec.Procedure) {
 			if !procedureAdmits(rest, spec.Procedure) {
-				return errInvestigatorReads
+				return g.refuse(ctx, c, spec.Procedure, errInvestigatorReads)
 			}
 			return next(tapp.WithCaller(ctx, rest), spec, stream)
 		}
-		if !procedureAdmits(rest, spec.Procedure) {
-			if err := g.edition(ctx); err != nil {
-				return err
-			}
+		if err := g.edition(ctx); err != nil {
+			return g.refuse(ctx, c, spec.Procedure, err)
 		}
 		return g.audited(ctx, c, spec, stream, next)
 	}
+}
+
+// refuse records the gate's refusal of a holder of the role (HR-657) and
+// returns it. The call is refused either way; a lost record is logged.
+func (g *selfMCPGate) refuse(ctx context.Context, c tapp.Caller, procedure string, refusal error) error {
+	if g.record == nil {
+		g.logger().ErrorContext(ctx, "self_mcp.audit_failed", slog.String("procedure", procedure))
+		return refusal
+	}
+	outcome := audit.Denied
+	if pcerr.CodeOf(refusal) == pcerr.Unavailable {
+		outcome = audit.Failure
+	}
+	ev := selfMCPEvent(c, procedure, nil, outcome)
+	ev.ReasonCode = pcerr.ReasonOf(refusal)
+	if err := g.record(context.WithoutCancel(ctx), c.Org, ev); err != nil {
+		g.logger().ErrorContext(ctx, "self_mcp.audit_failed", slog.String("procedure", procedure), pclog.Err(err))
+	}
+	return refusal
 }
 
 func (g *selfMCPGate) edition(ctx context.Context) error {
@@ -110,7 +132,7 @@ func (g *selfMCPGate) edition(ctx context.Context) error {
 	}
 	e, err := g.editions.Current(ctx)
 	if err != nil {
-		return errSelfMCPAudit
+		return errSelfMCPEntitlements
 	}
 	if !e.SelfMCP() {
 		return errSelfMCPEdition

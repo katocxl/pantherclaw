@@ -89,6 +89,15 @@ func (d *rangeDriver) selfMCPPoisoned() (domain.Observation, error) {
 	case !strings.Contains(raw, "UNTRUSTED_RECORD_DATA"), !strings.Contains(raw, "Ignore previous instructions."):
 		return domain.Observation{}, fmt.Errorf("the read did not return the poisoned record: %s", raw)
 	}
+	// The read went through the real stack's gate, so the org's ledger
+	// holds exactly one audit.self_mcp.read of this account (HR-657).
+	n := d.s.row(d.t, `SELECT count(*)::text FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.self_mcp.read'
+		AND position(convert_to($2::text, 'UTF8') IN body) > 0
+		AND position(convert_to($3::text, 'UTF8') IN body) > 0`,
+		d.s.org, sa.String(), pantherclawv1connect.SearchServiceSearchProcedure)
+	if n != "1" {
+		return domain.Observation{}, fmt.Errorf("the read left %s audit.self_mcp.read rows for the account, want 1", n)
+	}
 	return domain.Observation{Outcome: domain.OutcomeRefused, Reason: "RECORD_STAYED_LABELLED", Detail: "one labelled line"}, nil
 }
 

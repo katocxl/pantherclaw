@@ -21,7 +21,7 @@ func (t *recordingTransport) RoundTrip(r *http.Request) (*http.Response, error) 
 
 // TestHR656_TransportSendsOnlyTheAllowList: a request off the list never
 // leaves the process, whatever a bug above it asks for.
-// Covers: F946
+// Covers: F947
 func TestHR656_TransportSendsOnlyTheAllowList(t *testing.T) {
 	base := &recordingTransport{}
 	tr := AllowList{Base: base}
@@ -54,6 +54,15 @@ func TestHR656_TransportSendsOnlyTheAllowList(t *testing.T) {
 	}
 	if err := send(http.MethodGet, Procedures()[0]); !errors.Is(err, errNotAllowed) {
 		t.Errorf("a GET: %v", err)
+	}
+	// The path is compared whole: a procedure under another path, or with
+	// more after it, is off the list.
+	for _, p := range []string{
+		"/anything" + Procedures()[2], Procedures()[2] + "/", Procedures()[2] + "x", "/" + Procedures()[2],
+	} {
+		if err := send(http.MethodPost, p); !errors.Is(err, errNotAllowed) {
+			t.Errorf("%s: %v", p, err)
+		}
 	}
 	if len(base.paths) != len(Procedures()) {
 		t.Errorf("sent %v", base.paths)

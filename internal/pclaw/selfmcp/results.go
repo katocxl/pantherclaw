@@ -52,7 +52,7 @@ type envelope struct {
 	Record any  `json:"record"`
 }
 
-// errTooLarge is a result over maxResultBytes.
+// errTooLarge is a result whose line is over maxResultBytes.
 var errTooLarge = errors.New("selfmcp: result too large")
 
 // marshal writes JSON no client can read as markup or as a second line: the
@@ -79,7 +79,7 @@ func labelled(name string, m proto.Message) (toolResult, error) {
 	if err != nil {
 		return toolResult{}, err
 	}
-	if len(text) > maxResultBytes {
+	if len(text) > maxResultBytes { // the whole line is measured again when it is written
 		return toolResult{}, errTooLarge
 	}
 	return toolResult{

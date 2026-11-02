@@ -12,7 +12,6 @@ import (
 	"errors"
 	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 )
@@ -40,11 +39,11 @@ type AllowList struct {
 	Base http.RoundTripper
 }
 
-// RoundTrip implements http.RoundTripper.
+// RoundTrip implements http.RoundTripper. The path must be an allow-listed
+// procedure exactly: pclaw's server URL is a base URL with no path
+// (checkServer), so the procedure is the whole path.
 func (t AllowList) RoundTrip(r *http.Request) (*http.Response, error) {
-	allowed := r.Method == http.MethodPost && slices.ContainsFunc(procedures, func(p string) bool {
-		return strings.HasSuffix(r.URL.Path, p)
-	})
+	allowed := r.Method == http.MethodPost && slices.Contains(procedures, r.URL.Path)
 	if !allowed {
 		return nil, errNotAllowed
 	}
