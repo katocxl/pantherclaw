@@ -105,6 +105,10 @@ func mountExtension(mux *http.ServeMux, ext extension.Set, d extension.Deps, web
 	if ext.Mount == nil {
 		return nil
 	}
+	if clientIP == nil {
+		clientIP = httpx.ClientIP
+	}
+	d.ClientIP = clientIP // the same rule as the rate limit below (D527)
 	routes, err := ext.Mount(d)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errExtensionRoute, err)

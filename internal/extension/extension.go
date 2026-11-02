@@ -115,6 +115,10 @@ type Deps struct {
 	Directory ports.Directory
 	// SignIn is the core's side of a SAML sign-in (G0 M26 D405). Mount only.
 	SignIn ports.SignIn
+	// ClientIP returns a request's client address with the core's rule:
+	// forwarding headers count only from the configured trusted proxies
+	// (D527). Mount only; never nil there.
+	ClientIP func(*http.Request) string
 }
 
 // Authorizer checks a permission for the principal of a session route's
