@@ -173,7 +173,7 @@ func TestHR647_ModesStartOffAndGoUpStepByStep(t *testing.T) {
 		t.Fatalf("OFF to ACTIVE: %v", err)
 	}
 	e.set(t, domain.ModeWatching)
-	e.d.AdminExec(t, "UPDATE pc.sessions SET step_up_at = NULL WHERE id = $1", e.alice.session)
+	e.d.AdminExec(t, "UPDATE pc.sessions SET step_up_at = now() - interval '1 hour' WHERE id = $1", e.alice.session)
 	if _, err := e.svc.SetMode(e.alice.ctx, domain.ModeActive, "a reason"); !errors.Is(err, rapp.ErrStepUp) {
 		t.Fatalf("ACTIVE without a step-up: %v", err)
 	}
