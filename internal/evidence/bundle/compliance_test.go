@@ -131,6 +131,17 @@ func TestHR604_AChangedStateFails(t *testing.T) {
 		{"an unreadable source with records", func(r *domain.Report, _ *pack.Manifest) { r.Inputs.Sources[1].Real = 3 }, "compliance.inputs"},
 		{"a test counted as real", func(r *domain.Report, _ *pack.Manifest) { r.Inputs.Sources[4].Real = 1 }, "compliance.inputs"},
 		{"counts citing nothing", func(r *domain.Report, _ *pack.Manifest) { r.Inputs.Sources[0].Refs = []domain.Ref{} }, "compliance.inputs"},
+		{"a test listed twice", func(r *domain.Report, _ *pack.Manifest) {
+			r.Inputs.Tests = append(r.Inputs.Tests, r.Inputs.Tests[0])
+		}, "compliance.inputs"},
+		{"a tag of no table", func(r *domain.Report, _ *pack.Manifest) { r.Inputs.Tests[0].Tag = "ASI11" }, "compliance.inputs"},
+		{"a test from a source that runs none", func(r *domain.Report, _ *pack.Manifest) {
+			r.Inputs.Tests[0].Source = domain.SourceReceipts
+		}, "compliance.inputs"},
+		{"a test from an unreadable source", func(r *domain.Report, _ *pack.Manifest) {
+			r.Inputs.Sources[5].Readable = false
+			r.Inputs.Tests = append(r.Inputs.Tests, domain.TestCount{Tag: "ASI02", Source: domain.SourceCampaign, Held: 1, Refs: []domain.Ref{}})
+		}, "compliance.inputs"},
 		{"another period", func(r *domain.Report, _ *pack.Manifest) { r.PeriodEnd = "2027-01-01T00:00:00Z" }, "compliance.report"},
 		{"another org", func(r *domain.Report, _ *pack.Manifest) { r.Org = "other" }, "compliance.report"},
 		{"no receipts", func(_ *domain.Report, m *pack.Manifest) { m.Include.Receipts = false }, "compliance.report"},

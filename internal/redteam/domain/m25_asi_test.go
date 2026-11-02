@@ -41,14 +41,24 @@ func asiFile(id, tags string) []byte {
 // once each, and nothing else.
 // Covers: F898
 func TestD304_ASITagsAreAClosedList(t *testing.T) {
-	s, err := domain.Parse(asiFile("RT-901", "asi: [ASI02, ASI10]\n"))
+	const why = "asi_why:\n  ASI02: \"Tool misuse (ASI02): it misuses a tool.\"\n  ASI10: \"Rogue agents (ASI10): it acts out of line.\"\n"
+	s, err := domain.Parse(asiFile("RT-901", "asi: [ASI02, ASI10]\n"+why))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.ASI) != 2 {
-		t.Fatalf("tags: %v", s.ASI)
+	if len(s.ASI) != 2 || len(s.ASIWhy) != 2 {
+		t.Fatalf("tags: %v %v", s.ASI, s.ASIWhy)
 	}
-	for _, bad := range []string{"asi: [ASI11]\n", "asi: [ASI00]\n", "asi: [LLM01]\n", "asi: [ASI01, ASI01]\n"} {
+	for _, bad := range []string{
+		"asi: [ASI11]\n", "asi: [ASI00]\n", "asi: [LLM01]\n", "asi: [ASI01, ASI01]\n",
+		// D531: every tag says why, in one line, and only tags do.
+		"asi: [ASI02, ASI10]\n",
+		"asi: [ASI02]\n" + why,
+		"asi: [ASI02, ASI03]\n" + why,
+		"asi: [ASI02]\nasi_why:\n  ASI02: \"\"\n",
+		"asi: [ASI02]\nasi_why:\n  ASI02: \"one\\ntwo\"\n",
+		"asi: [ASI02]\nasi_why:\n  ASI02: \"" + strings.Repeat("x", 201) + "\"\n",
+	} {
 		if _, err := domain.Parse(asiFile("RT-901", bad)); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%q: %v", bad, err)
 		}
@@ -61,5 +71,8 @@ func TestD304_ASITagsAreAClosedList(t *testing.T) {
 func TestT260_CustomerScenarioCarriesNoTag(t *testing.T) {
 	if _, err := domain.Parse(asiFile("CX-901", "asi: [ASI02]\n")); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("a customer scenario with a tag: %v", err)
+	}
+	if _, err := domain.Parse(asiFile("CX-901", "asi_why:\n  ASI02: \"Tool misuse (ASI02): x.\"\n")); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("a customer scenario with a reason: %v", err)
 	}
 }

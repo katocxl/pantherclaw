@@ -8,6 +8,9 @@ attacker: A9
 threats: [T-149]
 rules: [HR-322]
 asi: [ASI04, ASI07]
+asi_why:
+  ASI04: "Agentic supply chain (ASI04): a peer agent swaps the card it is known by, a component changed after it was trusted."
+  ASI07: "Insecure inter-agent communication (ASI07): a peer agent presents a swapped card to another agent."
 requires: [a2a.send, a2a.card_swap]
 harness_only: false
 steps:

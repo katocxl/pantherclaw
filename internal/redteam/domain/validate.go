@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 var (
@@ -20,14 +21,16 @@ var (
 	threatRE      = regexp.MustCompile(`^T-[0-9]{3}$`)
 	ruleRE        = regexp.MustCompile(`^HR-[0-9]{3}$`)
 	asiRE         = regexp.MustCompile(`^ASI(0[1-9]|10)$`)
-	fileNameRE    = regexp.MustCompile(`^(RT-[0-9]{3}|CX-[0-9]{3,5})-[a-z0-9]+(-[a-z0-9]+)*\.yaml$`)
-	roleRE        = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
-	toolRE        = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,120}$`)
-	tokenRE       = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
-	saveNameRE    = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-	categories    = []string{"functional", "boundary", "recovery", "explanation"}
-	suites        = []string{"coding-agent", "platform"}
-	tiers         = []string{"community", "business"}
+	// maxASIWhy bounds one asi_why line.
+	maxASIWhy  = 200
+	fileNameRE = regexp.MustCompile(`^(RT-[0-9]{3}|CX-[0-9]{3,5})-[a-z0-9]+(-[a-z0-9]+)*\.yaml$`)
+	roleRE     = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
+	toolRE     = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,120}$`)
+	tokenRE    = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+	saveNameRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	categories = []string{"functional", "boundary", "recovery", "explanation"}
+	suites     = []string{"coding-agent", "platform"}
+	tiers      = []string{"community", "business"}
 	// M14 capabilities and faces: G0 M14 D46.
 	capabilities = []string{
 		"github", "payments", "mcp", "sandbox", "person", "second_org",
@@ -251,11 +254,21 @@ func (s *Scenario) Validate() error {
 		return err
 	}
 	// A customer scenario is the customer's word: it maps to no risk (D304).
-	if customer && len(s.ASI) > 0 {
+	if customer && (len(s.ASI) > 0 || len(s.ASIWhy) > 0) {
 		return invalid("asi is for library scenarios")
 	}
 	if err := listOf("asi", s.ASI, asiRE, false); err != nil {
 		return err
+	}
+	// Every tag says why, in one line, and nothing else is said (D531).
+	if len(s.ASIWhy) != len(s.ASI) {
+		return invalid("asi_why must give one reason for each asi tag")
+	}
+	for _, tag := range s.ASI {
+		why := s.ASIWhy[tag]
+		if strings.TrimSpace(why) == "" || strings.ContainsAny(why, "\r\n") || utf8.RuneCountInString(why) > maxASIWhy {
+			return invalid("asi_why %s must be one line of at most %d characters", tag, maxASIWhy)
+		}
 	}
 	for _, r := range s.Requires {
 		if !slices.Contains(capabilities, r) {

@@ -8,6 +8,8 @@ attacker: A1
 threats: [T-086, T-088]
 rules: [HR-122]
 asi: [ASI05]
+asi_why:
+  ASI05: "Unexpected code execution (ASI05): code run in the sandbox tries IPv6, ICMP, the host gateway, metadata and docker.sock."
 requires: [sandbox]
 harness_only: false
 steps:

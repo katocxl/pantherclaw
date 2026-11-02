@@ -8,6 +8,8 @@ attacker: A9
 threats: [T-147]
 rules: [HR-318, HR-319]
 asi: [ASI03]
+asi_why:
+  ASI03: "Identity and privilege abuse (ASI03): a replayed evaluation tries to spend the agent's budget twice."
 requires: [payments, authzen.evaluate]
 harness_only: false
 steps:

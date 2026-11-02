@@ -8,6 +8,9 @@ attacker: A1
 threats: [T-008]
 rules: [HR-046, HR-047]
 asi: [ASI03, ASI07]
+asi_why:
+  ASI03: "Identity and privilege abuse (ASI03): a sub-agent asks for a lifetime past its parent's, outliving the authority it came from."
+  ASI07: "Insecure inter-agent communication (ASI07): a delegation between agents tries to outlast the parent that made it."
 requires: [github]
 harness_only: false
 steps:

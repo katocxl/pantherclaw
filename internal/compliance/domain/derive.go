@@ -257,7 +257,9 @@ func tests(c Control, in Inputs, r *ControlResult) bool {
 			})
 		}
 	}
-	exercised := held > 0 || reported > 0
+	// Only a result the server saw hold counts. A report is never proven
+	// (D309, HR-610): it stays a reported_only gap and lifts nothing.
+	exercised := held > 0
 	if len(c.Records) == 0 && exercised {
 		// Nothing but tests reads this control: no real use is in evidence.
 		r.Gaps = append(r.Gaps, ControlGap{
@@ -279,7 +281,7 @@ func tests(c Control, in Inputs, r *ControlResult) bool {
 		r.Gaps = append(r.Gaps, ControlGap{
 			Reason: ReasonNotExercised, Detail: fmt.Sprintf("%d tagged results did not run to an end", notExercised),
 		})
-	case !exercised && failed == 0:
+	case !exercised && failed == 0 && reported == 0:
 		r.Gaps = append(r.Gaps, ControlGap{Reason: ReasonNotExercised, Detail: "no tagged test ran in the period"})
 	}
 	return exercised

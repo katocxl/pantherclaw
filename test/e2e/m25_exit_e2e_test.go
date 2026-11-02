@@ -58,27 +58,34 @@ func failedChecks(r *bundle.Report) []bundle.Check {
 // exported again gives the same digest (G0 M25 D300-D304, D312).
 // Covers: F894, F895, F896, F899
 func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
-	from := time.Now().UTC().Add(-time.Minute)
 	r := startRangeStack(t)
 	s := r.d.s
-	code, out, errs, _ := r.run(t, scenarioDir(t, "RT-001", "RT-006", "RT-019"))
-	if code != 0 {
-		t.Fatalf("the range: %d\n%s\n%s", code, out, errs)
-	}
-	to := time.Now().UTC().Add(time.Minute)
-
 	p := s.proof(t)
 	ctx := context.Background()
 	svc := app.New(s.pool, p.origin).WithPacks(func(context.Context, db.TenantTx, ids.OrgID, ids.UUID) error { return nil }, teamEdition{})
 	campaign := ids.NewV7()
+	compliance := &coapp.Service{Pool: s.pool, Ents: teamEdition{}, Campaigns: campaignresults.Reader{
+		Results: oneCampaign{campaign}, Tags: campaignresults.LibraryTags,
+	}}
 	builder := &packbuild.Service{
 		Pool: s.pool, Keys: p.reg, LogOrigin: p.origin, Explorer: &txapp.Explorer{Pool: s.pool}, Bundles: app.New(s.pool, p.origin),
-		Log: pclog.Discard(),
-		Compliance: &coapp.Service{Pool: s.pool, Ents: teamEdition{}, Campaigns: campaignresults.Reader{
-			Results: oneCampaign{campaign}, Tags: campaignresults.LibraryTags,
-		}},
+		Log: pclog.Discard(), Compliance: compliance,
 	}
 	auditor := s.boundAuditor(t, "compliance-auditor")
+
+	// The period opens once the stack stands. The stack's own team agent
+	// holds real grants that stay live through it; the range adds only
+	// simulated use, so what is real before the run is all that is real after.
+	from := time.Now().UTC()
+	to := from.Add(30 * time.Minute)
+	before, err := compliance.Report(auditor, domain.OWASPASI, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs, _ := r.run(t, scenarioDir(t, "RT-001", "RT-006", "RT-019"))
+	if code != 0 {
+		t.Fatalf("the range: %d\n%s\n%s", code, out, errs)
+	}
 	export := func(name string) (string, map[string][]byte) {
 		pk, err := svc.CreateEvidencePack(auditor, app.PackRequest{Kind: pack.ScopeCompliance, Framework: string(domain.OWASPASI), From: &from, To: &to})
 		if err != nil {
@@ -131,10 +138,38 @@ func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
 			t.Errorf("%s = %s, want a gap", id, got)
 		}
 	}
+	// A report on simulators: the run's traffic is never real use. No
+	// receipt in the period is real, and the run added nothing real at all.
+	sourceOf := func(rep domain.Report, src domain.Source) domain.SourceCount {
+		for _, c := range rep.Inputs.Sources {
+			if c.Source == src {
+				return c
+			}
+		}
+		t.Fatalf("no source %s", src)
+		return domain.SourceCount{}
+	}
+	if got := sourceOf(*report, domain.SourceReceipts); got.Real != 0 || got.Simulated == 0 {
+		t.Fatalf("the run's receipts: %+v", got)
+	}
+	if report.Split.Real != before.Split.Real || report.Split.Simulated <= before.Split.Simulated {
+		t.Fatalf("simulator traffic counted as real: before %+v, after %+v %+v", before.Split, report.Split, report.Inputs.Sources)
+	}
+	was := map[string]domain.State{}
+	for _, c := range before.Controls {
+		was[c.ID] = c.State
+	}
+	shown := false
 	for _, c := range report.Controls {
-		if c.State == domain.Evidenced && report.Split.Real == 0 {
+		if c.State == domain.Evidenced && was[c.ID] != domain.Evidenced {
 			t.Errorf("%s is evidenced by simulators alone", c.ID)
 		}
+		if c.ID != "ASI05" && c.ID != "ASI06" && (c.State == domain.Gap || c.State == domain.Partial) && len(c.Gaps) > 0 {
+			shown = true
+		}
+	}
+	if !shown {
+		t.Error("no tested control shows a gap with its reason")
 	}
 	test := func(tag string, src domain.Source) domain.TestCount {
 		for _, c := range report.Inputs.Tests {

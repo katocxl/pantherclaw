@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	coapp "github.com/katocxl/pantherclaw/internal/compliance/app"
 	"github.com/katocxl/pantherclaw/internal/compliance/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -55,7 +56,9 @@ func (b *builder) loadCompliance() (*complianceData, error) {
 		return nil, err
 	}
 	report, err := b.s.Compliance.Report(b.ctx, domain.Framework(row.Framework), row.PeriodStart, row.PeriodEnd)
-	if err != nil {
+	if permanent(err) {
+		return nil, errors.Join(errCompliance, err)
+	} else if err != nil {
 		return nil, err
 	}
 	data, err := pack.Canonical(report)
@@ -68,6 +71,12 @@ func (b *builder) loadCompliance() (*complianceData, error) {
 		digest:       sum[:],
 		transactions: citedTransactions(report),
 	}, nil
+}
+
+// permanent reports a report error no retry can mend: the pack fails at once
+// with CodeComplianceUnavailable rather than staying pending.
+func permanent(err error) bool {
+	return errors.Is(err, coapp.ErrBadPeriod) || errors.Is(err, coapp.ErrUnknown) || errors.Is(err, coapp.ErrUnavailable)
 }
 
 // citedTransactions lists the transactions the report cites, once each: the

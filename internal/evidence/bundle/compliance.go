@@ -90,9 +90,43 @@ func verifyComplianceInputs(r *Report, subject string, rep *domain.Report) {
 			}
 		}
 	}
-	if bad == 0 {
-		r.add("compliance.inputs", subject, Passed, "the header and the source counts agree")
+	type key struct {
+		tag    string
+		source domain.Source
 	}
+	tested := map[key]bool{}
+	for _, t := range rep.Inputs.Tests {
+		name := truncate(t.Tag + "/" + string(t.Source))
+		if tested[key{t.Tag, t.Source}] {
+			fail(name, "the test result is listed twice")
+		}
+		tested[key{t.Tag, t.Source}] = true
+		if !knownTag(t.Tag) {
+			fail(name, "the tag is no risk of any control table")
+		}
+		i := slices.IndexFunc(rep.Inputs.Sources, func(s domain.SourceCount) bool { return s.Source == t.Source })
+		switch {
+		case !slices.Contains(domain.TestSources(), t.Source):
+			fail(name, "a test result from a source that runs no tests")
+		case i < 0 || !rep.Inputs.Sources[i].Readable:
+			fail(name, "a test result from a source the report could not read")
+		}
+	}
+	if bad == 0 {
+		r.add("compliance.inputs", subject, Passed, "the header, the source counts and the test results agree")
+	}
+}
+
+// knownTag reports whether a control of any table reads the tag.
+func knownTag(tag string) bool {
+	for _, f := range domain.Frameworks() {
+		for _, c := range domain.Controls(f) {
+			if slices.Contains(c.Tests, tag) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func cites(s domain.SourceCount, simulated bool) bool {

@@ -43,7 +43,27 @@ CREATE POLICY tenant_isolation ON pc.compliance_reports
 CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.compliance_reports
     FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
-GRANT SELECT, INSERT ON pc.compliance_reports TO pc_app;
+-- The digest is set once, and nothing else of a row ever changes (HR-606).
+-- +goose StatementBegin
+CREATE FUNCTION pc.compliance_report_digest_once() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
+BEGIN
+    IF OLD.report_sha256 IS NOT NULL
+        OR (NEW.org_id, NEW.id, NEW.pack_id, NEW.framework, NEW.period_start, NEW.period_end, NEW.created_by, NEW.created_at)
+            IS DISTINCT FROM
+           (OLD.org_id, OLD.id, OLD.pack_id, OLD.framework, OLD.period_start, OLD.period_end, OLD.created_by, OLD.created_at) THEN
+        RAISE EXCEPTION 'compliance report % takes its digest once and changes nothing else', OLD.id USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER compliance_reports_digest_once BEFORE UPDATE ON pc.compliance_reports
+    FOR EACH ROW EXECUTE FUNCTION pc.compliance_report_digest_once();
+
+-- pc_app inserts no digest and no time.
+GRANT SELECT ON pc.compliance_reports TO pc_app;
+GRANT INSERT (org_id, id, pack_id, framework, period_start, period_end, created_by) ON pc.compliance_reports TO pc_app;
 GRANT UPDATE (report_sha256) ON pc.compliance_reports TO pc_app;
 GRANT SELECT ON pc.compliance_reports TO pc_audit_ro;
 -- +goose StatementBegin
@@ -56,6 +76,7 @@ END $$;
 
 -- +goose Down
 DROP TABLE pc.compliance_reports;
+DROP FUNCTION pc.compliance_report_digest_once();
 DELETE FROM pc.evidence_packs WHERE scope_kind = 'compliance';
 ALTER TABLE pc.evidence_packs
     DROP CONSTRAINT evidence_packs_scope_kind_check,

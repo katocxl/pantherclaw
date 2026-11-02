@@ -7,7 +7,6 @@ tier: business
 attacker: A8
 threats: [T-163]
 rules: [HR-356, HR-357]
-asi: [ASI08]
 requires: [payments, billing]
 harness_only: true
 steps:

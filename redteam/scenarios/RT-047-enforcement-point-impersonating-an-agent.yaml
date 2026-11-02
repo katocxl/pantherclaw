@@ -8,6 +8,8 @@ attacker: A9
 threats: [T-147]
 rules: [HR-317, HR-318]
 asi: [ASI03]
+asi_why:
+  ASI03: "Identity and privilege abuse (ASI03): an enforcement point asks for decisions as an agent it cannot prove to be."
 requires: [payments, authzen.evaluate]
 harness_only: false
 steps:

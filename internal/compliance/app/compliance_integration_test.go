@@ -359,6 +359,14 @@ func TestHR606_ReportRowOutlivesItsPackAndDigestIsSetOnce(t *testing.T) {
 		"DELETE FROM pc.compliance_reports WHERE org_id = $1",
 		"UPDATE pc.compliance_reports SET framework = 'SOC2' WHERE org_id = $1",
 		"UPDATE pc.compliance_reports SET period_end = now() WHERE org_id = $1",
+		// The database holds the rule, not only the query (HR-606).
+		"UPDATE pc.compliance_reports SET report_sha256 = decode(repeat('ab', 32), 'hex') WHERE org_id = $1",
+		`INSERT INTO pc.compliance_reports (org_id, id, pack_id, framework, period_start, period_end, created_by, report_sha256)
+			SELECT org_id, gen_random_uuid(), pack_id, framework, period_start, period_end, created_by, report_sha256
+			FROM pc.compliance_reports WHERE org_id = $1`,
+		`INSERT INTO pc.compliance_reports (org_id, id, pack_id, framework, period_start, period_end, created_by, created_at)
+			SELECT org_id, gen_random_uuid(), pack_id, framework, period_start, period_end, created_by, now() - interval '1 year'
+			FROM pc.compliance_reports WHERE org_id = $1`,
 	} {
 		err := o.P.InTenantTx(context.Background(), o.Org, func(ctx context.Context, tx db.TenantTx) error {
 			_, err := tx.Exec(ctx, sql, o.Org)

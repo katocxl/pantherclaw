@@ -23,6 +23,8 @@ type Entry struct {
 	Tier   string `json:"tier"`
 	// ASI are the OWASP agentic risks the scenario exercises (G0 M25 D304).
 	ASI []string `json:"asi,omitzero"`
+	// ASIWhy says, per tag, how the scenario exercises that risk (D531).
+	ASIWhy map[string]string `json:"asi_why,omitzero"`
 }
 
 //go:embed library.json

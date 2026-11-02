@@ -8,6 +8,8 @@ attacker: A11
 threats: [T-012, T-013]
 rules: [HR-005, HR-078]
 asi: [ASI08]
+asi_why:
+  ASI08: "Cascading failures (ASI08): a lost response must not turn into a blind retry that doubles the effect."
 requires: [payments]
 harness_only: false
 steps:

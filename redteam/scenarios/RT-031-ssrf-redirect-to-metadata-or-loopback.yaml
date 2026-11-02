@@ -8,6 +8,8 @@ attacker: A11
 threats: [T-021, T-015]
 rules: [HR-070, HR-077, HR-221]
 asi: [ASI02]
+asi_why:
+  ASI02: "Tool misuse (ASI02): a tool call is steered to an unlisted address or a redirect (SSRF)."
 requires: [payments]
 harness_only: false
 steps:

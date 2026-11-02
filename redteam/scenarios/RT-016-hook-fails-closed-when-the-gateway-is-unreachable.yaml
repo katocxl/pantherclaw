@@ -8,6 +8,8 @@ attacker: A1
 threats: [T-069, T-080]
 rules: [HR-186]
 asi: [ASI08]
+asi_why:
+  ASI08: "Cascading failures (ASI08): with the gateway down, the agent's next command must stop rather than run unchecked."
 requires: []
 harness_only: false
 steps:

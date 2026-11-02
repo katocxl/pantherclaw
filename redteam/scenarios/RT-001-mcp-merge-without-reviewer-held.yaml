@@ -8,6 +8,8 @@ attacker: A1
 threats: [T-083, T-014]
 rules: [HR-201, HR-205]
 asi: [ASI02]
+asi_why:
+  ASI02: "Tool misuse (ASI02): the agent uses its own merge tool to merge with no independent review."
 requires: [github]
 harness_only: false
 steps:

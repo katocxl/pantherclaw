@@ -8,6 +8,8 @@ attacker: A1
 threats: [T-145]
 rules: [HR-313]
 asi: [ASI09]
+asi_why:
+  ASI09: "Human-agent trust exploitation (ASI09): a Slack action that looks like an approval tries to release a held action."
 requires: [payments, person, slack.interaction_post]
 harness_only: false
 steps:

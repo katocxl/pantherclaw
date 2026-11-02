@@ -8,6 +8,8 @@ attacker: A8
 threats: [T-037, T-003]
 rules: [HR-050, HR-051]
 asi: [ASI03]
+asi_why:
+  ASI03: "Identity and privilege abuse (ASI03): the agent guesses ids to reach another organisation's records."
 requires: [second_org]
 harness_only: false
 steps:

@@ -8,6 +8,8 @@ attacker: A4
 threats: [T-032]
 rules: [HR-090, HR-091]
 asi: [ASI03]
+asi_why:
+  ASI03: "Identity and privilege abuse (ASI03): a stolen token is replayed with a proof that was already used."
 requires: [github]
 harness_only: false
 steps:

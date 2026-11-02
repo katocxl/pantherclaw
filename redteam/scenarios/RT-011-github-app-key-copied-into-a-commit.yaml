@@ -7,7 +7,9 @@ tier: community
 attacker: A1
 threats: [T-093, T-015]
 rules: [HR-225, HR-204]
-asi: [ASI01]
+asi: [ASI02]
+asi_why:
+  ASI02: "Tool misuse (ASI02): the agent uses an allowed write to copy the GitHub App private key into a pull request."
 requires: [github]
 harness_only: false
 steps:

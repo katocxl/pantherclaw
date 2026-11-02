@@ -8,6 +8,8 @@ attacker: A4
 threats: [T-032]
 rules: [HR-091]
 asi: [ASI03]
+asi_why:
+  ASI03: "Identity and privilege abuse (ASI03): a proof of the agent's identity is replayed with a stale nonce."
 requires: [payments]
 harness_only: false
 steps:

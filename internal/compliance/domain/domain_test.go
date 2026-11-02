@@ -253,7 +253,7 @@ func TestD302_States(t *testing.T) {
 		{"a campaign is enough", withTests(allReadable(2, 0), domain.TestCount{Tag: "ASI01", Source: domain.SourceCampaign, Held: 1}), domain.Evidenced, []string{}},
 		{"a failure stays", withTests(allReadable(2, 0), domain.TestCount{Tag: "ASI01", Source: domain.SourceRange, Held: 3, Failed: 1}), domain.Partial, []string{domain.ReasonTestFailed}},
 		{"only a failure", withTests(allReadable(0, 0), domain.TestCount{Tag: "ASI01", Source: domain.SourceRange, Failed: 1}), domain.Gap, []string{domain.ReasonNoRecords, domain.ReasonTestFailed}},
-		{"a report is not proof", withTests(allReadable(2, 0), domain.TestCount{Tag: "ASI01", Source: domain.SourceCampaign, Reported: 1}), domain.Partial, []string{domain.ReasonReportedOnly}},
+		{"a report is not proof", withTests(allReadable(2, 0), domain.TestCount{Tag: "ASI01", Source: domain.SourceCampaign, Reported: 1}), domain.Partial, []string{domain.ReasonReportedOnly}}, // the records make it partial, never the report
 		{"not exercised is no pass", withTests(allReadable(2, 0), domain.TestCount{Tag: "ASI01", Source: domain.SourceCampaign, NotExercised: 2}), domain.Partial, []string{domain.ReasonNotExercised}},
 		{"another tag says nothing", withTests(allReadable(2, 0), domain.TestCount{Tag: "ASI09", Source: domain.SourceRange, Held: 9}), domain.Partial, []string{domain.ReasonNotExercised}},
 	}
@@ -270,6 +270,24 @@ func TestD302_States(t *testing.T) {
 func withTests(in domain.Inputs, ts ...domain.TestCount) domain.Inputs {
 	in.Tests = ts
 	return in
+}
+
+// TestD309_AReportOnlyControlIsAGap: a control with nothing but reported
+// results is a gap that says so: a report lifts nothing (HR-610).
+// Covers: F891
+func TestD309_AReportOnlyControlIsAGap(t *testing.T) {
+	in := withTests(allReadable(0, 0),
+		domain.TestCount{Tag: "ASI05", Source: domain.SourceCampaign, Reported: 2},
+		domain.TestCount{Tag: "ASI05", Source: domain.SourceRange, Reported: 1})
+	got := control(t, domain.OWASPASI, in, "ASI05")
+	if got.State != domain.Gap || !slices.Equal(reasons(got), []string{domain.ReasonReportedOnly}) || got.SimulatedOnly {
+		t.Fatalf("%s %v %+v", got.State, reasons(got), got)
+	}
+	// A control with record sources that hold nothing stays a gap too.
+	in = withTests(allReadable(0, 0), domain.TestCount{Tag: "ASI07", Source: domain.SourceCampaign, Reported: 1})
+	if got := control(t, domain.OWASPASI, in, "ASI07"); got.State != domain.Gap {
+		t.Fatalf("ASI07 with no grants and a report: %s %v", got.State, reasons(got))
+	}
 }
 
 // TestD304_ASI05AndASI06ReadAsGaps: no production record maps them, so

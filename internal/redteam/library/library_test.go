@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/detection/rules"
@@ -32,7 +33,7 @@ func TestLibrary_MatchesTheShippedScenarios(t *testing.T) {
 	}
 	want := map[string]library.Entry{}
 	for _, l := range set {
-		want[l.Scenario.ID] = library.Entry{Digest: l.Digest, Tier: l.Scenario.Tier, ASI: l.Scenario.ASI}
+		want[l.Scenario.ID] = library.Entry{Digest: l.Digest, Tier: l.Scenario.Tier, ASI: l.Scenario.ASI, ASIWhy: l.Scenario.ASIWhy}
 	}
 	if *update {
 		b, err := json.Marshal(want, json.Deterministic(true), jsontext.WithIndent("  "))
@@ -45,7 +46,7 @@ func TestLibrary_MatchesTheShippedScenarios(t *testing.T) {
 		return
 	}
 	same := func(a, b library.Entry) bool {
-		return a.Digest == b.Digest && a.Tier == b.Tier && slices.Equal(a.ASI, b.ASI)
+		return a.Digest == b.Digest && a.Tier == b.Tier && slices.Equal(a.ASI, b.ASI) && maps.Equal(a.ASIWhy, b.ASIWhy)
 	}
 	if got := library.All(); !maps.EqualFunc(got, want, same) {
 		t.Fatalf("library.json is out of date with %s: run task range:library", dir)
@@ -65,7 +66,13 @@ func TestD304_TagsAreKnownRisks(t *testing.T) {
 		if len(e.ASI) > 0 {
 			tagged++
 		}
+		if len(e.ASIWhy) != len(e.ASI) {
+			t.Errorf("%s: %d tags and %d reasons (D531)", id, len(e.ASI), len(e.ASIWhy))
+		}
 		for _, tag := range e.ASI {
+			if !strings.Contains(e.ASIWhy[tag], "("+tag+")") {
+				t.Errorf("%s: the reason for %s does not cite the risk: %q", id, tag, e.ASIWhy[tag])
+			}
 			if !rules.KnownOWASP(tag) {
 				t.Errorf("%s: tag %q", id, tag)
 			}

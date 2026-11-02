@@ -8,6 +8,8 @@ attacker: A1
 threats: [T-006]
 rules: [HR-030, HR-031]
 asi: [ASI09]
+asi_why:
+  ASI09: "Human-agent trust exploitation (ASI09): a person approves one amount and the agent changes it afterwards."
 requires: [payments, person]
 harness_only: false
 steps:
