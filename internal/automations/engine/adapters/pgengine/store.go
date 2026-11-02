@@ -117,6 +117,12 @@ func (e *Engine) build(ctx context.Context, q *dbq.Queries, row dbq.PcAutomation
 			OccurredAt: row.OccurredAt,
 		},
 	}
+	basis, err := q.AutomationTriggerBasis(ctx, org, row.TriggerID)
+	if err != nil {
+		return nil, err
+	}
+	x.View.Trigger.Confirmed = basis.Confirmed
+	x.View.Trigger.Inferred = basis.Basis != "" && !basis.Confirmed
 	switch {
 	case row.PrincipalUserID != nil:
 		x.View.Principal = gdomain.Principal{Kind: gdomain.PrincipalUser, ID: *row.PrincipalUserID}

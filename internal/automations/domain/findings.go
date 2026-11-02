@@ -52,6 +52,7 @@ const (
 	CodePrefixIrreversible       = "CEILING_PREFIX_IRREVERSIBLE"
 	CodeLimitInvalid             = "LIMIT_INVALID"
 	CodeInputNotJSON             = "INPUT_NOT_JSON"
+	CodeContainOnInferred        = "CONTAIN_ON_INFERRED"
 	// Graph findings of a v2 definition (D301, D307).
 	CodeUnreachableNode            = "UNREACHABLE_NODE"
 	CodePathNotTerminated          = "PATH_NOT_TERMINATED"

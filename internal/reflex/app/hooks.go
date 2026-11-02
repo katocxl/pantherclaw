@@ -234,7 +234,7 @@ func (h *Hooks) group(ctx context.Context, tx db.TenantTx, q *dbq.Queries, s ref
 	}); err != nil {
 		return ids.UUID{}, false, err
 	}
-	if err := IncidentEntry(ctx, tx, inc, s.Subjects); err != nil {
+	if err := incidentEntry(ctx, tx, inc, s.Subjects, s.Basis); err != nil {
 		return ids.UUID{}, false, err
 	}
 	return inc.ID, true, attach(ctx, q, org, inc.ID, r.Alert, string(s.Severity), "system", "reflex")
@@ -271,16 +271,27 @@ func attach(ctx context.Context, q *dbq.Queries, org ids.OrgID, incident, alert 
 // IncidentEntry writes the reflex.incident ledger entry of an incident
 // change (D6): ids, state, severity and subjects only.
 func IncidentEntry(ctx context.Context, tx db.TenantTx, inc dbq.PcIncident, subjects []reflexdomain.Subject) error {
+	return incidentEntry(ctx, tx, inc, subjects, "")
+}
+
+// incidentEntry also names the basis of the signal that opened the incident
+// (G0 M27 D500): an incident opened by an inference is still an inference
+// to an automation. A person's change carries none.
+func incidentEntry(ctx context.Context, tx db.TenantTx, inc dbq.PcIncident, subjects []reflexdomain.Subject, basis reflexdomain.Basis) error {
 	if subjects == nil {
 		subjects = []reflexdomain.Subject{}
 	}
 	if len(subjects) > 16 {
 		subjects = subjects[:16]
 	}
-	body, err := canonical(map[string]any{
+	fields := map[string]any{
 		"id": inc.ID.String(), "state": inc.State, "severity": inc.Severity, "attention": string(reflexdomain.AttentionIncident),
 		"subjects": subjects, "group": inc.GroupKey,
-	})
+	}
+	if basis != "" {
+		fields["basis"] = string(basis)
+	}
+	body, err := canonical(fields)
 	if err != nil {
 		return err
 	}

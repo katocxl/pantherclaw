@@ -218,6 +218,28 @@ func (q *Queries) AutomationRolloutOf(ctx context.Context, orgID ids.OrgID, iD i
 	return i, err
 }
 
+const automationTriggerBasis = `-- name: AutomationTriggerBasis :one
+SELECT CASE WHEN authenticity = 'PLATFORM_FEED' THEN coalesce(authenticity_detail ->> 'basis', '') ELSE '' END::text AS basis,
+       (authenticity = 'PLATFORM_FEED' AND kind = 'EVENT'
+        AND coalesce(authenticity_detail ->> 'confirmed', '') = 'true')::boolean AS confirmed
+FROM pc.automation_triggers
+WHERE org_id = $1 AND id = $2
+`
+
+type AutomationTriggerBasisRow struct {
+	Basis     string
+	Confirmed bool
+}
+
+// The basis the feed kept on a trigger of a Reflex signal, and whether it is
+// a CONFIRMED alert (G0 M27 D500, D514). Only the platform feed sets either.
+func (q *Queries) AutomationTriggerBasis(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (AutomationTriggerBasisRow, error) {
+	row := q.db.QueryRow(ctx, automationTriggerBasis, orgID, iD)
+	var i AutomationTriggerBasisRow
+	err := row.Scan(&i.Basis, &i.Confirmed)
+	return i, err
+}
+
 const claimAutomationLaunch = `-- name: ClaimAutomationLaunch :one
 UPDATE pc.automation_launches l SET state = 'CLAIMED', claimed_instance_id = $1
 WHERE l.org_id = $2 AND l.id = (

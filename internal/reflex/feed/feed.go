@@ -228,6 +228,7 @@ func reflexEntry(e *Event, body []byte) error {
 		Rule      string                 `json:"rule"`
 		Severity  string                 `json:"severity"`
 		Attention string                 `json:"attention"`
+		Basis     string                 `json:"basis"`
 		State     string                 `json:"state"`
 		Subjects  []reflexdomain.Subject `json:"subjects"`
 		Test      bool                   `json:"test"`
@@ -241,7 +242,7 @@ func reflexEntry(e *Event, body []byte) error {
 		}
 	}
 	e.Outcome, e.Test = b.State, b.Test
-	e.Attrs = attrs("id", b.ID, "rule", b.Rule, "severity", b.Severity, "attention", b.Attention)
+	e.Attrs = attrs("id", b.ID, "rule", b.Rule, "severity", b.Severity, "attention", b.Attention, "basis", b.Basis)
 	return nil
 }
 

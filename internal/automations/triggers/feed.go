@@ -4,6 +4,7 @@
 package triggers
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -300,15 +301,31 @@ func (s *Service) consider(ctx context.Context, tx db.TenantTx, ls []listener, e
 		}
 		if l.event != nil {
 			params, perr := ExtractFields(l.event.Params, func(p string) (string, bool) { return eventField(e, p) })
+			detail := map[string]string{"seq": fmt.Sprint(e.Seq), "entry": e.ID.String(), "kind": e.Kind, "event": on}
+			switch {
+			case confirmed(e):
+				// Only a CONFIRMED alert lets a contain step run (D514).
+				detail[attrBasis], detail[detailConfirmed] = e.Attrs[attrBasis], "true"
+			case inferred(e):
+				// The trigger keeps the basis, so a step that would contain
+				// acts on nothing (D500).
+				detail[attrBasis] = cmp.Or(e.Attrs[attrBasis], "UNKNOWN")
+			}
 			out, ok := s.FireInSavepoint(ctx, tx, Candidate{
 				Automation: l.a, Kind: autodomain.TriggerEvent, Authenticity: autodomain.AuthPlatformFeed,
-				Detail:    map[string]string{"seq": fmt.Sprint(e.Seq), "entry": e.ID.String(), "kind": e.Kind, "event": on},
+				Detail:    detail,
 				SourceRef: "event:" + on + ":" + e.ID.String(), Params: params, ParamErr: perr, Subjects: e.Subjects,
 				Evidence: evidenceOf(e), Lineage: lin, BaseKey: eventKeyOf(e), OccurredAt: e.OccurredAt, QueueOK: true,
 			})
 			if ok && out.State.Started() {
 				fired++
 			}
+			continue
+		}
+		// A threshold sums many events and its trigger can't say which were
+		// inferred: an automation that can contain counts only CONFIRMED
+		// alerts (D500, D514).
+		if signal(e) && !confirmed(e) && l.a.Def.Contains() {
 			continue
 		}
 		n, err := s.count(ctx, tx, l, e, lin, now)

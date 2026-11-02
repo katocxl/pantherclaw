@@ -41,6 +41,55 @@ func TestAReceiptOfAHoldIsAHeldAction(t *testing.T) {
 	}
 }
 
+// TestHR640_OnlyAnInferredSignalIsMarkedSo reads alerts and incidents
+// through the feed, as the firing loop does: the basis the ledger holds
+// decides, and an incident only names one when a signal opened it.
+// Covers: F933
+func TestHR640_OnlyAnInferredSignalIsMarkedSo(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		kind, basis      string
+		want, confirmedW bool
+	}{
+		{"reflex.alert", "INFERRED", true, false},
+		{"reflex.alert", "HYPOTHESIS", true, false},
+		{"reflex.alert", "", true, false},
+		{"reflex.alert", "GUESS", true, false},
+		{"reflex.alert", "OBSERVED", false, true},
+		{"reflex.alert", "RULE_MATCH", false, true},
+		{"reflex.incident", "INFERRED", true, false},
+		{"reflex.incident", "OBSERVED", false, true},
+		// A person's change to an incident names no basis: neither.
+		{"reflex.incident", "", false, false},
+	} {
+		fields := map[string]string{"id": "a1", "state": "OPEN"}
+		if tc.basis != "" {
+			fields["basis"] = tc.basis
+		}
+		body, err := evdomain.CanonicalBody(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := feed.Normalize(tc.kind, "system", "reflex", time.Now(), body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := inferred(e); got != tc.want {
+			t.Errorf("%s basis %q: inferred = %v, want %v", tc.kind, tc.basis, got, tc.want)
+		}
+		if got := confirmed(e); got != tc.confirmedW {
+			t.Errorf("%s basis %q: confirmed = %v, want %v", tc.kind, tc.basis, got, tc.confirmedW)
+		}
+	}
+	if inferred(feed.Event{Kind: "receipt.decision"}) {
+		t.Error("a decision is not an inferred signal")
+	}
+	// Only a Reflex signal is a CONFIRMED alert, whatever its attributes.
+	if confirmed(feed.Event{Kind: "receipt.decision", Attrs: map[string]string{"basis": "OBSERVED"}}) {
+		t.Error("a decision is not a confirmed alert")
+	}
+}
+
 func TestVocabularyMeansItsFeedKinds(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -71,6 +120,15 @@ func TestVocabularyMeansItsFeedKinds(t *testing.T) {
 		{VocabCoverageLost, feed.Event{Kind: "coverage.invalidation"}, Facts{}, true},
 		{VocabIncidentOpened, feed.Event{Kind: "reflex.incident", Outcome: "OPEN"}, Facts{}, true},
 		{VocabIncidentOpened, feed.Event{Kind: "reflex.incident", Outcome: "CLOSED"}, Facts{}, false},
+		// An inferred alert stays an alert (HR-640). Covers: F933
+		{VocabAlertRaised, feed.Event{Kind: "reflex.alert", Attrs: map[string]string{"basis": "INFERRED"}}, Facts{}, true},
+		{VocabAlertRaised, feed.Event{Kind: "reflex.alert", Attrs: map[string]string{"basis": "OBSERVED"}}, Facts{}, true},
+		{VocabAlertInferred, feed.Event{Kind: "reflex.alert", Attrs: map[string]string{"basis": "INFERRED"}}, Facts{}, true},
+		{VocabAlertInferred, feed.Event{Kind: "reflex.alert", Attrs: map[string]string{"basis": "HYPOTHESIS"}}, Facts{}, true},
+		{VocabAlertInferred, feed.Event{Kind: "reflex.alert"}, Facts{}, true},
+		{VocabAlertInferred, feed.Event{Kind: "reflex.alert", Attrs: map[string]string{"basis": "OBSERVED"}}, Facts{}, false},
+		{VocabAlertInferred, feed.Event{Kind: "reflex.alert", Attrs: map[string]string{"basis": "RULE_MATCH"}}, Facts{}, false},
+		{VocabAlertInferred, feed.Event{Kind: "reflex.incident", Attrs: map[string]string{"basis": "INFERRED"}}, Facts{}, false},
 		{VocabCaseClosed, feed.Event{Kind: "reflex.case"}, Facts{CaseClosed: true}, true},
 		{VocabCaseClosed, feed.Event{Kind: "reflex.case"}, Facts{}, false},
 		{"not.a.name", feed.Event{Kind: "receipt.decision", Decision: "DENY"}, Facts{}, false},
@@ -79,7 +137,7 @@ func TestVocabularyMeansItsFeedKinds(t *testing.T) {
 			t.Errorf("%s on %s: %v, want %v", tc.name, tc.e.Kind, got, tc.want)
 		}
 	}
-	if len(Vocabulary()) != 16 || !KnownEvent(VocabAgentDiscovered) || KnownEvent("agent.change") {
+	if len(Vocabulary()) != 17 || !KnownEvent(VocabAgentDiscovered) || KnownEvent("agent.change") {
 		t.Fatal("vocabulary")
 	}
 }

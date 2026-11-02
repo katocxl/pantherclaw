@@ -107,9 +107,10 @@ func TestNormalizeKinds(t *testing.T) {
 			},
 		},
 		{
-			reflexdomain.KindAlert, `{"attention":"ALERT","id":"a1","rule":"pc.tools.drift","severity":"HIGH","state":"OPEN","subjects":[{"type":"connection","id":"` + conn + `"},{"type":"planet","id":"x"}],"test":true}`,
+			reflexdomain.KindAlert, `{"attention":"ALERT","basis":"INFERRED","id":"a1","rule":"pc.tools.drift","severity":"HIGH","state":"OPEN","subjects":[{"type":"connection","id":"` + conn + `"},{"type":"planet","id":"x"}],"test":true}`,
 			func(t *testing.T, e feed.Event) {
-				if !e.Test || e.Attrs["rule"] != "pc.tools.drift" || len(e.Subjects) != 1 {
+				// The basis reaches automations (HR-640). Covers: F933
+				if !e.Test || e.Attrs["rule"] != "pc.tools.drift" || e.Attrs["basis"] != "INFERRED" || len(e.Subjects) != 1 {
 					t.Errorf("%+v", e)
 				}
 			},
