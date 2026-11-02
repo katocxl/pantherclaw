@@ -3747,6 +3747,7 @@ type PcScimToken struct {
 	CreatedBy        string
 	CreatedAt        time.Time
 	ExpiresAt        time.Time
+	ActivatedAt      *time.Time
 	RevokedAt        *time.Time
 	LastUsedAt       *time.Time
 }
@@ -3754,6 +3755,7 @@ type PcScimToken struct {
 type PcScimUser struct {
 	OrgID          ids.OrgID
 	UserID         ids.UUID
+	UserName       *string
 	ExternalID     *string
 	DisabledByScim bool
 	DeletedAt      *time.Time

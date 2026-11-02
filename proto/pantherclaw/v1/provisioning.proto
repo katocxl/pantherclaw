@@ -1,0 +1,301 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/identity_providers.proto";
+
+// ProvisioningService manages what an enterprise identity provider may do
+// (G0 M26 D405, D406, D409; HR-629..634): SCIM tokens, SAML connections and
+// the roles a group carries. The SCIM and SAML protocols themselves are
+// served by the enterprise build.
+//
+// Activating a SCIM token, every SAML connection change and every group role
+// mapping change is a two-person protected change in every protect mode: the
+// call files it and it applies when a different person holding
+// identity_provider.manage confirms it with a security key. Every org admin
+// is notified. Only a person may file one. Revoking a token applies at once.
+//
+// A group never carries a role that holds role.bind, nor Emergency Responder:
+// those stay bound in PantherClaw.
+//
+// Creating and activating need the Enterprise edition. Revoking, disabling
+// and reading work in every edition.
+service ProvisioningService {
+  // CreateScimToken stores a PENDING token and files its activation. The
+  // secret is shown here once and does nothing until a second person
+  // confirms.
+  // permission: identity_provider.manage
+  rpc CreateScimToken(CreateScimTokenRequest) returns (CreateScimTokenResponse);
+  // RevokeScimToken ends a token at once.
+  // permission: identity_provider.manage
+  rpc RevokeScimToken(RevokeScimTokenRequest) returns (RevokeScimTokenResponse);
+  // ListScimTokens lists the org's tokens by name, never their secrets.
+  // permission: identity_provider.read
+  rpc ListScimTokens(ListScimTokensRequest) returns (ListScimTokensResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateSamlConnection stores a PENDING connection and files its
+  // activation.
+  // permission: identity_provider.manage
+  rpc CreateSamlConnection(CreateSamlConnectionRequest) returns (CreateSamlConnectionResponse);
+  // UpdateSamlConnection files a change of sign-in URL or certificates, and
+  // activates a connection that is not ACTIVE. The entity id never changes.
+  // permission: identity_provider.manage
+  rpc UpdateSamlConnection(UpdateSamlConnectionRequest) returns (UpdateSamlConnectionResponse);
+  // DisableSamlConnection files turning a connection off. It is refused when
+  // no active org admin would have a way left to sign in; the change request
+  // lists the admins who would lose theirs.
+  // permission: identity_provider.manage
+  rpc DisableSamlConnection(DisableSamlConnectionRequest) returns (DisableSamlConnectionResponse);
+  // ListSamlConnections lists the org's connections by name.
+  // permission: identity_provider.read
+  rpc ListSamlConnections(ListSamlConnectionsRequest) returns (ListSamlConnectionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListGroups lists the groups the org's identity providers sent.
+  // permission: identity_provider.read
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListGroupRoleMappings lists which roles groups carry.
+  // permission: identity_provider.read
+  rpc ListGroupRoleMappings(ListGroupRoleMappingsRequest) returns (ListGroupRoleMappingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AddGroupRoleMapping files giving a group's members a role at a scope.
+  // permission: identity_provider.manage
+  rpc AddGroupRoleMapping(AddGroupRoleMappingRequest) returns (AddGroupRoleMappingResponse);
+  // RemoveGroupRoleMapping files taking a mapping away.
+  // permission: identity_provider.manage
+  rpc RemoveGroupRoleMapping(RemoveGroupRoleMappingRequest) returns (RemoveGroupRoleMappingResponse);
+}
+
+// ScimToken is a token as people see it: never its secret.
+message ScimToken {
+  string id = 1;
+  string name = 2;
+  // issuer is the one issuer whose users and groups the token provisions.
+  string issuer = 3;
+  // subject_attribute is the SCIM attribute that holds the subject at
+  // sign-in: userName or externalId.
+  string subject_attribute = 4;
+  // hint is the end of the secret, to tell tokens apart.
+  string hint = 5;
+  // state is PENDING, ACTIVE, REVOKED or LAPSED. Only ACTIVE works.
+  string state = 6;
+  string created_by = 7;
+  google.protobuf.Timestamp create_time = 8;
+  google.protobuf.Timestamp expire_time = 9;
+  google.protobuf.Timestamp activate_time = 10;
+  google.protobuf.Timestamp revoke_time = 11;
+  google.protobuf.Timestamp last_use_time = 12;
+}
+
+// CreateScimTokenRequest names a new token.
+message CreateScimTokenRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"];
+  // issuer must be one of the org's or the deployment's providers.
+  string issuer = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+  string subject_attribute = 3 [(buf.validate.field).string = {
+    in: [
+      "userName",
+      "externalId"
+    ]
+  }];
+  // ttl_days is the token's life.
+  int32 ttl_days = 4 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 366
+  }];
+}
+
+// CreateScimTokenResponse carries the secret, once.
+message CreateScimTokenResponse {
+  ScimToken token = 1;
+  string secret = 2;
+  ProtectedChangeFiled filed = 3;
+}
+
+// RevokeScimTokenRequest names a token.
+message RevokeScimTokenRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RevokeScimTokenResponse is the revoked token.
+message RevokeScimTokenResponse {
+  ScimToken token = 1;
+}
+
+// ListScimTokensRequest has no fields.
+message ListScimTokensRequest {}
+
+// ListScimTokensResponse lists tokens.
+message ListScimTokensResponse {
+  repeated ScimToken tokens = 1;
+}
+
+// SamlConnection is an organization's SAML identity provider.
+message SamlConnection {
+  string id = 1;
+  string name = 2;
+  string idp_entity_id = 3;
+  // issuer is what its users' identities carry.
+  string issuer = 4;
+  string sso_url = 5;
+  // certificates are base64 DER X.509 certificates.
+  repeated string certificates = 6;
+  // state is PENDING, ACTIVE, DISABLED or LAPSED.
+  string state = 7;
+  string created_by = 8;
+  google.protobuf.Timestamp create_time = 9;
+  google.protobuf.Timestamp update_time = 10;
+  google.protobuf.Timestamp activate_time = 11;
+  google.protobuf.Timestamp disable_time = 12;
+}
+
+// CreateSamlConnectionRequest is a new connection's settings.
+message CreateSamlConnectionRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z0-9]([a-z0-9-]{0,25}[a-z0-9])?$"];
+  string idp_entity_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  string sso_url = 3 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+  }];
+  repeated string certificates = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 4
+  }];
+}
+
+// CreateSamlConnectionResponse is the PENDING connection and its filed
+// activation.
+message CreateSamlConnectionResponse {
+  SamlConnection connection = 1;
+  ProtectedChangeFiled filed = 2;
+}
+
+// UpdateSamlConnectionRequest is a connection's new settings.
+message UpdateSamlConnectionRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string sso_url = 2 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+  }];
+  repeated string certificates = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 4
+  }];
+}
+
+// UpdateSamlConnectionResponse is the filed change.
+message UpdateSamlConnectionResponse {
+  ProtectedChangeFiled filed = 1;
+}
+
+// DisableSamlConnectionRequest names a connection.
+message DisableSamlConnectionRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DisableSamlConnectionResponse is the filed change.
+message DisableSamlConnectionResponse {
+  ProtectedChangeFiled filed = 1;
+}
+
+// ListSamlConnectionsRequest has no fields.
+message ListSamlConnectionsRequest {}
+
+// ListSamlConnectionsResponse lists connections.
+message ListSamlConnectionsResponse {
+  repeated SamlConnection connections = 1;
+}
+
+// DirectoryGroup is a group an identity provider sent. Its names are the
+// provider's text, shown as plain text.
+message DirectoryGroup {
+  string id = 1;
+  string issuer = 2;
+  string display_name = 3;
+  int64 member_count = 4;
+}
+
+// ListGroupsRequest is a page of groups.
+message ListGroupsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string.max_len = 128];
+}
+
+// ListGroupsResponse is a page of groups.
+message ListGroupsResponse {
+  repeated DirectoryGroup groups = 1;
+  string next_page_token = 2;
+}
+
+// GroupRoleMapping gives every member of a group a role at a scope.
+message GroupRoleMapping {
+  string id = 1;
+  string group_id = 2;
+  string role = 3;
+  // scope_type is ORG, BUSINESS_UNIT, TEAM or ENVIRONMENT.
+  string scope_type = 4;
+  // scope_id is empty at ORG.
+  string scope_id = 5;
+  string created_by = 6;
+  google.protobuf.Timestamp create_time = 7;
+}
+
+// ListGroupRoleMappingsRequest has no fields.
+message ListGroupRoleMappingsRequest {}
+
+// ListGroupRoleMappingsResponse lists mappings.
+message ListGroupRoleMappingsResponse {
+  repeated GroupRoleMapping mappings = 1;
+}
+
+// AddGroupRoleMappingRequest is the mapping to file.
+message AddGroupRoleMappingRequest {
+  string group_id = 1 [(buf.validate.field).string.uuid = true];
+  string role = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+  }];
+  string scope_type = 3 [(buf.validate.field).string = {
+    in: [
+      "ORG",
+      "BUSINESS_UNIT",
+      "TEAM",
+      "ENVIRONMENT"
+    ]
+  }];
+  // scope_id is empty at ORG.
+  string scope_id = 4 [(buf.validate.field).string.max_len = 36];
+}
+
+// AddGroupRoleMappingResponse is the filed change.
+message AddGroupRoleMappingResponse {
+  ProtectedChangeFiled filed = 1;
+}
+
+// RemoveGroupRoleMappingRequest names a mapping.
+message RemoveGroupRoleMappingRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RemoveGroupRoleMappingResponse is the filed change.
+message RemoveGroupRoleMappingResponse {
+  ProtectedChangeFiled filed = 1;
+}

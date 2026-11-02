@@ -388,6 +388,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	// protect sets its ports on it in every role (D110 P1).
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
 	closeM18IdPs(m11protect.gate, log)
+	closeM26Provisioning(m11protect.gate)
 	wireM11Process(autos, m11protect, pool)
 	wireM14Process(autos, bill)
 	wireM14A2APeer(svc, authorityStore, autos, pool)
@@ -974,6 +975,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM17Rules(rs, d)
 	registerM18IdPs(rs, d)
 	registerM24Catalog(rs, d)
+	d.extDeps = registerM26Provisioning(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)

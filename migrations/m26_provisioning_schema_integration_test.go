@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	"github.com/katocxl/pantherclaw/internal/provisioning/domain"
 )
 
 // These tests check migrations 00292 and 00293 (G0 M26 D405, D406). Names
@@ -34,7 +35,8 @@ func TestHR630_NoAdminRoleCanBeMappedInTheSchema(t *testing.T) {
 	group := m5ID()
 	a.mustExec(t, m26provGroup, a.org, group, "engineers")
 	a.mustExec(t, m26provMap, a.org, m5ID(), group, "viewer")
-	for _, role := range []string{"org_admin", "security_admin", "scope_admin"} {
+	for _, r := range domain.UnmappableRoles() {
+		role := string(r)
 		a.want(t, m5Check, "a mapping to "+role, m26provMap, a.org, m5ID(), group, role)
 		a.want(t, m5Check, "a provisioned binding of "+role,
 			`INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by, provisioned)
@@ -73,6 +75,7 @@ func TestTenancy_provisioning(t *testing.T) {
 	a.want(t, m5Check, "a short hash", m26provToken, a.org, m5ID(), "short", []byte("x"))
 	a.mustExec(t, "INSERT INTO pc.scim_users (org_id, user_id, external_id) VALUES ($1, $2, 'ext')", a.org, a.user)
 
+	a.want(t, m5Check, "ACTIVE without activated_at", "UPDATE pc.scim_tokens SET state = 'ACTIVE'")
 	a.want(t, m5Denied, "a token's hash is rewritten", "UPDATE pc.scim_tokens SET secret_hash = $1", m5Secret(2))
 	a.want(t, m5Denied, "a token's issuer moves", "UPDATE pc.scim_tokens SET issuer = 'https://other.example.com'")
 	a.want(t, m5Denied, "a token is deleted", "DELETE FROM pc.scim_tokens")

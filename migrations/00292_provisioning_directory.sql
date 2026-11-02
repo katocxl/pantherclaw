@@ -6,9 +6,11 @@
 --
 -- A SCIM token is bound to the one issuer it provisions: it sees and
 -- changes only that issuer's users and groups. Only the token's hash is
--- stored. A group maps only to non-admin roles: Org Admin, Security Admin
--- and Scope Admin bindings stay in PantherClaw (R-08, HR-630), which the
--- checks here hold even if the code above them is wrong.
+-- stored, and a token does nothing until a second person approves it (D409).
+-- A group change takes effect with no second person (R-08), so no group may
+-- carry a role that holds role.bind or Emergency Responder: those bindings
+-- stay in PantherClaw (HR-630). The checks here hold that even if the code
+-- above them is wrong; a test keeps this list in step with the role table.
 -- +goose Up
 CREATE TABLE pc.groups (
     org_id       uuid        NOT NULL REFERENCES pc.orgs (id),
@@ -40,7 +42,7 @@ CREATE TABLE pc.group_role_mappings (
     id               uuid        NOT NULL,
     group_id         uuid        NOT NULL,
     role             text        NOT NULL CHECK (role ~ '^[a-z][a-z_]{0,62}$'
-                                                 AND role NOT IN ('org_admin', 'security_admin', 'scope_admin')),
+                                                 AND role NOT IN ('org_admin', 'security_admin', 'scope_admin', 'emergency_responder')),
     scope_type       text        NOT NULL CHECK (scope_type IN ('ORG', 'BUSINESS_UNIT', 'TEAM', 'ENVIRONMENT')),
     business_unit_id uuid,
     team_id          uuid,
@@ -71,25 +73,29 @@ CREATE TABLE pc.scim_tokens (
     subject_attribute text        NOT NULL CHECK (subject_attribute IN ('userName', 'externalId')),
     secret_hash       bytea       NOT NULL CHECK (octet_length(secret_hash) = 32),
     hint              text        NOT NULL CHECK (char_length(hint) BETWEEN 1 AND 16),
-    state             text        NOT NULL DEFAULT 'ACTIVE' CHECK (state IN ('ACTIVE', 'REVOKED')),
+    state             text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'ACTIVE', 'REVOKED', 'LAPSED')),
     created_by        text        NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 100),
     created_at        timestamptz NOT NULL DEFAULT now(),
     expires_at        timestamptz NOT NULL,
+    activated_at      timestamptz,
     revoked_at        timestamptz,
     last_used_at      timestamptz,
     PRIMARY KEY (org_id, id),
     UNIQUE (org_id, secret_hash),
     UNIQUE (org_id, name),
+    CHECK (state <> 'ACTIVE' OR activated_at IS NOT NULL),
     CHECK ((state = 'REVOKED') = (revoked_at IS NOT NULL))
 );
 
--- What SCIM needs of a user that pc.users has no place for. disabled_by_scim
--- is what lets SCIM re-enable a user: a person who disabled someone in
--- PantherClaw is never overruled by the next sync. deleted_at hides the
--- user from SCIM (RFC 7644 3.6); the pc.users row stays, disabled.
+-- What SCIM needs of a user that pc.users has no place for: the userName and
+-- externalId as the provider sent them (one of them is also the subject).
+-- disabled_by_scim is what lets SCIM re-enable a user: a person who disabled
+-- someone in PantherClaw is never overruled by the next sync. deleted_at
+-- hides the user from SCIM (RFC 7644 3.6); the pc.users row stays, disabled.
 CREATE TABLE pc.scim_users (
     org_id           uuid        NOT NULL REFERENCES pc.orgs (id),
     user_id          uuid        NOT NULL,
+    user_name        text        CHECK (char_length(user_name) BETWEEN 1 AND 256),
     external_id      text        CHECK (char_length(external_id) BETWEEN 1 AND 256),
     disabled_by_scim boolean     NOT NULL DEFAULT false,
     deleted_at       timestamptz,
@@ -100,10 +106,10 @@ CREATE TABLE pc.scim_users (
 );
 
 -- A binding that a group mapping made. Reconciling adds and removes only
--- these, so a binding a person made is never touched, and none is ever an
--- admin role (D406).
+-- these, so a binding a person made is never touched, and none is ever a
+-- role that stays in PantherClaw (D406, D409).
 ALTER TABLE pc.role_bindings ADD COLUMN provisioned boolean NOT NULL DEFAULT false
-    CONSTRAINT role_bindings_provisioned_role CHECK (NOT provisioned OR role NOT IN ('org_admin', 'security_admin', 'scope_admin'));
+    CONSTRAINT role_bindings_provisioned_role CHECK (NOT provisioned OR role NOT IN ('org_admin', 'security_admin', 'scope_admin', 'emergency_responder'));
 
 -- +goose StatementBegin
 DO $$
@@ -128,10 +134,10 @@ END $$;
 GRANT SELECT, INSERT, DELETE ON pc.groups, pc.group_members, pc.group_role_mappings TO pc_app;
 GRANT SELECT, INSERT ON pc.scim_tokens, pc.scim_users TO pc_app;
 GRANT UPDATE (display_name, external_id, updated_at) ON pc.groups TO pc_app;
-GRANT UPDATE (state, revoked_at, last_used_at) ON pc.scim_tokens TO pc_app;
-GRANT UPDATE (external_id, disabled_by_scim, deleted_at, updated_at) ON pc.scim_users TO pc_app;
+GRANT UPDATE (state, activated_at, revoked_at, last_used_at) ON pc.scim_tokens TO pc_app;
+GRANT UPDATE (user_name, external_id, disabled_by_scim, deleted_at, updated_at) ON pc.scim_users TO pc_app;
 -- The hash stays out of the auditors' read.
-GRANT SELECT (org_id, id, name, issuer, subject_attribute, hint, state, created_by, created_at, expires_at, revoked_at, last_used_at)
+GRANT SELECT (org_id, id, name, issuer, subject_attribute, hint, state, created_by, created_at, expires_at, activated_at, revoked_at, last_used_at)
     ON pc.scim_tokens TO pc_audit_ro;
 GRANT SELECT ON pc.groups, pc.group_members, pc.group_role_mappings, pc.scim_users TO pc_audit_ro;
 

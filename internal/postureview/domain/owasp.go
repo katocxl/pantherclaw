@@ -38,6 +38,8 @@ var owaspByKind = map[string][]string{
 	"provenance_unknown": {"ASI04"},
 	"schema_unavailable": {"ASI04"},
 	KindUnapprovedServer: {"ASI04"},
+	// Provisioning.
+	KindDeprovisionedOwnerKey: {"ASI03"},
 }
 
 // OWASP lists kind's risks. An identity recommendation is about who an agent
