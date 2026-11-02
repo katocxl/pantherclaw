@@ -41,6 +41,16 @@ func (c oneCampaign) CampaignResults(context.Context, ids.OrgID, cports.Filter) 
 	}}}, nil
 }
 
+func failedChecks(r *bundle.Report) []bundle.Check {
+	var out []bundle.Check
+	for _, c := range r.Checks {
+		if c.Status == bundle.Failed {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // TestE2E_M25_ComplianceReportOnSimulators is M25's exit: a range runs against
 // the simulators, an auditor exports a signed OWASP report of the period, and
 // `pclaw verify` re-derives it offline. The report shows its gaps, labels all
@@ -91,7 +101,7 @@ func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
 	file, files := export("compliance.zip")
 	code, rep := p.verify(t, file)
 	if code != 0 {
-		t.Fatalf("pclaw verify: exit %d\n%+v", code, rep.Checks)
+		t.Fatalf("pclaw verify: exit %d, failed: %v", code, failedChecks(rep))
 	}
 	for _, name := range []string{"compliance.report", "compliance.inputs", "compliance.controls", "compliance.refs"} {
 		if got := statuses(rep, name); len(got) == 0 || slices.Contains(got, bundle.Failed) || got[0] != bundle.Passed {
@@ -150,6 +160,6 @@ func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
 		t.Errorf("a re-export changed the report:\n%s\n%s", files[pack.CompliancePath], more[pack.CompliancePath])
 	}
 	if code, rep := p.verify(t, again); code != 0 {
-		t.Fatalf("pclaw verify of the re-export: exit %d\n%+v", code, rep.Checks)
+		t.Fatalf("pclaw verify of the re-export: exit %d, failed: %v", code, failedChecks(rep))
 	}
 }

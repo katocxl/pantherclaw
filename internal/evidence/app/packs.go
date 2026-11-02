@@ -118,6 +118,14 @@ type Pack struct {
 	ErrorCode     string
 }
 
+func micro(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	m := t.UTC().Truncate(time.Microsecond)
+	return &m
+}
+
 func (r PackRequest) scope() (pack.Scope, error) {
 	sc := pack.Scope{Kind: r.Kind}
 	if r.From != nil {
@@ -195,6 +203,11 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 	}
 	if !ents.Edition.Paid() {
 		return Pack{}, ErrPacksEdition
+	}
+	if req.Kind == pack.ScopeCompliance {
+		// The report row stores the period as PostgreSQL does, to the
+		// microsecond; the manifest must name the same period (HR-604).
+		req.From, req.To = micro(req.From), micro(req.To)
 	}
 	sc, err := req.scope()
 	if err != nil {
