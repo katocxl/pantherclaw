@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/entitlements"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/pclaw/selfmcp"
@@ -34,7 +35,7 @@ func passes(t *testing.T, c tapp.Caller, procedure string) (bool, tapp.Caller, e
 	t.Helper()
 	var got tapp.Caller
 	ran := false
-	g := &selfMCPGate{}
+	g := testGate(billing.Team, nil)
 	err := g.intercept(func(ctx context.Context, _ connect.Spec, _ connect.ServerStream) error {
 		ran = true
 		got, _ = tapp.CallerFrom(ctx)
