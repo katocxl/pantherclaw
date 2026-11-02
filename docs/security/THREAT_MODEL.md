@@ -310,6 +310,21 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-254 | A scan key stolen from a laptop: a key left on a managed device is used to read or change anything beyond submitting scans, or to submit for another device's scope | A4, A1 | TB4 | Wider access from a key that sits on every laptop | HR-589; a role holding exactly `org.read` and `agent.scan.submit`, submitting only for its scope, service accounts only, a key file rather than an environment value; org-wide limits on device scopes (`SCAN_DEVICE_LIMIT`) | M24 |
 | T-255 | A scan over-collects: a scan sends file content, prompts or command arguments that hold secrets, or `--all-users` gathers more from other people's home directories | A7, A5 | TB4 | Disclosure of people's work and secrets to the server; privacy harm | HR-588; hooks send event and executable basename only, skills name and path only, package references the package or image token only; home paths become `~`, and a device scan sends no hostname unless asked; a test proves it | M24 |
 
+**G0 M25: compliance reports and real-agent campaigns**
+
+| ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
+|---|---|---|---|---|---|---|
+
+**G0 M26: IdP access, SCIM, SAML and SaaS discovery**
+
+| ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
+|---|---|---|---|---|---|---|
+
+**G0 M27: analytics, content signals, playbooks and the read-only MCP server**
+
+| ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
+|---|---|---|---|---|---|---|
+
 ## 8. Residual risks (accepted, owner: founder, reviewed quarterly)
 
 | ID | Risk | Why accepted | Compensating controls |
@@ -434,3 +449,4 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | 2026-10-30 | M20 amendment D283: one founder-approved exception to HR-190 lets the ECS deploy verifier read with `POST`, only for the exact `DescribeServices` target in a session narrowed to `ecs:DescribeServices`. T-070 and T-225 record the risk of a write declared as a read. D290 narrows the exception to PantherClaw's own `pc.aws.ecs` on a `pantherclaw_held` `aws_sigv4` credential sealed for `ecs`, after a review showed an organization-signed package could declare a write-shaped `POST`. D289 adds custom CI paths and Auto DevOps to the GitLab hold in T-229. No residual risk added | G0 M20 |
 | 2026-10-29 | M21 brief (branching automations, recommendations, outcome metrics and model drafting; ADR-0043): a validator bypass through branching, v1/v2 engine incompatibility and the migration, recommendations leaking across scopes, misleading outcome metrics, data leaving through the model provider and model output executed or injected become T-230..T-235 with HR-530..545. New trust boundary TB13: the customer's model provider is an external processor; the customer holds the data-processing agreement with that vendor (DPA note), and the vendor's region may differ from the hosted region named in the PantherClaw order form (residency caveat; `docs/runbooks/residency.md`). New attack surfaces: the v2 automation format, the recommendation, outcome-metric and drafting RPCs, and the outbound model call. No residual risk added | G0 M21 |
 | 2026-10-31 | M22, M23 and M24 briefs (ADR-0044, ADR-0045, ADR-0046), rows landing with each milestone. M22: a graph label leaking a hidden name, a cause shown without evidence and a rotation RPC skipping step-up become T-238..T-240 with HR-550..554. M23: a malicious Hub index or mirror, a Hub rollback, a policy file injecting into a CI report and CI action token abuse become T-242..T-245 with HR-560..567. M24: a poisoned tool description, a rug pull after approval, tool shadowing, an unapproved server slipping past the catalogue, a scan key stolen from a laptop and a scan over-collecting become T-250..T-255 with HR-580..590. New attack surfaces: the rotation RPCs, Hub documents and `pclaw hub` sources, `pclaw ci check` reports and the CI action, the catalogue and revoke RPCs, `input_schema` in inventory reports, scanner keys and device scans. No residual risk added | G0 M22, G0 M23, G0 M24 |
+| 2026-11-01 | M25, M26 and M27 briefs (ADR-0047, ADR-0048, ADR-0049, ADR-0050), rows landing with each milestone. M25: compliance reports and real-agent campaigns, T-258..T-265 with HR-600..615. M26: IdP access, SCIM, SAML and SaaS discovery, T-266..T-273 with HR-620..639. M27: analytics, content signals, playbooks and the read-only MCP server, T-274..T-281 with HR-640..659. No residual risk added | G0 M25, G0 M26, G0 M27 |
