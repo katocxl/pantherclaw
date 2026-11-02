@@ -593,6 +593,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, rangeJobs...)
+		if evidenceJobs, err = appendCampaignJobs(evidenceJobs, jreg, pool, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerPolicyRolloutJobs(evidenceJobs, jreg, pool, bill, m5, kp, log); err != nil {
 			return err
 		}

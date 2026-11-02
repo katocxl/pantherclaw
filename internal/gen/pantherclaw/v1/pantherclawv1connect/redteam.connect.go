@@ -40,6 +40,15 @@ const (
 	// RangeServiceExportAssuranceReportProcedure is the procedure name of the RangeService's
 	// ExportAssuranceReport RPC.
 	RangeServiceExportAssuranceReportProcedure = "/pantherclaw.v1.RangeService/ExportAssuranceReport"
+	// RangeServiceStartCampaignProcedure is the procedure name of the RangeService's StartCampaign RPC.
+	RangeServiceStartCampaignProcedure = "/pantherclaw.v1.RangeService/StartCampaign"
+	// RangeServiceFinishCampaignProcedure is the procedure name of the RangeService's FinishCampaign
+	// RPC.
+	RangeServiceFinishCampaignProcedure = "/pantherclaw.v1.RangeService/FinishCampaign"
+	// RangeServiceGetCampaignProcedure is the procedure name of the RangeService's GetCampaign RPC.
+	RangeServiceGetCampaignProcedure = "/pantherclaw.v1.RangeService/GetCampaign"
+	// RangeServiceListCampaignsProcedure is the procedure name of the RangeService's ListCampaigns RPC.
+	RangeServiceListCampaignsProcedure = "/pantherclaw.v1.RangeService/ListCampaigns"
 )
 
 var (
@@ -87,6 +96,36 @@ var (
 			Procedure:  RangeServiceExportAssuranceReportProcedure,
 		}
 	})
+	rangeServiceStartCampaignSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_redteam_proto.Services().ByName("RangeService").Methods().ByName("StartCampaign"),
+			Procedure:  RangeServiceStartCampaignProcedure,
+		}
+	})
+	rangeServiceFinishCampaignSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_redteam_proto.Services().ByName("RangeService").Methods().ByName("FinishCampaign"),
+			Procedure:  RangeServiceFinishCampaignProcedure,
+		}
+	})
+	rangeServiceGetCampaignSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_redteam_proto.Services().ByName("RangeService").Methods().ByName("GetCampaign"),
+			Procedure:        RangeServiceGetCampaignProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	rangeServiceListCampaignsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_redteam_proto.Services().ByName("RangeService").Methods().ByName("ListCampaigns"),
+			Procedure:        RangeServiceListCampaignsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // RangeServiceClient is a client for the pantherclaw.v1.RangeService service.
@@ -112,6 +151,24 @@ type RangeServiceClient interface {
 	// edition. The pack is downloaded through EvidenceService.
 	// permission: evidence.export
 	ExportAssuranceReport(context.Context, *v1.ExportAssuranceReportRequest) (*v1.ExportAssuranceReportResponse, error)
+	// StartCampaign records an attack campaign against a range twin of the
+	// customer's agent (G0 M25 D309, HR-220): the image it tests, by digest,
+	// the one model host of the run and the campaigns of the library it runs.
+	// Business edition. A range agent has at most one open campaign.
+	// permission: redteam.run
+	StartCampaign(context.Context, *v1.StartCampaignRequest) (*v1.StartCampaignResponse, error)
+	// FinishCampaign ends a campaign. The caller says which runs were which
+	// scenario's and what the edge reported; every outcome is derived by the
+	// server from its own transactions. An attempt with nothing behind it is
+	// NOT_EXERCISED, a gap and not a pass (D306).
+	// permission: redteam.run
+	FinishCampaign(context.Context, *v1.FinishCampaignRequest) (*v1.FinishCampaignResponse, error)
+	// GetCampaign returns a campaign and its steps.
+	// permission: redteam.read
+	GetCampaign(context.Context, *v1.GetCampaignRequest) (*v1.GetCampaignResponse, error)
+	// ListCampaigns lists campaigns, newest first.
+	// permission: redteam.read
+	ListCampaigns(context.Context, *v1.ListCampaignsRequest) (*v1.ListCampaignsResponse, error)
 }
 
 // NewRangeServiceClient constructs a client for the pantherclaw.v1.RangeService service. Multiple
@@ -143,6 +200,24 @@ type RangeServiceHandler interface {
 	// edition. The pack is downloaded through EvidenceService.
 	// permission: evidence.export
 	ExportAssuranceReport(context.Context, *v1.ExportAssuranceReportRequest) (*v1.ExportAssuranceReportResponse, error)
+	// StartCampaign records an attack campaign against a range twin of the
+	// customer's agent (G0 M25 D309, HR-220): the image it tests, by digest,
+	// the one model host of the run and the campaigns of the library it runs.
+	// Business edition. A range agent has at most one open campaign.
+	// permission: redteam.run
+	StartCampaign(context.Context, *v1.StartCampaignRequest) (*v1.StartCampaignResponse, error)
+	// FinishCampaign ends a campaign. The caller says which runs were which
+	// scenario's and what the edge reported; every outcome is derived by the
+	// server from its own transactions. An attempt with nothing behind it is
+	// NOT_EXERCISED, a gap and not a pass (D306).
+	// permission: redteam.run
+	FinishCampaign(context.Context, *v1.FinishCampaignRequest) (*v1.FinishCampaignResponse, error)
+	// GetCampaign returns a campaign and its steps.
+	// permission: redteam.read
+	GetCampaign(context.Context, *v1.GetCampaignRequest) (*v1.GetCampaignResponse, error)
+	// ListCampaigns lists campaigns, newest first.
+	// permission: redteam.read
+	ListCampaigns(context.Context, *v1.ListCampaignsRequest) (*v1.ListCampaignsResponse, error)
 }
 
 // RegisterRangeServiceHandler registers svc as the pantherclaw.v1.RangeService implementation on
@@ -156,6 +231,10 @@ func RegisterRangeServiceHandler(server *connect.Server, svc RangeServiceHandler
 		connect.Method{Spec: rangeServiceGetRangeSpec(), Handler: adapter.getRange},
 		connect.Method{Spec: rangeServiceListRangesSpec(), Handler: adapter.listRanges},
 		connect.Method{Spec: rangeServiceExportAssuranceReportSpec(), Handler: adapter.exportAssuranceReport},
+		connect.Method{Spec: rangeServiceStartCampaignSpec(), Handler: adapter.startCampaign},
+		connect.Method{Spec: rangeServiceFinishCampaignSpec(), Handler: adapter.finishCampaign},
+		connect.Method{Spec: rangeServiceGetCampaignSpec(), Handler: adapter.getCampaign},
+		connect.Method{Spec: rangeServiceListCampaignsSpec(), Handler: adapter.listCampaigns},
 	)
 }
 
@@ -184,6 +263,22 @@ func (UnimplementedRangeServiceHandler) ListRanges(context.Context, *v1.ListRang
 
 func (UnimplementedRangeServiceHandler) ExportAssuranceReport(context.Context, *v1.ExportAssuranceReportRequest) (*v1.ExportAssuranceReportResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.RangeService.ExportAssuranceReport is not implemented")
+}
+
+func (UnimplementedRangeServiceHandler) StartCampaign(context.Context, *v1.StartCampaignRequest) (*v1.StartCampaignResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.RangeService.StartCampaign is not implemented")
+}
+
+func (UnimplementedRangeServiceHandler) FinishCampaign(context.Context, *v1.FinishCampaignRequest) (*v1.FinishCampaignResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.RangeService.FinishCampaign is not implemented")
+}
+
+func (UnimplementedRangeServiceHandler) GetCampaign(context.Context, *v1.GetCampaignRequest) (*v1.GetCampaignResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.RangeService.GetCampaign is not implemented")
+}
+
+func (UnimplementedRangeServiceHandler) ListCampaigns(context.Context, *v1.ListCampaignsRequest) (*v1.ListCampaignsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.RangeService.ListCampaigns is not implemented")
 }
 
 type rangeServiceClient struct {
@@ -233,6 +328,38 @@ func (c *rangeServiceClient) ListRanges(ctx context.Context, req *v1.ListRangesR
 func (c *rangeServiceClient) ExportAssuranceReport(ctx context.Context, req *v1.ExportAssuranceReportRequest) (*v1.ExportAssuranceReportResponse, error) {
 	var res v1.ExportAssuranceReportResponse
 	if err := c.client.CallUnary(ctx, rangeServiceExportAssuranceReportSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *rangeServiceClient) StartCampaign(ctx context.Context, req *v1.StartCampaignRequest) (*v1.StartCampaignResponse, error) {
+	var res v1.StartCampaignResponse
+	if err := c.client.CallUnary(ctx, rangeServiceStartCampaignSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *rangeServiceClient) FinishCampaign(ctx context.Context, req *v1.FinishCampaignRequest) (*v1.FinishCampaignResponse, error) {
+	var res v1.FinishCampaignResponse
+	if err := c.client.CallUnary(ctx, rangeServiceFinishCampaignSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *rangeServiceClient) GetCampaign(ctx context.Context, req *v1.GetCampaignRequest) (*v1.GetCampaignResponse, error) {
+	var res v1.GetCampaignResponse
+	if err := c.client.CallUnary(ctx, rangeServiceGetCampaignSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *rangeServiceClient) ListCampaigns(ctx context.Context, req *v1.ListCampaignsRequest) (*v1.ListCampaignsResponse, error) {
+	var res v1.ListCampaignsResponse
+	if err := c.client.CallUnary(ctx, rangeServiceListCampaignsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -306,6 +433,54 @@ func (h rangeServiceHandler) exportAssuranceReport(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.ExportAssuranceReport(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h rangeServiceHandler) startCampaign(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartCampaignRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartCampaign(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h rangeServiceHandler) finishCampaign(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.FinishCampaignRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.FinishCampaign(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h rangeServiceHandler) getCampaign(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCampaignRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCampaign(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h rangeServiceHandler) listCampaigns(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListCampaignsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListCampaigns(ctx, &req)
 	if err != nil {
 		return err
 	}
