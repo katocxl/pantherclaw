@@ -365,6 +365,9 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			if current == nil {
 				return ErrA2ANotPinned
 			}
+			if current.PublicURL == *in.A2APublicURL {
+				return ErrA2AURLUnchanged
+			}
 			set("public_url", current.PublicURL, *in.A2APublicURL, true)
 			current.PublicURL = *in.A2APublicURL
 			peer = current

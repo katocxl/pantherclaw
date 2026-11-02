@@ -270,7 +270,10 @@ type ConnectionServiceClient interface {
 	// SetA2APublicUrl changes only an a2a connection's public URL. The server
 	// starts from the proposed pin, else the active one, so open edits survive,
 	// and saves a new proposal, a weakening change that serves once a person
-	// confirms it with a security key.
+	// confirms it with a security key. Like every save, it fetches the peer's
+	// card again and the proposal pins the digest of what it read, which may
+	// differ from the current pin's; the pin page shows both. A URL equal to the
+	// current one is refused with A2A_URL_UNCHANGED before any fetch.
 	// permission: connection.manage
 	SetA2APublicUrl(context.Context, *v1.SetA2APublicUrlRequest) (*v1.SetA2APublicUrlResponse, error)
 	// SetRouteMode sets one route's mode; enforce to monitor is a weakening
@@ -384,7 +387,10 @@ type ConnectionServiceHandler interface {
 	// SetA2APublicUrl changes only an a2a connection's public URL. The server
 	// starts from the proposed pin, else the active one, so open edits survive,
 	// and saves a new proposal, a weakening change that serves once a person
-	// confirms it with a security key.
+	// confirms it with a security key. Like every save, it fetches the peer's
+	// card again and the proposal pins the digest of what it read, which may
+	// differ from the current pin's; the pin page shows both. A URL equal to the
+	// current one is refused with A2A_URL_UNCHANGED before any fetch.
 	// permission: connection.manage
 	SetA2APublicUrl(context.Context, *v1.SetA2APublicUrlRequest) (*v1.SetA2APublicUrlResponse, error)
 	// SetRouteMode sets one route's mode; enforce to monitor is a weakening

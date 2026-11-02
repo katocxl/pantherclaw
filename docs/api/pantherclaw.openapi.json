@@ -7788,7 +7788,7 @@
           "pantherclaw.v1.ConnectionService"
         ],
         "summary": "SetA2APublicUrl",
-        "description": "SetA2APublicUrl changes only an a2a connection's public URL. The server\n starts from the proposed pin, else the active one, so open edits survive,\n and saves a new proposal, a weakening change that serves once a person\n confirms it with a security key.\n permission: connection.manage",
+        "description": "SetA2APublicUrl changes only an a2a connection's public URL. The server\n starts from the proposed pin, else the active one, so open edits survive,\n and saves a new proposal, a weakening change that serves once a person\n confirms it with a security key. Like every save, it fetches the peer's\n card again and the proposal pins the digest of what it read, which may\n differ from the current pin's; the pin page shows both. A URL equal to the\n current one is refused with A2A_URL_UNCHANGED before any fetch.\n permission: connection.manage",
         "operationId": "pantherclaw.v1.ConnectionService.SetA2APublicUrl",
         "parameters": [
           {

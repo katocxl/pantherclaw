@@ -47,6 +47,7 @@ type publicURLWorld struct {
 	svc     *capp.Service
 	h       *connectionsrpc.Handler
 	cfg     *capp.A2AConfig
+	card    []byte
 	ctx     context.Context
 }
 
@@ -82,6 +83,10 @@ func newPublicURLWorld(t *testing.T) *publicURLWorld {
 		_, err := w.adapter.Save(ctx, tx, w.org, w.conn, 1, w.cfg)
 		return err
 	})
+	w.card = w.proposed(t).GetPinnedCard()
+	if len(w.card) == 0 {
+		t.Fatal("no card was pinned")
+	}
 	return w
 }
 
@@ -124,6 +129,9 @@ func (w *publicURLWorld) neverShowsTheKeys(t *testing.T, m proto.Message) {
 	}
 	if bytes.Contains(b, []byte(publicURLKeyID)) || bytes.Contains(b, w.cfg.CardKeys) {
 		t.Fatalf("a response carries the card keys: %q", b)
+	}
+	if bytes.Contains(b, w.card) {
+		t.Fatalf("a response carries the pinned card: %q", b)
 	}
 }
 
@@ -200,12 +208,28 @@ func TestD97_SetA2APublicUrlChangesOnlyTheURL(t *testing.T) {
 
 	edited := *w.cfg
 	edited.MaxAnswerBytes = 2 << 20
-	if _, err := w.svc.Update(w.ctx, capp.UpdateInput{ID: w.conn, Revision: w.read(t).GetRevision(), A2A: &edited}); err != nil {
+	updated, err := w.h.UpdateConnection(w.ctx, &pb.UpdateConnectionRequest{Id: w.conn.String(), Revision: w.read(t).GetRevision(), A2A: a2astore.ToProto(&edited)})
+	if err != nil {
 		t.Fatal(err)
+	}
+	w.neverShowsTheKeys(t, updated)
+	if s := updated.GetConnection().GetA2AStatus(); s.GetPinState() != pb.A2APinState_A2A_PIN_STATE_PROPOSED || s.GetPublicUrl() != "" {
+		t.Fatalf("the update response: %v", s)
 	}
 	const second = "https://gateway.example.test/a2a/other"
 	if _, err := w.set(t, second); err != nil {
 		t.Fatal(err)
+	}
+	// The URL already proposed is refused before any fetch: the proposal stays.
+	again, err := w.pins.Get(w.ctx, w.conn)
+	if err != nil || again.Proposed == nil {
+		t.Fatalf("pins: %+v %v", again, err)
+	}
+	if _, err := w.set(t, second); !errors.Is(err, capp.ErrA2AURLUnchanged) {
+		t.Fatalf("the same URL again: %v", err)
+	}
+	if got, _ := w.pins.Get(w.ctx, w.conn); got.Proposed == nil || got.Proposed.ID != again.Proposed.ID {
+		t.Fatalf("the same URL proposed again: %+v", got.Proposed)
 	}
 	if p := w.proposed(t); p.GetMaxAnswerBytes() != 2<<20 || p.GetPublicUrl() != second {
 		t.Fatalf("the open edit: %v", p)
@@ -217,8 +241,8 @@ func TestD97_SetA2APublicUrlChangesOnlyTheURL(t *testing.T) {
 }
 
 // TestD97_SetA2APublicUrlIsRefused: a stale revision, a URL the configuration
-// check refuses, another permission and another kind's update all change
-// nothing.
+// check refuses and a caller without the permission all change nothing
+// (another kind and an unpinned connection: the connections app's TestD97).
 // Covers: F882
 func TestD97_SetA2APublicUrlIsRefused(t *testing.T) {
 	w := newPublicURLWorld(t)
@@ -263,6 +287,17 @@ func TestD97_AHeldChangeCarriesOnlyTheURL(t *testing.T) {
 		return err
 	})
 	before := w.proposed(t)
+	// The URL already set is refused, not held.
+	if _, err := held.SetA2APublicURL(w.ctx, w.conn, "", w.read(t).GetRevision()); !errors.Is(err, capp.ErrA2AURLUnchanged) {
+		t.Fatalf("the same URL under CUSTODY: %v", err)
+	}
+	var stored int
+	w.tx(t, func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.protected_changes WHERE org_id = $1", w.org).Scan(&stored)
+	})
+	if stored != 0 {
+		t.Fatalf("an unchanged URL was held: %d changes", stored)
+	}
 	const url = "https://gateway.example.test/a2a/held"
 	_, err := held.SetA2APublicURL(w.ctx, w.conn, url, w.read(t).GetRevision())
 	var pending *protect.PendingError
