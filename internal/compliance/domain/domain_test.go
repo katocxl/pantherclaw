@@ -276,7 +276,7 @@ func withTests(in domain.Inputs, ts ...domain.TestCount) domain.Inputs {
 // however much the org did they stay gaps until a tagged test exercised them.
 // Covers: F890, F898
 func TestD304_ASI05AndASI06ReadAsGaps(t *testing.T) {
-	for _, id := range []string{"ASI05", "ASI06"} {
+	for _, id := range []string{"ASI05", "ASI06"} { // with no tagged test in the period
 		got := control(t, domain.OWASPASI, allReadable(1000, 1000), id)
 		if got.State != domain.Gap || !slices.Equal(reasons(got), []string{domain.ReasonNotExercised}) {
 			t.Errorf("%s: %+v", id, got)

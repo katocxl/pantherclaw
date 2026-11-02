@@ -55,8 +55,9 @@ func TestLibrary_MatchesTheShippedScenarios(t *testing.T) {
 	}
 }
 
-// TestD304_TagsAreKnownRisks: every tag is a listed risk, and no scenario
-// tags ASI05 or ASI06, which read as gaps until a real source maps them.
+// TestD304_TagsAreKnownRisks: every tag is a listed risk. ASI05 is only on
+// the scenarios that run code in the sandbox (D529), and no scenario tags
+// ASI06: none poisons memory or context, so it reads as a gap.
 // Covers: F898
 func TestD304_TagsAreKnownRisks(t *testing.T) {
 	tagged := 0
@@ -68,8 +69,8 @@ func TestD304_TagsAreKnownRisks(t *testing.T) {
 			if !rules.KnownOWASP(tag) {
 				t.Errorf("%s: tag %q", id, tag)
 			}
-			if tag == "ASI05" || tag == "ASI06" {
-				t.Errorf("%s: %s needs a real source (D304)", id, tag)
+			if tag == "ASI06" || (tag == "ASI05" && id != "RT-014" && id != "RT-015") {
+				t.Errorf("%s: %s is not what this scenario exercises (D304, D529)", id, tag)
 			}
 		}
 	}

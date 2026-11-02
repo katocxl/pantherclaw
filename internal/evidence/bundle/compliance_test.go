@@ -182,6 +182,21 @@ func TestT258_TamperedReportFailsVerify(t *testing.T) {
 	if got := statusOf(r, "pack.item"); got != bundle.Failed {
 		t.Errorf("tampered report: pack.item = %q", got)
 	}
+	// The framework lives only in compliance.json, which the manifest's
+	// digest covers: renaming it after signing fails the same way.
+	renamed := bytes.Replace(before, []byte(`"framework":"OWASP_ASI"`), []byte(`"framework":"NIST_AI_RMF"`), 1)
+	if bytes.Equal(before, renamed) {
+		t.Fatal("the report names no framework")
+	}
+	r = bundle.VerifyPack(repack(t, good, pack.CompliancePath, renamed), bundle.Options{Trust: k.trust})
+	if got := statusOf(r, "pack.item"); got != bundle.Failed {
+		t.Errorf("another framework after signing: pack.item = %q", got)
+	}
+	// Signed under another framework's name, the table no longer matches.
+	r = verifyCompliancePack(t, "", func(rep *domain.Report, _ *pack.Manifest) { rep.Framework = domain.NISTAIRMF })
+	if got := statusOf(r, "compliance.controls"); got == bundle.Passed {
+		t.Errorf("a report signed under another framework's name: compliance.controls = %q", got)
+	}
 	none := k.build(false, func(m *pack.Manifest, files []pack.File) []pack.File {
 		m.Scope, m.Statement = pack.Scope{Kind: pack.ScopeCompliance, From: periodStart, To: periodEnd}, pack.ComplianceStatement
 		return files

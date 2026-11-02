@@ -94,12 +94,18 @@
     ]
   },
   "RT-014": {
-    "digest": "13bc3d1e263b53a7ad0f9f830f5fb76080efaa7e44d597f7a6684d236d48e21b",
-    "tier": "community"
+    "digest": "2a96a9457d73776d3c7ca6bb30541d122dd0d07f88c9e207262363a58f050b8a",
+    "tier": "community",
+    "asi": [
+      "ASI05"
+    ]
   },
   "RT-015": {
-    "digest": "c392ef95e4e5f6b678ad85f0a3a61f59ffd83d0cb11d179f91318252b71fd8c7",
-    "tier": "community"
+    "digest": "335e24a22567f9ed02d66639c476ce9ebf1b59f74da5e54b68caae434cdb95fa",
+    "tier": "community",
+    "asi": [
+      "ASI05"
+    ]
   },
   "RT-016": {
     "digest": "f1fa660ed7f0a7ebcae90c4961a72398af2653ddc1632eb6a6ec2e7fff6d1805",
