@@ -214,7 +214,10 @@ func TestHR613_TheModelRouteCountsOnTheServer(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	d, err := w.svc.FinishCampaign(w.as(), c.ID, []app.RunReport{{Run: w.twinRun, Scenario: "RT-140"}})
+	if _, err := w.svc.FinishCampaign(w.as(), c.ID, []app.RunReport{{Run: w.twinRun, Scenario: "RT-140"}}); err != nil {
+		t.Fatal(err)
+	}
+	d, err := w.svc.GetCampaign(w.as(), c.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
