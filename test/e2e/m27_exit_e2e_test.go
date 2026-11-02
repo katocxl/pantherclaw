@@ -43,10 +43,10 @@ import (
 )
 
 // TestE2E_M27_SimulatedIncidentDetectedExplainedContained is M27's exit
-// journey (G0 M27 D502, D514). A range agent gets a fortnight of labelled,
+// journey (G0 M27 D502, D514). A range agent gets a fortnight of labeled,
 // generated history; the rollup builds its SIMULATED profile, and when the
 // agent then uses a tool it never used, behavior analytics raise a test
-// alert: labelled inference, UNVALIDATED, at most ALERT, never a CONFIRMED
+// alert: labeled inference, UNVALIDATED, at most ALERT, never a CONFIRMED
 // alert. The stack's server shows the alert and explains it with the
 // agent's profile, and a person contains the run. Nothing contained it
 // automatically.
@@ -122,7 +122,7 @@ func TestE2E_M27_SimulatedIncidentDetectedExplainedContained(t *testing.T) {
 		t.Fatalf("before the rollup: %+v %v", prof, err)
 	}
 
-	// Labelled generated history, then the rollup starts collection.
+	// Labeled generated history, then the rollup starts collection.
 	if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := simhistory.Store(ctx, tx, simhistory.Spec{
 			Agent: agent, DestClass: "INTERNAL", Operations: []string{"repo.read", "repo.write"},
@@ -144,7 +144,7 @@ func TestE2E_M27_SimulatedIncidentDetectedExplainedContained(t *testing.T) {
 		t.Fatalf("second rollup: %+v %v", res, err)
 	}
 
-	// Detected: the server lists the alert, a labelled test inference.
+	// Detected: the server lists the alert, a labeled test inference.
 	listed, err := incidents.ListAlerts(ctx, &pantherclawv1.ListAlertsRequest{RuleId: "pc.drift.behavior.new_tool"})
 	if err != nil || len(listed.GetAlerts()) != 1 {
 		t.Fatalf("alerts: %+v %v", listed, err)

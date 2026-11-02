@@ -6,7 +6,7 @@
 // from its own transactions, and the deviations of newer actions from it.
 //
 // Everything this package says is inference on thresholds nobody has checked
-// against real incidents: each result is labelled so (F648, F801), and no
+// against real incidents: each result is labeled so (F648, F801), and no
 // decision reads any of it. A profile with too little history infers
 // nothing. A count is a sample, never a measure of value (HR-539).
 //

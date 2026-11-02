@@ -4,7 +4,7 @@
 // Package app runs behavior analytics (G0 M27 D501, D502, D506; F930-F934):
 // a rollup job over an org's own pc.transactions and the two reads of
 // BehaviorService. The job is off the decision path and nothing on that path
-// imports this package (HR-641). What it raises is labelled inference,
+// imports this package (HR-641). What it raises is labeled inference,
 // capped at ALERT, and can never contain by itself (HR-640, HR-644).
 package app
 
@@ -438,7 +438,7 @@ var severity = map[bdomain.Kind]reflexdomain.Severity{
 	bdomain.KindNewDestination: reflexdomain.SeverityMedium, bdomain.KindSpendSpike: reflexdomain.SeverityMedium,
 }
 
-// signal is a deviation as a Reflex signal: labelled inference, on the
+// signal is a deviation as a Reflex signal: labeled inference, on the
 // agent, and SIMULATED rests apart as a test signal, which never pages
 // (HR-222, HR-644).
 func signal(org ids.OrgID, origin bdomain.Origin, d found) reflexdomain.Signal {

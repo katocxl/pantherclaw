@@ -237,7 +237,7 @@ var eventFields = func() map[string]map[string][]string {
 			fieldActorType: texts(td.KindServiceAccount), fieldOutcome: texts(audit.Success, audit.Failure),
 		},
 		triggers.VocabAlertRaised:    {fieldActorType: {alerts.Actor.Type}, fieldOutcome: {alerts.StateOpen, alerts.StateSuppressed}},
-		triggers.VocabAlertInferred: {fieldActorType: {alerts.Actor.Type}, fieldOutcome: {alerts.StateOpen, alerts.StateSuppressed}},
+		triggers.VocabAlertInferred:  {fieldActorType: {alerts.Actor.Type}, fieldOutcome: {alerts.StateOpen, alerts.StateSuppressed}},
 		triggers.VocabIncidentOpened: {fieldActorType: {alerts.Actor.Type}},
 		// coverage.lost's entries fill different fields, and case.closed's none.
 		triggers.VocabCoverageLost: actors(callers, system),

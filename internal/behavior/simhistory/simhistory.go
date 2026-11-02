@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package simhistory gives a range agent a labelled, made-up history, so
+// Package simhistory gives a range agent a labeled, made-up history, so
 // behavior analytics can be shown and tested without weeks of real work
 // (G0 M27 D502; F931; HR-642, HR-222, F630). The same seed gives the same
 // history. Rows go to pc.behavior_simulated_actions, never pc.transactions,

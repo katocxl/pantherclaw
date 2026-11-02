@@ -155,7 +155,7 @@ func (f *fx) simulate(agent ids.UUID) error {
 // TestHR642_RealAndSimulatedNeverMeet: one rollup keeps a real agent's
 // profile on its real transactions and a range agent's on its simulated
 // ones and its generated history; neither has a profile of the other kind.
-// A first run only starts collection. Afterwards a new tool raises labelled
+// A first run only starts collection. Afterwards a new tool raises labeled
 // inference on each side: the real one an alert, the simulated one a test
 // alert. None opens an incident, and none is a CONFIRMED alert (HR-640,
 // HR-644). The database refuses generated history for a real agent.

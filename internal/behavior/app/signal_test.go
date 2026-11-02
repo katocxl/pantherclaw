@@ -18,12 +18,12 @@ var allKinds = []bdomain.Kind{
 	bdomain.KindNewSequence, bdomain.KindVolumeSpike, bdomain.KindSpendSpike,
 }
 
-// TestHR644_EverySignalIsLabelledInferenceAtMostAnAlert: whatever the kind,
+// TestHR644_EverySignalIsLabeledInferenceAtMostAnAlert: whatever the kind,
 // a behavior signal is valid, rests on INFERRED, says UNVALIDATED and the
 // label, extends pc.drift.behavior, never asks for more than ALERT, and is
 // never a CONFIRMED alert, so it can't start a contain step (HR-640). A
 // simulated one is a test signal (HR-222, HR-642). Covers: F932, F933
-func TestHR644_EverySignalIsLabelledInferenceAtMostAnAlert(t *testing.T) {
+func TestHR644_EverySignalIsLabeledInferenceAtMostAnAlert(t *testing.T) {
 	org := ids.New[ids.Org]()
 	for _, origin := range []bdomain.Origin{bdomain.OriginReal, bdomain.OriginSimulated} {
 		for _, k := range allKinds {
@@ -46,7 +46,7 @@ func TestHR644_EverySignalIsLabelledInferenceAtMostAnAlert(t *testing.T) {
 			}
 			if !strings.HasPrefix(s.RuleID, ruleRoot) || s.Facts["basis"] != bdomain.Basis ||
 				s.Facts["definition_status"] != bdomain.DefinitionStatus || !strings.Contains(s.Summary, bdomain.Label) {
-				t.Errorf("%s %s: unlabelled %+v", origin, k, s)
+				t.Errorf("%s %s: unlabeled %+v", origin, k, s)
 			}
 			if len(s.Facts["value"]) > reflexdomain.MaxFactValue {
 				t.Errorf("%s %s: value of %d bytes", origin, k, len(s.Facts["value"]))
