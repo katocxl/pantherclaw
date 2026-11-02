@@ -93,7 +93,11 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 	for _, f := range req.GetPayloadFindings() {
 		findings = append(findings, pipeline.PayloadFinding{Kind: f.GetKind(), Location: f.GetLocation()})
 	}
-	res, err := h.svc.Authorize(ctx, gw, req.GetActionIr(), creds, findings...)
+	var content []pipeline.PayloadFinding
+	for _, f := range req.GetContentFindings() {
+		content = append(content, pipeline.PayloadFinding{Kind: f.GetKind(), Location: f.GetLocation()})
+	}
+	res, err := h.svc.authorizeContent(ctx, gw, req.GetActionIr(), creds, content, findings...)
 	if err != nil {
 		return nil, err
 	}
@@ -233,6 +237,7 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 		ResponseDigest: req.GetResponseDigest(), DispatchMS: req.GetDispatchMs(), TargetRef: req.GetTargetRef(),
 		Access:    accessOf(req.GetCredentialAccess()),
 		DataScope: dataScopeOf(req.GetDataScope()),
+		ContentFindings: contentOf(req.GetContentFindings()),
 	})
 	if err != nil {
 		return nil, err
@@ -355,4 +360,13 @@ var consequenceLabels = map[consequences.Label]pantherclawv1.ConsequenceLabel{
 // ConsequenceLabel is a label's protobuf value.
 func ConsequenceLabel(l consequences.Label) pantherclawv1.ConsequenceLabel {
 	return consequenceLabels[l]
+}
+
+// contentOf maps a tool result's content flags (G0 M27 D507).
+func contentOf(in []*pantherclawv1.ContentFinding) []pipeline.PayloadFinding {
+	var out []pipeline.PayloadFinding
+	for _, f := range in {
+		out = append(out, pipeline.PayloadFinding{Kind: f.GetKind(), Location: f.GetLocation()})
+	}
+	return out
 }

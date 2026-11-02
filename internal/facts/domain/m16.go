@@ -52,8 +52,13 @@ const (
 	NameClassification = "pc.classification"
 	// NameIdentityRisk is the identity-risk fact about user:<id> (D82).
 	NameIdentityRisk = "pc.identity.risk"
+	// NameContentFlag is the content flag on a run (G0 M27 D507, HR-648),
+	// written only by the built-in provider.
+	NameContentFlag = "pc.content.flag"
 	// SubjectUser is the subject type of a fact about a person.
 	SubjectUser = "user"
+	// SubjectRun is the subject type of a fact about a run.
+	SubjectRun = "run"
 	// BuiltinProvider is the name of the built-in provider.
 	BuiltinProvider = "pc.signals"
 	// MaxSourceLen bounds a fact's source.
@@ -65,7 +70,9 @@ var Methods = []string{"manual", "rule", "model"}
 
 // reservedFor reports whether a fact name is reserved for the built-in
 // provider (compared with dots as underscores, as policies name it).
-func reservedFor(name string) bool { return CELName(name) == CELName(NameIdentityRisk) }
+func reservedFor(name string) bool {
+	return CELName(name) == CELName(NameIdentityRisk) || CELName(name) == CELName(NameContentFlag)
+}
 
 // validSources checks the provider's source: exactly one of a service
 // account, a gateway and connection, or built in, and the built-in name

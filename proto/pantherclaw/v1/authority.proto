@@ -129,6 +129,21 @@ message AuthorizeRequest {
   // (HR-225). Each makes the Authority require a person's approval; none
   // can lift a requirement. At most 16, sorted, never the value.
   repeated PayloadFinding payload_findings = 3 [(buf.validate.field).repeated.max_items = 16];
+  // Content flags the gateway found in the outbound body (G0 M27 D507,
+  // HR-648): the Authority reads the org's mode itself, and a flag can only
+  // add a hold. At most 16, sorted, never the value.
+  repeated ContentFinding content_findings = 4 [(buf.validate.field).repeated.max_items = 16];
+}
+
+// ContentFinding is one content flag: a kind and a location, never a value
+// (G0 M27 D507, HR-649).
+message ContentFinding {
+  // injection_phrase, secret_format, high_entropy, pii_email, pii_card,
+  // pii_national_id, classifier_flag or scan_incomplete.
+  string kind = 1 [(buf.validate.field).string.pattern = "^[a-z_]{1,32}$"];
+  // Where, such as result/content/0/text; for scan_incomplete, over_bound,
+  // classifier_unavailable or builtin_failed.
+  string location = 2 [(buf.validate.field).string.pattern = "^[!-~]{1,128}$"];
 }
 
 // PayloadFinding is one credential-shaped value in an action's payload.
@@ -468,6 +483,10 @@ message RecordExecutionRequest {
   // What the gateway's data scope did to the answer (G0 M14 D102), counts
   // only; unset when no data scope applied.
   DataScopeApplied data_scope = 9;
+  // Content flags on the tool result (G0 M27 D507, HR-648): they land on the
+  // run, for later decisions. Empty for a delegated outcome, which is not
+  // inspected. At most 16, sorted, never the value.
+  repeated ContentFinding content_findings = 10 [(buf.validate.field).repeated.max_items = 16];
 }
 
 // DataScopeApplied is what applying a read's data scope did to its answer

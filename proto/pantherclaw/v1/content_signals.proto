@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/identity_providers.proto";
+
+// ContentSignalService is the org's opt-in content signals (G0 M27 D503-D505,
+// D507, D512; F936; HR-647..652; Business edition).
+//
+// Content signals are restrict-only and make no safety claim. The gateway
+// scans tool results and outbound bodies and keeps none of it: a finding is a
+// kind and a location. A flag can hold a later write, or an org's own rule
+// may deny on it; nothing can allow or lift on it. No flags reads "no known
+// flags", never clean or safe, and the hook, SDK and delegated faces are not
+// inspected.
+service ContentSignalService {
+  // GetSettings reads the mode and what WATCHING would have held.
+  // permission: content.read
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetMode changes the mode (a person). OFF moves only to WATCHING, and
+  // ACTIVE is reached only from WATCHING with a fresh security-key step-up.
+  // Leaving ACTIVE files a protected change and returns it: nothing changes
+  // until a second person confirms it.
+  // permission: content.manage
+  rpc SetMode(SetModeRequest) returns (SetModeResponse);
+}
+
+// ContentSignalMode is what the org does with content signals.
+enum ContentSignalMode {
+  CONTENT_SIGNAL_MODE_UNSPECIFIED = 0;
+  // The default: nothing is scanned.
+  CONTENT_SIGNAL_MODE_OFF = 1;
+  // Flags are recorded and alerted on, and no decision changes.
+  CONTENT_SIGNAL_MODE_WATCHING = 2;
+  // Flags hold outbound actions and later writes on the run tree.
+  CONTENT_SIGNAL_MODE_ACTIVE = 3;
+}
+
+// ContentWouldHold is how many times WATCHING would have held, for one
+// reason: a finding kind, over_bound, classifier_unavailable or
+// builtin_failed.
+message ContentWouldHold {
+  string reason = 1;
+  int64 count = 2;
+  google.protobuf.Timestamp first_time = 3;
+  google.protobuf.Timestamp last_time = 4;
+}
+
+// ContentSignalSettings are the org's settings.
+message ContentSignalSettings {
+  ContentSignalMode mode = 1;
+  // Empty until the mode was first changed.
+  string updated_by = 2;
+  google.protobuf.Timestamp update_time = 3;
+  // What WATCHING would have held, most first: the step-up to ACTIVE shows
+  // it (D512).
+  repeated ContentWouldHold would_hold = 4;
+  // The faces content signals do not see into: hook, sdk and delegated. What
+  // comes through them is not inspected, and never reads as no known flags.
+  repeated string not_inspected = 5;
+}
+
+// GetSettingsRequest asks for the settings.
+message GetSettingsRequest {}
+
+// GetSettingsResponse holds the settings.
+message GetSettingsResponse {
+  ContentSignalSettings settings = 1;
+}
+
+// SetModeRequest changes the mode.
+message SetModeRequest {
+  ContentSignalMode mode = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// SetModeResponse is what SetMode did.
+message SetModeResponse {
+  ContentSignalSettings settings = 1;
+  // Set when the change waits for a second person: settings are unchanged.
+  ProtectedChangeFiled change = 2;
+}

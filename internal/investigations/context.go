@@ -5,8 +5,10 @@ package investigations
 
 import (
 	"context"
+	"slices"
 	"time"
 
+	csdomain "github.com/katocxl/pantherclaw/internal/contentsignals/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -73,14 +75,46 @@ type Preceding struct {
 	Tools       []ToolChange
 	Shared      []Shared
 	Links       []Link
-	// ContentProvenance: external-content provenance is not collected for
+	// ContentProvenance says what is known of the content before the subject:
+	// external-content provenance is not collected for
 	// agent inputs yet; the view says so instead of showing nothing.
 	ContentProvenance string
 	ScopeLimited      bool
 }
 
-// ProvenanceNotCollected is Preceding.ContentProvenance today.
-const ProvenanceNotCollected = "NOT_COLLECTED"
+// Preceding.ContentProvenance (G0 M27 D504, HR-651): NOT_COLLECTED unless the
+// org has content signals on; then FLAGGED, NO_KNOWN_FLAGS, which is never
+// clean or safe, or NOT_INSPECTED for a face the gateway cannot see into.
+const (
+	ProvenanceNotCollected = "NOT_COLLECTED"
+	ProvenanceFlagged      = "FLAGGED"
+	ProvenanceNoKnownFlags = "NO_KNOWN_FLAGS"
+	ProvenanceNotInspected = "NOT_INSPECTED"
+)
+
+// contentProvenance reads what content signals know of the run's tree.
+func contentProvenance(ctx context.Context, q *dbq.Queries, org ids.OrgID, run ids.UUID, subject *dbq.InvTransactionRow) (string, error) {
+	mode, err := q.ContentSignalMode(ctx, org)
+	if err != nil {
+		return "", err
+	}
+	if !csdomain.Mode(mode).Scans() {
+		return ProvenanceNotCollected, nil
+	}
+	if subject != nil && subject.Channel != nil && slices.Contains(csdomain.NotInspectedFaces, *subject.Channel) {
+		return ProvenanceNotInspected, nil
+	}
+	st, err := q.ContentRunState(ctx, org, run)
+	if db.IsNoRows(err) {
+		return ProvenanceNoKnownFlags, nil
+	} else if err != nil {
+		return "", err
+	}
+	if kinds, _ := csdomain.ParseFlag(st.Flag); len(kinds) > 0 {
+		return ProvenanceFlagged, nil
+	}
+	return ProvenanceNoKnownFlags, nil
+}
 
 // PrecedingContext assembles the context before transaction txn, or before
 // the end of run when txn is nil, over rng (zero: the DefaultContext
@@ -124,8 +158,12 @@ func PrecedingContext(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID
 	if err := rng.check(); err != nil {
 		return Preceding{}, err
 	}
+	provenance, err := contentProvenance(ctx, q, tx.OrgID(), r.ID, subject)
+	if err != nil {
+		return Preceding{}, err
+	}
 	p := Preceding{
-		Run: r.ID, Agent: r.AgentID, Transaction: txn, Range: rng, ContentProvenance: ProvenanceNotCollected,
+		Run: r.ID, Agent: r.AgentID, Transaction: txn, Range: rng, ContentProvenance: provenance,
 		ScopeLimited: s.Limited(),
 	}
 

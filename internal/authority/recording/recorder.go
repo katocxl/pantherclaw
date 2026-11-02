@@ -70,6 +70,9 @@ func request(req pipeline.Request) Request {
 	for _, f := range req.PayloadFindings {
 		out.PayloadFindings = append(out.PayloadFindings, PayloadFinding{Kind: f.Kind, Location: f.Location})
 	}
+	for _, f := range req.ContentFindings {
+		out.ContentFindings = append(out.ContentFindings, PayloadFinding{Kind: f.Kind, Location: f.Location})
+	}
 	return out
 }
 
@@ -299,4 +302,14 @@ func (r *Recorder) CustomerRules(ctx context.Context, org ids.OrgID) ([]conseque
 		return nil
 	})
 	return rules, err
+}
+
+// ContentSignals implements pipeline.Reader.
+func (r *Recorder) ContentSignals(ctx context.Context, org ids.OrgID, run ids.UUID) (pipeline.ContentState, error) {
+	st, err := r.r.ContentSignals(ctx, org, run)
+	r.keep(func(x *Reads) error {
+		x.Content = &Content{Run: run.String(), Mode: st.Mode, Kinds: st.Kinds, Err: errKind(err)}
+		return nil
+	})
+	return st, err
 }

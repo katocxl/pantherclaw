@@ -21,6 +21,7 @@ import (
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	contentapp "github.com/katocxl/pantherclaw/internal/contentsignals/app"
 	"github.com/katocxl/pantherclaw/internal/budgets/adapters/pgbudgets"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -59,6 +60,9 @@ type Store struct {
 	// transaction (G0 M14 D33, D89): it returns the child run and the
 	// audience of the action token, or nil for a dispatch to no peer.
 	Peer PeerDelegation
+	// Content takes a tool result's content flags in the outcome's transaction
+	// (G0 M27 D507); nil keeps none.
+	Content *contentapp.Sink
 }
 
 // PeerDelegation delegates to a peer agent in BeginDispatch's transaction.
@@ -686,6 +690,9 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 			return err
 		}
 		if err := keepReceipt(ctx, tx, q, org, attempt.ID, txn, permit, evdomain.Actor{Type: "gateway", ID: gatewayID}, r); err != nil {
+			return err
+		}
+		if err := s.contentResult(ctx, tx, org, e, txn); err != nil {
 			return err
 		}
 		if err := unverifiable(ctx, tx, q, org, gatewayID, txn, unv, sign); err != nil {

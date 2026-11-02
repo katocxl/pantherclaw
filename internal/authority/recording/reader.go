@@ -105,6 +105,9 @@ func (r *Reader) Request() (pipeline.Request, error) {
 	for _, f := range r.rec.Request.PayloadFindings {
 		req.PayloadFindings = append(req.PayloadFindings, pipeline.PayloadFinding{Kind: f.Kind, Location: f.Location})
 	}
+	for _, f := range r.rec.Request.ContentFindings {
+		req.ContentFindings = append(req.ContentFindings, pipeline.PayloadFinding{Kind: f.Kind, Location: f.Location})
+	}
 	return req, nil
 }
 
@@ -530,4 +533,20 @@ func (r *Reader) CustomerRules(_ context.Context, org ids.OrgID) ([]consequences
 		return nil, r.gap("customer_rules", pipeline.StepFacts, detail)
 	}
 	return slices.Clone(r.served.CustomerRules), nil
+}
+
+// ContentSignals implements pipeline.Reader. Only a recording of pipeline
+// version 7 or later replays this read, and each of those holds it.
+func (r *Reader) ContentSignals(_ context.Context, org ids.OrgID, run ids.UUID) (pipeline.ContentState, error) {
+	if err := r.otherOrg(org, "content signals", pipeline.StepFacts); err != nil {
+		return pipeline.ContentState{}, err
+	}
+	x := r.rec.Reads.Content
+	if x == nil || x.Run != run.String() {
+		return pipeline.ContentState{}, r.gap("content signals", pipeline.StepFacts, "the content signals were not read for this run")
+	}
+	if x.Err != "" {
+		return pipeline.ContentState{}, errors.New("recording: the content signals could not be read")
+	}
+	return pipeline.ContentState{Mode: x.Mode, Kinds: x.Kinds}, nil
 }

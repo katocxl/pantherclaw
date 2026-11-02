@@ -51,6 +51,7 @@ import (
 	credentials "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/contentscan"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/gateway/simcheck"
@@ -202,6 +203,9 @@ type Options struct {
 	// secret_in_payload or elicitation_refused, with machine metadata only,
 	// so detections see it (G0 M12, HR-225; G0 M15 D40); nil only logs it.
 	ReportLocalRefusal LocalRefusalReporter
+	// Content is the content scan (G0 M27 D507); nil runs the built-in only.
+	// Whether anything is scanned is the org's mode, on the connection.
+	Content *contentscan.Scanner
 	// GitHubAPIURL is GitHub's REST API (gateway configuration
 	// github.api_url), where a GitHub App connection to GitHub's MCP server
 	// mints its tokens and reads its facts; a connection to the REST API
@@ -248,6 +252,7 @@ type Engine struct {
 	factTimeout   time.Duration
 	revocations   RevocationReporter
 	localRefusals LocalRefusalReporter
+	content       *contentscan.Scanner
 	sims          *simcheck.Checker
 	githubAPI     string
 
@@ -286,6 +291,9 @@ func New(o Options) (*Engine, error) {
 	if o.FactTimeout <= 0 {
 		o.FactTimeout = DefaultFactTimeout
 	}
+	if o.Content == nil {
+		o.Content = &contentscan.Scanner{Log: o.Log}
+	}
 	if o.GitHubAPIURL == "" {
 		o.GitHubAPIURL = DefaultGitHubAPIURL
 	}
@@ -296,6 +304,7 @@ func New(o Options) (*Engine, error) {
 		connectors:  o.Connectors,
 		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation, localRefusals: o.ReportLocalRefusal,
 		sims: simcheck.New(), githubAPI: strings.TrimSuffix(o.GitHubAPIURL, "/"), apis: map[string]clientEntry{}, tokenClients: map[string]clientEntry{},
+		content: o.Content,
 	}, nil
 }
 
@@ -414,6 +423,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if code := e.simulatorRefusal(ctx, conn); code != "" {
 		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
+	ctx, content := e.outboundContent(ctx, c) // G0 M27 D507
 	refusedPayload, findings := e.outboundCheck(ctx, conn, c.Action.Action)
 	if refusedPayload {
 		return Result{Class: CannotAuthorize, Code: CodeSecretInPayload, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
@@ -448,7 +458,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if read, unreported := e.reportGitLabFacts(ctx, conn, c.Action.Action); read && unreported != nil {
 		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
-	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings})
+	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content})
 	t.lap("authz")
 	if err != nil {
 		e.log.ErrorContext(ctx, "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
@@ -1175,6 +1185,7 @@ func (e *Engine) record(ctx context.Context, r Result, want permitWant, outcome 
 		PermitId: want.PermitID, Outcome: outcome, TargetStatus: int32(min(status, 599)), ResponseDigest: digest, //nolint:gosec // G115: clamped
 		DispatchMs: int32(min(elapsed.Milliseconds(), 600000)), //nolint:gosec // G115: clamped
 	}
+	req.ContentFindings = e.resultContent(ctx, r) // G0 M27 D507
 	for _, f := range extra {
 		f(req)
 	}
