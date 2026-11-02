@@ -42,6 +42,9 @@ const (
 	RangeServiceExportAssuranceReportProcedure = "/pantherclaw.v1.RangeService/ExportAssuranceReport"
 	// RangeServiceStartCampaignProcedure is the procedure name of the RangeService's StartCampaign RPC.
 	RangeServiceStartCampaignProcedure = "/pantherclaw.v1.RangeService/StartCampaign"
+	// RangeServiceStartCampaignStepProcedure is the procedure name of the RangeService's
+	// StartCampaignStep RPC.
+	RangeServiceStartCampaignStepProcedure = "/pantherclaw.v1.RangeService/StartCampaignStep"
 	// RangeServiceFinishCampaignProcedure is the procedure name of the RangeService's FinishCampaign
 	// RPC.
 	RangeServiceFinishCampaignProcedure = "/pantherclaw.v1.RangeService/FinishCampaign"
@@ -103,6 +106,13 @@ var (
 			Procedure:  RangeServiceStartCampaignProcedure,
 		}
 	})
+	rangeServiceStartCampaignStepSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_redteam_proto.Services().ByName("RangeService").Methods().ByName("StartCampaignStep"),
+			Procedure:  RangeServiceStartCampaignStepProcedure,
+		}
+	})
 	rangeServiceFinishCampaignSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -157,10 +167,16 @@ type RangeServiceClient interface {
 	// Business edition. A range agent has at most one open campaign.
 	// permission: redteam.run
 	StartCampaign(context.Context, *v1.StartCampaignRequest) (*v1.StartCampaignResponse, error)
-	// FinishCampaign ends a campaign. The caller says which runs were which
-	// scenario's and what the edge reported; every outcome is derived by the
-	// server from its own transactions. An attempt with nothing behind it is
-	// NOT_EXERCISED, a gap and not a pass (D306).
+	// StartCampaignStep opens one scenario's step of a running campaign: every
+	// run of the twin created from now until the next step, or the finish,
+	// is bound to it by the server (G0 M25 D525). Steps run one at a time.
+	// permission: redteam.run
+	StartCampaignStep(context.Context, *v1.StartCampaignStepRequest) (*v1.StartCampaignStepResponse, error)
+	// FinishCampaign ends a campaign. Every outcome is derived by the server
+	// from the transactions of the runs it bound to each step, the worst one
+	// winning, and from the route reports stored for the step. A scenario
+	// with no bound run is NOT_EXERCISED, a gap and not a pass (D306). Runs
+	// in the request are checked against the binding, never trusted.
 	// permission: redteam.run
 	FinishCampaign(context.Context, *v1.FinishCampaignRequest) (*v1.FinishCampaignResponse, error)
 	// GetCampaign returns a campaign and its steps.
@@ -206,10 +222,16 @@ type RangeServiceHandler interface {
 	// Business edition. A range agent has at most one open campaign.
 	// permission: redteam.run
 	StartCampaign(context.Context, *v1.StartCampaignRequest) (*v1.StartCampaignResponse, error)
-	// FinishCampaign ends a campaign. The caller says which runs were which
-	// scenario's and what the edge reported; every outcome is derived by the
-	// server from its own transactions. An attempt with nothing behind it is
-	// NOT_EXERCISED, a gap and not a pass (D306).
+	// StartCampaignStep opens one scenario's step of a running campaign: every
+	// run of the twin created from now until the next step, or the finish,
+	// is bound to it by the server (G0 M25 D525). Steps run one at a time.
+	// permission: redteam.run
+	StartCampaignStep(context.Context, *v1.StartCampaignStepRequest) (*v1.StartCampaignStepResponse, error)
+	// FinishCampaign ends a campaign. Every outcome is derived by the server
+	// from the transactions of the runs it bound to each step, the worst one
+	// winning, and from the route reports stored for the step. A scenario
+	// with no bound run is NOT_EXERCISED, a gap and not a pass (D306). Runs
+	// in the request are checked against the binding, never trusted.
 	// permission: redteam.run
 	FinishCampaign(context.Context, *v1.FinishCampaignRequest) (*v1.FinishCampaignResponse, error)
 	// GetCampaign returns a campaign and its steps.
@@ -232,6 +254,7 @@ func RegisterRangeServiceHandler(server *connect.Server, svc RangeServiceHandler
 		connect.Method{Spec: rangeServiceListRangesSpec(), Handler: adapter.listRanges},
 		connect.Method{Spec: rangeServiceExportAssuranceReportSpec(), Handler: adapter.exportAssuranceReport},
 		connect.Method{Spec: rangeServiceStartCampaignSpec(), Handler: adapter.startCampaign},
+		connect.Method{Spec: rangeServiceStartCampaignStepSpec(), Handler: adapter.startCampaignStep},
 		connect.Method{Spec: rangeServiceFinishCampaignSpec(), Handler: adapter.finishCampaign},
 		connect.Method{Spec: rangeServiceGetCampaignSpec(), Handler: adapter.getCampaign},
 		connect.Method{Spec: rangeServiceListCampaignsSpec(), Handler: adapter.listCampaigns},
@@ -267,6 +290,10 @@ func (UnimplementedRangeServiceHandler) ExportAssuranceReport(context.Context, *
 
 func (UnimplementedRangeServiceHandler) StartCampaign(context.Context, *v1.StartCampaignRequest) (*v1.StartCampaignResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.RangeService.StartCampaign is not implemented")
+}
+
+func (UnimplementedRangeServiceHandler) StartCampaignStep(context.Context, *v1.StartCampaignStepRequest) (*v1.StartCampaignStepResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.RangeService.StartCampaignStep is not implemented")
 }
 
 func (UnimplementedRangeServiceHandler) FinishCampaign(context.Context, *v1.FinishCampaignRequest) (*v1.FinishCampaignResponse, error) {
@@ -336,6 +363,14 @@ func (c *rangeServiceClient) ExportAssuranceReport(ctx context.Context, req *v1.
 func (c *rangeServiceClient) StartCampaign(ctx context.Context, req *v1.StartCampaignRequest) (*v1.StartCampaignResponse, error) {
 	var res v1.StartCampaignResponse
 	if err := c.client.CallUnary(ctx, rangeServiceStartCampaignSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *rangeServiceClient) StartCampaignStep(ctx context.Context, req *v1.StartCampaignStepRequest) (*v1.StartCampaignStepResponse, error) {
+	var res v1.StartCampaignStepResponse
+	if err := c.client.CallUnary(ctx, rangeServiceStartCampaignStepSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -445,6 +480,18 @@ func (h rangeServiceHandler) startCampaign(ctx context.Context, _ connect.Spec, 
 		return err
 	}
 	res, err := h.svc.StartCampaign(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h rangeServiceHandler) startCampaignStep(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartCampaignStepRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartCampaignStep(ctx, &req)
 	if err != nil {
 		return err
 	}

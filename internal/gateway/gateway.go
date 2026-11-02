@@ -102,8 +102,8 @@ func (g *Gateway) Handler() http.Handler {
 			g.sdk.ServeHTTP(w, r)
 			return
 		}
-		if strings.HasPrefix(r.URL.EscapedPath(), modelface.Prefix) {
-			g.model.ServeHTTP(w, r) // G0 M25 D313; "model" is a reserved name
+		if g.model.Serves(r.URL.EscapedPath()) {
+			g.model.ServeHTTP(w, r) // G0 M25 D313: only a connection marked as a model relay (D525 L5)
 			return
 		}
 		if _, _, ok := a2aface.Path(r.URL.EscapedPath()); ok {

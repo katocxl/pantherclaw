@@ -218,6 +218,33 @@ func TestHR614_OnlyASimulatedModelRelayIsServed(t *testing.T) {
 	}
 }
 
+// TestHR614_TheModelFaceKnowsARelayByItsMark: the gateway hands the face
+// only /model/{name}/… where {name} is marked as a simulated model relay;
+// every other /model/… path, a connection named model included, stays with
+// the connection routes (D525 L5).
+// Covers: F906
+func TestHR614_TheModelFaceKnowsARelayByItsMark(t *testing.T) {
+	w := newWorld(t, func(http.ResponseWriter) {})
+	w.conns["model"] = &control.Connection{GatewayConnection: &pb.GatewayConnection{
+		Id: ids.NewV7().String(), Name: "model", Kind: "http", BaseUrl: "https://payments.example.test", State: "ACTIVE",
+	}}
+	h := modelface.New(w.eng, w.ctl, cfg{&control.Config{ByName: w.conns}}, public, nil)
+	if !h.Serves("/model/relay/" + host + "/v1/messages") {
+		t.Fatal("the relay is not served")
+	}
+	for _, p := range []string{
+		"/model/real/" + host + "/v1", "/model/twin/" + host + "/v1", "/model/nope/" + host + "/v1",
+		"/model/model/" + host + "/v1", "/model/v1/charges", "/model", "/relay/" + host + "/v1",
+	} {
+		if h.Serves(p) {
+			t.Errorf("%s went to the model face", p)
+		}
+	}
+	if (&modelface.Handler{}).Serves("/model/relay/" + host + "/v1") {
+		t.Error("served with no configuration")
+	}
+}
+
 // TestHR614_TheRouteIsOffWithoutAnOpenCampaign: when the server refuses (no
 // open campaign, a real agent, a closed campaign, another host or the run
 // total), nothing is sent.

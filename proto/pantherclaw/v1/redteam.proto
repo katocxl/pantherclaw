@@ -59,10 +59,16 @@ service RangeService {
   // Business edition. A range agent has at most one open campaign.
   // permission: redteam.run
   rpc StartCampaign(StartCampaignRequest) returns (StartCampaignResponse);
-  // FinishCampaign ends a campaign. The caller says which runs were which
-  // scenario's and what the edge reported; every outcome is derived by the
-  // server from its own transactions. An attempt with nothing behind it is
-  // NOT_EXERCISED, a gap and not a pass (D306).
+  // StartCampaignStep opens one scenario's step of a running campaign: every
+  // run of the twin created from now until the next step, or the finish,
+  // is bound to it by the server (G0 M25 D525). Steps run one at a time.
+  // permission: redteam.run
+  rpc StartCampaignStep(StartCampaignStepRequest) returns (StartCampaignStepResponse);
+  // FinishCampaign ends a campaign. Every outcome is derived by the server
+  // from the transactions of the runs it bound to each step, the worst one
+  // winning, and from the route reports stored for the step. A scenario
+  // with no bound run is NOT_EXERCISED, a gap and not a pass (D306). Runs
+  // in the request are checked against the binding, never trusted.
   // permission: redteam.run
   rpc FinishCampaign(FinishCampaignRequest) returns (FinishCampaignResponse);
   // GetCampaign returns a campaign and its steps.
@@ -450,12 +456,21 @@ message CampaignRoute {
   }];
 }
 
-// CampaignRunReport names the run of one campaign and what its edge saw.
+// CampaignRunReport names a run the runner saw for one campaign. The server
+// refuses one its own binding contradicts; routes are not read (the edge's
+// stored reports are).
 message CampaignRunReport {
   string scenario_id = 1 [(buf.validate.field).string.pattern = "^RT-14[0-9]$"];
   string run_id = 2 [(buf.validate.field).string.uuid = true];
   repeated CampaignRoute routes = 3 [(buf.validate.field).repeated = {max_items: 64}];
 }
+
+message StartCampaignStepRequest {
+  string campaign_id = 1 [(buf.validate.field).string.uuid = true];
+  string scenario_id = 2 [(buf.validate.field).string.pattern = "^RT-14[0-9]$"];
+}
+
+message StartCampaignStepResponse {}
 
 message FinishCampaignRequest {
   string campaign_id = 1 [(buf.validate.field).string.uuid = true];

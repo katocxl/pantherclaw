@@ -239,6 +239,16 @@ func (a Attempt) matches(r Route) bool {
 	return false
 }
 
+// ReasonRunTooLarge marks an attempt whose step passed a cost bound of the
+// derivation (D525 M2): a gap, never a better outcome.
+const ReasonRunTooLarge = "RUN_TOO_LARGE"
+
+// TooLarge is an attempt the server did not derive because its step was too
+// large to read: NOT_EXERCISED with reason RUN_TOO_LARGE.
+func TooLarge(scenario string, a Attempt) Step {
+	return Step{Scenario: scenario, ID: a.ID, Boundary: a.Boundary, Expected: a.Expected, Outcome: NotExercised, Basis: NoBasis, Reason: ReasonRunTooLarge}
+}
+
 // Derive returns the outcome of one attempt from a run's transactions and its
 // edge's report. The server's records come first; among matching
 // transactions the worst for the boundary wins, so one that went through is

@@ -118,6 +118,20 @@ func Path(escaped string) (conn, host, rest string, ok bool) {
 	return conn, host, rest, true
 }
 
+// Serves reports whether the escaped path is the model face's: /model/{name}/…
+// where {name} is a connection marked as a model relay in the current
+// configuration. A relay is known by its mark, never by the name model; any
+// other /model/… path belongs to the connection named model, if one exists
+// (D525 L5).
+func (h *Handler) Serves(escaped string) bool {
+	name, _, _, ok := Path(escaped)
+	if !ok || h.config == nil {
+		return false
+	}
+	cfg := h.config.Current()
+	return cfg != nil && dispatch.IsModelRelay(cfg.ByName[name])
+}
+
 // Refusal is the JSON body of a refusal.
 type Refusal struct {
 	ErrorClass string `json:"error_class"`

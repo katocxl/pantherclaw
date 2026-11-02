@@ -56,7 +56,7 @@ type m9 struct {
 	out string
 }
 
-func startM9(t *testing.T) *m9 {
+func startM9(t *testing.T, edits ...func(*options)) *m9 {
 	t.Helper()
 	c, e := dockertest.Client(t)
 	m := &m9{
@@ -67,7 +67,16 @@ func startM9(t *testing.T) *m9 {
 	p := inProcessIdP(t)
 	// A coverage claim gets a second on this shared test machine; the
 	// default (50 ms) is for a server sized for its load.
-	m.stack = start(t, options{budget: "1000.00", people: &p, github: true, claimTimeout: time.Second})
+	o := options{budget: "1000.00", people: &p, github: true, claimTimeout: time.Second}
+	for _, edit := range edits {
+		edit(&o)
+	}
+	m.stack = start(t, o)
+	if o.billing {
+		// A paid plan before anything calls the API (G0 M25: campaigns are
+		// Business).
+		activePlan(t, m.pool, m.org)
+	}
 	people := &m2Stack{url: m.apiURL, cfg: m.serverCfg, idp: p}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), []string{"org", "admin-invite", "--config", m.serverCfg, "--org", m.org.String()}, &out, &errb, noEnv); code != 0 {

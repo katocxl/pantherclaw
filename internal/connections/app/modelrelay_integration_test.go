@@ -10,6 +10,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/connections/app"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 )
 
 // TestHR613_AModelRelayIsASimulatedConnectionWithoutAPackage: a model relay is
@@ -48,9 +49,34 @@ func TestHR613_AModelRelayIsASimulatedConnectionWithoutAPackage(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	in := relay()
-	in.Name, in.ModelRelay = "model", false
-	if _, err := e.svc.Create(e.admin, in); pcerr.ReasonOf(err) != "CONNECTION_NAME_RESERVED" {
-		t.Fatalf("the name model: %v", err)
+	// A relay is known by its mark, never by a name: "model" is an
+	// ordinary connection name (D525 L5).
+	plain := app.CreateInput{
+		Name: "model", Kind: app.KindHTTP, Package: mockpayments.Name, BaseURL: "https://payments.example.test/v1/", Gateway: e.gateway,
+		AccessMode: app.AccessNone,
+	}
+	if m, err := e.svc.Create(e.admin, plain); err != nil || m.ModelRelay {
+		t.Fatalf("a connection named model: %v", err)
+	}
+
+	// The relay keeps its shape on update (D525 L3).
+	other := app.ClassInternal
+	if c.DestinationClass == app.ClassInternal {
+		other = app.ClassPublic
+	}
+	held := app.AccessHeld
+	for name, u := range map[string]app.UpdateInput{
+		"access mode":       {AccessMode: &held},
+		"agent hosts":       {AgentHosts: []string{"api.anthropic.com"}, SetAgentHosts: true},
+		"destination class": {DestinationClass: &other},
+	} {
+		u.ID, u.Revision = c.ID, c.Revision
+		if _, err := e.svc.Update(e.admin, u); pcerr.ReasonOf(err) != "MODEL_RELAY_INVALID" {
+			t.Errorf("update of the %s: %v", name, err)
+		}
+	}
+	timeout := int32(5000)
+	if _, err := e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: c.Revision, TimeoutMs: &timeout}); err != nil {
+		t.Fatalf("a timeout change: %v", err)
 	}
 }

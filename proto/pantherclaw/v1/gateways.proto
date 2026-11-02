@@ -1054,6 +1054,9 @@ enum ConnectionServingState {
   CONNECTION_SERVING_STATE_DRIFT_QUARANTINED = 3;
   // It could not be loaded.
   CONNECTION_SERVING_STATE_NOT_LOADED = 4;
+  // A campaign's model relay, served by the model face with no package
+  // (G0 M25 D313).
+  CONNECTION_SERVING_STATE_LOCAL_RELAY = 5;
 }
 
 // ReportStatusResponse says when to report next.

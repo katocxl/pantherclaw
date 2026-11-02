@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/netip"
 	"net/url"
 	"os"
@@ -48,7 +49,7 @@ func init() {
 		usage: "redteam campaign run --agent RANGE_AGENT_ID --connection ID... --relay-connection ID --grant ID --gateway URL --image REF@sha256:… " +
 			"--model-host HOST --model-key-file FILE [--model-key-header NAME] [--campaigns DIR] [--only RT-14x,…] [--fixture NAME=VALUE]… " +
 			"[--scripted] [--workspace DIR] [--edge-image REF] [--probe-image REF] [--gateway-addr HOST:PORT] [--gateway-peer IP] " +
-			"[--model-ca FILE] [--model-dial HOST:PORT] [--ttl DURATION] [-- COMMAND ARGS...]",
+			"[--ttl DURATION] [-- COMMAND ARGS...]",
 		run: redteamCampaignRun,
 	}
 }
@@ -98,8 +99,9 @@ func parseCampaignRun(a *app, args []string) (campaignFlags, error) {
 	fs.Var(&f.fixtures, "fixture", "fill ${NAME} in the campaigns: NAME=VALUE (repeat)")
 	fs.BoolVar(&f.scripted, "scripted", false, "the agent is the scripted stand-in: write each campaign's script into its workspace")
 	fs.StringVar(&f.gatewayPeer, "gateway-peer", "", "the gateway's address as the relay sees it (default: this host's loopback)")
-	fs.StringVar(&f.modelCA, "model-ca", "", "PEM roots for the model host instead of the system's (a local test provider)")
-	fs.StringVar(&f.modelDial, "model-dial", "", "host:port dialed for the model host (a local test provider)")
+	fs.StringVar(&f.modelCA, "model-ca", "", "hidden, tests only: PEM roots for a local test provider instead of the system's")
+	fs.StringVar(&f.modelDial, "model-dial", "", "hidden, tests only: host:port of a local test provider")
+	fs.Usage = func() { hiddenDefaults(fs, "model-ca", "model-dial") }
 	if err := fs.Parse(args); err != nil {
 		return f, err
 	}
@@ -109,6 +111,18 @@ func parseCampaignRun(a *app, args []string) (campaignFlags, error) {
 		return f, errUsage
 	}
 	return f, nil
+}
+
+// hiddenDefaults prints a flag set's flags except the hidden ones (G0 M25
+// D523: the test provider's flags stay out of the help).
+func hiddenDefaults(fs *flag.FlagSet, hidden ...string) {
+	_, _ = fmt.Fprintf(fs.Output(), "Usage of %s:\n", fs.Name())
+	fs.VisitAll(func(fl *flag.Flag) {
+		if slices.Contains(hidden, fl.Name) {
+			return
+		}
+		_, _ = fmt.Fprintf(fs.Output(), "  -%s\n    \t%s\n", fl.Name, fl.Usage)
+	})
 }
 
 // localGateway refuses a gateway that is not on this host or its private
@@ -128,24 +142,24 @@ func localGateway(gateway string) error {
 	return nil
 }
 
+// errKeyInWorkspace refuses a key file the sandbox would copy to the agent.
+var errKeyInWorkspace = errors.New("--model-key-file is inside --workspace, which the sandbox copies to the agent")
+
 // readModelKey reads the key file once. It must not be inside a workspace
-// the sandbox copies, which would hand the key to the agent.
+// the sandbox copies, which would hand the key to the agent: not by its
+// path, not through a symbolic link on either side, and not as a hard link
+// anywhere in the workspace tree (D525 M3).
 func readModelKey(path, workspace string) ([]byte, error) {
-	if workspace != "" {
-		abs, err1 := filepath.Abs(path)
-		ws, err2 := filepath.Abs(workspace)
-		if err1 != nil || err2 != nil {
-			return nil, errors.New("--model-key-file: cannot resolve the path")
-		}
-		if rel, err := filepath.Rel(ws, abs); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return nil, errors.New("--model-key-file is inside --workspace, which the sandbox copies to the agent")
-		}
-	}
 	fh, err := os.Open(path) //nolint:gosec // G304: the operator's key file
 	if err != nil {
 		return nil, errors.New("--model-key-file: cannot open the file")
 	}
 	defer func() { _ = fh.Close() }()
+	if workspace != "" {
+		if err := keyOutsideWorkspace(fh, path, workspace); err != nil {
+			return nil, err
+		}
+	}
 	raw, err := io.ReadAll(io.LimitReader(fh, maxModelKey+1))
 	if err != nil || len(raw) > maxModelKey {
 		clear(raw)
@@ -158,6 +172,113 @@ func readModelKey(path, workspace string) ([]byte, error) {
 		return nil, errors.New("--model-key-file: one key on one line")
 	}
 	return key, nil
+}
+
+// keyOutsideWorkspace checks the open key file against the workspace: its
+// path and its resolved path are outside both the workspace's path and its
+// resolved path, and no regular file in the workspace tree is the same file.
+func keyOutsideWorkspace(fh *os.File, path, workspace string) error {
+	keyInfo, err := fh.Stat()
+	if err != nil {
+		return errors.New("--model-key-file: cannot stat the file")
+	}
+	keys, err1 := absAndReal(path)
+	wss, err2 := absAndReal(workspace)
+	if err1 != nil || err2 != nil {
+		return errors.New("--model-key-file or --workspace: cannot resolve the path")
+	}
+	for _, ws := range wss {
+		for _, k := range keys {
+			if rel, err := filepath.Rel(ws, k); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return errKeyInWorkspace
+			}
+		}
+	}
+	// A hard link to the key anywhere in the copied tree (the copy follows
+	// no symbolic link, so neither does this scan).
+	found := errors.New("found")
+	err = filepath.WalkDir(wss[1], func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		fi, err := os.Lstat(p)
+		if err != nil {
+			return err
+		}
+		if os.SameFile(fi, keyInfo) {
+			return found
+		}
+		return nil
+	})
+	switch {
+	case errors.Is(err, found):
+		return errKeyInWorkspace
+	case err != nil:
+		return fmt.Errorf("--workspace: cannot scan the tree: %w", err)
+	}
+	return nil
+}
+
+// absAndReal is a path made absolute, and with its symbolic links resolved.
+func absAndReal(p string) ([2]string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return [2]string{}, err
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return [2]string{}, err
+	}
+	return [2]string{abs, resolved}, nil
+}
+
+// copyWorkspace copies src's directories and regular files into dst. It
+// follows no symbolic link: a link, or any other file that is not regular,
+// is skipped and counted (D525 M3).
+func copyWorkspace(dst, src string) (skipped int, err error) {
+	root, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		return 0, err
+	}
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		switch {
+		case d.IsDir():
+			return os.MkdirAll(target, 0o755) //nolint:gosec // G301: copied into the sandbox, read by the agent's uid
+		case !d.Type().IsRegular():
+			skipped++
+			return nil
+		}
+		return copyRegular(target, p)
+	})
+	return skipped, err
+}
+
+func copyRegular(dst, src string) error {
+	in, err := os.Open(src) //nolint:gosec // G304: the operator's workspace
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // G302: read by the agent's uid
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 func parseFixtures(l list) (campaign.Fixtures, error) {
@@ -266,7 +387,11 @@ func redteamCampaignRun(ctx context.Context, a *app, args []string) error {
 	id := started.GetCampaignId()
 	_, _ = fmt.Fprintf(a.stderr, "campaign %s started: %d campaigns against image %s\n", id, len(set), image)
 
-	reports, runErr := runCampaigns(ctx, a, f, set, fx, c.GetName())
+	openStep := func(ctx context.Context, scenario string) error {
+		_, err := ranges.StartCampaignStep(ctx, &pantherclawv1.StartCampaignStepRequest{CampaignId: id, ScenarioId: scenario})
+		return err
+	}
+	reports, runErr := runCampaigns(ctx, a, f, set, fx, c.GetName(), openStep)
 	// The campaign finishes whatever happened: a run left out only widens
 	// the gap (HR-609).
 	fin, err := ranges.FinishCampaign(context.WithoutCancel(ctx), &pantherclawv1.FinishCampaignRequest{CampaignId: id, Runs: reports})
@@ -295,13 +420,20 @@ func relayListen(base string) (string, error) {
 	return u.Host, nil
 }
 
-// runCampaigns runs each campaign's sandbox and returns the run reports. It
+// runCampaigns opens each campaign's step and runs its sandbox, and returns
+// the runs it saw (the server checks them against its own binding). It
 // stops at an infrastructure failure, returning what it has.
 func runCampaigns(ctx context.Context, a *app, f campaignFlags, set []campaign.Loaded, fx campaign.Fixtures, relayName string,
+	openStep func(context.Context, string) error,
 ) ([]*pantherclawv1.CampaignRunReport, error) {
 	placeholder := "pc-placeholder-" + rand.Text()
 	var reports []*pantherclawv1.CampaignRunReport
 	for _, l := range set {
+		// The server binds every run of the twin from now on to this step
+		// (D525 M1).
+		if err := openStep(ctx, l.File.ID); err != nil {
+			return reports, fmt.Errorf("%s: opening the step: %s", l.File.ID, describe(err))
+		}
 		dir, err := os.MkdirTemp("", "pclaw-campaign-")
 		if err != nil {
 			return reports, err
@@ -332,8 +464,12 @@ func (e *agentExitError) Error() string { return fmt.Sprintf("the agent exited w
 func runOneCampaign(ctx context.Context, a *app, f campaignFlags, l campaign.Loaded, fx campaign.Fixtures, relayName, placeholder, dir string,
 ) (sandboxResult, error) {
 	if f.sandbox.workspace != "" {
-		if err := os.CopyFS(dir, os.DirFS(f.sandbox.workspace)); err != nil {
+		skipped, err := copyWorkspace(dir, f.sandbox.workspace)
+		if err != nil {
 			return sandboxResult{}, fmt.Errorf("copying the workspace: %w", err)
+		}
+		if skipped > 0 {
+			_, _ = fmt.Fprintf(a.stderr, "workspace: skipped %d symbolic links and other files that are not regular files\n", skipped)
 		}
 	}
 	if err := l.File.Workspace(dir, fx.With(campaign.Canaries()), f.modelHost, f.scripted); err != nil {

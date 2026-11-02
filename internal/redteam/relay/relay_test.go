@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -202,9 +203,9 @@ func TestHR607_StreamsAsTheModelWrites(t *testing.T) {
 // and a redirect is refused rather than followed or handed back.
 // Covers: F907
 func TestHR607_AnyOtherHostIsRefused(t *testing.T) {
-	hits := 0
+	var hits atomic.Int32
 	srv, roots := provider(t, func(w http.ResponseWriter, r *http.Request) {
-		hits++
+		hits.Add(1)
 		if r.URL.Path == "/redirect" {
 			w.Header().Set("Location", "https://evil.example/steal")
 			w.WriteHeader(http.StatusTemporaryRedirect)
@@ -218,8 +219,8 @@ func TestHR607_AnyOtherHostIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusForbidden || res.Header.Get(relay.HeaderRefused) != "relay" || hits != 0 {
-		t.Fatalf("another host: %d, %d hits", res.StatusCode, hits)
+	if res.StatusCode != http.StatusForbidden || res.Header.Get(relay.HeaderRefused) != "relay" || hits.Load() != 0 {
+		t.Fatalf("another host: %d, %d hits", res.StatusCode, hits.Load())
 	}
 	r2 := post(t, rg, "/redirect", nil, "{}")
 	defer func() { _ = r2.Body.Close() }()
@@ -233,16 +234,16 @@ func TestHR607_AnyOtherHostIsRefused(t *testing.T) {
 // another name, stops the request, so the key is never sent to it.
 // Covers: F907
 func TestHR607_OnlyAVerifiedHost(t *testing.T) {
-	hits := 0
-	srv, roots := provider(t, func(http.ResponseWriter, *http.Request) { hits++ })
+	var hits atomic.Int32
+	srv, roots := provider(t, func(http.ResponseWriter, *http.Request) { hits.Add(1) })
 	for name, edit := range map[string]func(*relay.Options){
 		"untrusted": func(o *relay.Options) { o.Roots = x509.NewCertPool() },
 		"other":     func(o *relay.Options) { o.ModelHost = modelHost },
 	} {
 		res := post(t, start(t, srv, roots, edit), "/x", nil, "{}")
 		defer func() { _ = res.Body.Close() }()
-		if res.StatusCode != http.StatusBadGateway || hits != 0 {
-			t.Fatalf("%s: %d, %d hits", name, res.StatusCode, hits)
+		if res.StatusCode != http.StatusBadGateway || hits.Load() != 0 {
+			t.Fatalf("%s: %d, %d hits", name, res.StatusCode, hits.Load())
 		}
 	}
 }
@@ -278,13 +279,13 @@ func TestHR607_ListensPrivatelyForTheLocalGateway(t *testing.T) {
 // refuses this peer before anything leaves.
 // Covers: F908
 func TestHR607_RefusesAnyOtherPeer(t *testing.T) {
-	hits := 0
-	srv, roots := provider(t, func(http.ResponseWriter, *http.Request) { hits++ })
+	var hits atomic.Int32
+	srv, roots := provider(t, func(http.ResponseWriter, *http.Request) { hits.Add(1) })
 	rg := start(t, srv, roots, func(o *relay.Options) { o.Gateway = netip.MustParseAddr("10.1.2.3") })
 	res := post(t, rg, "/x", nil, "{}")
 	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusForbidden || hits != 0 {
-		t.Fatalf("%d, %d hits", res.StatusCode, hits)
+	if res.StatusCode != http.StatusForbidden || hits.Load() != 0 {
+		t.Fatalf("%d, %d hits", res.StatusCode, hits.Load())
 	}
 }
 
@@ -292,8 +293,8 @@ func TestHR607_RefusesAnyOtherPeer(t *testing.T) {
 // simulator, without a credential, and the handshake never reaches the host.
 // Covers: F905
 func TestHR607_AnswersTheSimulatorHandshake(t *testing.T) {
-	hits := 0
-	srv, roots := provider(t, func(http.ResponseWriter, *http.Request) { hits++ })
+	var hits atomic.Int32
+	srv, roots := provider(t, func(http.ResponseWriter, *http.Request) { hits.Add(1) })
 	rg := start(t, srv, roots, nil)
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, rg.r.BaseURL()+handshake.Path+"?nonce="+strings.Repeat("a", 32), http.NoBody)
 	res, err := http.DefaultTransport.RoundTrip(req)
@@ -302,18 +303,52 @@ func TestHR607_AnswersTheSimulatorHandshake(t *testing.T) {
 	}
 	defer func() { _ = res.Body.Close() }()
 	b, _ := io.ReadAll(res.Body)
-	if res.StatusCode != http.StatusOK || res.Header.Get("Simulated") != "true" || !strings.Contains(string(b), relay.Kind) || hits != 0 {
-		t.Fatalf("%d %s %d", res.StatusCode, b, hits)
+	if res.StatusCode != http.StatusOK || res.Header.Get("Simulated") != "true" || !strings.Contains(string(b), relay.Kind) || hits.Load() != 0 {
+		t.Fatalf("%d %s %d", res.StatusCode, b, hits.Load())
 	}
 }
 
-// TestHR607_ABodyOverTheLimitIsRefused: 8 MiB each way (D313).
+// TestHR607_ABodyOverTheLimitIsRefused: a request body past 8 MiB (D313) is
+// the relay's own refusal, 413 body_too_large: a declared length never
+// reaches the model host, and an undeclared one never arrives there whole.
 // Covers: F906
 func TestHR607_ABodyOverTheLimitIsRefused(t *testing.T) {
-	srv, roots := provider(t, func(_ http.ResponseWriter, r *http.Request) { _, _ = io.Copy(io.Discard, r.Body) })
-	res := post(t, start(t, srv, roots, nil), "/x", nil, strings.Repeat("a", relay.MaxBody+1))
-	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode < 400 {
-		t.Fatalf("%d", res.StatusCode)
+	var hits, whole atomic.Int32
+	srv, roots := provider(t, func(_ http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if n, err := io.Copy(io.Discard, r.Body); err == nil && n > relay.MaxBody {
+			whole.Add(1)
+		}
+	})
+	rg := start(t, srv, roots, nil)
+	body := strings.Repeat("a", relay.MaxBody+1)
+	for _, c := range []struct {
+		name string
+		rd   io.Reader
+	}{
+		{"declared", strings.NewReader(body)},                        // first, while hits is still 0
+		{"undeclared", struct{ io.Reader }{strings.NewReader(body)}}, // hides the length: chunked
+	} {
+		name, rd := c.name, c.rd
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, rg.r.BaseURL()+"/x", rd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := http.DefaultTransport.RoundTrip(req)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		out, _ := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+		if res.StatusCode != http.StatusRequestEntityTooLarge || res.Header.Get(relay.HeaderRefused) != "relay" ||
+			!strings.Contains(string(out), "body_too_large") {
+			t.Errorf("%s: %d %v %s", name, res.StatusCode, res.Header, out)
+		}
+		if name == "declared" && hits.Load() != 0 {
+			t.Error("a declared oversize body reached the model host")
+		}
+	}
+	if whole.Load() != 0 {
+		t.Fatal("the model host received a whole oversize body")
 	}
 }

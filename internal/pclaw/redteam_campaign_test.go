@@ -39,6 +39,7 @@ type fakeCampaignServer struct {
 	finish   *pantherclawv1.FinishCampaignRequest
 	outcome  pantherclawv1.CampaignOutcome
 	bodies   []string
+	steps    []string
 }
 
 func (f *fakeCampaignServer) GetConnection(context.Context, *pantherclawv1.GetConnectionRequest) (*pantherclawv1.GetConnectionResponse, error) {
@@ -52,6 +53,13 @@ func (f *fakeCampaignServer) StartCampaign(_ context.Context, req *pantherclawv1
 	defer f.mu.Unlock()
 	f.start = req
 	return &pantherclawv1.StartCampaignResponse{CampaignId: "0192aaaa-bbbb-7ccc-8ddd-0000000000c1"}, nil
+}
+
+func (f *fakeCampaignServer) StartCampaignStep(_ context.Context, req *pantherclawv1.StartCampaignStepRequest) (*pantherclawv1.StartCampaignStepResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.steps = append(f.steps, req.GetScenarioId())
+	return &pantherclawv1.StartCampaignStepResponse{}, nil
 }
 
 func (f *fakeCampaignServer) FinishCampaign(_ context.Context, req *pantherclawv1.FinishCampaignRequest) (*pantherclawv1.FinishCampaignResponse, error) {
@@ -219,6 +227,10 @@ func TestHR607_TheModelKeyStaysInTheRelay(t *testing.T) {
 	if len(fin.GetRuns()) != 2 || fin.GetRuns()[1].GetScenarioId() != "RT-141" || len(fin.GetRuns()[0].GetRoutes()) != 1 {
 		t.Fatalf("FinishCampaign %v", fin)
 	}
+	// Each scenario's step opened before its sandbox ran (D525 M1).
+	if !slices.Equal(r.srv.steps, []string{"RT-140", "RT-141"}) {
+		t.Fatalf("steps opened %v", r.srv.steps)
+	}
 	if !strings.Contains(out, "RT-140") || !strings.Contains(out, "HELD") || !strings.Contains(out, "range twin") {
 		t.Fatalf("output %s", out)
 	}
@@ -263,8 +275,75 @@ func TestHR607_TheRunnerRefusesWhatWouldLeakTheKey(t *testing.T) {
 			t.Errorf("%s: code %d, started %v\n%s\n%s", name, code, r.srv.start != nil, out, errs)
 		}
 	}
+	// The test provider's flags stay out of the help (D523).
+	if _, _, errs := run(t, r.env, "redteam", "campaign", "run", "-h"); !strings.Contains(errs, "-model-key-file") ||
+		strings.Contains(errs, "model-ca") || strings.Contains(errs, "model-dial") {
+		t.Errorf("help shows the hidden flags or misses the others:\n%s", errs)
+	}
 	r.srv.relayURL = "https://203.0.113.1:443"
 	if code, _, errs := run(t, r.env, r.args()...); code != 2 || r.srv.start != nil {
 		t.Errorf("a relay off a private address: %d %s", code, errs)
+	}
+}
+
+// TestHR607_TheKeyCannotReachTheWorkspaceThroughALink: a workspace that is a
+// symbolic link to the key's directory, and a hard link to the key inside
+// the workspace, are refused before anything runs; a symbolic link inside
+// the workspace is skipped by the copy and reported (D525 M3).
+// Covers: F901
+func TestHR607_TheKeyCannotReachTheWorkspaceThroughALink(t *testing.T) {
+	r := newCampaignRig(t)
+	useFakeSandbox(t, func(context.Context, *app, sandboxRunFlags, sandboxExtra) (sandboxResult, error) {
+		t.Error("a sandbox ran")
+		return sandboxResult{}, nil
+	})
+	// A hard link needs no privilege, so it runs everywhere.
+	hard := filepath.Join(t.TempDir(), "ws")
+	if err := os.MkdirAll(filepath.Join(hard, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(r.keyFile, filepath.Join(hard, "sub", "notes.txt")); err != nil {
+		t.Fatalf("hard link: %v", err)
+	}
+	r.refusesWorkspace(t, "hard link to the key", hard)
+	linked := filepath.Join(t.TempDir(), "ws-link")
+	if err := os.Symlink(r.dir, linked); err != nil {
+		t.Skipf("symbolic links unavailable here (CI runs this on Linux): %v", err)
+	}
+	r.refusesWorkspace(t, "symlinked workspace", linked)
+}
+
+func (r *campaignRig) refusesWorkspace(t *testing.T, name, ws string) {
+	t.Helper()
+	code, out, errs := run(t, r.env, r.args("--workspace", ws)...)
+	if code != 2 || r.srv.start != nil || len(r.sawKey) != 0 || !strings.Contains(errs, "inside --workspace") {
+		t.Errorf("%s: code %d, started %v\n%s\n%s", name, code, r.srv.start != nil, out, errs)
+	}
+}
+
+// TestHR607_TheWorkspaceCopySkipsLinks: the copy follows no symbolic link
+// and says how many it skipped; regular files arrive.
+// Covers: F901
+func TestHR607_TheWorkspaceCopySkipsLinks(t *testing.T) {
+	src, dst := t.TempDir(), filepath.Join(t.TempDir(), "ws")
+	secret := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(secret, []byte(campaignKey), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(src, "leak")); err != nil {
+		t.Skipf("symbolic links unavailable here: %v", err)
+	}
+	n, err := copyWorkspace(dst, src)
+	if err != nil || n != 1 {
+		t.Fatalf("copyWorkspace = %d, %v", n, err)
+	}
+	if b, err := os.ReadFile(filepath.Join(dst, "README.md")); err != nil || string(b) != "hello" {
+		t.Fatalf("README %q %v", b, err)
+	}
+	if _, err := os.Lstat(filepath.Join(dst, "leak")); !os.IsNotExist(err) {
+		t.Fatalf("the link was copied: %v", err)
 	}
 }

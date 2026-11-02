@@ -48,6 +48,9 @@ const Kind = "model-relay"
 // MaxBody is the most a request or an answer may carry (D313).
 const MaxBody = 8 << 20
 
+// codeBodyTooLarge refuses a request body past MaxBody.
+const codeBodyTooLarge = "body_too_large"
+
 // HeaderRefused marks the relay's own refusals.
 const HeaderRefused = "PC-Refused-By"
 
@@ -285,6 +288,12 @@ func (r *Relay) handler(rt http.RoundTripper) http.Handler {
 		ErrorHandler: func(w http.ResponseWriter, in *http.Request, err error) {
 			// err may be anything the transport says: it stays out of the log
 			// and the answer, which only say that it failed.
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				r.log.WarnContext(in.Context(), "relay.refused", "code", codeBodyTooLarge)
+				refuse(w, http.StatusRequestEntityTooLarge, codeBodyTooLarge)
+				return
+			}
 			code := "model_host_unreachable"
 			if errors.Is(err, errRedirect) {
 				code = "redirect_refused"
@@ -303,6 +312,11 @@ func (r *Relay) handler(rt http.RoundTripper) http.Handler {
 			refuse(w, http.StatusForbidden, "other_host_refused")
 		case in.Header.Get("Upgrade") != "":
 			refuse(w, http.StatusForbidden, "upgrade_refused")
+		case in.ContentLength > MaxBody:
+			// A declared length past the cap never starts upstream; an
+			// undeclared one is cut by MaxBytesReader below.
+			r.log.WarnContext(in.Context(), "relay.refused", "code", codeBodyTooLarge)
+			refuse(w, http.StatusRequestEntityTooLarge, codeBodyTooLarge)
 		default:
 			r.requests.Add(1)
 			in.Body = &counted{ReadCloser: http.MaxBytesReader(w, in.Body, MaxBody), n: &r.out}

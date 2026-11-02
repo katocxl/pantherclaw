@@ -16,20 +16,24 @@ import (
 )
 
 const addModelAnswer = `-- name: AddModelAnswer :execrows
-UPDATE pc.campaign_runs SET bytes_from_model = bytes_from_model + $1
-WHERE org_id = $2 AND campaign_id = $3 AND run_id = $4
+UPDATE pc.campaign_runs
+SET bytes_from_model = bytes_from_model + $1, bytes_reserved = greatest(bytes_reserved - $2, 0)
+WHERE org_id = $3 AND campaign_id = $4 AND run_id = $5
 `
 
 type AddModelAnswerParams struct {
 	Bytes      int64
+	Reserve    int64
 	OrgID      ids.OrgID
 	CampaignID ids.UUID
 	RunID      ids.UUID
 }
 
+// An answer's bytes, settling the reservation its request made.
 func (q *Queries) AddModelAnswer(ctx context.Context, arg AddModelAnswerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, addModelAnswer,
 		arg.Bytes,
+		arg.Reserve,
 		arg.OrgID,
 		arg.CampaignID,
 		arg.RunID,
@@ -41,38 +45,71 @@ func (q *Queries) AddModelAnswer(ctx context.Context, arg AddModelAnswerParams) 
 }
 
 const addModelRequest = `-- name: AddModelRequest :one
-INSERT INTO pc.campaign_runs (org_id, campaign_id, run_id, model_host, requests, bytes_to_model)
-VALUES ($1, $2, $3, $4, 1, $5)
-ON CONFLICT (org_id, campaign_id, run_id) DO UPDATE
-SET requests = pc.campaign_runs.requests + 1, bytes_to_model = pc.campaign_runs.bytes_to_model + EXCLUDED.bytes_to_model
-WHERE pc.campaign_runs.bytes_to_model + pc.campaign_runs.bytes_from_model + EXCLUDED.bytes_to_model <= $6
+UPDATE pc.campaign_runs
+SET requests = requests + 1, bytes_to_model = bytes_to_model + $1, bytes_reserved = bytes_reserved + $2
+WHERE org_id = $3 AND campaign_id = $4 AND run_id = $5
+  AND bytes_to_model + bytes_from_model + bytes_reserved + $1 + $2 <= $6
 RETURNING requests
 `
 
 type AddModelRequestParams struct {
+	Bytes      int64
+	Reserve    int64
 	OrgID      ids.OrgID
 	CampaignID ids.UUID
 	RunID      ids.UUID
-	ModelHost  string
-	Bytes      int64
 	RunTotal   int64
 }
 
-// One model request of a run (D313): counted before it is sent, so the count
-// holds whatever becomes of the answer. No row comes back when the bytes
+// One model request of a bound run (D313): counted before it is sent, with
+// the most its answer may bring reserved (D525 L2), so the count holds
+// whatever becomes of the answer and concurrent calls never pass the total.
+// No row comes back for a run the server did not bind, or when the bytes
 // would take the run past its total.
 func (q *Queries) AddModelRequest(ctx context.Context, arg AddModelRequestParams) (int64, error) {
 	row := q.db.QueryRow(ctx, addModelRequest,
+		arg.Bytes,
+		arg.Reserve,
 		arg.OrgID,
 		arg.CampaignID,
 		arg.RunID,
-		arg.ModelHost,
-		arg.Bytes,
 		arg.RunTotal,
 	)
 	var requests int64
 	err := row.Scan(&requests)
 	return requests, err
+}
+
+const campaignBoundRuns = `-- name: CampaignBoundRuns :many
+SELECT run_id, scenario_id FROM pc.campaign_runs
+WHERE org_id = $1 AND campaign_id = $2
+ORDER BY scenario_id, run_id
+`
+
+type CampaignBoundRunsRow struct {
+	RunID      ids.UUID
+	ScenarioID string
+}
+
+// The runs the server bound to a campaign's steps.
+func (q *Queries) CampaignBoundRuns(ctx context.Context, orgID ids.OrgID, campaignID ids.UUID) ([]CampaignBoundRunsRow, error) {
+	rows, err := q.db.Query(ctx, campaignBoundRuns, orgID, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CampaignBoundRunsRow{}
+	for rows.Next() {
+		var i CampaignBoundRunsRow
+		if err := rows.Scan(&i.RunID, &i.ScenarioID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const campaignRelayConnection = `-- name: CampaignRelayConnection :one
@@ -126,56 +163,6 @@ func (q *Queries) CampaignRunRecord(ctx context.Context, orgID ids.OrgID, iD ids
 	return i, err
 }
 
-const campaignRunTransactions = `-- name: CampaignRunTransactions :many
-SELECT t.id, t.operation, t.decision, t.reason_code, t.mode, t.simulated, t.created_at, coalesce(t.effect_state, '')::text AS effect_state
-FROM pc.transactions t
-WHERE t.org_id = $1 AND t.run_id = $2
-ORDER BY t.created_at, t.id
-LIMIT 2000
-`
-
-type CampaignRunTransactionsRow struct {
-	ID          ids.UUID
-	Operation   string
-	Decision    string
-	ReasonCode  string
-	Mode        string
-	Simulated   bool
-	CreatedAt   time.Time
-	EffectState string
-}
-
-// A run's transactions: the server's own records behind every outcome. The
-// limit bounds one run; the campaign's attempts look at them all.
-func (q *Queries) CampaignRunTransactions(ctx context.Context, orgID ids.OrgID, runID ids.UUID) ([]CampaignRunTransactionsRow, error) {
-	rows, err := q.db.Query(ctx, campaignRunTransactions, orgID, runID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CampaignRunTransactionsRow{}
-	for rows.Next() {
-		var i CampaignRunTransactionsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Operation,
-			&i.Decision,
-			&i.ReasonCode,
-			&i.Mode,
-			&i.Simulated,
-			&i.CreatedAt,
-			&i.EffectState,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const campaignStepOutcomes = `-- name: CampaignStepOutcomes :many
 SELECT campaign_id, outcome, count(*)::int AS steps FROM pc.campaign_steps
 WHERE org_id = $1 AND campaign_id = ANY($2::uuid[])
@@ -208,8 +195,113 @@ func (q *Queries) CampaignStepOutcomes(ctx context.Context, orgID ids.OrgID, cam
 	return items, nil
 }
 
+const campaignStepRoutes = `-- name: CampaignStepRoutes :many
+SELECT kind, locator FROM pc.campaign_routes
+WHERE org_id = $1 AND campaign_id = $2 AND scenario_id = $3
+ORDER BY recorded_at, locator
+LIMIT $4
+`
+
+type CampaignStepRoutesParams struct {
+	OrgID      ids.OrgID
+	CampaignID ids.UUID
+	ScenarioID string
+	MaxRows    int32
+}
+
+type CampaignStepRoutesRow struct {
+	Kind    string
+	Locator string
+}
+
+// The edge's stored route reports for a step, at most max_rows.
+func (q *Queries) CampaignStepRoutes(ctx context.Context, arg CampaignStepRoutesParams) ([]CampaignStepRoutesRow, error) {
+	rows, err := q.db.Query(ctx, campaignStepRoutes,
+		arg.OrgID,
+		arg.CampaignID,
+		arg.ScenarioID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CampaignStepRoutesRow{}
+	for rows.Next() {
+		var i CampaignStepRoutesRow
+		if err := rows.Scan(&i.Kind, &i.Locator); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const campaignWorstTransactions = `-- name: CampaignWorstTransactions :many
+SELECT DISTINCT ON (t.operation) t.id, t.operation, t.decision, t.reason_code, t.mode, t.simulated, t.created_at,
+    coalesce(t.effect_state, '')::text AS effect_state
+FROM pc.transactions t
+WHERE t.org_id = $1 AND t.run_id = ANY ($2::uuid[])
+  AND t.operation = ANY ($3::text[]) AND t.simulated
+ORDER BY t.operation,
+    CASE
+        WHEN t.mode::text = 'monitor' OR coalesce(t.effect_state::text, '') NOT IN ('', 'NONE_CONFIRMED') THEN 3
+        WHEN t.decision::text IN ('REQUIRE_APPROVAL', 'REQUIRE_STEP_UP') THEN 2
+        WHEN t.decision::text IN ('DENY', 'CANNOT_AUTHORIZE') THEN 1
+        ELSE 3
+    END DESC, t.created_at, t.id
+`
+
+type CampaignWorstTransactionsRow struct {
+	ID          ids.UUID
+	Operation   string
+	Decision    string
+	ReasonCode  string
+	Mode        string
+	Simulated   bool
+	CreatedAt   time.Time
+	EffectState string
+}
+
+// The worst simulated transaction for each of the operations, over every
+// run bound to a step (D525 M2): the server's own records behind every
+// outcome, with no row cap. The order is domain.Transaction.stopped's: an
+// allowed, monitored or effective action first, then a held one, then a
+// denied one. One row per operation comes back.
+func (q *Queries) CampaignWorstTransactions(ctx context.Context, orgID ids.OrgID, runIds []ids.UUID, operations []string) ([]CampaignWorstTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, campaignWorstTransactions, orgID, runIds, operations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CampaignWorstTransactionsRow{}
+	for rows.Next() {
+		var i CampaignWorstTransactionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Operation,
+			&i.Decision,
+			&i.ReasonCode,
+			&i.Mode,
+			&i.Simulated,
+			&i.CreatedAt,
+			&i.EffectState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const finishedCampaigns = `-- name: FinishedCampaigns :many
-SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at FROM pc.campaigns
+SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at, open_step FROM pc.campaigns
 WHERE org_id = $1 AND state = 'FINISHED'
   AND finished_at >= $2 AND finished_at < $3
   AND ($4::uuid IS NULL OR range_agent_id = $4)
@@ -256,6 +348,7 @@ func (q *Queries) FinishedCampaigns(ctx context.Context, arg FinishedCampaignsPa
 			&i.State,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.OpenStep,
 		); err != nil {
 			return nil, err
 		}
@@ -268,7 +361,7 @@ func (q *Queries) FinishedCampaigns(ctx context.Context, arg FinishedCampaignsPa
 }
 
 const getCampaign = `-- name: GetCampaign :one
-SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at FROM pc.campaigns WHERE org_id = $1 AND id = $2
+SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at, open_step FROM pc.campaigns WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetCampaign(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcCampaign, error) {
@@ -289,6 +382,7 @@ func (q *Queries) GetCampaign(ctx context.Context, orgID ids.OrgID, iD ids.UUID)
 		&i.State,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.OpenStep,
 	)
 	return i, err
 }
@@ -300,7 +394,7 @@ INSERT INTO pc.campaigns (org_id, id, range_agent_id, started_by, runner_version
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9,
     $10, $11)
-RETURNING org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at
+RETURNING org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at, open_step
 `
 
 type InsertCampaignParams struct {
@@ -353,8 +447,39 @@ func (q *Queries) InsertCampaign(ctx context.Context, arg InsertCampaignParams) 
 		&i.State,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.OpenStep,
 	)
 	return i, err
+}
+
+const insertCampaignRoute = `-- name: InsertCampaignRoute :execrows
+INSERT INTO pc.campaign_routes (org_id, campaign_id, scenario_id, kind, locator)
+SELECT c.org_id, c.id, c.open_step, $1::text, $2::text
+FROM pc.campaigns c
+WHERE c.org_id = $3 AND c.range_agent_id = $4 AND c.state = 'RUNNING'
+  AND c.open_step IS NOT NULL
+`
+
+type InsertCampaignRouteParams struct {
+	Kind         string
+	Locator      string
+	OrgID        ids.OrgID
+	RangeAgentID ids.UUID
+}
+
+// Stores one route of a twin's report on its open campaign's open step, if
+// any (D525 L6).
+func (q *Queries) InsertCampaignRoute(ctx context.Context, arg InsertCampaignRouteParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertCampaignRoute,
+		arg.Kind,
+		arg.Locator,
+		arg.OrgID,
+		arg.RangeAgentID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertCampaignStep = `-- name: InsertCampaignStep :exec
@@ -396,7 +521,7 @@ func (q *Queries) InsertCampaignStep(ctx context.Context, arg InsertCampaignStep
 }
 
 const listCampaignRuns = `-- name: ListCampaignRuns :many
-SELECT org_id, campaign_id, run_id, scenario_id, model_host, requests, bytes_to_model, bytes_from_model FROM pc.campaign_runs
+SELECT org_id, campaign_id, run_id, scenario_id, model_host, requests, bytes_to_model, bytes_from_model, bytes_reserved FROM pc.campaign_runs
 WHERE org_id = $1 AND campaign_id = $2
 ORDER BY run_id
 `
@@ -419,6 +544,7 @@ func (q *Queries) ListCampaignRuns(ctx context.Context, orgID ids.OrgID, campaig
 			&i.Requests,
 			&i.BytesToModel,
 			&i.BytesFromModel,
+			&i.BytesReserved,
 		); err != nil {
 			return nil, err
 		}
@@ -470,7 +596,7 @@ func (q *Queries) ListCampaignSteps(ctx context.Context, orgID ids.OrgID, campai
 }
 
 const listCampaigns = `-- name: ListCampaigns :many
-SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at FROM pc.campaigns
+SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at, open_step FROM pc.campaigns
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR range_agent_id = $2)
   AND (coalesce($3::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000' OR id < $3)
@@ -514,6 +640,7 @@ func (q *Queries) ListCampaigns(ctx context.Context, arg ListCampaignsParams) ([
 			&i.State,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.OpenStep,
 		); err != nil {
 			return nil, err
 		}
@@ -526,7 +653,7 @@ func (q *Queries) ListCampaigns(ctx context.Context, arg ListCampaignsParams) ([
 }
 
 const lockCampaign = `-- name: LockCampaign :one
-SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at FROM pc.campaigns WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at, open_step FROM pc.campaigns WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockCampaign(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcCampaign, error) {
@@ -547,12 +674,13 @@ func (q *Queries) LockCampaign(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 		&i.State,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.OpenStep,
 	)
 	return i, err
 }
 
 const openCampaignOfAgent = `-- name: OpenCampaignOfAgent :one
-SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at FROM pc.campaigns WHERE org_id = $1 AND range_agent_id = $2 AND state = 'RUNNING'
+SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at, open_step FROM pc.campaigns WHERE org_id = $1 AND range_agent_id = $2 AND state = 'RUNNING'
 `
 
 func (q *Queries) OpenCampaignOfAgent(ctx context.Context, orgID ids.OrgID, rangeAgentID ids.UUID) (PcCampaign, error) {
@@ -573,37 +701,27 @@ func (q *Queries) OpenCampaignOfAgent(ctx context.Context, orgID ids.OrgID, rang
 		&i.State,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.OpenStep,
 	)
 	return i, err
 }
 
-const setCampaignRunScenario = `-- name: SetCampaignRunScenario :exec
-INSERT INTO pc.campaign_runs (org_id, campaign_id, run_id, scenario_id, model_host)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (org_id, campaign_id, run_id) DO UPDATE SET scenario_id = EXCLUDED.scenario_id
+const openCampaignStep = `-- name: OpenCampaignStep :execrows
+UPDATE pc.campaigns SET open_step = $1
+WHERE org_id = $2 AND id = $3 AND state = 'RUNNING'
 `
 
-type SetCampaignRunScenarioParams struct {
-	OrgID      ids.OrgID
-	CampaignID ids.UUID
-	RunID      ids.UUID
-	ScenarioID *string
-	ModelHost  string
-}
-
-func (q *Queries) SetCampaignRunScenario(ctx context.Context, arg SetCampaignRunScenarioParams) error {
-	_, err := q.db.Exec(ctx, setCampaignRunScenario,
-		arg.OrgID,
-		arg.CampaignID,
-		arg.RunID,
-		arg.ScenarioID,
-		arg.ModelHost,
-	)
-	return err
+// Opens a step: runs of the twin created from now on bind to it (D525 M1).
+func (q *Queries) OpenCampaignStep(ctx context.Context, scenarioID *string, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, openCampaignStep, scenarioID, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const staleCampaigns = `-- name: StaleCampaigns :many
-SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at FROM pc.campaigns
+SELECT org_id, id, range_agent_id, started_by, runner_version, set_digest, scenario_ids, image_digest, model_host, relay_connection_id, scripted, state, started_at, finished_at, open_step FROM pc.campaigns
 WHERE org_id = $1 AND state = 'RUNNING' AND started_at <= now() - interval '24 hours'
 ORDER BY started_at, id
 LIMIT $2
@@ -635,6 +753,7 @@ func (q *Queries) StaleCampaigns(ctx context.Context, orgID ids.OrgID, maxRows i
 			&i.State,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.OpenStep,
 		); err != nil {
 			return nil, err
 		}

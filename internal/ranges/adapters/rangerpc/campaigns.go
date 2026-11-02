@@ -52,6 +52,21 @@ func (h *Handler) StartCampaign(ctx context.Context, r *pantherclawv1.StartCampa
 }
 
 // FinishCampaign implements RangeServiceHandler.
+// StartCampaignStep opens one scenario's step (D525 M1).
+func (h *Handler) StartCampaignStep(ctx context.Context, r *pantherclawv1.StartCampaignStepRequest) (*pantherclawv1.StartCampaignStepResponse, error) {
+	if h.campaigns == nil {
+		return nil, errNoCampaigns
+	}
+	id, err := ids.ParseUUID(r.GetCampaignId())
+	if err != nil {
+		return nil, capp.ErrNotFound
+	}
+	if err := h.campaigns.StartCampaignStep(ctx, id, r.GetScenarioId()); err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.StartCampaignStepResponse{}, nil
+}
+
 func (h *Handler) FinishCampaign(ctx context.Context, r *pantherclawv1.FinishCampaignRequest) (*pantherclawv1.FinishCampaignResponse, error) {
 	if h.campaigns == nil {
 		return nil, errNoCampaigns

@@ -68,7 +68,7 @@ func TestLibrary_MatchesTheShippedCampaigns(t *testing.T) {
 	}
 	want := map[string]library.CampaignEntry{}
 	for _, l := range set {
-		want[l.File.ID] = library.CampaignEntry{Digest: l.Digest, Tier: l.File.Tier, Attempts: l.File.Attempts}
+		want[l.File.ID] = library.CampaignEntry{Digest: l.Digest, Tier: l.File.Tier, Attempts: l.File.Attempts, ASI: l.File.ASI}
 	}
 	if *update {
 		b, err := json.Marshal(want, json.Deterministic(true), jsontext.WithIndent("  "))
@@ -83,8 +83,19 @@ func TestLibrary_MatchesTheShippedCampaigns(t *testing.T) {
 	techniques := map[string]bool{}
 	for _, l := range set {
 		got, ok := library.Campaign(l.File.ID)
-		if !ok || got.Digest != l.Digest || got.Tier != l.File.Tier || !slices.Equal(got.Attempts, l.File.Attempts) {
+		if !ok || got.Digest != l.Digest || got.Tier != l.File.Tier || !slices.Equal(got.Attempts, l.File.Attempts) ||
+			!slices.Equal(got.ASI, l.File.ASI) {
 			t.Fatalf("campaigns.json is out of date with %s (%s): run task range:library", campaignDir, l.File.ID)
+		}
+		// The lookup S25a's compliance adapter calls gives the file's tags
+		// (D529), and a copy.
+		if asi := library.CampaignASI(l.File.ID); !slices.Equal(asi, l.File.ASI) {
+			t.Fatalf("CampaignASI(%s) = %v, want %v", l.File.ID, asi, l.File.ASI)
+		} else if len(asi) > 0 {
+			asi[0] = "changed"
+			if library.CampaignASI(l.File.ID)[0] == "changed" {
+				t.Fatal("CampaignASI shares the library's slice")
+			}
 		}
 		techniques[l.File.Technique] = true
 	}
@@ -92,6 +103,9 @@ func TestLibrary_MatchesTheShippedCampaigns(t *testing.T) {
 		if _, ok := library.Campaign(fmt.Sprintf("RT-14%d", id)); ok && !slices.ContainsFunc(set, func(l campaign.Loaded) bool { return l.File.ID == fmt.Sprintf("RT-14%d", id) }) {
 			t.Fatalf("campaigns.json holds RT-14%d, which has no file", id)
 		}
+	}
+	if library.CampaignASI("RT-999") != nil || len(library.CampaignASI("RT-140")) == 0 {
+		t.Fatal("CampaignASI of an unknown id, or of a tagged campaign")
 	}
 	if len(set) != 10 || len(techniques) != len(campaign.Techniques) {
 		t.Fatalf("the library holds %d campaigns over %d techniques, want RT-140..RT-149 over all %d", len(set), len(techniques), len(campaign.Techniques))

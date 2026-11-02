@@ -104,8 +104,10 @@ const ModelRelayPackage = "model-relay"
 
 // reservedNames are the gateway's own first path segments: a connection's
 // name is the first segment of its HTTP routes (/{connection}/…), so it
-// can never shadow them.
-var reservedNames = []string{"mcp", "hook", "sdk", "a2a", "model", "healthz", "readyz", "metrics"}
+// can never shadow them. "model" is not one: the gateway sends
+// /model/{name}/… to the model face only when {name} is a model relay, by
+// its mark, and otherwise to the connection named model (D525 L5).
+var reservedNames = []string{"mcp", "hook", "sdk", "a2a", "healthz", "readyz", "metrics"}
 
 // Notifier queues a notification in the caller's transaction (M5).
 type Notifier interface {

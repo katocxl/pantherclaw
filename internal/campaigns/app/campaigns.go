@@ -56,7 +56,7 @@ var (
 	ErrRuns         = pcerr.New(pcerr.InvalidArgument, "INVALID_CAMPAIGN_RUNS", "each run is one declared campaign's, at most once, with at most 64 printable routes")
 	// ErrRecord never says which rule failed, so it cannot be used to probe
 	// other objects.
-	ErrRecord = pcerr.New(pcerr.InvalidArgument, "CAMPAIGN_RECORD_INVALID", "a run named here is not a simulated run of this campaign's agent made after it started")
+	ErrRecord = pcerr.New(pcerr.InvalidArgument, "CAMPAIGN_RECORD_INVALID", "a run named here is not one the server bound to that scenario's step of this campaign")
 )
 
 // AgentRef is an agent as campaigns need it.
@@ -104,9 +104,18 @@ type Tx interface {
 	Steps(ctx context.Context, campaign ids.UUID) ([]domain.Step, error)
 	InsertStep(ctx context.Context, campaign ids.UUID, s domain.Step) error
 	Run(ctx context.Context, id ids.UUID) (domain.RunRecord, bool, error)
-	Transactions(ctx context.Context, run ids.UUID) ([]domain.Transaction, error)
-	// SetRunScenario records whose run it was.
-	SetRunScenario(ctx context.Context, c domain.Campaign, run ids.UUID, scenario string) error
+	// OpenStep opens a scenario's step of a running campaign: the database
+	// binds every run of the twin created from now on to it (D525 M1).
+	// False when the campaign no longer runs.
+	OpenStep(ctx context.Context, campaign ids.UUID, scenario string) (bool, error)
+	// BoundRuns are the runs the database bound to the campaign's steps,
+	// run to scenario.
+	BoundRuns(ctx context.Context, campaign ids.UUID) (map[ids.UUID]string, error)
+	// WorstTransactions returns, for each operation, the worst simulated
+	// transaction of the runs (D525 M2), with no row cap.
+	WorstTransactions(ctx context.Context, runs []ids.UUID, operations []string) ([]domain.Transaction, error)
+	// StepRoutes returns at most max of the edge reports stored for a step.
+	StepRoutes(ctx context.Context, campaign ids.UUID, scenario string, limit int32) ([]domain.Route, error)
 	Usage(ctx context.Context, campaign ids.UUID) ([]Usage, error)
 	Audit(ctx context.Context, ev audit.Event) error
 	ModelTx
@@ -298,11 +307,94 @@ func checkRuns(c domain.Campaign, runs []RunReport) error {
 	return nil
 }
 
+// Cost bounds of one scenario's derivation (D525 M2). Past either, the
+// scenario is a gap, RUN_TOO_LARGE, never a better outcome.
+const (
+	MaxBoundRuns  = 32
+	MaxStepRoutes = 256
+)
+
+// deriveScenario derives each attempt of a scenario from every run the
+// server bound to its step and the step's stored edge reports. With no
+// bound run, every attempt is NOT_EXERCISED.
+func deriveScenario(ctx context.Context, tx Tx, campaign ids.UUID, scenario string, attempts []domain.Attempt, runs []ids.UUID) ([]domain.Step, error) {
+	out := make([]domain.Step, 0, len(attempts))
+	tooLarge := len(runs) > MaxBoundRuns
+	var txns []domain.Transaction
+	var routes []domain.Route
+	if len(runs) > 0 && !tooLarge {
+		var ops []string
+		for _, a := range attempts {
+			if a.Operation != "" && !slices.Contains(ops, a.Operation) {
+				ops = append(ops, a.Operation)
+			}
+		}
+		var err error
+		if len(ops) > 0 {
+			if txns, err = tx.WorstTransactions(ctx, runs, ops); err != nil {
+				return nil, err
+			}
+		}
+		if routes, err = tx.StepRoutes(ctx, campaign, scenario, MaxStepRoutes+1); err != nil {
+			return nil, err
+		}
+		tooLarge = len(routes) > MaxStepRoutes
+	}
+	for _, a := range attempts {
+		switch {
+		case tooLarge:
+			out = append(out, domain.TooLarge(scenario, a))
+		case len(runs) == 0:
+			out = append(out, domain.Derive(scenario, a, nil, nil))
+		default:
+			out = append(out, domain.Derive(scenario, a, txns, routes))
+		}
+	}
+	return out, nil
+}
+
+// StartCampaignStep opens a scenario's step of a running campaign
+// (redteam.run, D525 M1). Steps run one at a time: opening one closes the
+// last, and every run of the twin created while it is open is bound to it
+// by the database.
+func (s *Service) StartCampaignStep(ctx context.Context, id ids.UUID, scenario string) error {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return err
+	}
+	return s.Store.InTx(ctx, c.Org, false, func(ctx context.Context, tx Tx) error {
+		cp, err := tx.Campaign(ctx, id, true)
+		if err != nil {
+			return err
+		}
+		if err := campaignAgentFor(ctx, c, tx, cp); err != nil {
+			return err
+		}
+		if cp.State != domain.Running {
+			return ErrNotRunning
+		}
+		if !slices.Contains(cp.Scenarios, scenario) {
+			return ErrRuns
+		}
+		if ok, err := tx.OpenStep(ctx, cp.ID, scenario); err != nil {
+			return err
+		} else if !ok {
+			return ErrNotRunning
+		}
+		return tx.Audit(ctx, audit.Event{
+			Name: "redteam.campaign_step_started", Actor: c.Actor(), Outcome: audit.Success,
+			Object:  &audit.Object{Type: "redteam_campaign", ID: cp.ID.String()},
+			Details: map[string]string{"scenario_id": scenario},
+		})
+	})
+}
+
 // FinishCampaign ends a running campaign (redteam.run) and derives every
-// attempt's outcome. A scenario with no run has all its attempts
-// NOT_EXERCISED, so leaving a run out can only widen the gap. The state
-// change is conditional on the campaign still running, which closes the
-// model route (D313).
+// attempt's outcome from the runs the server bound to each step, the worst
+// transaction winning (D525 M1, M2). A scenario with no bound run has all
+// its attempts NOT_EXERCISED. Runs in the request must agree with the
+// binding. The state change is conditional on the campaign still running,
+// which closes the step and the model route (D313).
 func (s *Service) FinishCampaign(ctx context.Context, id ids.UUID, runs []RunReport) (Detail, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -323,16 +415,16 @@ func (s *Service) FinishCampaign(ctx context.Context, id ids.UUID, runs []RunRep
 		if err := checkRuns(cp, runs); err != nil {
 			return err
 		}
-		byScenario := map[string]RunReport{}
+		// The server bound each run to its step when the run was created
+		// (D525 M1); the request can only agree with that.
+		bound, err := tx.BoundRuns(ctx, cp.ID)
+		if err != nil {
+			return err
+		}
 		for _, r := range runs {
-			rec, found, err := tx.Run(ctx, r.Run)
-			if err != nil {
-				return err
-			}
-			if !found || !rec.Belongs(cp.Agent, cp.Started) {
+			if got, ok := bound[r.Run]; !ok || got != r.Scenario {
 				return ErrRecord
 			}
-			byScenario[r.Scenario] = r
 		}
 		now, ok, err := tx.Transition(ctx, cp.ID, domain.Finished)
 		if err != nil {
@@ -341,24 +433,21 @@ func (s *Service) FinishCampaign(ctx context.Context, id ids.UUID, runs []RunRep
 			return ErrNotRunning
 		}
 		cp.State, cp.Finished = domain.Finished, &now
+		byScenario := map[string][]ids.UUID{}
+		for run, scenario := range bound {
+			byScenario[scenario] = append(byScenario[scenario], run)
+		}
 		var steps []domain.Step
 		for _, scenario := range cp.Scenarios {
 			e, found := s.lookup(scenario)
 			if !found {
 				return ErrNotLibrary // a campaign started on another build
 			}
-			var txns []domain.Transaction
-			r, ran := byScenario[scenario]
-			if ran {
-				if txns, err = tx.Transactions(ctx, r.Run); err != nil {
-					return err
-				}
-				if err := tx.SetRunScenario(ctx, cp, r.Run, scenario); err != nil {
-					return err
-				}
+			derived, err := deriveScenario(ctx, tx, cp.ID, scenario, e.Attempts, byScenario[scenario])
+			if err != nil {
+				return err
 			}
-			for _, a := range e.Attempts {
-				st := domain.Derive(scenario, a, txns, r.Routes)
+			for _, st := range derived {
 				if err := tx.InsertStep(ctx, cp.ID, st); err != nil {
 					return err
 				}

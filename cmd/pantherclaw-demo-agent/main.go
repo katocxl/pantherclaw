@@ -38,6 +38,7 @@ Commands:
                                    placeholder key, then each step of /workspace/.pclaw-campaign/script.json
 
 Without --branch and --file, allowed names its branch and file with a random suffix, so that it can run again on the same repository; it prints the names it chose.
+  dial ADDR...                     tries each HOST:PORT directly over TCP and as HTTP through the sandbox's proxy
   help, -h, --help                 this text
 
 One line per attempt: "name STATUS body" for HTTP, "ssh ADDRESS reached|blocked" for SSH.
@@ -59,6 +60,16 @@ func main() {
 	cmd, args := args[0], args[1:]
 	if cmd == "campaign" {
 		os.Exit(campaign("/workspace/.pclaw-campaign/script.json"))
+	}
+	if cmd == "dial" {
+		if len(args) == 0 {
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(2)
+		}
+		for _, addr := range args {
+			dial(addr)
+		}
+		return
 	}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -141,6 +152,31 @@ func push(repo string) {
 			say("ssh", addr, "blocked")
 		}
 	}
+}
+
+// dial tries to reach addr directly over TCP, then as an HTTP request through
+// the sandbox's proxy, and prints "dial ADDR reached|blocked" and "proxy ADDR
+// STATUS REFUSED-BY BODY" (a campaign's model relay must be reachable by
+// neither, D525 L1).
+func dial(addr string) {
+	if c, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", addr); err == nil {
+		_ = c.Close()
+		say("dial", addr, "reached")
+	} else {
+		say("dial", addr, "blocked")
+	}
+	req, _ := http.NewRequest(http.MethodPost, "http://"+addr+"/v1/messages", strings.NewReader("{}")) //nolint:noctx,gosec // a one-shot agent; G704: it sends what it is told to, through the sandbox proxy
+	res, err := client.Do(req)                                                                         //nolint:gosec // G704: as above
+	if err != nil {
+		say("proxy", addr, answer(nil, err))
+		return
+	}
+	defer func() { _ = res.Body.Close() }()
+	refused := res.Header.Get("PC-Refused-By")
+	if refused == "" {
+		refused = "-"
+	}
+	say("proxy", addr, refused, answer(res, nil))
 }
 
 // found returns the first line of path that starts with prefix, without it.

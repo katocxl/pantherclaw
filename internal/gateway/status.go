@@ -48,6 +48,7 @@ var servingStates = map[string]pb.ConnectionServingState{
 	dispatch.ServingCircuitOpen:      pb.ConnectionServingState_CONNECTION_SERVING_STATE_CIRCUIT_OPEN,
 	dispatch.ServingDriftQuarantined: pb.ConnectionServingState_CONNECTION_SERVING_STATE_DRIFT_QUARANTINED,
 	dispatch.ServingNotLoaded:        pb.ConnectionServingState_CONNECTION_SERVING_STATE_NOT_LOADED,
+	dispatch.ServingLocalRelay:       pb.ConnectionServingState_CONNECTION_SERVING_STATE_LOCAL_RELAY,
 }
 
 // status is this process's replica identity and its connections' drift

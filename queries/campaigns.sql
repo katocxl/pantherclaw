@@ -75,19 +75,51 @@ GROUP BY campaign_id, outcome;
 SELECT id, agent_id, simulated, created_at FROM pc.runs
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
--- A run's transactions: the server's own records behind every outcome. The
--- limit bounds one run; the campaign's attempts look at them all.
--- name: CampaignRunTransactions :many
-SELECT t.id, t.operation, t.decision, t.reason_code, t.mode, t.simulated, t.created_at, coalesce(t.effect_state, '')::text AS effect_state
+-- The worst simulated transaction for each of the operations, over every
+-- run bound to a step (D525 M2): the server's own records behind every
+-- outcome, with no row cap. The order is domain.Transaction.stopped's: an
+-- allowed, monitored or effective action first, then a held one, then a
+-- denied one. One row per operation comes back.
+-- name: CampaignWorstTransactions :many
+SELECT DISTINCT ON (t.operation) t.id, t.operation, t.decision, t.reason_code, t.mode, t.simulated, t.created_at,
+    coalesce(t.effect_state, '')::text AS effect_state
 FROM pc.transactions t
-WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
-ORDER BY t.created_at, t.id
-LIMIT 2000;
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = ANY (sqlc.arg(run_ids)::uuid[])
+  AND t.operation = ANY (sqlc.arg(operations)::text[]) AND t.simulated
+ORDER BY t.operation,
+    CASE
+        WHEN t.mode::text = 'monitor' OR coalesce(t.effect_state::text, '') NOT IN ('', 'NONE_CONFIRMED') THEN 3
+        WHEN t.decision::text IN ('REQUIRE_APPROVAL', 'REQUIRE_STEP_UP') THEN 2
+        WHEN t.decision::text IN ('DENY', 'CANNOT_AUTHORIZE') THEN 1
+        ELSE 3
+    END DESC, t.created_at, t.id;
 
--- name: SetCampaignRunScenario :exec
-INSERT INTO pc.campaign_runs (org_id, campaign_id, run_id, scenario_id, model_host)
-VALUES (sqlc.arg(org_id), sqlc.arg(campaign_id), sqlc.arg(run_id), sqlc.arg(scenario_id), sqlc.arg(model_host))
-ON CONFLICT (org_id, campaign_id, run_id) DO UPDATE SET scenario_id = EXCLUDED.scenario_id;
+-- Opens a step: runs of the twin created from now on bind to it (D525 M1).
+-- name: OpenCampaignStep :execrows
+UPDATE pc.campaigns SET open_step = sqlc.arg(scenario_id)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'RUNNING';
+
+-- The runs the server bound to a campaign's steps.
+-- name: CampaignBoundRuns :many
+SELECT run_id, scenario_id FROM pc.campaign_runs
+WHERE org_id = sqlc.arg(org_id) AND campaign_id = sqlc.arg(campaign_id)
+ORDER BY scenario_id, run_id;
+
+-- The edge's stored route reports for a step, at most max_rows.
+-- name: CampaignStepRoutes :many
+SELECT kind, locator FROM pc.campaign_routes
+WHERE org_id = sqlc.arg(org_id) AND campaign_id = sqlc.arg(campaign_id) AND scenario_id = sqlc.arg(scenario_id)
+ORDER BY recorded_at, locator
+LIMIT sqlc.arg(max_rows);
+
+-- Stores one route of a twin's report on its open campaign's open step, if
+-- any (D525 L6).
+-- name: InsertCampaignRoute :execrows
+INSERT INTO pc.campaign_routes (org_id, campaign_id, scenario_id, kind, locator)
+SELECT c.org_id, c.id, c.open_step, sqlc.arg(kind)::text, sqlc.arg(locator)::text
+FROM pc.campaigns c
+WHERE c.org_id = sqlc.arg(org_id) AND c.range_agent_id = sqlc.arg(range_agent_id) AND c.state = 'RUNNING'
+  AND c.open_step IS NOT NULL;
 
 -- name: ListCampaignRuns :many
 SELECT * FROM pc.campaign_runs
@@ -99,17 +131,20 @@ ORDER BY run_id;
 SELECT gateway_id, simulated, model_relay, state FROM pc.connections
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
--- One model request of a run (D313): counted before it is sent, so the count
--- holds whatever becomes of the answer. No row comes back when the bytes
+-- One model request of a bound run (D313): counted before it is sent, with
+-- the most its answer may bring reserved (D525 L2), so the count holds
+-- whatever becomes of the answer and concurrent calls never pass the total.
+-- No row comes back for a run the server did not bind, or when the bytes
 -- would take the run past its total.
 -- name: AddModelRequest :one
-INSERT INTO pc.campaign_runs (org_id, campaign_id, run_id, model_host, requests, bytes_to_model)
-VALUES (sqlc.arg(org_id), sqlc.arg(campaign_id), sqlc.arg(run_id), sqlc.arg(model_host), 1, sqlc.arg(bytes))
-ON CONFLICT (org_id, campaign_id, run_id) DO UPDATE
-SET requests = pc.campaign_runs.requests + 1, bytes_to_model = pc.campaign_runs.bytes_to_model + EXCLUDED.bytes_to_model
-WHERE pc.campaign_runs.bytes_to_model + pc.campaign_runs.bytes_from_model + EXCLUDED.bytes_to_model <= sqlc.arg(run_total)
+UPDATE pc.campaign_runs
+SET requests = requests + 1, bytes_to_model = bytes_to_model + sqlc.arg(bytes), bytes_reserved = bytes_reserved + sqlc.arg(reserve)
+WHERE org_id = sqlc.arg(org_id) AND campaign_id = sqlc.arg(campaign_id) AND run_id = sqlc.arg(run_id)
+  AND bytes_to_model + bytes_from_model + bytes_reserved + sqlc.arg(bytes) + sqlc.arg(reserve) <= sqlc.arg(run_total)
 RETURNING requests;
 
+-- An answer's bytes, settling the reservation its request made.
 -- name: AddModelAnswer :execrows
-UPDATE pc.campaign_runs SET bytes_from_model = bytes_from_model + sqlc.arg(bytes)
+UPDATE pc.campaign_runs
+SET bytes_from_model = bytes_from_model + sqlc.arg(bytes), bytes_reserved = greatest(bytes_reserved - sqlc.arg(reserve), 0)
 WHERE org_id = sqlc.arg(org_id) AND campaign_id = sqlc.arg(campaign_id) AND run_id = sqlc.arg(run_id);

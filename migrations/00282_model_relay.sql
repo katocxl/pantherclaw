@@ -5,9 +5,11 @@
 -- campaign. It has no package and no routes, so no other face serves it. The
 -- mark is set at creation and never changes: pc_app gets no UPDATE on it.
 -- +goose Up
+-- The CHECK is NOT VALID: every existing row has the new column false, which
+-- satisfies it, and every write from now on is checked.
 ALTER TABLE pc.connections ADD COLUMN model_relay boolean NOT NULL DEFAULT false;
 ALTER TABLE pc.connections ADD CONSTRAINT connections_model_relay
-    CHECK (NOT model_relay OR (simulated AND kind = 'http'));
+    CHECK (NOT model_relay OR (simulated AND kind = 'http')) NOT VALID;
 
 -- A campaign's relay carries the mark, in the database too.
 -- +goose StatementBegin

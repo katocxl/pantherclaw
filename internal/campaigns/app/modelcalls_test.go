@@ -27,6 +27,7 @@ func modelWorld(t *testing.T) (*world, domain.Campaign, ids.UUID, ids.UUID) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	w.step(t, c, "RT-140")
 	return w, c, gw, w.run(c)
 }
 
@@ -101,18 +102,36 @@ func TestHR614_TheModelRouteOpensOnlyForAnOpenCampaignsTwinRun(t *testing.T) {
 }
 
 // TestHR614_AStaleCampaignAndTheRunTotalCloseTheRoute: a campaign past 24
-// hours and a run past its total are refused (D313).
+// hours and a run past its total are refused (D313). Each request reserves
+// room for its answer (MaxModelBytes, D525 L2), so requests whose answers
+// have not come back cannot pass the total either; an answer settles its
+// reservation.
 // Covers: F906
 func TestHR614_AStaleCampaignAndTheRunTotalCloseTheRoute(t *testing.T) {
 	w, c, gw, run := modelWorld(t)
 	call := app.ModelCall{Gateway: gw, Connection: w.relay, Run: run, ModelHost: modelHost, BytesToModel: app.MaxModelBytes}
-	for range app.RunModelTotal / app.MaxModelBytes {
+	for range app.RunModelTotal / (2 * app.MaxModelBytes) {
 		if _, err := w.svc.AuthorizeModelCall(w.ctx, w.org(), call); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if _, err := w.svc.AuthorizeModelCall(w.ctx, w.org(), call); !errors.Is(err, app.ErrModelRoute) {
-		t.Fatalf("past the run total: %v", err)
+		t.Fatalf("past the run total with the answers reserved: %v", err)
+	}
+	if w.f.reserved[run] != app.RunModelTotal/2 {
+		t.Fatalf("reserved %d", w.f.reserved[run])
+	}
+	// One-byte answers settle their reservations, which opens room again.
+	for range app.RunModelTotal / (2 * app.MaxModelBytes) {
+		if err := w.svc.ReportModelUsage(w.ctx, w.org(), gw, c.ID, run, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if w.f.reserved[run] != 0 {
+		t.Fatalf("reserved %d after the answers", w.f.reserved[run])
+	}
+	if _, err := w.svc.AuthorizeModelCall(w.ctx, w.org(), call); err != nil {
+		t.Fatalf("after the answers settled: %v", err)
 	}
 	w2, _, gw2, run2 := modelWorld(t)
 	w2.svc.Now = func() time.Time { return c.Started.Add(app.MaxCampaignAge) }

@@ -39,9 +39,11 @@ type RelayRef struct {
 type ModelTx interface {
 	RelayConnection(ctx context.Context, id ids.UUID) (RelayRef, bool, error)
 	// AddModelRequest counts one request of a run, within the total; false
-	// when it would pass it.
-	AddModelRequest(ctx context.Context, campaign, run ids.UUID, host string, bytes, total int64) (bool, error)
-	AddModelAnswer(ctx context.Context, campaign, run ids.UUID, bytes int64) (bool, error)
+	// for a run the server did not bind to the campaign, or when the bytes
+	// and an answer's reservation (MaxModelBytes, D525 L2) would pass it.
+	AddModelRequest(ctx context.Context, campaign, run ids.UUID, bytes, reserve, total int64) (bool, error)
+	// AddModelAnswer adds an answer's bytes and settles the reservation.
+	AddModelAnswer(ctx context.Context, campaign, run ids.UUID, bytes, reserve int64) (bool, error)
 }
 
 // ModelCall is one model request as the gateway describes it.
@@ -93,7 +95,7 @@ func (s *Service) AuthorizeModelCall(ctx context.Context, org ids.OrgID, in Mode
 			s.now().Sub(c.Started) >= MaxCampaignAge || !run.Belongs(agent.ID, c.Started) {
 			return ErrModelRoute
 		}
-		added, err := tx.AddModelRequest(ctx, c.ID, in.Run, in.ModelHost, in.BytesToModel, RunModelTotal)
+		added, err := tx.AddModelRequest(ctx, c.ID, in.Run, in.BytesToModel, MaxModelBytes, RunModelTotal)
 		if err != nil {
 			return err
 		}
@@ -125,7 +127,7 @@ func (s *Service) ReportModelUsage(ctx context.Context, org ids.OrgID, gateway, 
 		if !ok || relay.Gateway != gateway {
 			return ErrModelRoute
 		}
-		added, err := tx.AddModelAnswer(ctx, campaign, run, bytes)
+		added, err := tx.AddModelAnswer(ctx, campaign, run, bytes, MaxModelBytes)
 		if err != nil {
 			return err
 		}

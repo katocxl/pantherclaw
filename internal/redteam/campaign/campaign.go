@@ -22,6 +22,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"net/http"
 	"net/url"
@@ -85,17 +86,32 @@ type Step struct {
 
 // File is a campaign file.
 type File struct {
-	APIVersion string           `json:"apiVersion"`
-	ID         string           `json:"id"`
-	Title      string           `json:"title"`
-	Technique  string           `json:"technique"`
-	Tier       string           `json:"tier"`
-	Threats    []string         `json:"threats,omitzero"`
-	Rules      []string         `json:"rules,omitzero"`
-	Task       string           `json:"task"`
-	Plants     []Plant          `json:"plants,omitzero"`
-	Attempts   []domain.Attempt `json:"attempts"`
-	Script     []Step           `json:"script"`
+	APIVersion string   `json:"apiVersion"`
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	Technique  string   `json:"technique"`
+	Tier       string   `json:"tier"`
+	Threats    []string `json:"threats,omitzero"`
+	// ASI are the OWASP Top 10 for Agentic Applications risks the campaign
+	// exercises by OWASP's definition, ascending (D529).
+	ASI      []string         `json:"asi,omitzero"`
+	Rules    []string         `json:"rules,omitzero"`
+	Task     string           `json:"task"`
+	Plants   []Plant          `json:"plants,omitzero"`
+	Attempts []domain.Attempt `json:"attempts"`
+	Script   []Step           `json:"script"`
+}
+
+var asiRE = regexp.MustCompile(`^ASI(0[1-9]|10)$`)
+
+// validASI: OWASP agentic risk ids, strictly ascending.
+func validASI(tags []string) bool {
+	for i, a := range tags {
+		if !asiRE.MatchString(a) || (i > 0 && tags[i-1] >= a) {
+			return false
+		}
+	}
+	return true
 }
 
 // Loaded is a campaign file read from disk, with its digest.
@@ -141,6 +157,8 @@ func (f *File) Validate() error {
 		return bad("at most %d plants", maxPlants)
 	case len(f.Attempts) == 0 || len(f.Attempts) > maxAttempts:
 		return bad("1..%d attempts", maxAttempts)
+	case !validASI(f.ASI):
+		return bad("asi: OWASP risks ASI01..ASI10, ascending, each once")
 	}
 	seen := map[string]bool{}
 	for _, p := range f.Plants {
@@ -340,25 +358,68 @@ type Script struct {
 	Steps     []Step `json:"steps"`
 }
 
+// ErrPlantLink refuses a plant whose path is, or passes through, a link: a
+// write would land outside the workspace (D525 M3).
+var ErrPlantLink = errors.New("campaign: a plant's path is a symbolic link")
+
 // Workspace writes the campaign's plants into dir, filled in, and, for a
-// scripted run, the stand-in's script under ScriptDir.
+// scripted run, the stand-in's script under ScriptDir. Every write goes
+// through an os.Root on dir and refuses a path through a symbolic link, so
+// no plant lands outside dir (D525 M3).
 func (f *File) Workspace(dir string, fx Fixtures, modelHost string, scripted bool) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
 	for _, p := range f.Plants {
 		content, err := fx.fill(p.Content)
 		if err != nil {
 			return fmt.Errorf("%s plant %s: %w", f.ID, p.Path, err)
 		}
-		dst := filepath.Join(dir, filepath.FromSlash(p.Path))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { //nolint:gosec // G301: copied into the sandbox, read by the agent's uid
-			return err
-		}
-		if err := os.WriteFile(dst, []byte(content), 0o644); err != nil { //nolint:gosec // G306: see above
-			return err
+		if err := writeNoLink(root, p.Path, []byte(content)); err != nil {
+			return fmt.Errorf("%s plant %s: %w", f.ID, p.Path, err)
 		}
 	}
 	if !scripted {
 		return nil
 	}
+	return f.writeScript(root, fx, modelHost)
+}
+
+// writeNoLink writes name (slash separated, relative) under root. No
+// component of the path may be a symbolic link, the file included.
+func writeNoLink(root *os.Root, name string, b []byte) error {
+	parts := strings.Split(name, "/")
+	for i := range parts {
+		fi, err := root.Lstat(path.Join(parts[:i+1]...))
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+		case err != nil:
+			return err
+		case fi.Mode()&fs.ModeSymlink != 0:
+			return ErrPlantLink
+		case i < len(parts)-1 && !fi.IsDir():
+			return fmt.Errorf("campaign: %s is not a directory", path.Join(parts[:i+1]...))
+		}
+	}
+	if dir := path.Dir(name); dir != "." {
+		if err := root.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	fh, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := fh.Write(b); err != nil {
+		_ = fh.Close()
+		return err
+	}
+	return fh.Close()
+}
+
+func (f *File) writeScript(root *os.Root, fx Fixtures, modelHost string) error {
 	sc := Script{Campaign: f.ID, ModelHost: modelHost}
 	for _, s := range f.Script {
 		var err error
@@ -381,9 +442,5 @@ func (f *File) Workspace(dir string, fx Fixtures, modelHost string, scripted boo
 	if err != nil {
 		return err
 	}
-	sd := filepath.Join(dir, ScriptDir)
-	if err := os.MkdirAll(sd, 0o755); err != nil { //nolint:gosec // G301: see above
-		return err
-	}
-	return os.WriteFile(filepath.Join(sd, ScriptFile), b, 0o644) //nolint:gosec // G306: see above
+	return writeNoLink(root, ScriptDir+"/"+ScriptFile, b)
 }
