@@ -51,7 +51,7 @@ func selfRun(t *testing.T, env map[string]string, stdin string) (int, string, st
 
 // TestF947_McpSelfServesStdioWithTheKeyFile: the key from the file reaches
 // the server as the bearer, the read goes to its one procedure, and stdout
-// carries one labelled answer.
+// carries one labeled answer.
 // Covers: F947
 func TestF947_McpSelfServesStdioWithTheKeyFile(t *testing.T) {
 	s, seen := selfServer(t)

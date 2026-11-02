@@ -59,8 +59,10 @@ type Server struct {
 func (s *Server) Serve(ctx context.Context, in io.Reader) error {
 	r := bufio.NewReaderSize(in, maxLine)
 	for {
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return nil // shutdown, not a failure
+		default:
 		}
 		line, err := r.ReadSlice('\n')
 		if errors.Is(err, bufio.ErrBufferFull) {
@@ -72,7 +74,8 @@ func (s *Server) Serve(ctx context.Context, in io.Reader) error {
 			}
 			continue
 		}
-		if err != nil && !errors.Is(err, io.EOF) {
+		eof := errors.Is(err, io.EOF)
+		if err != nil && !eof {
 			return fmt.Errorf("reading the MCP client: %w", err)
 		}
 		if line = bytes.TrimSpace(line); len(line) > 0 {
@@ -82,7 +85,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader) error {
 				}
 			}
 		}
-		if err != nil {
+		if eof {
 			return nil // the client closed stdin
 		}
 	}
@@ -182,7 +185,7 @@ func (s *Server) call(ctx context.Context, t tool, args jsontext.Value) toolResu
 	if err != nil {
 		return refused(refusalOf(err))
 	}
-	res, err := labelled(t.Name, m)
+	res, err := labeled(t.Name, m)
 	if err != nil {
 		return refused(refusalOf(err))
 	}

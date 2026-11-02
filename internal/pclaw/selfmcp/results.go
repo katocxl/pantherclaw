@@ -61,9 +61,9 @@ func marshal(v any) ([]byte, error) {
 	return json.Marshal(v, json.Deterministic(true), jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))
 }
 
-// labelled is m as a tool result. Every string in the record is cleaned of
+// labeled is m as a tool result. Every string in the record is cleaned of
 // control, format and bidi characters first, keys included.
-func labelled(name string, m proto.Message) (toolResult, error) {
+func labeled(name string, m proto.Message) (toolResult, error) {
 	b, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(m)
 	if err != nil {
 		return toolResult{}, err
@@ -161,6 +161,10 @@ func refusalOf(err error) refusal {
 			return refusalFor("deny", "edition", "EDITION_REQUIRED", "upgrade", "This read needs the Team edition or above.")
 		}
 		return refusalFor("deny", "state", "FAILED_PRECONDITION", "ask_admin", "Ask an admin to check this organization's state.")
+	case connect.CodeCanceled, connect.CodeUnknown, connect.CodeDeadlineExceeded, connect.CodeAlreadyExists,
+		connect.CodeAborted, connect.CodeOutOfRange, connect.CodeUnimplemented, connect.CodeInternal,
+		connect.CodeUnavailable, connect.CodeDataLoss:
+		return refusalFor("cannot_authorize", "availability", "UNAVAILABLE", "retry_later", "Wait and call again.")
 	default:
 		return refusalFor("cannot_authorize", "availability", "UNAVAILABLE", "retry_later", "Wait and call again.")
 	}

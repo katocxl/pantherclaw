@@ -98,7 +98,7 @@ func (d *rangeDriver) selfMCPPoisoned() (domain.Observation, error) {
 	if n != "1" {
 		return domain.Observation{}, fmt.Errorf("the read left %s audit.self_mcp.read rows for the account, want 1", n)
 	}
-	return domain.Observation{Outcome: domain.OutcomeRefused, Reason: "RECORD_STAYED_LABELLED", Detail: "one labelled line"}, nil
+	return domain.Observation{Outcome: domain.OutcomeRefused, Reason: "RECORD_STAYED_LABELED", Detail: "one labeled line"}, nil
 }
 
 func (d *rangeDriver) selfMCPNoPermission() (domain.Observation, error) {

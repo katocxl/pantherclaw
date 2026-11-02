@@ -26,7 +26,7 @@ func TestHR656_TransportSendsOnlyTheAllowList(t *testing.T) {
 	base := &recordingTransport{}
 	tr := AllowList{Base: base}
 	send := func(method, path string) error {
-		r, err := http.NewRequest(method, "https://pc.example.test"+path, strings.NewReader("{}")) //nolint:noctx // no call is made
+		r, err := http.NewRequest(method, "https://pc.example.test"+path, strings.NewReader("{}"))
 		if err != nil {
 			t.Fatal(err)
 		}
