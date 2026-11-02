@@ -53,6 +53,9 @@ func (d *rangeDriver) uiStep(st domain.Step) (domain.Observation, bool, error) {
 	case "data.probe":
 		obs, err := d.dataProbe(st)
 		return obs, true, err
+	case "selfmcp.probe":
+		obs, err := d.selfMCPProbe(st)
+		return obs, true, err
 	}
 	return domain.Observation{}, false, nil
 }
