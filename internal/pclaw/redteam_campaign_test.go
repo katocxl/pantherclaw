@@ -153,7 +153,7 @@ func (r *campaignRig) fakeSandbox(t *testing.T) func(context.Context, *app, sand
 		}
 		_ = filepath.WalkDir(f.workspace, func(p string, d fs.DirEntry, err error) error {
 			if err == nil && !d.IsDir() {
-				b, _ := os.ReadFile(p) //nolint:gosec // the test's own workspace
+				b, _ := os.ReadFile(p)
 				if strings.Contains(string(b), campaignKey) {
 					t.Errorf("the key reached the workspace: %s", p)
 				}
