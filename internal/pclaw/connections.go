@@ -55,7 +55,7 @@ func connectionCommands() map[string]command {
 	return map[string]command{
 		"connection create": rpc("connection create NAME --kind http|mcp|local --gateway ID --package NAME [--base-url URL] "+
 			"[--allowed-host HOST...] --access pantherclaw_held|agent_held|target_enforced|none [--header NAME [--scheme S]] "+
-			"[--class public|internal] [--default-mode monitor|enforce] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST...] [--simulated]", 1,
+			"[--class public|internal] [--default-mode monitor|enforce] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST...] [--simulated [--model-relay]]", 1,
 			func(fs *flag.FlagSet) call {
 				var hosts, agentHosts list
 				kind, gw, pkg, base := fs.String("kind", "", "http, mcp or local"), fs.String("gateway", "", "gateway id"),
@@ -63,6 +63,7 @@ func connectionCommands() map[string]command {
 				fs.Var(&hosts, "allowed-host", "host a credential may be sent to (repeatable; default: the base URL's host)")
 				fs.Var(&agentHosts, "agent-host", "a host name agents use for the API, which a sandbox maps here (repeatable)")
 				simulated := fs.Bool("simulated", false, "a simulated connection, for range agents: its base URL is an IP literal on loopback or a private network (fixed for its life)")
+				modelRelay := fs.Bool("model-relay", false, "a campaign's model relay (with --simulated, --kind http, --package model-relay, --access none): where pclaw redteam campaign run listens")
 				acc, header, scheme := fs.String("access", "", "access mode"), fs.String("header", "", "credential header"),
 					fs.String("scheme", "", "credential scheme, for example Bearer")
 				class, mode := fs.String("class", "", "destination class"), fs.String("default-mode", "", "monitor (default) or enforce")
@@ -79,7 +80,7 @@ func connectionCommands() map[string]command {
 						Name: a[0], Kind: k, GatewayId: *gw, Package: *pkg, BaseUrl: *base, AllowedHosts: hosts, AccessMode: am,
 						CredentialHeader: *header, CredentialScheme: *scheme, DestinationClass: dc, DefaultMode: dm,
 						MaxResponseBytes: int32(min(max(*maxBytes, 0), 8<<20)), TimeoutMs: int32(min(max(*timeout, 0), 60_000)),
-						AgentHosts: agentHosts, Simulated: *simulated,
+						AgentHosts: agentHosts, Simulated: *simulated, ModelRelay: *modelRelay,
 					})
 				}
 			}),
