@@ -1,0 +1,38 @@
+apiVersion: pantherclaw.range/v1
+id: RT-154
+title: A hostile field from a SaaS tenant stays inert text, and an external agent gets an owner and nothing else
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-272, T-273]
+rules: [HR-636, HR-638, HR-639]
+requires: []
+harness_only: true
+steps:
+  - id: hostile-field-is-text
+    do: saas.probe
+    with: {attack: hostile_field}
+    expect:
+      outcome: REFUSED
+      reason: SAAS_TEXT_INERT
+      decisive_control: HR-638
+  - id: forged-finding-key
+    do: saas.probe
+    with: {attack: forged_key}
+    expect:
+      outcome: REFUSED
+      reason: SAAS_FINDING
+      decisive_control: HR-636
+  - id: claim-external-agent
+    do: saas.probe
+    with: {attack: claim_external}
+    expect:
+      outcome: REFUSED
+      reason: AGENT_EXTERNAL
+      decisive_control: HR-639
+  - id: owner-is-all-it-gets
+    do: saas.probe
+    with: {attack: set_owner}
+    expect:
+      outcome: ALLOW

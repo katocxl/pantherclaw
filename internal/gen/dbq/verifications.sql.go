@@ -754,11 +754,11 @@ func (q *Queries) RecordTestTokenMint(ctx context.Context, attempt int32, orgID 
 const releaseExpiredLeases = `-- name: ReleaseExpiredLeases :many
 UPDATE pc.verifications
 SET state = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= $1::integer)
-                      OR (purpose = 'org_scan' AND attempts >= 3)
+                      OR (purpose IN ('org_scan', 'saas_scan') AND attempts >= 3)
                       OR (purpose IN ('credential_rotation_test', 'credential_rotation_confirm') AND attempts >= 3)
                  THEN 'EXPIRED' ELSE 'PENDING' END,
     finished_at = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= $1::integer)
-                            OR (purpose = 'org_scan' AND attempts >= 3)
+                            OR (purpose IN ('org_scan', 'saas_scan') AND attempts >= 3)
                             OR (purpose IN ('credential_rotation_test', 'credential_rotation_confirm') AND attempts >= 3)
                        THEN now() END,
     lease_hash = NULL, leased_by = NULL, leased_at = NULL, lease_expires_at = NULL

@@ -56,6 +56,9 @@ func (d *rangeDriver) uiStep(st domain.Step) (domain.Observation, bool, error) {
 	case "idp.probe":
 		obs, err := d.idpProbe(st)
 		return obs, true, err
+	case "saas.probe":
+		obs, err := d.saasProbe(st)
+		return obs, true, err
 	}
 	return domain.Observation{}, false, nil
 }

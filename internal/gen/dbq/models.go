@@ -173,6 +173,7 @@ type PcAgent struct {
 	DataClasses       []string
 	AiActRole         string
 	AiActRisk         string
+	External          bool
 }
 
 type PcAgentChange struct {
@@ -3817,6 +3818,23 @@ type PcRun struct {
 	Simulated             bool
 	AutomationExecutionID *ids.UUID
 	ScopeOperations       []string
+}
+
+type PcSaasScanRun struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	Source         string
+	Origin         string
+	Tenant         string
+	ConnectionID   *ids.UUID
+	VerificationID *ids.UUID
+	State          string
+	Counts         []byte
+	Scanned        []string
+	NotScanned     []byte
+	StartedBy      string
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
 }
 
 type PcSamlConnection struct {

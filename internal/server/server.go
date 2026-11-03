@@ -982,6 +982,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM26IdAccess(rs, d)
 	registerM24Catalog(rs, d)
 	d.extDeps = registerM26Provisioning(rs, d)
+	registerM26SaaS(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)

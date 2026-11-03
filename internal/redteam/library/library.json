@@ -568,5 +568,9 @@
   "RT-153": {
     "digest": "ac4249f352d98c2554b8d7d2faaf73cb3aa8db7cd5cc0064e3110b18d7915a7d",
     "tier": "business"
+  },
+  "RT-154": {
+    "digest": "33e6d7978aadc61232efb643bd8e667cbbc0226926d6110d4849ac1ce75659cf",
+    "tier": "business"
   }
 }

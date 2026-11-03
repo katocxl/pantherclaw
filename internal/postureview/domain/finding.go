@@ -32,6 +32,7 @@ const (
 	// SourceProvisioning: API keys of people SCIM deprovisioned, which stay
 	// active until a person rotates them (G0 M26 D409).
 	SourceProvisioning Source = "provisioning"
+	SourceSaaS         Source = "saas"
 )
 
 // MaxPerSource is how many findings one source returns (D204). A source
