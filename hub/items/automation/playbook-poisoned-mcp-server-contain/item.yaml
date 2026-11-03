@@ -18,7 +18,7 @@ body:
       event:
         on: alert.raised
         where: >-
-          event.attrs["rule"] in ["pc.tools.drift", "pc.tools.description_injection"]
+          event.attrs["rule"] == "pc.tools.drift"
           && event.attrs["event_kind"] == "audit.package.transitioned" && "run" in event.subjects
         params:
           signal: {from: attrs.id, type: uuid}

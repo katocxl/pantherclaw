@@ -28,8 +28,8 @@ Alerts carry their event kind, and the run where one exists (HR-665). A refused 
 
 | Playbook | Starts on | What it does |
 |---|---|---|
-| Rogue sub-agent, contain (`pc.playbook.rogue-sub-agent-contain`) | `alert.raised` on rogue sub-agent's rules, event kind `audit.grant.delegate_refused`, with a run | Suspends that run (SUSPEND_RUN on TRIGGER_RUN) |
-| Poisoned MCP server, contain (`pc.playbook.poisoned-mcp-server-contain`) | `alert.raised` on poisoned MCP server's rules, event kind `audit.package.transitioned`, with a run | Suspends that run (SUSPEND_RUN on TRIGGER_RUN) |
+| Rogue sub-agent, contain (`pc.playbook.rogue-sub-agent-contain`) | `alert.raised` on `pc.authority.self_issue`, the one confirmed rule that raises on event kind `audit.grant.delegate_refused`, with a run | Suspends that run (SUSPEND_RUN on TRIGGER_RUN) |
+| Poisoned MCP server, contain (`pc.playbook.poisoned-mcp-server-contain`) | `alert.raised` on `pc.tools.drift`, the one confirmed rule that raises on event kind `audit.package.transitioned`, with a run | Suspends that run (SUSPEND_RUN on TRIGGER_RUN) |
 
 - Each contains only on a CONFIRMED alert (OBSERVED or RULE_MATCH); on any other alert the step skips with `UNCONFIRMED_SIGNAL`.
 - A refused issue, a refused revision and a drift found by the periodic check name no run, so neither starts on them. A drift report that names a call on another connection is still quarantined, but names no run.

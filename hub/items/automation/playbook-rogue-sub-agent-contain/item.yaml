@@ -19,7 +19,7 @@ body:
       event:
         on: alert.raised
         where: >-
-          event.attrs["rule"] in ["pc.authority.self_issue", "pc.authority.self_approve", "pc.delegation.depth_anomaly"]
+          event.attrs["rule"] == "pc.authority.self_issue"
           && event.attrs["event_kind"] == "audit.grant.delegate_refused" && "run" in event.subjects
         params:
           signal: {from: attrs.id, type: uuid}

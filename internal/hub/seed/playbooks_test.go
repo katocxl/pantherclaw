@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -284,12 +285,45 @@ func checkContainment(t *testing.T, p playbook) {
 // names the run; it does not match that alert without its run subject, nor
 // with another event kind, nor the alerts of a refused issue or a periodic
 // drift check (no run), nor the other playbook's alert. Every signal the
-// pinned event raises under the trigger's rules is CONFIRMED.
+// pinned event raises is CONFIRMED, and every rule a containment playbook
+// names is a built-in rule with a CONFIRMED basis whose `on` lists the
+// pinned event kind.
 //
 // Covers: F943
 func TestHR665_ContainmentTriggers(t *testing.T) {
 	ctx := context.Background()
 	rogue, poisoned := book(t, "pc.playbook.rogue-sub-agent-contain"), book(t, "pc.playbook.poisoned-mcp-server-contain")
+	env, err := detengine.NewEnv(celenv.DefaultLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk, err := pack.Load(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	builtin := map[string]*rules.Rule{}
+	for _, c := range pk.Rules {
+		builtin[c.Rule.ID] = c.Rule
+	}
+	ruleNames := regexp.MustCompile(`"((?:pc|org)\.[A-Za-z0-9_.-]+)"`)
+	for _, p := range containBooks(t) {
+		kind := containNames[p.item.Entry.Name]
+		named := ruleNames.FindAllStringSubmatch(p.def.When.Event.Where, -1)
+		if len(named) == 0 {
+			t.Errorf("%s names no rule", p.item.Entry.Name)
+		}
+		for _, m := range named {
+			r, ok := builtin[m[1]]
+			switch {
+			case !ok || !r.Builtin():
+				t.Errorf("%s names %s, not a built-in rule", p.item.Entry.Name, m[1])
+			case !r.Basis.Confirmed():
+				t.Errorf("%s names %s, whose basis %s is not CONFIRMED", p.item.Entry.Name, m[1], r.Basis)
+			case !slices.Contains(r.On, kind):
+				t.Errorf("%s names %s, which does not raise on %s", p.item.Entry.Name, m[1], kind)
+			}
+		}
+	}
 	alert := func(e feed.Event, rule string) feed.Event {
 		t.Helper()
 		s := one(t, detect(t, e), rule)
