@@ -11,8 +11,9 @@ description: >-
 severity: HIGH
 attention: ALERT
 basis: OBSERVED
-atlas: [AML.T0053]
 owasp: [ASI03, ASI09]
+atlas: [AML.T0053]
+attack: [T1548]
 edition: community
 on: [audit.approval.response_refused, audit.rpc.human_only_refused]
 match: >-

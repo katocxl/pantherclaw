@@ -207,6 +207,7 @@ description: Counts per agent.
 severity: LOW
 attention: ALERT
 basis: INFERRED
+techniques_none: A test rule.
 edition: community
 on: [audit.test.flood]
 window: {duration: 1h, group_by: [subjects.agent], count: 3}
@@ -246,6 +247,7 @@ description: Reads an attribute that is never there.
 severity: LOW
 attention: ALERT
 basis: INFERRED
+techniques_none: A test rule.
 edition: community
 on: [audit.security.kill_switch_engaged]
 match: event.attrs["missing"] == "x"

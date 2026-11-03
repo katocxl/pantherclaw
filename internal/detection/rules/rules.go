@@ -390,10 +390,14 @@ func KindMatches(on []string, kind string) bool {
 const MaxTechniquesNone = 200
 
 // checkTechniquesNone: techniques_none is one line of 1..200 characters on
-// a built-in rule that maps to no technique; a custom rule never carries it
-// (G0 M28 D714).
+// a built-in rule that maps to no technique; a custom rule never carries it.
+// A built-in rule names atlas or attack techniques or says techniques_none
+// (G0 M28 D714, D714a).
 func (r *Rule) checkTechniquesNone() error {
 	if r.TechniquesNone == "" {
+		if r.Builtin() && len(r.ATLAS) == 0 && len(r.ATTACK) == 0 {
+			return invalid(r.ID, "a built-in rule maps to atlas or attack techniques, or says techniques_none")
+		}
 		return nil
 	}
 	switch why := r.TechniquesNone; {

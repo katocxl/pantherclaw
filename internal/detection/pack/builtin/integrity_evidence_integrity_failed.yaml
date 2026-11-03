@@ -10,6 +10,7 @@ severity: CRITICAL
 attention: PAGE
 basis: OBSERVED
 owasp: [ASI08]
+attack: [T1070, T1565.001]
 edition: community
 on: [audit.security.evidence_integrity_failed]
 tests:
