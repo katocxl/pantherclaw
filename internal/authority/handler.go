@@ -335,8 +335,6 @@ func (h *Handler) ReportUnknownWorkload(ctx context.Context, req *pantherclawv1.
 	return out, nil
 }
 
-// accessOf is what a dispatch's minted credential allowed, as the gateway
-// reported it (ADR-0021 item 5); nil when it reported none.
 // credentialOf maps the credential a gateway reported opening (HR-660);
 // nil when it reported none.
 func credentialOf(c *pantherclawv1.CredentialUsed) (*CredentialUsed, error) {
@@ -350,6 +348,8 @@ func credentialOf(c *pantherclawv1.CredentialUsed) (*CredentialUsed, error) {
 	return &CredentialUsed{ID: id, Version: c.GetVersion()}, nil
 }
 
+// accessOf is what a dispatch's minted credential allowed, as the gateway
+// reported it (ADR-0021 item 5); nil when it reported none.
 func accessOf(a *pantherclawv1.CredentialAccess) *Access {
 	if a == nil {
 		return nil

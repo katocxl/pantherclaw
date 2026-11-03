@@ -39485,7 +39485,7 @@
           },
           "credentialUsed": {
             "title": "credential_used",
-            "description": "The sealed credential the gateway opened for this dispatch, an App key\n it minted with included (HR-660); unset when it opened none. The\n Authority accepts it only when it is a version of the permit's\n connection's credential, and then names it on the receipt.",
+            "description": "The credential of the permit's connection, when the gateway opened it\n for this dispatch, an App key it minted with included (HR-660); unset\n otherwise. A connector's egress credential is not named. The Authority\n accepts it only when it is a version of the permit's connection's\n credential, and then names it on the receipt.",
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.CredentialUsed"
