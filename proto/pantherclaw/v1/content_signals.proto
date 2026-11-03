@@ -16,7 +16,7 @@ import "pantherclaw/v1/identity_providers.proto";
 // scans tool results and outbound bodies and keeps none of it: a finding is a
 // kind and a location. A flag can hold a later write, or an org's own rule
 // may deny on it; nothing can allow or lift on it. No flags reads "no known
-// flags", never clean or safe. Hook, SDK and local connections are not
+// flags", never clean or safe. Hook, SDK, AuthZEN and local connections are not
 // scanned, and delegated outcomes are not inspected.
 service ContentSignalService {
   // GetSettings reads the mode and what WATCHING would have held.
@@ -62,12 +62,13 @@ message ContentSignalSettings {
   // What WATCHING would have held, most first: the step-up to ACTIVE shows
   // it (D512).
   repeated ContentWouldHold would_hold = 4;
-  // The faces content signals do not see into: hook, sdk, local and
+  // The faces content signals do not see into: hook, sdk, authzen, local and
   // delegated. What comes through them is not inspected, and never reads as
   // no known flags.
   repeated string not_inspected = 5;
-  // The settings' plain sentence about them: hook, SDK and local connections
-  // are not scanned (D532).
+  // The settings' plain sentence about them: hook, SDK, AuthZEN and local
+  // connections are not scanned, and re-encoded, split or paraphrased content
+  // passes (D532, D533).
   string not_inspected_note = 6;
 }
 

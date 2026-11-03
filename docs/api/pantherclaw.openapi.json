@@ -52334,12 +52334,12 @@
               "type": "string"
             },
             "title": "not_inspected",
-            "description": "The faces content signals do not see into: hook, sdk, local and\n delegated. What comes through them is not inspected, and never reads as\n no known flags."
+            "description": "The faces content signals do not see into: hook, sdk, authzen, local and\n delegated. What comes through them is not inspected, and never reads as\n no known flags."
           },
           "notInspectedNote": {
             "type": "string",
             "title": "not_inspected_note",
-            "description": "The settings' plain sentence about them: hook, SDK and local connections\n are not scanned (D532)."
+            "description": "The settings' plain sentence about them: hook, SDK, AuthZEN and local\n connections are not scanned, and re-encoded, split or paraphrased content\n passes (D532, D533)."
           }
         },
         "title": "ContentSignalSettings",
@@ -95042,7 +95042,7 @@
     },
     {
       "name": "pantherclaw.v1.ContentSignalService",
-      "description": "ContentSignalService is the org's opt-in content signals (G0 M27 D503-D505,\n D507, D512; F936; HR-647..652; Business edition).\n\n Content signals are restrict-only and make no safety claim. The gateway\n scans tool results and outbound bodies and keeps none of it: a finding is a\n kind and a location. A flag can hold a later write, or an org's own rule\n may deny on it; nothing can allow or lift on it. No flags reads \"no known\n flags\", never clean or safe. Hook, SDK and local connections are not\n scanned, and delegated outcomes are not inspected."
+      "description": "ContentSignalService is the org's opt-in content signals (G0 M27 D503-D505,\n D507, D512; F936; HR-647..652; Business edition).\n\n Content signals are restrict-only and make no safety claim. The gateway\n scans tool results and outbound bodies and keeps none of it: a finding is a\n kind and a location. A flag can hold a later write, or an org's own rule\n may deny on it; nothing can allow or lift on it. No flags reads \"no known\n flags\", never clean or safe. Hook, SDK, AuthZEN and local connections are not\n scanned, and delegated outcomes are not inspected."
     },
     {
       "name": "pantherclaw.v1.CoverageService",

@@ -161,7 +161,7 @@ const (
 	ContentScan_CONTENT_SCAN_SCANNED ContentScan = 1
 	// The gateway runs with content signals off.
 	ContentScan_CONTENT_SCAN_OFF ContentScan = 2
-	// A face the gateway does not scan: hook, SDK, local or delegated.
+	// A face the gateway does not scan: hook, SDK, AuthZEN, local or delegated.
 	ContentScan_CONTENT_SCAN_FACE_NOT_SCANNED ContentScan = 3
 )
 

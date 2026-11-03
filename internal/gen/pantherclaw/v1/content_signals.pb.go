@@ -163,12 +163,13 @@ type ContentSignalSettings struct {
 	// What WATCHING would have held, most first: the step-up to ACTIVE shows
 	// it (D512).
 	WouldHold []*ContentWouldHold `protobuf:"bytes,4,rep,name=would_hold,json=wouldHold,proto3" json:"would_hold,omitempty"`
-	// The faces content signals do not see into: hook, sdk, local and
+	// The faces content signals do not see into: hook, sdk, authzen, local and
 	// delegated. What comes through them is not inspected, and never reads as
 	// no known flags.
 	NotInspected []string `protobuf:"bytes,5,rep,name=not_inspected,json=notInspected,proto3" json:"not_inspected,omitempty"`
-	// The settings' plain sentence about them: hook, SDK and local connections
-	// are not scanned (D532).
+	// The settings' plain sentence about them: hook, SDK, AuthZEN and local
+	// connections are not scanned, and re-encoded, split or paraphrased content
+	// passes (D532, D533).
 	NotInspectedNote string `protobuf:"bytes,6,opt,name=not_inspected_note,json=notInspectedNote,proto3" json:"not_inspected_note,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache

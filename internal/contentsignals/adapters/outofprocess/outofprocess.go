@@ -136,12 +136,19 @@ func (c *Classifier) Classify(ctx context.Context, in ports.Input) ([]domain.Fin
 		return nil, errors.New("outofprocess: no flags member")
 	}
 	var out []domain.Finding
+	var known map[string]bool
 	for _, f := range *a.Flags {
-		// A location that is not the built-in's own grammar may carry a
-		// value: the location asked about stands in for it (D533, HR-649).
+		// Only the location asked about or one the built-in gives for this
+		// same body is kept; anything else may carry a value, and the
+		// location asked about stands in for it (D533, D553, HR-649).
 		loc := f.Location
-		if !builtin.PlainLocation(in.Location, loc) {
-			loc = in.Location
+		if loc != in.Location {
+			if known == nil {
+				known = builtin.Locations(in.Location, in.Content)
+			}
+			if !known[loc] {
+				loc = in.Location
+			}
 		}
 		out = append(out, domain.Finding{Kind: domain.KindClassifierFlag, Location: loc})
 	}

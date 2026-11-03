@@ -81,13 +81,7 @@ func (Classifier) Classify(ctx context.Context, in ports.Input) ([]domain.Findin
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	base := in.Location
-	if !plainRe.MatchString(base) {
-		base = "body"
-	}
-	if events, ok := sseData(in.Content); ok {
-		return classifyEvents(base, events)
-	}
+	base := baseOf(in.Location)
 	var found []domain.Finding
 	finished, err := walk(in.Content, func(pointer, text string) {
 		for _, k := range Kinds(text) {
@@ -102,7 +96,47 @@ func (Classifier) Classify(ctx context.Context, in ports.Input) ([]domain.Findin
 			found = append(found, domain.Finding{Kind: k, Location: base})
 		}
 	}
+	// A server-sent events answer is also walked event by event, so a JSON
+	// escape in a data line is decoded before it is matched. This pass only
+	// adds: the raw text above is always scanned, so a body that merely
+	// looks like SSE hides nothing in its other lines (D533, D553).
+	if events, ok := sseData(in.Content); ok {
+		more, err := classifyEvents(base, events)
+		found = append(found, more...)
+		if err != nil {
+			return domain.Pick(found), err
+		}
+	}
 	return domain.Pick(found), nil
+}
+
+func baseOf(loc string) string {
+	if !plainRe.MatchString(loc) {
+		return "body"
+	}
+	return loc
+}
+
+// Locations lists every location the built-in can give a finding in content
+// asked about at loc: the location itself and, for each JSON string (also in
+// each server-sent event's data), its pointer as location writes it. An
+// out-of-process classifier's location is kept only when it is one of these
+// (D553, HR-649). A body over the string cap yields what was read.
+func Locations(loc string, content []byte) map[string]bool {
+	base := baseOf(loc)
+	out := map[string]bool{base: true}
+	add := func(prefix string) func(pointer, _ string) {
+		return func(pointer, _ string) { out[location(base, prefix+pointer)] = true }
+	}
+	_, _ = walk(content, add(""))
+	if events, ok := sseData(content); ok {
+		for i, data := range events {
+			prefix := "/" + strconv.Itoa(i)
+			out[location(base, prefix)] = true
+			_, _ = walk(data, add(prefix))
+		}
+	}
+	return out
 }
 
 // walk calls see with every string of a JSON text and reports whether the
@@ -224,25 +258,6 @@ func Entropy(s string) float64 {
 		}
 	}
 	return e
-}
-
-// PlainLocation reports whether loc is base, or base followed by segments the
-// built-in itself would keep: indices, "*" and plain-word member names that
-// say nothing of a value (D533). A classifier's location must be one.
-func PlainLocation(base, loc string) bool {
-	if loc == base {
-		return true
-	}
-	rest, ok := strings.CutPrefix(loc, base+"/")
-	if !ok || len(loc) > domain.MaxLocation {
-		return false
-	}
-	for seg := range strings.SplitSeq(rest, "/") {
-		if seg != "*" && !keep(seg) {
-			return false
-		}
-	}
-	return true
 }
 
 // sseData un-frames a server-sent events body, as an MCP server may answer

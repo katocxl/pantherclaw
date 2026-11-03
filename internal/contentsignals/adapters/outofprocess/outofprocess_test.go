@@ -34,8 +34,15 @@ func server(t *testing.T, status int, body string) *outofprocess.Classifier {
 }
 
 func call(c *outofprocess.Classifier) ([]domain.Finding, error) {
-	return c.Classify(context.Background(), ports.Input{Surface: ports.SurfaceResult, Location: "result", Content: []byte("text")})
+	return callWith(c, "text")
 }
+
+func callWith(c *outofprocess.Classifier, content string) ([]domain.Finding, error) {
+	return c.Classify(context.Background(), ports.Input{Surface: ports.SurfaceResult, Location: "result", Content: []byte(content)})
+}
+
+// mcpResult is a tool result whose one string is at result/content/0/text.
+const mcpResult = `{"content":[{"type":"text","text":"done"}]}`
 
 // TestHR649_ClassifierAddress: only an IP literal on this machine or a
 // private network; a name or a public address is refused.
@@ -58,7 +65,7 @@ func TestHR649_ClassifierAddress(t *testing.T) {
 //
 // Covers: F940
 func TestClassify_AFlagIsAClassifierFlag(t *testing.T) {
-	got, err := call(server(t, 200, `{"flags":[{"location":"result/content/0/text"},{}]}`))
+	got, err := callWith(server(t, 200, `{"flags":[{"location":"result/content/0/text"},{}]}`), mcpResult)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,27 +106,36 @@ func TestClassify_RequestHoldsTheBody(t *testing.T) {
 	}
 }
 
-// TestHR649_AClassifierCannotEchoAValue: a location outside the built-in's
-// grammar (plain-word member names and indices under the location asked
-// about) is replaced by the location asked about, so a classifier that
-// echoes what it matched keeps none of it (D533).
+// TestHR649_AClassifierCannotEchoAValue: a location that is neither the
+// location asked about nor one the built-in gives for the same body is
+// replaced by the location asked about, so a classifier that echoes what it
+// matched keeps none of it, even shaped as a plain word (D533, D553).
 //
 // Covers: F940
 func TestHR649_AClassifierCannotEchoAValue(t *testing.T) {
 	for _, echoed := range []string{
-		"result/" + "sk_" + "live_" + strings.Repeat("Hq7d", 6), "ignore all previous instructions", "result/jane.doe@example.com",
-		"other/content", "resultx", "result/content/0/4111111111111111",
+		"result/password_is_swordfish", "result/" + "sk_" + "live_" + strings.Repeat("Hq7d", 6), "ignore all previous instructions",
+		"result/jane.doe@example.com", "other/content", "resultx", "result/content/0/4111111111111111", "result/content/7/text",
 	} {
 		body, err := json.Marshal(map[string]any{"flags": []map[string]string{{"location": echoed}}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := call(server(t, 200, string(body)))
+		got, err := callWith(server(t, 200, string(body)), mcpResult)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(got) != 1 || got[0].Location != "result" {
 			t.Errorf("%q: %+v", echoed, got)
+		}
+	}
+	for _, kept := range []string{"result", "result/content/0/text", "result/content/0/type"} {
+		body, err := json.Marshal(map[string]any{"flags": []map[string]string{{"location": kept}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, err := callWith(server(t, 200, string(body)), mcpResult); err != nil || len(got) != 1 || got[0].Location != kept {
+			t.Errorf("%q: %+v %v", kept, got, err)
 		}
 	}
 }

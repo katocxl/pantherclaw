@@ -160,7 +160,7 @@ enum ContentScan {
   CONTENT_SCAN_SCANNED = 1;
   // The gateway runs with content signals off.
   CONTENT_SCAN_OFF = 2;
-  // A face the gateway does not scan: hook, SDK, local or delegated.
+  // A face the gateway does not scan: hook, SDK, AuthZEN, local or delegated.
   CONTENT_SCAN_FACE_NOT_SCANNED = 3;
 }
 
