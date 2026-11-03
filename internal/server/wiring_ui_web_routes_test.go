@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -16,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/extension"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -78,6 +80,47 @@ func (callerAuthz) Require(ctx context.Context, _ string) error {
 		return err
 	}
 	return nil
+}
+
+// TestD527_ExtensionClientIPBehindTrustedProxy: an extension reads the
+// client address with the core's rule. Behind a trusted proxy it is the
+// forwarded client; from any other peer a forwarded header is ignored.
+func TestD527_ExtensionClientIPBehindTrustedProxy(t *testing.T) {
+	var got string
+	set := extension.Set{Mount: func(d extension.Deps) ([]extension.Route, error) {
+		if d.ClientIP == nil {
+			return nil, errors.New("no ClientIP")
+		}
+		return []extension.Route{{Pattern: "GET /app/ext/ip", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = d.ClientIP(r)
+			w.WriteHeader(http.StatusNoContent)
+		})}}, nil
+	}}
+	trusted := httpx.TrustedProxyClientIP([]netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")})
+	for _, tc := range []struct {
+		name     string
+		clientIP httpx.ClientIPFunc
+		peer     string
+		want     string
+	}{
+		{"trusted proxy", trusted, "10.1.2.3:443", "203.0.113.7"},
+		{"untrusted peer", trusted, "198.51.100.9:443", "198.51.100.9"},
+		{"no proxies configured", nil, "10.1.2.3:443", "10.1.2.3"},
+	} {
+		mux := coreMux()
+		if err := mountExtension(mux, set, extension.Deps{}, nil, tc.clientIP); err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodGet, "/app/ext/ip", nil)
+		req.RemoteAddr = tc.peer
+		req.Header.Set("X-Forwarded-For", "203.0.113.7")
+		got = ""
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent || got != tc.want {
+			t.Errorf("%s: %d, client %q, want %q", tc.name, rec.Code, got, tc.want)
+		}
+	}
 }
 
 func mountTest(mux *http.ServeMux, set extension.Set, web *webhttp.Handler) error {

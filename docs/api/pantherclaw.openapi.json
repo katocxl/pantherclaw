@@ -18261,6 +18261,708 @@
         }
       }
     },
+    "/pantherclaw.v1.IdpAccessService/CreateAssertionIssuer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "CreateAssertionIssuer",
+        "description": "CreateAssertionIssuer stores a PENDING issuer and files its activation.\n Its discovery document is read over HTTPS through the egress guard.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.CreateAssertionIssuer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateAssertionIssuerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateAssertionIssuerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/DisableAssertionIssuer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "DisableAssertionIssuer",
+        "description": "DisableAssertionIssuer turns an issuer off at once.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.DisableAssertionIssuer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableAssertionIssuerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableAssertionIssuerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/ListAssertionIssuers": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "ListAssertionIssuers",
+        "description": "ListAssertionIssuers lists the org's issuers by name (at most 100).\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdpAccessService.ListAssertionIssuers",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListAssertionIssuersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListAssertionIssuersResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/BindAssertionClient": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "BindAssertionClient",
+        "description": "BindAssertionClient files that a client id of an issuer acts as one\n agent.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.BindAssertionClient",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.BindAssertionClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.BindAssertionClientResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/RemoveAssertionClient": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "RemoveAssertionClient",
+        "description": "RemoveAssertionClient removes a binding at once.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.RemoveAssertionClient",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveAssertionClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveAssertionClientResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/ListAssertionClients": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "ListAssertionClients",
+        "description": "ListAssertionClients lists an issuer's bindings (at most 100).\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdpAccessService.ListAssertionClients",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListAssertionClientsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListAssertionClientsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/GetMcpAccess": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "GetMcpAccess",
+        "description": "GetMcpAccess returns the org's MCP authorization setting. It is off\n until a person turns it on.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdpAccessService.GetMcpAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetMcpAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetMcpAccessResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/EnableMcpAccess": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "EnableMcpAccess",
+        "description": "EnableMcpAccess files turning MCP authorization on.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.EnableMcpAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.EnableMcpAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.EnableMcpAccessResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/DisableMcpAccess": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "DisableMcpAccess",
+        "description": "DisableMcpAccess turns MCP authorization off at once.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.DisableMcpAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableMcpAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableMcpAccessResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/AllowMcpClient": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "AllowMcpClient",
+        "description": "AllowMcpClient files that a client URL acts as one enrolled agent.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.AllowMcpClient",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AllowMcpClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AllowMcpClientResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/RemoveMcpClient": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "RemoveMcpClient",
+        "description": "RemoveMcpClient removes a client at once: its tokens stop on their next\n use and its instance is revoked.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.RemoveMcpClient",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveMcpClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveMcpClientResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/RefreshMcpClientDocument": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "RefreshMcpClientDocument",
+        "description": "RefreshMcpClientDocument files taking an active client's changed\n metadata document: until a second person confirms it, the client keeps\n the document confirmed before.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.RefreshMcpClientDocument",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RefreshMcpClientDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RefreshMcpClientDocumentResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/ListMcpClients": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "ListMcpClients",
+        "description": "ListMcpClients lists the allow-list (at most 100).\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdpAccessService.ListMcpClients",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListMcpClientsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListMcpClientsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.IncidentService/ListAlerts": {
       "post": {
         "tags": [
@@ -25929,6 +26631,600 @@
         }
       }
     },
+    "/pantherclaw.v1.ProvisioningService/CreateScimToken": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "CreateScimToken",
+        "description": "CreateScimToken stores a PENDING token and files its activation. The\n secret is shown here once and does nothing until a second person\n confirms.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.ProvisioningService.CreateScimToken",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateScimTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateScimTokenResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/RevokeScimToken": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "RevokeScimToken",
+        "description": "RevokeScimToken ends a token at once.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.ProvisioningService.RevokeScimToken",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokeScimTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokeScimTokenResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/ListScimTokens": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "ListScimTokens",
+        "description": "ListScimTokens lists the org's tokens by name, never their secrets.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.ProvisioningService.ListScimTokens",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListScimTokensRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListScimTokensResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/CreateSamlConnection": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "CreateSamlConnection",
+        "description": "CreateSamlConnection stores a PENDING connection and files its\n activation.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.ProvisioningService.CreateSamlConnection",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateSamlConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateSamlConnectionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/UpdateSamlConnection": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "UpdateSamlConnection",
+        "description": "UpdateSamlConnection files a change of sign-in URL or certificates, and\n activates a connection that is not ACTIVE. The entity id never changes.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.ProvisioningService.UpdateSamlConnection",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.UpdateSamlConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.UpdateSamlConnectionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/DisableSamlConnection": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "DisableSamlConnection",
+        "description": "DisableSamlConnection files turning a connection off. It is refused when\n no active org admin would have a way left to sign in; the change request\n lists the admins who would lose theirs.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.ProvisioningService.DisableSamlConnection",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableSamlConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableSamlConnectionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/ListSamlConnections": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "ListSamlConnections",
+        "description": "ListSamlConnections lists the org's connections by name.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.ProvisioningService.ListSamlConnections",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListSamlConnectionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListSamlConnectionsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/ListGroups": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "ListGroups",
+        "description": "ListGroups lists the groups the org's identity providers sent.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.ProvisioningService.ListGroups",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListGroupsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListGroupsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/ListGroupRoleMappings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "ListGroupRoleMappings",
+        "description": "ListGroupRoleMappings lists which roles groups carry.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.ProvisioningService.ListGroupRoleMappings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListGroupRoleMappingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListGroupRoleMappingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/AddGroupRoleMapping": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "AddGroupRoleMapping",
+        "description": "AddGroupRoleMapping files giving a group's members a role at a scope.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.ProvisioningService.AddGroupRoleMapping",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AddGroupRoleMappingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AddGroupRoleMappingResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ProvisioningService/RemoveGroupRoleMapping": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ProvisioningService"
+        ],
+        "summary": "RemoveGroupRoleMapping",
+        "description": "RemoveGroupRoleMapping files taking a mapping away.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.ProvisioningService.RemoveGroupRoleMapping",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveGroupRoleMappingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveGroupRoleMappingResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.RecommendationService/ListRecommendations": {
       "post": {
         "tags": [
@@ -27755,6 +29051,330 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetRestorationPlanResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SaasDiscoveryService/ImportSaasReport": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SaasDiscoveryService"
+        ],
+        "summary": "ImportSaasReport",
+        "description": "ImportSaasReport records a report `pclaw discover import` parsed from an\n exported recording, on the caller's machine. The server checks each\n finding's kind, key and attributes and keeps only what the kind names.\n permission: agent.manage",
+        "operationId": "pantherclaw.v1.SaasDiscoveryService.ImportSaasReport",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ImportSaasReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ImportSaasReportResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SaasDiscoveryService/StartSaasScan": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SaasDiscoveryService"
+        ],
+        "summary": "StartSaasScan",
+        "description": "StartSaasScan starts a gateway's collection through a connection: a\n saas_scan lease for the connection's gateway. One scan of a connection\n runs at a time. People only.\n permission: agent.manage",
+        "operationId": "pantherclaw.v1.SaasDiscoveryService.StartSaasScan",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.StartSaasScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.StartSaasScanResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SaasDiscoveryService/GetSaasScan": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SaasDiscoveryService"
+        ],
+        "summary": "GetSaasScan",
+        "description": "GetSaasScan returns a run: its state, counts, and what it read and could\n not read.\n permission: agent.read",
+        "operationId": "pantherclaw.v1.SaasDiscoveryService.GetSaasScan",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetSaasScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetSaasScanResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SaasDiscoveryService/ListSaasScans": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SaasDiscoveryService"
+        ],
+        "summary": "ListSaasScans",
+        "description": "ListSaasScans lists the org's runs, newest first.\n permission: agent.read",
+        "operationId": "pantherclaw.v1.SaasDiscoveryService.ListSaasScans",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListSaasScansRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListSaasScansResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SaasDiscoveryService/ListSaasAgents": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SaasDiscoveryService"
+        ],
+        "summary": "ListSaasAgents",
+        "description": "ListSaasAgents lists the external agents found.\n permission: agent.read",
+        "operationId": "pantherclaw.v1.SaasDiscoveryService.ListSaasAgents",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListSaasAgentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListSaasAgentsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.SaasDiscoveryService/SetSaasAgentOwner": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.SaasDiscoveryService"
+        ],
+        "summary": "SetSaasAgentOwner",
+        "description": "SetSaasAgentOwner names an external agent's owner. It sets the owner and\n nothing else: the agent stays DISCOVERED and observe-only, with no key,\n token or grant, and it closes the agent's admission entry. Naming another\n owner later is how an external agent's owner changes.\n permission: agent.manage",
+        "operationId": "pantherclaw.v1.SaasDiscoveryService.SetSaasAgentOwner",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetSaasAgentOwnerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetSaasAgentOwnerResponse"
                 }
               }
             }
@@ -36757,6 +38377,11 @@
             "title": "scan_state",
             "description": "What continuous discovery saw of it (G0 M22 D6); unset for an agent no\n scan found.",
             "$ref": "#/components/schemas/pantherclaw.v1.AgentScanState"
+          },
+          "external": {
+            "type": "boolean",
+            "title": "external",
+            "description": "An agent that lives in a SaaS tenant (G0 M26 D407, HR-639): found by SaaS\n discovery, it stays DISCOVERED and observe-only, with no key, token or\n grant. Naming its owner is the only claim it takes."
           }
         },
         "title": "Agent",
@@ -37319,6 +38944,11 @@
               "title": "value"
             },
             "description": "UNTRUSTED attributes as observed (gateway, route, client address, user\n agent). Never use them to identify the agent."
+          },
+          "status": {
+            "type": "string",
+            "title": "status",
+            "description": "For an external agent's discovery, what it is in words: \"owner set,\n external agent\" once an owner is named (state CLAIMED, though the agent\n is never claimed), \"no owner, external agent\" or \"dismissed, external\n agent\". Empty for any other agent."
           }
         },
         "title": "Discovery",
@@ -37678,9 +39308,11 @@
               "env_secret",
               "github_app",
               "github_workflow",
-              "github_mcp_config"
+              "github_mcp_config",
+              "copilot_studio_agent",
+              "chatgpt_gpt"
             ],
-            "description": "\"mcp_server\", \"agent_project\", \"hook\", \"skill\" or \"env_secret\" from a\n local scan (env_secret carries the credential's kind and nothing of its\n value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,\n HR-209), \"github_app\", \"github_workflow\" or \"github_mcp_config\"."
+            "description": "\"mcp_server\", \"agent_project\", \"hook\", \"skill\" or \"env_secret\" from a\n local scan (env_secret carries the credential's kind and nothing of its\n value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,\n HR-209), \"github_app\", \"github_workflow\" or \"github_mcp_config\"; from a\n gateway's SaaS scan (G0 M26 D407), \"copilot_studio_agent\" or \"chatgpt_gpt\"."
           },
           "key": {
             "type": "string",
@@ -39750,14 +41382,16 @@
             ],
             "title": "workload_token",
             "maxLength": 8192,
-            "description": "Workload token from \"Authorization: PAP \u003ctoken\u003e\"; empty for a key-only\n proof."
+            "description": "Workload token from \"Authorization: PAP \u003ctoken\u003e\"; empty for a key-only\n proof. On the gateway's OAuth route it is the bearer token: the Authority\n tells the two apart by the token's type alone (G0 M26 D408)."
           },
           "proof": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "title": "proof",
             "maxLength": 8192,
-            "minLength": 16,
-            "description": "PAP-Proof header value."
+            "description": "PAP-Proof header value. Empty only with a pap-mcp+jwt token: a missing\n proof never selects bearer mode, and a pap-wt+jwt token without one is\n refused."
           },
           "bodySha256": {
             "type": "string",
@@ -39794,7 +41428,6 @@
         "additionalProperties": false,
         "description": "WorkloadCredentials are a workload's PAP/1 request credentials as the\n gateway received them (PAP-1 §4). The gateway hashes the raw body before\n parsing it; the Authority verifies everything again.",
         "required": [
-          "proof",
           "bodySha256",
           "htm",
           "htu"
@@ -64056,6 +65689,19 @@
         "additionalProperties": false,
         "description": "GatewayConnection is a connection as its gateway sees it."
       },
+      "pantherclaw.v1.GatewayMcpAccess": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "The org's authorization server issuer, for protected resource metadata."
+          }
+        },
+        "title": "GatewayMcpAccess",
+        "additionalProperties": false,
+        "description": "GatewayMcpAccess turns on the OAuth route of a gateway's MCP face."
+      },
       "pantherclaw.v1.GatewayPackage": {
         "type": "object",
         "properties": {
@@ -64262,6 +65908,11 @@
             },
             "title": "capture_profiles",
             "description": "The active, unexpired capture profiles covering those connections\n (G0 M7 design decision 10, HR-199); none when capture is off."
+          },
+          "mcpAccess": {
+            "title": "mcp_access",
+            "description": "The org's MCP authorization route (G0 M26 D402); unset while it is off.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GatewayMcpAccess"
           },
           "contentSignalMode": {
             "title": "content_signal_mode",
@@ -70912,6 +72563,631 @@
         "title": "WithdrawIssuerProposalResponse",
         "additionalProperties": false,
         "description": "WithdrawIssuerProposalResponse returns the withdrawn revision."
+      },
+      "pantherclaw.v1.AllowMcpClientRequest": {
+        "type": "object",
+        "properties": {
+          "clientUrl": {
+            "type": "string",
+            "title": "client_url",
+            "maxLength": 1024,
+            "minLength": 10,
+            "format": "uri",
+            "description": "Client ID Metadata Document URL: HTTPS with a path."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "description": "The enrolled agent."
+          }
+        },
+        "title": "AllowMcpClientRequest",
+        "additionalProperties": false,
+        "description": "AllowMcpClientRequest allow-lists a client URL.",
+        "required": [
+          "clientUrl",
+          "agentId"
+        ]
+      },
+      "pantherclaw.v1.AllowMcpClientResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The PENDING client.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpClient"
+          },
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "AllowMcpClientResponse",
+        "additionalProperties": false,
+        "description": "AllowMcpClientResponse names the client and its change request."
+      },
+      "pantherclaw.v1.AssertionClient": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Binding id."
+          },
+          "issuerId": {
+            "type": "string",
+            "title": "issuer_id",
+            "description": "The issuer."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "description": "The client id assertions name."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "description": "The agent it acts as."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE or REMOVED."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "AssertionClient",
+        "additionalProperties": false,
+        "description": "AssertionClient pins a client id of an issuer to one agent."
+      },
+      "pantherclaw.v1.AssertionIssuer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Issuer id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "Issuer URL, fixed once the issuer has been ACTIVE."
+          },
+          "audience": {
+            "type": "string",
+            "title": "audience",
+            "description": "The audience an assertion must name, fixed once ACTIVE."
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "description": "The tenant a multi-tenant issuer's assertion must carry."
+          },
+          "algorithms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "algorithms",
+            "description": "Allowed signature algorithms."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE or DISABLED."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it first became ACTIVE.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "AssertionIssuer",
+        "additionalProperties": false,
+        "description": "AssertionIssuer is an identity provider whose assertions the org accepts."
+      },
+      "pantherclaw.v1.BindAssertionClientRequest": {
+        "type": "object",
+        "properties": {
+          "issuerId": {
+            "type": "string",
+            "title": "issuer_id",
+            "format": "uuid",
+            "description": "Issuer id."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "The client id assertions name."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "description": "The enrolled agent."
+          }
+        },
+        "title": "BindAssertionClientRequest",
+        "additionalProperties": false,
+        "description": "BindAssertionClientRequest pins a client id to an agent.",
+        "required": [
+          "issuerId",
+          "clientId",
+          "agentId"
+        ]
+      },
+      "pantherclaw.v1.BindAssertionClientResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The PENDING binding.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AssertionClient"
+          },
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "BindAssertionClientResponse",
+        "additionalProperties": false,
+        "description": "BindAssertionClientResponse names the binding and its change request."
+      },
+      "pantherclaw.v1.CreateAssertionIssuerRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "pattern": "^[a-z0-9-]{1,32}$",
+            "description": "Name."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 512,
+            "minLength": 9,
+            "format": "uri",
+            "description": "Issuer URL, HTTPS on a public host."
+          },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "tenant",
+            "maxLength": 256,
+            "description": "The tenant, for a multi-tenant issuer only."
+          },
+          "algorithms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 3,
+              "minItems": 1,
+              "uniqueItems": true,
+              "enum": [
+                "RS256",
+                "ES256",
+                "EdDSA"
+              ]
+            },
+            "title": "algorithms",
+            "maxItems": 3,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Allowed signature algorithms."
+          }
+        },
+        "title": "CreateAssertionIssuerRequest",
+        "additionalProperties": false,
+        "description": "CreateAssertionIssuerRequest adds an issuer.",
+        "required": [
+          "name",
+          "issuer",
+          "algorithms"
+        ]
+      },
+      "pantherclaw.v1.CreateAssertionIssuerResponse": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "title": "issuer",
+            "description": "The PENDING issuer.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AssertionIssuer"
+          },
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "CreateAssertionIssuerResponse",
+        "additionalProperties": false,
+        "description": "CreateAssertionIssuerResponse names the issuer and its change request."
+      },
+      "pantherclaw.v1.DisableAssertionIssuerRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Issuer id."
+          }
+        },
+        "title": "DisableAssertionIssuerRequest",
+        "additionalProperties": false,
+        "description": "DisableAssertionIssuerRequest names an issuer.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DisableAssertionIssuerResponse": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "title": "issuer",
+            "description": "The DISABLED issuer.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AssertionIssuer"
+          }
+        },
+        "title": "DisableAssertionIssuerResponse",
+        "additionalProperties": false,
+        "description": "DisableAssertionIssuerResponse is the issuer now."
+      },
+      "pantherclaw.v1.DisableMcpAccessRequest": {
+        "type": "object",
+        "title": "DisableMcpAccessRequest",
+        "additionalProperties": false,
+        "description": "DisableMcpAccessRequest turns MCP authorization off."
+      },
+      "pantherclaw.v1.DisableMcpAccessResponse": {
+        "type": "object",
+        "properties": {
+          "access": {
+            "title": "access",
+            "description": "The setting.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpAccess"
+          }
+        },
+        "title": "DisableMcpAccessResponse",
+        "additionalProperties": false,
+        "description": "DisableMcpAccessResponse is the setting now."
+      },
+      "pantherclaw.v1.EnableMcpAccessRequest": {
+        "type": "object",
+        "properties": {
+          "gatewayUrl": {
+            "type": "string",
+            "title": "gateway_url",
+            "maxLength": 512,
+            "minLength": 9,
+            "format": "uri",
+            "description": "The gateway URL protected resources live under."
+          }
+        },
+        "title": "EnableMcpAccessRequest",
+        "additionalProperties": false,
+        "description": "EnableMcpAccessRequest turns MCP authorization on.",
+        "required": [
+          "gatewayUrl"
+        ]
+      },
+      "pantherclaw.v1.EnableMcpAccessResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "EnableMcpAccessResponse",
+        "additionalProperties": false,
+        "description": "EnableMcpAccessResponse names the change request."
+      },
+      "pantherclaw.v1.GetMcpAccessRequest": {
+        "type": "object",
+        "title": "GetMcpAccessRequest",
+        "additionalProperties": false,
+        "description": "GetMcpAccessRequest reads the setting."
+      },
+      "pantherclaw.v1.GetMcpAccessResponse": {
+        "type": "object",
+        "properties": {
+          "access": {
+            "title": "access",
+            "description": "The setting.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpAccess"
+          }
+        },
+        "title": "GetMcpAccessResponse",
+        "additionalProperties": false,
+        "description": "GetMcpAccessResponse is the setting."
+      },
+      "pantherclaw.v1.ListAssertionClientsRequest": {
+        "type": "object",
+        "properties": {
+          "issuerId": {
+            "type": "string",
+            "title": "issuer_id",
+            "format": "uuid",
+            "description": "Issuer id."
+          }
+        },
+        "title": "ListAssertionClientsRequest",
+        "additionalProperties": false,
+        "description": "ListAssertionClientsRequest names an issuer.",
+        "required": [
+          "issuerId"
+        ]
+      },
+      "pantherclaw.v1.ListAssertionClientsResponse": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.AssertionClient"
+            },
+            "title": "clients",
+            "description": "Bindings."
+          }
+        },
+        "title": "ListAssertionClientsResponse",
+        "additionalProperties": false,
+        "description": "ListAssertionClientsResponse is the issuer's bindings."
+      },
+      "pantherclaw.v1.ListAssertionIssuersRequest": {
+        "type": "object",
+        "title": "ListAssertionIssuersRequest",
+        "additionalProperties": false,
+        "description": "ListAssertionIssuersRequest lists issuers."
+      },
+      "pantherclaw.v1.ListAssertionIssuersResponse": {
+        "type": "object",
+        "properties": {
+          "issuers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.AssertionIssuer"
+            },
+            "title": "issuers",
+            "description": "Issuers by name."
+          }
+        },
+        "title": "ListAssertionIssuersResponse",
+        "additionalProperties": false,
+        "description": "ListAssertionIssuersResponse is the org's issuers."
+      },
+      "pantherclaw.v1.ListMcpClientsRequest": {
+        "type": "object",
+        "title": "ListMcpClientsRequest",
+        "additionalProperties": false,
+        "description": "ListMcpClientsRequest lists the allow-list."
+      },
+      "pantherclaw.v1.ListMcpClientsResponse": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpClient"
+            },
+            "title": "clients",
+            "description": "Clients."
+          }
+        },
+        "title": "ListMcpClientsResponse",
+        "additionalProperties": false,
+        "description": "ListMcpClientsResponse is the allow-list."
+      },
+      "pantherclaw.v1.McpAccess": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "enabled",
+            "description": "Whether the gateway's OAuth route is on."
+          },
+          "gatewayUrl": {
+            "type": "string",
+            "title": "gateway_url",
+            "description": "The gateway URL protected resources live under."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "The org's authorization server issuer."
+          }
+        },
+        "title": "McpAccess",
+        "additionalProperties": false,
+        "description": "McpAccess is the org's MCP authorization setting."
+      },
+      "pantherclaw.v1.McpClient": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Client entry id."
+          },
+          "clientUrl": {
+            "type": "string",
+            "title": "client_url",
+            "description": "Client ID Metadata Document URL."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "description": "The enrolled agent it acts as."
+          },
+          "instanceId": {
+            "type": "string",
+            "title": "instance_id",
+            "description": "The instance it acts through; no PAP/1 proof can use it."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE or REMOVED."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "clientName": {
+            "type": "string",
+            "title": "client_name",
+            "description": "The client's own name in the confirmed document: untrusted text."
+          },
+          "redirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "redirect_uris",
+            "description": "The redirect URIs of the confirmed document."
+          },
+          "documentDigest": {
+            "type": "string",
+            "title": "document_digest",
+            "description": "SHA-256 of the confirmed document, hex."
+          }
+        },
+        "title": "McpClient",
+        "additionalProperties": false,
+        "description": "McpClient is one allow-listed standard MCP client."
+      },
+      "pantherclaw.v1.RefreshMcpClientDocumentRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Client entry id."
+          }
+        },
+        "title": "RefreshMcpClientDocumentRequest",
+        "additionalProperties": false,
+        "description": "RefreshMcpClientDocumentRequest names an active client.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RefreshMcpClientDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The client as confirmed so far.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpClient"
+          },
+          "clientName": {
+            "type": "string",
+            "title": "client_name",
+            "description": "The live document's name: untrusted text."
+          },
+          "redirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "redirect_uris",
+            "description": "The live document's redirect URIs."
+          },
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "RefreshMcpClientDocumentResponse",
+        "additionalProperties": false,
+        "description": "RefreshMcpClientDocumentResponse is the change a second person confirms."
+      },
+      "pantherclaw.v1.RemoveAssertionClientRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Binding id."
+          }
+        },
+        "title": "RemoveAssertionClientRequest",
+        "additionalProperties": false,
+        "description": "RemoveAssertionClientRequest names a binding.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RemoveAssertionClientResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The REMOVED binding.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AssertionClient"
+          }
+        },
+        "title": "RemoveAssertionClientResponse",
+        "additionalProperties": false,
+        "description": "RemoveAssertionClientResponse is the binding now."
+      },
+      "pantherclaw.v1.RemoveMcpClientRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Client entry id."
+          }
+        },
+        "title": "RemoveMcpClientRequest",
+        "additionalProperties": false,
+        "description": "RemoveMcpClientRequest names a client.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RemoveMcpClientResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The REMOVED client.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpClient"
+          }
+        },
+        "title": "RemoveMcpClientResponse",
+        "additionalProperties": false,
+        "description": "RemoveMcpClientResponse is the client now."
       },
       "pantherclaw.v1.Alert": {
         "type": "object",
@@ -83225,6 +85501,8 @@
               "inventory",
               "supply_chain",
               "catalog",
+              "provisioning",
+              "saas",
               null
             ]
           },
@@ -84285,6 +86563,608 @@
         "title": "SetProtectedCategoryModeResponse",
         "additionalProperties": false,
         "description": "SetProtectedCategoryModeResponse returns the category."
+      },
+      "pantherclaw.v1.AddGroupRoleMappingRequest": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string",
+            "title": "group_id",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string",
+            "title": "role",
+            "maxLength": 63,
+            "minLength": 1
+          },
+          "scopeType": {
+            "type": "string",
+            "title": "scope_type",
+            "enum": [
+              "ORG",
+              "BUSINESS_UNIT",
+              "TEAM",
+              "ENVIRONMENT"
+            ]
+          },
+          "scopeId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "scope_id",
+            "maxLength": 36,
+            "description": "scope_id is empty at ORG."
+          }
+        },
+        "title": "AddGroupRoleMappingRequest",
+        "additionalProperties": false,
+        "description": "AddGroupRoleMappingRequest is the mapping to file.",
+        "required": [
+          "groupId",
+          "role",
+          "scopeType"
+        ]
+      },
+      "pantherclaw.v1.AddGroupRoleMappingResponse": {
+        "type": "object",
+        "properties": {
+          "filed": {
+            "title": "filed",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "AddGroupRoleMappingResponse",
+        "additionalProperties": false,
+        "description": "AddGroupRoleMappingResponse is the filed change."
+      },
+      "pantherclaw.v1.CreateSamlConnectionRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,25}[a-z0-9])?$"
+          },
+          "idpEntityId": {
+            "type": "string",
+            "title": "idp_entity_id",
+            "maxLength": 500,
+            "minLength": 1
+          },
+          "ssoUrl": {
+            "type": "string",
+            "title": "sso_url",
+            "maxLength": 2048,
+            "minLength": 9
+          },
+          "certificates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 4,
+              "minItems": 1
+            },
+            "title": "certificates",
+            "maxItems": 4,
+            "minItems": 1
+          }
+        },
+        "title": "CreateSamlConnectionRequest",
+        "additionalProperties": false,
+        "description": "CreateSamlConnectionRequest is a new connection's settings.",
+        "required": [
+          "name",
+          "idpEntityId",
+          "ssoUrl",
+          "certificates"
+        ]
+      },
+      "pantherclaw.v1.CreateSamlConnectionResponse": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "title": "connection",
+            "$ref": "#/components/schemas/pantherclaw.v1.SamlConnection"
+          },
+          "filed": {
+            "title": "filed",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "CreateSamlConnectionResponse",
+        "additionalProperties": false,
+        "description": "CreateSamlConnectionResponse is the PENDING connection and its filed\n activation."
+      },
+      "pantherclaw.v1.CreateScimTokenRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "issuer must be one of the org's or the deployment's providers."
+          },
+          "subjectAttribute": {
+            "type": "string",
+            "title": "subject_attribute",
+            "enum": [
+              "userName",
+              "externalId"
+            ]
+          },
+          "ttlDays": {
+            "type": "integer",
+            "title": "ttl_days",
+            "maximum": 366,
+            "minimum": 1,
+            "format": "int32",
+            "description": "ttl_days is the token's life."
+          }
+        },
+        "title": "CreateScimTokenRequest",
+        "additionalProperties": false,
+        "description": "CreateScimTokenRequest names a new token.",
+        "required": [
+          "name",
+          "issuer",
+          "subjectAttribute",
+          "ttlDays"
+        ]
+      },
+      "pantherclaw.v1.CreateScimTokenResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "title": "token",
+            "$ref": "#/components/schemas/pantherclaw.v1.ScimToken"
+          },
+          "secret": {
+            "type": "string",
+            "title": "secret"
+          },
+          "filed": {
+            "title": "filed",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "CreateScimTokenResponse",
+        "additionalProperties": false,
+        "description": "CreateScimTokenResponse carries the secret, once."
+      },
+      "pantherclaw.v1.DirectoryGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer"
+          },
+          "displayName": {
+            "type": "string",
+            "title": "display_name"
+          },
+          "memberCount": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "member_count",
+            "format": "int64"
+          }
+        },
+        "title": "DirectoryGroup",
+        "additionalProperties": false,
+        "description": "DirectoryGroup is a group an identity provider sent. Its names are the\n provider's text, shown as plain text."
+      },
+      "pantherclaw.v1.DisableSamlConnectionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "DisableSamlConnectionRequest",
+        "additionalProperties": false,
+        "description": "DisableSamlConnectionRequest names a connection.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DisableSamlConnectionResponse": {
+        "type": "object",
+        "properties": {
+          "filed": {
+            "title": "filed",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "DisableSamlConnectionResponse",
+        "additionalProperties": false,
+        "description": "DisableSamlConnectionResponse is the filed change."
+      },
+      "pantherclaw.v1.GroupRoleMapping": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "groupId": {
+            "type": "string",
+            "title": "group_id"
+          },
+          "role": {
+            "type": "string",
+            "title": "role"
+          },
+          "scopeType": {
+            "type": "string",
+            "title": "scope_type",
+            "description": "scope_type is ORG, BUSINESS_UNIT, TEAM or ENVIRONMENT."
+          },
+          "scopeId": {
+            "type": "string",
+            "title": "scope_id",
+            "description": "scope_id is empty at ORG."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GroupRoleMapping",
+        "additionalProperties": false,
+        "description": "GroupRoleMapping gives every member of a group a role at a scope."
+      },
+      "pantherclaw.v1.ListGroupRoleMappingsRequest": {
+        "type": "object",
+        "title": "ListGroupRoleMappingsRequest",
+        "additionalProperties": false,
+        "description": "ListGroupRoleMappingsRequest has no fields."
+      },
+      "pantherclaw.v1.ListGroupRoleMappingsResponse": {
+        "type": "object",
+        "properties": {
+          "mappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.GroupRoleMapping"
+            },
+            "title": "mappings"
+          }
+        },
+        "title": "ListGroupRoleMappingsResponse",
+        "additionalProperties": false,
+        "description": "ListGroupRoleMappingsResponse lists mappings."
+      },
+      "pantherclaw.v1.ListGroupsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 128
+          }
+        },
+        "title": "ListGroupsRequest",
+        "additionalProperties": false,
+        "description": "ListGroupsRequest is a page of groups."
+      },
+      "pantherclaw.v1.ListGroupsResponse": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.DirectoryGroup"
+            },
+            "title": "groups"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListGroupsResponse",
+        "additionalProperties": false,
+        "description": "ListGroupsResponse is a page of groups."
+      },
+      "pantherclaw.v1.ListSamlConnectionsRequest": {
+        "type": "object",
+        "title": "ListSamlConnectionsRequest",
+        "additionalProperties": false,
+        "description": "ListSamlConnectionsRequest has no fields."
+      },
+      "pantherclaw.v1.ListSamlConnectionsResponse": {
+        "type": "object",
+        "properties": {
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SamlConnection"
+            },
+            "title": "connections"
+          }
+        },
+        "title": "ListSamlConnectionsResponse",
+        "additionalProperties": false,
+        "description": "ListSamlConnectionsResponse lists connections."
+      },
+      "pantherclaw.v1.ListScimTokensRequest": {
+        "type": "object",
+        "title": "ListScimTokensRequest",
+        "additionalProperties": false,
+        "description": "ListScimTokensRequest has no fields."
+      },
+      "pantherclaw.v1.ListScimTokensResponse": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ScimToken"
+            },
+            "title": "tokens"
+          }
+        },
+        "title": "ListScimTokensResponse",
+        "additionalProperties": false,
+        "description": "ListScimTokensResponse lists tokens."
+      },
+      "pantherclaw.v1.RemoveGroupRoleMappingRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "RemoveGroupRoleMappingRequest",
+        "additionalProperties": false,
+        "description": "RemoveGroupRoleMappingRequest names a mapping.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RemoveGroupRoleMappingResponse": {
+        "type": "object",
+        "properties": {
+          "filed": {
+            "title": "filed",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "RemoveGroupRoleMappingResponse",
+        "additionalProperties": false,
+        "description": "RemoveGroupRoleMappingResponse is the filed change."
+      },
+      "pantherclaw.v1.RevokeScimTokenRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "RevokeScimTokenRequest",
+        "additionalProperties": false,
+        "description": "RevokeScimTokenRequest names a token.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RevokeScimTokenResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "title": "token",
+            "$ref": "#/components/schemas/pantherclaw.v1.ScimToken"
+          }
+        },
+        "title": "RevokeScimTokenResponse",
+        "additionalProperties": false,
+        "description": "RevokeScimTokenResponse is the revoked token."
+      },
+      "pantherclaw.v1.SamlConnection": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "idpEntityId": {
+            "type": "string",
+            "title": "idp_entity_id"
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "issuer is what its users' identities carry."
+          },
+          "ssoUrl": {
+            "type": "string",
+            "title": "sso_url"
+          },
+          "certificates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "certificates",
+            "description": "certificates are base64 DER X.509 certificates."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "state is PENDING, ACTIVE, DISABLED or LAPSED."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "disableTime": {
+            "title": "disable_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "SamlConnection",
+        "additionalProperties": false,
+        "description": "SamlConnection is an organization's SAML identity provider."
+      },
+      "pantherclaw.v1.ScimToken": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "issuer is the one issuer whose users and groups the token provisions."
+          },
+          "subjectAttribute": {
+            "type": "string",
+            "title": "subject_attribute",
+            "description": "subject_attribute is the SCIM attribute that holds the subject at\n sign-in: userName or externalId."
+          },
+          "hint": {
+            "type": "string",
+            "title": "hint",
+            "description": "hint is the end of the secret, to tell tokens apart."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "state is PENDING, ACTIVE, REVOKED or LAPSED. Only ACTIVE works."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "revokeTime": {
+            "title": "revoke_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastUseTime": {
+            "title": "last_use_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ScimToken",
+        "additionalProperties": false,
+        "description": "ScimToken is a token as people see it: never its secret."
+      },
+      "pantherclaw.v1.UpdateSamlConnectionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "ssoUrl": {
+            "type": "string",
+            "title": "sso_url",
+            "maxLength": 2048,
+            "minLength": 9
+          },
+          "certificates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 4,
+              "minItems": 1
+            },
+            "title": "certificates",
+            "maxItems": 4,
+            "minItems": 1
+          }
+        },
+        "title": "UpdateSamlConnectionRequest",
+        "additionalProperties": false,
+        "description": "UpdateSamlConnectionRequest is a connection's new settings.",
+        "required": [
+          "id",
+          "ssoUrl",
+          "certificates"
+        ]
+      },
+      "pantherclaw.v1.UpdateSamlConnectionResponse": {
+        "type": "object",
+        "properties": {
+          "filed": {
+            "title": "filed",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "UpdateSamlConnectionResponse",
+        "additionalProperties": false,
+        "description": "UpdateSamlConnectionResponse is the filed change."
       },
       "pantherclaw.v1.RecommendationCategory": {
         "type": "string",
@@ -88096,6 +90976,704 @@
         "title": "TerminateRunResponse",
         "additionalProperties": false,
         "description": "TerminateRunResponse is the action."
+      },
+      "pantherclaw.v1.SaasScanState": {
+        "type": "string",
+        "title": "SaasScanState",
+        "enum": [
+          "SAAS_SCAN_STATE_UNSPECIFIED",
+          "SAAS_SCAN_STATE_PENDING",
+          "SAAS_SCAN_STATE_RUNNING",
+          "SAAS_SCAN_STATE_DONE",
+          "SAAS_SCAN_STATE_FAILED"
+        ],
+        "description": "SaasScanState is how a run stands."
+      },
+      "pantherclaw.v1.GetSaasScanRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Run id."
+          }
+        },
+        "title": "GetSaasScanRequest",
+        "additionalProperties": false,
+        "description": "GetSaasScanRequest names a run.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetSaasScanResponse": {
+        "type": "object",
+        "properties": {
+          "scan": {
+            "title": "scan",
+            "description": "The run.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SaasScan"
+          }
+        },
+        "title": "GetSaasScanResponse",
+        "additionalProperties": false,
+        "description": "GetSaasScanResponse returns it."
+      },
+      "pantherclaw.v1.ImportSaasReportRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "source",
+            "enum": [
+              "copilot_studio",
+              "chatgpt_enterprise"
+            ],
+            "description": "\"copilot_studio\" or \"chatgpt_enterprise\"."
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "description": "The Dataverse organization or ChatGPT workspace the recording covers."
+          },
+          "findings": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SaasReportFinding"
+            },
+            "title": "findings",
+            "maxItems": 200,
+            "description": "The findings."
+          },
+          "scanned": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 32,
+              "maxItems": 16
+            },
+            "title": "scanned",
+            "maxItems": 16,
+            "description": "What the recording read in full."
+          },
+          "notScanned": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "title": "not_scanned",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "title": "value",
+              "maxLength": 512
+            },
+            "description": "What it could not read, with why. Anything not named in either is\n recorded as not reported."
+          },
+          "counts": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "title": "counts",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "title": "value",
+              "format": "int64"
+            },
+            "description": "Counts of what it read, each a name from a closed list (\"agents\",\n \"records_unread\"); any other name is refused."
+          }
+        },
+        "title": "ImportSaasReportRequest",
+        "additionalProperties": false,
+        "description": "ImportSaasReportRequest is one parsed recording.",
+        "required": [
+          "source",
+          "tenant"
+        ]
+      },
+      "pantherclaw.v1.ImportSaasReportRequest.CountsEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "value",
+            "format": "int64"
+          }
+        },
+        "title": "CountsEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ImportSaasReportRequest.NotScannedEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "NotScannedEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ImportSaasReportResponse": {
+        "type": "object",
+        "properties": {
+          "scan": {
+            "title": "scan",
+            "description": "The run the import made.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SaasScan"
+          },
+          "created": {
+            "type": "integer",
+            "title": "created",
+            "format": "int32",
+            "description": "Findings that made a new discovery."
+          },
+          "counted": {
+            "type": "integer",
+            "title": "counted",
+            "format": "int32",
+            "description": "Findings seen before."
+          },
+          "dropped": {
+            "type": "integer",
+            "title": "dropped",
+            "format": "int32",
+            "description": "Findings dropped at the cap on open discoveries, and reported not scanned."
+          },
+          "reopened": {
+            "type": "integer",
+            "title": "reopened",
+            "format": "int32",
+            "description": "Dismissed findings reopened because what they may do changed."
+          },
+          "missed": {
+            "type": "integer",
+            "title": "missed",
+            "format": "int32",
+            "description": "Discoveries of the tenant this complete run did not see."
+          },
+          "droppedAttributes": {
+            "type": "integer",
+            "title": "dropped_attributes",
+            "format": "int32",
+            "description": "Attributes the server did not keep."
+          }
+        },
+        "title": "ImportSaasReportResponse",
+        "additionalProperties": false,
+        "description": "ImportSaasReportResponse says what was recorded."
+      },
+      "pantherclaw.v1.ListSaasAgentsRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "source",
+            "maxLength": 32,
+            "description": "Only this source; empty for all."
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Page size (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 512,
+            "description": "Page token from the previous page."
+          }
+        },
+        "title": "ListSaasAgentsRequest",
+        "additionalProperties": false,
+        "description": "ListSaasAgentsRequest pages through external agents."
+      },
+      "pantherclaw.v1.ListSaasAgentsResponse": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SaasAgent"
+            },
+            "title": "agents",
+            "description": "The agents."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token of the next page."
+          }
+        },
+        "title": "ListSaasAgentsResponse",
+        "additionalProperties": false,
+        "description": "ListSaasAgentsResponse is one page."
+      },
+      "pantherclaw.v1.ListSaasScansRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "source",
+            "maxLength": 32,
+            "description": "Only this source; empty for all."
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Page size (default 50, at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 512,
+            "description": "Page token from the previous page."
+          }
+        },
+        "title": "ListSaasScansRequest",
+        "additionalProperties": false,
+        "description": "ListSaasScansRequest pages through runs."
+      },
+      "pantherclaw.v1.ListSaasScansResponse": {
+        "type": "object",
+        "properties": {
+          "scans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.SaasScan"
+            },
+            "title": "scans",
+            "description": "The runs."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token of the next page."
+          }
+        },
+        "title": "ListSaasScansResponse",
+        "additionalProperties": false,
+        "description": "ListSaasScansResponse is one page."
+      },
+      "pantherclaw.v1.SaasAgent": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "description": "The agent."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "\"copilot_studio\" or \"chatgpt_enterprise\"."
+          },
+          "coverage": {
+            "title": "coverage",
+            "description": "Always observe-only: PantherClaw enforces nothing in a vendor's tenant.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CoverageState"
+          },
+          "ownerUserId": {
+            "type": "string",
+            "title": "owner_user_id",
+            "description": "Its owner; empty until a person names one."
+          },
+          "backupOwnerUserId": {
+            "type": "string",
+            "title": "backup_owner_user_id",
+            "description": "Its backup owner."
+          },
+          "discoveryState": {
+            "type": "string",
+            "title": "discovery_state",
+            "description": "\"OPEN\" with no owner, \"CLAIMED\" once owned, or \"DISMISSED\"."
+          },
+          "attributes": {
+            "type": "object",
+            "title": "attributes",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "UNTRUSTED attributes of the record."
+          },
+          "seenCount": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "seen_count",
+            "format": "int64",
+            "description": "How often imports and scans saw it."
+          },
+          "missedScans": {
+            "type": "integer",
+            "title": "missed_scans",
+            "format": "int32",
+            "description": "Complete runs in a row that did not see it."
+          },
+          "firstSeenTime": {
+            "title": "first_seen_time",
+            "description": "When first seen.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastSeenTime": {
+            "title": "last_seen_time",
+            "description": "When last seen.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "title": "status",
+            "description": "What it is in words: \"owner set, external agent\" once owned (its\n discovery reads CLAIMED, but an external agent is never claimed), \"no\n owner, external agent\" or \"dismissed, external agent\"."
+          }
+        },
+        "title": "SaasAgent",
+        "additionalProperties": false,
+        "description": "SaasAgent is one external agent. Its attributes are UNTRUSTED text a vendor\n tenant holds: show them as text and act on none of them."
+      },
+      "pantherclaw.v1.SaasAgent.AttributesEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "AttributesEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SaasReportFinding": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "copilot_studio_agent",
+              "chatgpt_gpt"
+            ],
+            "description": "\"copilot_studio_agent\" or \"chatgpt_gpt\", the source's own kind."
+          },
+          "key": {
+            "type": "string",
+            "title": "key",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "Stable key of the record (hex SHA-256); the server derives it again from\n the source, the tenant and the record's id."
+          },
+          "attributes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "title": "attributes",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "string",
+              "title": "value",
+              "maxLength": 256
+            },
+            "description": "UNTRUSTED attributes."
+          }
+        },
+        "title": "SaasReportFinding",
+        "additionalProperties": false,
+        "description": "SaasReportFinding is one finding of a report.",
+        "required": [
+          "kind",
+          "key"
+        ]
+      },
+      "pantherclaw.v1.SaasReportFinding.AttributesEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "AttributesEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SaasScan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Run id."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "\"copilot_studio\" or \"chatgpt_enterprise\"."
+          },
+          "origin": {
+            "type": "string",
+            "title": "origin",
+            "description": "\"import\" or \"gateway\"."
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "description": "The tenant it covers."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "The connection a gateway scan used; empty for an import."
+          },
+          "state": {
+            "title": "state",
+            "description": "How it stands.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SaasScanState"
+          },
+          "counts": {
+            "type": "object",
+            "title": "counts",
+            "additionalProperties": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "title": "value",
+              "format": "int64"
+            },
+            "description": "What it counted."
+          },
+          "scanned": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "scanned",
+            "description": "What it read in full."
+          },
+          "notScanned": {
+            "type": "object",
+            "title": "not_scanned",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "What it did not read, with why: never \"none found\"."
+          },
+          "startedBy": {
+            "type": "string",
+            "title": "started_by",
+            "description": "Who started it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it started.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "finishTime": {
+            "title": "finish_time",
+            "description": "When it finished.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "SaasScan",
+        "additionalProperties": false,
+        "description": "SaasScan is one import or gateway scan."
+      },
+      "pantherclaw.v1.SaasScan.CountsEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "value",
+            "format": "int64"
+          }
+        },
+        "title": "CountsEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SaasScan.NotScannedEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "NotScannedEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.SetSaasAgentOwnerRequest": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "description": "The external agent."
+          },
+          "ownerUserId": {
+            "type": "string",
+            "title": "owner_user_id",
+            "format": "uuid",
+            "description": "The owner, an active user."
+          },
+          "backupOwnerUserId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "backup_owner_user_id",
+            "description": "The backup owner, optional.",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 1000,
+            "minLength": 1,
+            "description": "Why, for the agent's history."
+          }
+        },
+        "title": "SetSaasAgentOwnerRequest",
+        "additionalProperties": false,
+        "description": "SetSaasAgentOwnerRequest names an owner.",
+        "required": [
+          "agentId",
+          "ownerUserId",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.SetSaasAgentOwnerResponse": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "title": "agent",
+            "description": "The agent, still DISCOVERED and observe-only.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SaasAgent"
+          }
+        },
+        "title": "SetSaasAgentOwnerResponse",
+        "additionalProperties": false,
+        "description": "SetSaasAgentOwnerResponse returns the agent."
+      },
+      "pantherclaw.v1.StartSaasScanRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "A connection of the source's package."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "enum": [
+              "copilot_studio",
+              "chatgpt_enterprise"
+            ],
+            "description": "\"copilot_studio\" or \"chatgpt_enterprise\"."
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "description": "The Dataverse organization id, or the ChatGPT workspace id."
+          }
+        },
+        "title": "StartSaasScanRequest",
+        "additionalProperties": false,
+        "description": "StartSaasScanRequest names what to collect.",
+        "required": [
+          "connectionId",
+          "source",
+          "tenant"
+        ]
+      },
+      "pantherclaw.v1.StartSaasScanResponse": {
+        "type": "object",
+        "properties": {
+          "scan": {
+            "title": "scan",
+            "description": "The run, PENDING.",
+            "$ref": "#/components/schemas/pantherclaw.v1.SaasScan"
+          }
+        },
+        "title": "StartSaasScanResponse",
+        "additionalProperties": false,
+        "description": "StartSaasScanResponse returns the run."
       },
       "pantherclaw.v1.SandboxRouteKind": {
         "type": "string",
@@ -97546,6 +101124,10 @@
       "description": "IdentityService administers PAP/1 workload identity (Badge; PAP-1 §3,\n ADR-0013, ADR-0018, G0 M3): enrollment tokens, agent instances and their\n admission, and trusted-issuer entries for L2 attestation. Workloads\n themselves use WorkloadService."
     },
     {
+      "name": "pantherclaw.v1.IdpAccessService",
+      "description": "IdpAccessService manages how an organization's identity provider and\n standard MCP clients reach its agents (G0 M26 D400-D402, D408; H8):\n assertion issuers, the client ids they may name, and the allow-list of\n MCP clients. Nothing here creates authority: an assertion or a sign-in\n uses or narrows an existing grant, and a person with no grant gets none.\n\n Adding or changing anything is a two-person protected change in every\n protect mode: the call files it and returns its change request, and it\n applies when a different person holding identity_provider.manage confirms\n it with a security key. Turning something off applies at once, so a\n compromised provider can be cut off without waiting (HR-141). Only a\n person may call a write.\n\n Writes that add or change need the Team edition; turning off and reading\n work in every edition, and what is ACTIVE keeps working after a downgrade."
+    },
+    {
       "name": "pantherclaw.v1.IncidentService",
       "description": "IncidentService serves Reflex's alerts, incidents, suppressions and owned\n operational failures (G0 M10 D14–D18; F603, F607, F616, F641; HR-242,\n HR-243). Alert and incident history is append-only: repeats add evidence\n and changes add events. Lists show only what the caller may read: an\n alert or incident about agents is listed when the caller holds\n incident.read where those agents live, and counts never include hidden\n rows (D8)."
     },
@@ -97622,6 +101204,10 @@
       "description": "PublisherService handles compromised publishers (G0 M11 part 2 D43;\n F595, F596, HR-293, T-129; Business edition). Marking a person\n compromised stops their confirming, approving, publishing, activating and\n promoting at once, voids their pending requests, pauses the automations\n whose ceiling they approved and halts the rollouts they confirmed; what\n they published since the given time is listed, each item is reviewed\n KEEP or ROLLBACK by someone else, and only then can two other people\n clear the mark. A valid signature never exempts."
     },
     {
+      "name": "pantherclaw.v1.ProvisioningService",
+      "description": "ProvisioningService manages what an enterprise identity provider may do\n (G0 M26 D405, D406, D409; HR-629..634): SCIM tokens, SAML connections and\n the roles a group carries. The SCIM and SAML protocols themselves are\n served by the enterprise build.\n\n Activating a SCIM token, every SAML connection change and every group role\n mapping change is a two-person protected change in every protect mode: the\n call files it and it applies when a different person holding\n identity_provider.manage confirms it with a security key. Every org admin\n is notified. Only a person may file one. Revoking a token applies at once.\n\n A group never carries a role that holds role.bind, nor Emergency Responder:\n those stay bound in PantherClaw.\n\n Creating and activating need the Enterprise edition. Revoking, disabling\n and reading work in every edition."
+    },
+    {
       "name": "pantherclaw.v1.RecommendationService",
       "description": "RecommendationService says which integrations would close what discovered\n agents and credentials need (G0 M21 D302, D308; F343; HR-535, HR-536; Team\n edition).\n\n Recommendations are computed on each read from a closed catalog, over\n discoveries, coverage, onboarding and connections. A recommendation\n changes nothing: it names what would help, what that enables and what\n stays unsupported. Reads show only what the viewer may see: signals from\n agents count only the agents the viewer's posture.read reaches, and\n org-wide integration gaps need posture.read at org scope. Dismissing hides\n a recommendation for the whole org until it is undone, so it needs\n posture.manage at org scope."
     },
@@ -97636,6 +101222,10 @@
     {
       "name": "pantherclaw.v1.ResponseService",
       "description": "ResponseService contains, terminates, revokes and restores (G0 M10;\n F547, F552, F561, F288, F013, F243, F230, F134, F555, F564, F568, F570,\n F541; HR-248..HR-252). A containment control is enforced in the\n Authority's decision path: DENY_ALL and DENY_OPERATION deny CONTAINED,\n HOLD_WRITES holds every non-read action for one independent responder.\n Adding or lifting one raises the containment epoch in the same\n transaction. Each request is a response action whose paths (the gateways\n serving the scope, the affected agents' coverage routes, agent-held\n credentials, dispatches in flight) are confirmed one by one: the action\n is CONFIRMED only when every material path is. A control wider than one\n run or agent needs the digest of its current preview. Lifting is a\n restoration, decided by an independent reviewer; closing an incident lifts\n nothing. The kill switch stays on the emergency-stop page."
+    },
+    {
+      "name": "pantherclaw.v1.SaasDiscoveryService",
+      "description": "SaasDiscoveryService finds agents people built in SaaS tenants (N6, G0 M26\n D407; F924-F929; HR-635..639; Business edition): Microsoft Copilot Studio\n and ChatGPT Enterprise.\n\n It reads metadata only, never conversations, prompts or instructions. What\n it finds is UNTRUSTED text. An agent found lands DISCOVERED and observe-only,\n marked external, with no key path: PantherClaw does not enforce anything in\n the vendor's tenant. What a run could not read is reported as not scanned,\n never as none found."
     },
     {
       "name": "pantherclaw.v1.SandboxService",

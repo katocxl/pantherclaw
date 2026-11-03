@@ -101,7 +101,7 @@ func (r *Recording) identity() (pipeline.Identity, error) {
 	if err := errors.Join(err1, err2); err != nil {
 		return pipeline.Identity{}, err
 	}
-	return pipeline.Identity{InstanceID: inst, AgentID: agent, AttestationLevel: r.Request.Attestation, JKT: r.Request.JKT}, nil
+	return pipeline.Identity{InstanceID: inst, AgentID: agent, AttestationLevel: r.Request.Attestation, JKT: r.Request.JKT, Proof: r.Request.Proof}, nil
 }
 
 func fromContainment(c pipeline.Containment, err error) *Containment {
@@ -177,6 +177,7 @@ func fromRun(id ids.UUID, run pipeline.Run, err error) Run {
 	for _, a := range run.Ancestors {
 		out.Ancestors = append(out.Ancestors, principalOf(a))
 	}
+	out.ScopeOperations = slices.Clone(run.ScopeOperations)
 	return out
 }
 
@@ -200,6 +201,7 @@ func (r Run) value() (pipeline.Run, error) {
 		out.Ancestors = append(out.Ancestors, p)
 	}
 	out.Active, out.TaskRef = r.Active, r.TaskRef
+	out.ScopeOperations = slices.Clone(r.ScopeOperations)
 	return out, errors.Join(errs[:]...)
 }
 

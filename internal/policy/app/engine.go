@@ -123,7 +123,8 @@ func (c *Compiled) forDefinition(d *defs.Definition) map[string]compiledRule {
 		maps.Copy(schema, ConsequenceSchema)
 		maps.Copy(schema, RunSchema)
 		maps.Copy(schema, PrincipalSchema)
-		env, err := celenv.New(c.limits, schema, ActionVariable, FactsVariable, NowVariable, ConsequenceVariable, RunVariable, PrincipalVariable)
+		maps.Copy(schema, WorkloadSchema)
+		env, err := celenv.New(c.limits, schema, ActionVariable, FactsVariable, NowVariable, ConsequenceVariable, RunVariable, PrincipalVariable, WorkloadVariable)
 		if err != nil {
 			rules[r.ID] = compiledRule{err: err}
 			continue
@@ -163,6 +164,7 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 	consequence := ConsequenceRecord(in.Consequence)
 	run := RunRecord(in.Run)
 	principal := PrincipalRecord(in.Risk)
+	workload := WorkloadRecord(in.Workload)
 	now := in.Now.Unix()
 	compiled := c.forDefinition(d)
 	rules := make([]*domain.Rule, 0, len(c.Bundle.Rules))
@@ -198,7 +200,7 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 		case missingFact(cr.needs, in.Facts) != "":
 			res.Effect, res.Detail = domain.FactsMissing, "fact "+missingFact(cr.needs, in.Facts)+" is missing or stale"
 		default:
-			vars := map[string]any{"action": action, "facts": FactsRecord(cr.needs, in.Facts), "now": now, "consequence": consequence, "run": run, "principal": principal}
+			vars := map[string]any{"action": action, "facts": FactsRecord(cr.needs, in.Facts), "now": now, "consequence": consequence, "run": run, "principal": principal, "workload": workload}
 			matched, cost, err := cr.prog.EvalBool(ctx, vars)
 			spent += cost
 			switch {
@@ -369,6 +371,9 @@ type Input struct {
 	// (`principal.risk`, G0 M16 D82), from the Authority's own facts; nil is
 	// none.
 	Risk *Risk
+	// Workload is how the Authority verified the action's workload
+	// (`workload`, G0 M26 D402, HR-627); nil is a PAP/1 proof at level 0.
+	Workload *Workload
 }
 
 func missingFact(needs []string, have map[string]fdomain.Value) string {

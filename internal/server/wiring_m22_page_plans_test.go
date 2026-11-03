@@ -62,7 +62,8 @@ func allPages(t *testing.T, h *webhttp.Handler, mux *http.ServeMux) {
 		WithPromotions(struct{ webhttp.Promotions }{}).
 		WithProtect(struct{ webhttp.Protect }{}).
 		WithSlackChannels(struct{ webhttp.SlackChannels }{}).
-		WithTeamsChannels(struct{ webhttp.TeamsChannels }{})
+		WithTeamsChannels(struct{ webhttp.TeamsChannels }{}).
+		WithMcpConsent(struct{ webhttp.McpConsent }{})
 	h.Mount(mux)
 	h.MountA2APins(mux, struct{ webhttp.A2APins }{})
 	h.MountAutomationEndpoints(mux, struct{ webhttp.AutomationEndpoints }{})

@@ -65,6 +65,8 @@ type Service struct {
 	hosted map[ids.UUID]bool
 	// kinds load the M14 kinds' configurations (kinds_m14.go).
 	kinds *ports.KindConfigs
+	// mcpIssuerBase is the server's public URL for MCP authorization (mcp_access_m26.go).
+	mcpIssuerBase string
 }
 
 // New returns the gateway use cases. gatewayAPIURL is the URL of the

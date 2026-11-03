@@ -553,6 +553,26 @@
       "ASI02": "Tool misuse (ASI02): the agent's ECS deploy reaches past its role's account."
     }
   },
+  "RT-150": {
+    "digest": "c7de7dd8f6e59b460447a24bb8e69ff079e879e98f2b8e488e0cd34301fbde4c",
+    "tier": "business"
+  },
+  "RT-151": {
+    "digest": "064565a8101b62c5edd6319818f5b799777b774c83d63a6420db87b76e525b70",
+    "tier": "business"
+  },
+  "RT-152": {
+    "digest": "f33994dcdcc71cf7ee2593ccea8a3f46f6cd2e096a2c684583d6314b171325af",
+    "tier": "business"
+  },
+  "RT-153": {
+    "digest": "5e7d97abdc3ffa2b93f927a9f86cf0be657ce239ff52042e3f390627f2206fe2",
+    "tier": "business"
+  },
+  "RT-154": {
+    "digest": "563e80797a9768be5795d398be180d487614a897915fd816ce26802fbeceba13",
+    "tier": "business"
+  },
   "RT-158": {
     "digest": "aeb613ec21dab6d709ed19bde8a81cac8ff449e05a73c9f68056338cf877ec22",
     "tier": "business"

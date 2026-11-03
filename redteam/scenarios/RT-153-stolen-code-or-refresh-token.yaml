@@ -1,0 +1,46 @@
+apiVersion: pantherclaw.range/v1
+id: RT-153
+title: A stolen authorization code or refresh token, or a redirect the client never registered, gains nothing
+category: boundary
+suite: platform
+tier: business
+attacker: A9
+threats: [T-269]
+rules: [HR-628]
+requires: [payments]
+harness_only: true
+steps:
+  # The person's consent to an allow-listed client: the tool runs.
+  - id: code-flow
+    do: idp.probe
+    with: {attack: code_flow}
+    expect:
+      outcome: ALLOW
+  - id: unregistered-redirect
+    do: idp.probe
+    with: {attack: unregistered_redirect}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_REQUEST
+      decisive_control: HR-628
+  - id: code-replay
+    do: idp.probe
+    with: {attack: code_replay}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_GRANT
+      decisive_control: HR-628
+  - id: wrong-verifier
+    do: idp.probe
+    with: {attack: wrong_verifier}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_GRANT
+      decisive_control: HR-628
+  - id: refresh-reuse
+    do: idp.probe
+    with: {attack: refresh_reuse}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_GRANT
+      decisive_control: HR-628

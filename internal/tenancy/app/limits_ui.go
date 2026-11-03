@@ -67,6 +67,13 @@ func checkMemberLimit(ctx context.Context, ents Entitlements, q *dbq.Queries, or
 	return limitError(ent.CheckMembers(int(members + pending)))
 }
 
+// CheckMemberLimit is checkMemberLimit for a member who joins with no
+// invitation, by SCIM (G0 M26 D405). Call it in the transaction that adds
+// the member.
+func CheckMemberLimit(ctx context.Context, ents Entitlements, q *dbq.Queries, org ids.OrgID) error {
+	return checkMemberLimit(ctx, ents, q, org)
+}
+
 func limitError(err error) error {
 	if errors.Is(err, billing.ErrLimitReached) {
 		return pcerr.Wrap(err, pcerr.FailedPrecondition, "PLAN_LIMIT", err.Error())

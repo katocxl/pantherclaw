@@ -1,0 +1,18 @@
+{{template "head" .}}
+<h1>Allow an MCP client to act as {{.AgentName}}?</h1>
+<p class="note">Allowing this creates no access. The client can only do what grants you already gave this agent allow, under your organization's guardrails and policy, and every call is checked again. It acts as you, through a run that ends when the grant or the run ends.</p>
+<dl>
+<dt>Client</dt><dd><code>{{.ClientURL}}</code> on <strong>{{.ClientHost}}</strong>{{with .ClientName}}; it calls itself <span class="untrusted">{{.}}</span> (the client's own words){{end}}</dd>
+<dt>Agent</dt><dd>{{.AgentName}} (<code>{{.Agent}}</code>)</dd>
+<dt>Server</dt><dd><code>{{.Connection}}</code> at <code>{{.Resource}}</code></dd>
+<dt>Returns to</dt><dd><code>{{.Request.RedirectURI}}</code></dd>
+{{if .LoopbackRedirect}}<dd class="alert" id="mcp-loopback">This returns to a plain HTTP address on this device. Any program running here could receive the answer. Allow only if you started this client yourself just now.</dd>{{end}}
+{{if .Request.HasScope}}<dt>Asks for</dt><dd><code>{{.Request.Scope}}</code></dd>{{end}}
+</dl>
+<p>
+<button type="button" id="mcp-allow" data-path="{{.Path}}" data-query="{{.Query}}">Allow</button>
+<button type="button" id="mcp-deny" data-path="{{.Path}}" data-query="{{.Query}}">Deny</button>
+</p>
+<p id="status" role="status"></p>
+<script src="/static/mcp_consent.js"></script>
+{{template "foot" .}}

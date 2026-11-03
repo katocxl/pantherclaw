@@ -805,16 +805,6 @@ Reports show evidence and gaps and are not a certification or statement of compl
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| F890 | OWASP and NIST coverage | Framework tables map OWASP ASI and NIST AI RMF controls to the evidence kinds that can show them. | Next | Team | M25 | new |
-| F891 | ISO, EU and SOC 2 coverage | The same tables for ISO 42001, the EU AI Act deployer view and SOC 2. | Next | Business | M25 | new |
-| F892 | Control states | Each control is EVIDENCED, PARTIAL, GAP or STATED, with no score and never "compliant". AI Act fields are STATED, never evidence. Simulated evidence is split and labelled. | Next | Team | M25 | F527, F630, F801 |
-| F893 | Framework coverage API | `ComplianceService` lists frameworks and returns controls with state, evidence references and gap reasons for a time range. Reading needs `compliance.read`. | Next | Team | M25 | new |
-| F894 | Compliance report pack | A signed pack of its own scope `compliance`, with its own Kind and fixed statement, re-derived offline by `pclaw verify`. Export needs `evidence.export` and stays ClassSafety. | Next | Team | M25 | F527 |
-| F895 | Report header | States the range, the simulated split and a fixed statement: this shows evidence and gaps and is not a certification or statement of compliance. | Next | Team | M25 | F801 |
-| F896 | Stored reports | A `pc.compliance_reports` row keeps the digest and parameters, so a report re-exports after the pack's 7 days. | Next | Team | M25 | new |
-| F897 | Own-records evidence | Evidence comes only from receipts, approvals, grants, coverage, range and campaign results. What the creator can't read is a gap. | Next | Team | M25 | F801 |
-| F898 | ASI tags on scenarios | Range scenarios carry ASI tags. ASI05 and ASI06 read as gaps unless a real source maps them. | Next | Team | M25 | F801 |
-| F899 | Framework view | A console view of controls, states, evidence and gaps per framework, with no score, in the edition of its data. | Next | Team | M25 | F797 |
 | F890 | Framework control table | Controls and the evidence each reads for OWASP ASI, NIST AI RMF, the EU AI Act deployer view, ISO 42001 and SOC 2. An obligation no record reaches is listed as a gap. | Next | Team | M25 | new |
 | F891 | Control states | EVIDENCED, PARTIAL, GAP, STATED, with no score and never "compliant". Not exercised is a gap. A reported result lifts nothing: it is a `reported_only` gap. | Next | Team | M25 | F527, F801 |
 | F892 | Coverage API | `ComplianceService`: `ListFrameworks`, `GetFrameworkCoverage`, `ListComplianceReports`, under `compliance.read`; `pclaw compliance frameworks`, `coverage` and `reports`. | Next | Team | M25 | new |
@@ -827,11 +817,30 @@ Reports show evidence and gaps and are not a certification or statement of compl
 | F899 | M25 exit | `test/e2e/m25_exit_e2e_test.go`: a report on simulators with gaps shown, verified offline. | Next | Team | M25 | new |
 | F900 | Campaign library and results | RT-140..RT-149, embedded in the server. Outcomes derived by the server from every run bound to each step, worst wins; results name the image and say twin, not production. | Next | Business | M25 | F630, F801 |
 | F901 | Campaign runner and model relay | `pclaw redteam campaign run` with the customer's key in a local relay, and a narrow gateway model route, off unless a campaign is open. | Next | Business | M25 | new |
+| F953 | Console framework coverage view | Per framework and period, the view shows the server's statement verbatim and each control's state (EVIDENCED, PARTIAL, GAP or STATED) with a simulated-only mark. It lists gaps with their reasons ("Outside your permission", never "no records"), evidence references and sources, and keeps real and simulated records apart. Stored reports are listed and export as an evidence pack. No score, no percentage, never "compliant"; each framework in its own edition. | Next | Team | M25 | F797 |
 
 ### M26 rows: Enterprise identity
 
+PantherClaw is the per-task layer behind the customer's IdP. An assertion uses or narrows an existing grant and never creates one (HR-146). All of this is tested on simulators and synthetic fixtures, and real tenant checks stay pending (F801) ([G0 M26](g0/M26.md)). F914–F917 are unused.
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
+| F910 | IdP assertion access | ID-JAG assertions through jwt-bearer use or narrow an existing grant, per task and run, or are refused `NO_GRANT`. `AssertionVerifier` with an `idjag` adapter naming draft-06; tested on a simulated Okta. | Next | Team | M26 | F801 |
+| F911 | Issuers and client bindings | Organization assertion issuers and client-to-agent bindings, each a two-person protected change; disabling or removing is immediate. The client authenticates with an admitted instance's key. | Next | Team | M26 | new |
+| F912 | MCP authorization | Off by default per org. `pap-mcp+jwt` for one gateway server, 5 minutes, re-verified on every call at `/mcp-oauth/{connection}`. `workload.proof == "bearer"` is level 0. | Next | Team | M26 | F801 |
+| F913 | Allow-listed MCP clients | Clients by Client ID Metadata Document, two-person allow-listing, code flow with PKCE and consent, rotating refresh tokens. A changed document is refused until a second person takes it. | Next | Team | M26 | new |
+| F918 | SCIM 2.0 Users | Create, read, list with exact filters (userName without case), replace, patch, delete. Enterprise to add; reads and deprovisioning in every edition. | Next | Enterprise | M26 | new |
+| F919 | SCIM 2.0 Groups | Groups and members. Enterprise to add; reads and removals in every edition. | Next | Enterprise | M26 | new |
+| F920 | Group role mappings | Mappings as two-person protected changes, never to a role that binds roles or to Emergency Responder. Enterprise to add; removal in every edition. | Next | Enterprise | M26 | new |
+| F921 | SAML connections | SAML connections as protected changes. Enterprise to add; disabling in every edition. | Next | Enterprise | M26 | new |
+| F922 | SAML sign-in | SP-initiated SAML sign-in for existing users, with a signed assertion. Every edition for an ACTIVE connection. | Next | Enterprise | M26 | new |
+| F923 | Enterprise server build | `pantherclaw-server-ee`: the core server with the enterprise package, with no billing and no console, built from a private repository. | Next | Enterprise | M26 | new |
+| F924 | `pclaw discover import` | `pclaw discover import --source <s> --file <f>` parses an exported recording on the admin's machine and sends the metadata. | Next | Business | M26 | new |
+| F925 | SaaS collector | A gateway collects from Copilot Studio and ChatGPT Enterprise through a connection, under a `saas_scan` lease, tested on simulators with SYNTHETIC rows. | Next | Business | M26 | F801 |
+| F926 | Change detection | Material attributes recorded and announced, dismissed findings reopened, misses counted only by complete runs, vanished noticed once. | Next | Business | M26 | new |
+| F927 | External agents | Found agents land DISCOVERED, observe-only, marked `external`, with `Agent.external` on the API. | Next | Business | M26 | new |
+| F928 | Owners and the queue | `SetSaasAgentOwner` sets an owner only. The ranked queue's `saas` source shows unowned external agents and tenants left partly unread. | Next | Business | M26 | new |
+| F929 | SaaS discovery edition | `SaaSDiscovery()` is Business and above: the API, the CLI import and the queue source answer EDITION_REQUIRED below it. | Next | Business | M26 | new |
 
 ### M27 rows: Agent Detection & Response
 
@@ -914,7 +923,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 
 Checked on 2026-10-09 by a script that parsed every table row with a Source column and expanded the ranges, after ADR-0017, ADR-0018 and ADR-0019 added PN-002.8, PN-016.3, PN-023 and PN-024 and moved four rows to M14; row counts updated on 2026-10-20 after G0 UI added PN-025, PN-026 and the new rows F803–F830.
 
-- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows F831–F949 of M22–M27 come on top of these counts as each milestone lands; they are new rows, not catalog IDs.
+- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows from F831 on, added from M22 on, come on top of these counts as each milestone or follow-up lands; they are new rows, not catalog IDs.
 - **Coverage:** 802 of 802 catalog IDs (F001–F802) appear in at least one Source cell. None are missing and none are out of range.
 - **Format checks:** every row ID matches its convention, and no row ID repeats. Every Phase, Edition and Milestone value is valid. Every "What the backend delivers" cell is ≤ 36 words.
 

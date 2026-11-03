@@ -114,6 +114,9 @@ type Handler struct {
 	// modelDrafting is the model drafting settings page (G0 M21 D309); nil
 	// when not mounted.
 	modelDrafting ModelDrafting
+	// mcpConsent is the MCP consent page (G0 M26 D408.4); nil when not
+	// mounted.
+	mcpConsent McpConsent
 	// playbook is the identity playbook page (G0 M10 D38); nil when not
 	// mounted.
 	playbook         PlaybookRequests
@@ -182,6 +185,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountCredentialRotations(mux)
 	h.mountSecretPages(mux)
 	h.mountModelDrafting(mux)
+	h.mountMcpConsent(mux)
 	h.mountPlaybook(mux)
 	h.mountChanges(mux)
 	h.mountPromotions(mux)
@@ -412,11 +416,18 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		h.fail(w, r, err)
 		return
-	case out.Reason != "":
-		h.render(w, http.StatusForbidden, "error.html", page{Title: "Sign in", Message: reasonText[out.Reason]})
-		return
-	case out.Kind == authnapp.SessionAccount:
+	case out.Kind == authnapp.SessionAccount && out.Reason == "":
 		h.accountSignedIn(w, out)
+		return
+	}
+	h.signedIn(w, out)
+}
+
+// signedIn answers a finished org sign-in: the refusal's page, or the
+// session cookie and the page that opens the next one.
+func (h *Handler) signedIn(w http.ResponseWriter, out authnapp.BrowserSignIn) {
+	if out.Reason != "" {
+		h.render(w, http.StatusForbidden, "error.html", page{Title: "Sign in", Message: reasonText[out.Reason]})
 		return
 	}
 	next := out.Next
@@ -427,6 +438,23 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 	// A SameSite=Strict cookie is not sent on a redirect chain that started
 	// at the provider, so the next page is opened from this same-origin page.
 	h.render(w, http.StatusOK, "continue.html", page{Title: "Signed in", Next: next})
+}
+
+// FinishExternalSignIn answers a sign-in another protocol verified (G0 M26
+// D405), exactly as Callback answers an OpenID one. Only here is an
+// extension's sign-in given a session cookie.
+func (h *Handler) FinishExternalSignIn(w http.ResponseWriter, r *http.Request, out authnapp.BrowserSignIn, err error) {
+	pageHeaders(w)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.signedIn(w, out)
+}
+
+// ClientMeta is what this server observes about a request's browser.
+func (h *Handler) ClientMeta(r *http.Request) authnapp.ClientMeta {
+	return authnapp.ClientMeta{UserAgent: r.UserAgent(), IP: h.clientIP(r)}
 }
 
 var reasonText = map[string]string{
