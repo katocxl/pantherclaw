@@ -22,7 +22,8 @@ func (f *fixture) alert(t *testing.T, atlas, attack []string) ids.UUID {
 	t.Helper()
 	id := ids.NewV7()
 	f.exec(t, `INSERT INTO pc.alerts (org_id, id, source, title, severity, attention, basis, dedupe_key, first_seen, last_seen, atlas, attack)
-		VALUES ($1, $2, 'detection', 'a', 'HIGH', 'ALERT', 'RULE_MATCH', $3, now(), now(), $4, $5)`,
+		VALUES ($1, $2, 'detection', 'a', 'HIGH', 'ALERT', 'RULE_MATCH', $3, now(), now(),
+			coalesce($4::text[], '{}'), coalesce($5::text[], '{}'))`,
 		f.org, id, "d:"+id.String(), atlas, attack)
 	return id
 }
@@ -31,7 +32,7 @@ func (f *fixture) incident(t *testing.T, atlas, attack []string) ids.UUID {
 	t.Helper()
 	id := ids.NewV7()
 	f.exec(t, `INSERT INTO pc.incidents (org_id, id, title, severity, opened_by, atlas, attack)
-		VALUES ($1, $2, 'i', 'HIGH', 'user:x', $3, $4)`, f.org, id, atlas, attack)
+		VALUES ($1, $2, 'i', 'HIGH', 'user:x', coalesce($3::text[], '{}'), coalesce($4::text[], '{}'))`, f.org, id, atlas, attack)
 	return id
 }
 
