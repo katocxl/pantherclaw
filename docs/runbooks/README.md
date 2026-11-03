@@ -54,3 +54,6 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [device-scan.md](device-scan.md) | M24 | Scheduled metadata scans on managed devices with Intune or Jamf |
 | [pclaw-compliance.md](pclaw-compliance.md) | M25 | `pclaw compliance`: framework coverage, signed compliance reports with evidence and gaps, and offline verification |
 | [pclaw-redteam-campaign.md](pclaw-redteam-campaign.md) | M25 | `pclaw redteam campaign run`: attack campaigns against a range twin, with your model key in a local relay |
+| [idp-access.md](idp-access.md) | M26 | IdP agent access with ID-JAG assertions and MCP client authorization (Team): issuers, bindings, allow-listed clients, changed client documents, reused tokens, rolling back 00291 |
+| [scim-saml.md](scim-saml.md) | M26 | SCIM provisioning and SAML sign-in (Enterprise to add): tokens, deprovisioning, group roles, connections and refused sign-ins |
+| [saas-discovery.md](saas-discovery.md) | M26 | List agents from Copilot Studio and ChatGPT Enterprise (Business): import, gateway scan, not scanned, owners |
