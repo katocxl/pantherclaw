@@ -7026,6 +7026,168 @@
         }
       }
     },
+    "/pantherclaw.v1.ComplianceService/ListFrameworks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ComplianceService"
+        ],
+        "summary": "ListFrameworks",
+        "description": "ListFrameworks lists every framework, and whether this edition reads it.\n permission: compliance.read",
+        "operationId": "pantherclaw.v1.ComplianceService.ListFrameworks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListFrameworksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListFrameworksResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ComplianceService/GetFrameworkCoverage": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ComplianceService"
+        ],
+        "summary": "GetFrameworkCoverage",
+        "description": "GetFrameworkCoverage derives each control of a framework for a period,\n from the records the caller may read.\n permission: compliance.read",
+        "operationId": "pantherclaw.v1.ComplianceService.GetFrameworkCoverage",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetFrameworkCoverageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetFrameworkCoverageResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ComplianceService/ListComplianceReports": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ComplianceService"
+        ],
+        "summary": "ListComplianceReports",
+        "description": "ListComplianceReports lists the signed reports made so far, newest\n first, with their parameters and digest. A report's pack lasts 7 days;\n this row does not, so the same parameters can be exported again, and an\n equal digest shows nothing changed.\n permission: compliance.read",
+        "operationId": "pantherclaw.v1.ComplianceService.ListComplianceReports",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListComplianceReportsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListComplianceReportsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.GitHubService/ProveIdentity": {
       "post": {
         "tags": [
@@ -15011,6 +15173,114 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.ReportLocalRefusalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/AuthorizeModelCall": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "AuthorizeModelCall",
+        "description": "AuthorizeModelCall asks whether one model request may cross the model\n face (G0 M25 D313), and counts it. It is asked for every request: the\n connection must be a simulated model relay this gateway serves, the run\n a simulated run of a range agent, and that agent's open campaign must\n name this relay and this model host, within the run's total.\n permission: gateway.observe",
+        "operationId": "pantherclaw.v1.GatewayService.AuthorizeModelCall",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AuthorizeModelCallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AuthorizeModelCallResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/ReportModelUsage": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "ReportModelUsage",
+        "description": "ReportModelUsage adds the bytes of one model answer to the run's count\n (G0 M25 D313): counts only, never content.\n permission: gateway.observe",
+        "operationId": "pantherclaw.v1.GatewayService.ReportModelUsage",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReportModelUsageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReportModelUsageResponse"
                 }
               }
             }
@@ -25919,6 +26189,276 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.ExportAssuranceReportResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.RangeService/StartCampaign": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RangeService"
+        ],
+        "summary": "StartCampaign",
+        "description": "StartCampaign records an attack campaign against a range twin of the\n customer's agent (G0 M25 D309, HR-220): the image it tests, by digest,\n the one model host of the run and the campaigns of the library it runs.\n Business edition. A range agent has at most one open campaign.\n permission: redteam.run",
+        "operationId": "pantherclaw.v1.RangeService.StartCampaign",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.StartCampaignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.StartCampaignResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.RangeService/StartCampaignStep": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RangeService"
+        ],
+        "summary": "StartCampaignStep",
+        "description": "StartCampaignStep opens one scenario's step of a running campaign: every\n run of the twin created from now until the next step, or the finish,\n is bound to it by the server (G0 M25 D525). Steps run one at a time.\n permission: redteam.run",
+        "operationId": "pantherclaw.v1.RangeService.StartCampaignStep",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.StartCampaignStepRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.StartCampaignStepResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.RangeService/FinishCampaign": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RangeService"
+        ],
+        "summary": "FinishCampaign",
+        "description": "FinishCampaign ends a campaign. Every outcome is derived by the server\n from the transactions of the runs it bound to each step, the worst one\n winning, and from the route reports stored for the step. A scenario\n with no bound run is NOT_EXERCISED, a gap and not a pass (D306). Runs\n in the request are checked against the binding, never trusted.\n permission: redteam.run",
+        "operationId": "pantherclaw.v1.RangeService.FinishCampaign",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.FinishCampaignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.FinishCampaignResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.RangeService/GetCampaign": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RangeService"
+        ],
+        "summary": "GetCampaign",
+        "description": "GetCampaign returns a campaign and its steps.\n permission: redteam.read",
+        "operationId": "pantherclaw.v1.RangeService.GetCampaign",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetCampaignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetCampaignResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.RangeService/ListCampaigns": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.RangeService"
+        ],
+        "summary": "ListCampaigns",
+        "description": "ListCampaigns lists campaigns, newest first.\n permission: redteam.read",
+        "operationId": "pantherclaw.v1.RangeService.ListCampaigns",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListCampaignsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListCampaignsResponse"
                 }
               }
             }
@@ -47130,6 +47670,489 @@
         "title": "UpdateFleetCohortResponse",
         "additionalProperties": false
       },
+      "pantherclaw.v1.ComplianceFramework": {
+        "type": "string",
+        "title": "ComplianceFramework",
+        "enum": [
+          "COMPLIANCE_FRAMEWORK_UNSPECIFIED",
+          "COMPLIANCE_FRAMEWORK_OWASP_ASI",
+          "COMPLIANCE_FRAMEWORK_NIST_AI_RMF",
+          "COMPLIANCE_FRAMEWORK_EU_AI_ACT_DEPLOYER",
+          "COMPLIANCE_FRAMEWORK_ISO_42001",
+          "COMPLIANCE_FRAMEWORK_SOC2"
+        ],
+        "description": "ComplianceFramework is a control table (D300)."
+      },
+      "pantherclaw.v1.ControlState": {
+        "type": "string",
+        "title": "ControlState",
+        "enum": [
+          "CONTROL_STATE_UNSPECIFIED",
+          "CONTROL_STATE_EVIDENCED",
+          "CONTROL_STATE_PARTIAL",
+          "CONTROL_STATE_GAP",
+          "CONTROL_STATE_STATED"
+        ],
+        "description": "ControlState is what the records say of a control (D302)."
+      },
+      "pantherclaw.v1.ComplianceControl": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ControlState"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "evidence",
+            "description": "evidence lists the sources that held something for this control."
+          },
+          "simulatedOnly": {
+            "type": "boolean",
+            "title": "simulated_only",
+            "description": "simulated_only: everything in evidence is simulated."
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceControlGap"
+            },
+            "title": "gaps"
+          }
+        },
+        "title": "ComplianceControl",
+        "additionalProperties": false,
+        "description": "ComplianceControl is one control of a framework."
+      },
+      "pantherclaw.v1.ComplianceControlGap": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "reason: outside_permission, no_records, simulated_only, not_exercised,\n test_failed, reported_only, not_stated, outside_records or limit."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "source is empty for a gap of the control as a whole."
+          },
+          "detail": {
+            "type": "string",
+            "title": "detail"
+          }
+        },
+        "title": "ComplianceControlGap",
+        "additionalProperties": false,
+        "description": "ComplianceControlGap is one thing a control lacks."
+      },
+      "pantherclaw.v1.ComplianceEvidenceRef": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "type",
+            "description": "type: transaction, approval, grant, coverage, range or campaign."
+          },
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "simulated": {
+            "type": "boolean",
+            "title": "simulated",
+            "description": "simulated is what the record itself says."
+          }
+        },
+        "title": "ComplianceEvidenceRef",
+        "additionalProperties": false,
+        "description": "ComplianceEvidenceRef points at a record behind a count."
+      },
+      "pantherclaw.v1.ComplianceFrameworkInfo": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "controlCount": {
+            "type": "integer",
+            "title": "control_count",
+            "format": "int32"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "available",
+            "description": "available: this edition reads it. Otherwise it needs Business."
+          }
+        },
+        "title": "ComplianceFrameworkInfo",
+        "additionalProperties": false,
+        "description": "ComplianceFrameworkInfo is one framework."
+      },
+      "pantherclaw.v1.ComplianceReportInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "packId": {
+            "type": "string",
+            "title": "pack_id",
+            "description": "pack_id is the evidence pack that holds it, while that pack lasts."
+          },
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework"
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "reportSha256": {
+            "type": "string",
+            "title": "report_sha256",
+            "description": "report_sha256 is the hex digest of compliance.json, empty until built."
+          }
+        },
+        "title": "ComplianceReportInfo",
+        "additionalProperties": false,
+        "description": "ComplianceReportInfo is one signed report's parameters and digest."
+      },
+      "pantherclaw.v1.ComplianceSourceCount": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "source: receipts, approvals, grants, coverage, range or campaign."
+          },
+          "readable": {
+            "type": "boolean",
+            "title": "readable",
+            "description": "readable false: the caller may not read this source, and the counts say\n nothing."
+          },
+          "real": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "real",
+            "format": "int64"
+          },
+          "simulated": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "simulated",
+            "format": "int64"
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceEvidenceRef"
+            },
+            "title": "refs"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "truncated: the source held more than a report reads."
+          }
+        },
+        "title": "ComplianceSourceCount",
+        "additionalProperties": false,
+        "description": "ComplianceSourceCount is what one source held in the period."
+      },
+      "pantherclaw.v1.ComplianceStatedCount": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "field",
+            "description": "field: ai_act_role or ai_act_risk."
+          },
+          "readable": {
+            "type": "boolean",
+            "title": "readable"
+          },
+          "stated": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "stated",
+            "format": "int64"
+          },
+          "unset": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unset",
+            "format": "int64"
+          }
+        },
+        "title": "ComplianceStatedCount",
+        "additionalProperties": false,
+        "description": "ComplianceStatedCount is one stated field across the org's agents."
+      },
+      "pantherclaw.v1.ComplianceTestCount": {
+        "type": "object",
+        "properties": {
+          "tag": {
+            "type": "string",
+            "title": "tag"
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "source: range or campaign."
+          },
+          "held": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "held",
+            "format": "int64"
+          },
+          "failed": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "failed",
+            "format": "int64"
+          },
+          "reported": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "reported",
+            "format": "int64",
+            "description": "reported: a client or edge report no server record confirms."
+          },
+          "notExercised": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "not_exercised",
+            "format": "int64",
+            "description": "not_exercised: the test ran, this part of it did not."
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceEvidenceRef"
+            },
+            "title": "refs"
+          }
+        },
+        "title": "ComplianceTestCount",
+        "additionalProperties": false,
+        "description": "ComplianceTestCount is one OWASP tag's results from one test source. Test\n results are simulated by construction."
+      },
+      "pantherclaw.v1.GetFrameworkCoverageRequest": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework",
+            "not": {
+              "enum": [
+                "COMPLIANCE_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "startTime": {
+            "title": "start_time",
+            "description": "Start, inclusive.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "description": "End, exclusive.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetFrameworkCoverageRequest",
+        "required": [
+          "startTime",
+          "endTime",
+          "framework"
+        ],
+        "additionalProperties": false,
+        "description": "GetFrameworkCoverageRequest names a framework and a period.\nend_time must be after start_time, at most 366 days later:\n```\nthis.end_time \u003e this.start_time \u0026\u0026 this.end_time - this.start_time \u003c= duration('8784h')\n```\n\n"
+      },
+      "pantherclaw.v1.GetFrameworkCoverageResponse": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework"
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "realRecords": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "real_records",
+            "format": "int64",
+            "description": "real_records and simulated_records split the period's activity (F630)."
+          },
+          "simulatedRecords": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "simulated_records",
+            "format": "int64"
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceControl"
+            },
+            "title": "controls"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceSourceCount"
+            },
+            "title": "sources"
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceTestCount"
+            },
+            "title": "tests"
+          },
+          "stated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceStatedCount"
+            },
+            "title": "stated"
+          },
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "description": "statement is the fixed sentence every report carries."
+          }
+        },
+        "title": "GetFrameworkCoverageResponse",
+        "additionalProperties": false,
+        "description": "GetFrameworkCoverageResponse is one framework's coverage for a period."
+      },
+      "pantherclaw.v1.ListComplianceReportsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Page size, at most 200; 0 for the default."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256
+          }
+        },
+        "title": "ListComplianceReportsRequest",
+        "additionalProperties": false,
+        "description": "ListComplianceReportsRequest pages through reports."
+      },
+      "pantherclaw.v1.ListComplianceReportsResponse": {
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceReportInfo"
+            },
+            "title": "reports"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListComplianceReportsResponse",
+        "additionalProperties": false,
+        "description": "ListComplianceReportsResponse is one page, newest first."
+      },
+      "pantherclaw.v1.ListFrameworksRequest": {
+        "type": "object",
+        "title": "ListFrameworksRequest",
+        "additionalProperties": false,
+        "description": "ListFrameworksRequest takes nothing."
+      },
+      "pantherclaw.v1.ListFrameworksResponse": {
+        "type": "object",
+        "properties": {
+          "frameworks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFrameworkInfo"
+            },
+            "title": "frameworks"
+          }
+        },
+        "title": "ListFrameworksResponse",
+        "additionalProperties": false,
+        "description": "ListFrameworksResponse lists every framework."
+      },
       "pantherclaw.v1.ConnectorState": {
         "type": "string",
         "title": "ConnectorState",
@@ -48943,6 +49966,11 @@
             "title": "a2a_status",
             "description": "An a2a connection's public URL and pin state, on GetConnection and\n UpdateConnection; unset on ListConnections.",
             "$ref": "#/components/schemas/pantherclaw.v1.A2AStatus"
+          },
+          "modelRelay": {
+            "type": "boolean",
+            "title": "model_relay",
+            "description": "Whether the connection is a campaign's model relay (G0 M25 D313): only\n the gateway's model face serves it, and only during an open campaign."
           }
         },
         "title": "Connection",
@@ -49685,6 +50713,14 @@
                 "type": "null"
               }
             ]
+          },
+          "modelRelay": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "model_relay",
+            "description": "Creates a campaign's model relay (G0 M25 D313): a simulated http\n connection with no package, no agent hosts and no credential. Fixed for\n the connection's life."
           }
         },
         "title": "CreateConnectionRequest",
@@ -55848,6 +56884,19 @@
           },
           {
             "properties": {
+              "compliance": {
+                "title": "compliance",
+                "description": "One framework's coverage for a period, as a signed report (G0 M25 D301).",
+                "$ref": "#/components/schemas/pantherclaw.v1.PackCompliance"
+              }
+            },
+            "title": "compliance",
+            "required": [
+              "compliance"
+            ]
+          },
+          {
+            "properties": {
               "runId": {
                 "type": "string",
                 "title": "run_id",
@@ -56602,6 +57651,32 @@
         "title": "ListEvidencePacksResponse",
         "additionalProperties": false,
         "description": "ListEvidencePacksResponse returns a page."
+      },
+      "pantherclaw.v1.PackCompliance": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework",
+            "not": {
+              "enum": [
+                "COMPLIANCE_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "period": {
+            "title": "period",
+            "description": "The period.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PackTimeRange"
+          }
+        },
+        "title": "PackCompliance",
+        "required": [
+          "period",
+          "framework"
+        ],
+        "additionalProperties": false,
+        "description": "PackCompliance names a report: a framework and a period. The pack holds\n compliance.json and the receipts it cites, and its statement is its own: it\n shows evidence and gaps, and is not a certification or statement of\n compliance. The framework's edition applies."
       },
       "pantherclaw.v1.PackContents": {
         "type": "object",
@@ -60922,7 +61997,8 @@
           "CONNECTION_SERVING_STATE_SERVING",
           "CONNECTION_SERVING_STATE_CIRCUIT_OPEN",
           "CONNECTION_SERVING_STATE_DRIFT_QUARANTINED",
-          "CONNECTION_SERVING_STATE_NOT_LOADED"
+          "CONNECTION_SERVING_STATE_NOT_LOADED",
+          "CONNECTION_SERVING_STATE_LOCAL_RELAY"
         ],
         "description": "ConnectionServingState is whether a replica serves a connection."
       },
@@ -61044,6 +62120,63 @@
         "title": "ApproverKey",
         "additionalProperties": false,
         "description": "ApproverKey is one person's active security key (HR-038)."
+      },
+      "pantherclaw.v1.AuthorizeModelCallRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "The model relay connection: one the calling gateway serves."
+          },
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "format": "uuid",
+            "description": "The run, whose workload the Authority has verified."
+          },
+          "modelHost": {
+            "type": "string",
+            "title": "model_host",
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$",
+            "description": "The model host the agent addressed."
+          },
+          "bytesToModel": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "bytes_to_model",
+            "maximum": 8388608,
+            "minimum": 0,
+            "format": "int64",
+            "description": "The request body's size."
+          }
+        },
+        "title": "AuthorizeModelCallRequest",
+        "additionalProperties": false,
+        "description": "AuthorizeModelCallRequest describes one model request.",
+        "required": [
+          "connectionId",
+          "runId",
+          "modelHost"
+        ]
+      },
+      "pantherclaw.v1.AuthorizeModelCallResponse": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string",
+            "title": "campaign_id",
+            "description": "The campaign."
+          }
+        },
+        "title": "AuthorizeModelCallResponse",
+        "additionalProperties": false,
+        "description": "AuthorizeModelCallResponse names the open campaign the call counts under."
       },
       "pantherclaw.v1.BrokerKey": {
         "type": "object",
@@ -61712,6 +62845,11 @@
             "title": "a2a",
             "description": "a2a is an a2a connection's configuration and pinned card (D64).",
             "$ref": "#/components/schemas/pantherclaw.v1.A2AConfig"
+          },
+          "modelRelay": {
+            "type": "boolean",
+            "title": "model_relay",
+            "description": "Whether the connection is a campaign's model relay (G0 M25 D313): it has\n no package, and only the model face serves it."
           }
         },
         "title": "GatewayConnection",
@@ -63216,6 +64354,48 @@
         "title": "ReportLocalRefusalResponse",
         "additionalProperties": false,
         "description": "ReportLocalRefusalResponse is empty."
+      },
+      "pantherclaw.v1.ReportModelUsageRequest": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string",
+            "title": "campaign_id",
+            "format": "uuid",
+            "description": "The campaign the call counted under."
+          },
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "format": "uuid",
+            "description": "The run."
+          },
+          "bytesFromModel": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "bytes_from_model",
+            "maximum": 8388608,
+            "minimum": 0,
+            "format": "int64",
+            "description": "The answer body's size."
+          }
+        },
+        "title": "ReportModelUsageRequest",
+        "additionalProperties": false,
+        "description": "ReportModelUsageRequest reports one model answer's size.",
+        "required": [
+          "campaignId",
+          "runId"
+        ]
+      },
+      "pantherclaw.v1.ReportModelUsageResponse": {
+        "type": "object",
+        "title": "ReportModelUsageResponse",
+        "additionalProperties": false,
+        "description": "ReportModelUsageResponse is empty."
       },
       "pantherclaw.v1.ReportObservationRequest": {
         "type": "object",
@@ -82508,6 +83688,41 @@
         "title": "UndismissRecommendationResponse",
         "additionalProperties": false
       },
+      "pantherclaw.v1.CampaignBasis": {
+        "type": "string",
+        "title": "CampaignBasis",
+        "enum": [
+          "CAMPAIGN_BASIS_UNSPECIFIED",
+          "CAMPAIGN_BASIS_SERVER_RECORD",
+          "CAMPAIGN_BASIS_EDGE_REPORT",
+          "CAMPAIGN_BASIS_NONE"
+        ],
+        "description": "CampaignBasis says what an outcome rests on."
+      },
+      "pantherclaw.v1.CampaignOutcome": {
+        "type": "string",
+        "title": "CampaignOutcome",
+        "enum": [
+          "CAMPAIGN_OUTCOME_UNSPECIFIED",
+          "CAMPAIGN_OUTCOME_HELD",
+          "CAMPAIGN_OUTCOME_DENIED",
+          "CAMPAIGN_OUTCOME_NOT_ROUTED_REPORTED",
+          "CAMPAIGN_OUTCOME_ALLOWED",
+          "CAMPAIGN_OUTCOME_NOT_EXERCISED"
+        ],
+        "description": "CampaignOutcome says what happened to one attempt of a campaign (D309)."
+      },
+      "pantherclaw.v1.CampaignState": {
+        "type": "string",
+        "title": "CampaignState",
+        "enum": [
+          "CAMPAIGN_STATE_UNSPECIFIED",
+          "CAMPAIGN_STATE_RUNNING",
+          "CAMPAIGN_STATE_FINISHED",
+          "CAMPAIGN_STATE_ABANDONED"
+        ],
+        "description": "CampaignState is where a campaign is in its life."
+      },
       "pantherclaw.v1.RangeObservedBy": {
         "type": "string",
         "title": "RangeObservedBy",
@@ -82542,6 +83757,288 @@
         ],
         "description": "RangeVerdict is a scenario's verdict. MISSING is server-only: the\n scenario was declared and never recorded."
       },
+      "pantherclaw.v1.Campaign": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "rangeAgentId": {
+            "type": "string",
+            "title": "range_agent_id"
+          },
+          "startedBy": {
+            "type": "string",
+            "title": "started_by"
+          },
+          "runnerVersion": {
+            "type": "string",
+            "title": "runner_version"
+          },
+          "setDigest": {
+            "type": "string",
+            "title": "set_digest"
+          },
+          "scenarioIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "scenario_ids"
+          },
+          "imageDigest": {
+            "type": "string",
+            "title": "image_digest"
+          },
+          "modelHost": {
+            "type": "string",
+            "title": "model_host"
+          },
+          "relayConnectionId": {
+            "type": "string",
+            "title": "relay_connection_id"
+          },
+          "scripted": {
+            "type": "boolean",
+            "title": "scripted"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.CampaignState"
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "finishTime": {
+            "title": "finish_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "counts": {
+            "title": "counts",
+            "$ref": "#/components/schemas/pantherclaw.v1.CampaignCounts"
+          },
+          "origin": {
+            "type": "string",
+            "title": "origin",
+            "description": "origin is \"campaign\"."
+          },
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "description": "statement is what the result is and is not: it tested a twin, by image\n digest, and never production."
+          }
+        },
+        "title": "Campaign",
+        "additionalProperties": false,
+        "description": "Campaign is one attack campaign against a range twin."
+      },
+      "pantherclaw.v1.CampaignCounts": {
+        "type": "object",
+        "properties": {
+          "held": {
+            "type": "integer",
+            "title": "held",
+            "format": "int32"
+          },
+          "denied": {
+            "type": "integer",
+            "title": "denied",
+            "format": "int32"
+          },
+          "notRoutedReported": {
+            "type": "integer",
+            "title": "not_routed_reported",
+            "format": "int32"
+          },
+          "allowed": {
+            "type": "integer",
+            "title": "allowed",
+            "format": "int32"
+          },
+          "notExercised": {
+            "type": "integer",
+            "title": "not_exercised",
+            "format": "int32"
+          }
+        },
+        "title": "CampaignCounts",
+        "additionalProperties": false,
+        "description": "CampaignCounts counts a campaign's attempts by outcome."
+      },
+      "pantherclaw.v1.CampaignDecl": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "pattern": "^RT-14[0-9]$"
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "title": "CampaignDecl",
+        "additionalProperties": false,
+        "description": "CampaignDecl declares a library campaign by id and digest. The server\n takes its attempts and tier from the library, never from the runner.",
+        "required": [
+          "id",
+          "digest"
+        ]
+      },
+      "pantherclaw.v1.CampaignModelUsage": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "title": "run_id"
+          },
+          "scenarioId": {
+            "type": "string",
+            "title": "scenario_id"
+          },
+          "modelHost": {
+            "type": "string",
+            "title": "model_host"
+          },
+          "requests": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "requests",
+            "format": "int64"
+          },
+          "bytesToModel": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "bytes_to_model",
+            "format": "int64"
+          },
+          "bytesFromModel": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "bytes_from_model",
+            "format": "int64"
+          }
+        },
+        "title": "CampaignModelUsage",
+        "additionalProperties": false,
+        "description": "CampaignModelUsage is a run's model traffic: never its content (D313).\n It is not attack evidence."
+      },
+      "pantherclaw.v1.CampaignRoute": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "direct_api",
+              "credential"
+            ]
+          },
+          "locator": {
+            "type": "string",
+            "title": "locator",
+            "maxLength": 512,
+            "minLength": 1
+          }
+        },
+        "title": "CampaignRoute",
+        "additionalProperties": false,
+        "description": "CampaignRoute is a route the edge reported.",
+        "required": [
+          "kind",
+          "locator"
+        ]
+      },
+      "pantherclaw.v1.CampaignRunReport": {
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string",
+            "title": "scenario_id",
+            "pattern": "^RT-14[0-9]$"
+          },
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "format": "uuid"
+          },
+          "routes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CampaignRoute"
+            },
+            "title": "routes",
+            "maxItems": 64
+          }
+        },
+        "title": "CampaignRunReport",
+        "additionalProperties": false,
+        "description": "CampaignRunReport names a run the runner saw for one campaign. The server\n refuses one its own binding contradicts; routes are not read (the edge's\n stored reports are).",
+        "required": [
+          "scenarioId",
+          "runId"
+        ]
+      },
+      "pantherclaw.v1.CampaignStep": {
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string",
+            "title": "scenario_id"
+          },
+          "stepId": {
+            "type": "string",
+            "title": "step_id"
+          },
+          "boundary": {
+            "type": "string",
+            "title": "boundary",
+            "description": "boundary is the rule the campaign says stops the attempt."
+          },
+          "expected": {
+            "type": "string",
+            "title": "expected",
+            "description": "expected is HELD, DENIED or NOT_ROUTED."
+          },
+          "outcome": {
+            "title": "outcome",
+            "$ref": "#/components/schemas/pantherclaw.v1.CampaignOutcome"
+          },
+          "basis": {
+            "title": "basis",
+            "$ref": "#/components/schemas/pantherclaw.v1.CampaignBasis"
+          },
+          "transactionId": {
+            "type": "string",
+            "title": "transaction_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "routeLocator": {
+            "type": "string",
+            "title": "route_locator",
+            "description": "route_locator is the reported route behind a NOT_ROUTED_REPORTED."
+          }
+        },
+        "title": "CampaignStep",
+        "additionalProperties": false,
+        "description": "CampaignStep is one attempt's outcome, as the server derived it."
+      },
       "pantherclaw.v1.ExportAssuranceReportRequest": {
         "type": "object",
         "properties": {
@@ -82567,6 +84064,50 @@
           }
         },
         "title": "ExportAssuranceReportResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.FinishCampaignRequest": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string",
+            "title": "campaign_id",
+            "format": "uuid"
+          },
+          "runs": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CampaignRunReport"
+            },
+            "title": "runs",
+            "maxItems": 10
+          }
+        },
+        "title": "FinishCampaignRequest",
+        "additionalProperties": false,
+        "required": [
+          "campaignId"
+        ]
+      },
+      "pantherclaw.v1.FinishCampaignResponse": {
+        "type": "object",
+        "properties": {
+          "campaign": {
+            "title": "campaign",
+            "$ref": "#/components/schemas/pantherclaw.v1.Campaign"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CampaignStep"
+            },
+            "title": "steps"
+          }
+        },
+        "title": "FinishCampaignResponse",
         "additionalProperties": false
       },
       "pantherclaw.v1.FinishRangeRequest": {
@@ -82602,6 +84143,46 @@
         "title": "FinishRangeResponse",
         "additionalProperties": false
       },
+      "pantherclaw.v1.GetCampaignRequest": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string",
+            "title": "campaign_id",
+            "format": "uuid"
+          }
+        },
+        "title": "GetCampaignRequest",
+        "additionalProperties": false,
+        "required": [
+          "campaignId"
+        ]
+      },
+      "pantherclaw.v1.GetCampaignResponse": {
+        "type": "object",
+        "properties": {
+          "campaign": {
+            "title": "campaign",
+            "$ref": "#/components/schemas/pantherclaw.v1.Campaign"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CampaignStep"
+            },
+            "title": "steps"
+          },
+          "modelUsage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CampaignModelUsage"
+            },
+            "title": "model_usage"
+          }
+        },
+        "title": "GetCampaignResponse",
+        "additionalProperties": false
+      },
       "pantherclaw.v1.GetRangeRequest": {
         "type": "object",
         "properties": {
@@ -82633,6 +84214,72 @@
           }
         },
         "title": "GetRangeResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListCampaignsRequest": {
+        "type": "object",
+        "properties": {
+          "rangeAgentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "range_agent_id",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256,
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListCampaignsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListCampaignsResponse": {
+        "type": "object",
+        "properties": {
+          "campaigns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Campaign"
+            },
+            "title": "campaigns"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListCampaignsResponse",
         "additionalProperties": false
       },
       "pantherclaw.v1.ListRangesRequest": {
@@ -83285,6 +84932,110 @@
           }
         },
         "title": "RecordResultResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.StartCampaignRequest": {
+        "type": "object",
+        "properties": {
+          "rangeAgentId": {
+            "type": "string",
+            "title": "range_agent_id",
+            "format": "uuid",
+            "description": "range_agent_id is the range twin: never the customer's real agent."
+          },
+          "campaigns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.CampaignDecl"
+            },
+            "title": "campaigns",
+            "maxItems": 10,
+            "minItems": 1
+          },
+          "runnerVersion": {
+            "type": "string",
+            "title": "runner_version",
+            "maxLength": 64,
+            "minLength": 1
+          },
+          "imageDigest": {
+            "type": "string",
+            "title": "image_digest",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "description": "image_digest is the agent image the twin ran; the report names it."
+          },
+          "modelHost": {
+            "type": "string",
+            "title": "model_host",
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$",
+            "description": "model_host is the one host the run's model relay forwards to."
+          },
+          "relayConnectionId": {
+            "type": "string",
+            "title": "relay_connection_id",
+            "format": "uuid",
+            "description": "relay_connection_id is the simulated connection of the run's relay."
+          },
+          "scripted": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "scripted",
+            "description": "scripted: a scripted stand-in agent ran, not a real model. The report\n says so."
+          }
+        },
+        "title": "StartCampaignRequest",
+        "additionalProperties": false,
+        "required": [
+          "rangeAgentId",
+          "campaigns",
+          "runnerVersion",
+          "imageDigest",
+          "modelHost",
+          "relayConnectionId"
+        ]
+      },
+      "pantherclaw.v1.StartCampaignResponse": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string",
+            "title": "campaign_id"
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "StartCampaignResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.StartCampaignStepRequest": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string",
+            "title": "campaign_id",
+            "format": "uuid"
+          },
+          "scenarioId": {
+            "type": "string",
+            "title": "scenario_id",
+            "pattern": "^RT-14[0-9]$"
+          }
+        },
+        "title": "StartCampaignStepRequest",
+        "additionalProperties": false,
+        "required": [
+          "campaignId",
+          "scenarioId"
+        ]
+      },
+      "pantherclaw.v1.StartCampaignStepResponse": {
+        "type": "object",
+        "title": "StartCampaignStepResponse",
         "additionalProperties": false
       },
       "pantherclaw.v1.StartRangeRequest": {
@@ -94815,6 +96566,10 @@
     {
       "name": "pantherclaw.v1.CohortService",
       "description": "CohortService groups agents into fleet cohorts (G0 M11 part 2, D40;\n F600, F601, HR-291). A fleet cohort is its static members (at most\n 1,000) plus the agents its optional rule matches (team, environment,\n task type), with an owner and an optional grant baseline. It only\n organizes: it grants nothing, and its baseline is a template a person\n issues grants from. These are not the policy rollout cohorts of\n PolicyRolloutService.\n\n Needs the Team edition. A cohort's scope is the narrowest one holding\n its rule's scope (a team, an environment, or the org for a task type\n alone) and its static members. Every change is made by a person holding\n cohort.manage there (and where each agent added or removed lives);\n reads need agent.read there. Agents outside the reader's scope are\n left out and never counted."
+    },
+    {
+      "name": "pantherclaw.v1.ComplianceService",
+      "description": "ComplianceService reads coverage of a framework from PantherClaw's own\n records (G0 M25 D300-D304, D311, D312; F890-F899; HR-600..606; OWASP ASI\n and NIST AI RMF on Team and above, the EU AI Act, ISO 42001 and SOC 2 on\n Business and above).\n\n Coverage shows evidence and gaps. It is not a certification or a statement\n of compliance: there is no score, and nothing here says a customer meets a\n framework. Each control is EVIDENCED, PARTIAL, GAP or STATED; a statement\n a person made is STATED and never evidence, and simulated activity is\n counted apart and labelled. What the caller may not read is a gap that says\n so, never a count of nothing. A signed report of the same coverage is an\n evidence pack of scope compliance (EvidenceService.CreateEvidencePack)."
     },
     {
       "name": "pantherclaw.v1.GitHubService",

@@ -7,6 +7,9 @@ tier: community
 attacker: A1
 threats: [T-086, T-014]
 rules: [HR-122]
+asi: [ASI05]
+asi_why:
+  ASI05: "Unexpected code execution (ASI05): code run in the sandbox tries DNS to the Docker resolver and the internet."
 requires: [sandbox]
 harness_only: false
 steps:

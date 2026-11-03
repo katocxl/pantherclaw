@@ -1,0 +1,222 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ComplianceService reads coverage of a framework from PantherClaw's own
+// records (G0 M25 D300-D304, D311, D312; F890-F899; HR-600..606; OWASP ASI
+// and NIST AI RMF on Team and above, the EU AI Act, ISO 42001 and SOC 2 on
+// Business and above).
+//
+// Coverage shows evidence and gaps. It is not a certification or a statement
+// of compliance: there is no score, and nothing here says a customer meets a
+// framework. Each control is EVIDENCED, PARTIAL, GAP or STATED; a statement
+// a person made is STATED and never evidence, and simulated activity is
+// counted apart and labelled. What the caller may not read is a gap that says
+// so, never a count of nothing. A signed report of the same coverage is an
+// evidence pack of scope compliance (EvidenceService.CreateEvidencePack).
+service ComplianceService {
+  // ListFrameworks lists every framework, and whether this edition reads it.
+  // permission: compliance.read
+  rpc ListFrameworks(ListFrameworksRequest) returns (ListFrameworksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetFrameworkCoverage derives each control of a framework for a period,
+  // from the records the caller may read.
+  // permission: compliance.read
+  rpc GetFrameworkCoverage(GetFrameworkCoverageRequest) returns (GetFrameworkCoverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListComplianceReports lists the signed reports made so far, newest
+  // first, with their parameters and digest. A report's pack lasts 7 days;
+  // this row does not, so the same parameters can be exported again, and an
+  // equal digest shows nothing changed.
+  // permission: compliance.read
+  rpc ListComplianceReports(ListComplianceReportsRequest) returns (ListComplianceReportsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ComplianceFramework is a control table (D300).
+enum ComplianceFramework {
+  COMPLIANCE_FRAMEWORK_UNSPECIFIED = 0;
+  // OWASP Top 10 for Agentic Applications (2026).
+  COMPLIANCE_FRAMEWORK_OWASP_ASI = 1;
+  // NIST AI Risk Management Framework 1.0.
+  COMPLIANCE_FRAMEWORK_NIST_AI_RMF = 2;
+  // EU AI Act, deployer obligations.
+  COMPLIANCE_FRAMEWORK_EU_AI_ACT_DEPLOYER = 3;
+  // ISO/IEC 42001:2023 Annex A.
+  COMPLIANCE_FRAMEWORK_ISO_42001 = 4;
+  // SOC 2 Trust Services Criteria, common criteria.
+  COMPLIANCE_FRAMEWORK_SOC2 = 5;
+}
+
+// ControlState is what the records say of a control (D302).
+enum ControlState {
+  CONTROL_STATE_UNSPECIFIED = 0;
+  // Every record the control reads holds real activity in the period, and
+  // no test it reads failed or went unexercised.
+  CONTROL_STATE_EVIDENCED = 1;
+  // Something holds, not all of it.
+  CONTROL_STATE_PARTIAL = 2;
+  // Nothing holds. Not exercised is a gap, not a pass.
+  CONTROL_STATE_GAP = 3;
+  // A person said so. PantherClaw has no evidence either way.
+  CONTROL_STATE_STATED = 4;
+}
+
+// ComplianceFrameworkInfo is one framework.
+message ComplianceFrameworkInfo {
+  ComplianceFramework framework = 1;
+  string title = 2;
+  int32 control_count = 3;
+  // available: this edition reads it. Otherwise it needs Business.
+  bool available = 4;
+}
+
+// ListFrameworksRequest takes nothing.
+message ListFrameworksRequest {}
+
+// ListFrameworksResponse lists every framework.
+message ListFrameworksResponse {
+  repeated ComplianceFrameworkInfo frameworks = 1;
+}
+
+// GetFrameworkCoverageRequest names a framework and a period.
+message GetFrameworkCoverageRequest {
+  ComplianceFramework framework = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Start, inclusive.
+  google.protobuf.Timestamp start_time = 2 [(buf.validate.field).required = true];
+  // End, exclusive.
+  google.protobuf.Timestamp end_time = 3 [(buf.validate.field).required = true];
+
+  option (buf.validate.message).cel = {
+    id: "framework_coverage_period"
+    message: "end_time must be after start_time, at most 366 days later"
+    expression: "this.end_time > this.start_time && this.end_time - this.start_time <= duration('8784h')"
+  };
+}
+
+// ComplianceEvidenceRef points at a record behind a count.
+message ComplianceEvidenceRef {
+  // type: transaction, approval, grant, coverage, range or campaign.
+  string type = 1;
+  string id = 2;
+  // simulated is what the record itself says.
+  bool simulated = 3;
+}
+
+// ComplianceSourceCount is what one source held in the period.
+message ComplianceSourceCount {
+  // source: receipts, approvals, grants, coverage, range or campaign.
+  string source = 1;
+  // readable false: the caller may not read this source, and the counts say
+  // nothing.
+  bool readable = 2;
+  int64 real = 3;
+  int64 simulated = 4;
+  repeated ComplianceEvidenceRef refs = 5;
+  // truncated: the source held more than a report reads.
+  bool truncated = 6;
+}
+
+// ComplianceTestCount is one OWASP tag's results from one test source. Test
+// results are simulated by construction.
+message ComplianceTestCount {
+  string tag = 1;
+  // source: range or campaign.
+  string source = 2;
+  int64 held = 3;
+  int64 failed = 4;
+  // reported: a client or edge report no server record confirms.
+  int64 reported = 5;
+  // not_exercised: the test ran, this part of it did not.
+  int64 not_exercised = 6;
+  repeated ComplianceEvidenceRef refs = 7;
+}
+
+// ComplianceStatedCount is one stated field across the org's agents.
+message ComplianceStatedCount {
+  // field: ai_act_role or ai_act_risk.
+  string field = 1;
+  bool readable = 2;
+  int64 stated = 3;
+  int64 unset = 4;
+}
+
+// ComplianceControlGap is one thing a control lacks.
+message ComplianceControlGap {
+  // reason: outside_permission, no_records, simulated_only, not_exercised,
+  // test_failed, reported_only, not_stated, outside_records or limit.
+  string reason = 1;
+  // source is empty for a gap of the control as a whole.
+  string source = 2;
+  string detail = 3;
+}
+
+// ComplianceControl is one control of a framework.
+message ComplianceControl {
+  string id = 1;
+  string title = 2;
+  ControlState state = 3;
+  // evidence lists the sources that held something for this control.
+  repeated string evidence = 4;
+  // simulated_only: everything in evidence is simulated.
+  bool simulated_only = 5;
+  repeated ComplianceControlGap gaps = 6;
+}
+
+// GetFrameworkCoverageResponse is one framework's coverage for a period.
+message GetFrameworkCoverageResponse {
+  ComplianceFramework framework = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  // real_records and simulated_records split the period's activity (F630).
+  int64 real_records = 4;
+  int64 simulated_records = 5;
+  repeated ComplianceControl controls = 6;
+  repeated ComplianceSourceCount sources = 7;
+  repeated ComplianceTestCount tests = 8;
+  repeated ComplianceStatedCount stated = 9;
+  // statement is the fixed sentence every report carries.
+  string statement = 10;
+}
+
+// ListComplianceReportsRequest pages through reports.
+message ListComplianceReportsRequest {
+  // Page size, at most 200; 0 for the default.
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string.max_len = 256];
+}
+
+// ComplianceReportInfo is one signed report's parameters and digest.
+message ComplianceReportInfo {
+  string id = 1;
+  // pack_id is the evidence pack that holds it, while that pack lasts.
+  string pack_id = 2;
+  ComplianceFramework framework = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  string created_by = 6;
+  google.protobuf.Timestamp create_time = 7;
+  // report_sha256 is the hex digest of compliance.json, empty until built.
+  string report_sha256 = 8;
+}
+
+// ListComplianceReportsResponse is one page, newest first.
+message ListComplianceReportsResponse {
+  repeated ComplianceReportInfo reports = 1;
+  string next_page_token = 2;
+}

@@ -7,6 +7,9 @@ tier: community
 attacker: A5
 threats: [T-002, T-083]
 rules: [HR-032, HR-036]
+asi: [ASI09]
+asi_why:
+  ASI09: "Human-agent trust exploitation (ASI09): the people who launched or wrote the agent try to approve its merge themselves."
 requires: [github, person]
 harness_only: false
 steps:

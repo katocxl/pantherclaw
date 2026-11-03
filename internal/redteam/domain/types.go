@@ -48,18 +48,24 @@ const RetryBudgetBusy = "BUDGET_BUSY"
 
 // Scenario is one attack scenario file.
 type Scenario struct {
-	APIVersion  string   `json:"apiVersion"`
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Category    string   `json:"category"`
-	Suite       string   `json:"suite"`
-	Tier        string   `json:"tier"`
-	Attacker    string   `json:"attacker"`
-	Threats     []string `json:"threats"`
-	Rules       []string `json:"rules"`
-	Requires    []string `json:"requires,omitempty"`
-	HarnessOnly bool     `json:"harness_only,omitzero"`
-	Steps       []Step   `json:"steps"`
+	APIVersion string   `json:"apiVersion"`
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	Category   string   `json:"category"`
+	Suite      string   `json:"suite"`
+	Tier       string   `json:"tier"`
+	Attacker   string   `json:"attacker"`
+	Threats    []string `json:"threats"`
+	Rules      []string `json:"rules"`
+	// ASI are the OWASP agentic risks a library scenario exercises (G0 M25
+	// D304). The server's library holds them, never a runner's claim.
+	ASI []string `json:"asi,omitempty"`
+	// ASIWhy gives each tag one line on how the scenario exercises that risk
+	// as OWASP defines it (D531).
+	ASIWhy      map[string]string `json:"asi_why,omitempty"`
+	Requires    []string          `json:"requires,omitempty"`
+	HarnessOnly bool              `json:"harness_only,omitzero"`
+	Steps       []Step            `json:"steps"`
 }
 
 // Step is one action of a scenario. With holds the kind's arguments as JSON;

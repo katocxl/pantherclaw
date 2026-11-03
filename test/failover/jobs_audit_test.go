@@ -105,6 +105,8 @@ var twoWorkerAudit = map[string]string{
 	"promotions.provisional_sweep_dispatch":      "fan-out",
 	"promotions.provisional_sweep_org":           "unique",
 	"ratelimit.janitor":                          "unique; idempotent delete",
+	"redteam.campaign_abandon_dispatch":          "fan-out",
+	"redteam.campaign_abandon_org":               "unique; a conditional UPDATE of running campaigns",
 	"redteam.abandon_dispatch":                   "fan-out",
 	"redteam.abandon_org":                        "unique",
 	"reflex.digest_dispatch":                     "fan-out",

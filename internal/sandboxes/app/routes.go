@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	cdomain "github.com/katocxl/pantherclaw/internal/campaigns/domain"
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -75,9 +76,19 @@ func (s *Service) ReportRoutes(ctx context.Context, session ids.UUID, routes []R
 			return err
 		}
 		// HR-222: a range agent's session, or a simulated connection, leaves
-		// no route behind for coverage.
+		// no route behind for coverage. A range agent's report goes to its
+		// open campaign step instead, if any (G0 M25 D525 L6).
 		if agent.RangeAgent {
 			conns = nil
+			if s.Campaigns != nil {
+				cr := make([]cdomain.Route, 0, len(routes))
+				for _, r := range routes {
+					cr = append(cr, cdomain.Route{Kind: r.Kind, Locator: r.Locator})
+				}
+				if err := s.Campaigns.RecordCampaignRoutes(ctx, tx, c.Org, sess.AgentID, cr); err != nil {
+					return err
+				}
+			}
 		}
 		recorded := conns[:0:0]
 		for _, conn := range conns {

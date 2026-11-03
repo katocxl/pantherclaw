@@ -247,6 +247,13 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		if conn.Revision != in.Revision {
 			return ErrStale
 		}
+		// A model relay keeps the shape it was created with: its access mode
+		// (none), no agent hosts, its destination class (D313, D525 L3).
+		if conn.ModelRelay && ((in.AccessMode != nil && *in.AccessMode != conn.AccessMode) ||
+			(in.SetAgentHosts && !slices.Equal(in.AgentHosts, conn.AgentHosts)) ||
+			(in.DestinationClass != nil && *in.DestinationClass != conn.DestinationClass)) {
+			return ErrModelRelay
+		}
 		p := params(c, conn)
 		var changes []change
 		set := func(field, from, to string, weakens bool) {

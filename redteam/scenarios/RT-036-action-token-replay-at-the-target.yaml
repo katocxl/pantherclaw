@@ -7,6 +7,9 @@ tier: business
 attacker: A11
 threats: [T-081]
 rules: [HR-188]
+asi: [ASI02]
+asi_why:
+  ASI02: "Tool misuse (ASI02): a completed tool action is repeated by replaying its action token at the target."
 requires: [payments]
 harness_only: false
 steps:

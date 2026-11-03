@@ -7,6 +7,9 @@ tier: business
 attacker: A1
 threats: [T-225]
 rules: [HR-525, HR-190, HR-191]
+asi: [ASI02]
+asi_why:
+  ASI02: "Tool misuse (ASI02): the agent's ECS deploy reaches past its role's account."
 requires: [aws.ecs.deploy]
 # On a live range this would be a real deploy to a real service.
 harness_only: true

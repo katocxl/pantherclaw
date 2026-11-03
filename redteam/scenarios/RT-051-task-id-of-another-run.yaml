@@ -7,6 +7,9 @@ tier: business
 attacker: A1
 threats: [T-148]
 rules: [HR-323]
+asi: [ASI07]
+asi_why:
+  ASI07: "Insecure inter-agent communication (ASI07): a run tries to read or continue a peer task another run created."
 requires: [a2a.send]
 harness_only: false
 steps:

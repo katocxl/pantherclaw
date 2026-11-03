@@ -20,7 +20,7 @@ import (
 // registerSandbox serves SandboxService on the public API (G0 M9 track B),
 // as pc_app. Closures go to coverage in the session's transaction.
 func registerSandbox(rs *connect.Server, d apiDeps) {
-	svc := &sandboxes.Service{Pool: d.pool, Coverage: &coverage.Service{Pool: d.pool, Freshness: d.freshness}}
+	svc := &sandboxes.Service{Pool: d.pool, Coverage: &coverage.Service{Pool: d.pool, Freshness: d.freshness}, Campaigns: campaignRoutes()}
 	pantherclawv1connect.RegisterSandboxServiceHandler(rs, sandboxrpc.New(svc))
 }
 

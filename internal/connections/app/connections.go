@@ -93,11 +93,20 @@ var (
 	ErrSimulatedConnector = pcerr.New(pcerr.InvalidArgument, "SIMULATED_CONNECTOR_UNSUPPORTED",
 		"a simulated connection cannot run a connector container")
 	ErrNameReserved = pcerr.New(pcerr.InvalidArgument, "CONNECTION_NAME_RESERVED", "this name is a path of the gateway itself")
+	// ErrModelRelay: a model relay is simulated http with no package, agent host or credential (D313).
+	ErrModelRelay = pcerr.New(pcerr.InvalidArgument, "MODEL_RELAY_INVALID",
+		"a model relay is a simulated http connection of package model-relay, with no agent hosts and access mode none")
 )
+
+// ModelRelayPackage is the package name of every model relay connection. No
+// such package is pinned or sent to a gateway: a relay has no routes.
+const ModelRelayPackage = "model-relay"
 
 // reservedNames are the gateway's own first path segments: a connection's
 // name is the first segment of its HTTP routes (/{connection}/…), so it
-// can never shadow them.
+// can never shadow them. "model" is not one: the gateway sends
+// /model/{name}/… to the model face only when {name} is a model relay, by
+// its mark, and otherwise to the connection named model (D525 L5).
 var reservedNames = []string{"mcp", "hook", "sdk", "a2a", "healthz", "readyz", "metrics"}
 
 // Notifier queues a notification in the caller's transaction (M5).
@@ -164,6 +173,10 @@ type CreateInput struct {
 	// Simulated marks a connection that points only at a simulator (G0 M12,
 	// HR-221); fixed for its life.
 	Simulated bool
+	// ModelRelay marks a campaign's model relay (G0 M25 D313): a simulated
+	// http connection with no package, agent host or credential, which only
+	// the gateway's model face serves.
+	ModelRelay bool
 	// Postgres is a postgres connection's configuration (G0 M14 D15).
 	Postgres *PostgresConfig
 	// A2A is an a2a connection's configuration (G0 M14 D30).
@@ -413,6 +426,12 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	if in.Simulated && in.Kind == KindMCPContainer {
 		return Connection{}, ErrSimulatedConnector
 	}
+	if in.ModelRelay {
+		if !in.Simulated || in.Kind != KindHTTP || in.Package != ModelRelayPackage || in.AccessMode != AccessNone || len(in.AgentHosts) > 0 {
+			return Connection{}, ErrModelRelay
+		}
+		in.MaxResponseBytes = 8 << 20 // D313: the cap each way
+	}
 	kc, err := s.checkM14Kind(&in)
 	if err != nil {
 		return Connection{}, err
@@ -461,16 +480,18 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 				return ErrHostedGateway
 			}
 		}
-		rs, err := routes(ctx, q, c.Org, in.Package, in.Kind)
-		if err != nil {
-			return err
+		var rs []string
+		if !in.ModelRelay { // a model relay has no package and no routes (D313)
+			if rs, err = routes(ctx, q, c.Org, in.Package, in.Kind); err != nil {
+				return err
+			}
 		}
 		conn, err := q.InsertConnection(ctx, dbq.InsertConnectionParams{
 			OrgID: c.Org, ID: ids.NewV7(), Name: in.Name, Kind: in.Kind, GatewayID: in.Gateway, Package: in.Package,
 			BaseUrl: base, AllowedHosts: hosts, DestinationClass: in.DestinationClass, AccessMode: in.AccessMode,
 			CredentialHeader: ptr(in.CredentialHeader), CredentialScheme: ptr(in.CredentialScheme), DefaultMode: in.DefaultMode,
 			MaxResponseBytes: in.MaxResponseBytes, TimeoutMs: in.TimeoutMs, AgentHosts: agentHosts, CreatedBy: c.By,
-			Simulated: in.Simulated,
+			Simulated: in.Simulated, ModelRelay: in.ModelRelay,
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrNameTaken

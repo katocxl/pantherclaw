@@ -23,6 +23,7 @@ import (
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
+	cports "github.com/katocxl/pantherclaw/internal/campaigns/ports"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/app"
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -68,6 +69,9 @@ var (
 type Service struct {
 	Pool     *db.Pool
 	Coverage *coverage.Service
+	// Campaigns stores a range agent's route reports on its open campaign
+	// step (G0 M25 D525 L6); nil stores none.
+	Campaigns cports.RouteRecorder
 	// Clock is the wall clock when nil.
 	Clock clock.Clock
 }

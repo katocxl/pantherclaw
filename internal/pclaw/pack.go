@@ -28,7 +28,7 @@ import (
 
 func init() {
 	commands["pack create"] = command{
-		usage: "pack create (--txn ID [--txn ID]… | --run ID | --agent ID | --from TIME --to TIME) [--from TIME --to TIME] " +
+		usage: "pack create (--txn ID [--txn ID]… | --run ID | --agent ID | --framework NAME --from TIME --to TIME | --from TIME --to TIME) [--from TIME --to TIME] " +
 			"[--include receipts,versions,approvals,containment[,captures]]",
 		run: packCreate,
 	}
@@ -89,17 +89,19 @@ func packCreate(ctx context.Context, a *app, args []string) error {
 	from := fs.String("from", "", "start of a time range (RFC 3339); with --run or --agent it narrows them")
 	to := fs.String("to", "", "end of the time range (RFC 3339)")
 	include := fs.String("include", defaultInclude, "what to include: receipts, versions, approvals, containment, captures")
+	framework := fs.String("framework", "", "a signed report of this framework for --from and --to: "+frameworkNames())
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	scopes := 0
-	for _, set := range []bool{len(txns) > 0, *run != "", *agent != ""} {
+	for _, set := range []bool{len(txns) > 0, *run != "", *agent != "", *framework != ""} {
 		if set {
 			scopes++
 		}
 	}
 	ranged := *from != "" || *to != ""
-	if fs.NArg() != 0 || scopes > 1 || (scopes == 0 && !ranged) || (ranged && (*from == "" || *to == "")) || (len(txns) > 0 && ranged) {
+	if fs.NArg() != 0 || scopes > 1 || (scopes == 0 && !ranged) || (ranged && (*from == "" || *to == "")) || (len(txns) > 0 && ranged) ||
+		(*framework != "" && !ranged) {
 		return errUsage
 	}
 	in, err := includeOf(*include)
@@ -126,6 +128,14 @@ func packCreate(ctx context.Context, a *app, args []string) error {
 		req.Scope, req.Within = &pantherclawv1.CreateEvidencePackRequest_RunId{RunId: *run}, tr
 	case *agent != "":
 		req.Scope, req.Within = &pantherclawv1.CreateEvidencePackRequest_AgentId{AgentId: *agent}, tr
+	case *framework != "":
+		fw, err := frameworkOf(*framework)
+		if err != nil {
+			return err
+		}
+		req.Scope = &pantherclawv1.CreateEvidencePackRequest_Compliance{
+			Compliance: &pantherclawv1.PackCompliance{Framework: fw, Period: tr},
+		}
 	default:
 		req.Scope = &pantherclawv1.CreateEvidencePackRequest_TimeRange{TimeRange: tr}
 	}
