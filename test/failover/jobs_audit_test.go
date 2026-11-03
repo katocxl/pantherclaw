@@ -30,6 +30,8 @@ var twoWorkerAudit = map[string]string{
 	"accounts.deletion_resume":                   "lock: CAS state transitions and the journal lock",
 	"approvals.janitor_dispatch":                 "fan-out",
 	"approvals.janitor_org":                      "unique",
+	"behavior.rollup_dispatch":                   "fan-out",
+	"behavior.rollup_org":                        "unique; the cursor moves by compare-and-set, profiles upsert",
 	"authn.janitor_dispatch":                     "fan-out",
 	"authn.janitor_org":                          "unique",
 	"authority.sweep_dispatch":                   "fan-out",

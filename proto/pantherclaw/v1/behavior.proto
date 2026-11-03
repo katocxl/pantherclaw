@@ -1,0 +1,169 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// BehaviorService reads what the behaviour analytics inferred from an org's
+// own transactions (G0 M27 D501, D502, D506; F930-F935; HR-641 to HR-646;
+// Business edition).
+//
+// Everything here is inference on unvalidated thresholds. It never reaches a
+// decision: no authorization step and no approval binding reads it, and an
+// inferred alert never contains anything by itself. Real and simulated
+// activity stay apart. A profile that was not collected says so, never zero.
+service BehaviorService {
+  // GetAgentProfile returns an agent's profile of one origin.
+  // permission: behavior.read
+  rpc GetAgentProfile(GetAgentProfileRequest) returns (GetAgentProfileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetBehaviorContext returns what stands out about a held action, to show
+  // beside the approval display. It is not part of that display and an
+  // approval never binds it.
+  // permission: behavior.read
+  rpc GetBehaviorContext(GetBehaviorContextRequest) returns (GetBehaviorContextResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// BehaviorOrigin says which activity a profile rests on.
+enum BehaviorOrigin {
+  BEHAVIOR_ORIGIN_UNSPECIFIED = 0;
+  BEHAVIOR_ORIGIN_REAL = 1;
+  // Range transactions and generated history, labelled as such.
+  BEHAVIOR_ORIGIN_SIMULATED = 2;
+}
+
+// BehaviorProfileState says what a read can rest on.
+enum BehaviorProfileState {
+  BEHAVIOR_PROFILE_STATE_UNSPECIFIED = 0;
+  // The agent has enough history to compare with.
+  BEHAVIOR_PROFILE_STATE_COLLECTED = 1;
+  // Some history, too little to compare with: nothing is inferred from it.
+  BEHAVIOR_PROFILE_STATE_INSUFFICIENT_HISTORY = 2;
+  // No profile exists. This is not zero activity.
+  BEHAVIOR_PROFILE_STATE_NOT_COLLECTED = 3;
+}
+
+// BehaviorDeviationKind is one way an action stands out.
+enum BehaviorDeviationKind {
+  BEHAVIOR_DEVIATION_KIND_UNSPECIFIED = 0;
+  BEHAVIOR_DEVIATION_KIND_NEW_TOOL = 1;
+  BEHAVIOR_DEVIATION_KIND_NEW_DESTINATION = 2;
+  BEHAVIOR_DEVIATION_KIND_UNUSUAL_HOUR = 3;
+  BEHAVIOR_DEVIATION_KIND_NEW_SEQUENCE = 4;
+  BEHAVIOR_DEVIATION_KIND_VOLUME_SPIKE = 5;
+  BEHAVIOR_DEVIATION_KIND_SPEND_SPIKE = 6;
+}
+
+message GetAgentProfileRequest {
+  string agent_id = 1 [(buf.validate.field).string.uuid = true];
+  // Defaults to REAL.
+  BehaviorOrigin origin = 2 [(buf.validate.field).enum.defined_only = true];
+}
+
+message GetAgentProfileResponse {
+  BehaviorProfile profile = 1;
+}
+
+// BehaviorProfile is what an agent usually does.
+message BehaviorProfile {
+  string agent_id = 1;
+  BehaviorOrigin origin = 2;
+  BehaviorProfileState state = 3;
+  // The range it covers. Unset when NOT_COLLECTED.
+  google.protobuf.Timestamp window_start_time = 4;
+  google.protobuf.Timestamp window_end_time = 5;
+  int64 action_count = 6;
+  int32 active_days = 7;
+  repeated BehaviorTool tools = 8;
+  repeated BehaviorDestination destinations = 9;
+  // Actions per hour of the UTC day, 24 entries. Empty when NOT_COLLECTED.
+  repeated int64 hours = 10;
+  BehaviorVolumes volumes = 11;
+  repeated BehaviorSequence sequences = 12;
+  repeated BehaviorSpend spend = 13;
+  // The history was longer than the method keeps, or a list was cut: "new"
+  // comparisons on a cut list are off.
+  bool truncated = 14;
+  // INFERRED, always (F648).
+  string basis = 15;
+  // UNVALIDATED: the thresholds have not been checked on real incidents
+  // (F801).
+  string definition_status = 16;
+  // Plain words stating that this is inference.
+  string label = 17;
+  // When the rollup computed this. Unset when NOT_COLLECTED.
+  google.protobuf.Timestamp as_of_time = 18;
+}
+
+message BehaviorTool {
+  string operation = 1;
+  int64 count = 2;
+}
+
+message BehaviorDestination {
+  // Empty when the action named no connection.
+  string connection_id = 1;
+  string destination_class = 2;
+  int64 count = 3;
+}
+
+// BehaviorVolumes are actions per active day, and the busiest hour.
+message BehaviorVolumes {
+  int64 median_daily = 1;
+  int64 p90_daily = 2;
+  int64 max_daily = 3;
+  int64 max_hourly = 4;
+}
+
+// BehaviorSequence is one operation that followed another in a run.
+message BehaviorSequence {
+  string from_operation = 1;
+  string to_operation = 2;
+  int64 count = 3;
+}
+
+// BehaviorSpend is what the agent's allowed actions named, per active day of
+// spending. It is what was asked for, not what settled.
+message BehaviorSpend {
+  string currency = 1;
+  string median_daily = 2;
+  string max_daily = 3;
+  int32 days = 4;
+}
+
+message GetBehaviorContextRequest {
+  string approval_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetBehaviorContextResponse {
+  string agent_id = 1;
+  BehaviorOrigin origin = 2;
+  BehaviorProfileState state = 3;
+  // What stands out. Empty does not mean the action is safe (F801).
+  repeated BehaviorContextLine lines = 4;
+  int64 action_count = 5;
+  int32 active_days = 6;
+  // INFERRED, always (F648).
+  string basis = 7;
+  // UNVALIDATED (F801).
+  string definition_status = 8;
+  // Plain words stating that this is inference, outside what the approval
+  // binds.
+  string label = 9;
+  google.protobuf.Timestamp as_of_time = 10;
+}
+
+// BehaviorContextLine is one thing that stands out about a held action.
+message BehaviorContextLine {
+  BehaviorDeviationKind kind = 1;
+  // Plain text built from recorded names, for example "Never done
+  // github.push in the last 30 days". Not markup.
+  string text = 2;
+}

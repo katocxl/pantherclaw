@@ -201,8 +201,8 @@ const (
 	// SourceAutomation: governed automations (G0 M11 part 2 D11), e.g. the
 	// automation.loop rule.
 	SourceAutomation = "automation"
-	// SourceBehavior: behaviour analytics (G0 M27 D502). Every such signal
-	// is labelled inference.
+	// SourceBehavior: behavior analytics (G0 M27 D502). Every such signal
+	// is labeled inference.
 	SourceBehavior = "behavior"
 )
 
@@ -275,7 +275,7 @@ func (s Signal) Validate() error {
 	case (s.Source == SourceDetection || s.Source == SourceBehavior) && (s.RuleID == "" || s.RuleDigest == ""):
 		return bad("a detection names its rule and digest")
 	case s.Source == SourceBehavior && (s.Basis != BasisInferred || s.Attention.AtLeast(AttentionIncident)):
-		return bad("behaviour analytics raise labelled inference, at most ALERT")
+		return bad("behavior analytics raise labeled inference, at most ALERT")
 	case len(s.RuleID) > MaxRuleIDSize || len(s.RuleVersion) > 64 || len(s.RuleDigest) > 128 || len(s.PackVersion) > 64:
 		return bad("rule reference too long")
 	case s.Title == "" || len(s.Title) > MaxTitle || len(s.Summary) > MaxSummary:

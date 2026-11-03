@@ -100,6 +100,34 @@ func TestHR640_ValidationRefusesContainOnAnInferredAlert(t *testing.T) {
 	}
 }
 
+// TestHR640_ContainWarnsUnderATriggerThatIsNotOneAlert: a contain step runs
+// only on one CONFIRMED alert or incident, so under any other trigger it
+// would always skip; validation warns of it (D526 P9). Covers: F933
+func TestHR640_ContainWarnsUnderATriggerThatIsNotOneAlert(t *testing.T) {
+	env := fakeEnv{edition: autodomain.EditionBusiness, approvers: 1}
+	warned := func(fs []autodomain.Finding) bool {
+		return slices.ContainsFunc(fs, func(f autodomain.Finding) bool {
+			return f.Code == autodomain.CodeContainNeedsConfirmedAlert && f.Severity == autodomain.SeverityWarning
+		})
+	}
+	for _, tc := range []struct {
+		name, trigger, step string
+		warn                bool
+	}{
+		{"contain on a raised alert", eventOnRaised, contains, false},
+		{"contain on an opened incident", "event:\n    on: incident.opened", contains, false},
+		{"contain on a threshold of alerts", "threshold:\n    on: alert.raised\n    over: 1h\n    at_least: 3", contains, true},
+		{"contain on another event", "event:\n    on: agent.discovery_changed", contains, true},
+		{"a case on a threshold", "threshold:\n    on: alert.raised\n    over: 1h\n    at_least: 3", opensCase, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := warned(validate(t, inferredDoc(tc.trigger, tc.step), env)); got != tc.warn {
+				t.Fatalf("warned = %v, want %v", got, tc.warn)
+			}
+		})
+	}
+}
+
 // TestHR640_ContainsNamesEveryStepThatWouldContain is what the threshold
 // loop asks a definition. Covers: F933
 func TestHR640_ContainsNamesEveryStepThatWouldContain(t *testing.T) {
