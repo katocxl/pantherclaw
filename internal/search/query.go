@@ -90,6 +90,9 @@ type Filters struct {
 	WidensOnly      bool       `json:"widens_only,omitzero"`
 	Start           *time.Time `json:"start,omitzero"`
 	End             *time.Time `json:"end,omitzero"`
+	// Technique is an ATLAS or ATT&CK id: alerts and incidents carrying it or
+	// one of its sub-techniques (G0 M28 D726).
+	Technique string `json:"technique,omitzero"`
 }
 
 // Query is one structured query.
@@ -115,6 +118,8 @@ var (
 	prefixRe = regexp.MustCompile(`^[a-z][a-z0-9_.]{0,199}$`)
 	codeRe   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,63}$`)
 	actorRe  = regexp.MustCompile(`^[A-Za-z0-9_:.@-]{1,200}$`)
+	// techniqueRe is the technique id form of G0 M28 D718.
+	techniqueRe = regexp.MustCompile(`^(T[0-9]{4}(\.[0-9]{3})?|AML\.T[0-9]{4}(\.[0-9]{3})?)$`)
 )
 
 // ErrInvalidQuery reports a malformed query; the message names the field.
@@ -130,7 +135,7 @@ const (
 	fPrincipal, fUsedConnection, fOperation, fTargetType, fEffect, fKind     field = "principal", "used_connection", "operation", "target_type", "effect_prefix", "kind_prefix"
 	fActor, fDecisions, fModes, fStates, fKinds, fAccessModes, fEnv, fUnused field = "actor", "decisions", "modes", "states", "kinds", "access_modes", "environment_kinds", "unused_since"
 	fWidens, fRange, fAlert, fIncident, fSeverities, fEffectStates           field = "widens_only", "range", "alert", "incident", "severities", "effect_states"
-	fAutomation                                                              field = "automation"
+	fAutomation, fTechnique                                                  field = "automation", "technique"
 )
 
 // allowedFilters lists, per entity, the filters it accepts.
@@ -145,8 +150,8 @@ var allowedFilters = map[Entity][]field{
 	EntityAudit:        {fID, fKind, fActor, fRange},
 	EntityOperations:   {fOperation, fEffect},
 	// An alert's kinds are its sources; a finding's are its finding kinds.
-	EntityAlerts:         {fID, fAgent, fIncident, fStates, fSeverities, fKinds, fRange},
-	EntityIncidents:      {fID, fAgent, fStates, fSeverities, fRange},
+	EntityAlerts:         {fID, fAgent, fIncident, fStates, fSeverities, fKinds, fRange, fTechnique},
+	EntityIncidents:      {fID, fAgent, fStates, fSeverities, fRange, fTechnique},
 	EntityCases:          {fID, fAgent, fAlert, fIncident, fStates, fRange},
 	EntityFindings:       {fID, fAgent, fConnection, fGrant, fStates, fKinds, fSeverities, fRange},
 	EntityPolicyVersions: {fID, fStates, fRange},
@@ -194,6 +199,7 @@ func (f Filters) used() []field {
 	add(f.UnusedSince != nil, fUnused)
 	add(f.WidensOnly, fWidens)
 	add(f.Start != nil || f.End != nil, fRange)
+	add(f.Technique != "", fTechnique)
 	return out
 }
 
@@ -228,6 +234,8 @@ func (f Filters) validate() error {
 		return ErrInvalidQuery("kind_prefix must start with audit.")
 	case f.TargetType != "" && !prefixRe.MatchString(f.TargetType):
 		return ErrInvalidQuery("target_type is malformed")
+	case f.Technique != "" && !techniqueRe.MatchString(f.Technique):
+		return ErrInvalidQuery("technique is malformed")
 	case f.Actor != "" && !actorRe.MatchString(f.Actor):
 		return ErrInvalidQuery("actor is malformed")
 	case f.Start != nil && f.End != nil && !f.End.After(*f.Start):

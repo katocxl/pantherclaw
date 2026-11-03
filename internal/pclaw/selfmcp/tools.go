@@ -77,7 +77,13 @@ var (
 	operationShape = regexp.MustCompile(`^[A-Za-z0-9._:/-]*$`)
 	decisionShape  = regexp.MustCompile(`^[A-Z_]{1,32}$`)
 	pageTokenShape = regexp.MustCompile(`^[A-Za-z0-9_-]{0,64}$`)
+	// techniqueShape is an ATLAS or ATT&CK id, or none (G0 M28 D718, D726).
+	techniqueShape = regexp.MustCompile(techniquePattern)
+	// techniqueEntities are the entities the technique filter applies to.
+	techniqueEntities = []string{"alerts", "incidents"}
 )
+
+const techniquePattern = `^(T[0-9]{4}(\.[0-9]{3})?|AML\.T[0-9]{4}(\.[0-9]{3})?)?$`
 
 // errInput is a tool argument that failed its limit. Its text is fixed: an
 // argument never comes back.
@@ -189,6 +195,7 @@ type searchArgs struct {
 	Operation       string   `json:"operation"`
 	OperationPrefix string   `json:"operation_prefix"`
 	Decisions       []string `json:"decisions"`
+	Technique       string   `json:"technique"`
 	StartTime       string   `json:"start_time"`
 	EndTime         string   `json:"end_time"`
 	PageSize        int32    `json:"page_size"`
@@ -196,7 +203,7 @@ type searchArgs struct {
 }
 
 func (a searchArgs) request() (*pb.SearchRequest, error) {
-	f := &pb.SearchFilters{Operation: a.Operation, OperationPrefix: a.OperationPrefix, Decisions: a.Decisions}
+	f := &pb.SearchFilters{Operation: a.Operation, OperationPrefix: a.OperationPrefix, Decisions: a.Decisions, Technique: a.Technique}
 	var err error
 	for _, x := range []struct {
 		dst **string
@@ -224,7 +231,9 @@ func (a searchArgs) request() (*pb.SearchRequest, error) {
 		!pageTokenShape.MatchString(a.PageToken),
 		len(a.Operation) > maxOperation || !operationShape.MatchString(a.Operation),
 		len(a.OperationPrefix) > maxOperation || !operationShape.MatchString(a.OperationPrefix),
-		len(a.Decisions) > maxDecisions:
+		len(a.Decisions) > maxDecisions,
+		!techniqueShape.MatchString(a.Technique),
+		a.Technique != "" && !slices.Contains(techniqueEntities, a.Entity):
 		return nil, errInput
 	}
 	for _, d := range a.Decisions {
@@ -271,10 +280,14 @@ var tools = []tool{
 			"operation":        map[string]any{"type": "string", "maxLength": maxOperation, "description": "An exact operation."},
 			"operation_prefix": map[string]any{"type": "string", "maxLength": maxOperation, "description": "An operation prefix."},
 			"decisions":        map[string]any{"type": "array", "maxItems": maxDecisions, "items": map[string]any{"type": "string", "maxLength": 32}},
-			"start_time":       map[string]any{"type": "string", "format": "date-time"},
-			"end_time":         map[string]any{"type": "string", "format": "date-time"},
-			"page_size":        map[string]any{"type": "integer", "minimum": 1, "maximum": maxPageSize},
-			"page_token":       map[string]any{"type": "string", "maxLength": 64},
+			"technique": map[string]any{
+				"type": "string", "pattern": techniquePattern,
+				"description": "Alerts or incidents mapped to this ATLAS or ATT&CK technique or one of its sub-techniques.",
+			},
+			"start_time": map[string]any{"type": "string", "format": "date-time"},
+			"end_time":   map[string]any{"type": "string", "format": "date-time"},
+			"page_size":  map[string]any{"type": "integer", "minimum": 1, "maximum": maxPageSize},
+			"page_token": map[string]any{"type": "string", "maxLength": 64},
 		}),
 	},
 	{

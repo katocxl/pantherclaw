@@ -138,6 +138,9 @@ message SearchFilters {
   repeated string effect_states = 30 [(buf.validate.field).repeated.max_items = 16];
   // Automation executions of this automation.
   optional string automation_id = 31 [(buf.validate.field).string.uuid = true];
+  // Alerts and incidents carrying this ATLAS or ATT&CK technique or one of
+  // its sub-techniques (G0 M28 D726). Other entities refuse it.
+  string technique = 32 [(buf.validate.field).string = {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)?$"}];
 }
 
 // Query is one structured query.

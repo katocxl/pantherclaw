@@ -242,6 +242,9 @@ func TestHR659_InputLimits(t *testing.T) {
 		"page token":      {"search", map[string]any{"entity": "runs", "page_token": "a b"}},
 		"scope type":      {"breach_radius", map[string]any{"scope_type": "automation", "scope_id": uuid()}},
 		"scope id":        {"breach_radius", map[string]any{"scope_type": "agent", "scope_id": canary}},
+		// G0 M28 D726: a technique id, for alerts and incidents only.
+		"technique shape":  {"search", map[string]any{"entity": "alerts", "technique": canary}},
+		"technique entity": {"search", map[string]any{"entity": "runs", "technique": "T1078"}},
 	}
 	for _, name := range slices.Sorted(maps.Keys(cases)) {
 		c := cases[name]
@@ -529,5 +532,18 @@ func TestF947_ClosedStdinEndsTheServer(t *testing.T) {
 	cancel()
 	if err := s.Serve(ctx, strings.NewReader("{}")); err != nil {
 		t.Errorf("canceled: %v", err)
+	}
+}
+
+// TestF947_SearchPassesTheTechnique: the search tool's technique argument
+// arrives as the search filter (G0 M28 D726). Covers: F947, F964
+func TestF947_SearchPassesTheTechnique(t *testing.T) {
+	f := &fakeBackend{search: &pb.SearchResponse{Result: &pb.SearchResult{}}}
+	as, raw := serve(t, f, callLine(t, "search", map[string]any{"entity": "incidents", "technique": "AML.T0051.000"}))
+	if as[0].Error != nil || as[0].Result.IsError {
+		t.Fatalf("answer %s", raw)
+	}
+	if got := f.lastQuery.GetQuery().GetFilters().GetTechnique(); got != "AML.T0051.000" {
+		t.Errorf("technique %q", got)
 	}
 }

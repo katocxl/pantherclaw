@@ -58716,6 +58716,22 @@
             "type": "string",
             "title": "content",
             "description": "The rule's YAML, for custom rules."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "attack",
+            "maxItems": 16,
+            "description": "Fields 20 and 21 are post-M27's (G0 M28 D703).\n ATT\u0026CK Enterprise techniques the rule maps to (G0 M28 D718).\n PROVISIONAL field number until post-M27's proto changes land (D703)."
+          },
+          "techniquesNone": {
+            "type": "string",
+            "title": "techniques_none",
+            "description": "Why a built-in rule maps to no technique, in one line; empty\n otherwise (G0 M28 D714, D718).\n PROVISIONAL field number until post-M27's proto changes land (D703)."
           }
         },
         "title": "DetectionRule",
@@ -78096,6 +78112,12 @@
             "format": "uuid",
             "description": "Automation executions of this automation.",
             "nullable": true
+          },
+          "technique": {
+            "type": "string",
+            "title": "technique",
+            "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)?$",
+            "description": "Alerts and incidents carrying this ATLAS or ATT\u0026CK technique or one of\n its sub-techniques (G0 M28 D726). Other entities refuse it."
           }
         },
         "title": "SearchFilters",
@@ -78415,6 +78437,22 @@
             "format": "uuid",
             "description": "Automation executions of this automation.",
             "nullable": true
+          },
+          "technique": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "technique",
+            "description": "Alerts and incidents carrying this ATLAS or ATT\u0026CK technique or one of\n its sub-techniques (G0 M28 D726). Other entities refuse it.",
+            "anyOf": [
+              {
+                "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "SearchFilters",
