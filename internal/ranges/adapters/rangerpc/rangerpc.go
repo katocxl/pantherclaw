@@ -9,6 +9,7 @@ package rangerpc
 
 import (
 	"context"
+	"slices"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	"github.com/katocxl/pantherclaw/internal/ranges/app"
 	"github.com/katocxl/pantherclaw/internal/ranges/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/library"
 )
 
 // Handler serves RangeService.
@@ -232,6 +234,13 @@ func resultPB(r domain.Result) *pantherclawv1.RangeResult {
 	}
 	if r.Claimed != "" {
 		out.ClaimedVerdict = verdictPB(r.Claimed)
+	}
+	// Technique labels come from the server's library, only for a library
+	// scenario whose digest is the library's (G0 M28 D718).
+	if out.Origin == domain.OriginLibrary {
+		if e, ok := library.Lookup(r.Scenario.ID); ok && e.Digest == r.Scenario.Digest {
+			out.Atlas, out.Attack = slices.Clone(e.ATLAS), slices.Clone(e.ATTACK)
+		}
 	}
 	for _, s := range r.Steps {
 		st := &pantherclawv1.RangeStep{

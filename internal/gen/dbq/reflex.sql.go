@@ -283,16 +283,16 @@ func (q *Queries) ScopeAgentPlacements(ctx context.Context, orgID ids.OrgID, max
 const upsertAlert = `-- name: UpsertAlert :one
 INSERT INTO pc.alerts (org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity,
                        attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, suppression_id,
-                       first_seen, last_seen, test)
+                       first_seen, last_seen, test, attack)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11, $12,
         $13, $14::text[], $15::text[], $16, $17,
         $18, $19, $20, $21, $21,
-        $22)
+        $22, $23::text[])
 ON CONFLICT (org_id, dedupe_key) WHERE state IN ('OPEN', 'ACKNOWLEDGED', 'SUPPRESSED')
 DO UPDATE SET count = pc.alerts.count + 1, last_seen = greatest(pc.alerts.last_seen, EXCLUDED.last_seen),
               updated_at = now()
-RETURNING id, state, severity, incident_id, suppression_id, count, (xmax = 0) AS inserted
+RETURNING id, state, severity, incident_id, suppression_id, count, (xmax = 0) AS inserted, atlas, attack
 `
 
 type UpsertAlertParams struct {
@@ -318,6 +318,7 @@ type UpsertAlertParams struct {
 	SuppressionID *ids.UUID
 	OccurredAt    time.Time
 	Test          bool
+	Attack        []string
 }
 
 type UpsertAlertRow struct {
@@ -328,6 +329,8 @@ type UpsertAlertRow struct {
 	SuppressionID *ids.UUID
 	Count         int32
 	Inserted      bool
+	Atlas         []string
+	Attack        []string
 }
 
 // A new alert, or a repeat of the open one with the same dedupe key: the
@@ -356,6 +359,7 @@ func (q *Queries) UpsertAlert(ctx context.Context, arg UpsertAlertParams) (Upser
 		arg.SuppressionID,
 		arg.OccurredAt,
 		arg.Test,
+		arg.Attack,
 	)
 	var i UpsertAlertRow
 	err := row.Scan(
@@ -366,6 +370,8 @@ func (q *Queries) UpsertAlert(ctx context.Context, arg UpsertAlertParams) (Upser
 		&i.SuppressionID,
 		&i.Count,
 		&i.Inserted,
+		&i.Atlas,
+		&i.Attack,
 	)
 	return i, err
 }

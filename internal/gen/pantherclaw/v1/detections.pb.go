@@ -56,9 +56,17 @@ type DetectionRule struct {
 	// Consecutive evaluation errors.
 	ConsecutiveErrors int32 `protobuf:"varint,18,opt,name=consecutive_errors,json=consecutiveErrors,proto3" json:"consecutive_errors,omitempty"`
 	// The rule's YAML, for custom rules.
-	Content       string `protobuf:"bytes,19,opt,name=content,proto3" json:"content,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Content string `protobuf:"bytes,19,opt,name=content,proto3" json:"content,omitempty"`
+	// Fields 20 and 21 are post-M27's (G0 M28 D703).
+	// ATT&CK Enterprise techniques the rule maps to (G0 M28 D718).
+	// PROVISIONAL field number until post-M27's proto changes land (D703).
+	Attack []string `protobuf:"bytes,22,rep,name=attack,proto3" json:"attack,omitempty"`
+	// Why a built-in rule maps to no technique, in one line; empty
+	// otherwise (G0 M28 D714, D718).
+	// PROVISIONAL field number until post-M27's proto changes land (D703).
+	TechniquesNone string `protobuf:"bytes,23,opt,name=techniques_none,json=techniquesNone,proto3" json:"techniques_none,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DetectionRule) Reset() {
@@ -220,6 +228,20 @@ func (x *DetectionRule) GetConsecutiveErrors() int32 {
 func (x *DetectionRule) GetContent() string {
 	if x != nil {
 		return x.Content
+	}
+	return ""
+}
+
+func (x *DetectionRule) GetAttack() []string {
+	if x != nil {
+		return x.Attack
+	}
+	return nil
+}
+
+func (x *DetectionRule) GetTechniquesNone() string {
+	if x != nil {
+		return x.TechniquesNone
 	}
 	return ""
 }
@@ -991,7 +1013,7 @@ var File_pantherclaw_v1_detections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_detections_proto_rawDesc = "" +
 	"\n" +
-	"\x1fpantherclaw/v1/detections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcf\x04\n" +
+	"\x1fpantherclaw/v1/detections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd6\x05\n" +
 	"\rDetectionRule\x12\x17\n" +
 	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +
@@ -1012,7 +1034,9 @@ const file_pantherclaw_v1_detections_proto_rawDesc = "" +
 	"\fdisable_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\vdisableTime\x12'\n" +
 	"\x0fdisabled_reason\x18\x11 \x01(\tR\x0edisabledReason\x12-\n" +
 	"\x12consecutive_errors\x18\x12 \x01(\x05R\x11consecutiveErrors\x12\x18\n" +
-	"\acontent\x18\x13 \x01(\tR\acontent\"\x12\n" +
+	"\acontent\x18\x13 \x01(\tR\acontent\x12\\\n" +
+	"\x06attack\x18\x16 \x03(\tBD\xbaHA\x92\x01>\x10\x10\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x06attack\x12'\n" +
+	"\x0ftechniques_none\x18\x17 \x01(\tR\x0etechniquesNone\"\x12\n" +
 	"\x10ListRulesRequest\"\x90\x01\n" +
 	"\x11ListRulesResponse\x123\n" +
 	"\x05rules\x18\x01 \x03(\v2\x1d.pantherclaw.v1.DetectionRuleR\x05rules\x12!\n" +

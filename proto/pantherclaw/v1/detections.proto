@@ -79,6 +79,19 @@ message DetectionRule {
   int32 consecutive_errors = 18;
   // The rule's YAML, for custom rules.
   string content = 19;
+  // Fields 20 and 21 are post-M27's (G0 M28 D703).
+  // ATT&CK Enterprise techniques the rule maps to (G0 M28 D718).
+  // PROVISIONAL field number until post-M27's proto changes land (D703).
+  repeated string attack = 22 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
+  // Why a built-in rule maps to no technique, in one line; empty
+  // otherwise (G0 M28 D714, D718).
+  // PROVISIONAL field number until post-M27's proto changes land (D703).
+  string techniques_none = 23;
 }
 
 // ListRulesRequest has no filters.

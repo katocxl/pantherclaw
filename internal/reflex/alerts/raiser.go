@@ -56,6 +56,9 @@ type Raised struct {
 	// Reopened reports a suppressed alert this signal bypassed and opened
 	// again; it notifies like a new one (D59 M1).
 	Reopened bool
+	// ATLAS and ATTACK are the stored alert's techniques, set by its first
+	// raise (G0 M28 D718b).
+	ATLAS, ATTACK []string
 }
 
 // Hooks extend the store-level Raiser with suppression, incident grouping
@@ -186,7 +189,8 @@ func Write(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal, suppressi
 		OrgID: s.Org, ID: ids.NewV7(), Source: s.Source, RuleID: s.RuleID, RuleVersion: s.RuleVersion,
 		RuleDigest: s.RuleDigest, PackVersion: s.PackVersion, Title: s.Title, Summary: s.Summary,
 		Severity: string(s.Severity), Attention: string(s.Attention), Basis: string(s.Basis), Subjects: subjects,
-		Atlas: nonNilStrings(s.ATLAS), Owasp: nonNilStrings(s.OWASP), Facts: facts, GroupKey: s.GroupKey,
+		Atlas: nonNilStrings(s.ATLAS), Attack: nonNilStrings(s.ATTACK), Owasp: nonNilStrings(s.OWASP), Facts: facts,
+		GroupKey:  s.GroupKey,
 		DedupeKey: s.DedupeKey, State: state, SuppressionID: suppression, OccurredAt: s.OccurredAt, Test: s.Test,
 	})
 	if err != nil {
@@ -201,7 +205,7 @@ func Write(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal, suppressi
 	}
 	res := Raised{
 		Alert: row.ID, New: row.Inserted, State: row.State, Attention: s.Attention, Incident: row.IncidentID,
-		Count: int(row.Count),
+		Count: int(row.Count), ATLAS: row.Atlas, ATTACK: row.Attack,
 	}
 	if !row.Inserted {
 		return res, nil
@@ -212,7 +216,11 @@ func Write(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal, suppressi
 	}); err != nil {
 		return Raised{}, fmt.Errorf("alerts: event: %w", err)
 	}
-	if _, err := ledger.Append(ctx, tx, reflexdomain.KindAlert, Actor, EntryBody(s, row.ID, row.State)); err != nil {
+	// The entry carries the stored row's techniques: first raise wins
+	// everywhere (G0 M28 D718b, HR-684).
+	stored := s
+	stored.ATLAS, stored.ATTACK = row.Atlas, row.Attack
+	if _, err := ledger.Append(ctx, tx, reflexdomain.KindAlert, Actor, EntryBody(stored, row.ID, row.State)); err != nil {
 		return Raised{}, fmt.Errorf("alerts: ledger: %w", err)
 	}
 	return res, nil
@@ -233,9 +241,10 @@ func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 		Basis       string                 `json:"basis"`
 		State       string                 `json:"state,omitzero"`
 		Subjects    []reflexdomain.Subject `json:"subjects"`
-		// The rule's ATLAS techniques and OWASP risks travel to the feed and
-		// the SIEM export (G0 M28 D718, HR-684).
+		// The rule's ATLAS and ATT&CK techniques and OWASP risks travel to
+		// the feed and the SIEM export (G0 M28 D718, HR-684).
 		ATLAS    []string `json:"atlas,omitzero"`
+		ATTACK   []string `json:"attack,omitzero"`
 		OWASP    []string `json:"owasp,omitzero"`
 		Evidence []string `json:"evidence,omitzero"`
 		Test     bool     `json:"test,omitzero"`
@@ -243,7 +252,7 @@ func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 	b := body{
 		Source: s.Source, Rule: s.RuleID, RuleVersion: s.RuleVersion, RuleDigest: s.RuleDigest, PackVersion: s.PackVersion,
 		Severity: string(s.Severity), Attention: string(s.Attention), Basis: string(s.Basis), State: state,
-		Subjects: nonNil(s.Subjects), ATLAS: s.ATLAS, OWASP: s.OWASP, Test: s.Test,
+		Subjects: nonNil(s.Subjects), ATLAS: s.ATLAS, ATTACK: s.ATTACK, OWASP: s.OWASP, Test: s.Test,
 	}
 	if !id.IsZero() {
 		b.ID = id.String()
@@ -265,7 +274,7 @@ func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 			out, _ := evdomain.CanonicalBody(body{
 				ID: b.ID, Source: b.Source, Rule: b.Rule, Severity: b.Severity,
 				Attention: b.Attention, Basis: b.Basis, State: b.State, Subjects: []reflexdomain.Subject{}, ATLAS: b.ATLAS,
-				OWASP: b.OWASP, Test: b.Test,
+				ATTACK: b.ATTACK, OWASP: b.OWASP, Test: b.Test,
 			})
 			return out
 		}

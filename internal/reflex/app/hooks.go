@@ -220,12 +220,11 @@ func (h *Hooks) group(ctx context.Context, tx db.TenantTx, q *dbq.Queries, s ref
 	if !escalates {
 		return ids.UUID{}, false, nil
 	}
-	// The incident starts with the opening signal's techniques, so its
-	// opening ledger entry carries them (G0 M28 D718); attach adds the
-	// stored alert's.
+	// The incident starts with the stored alert's techniques (first raise
+	// wins), so its opening ledger entry carries them (G0 M28 D718, D718b).
 	inc, err := q.InsertIncident(ctx, dbq.InsertIncidentParams{
 		OrgID: org, ID: ids.NewV7(), Title: s.Title, Severity: string(s.Severity), GroupKey: s.GroupKey,
-		OpenedBy: "alert:" + r.Alert.String(), Atlas: s.ATLAS,
+		OpenedBy: "alert:" + r.Alert.String(), Atlas: r.ATLAS, Attack: r.ATTACK,
 	})
 	if err != nil {
 		return ids.UUID{}, false, err

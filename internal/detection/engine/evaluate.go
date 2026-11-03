@@ -222,7 +222,8 @@ func Signal(c *Compiled, e feed.Event, f Firing) reflexdomain.Signal {
 		Org: e.Org, Source: reflexdomain.SourceDetection, RuleID: r.ID, RuleVersion: r.Version, RuleDigest: c.Digest,
 		PackVersion: c.PackVersion, Title: r.Title, Summary: truncate(r.Description, reflexdomain.MaxSummary),
 		Severity: r.Severity, Attention: r.Attention, Basis: r.Basis, Subjects: e.Subjects,
-		GroupKey: GroupKey(r.Group, e), ATLAS: r.ATLAS, OWASP: r.OWASP, OccurredAt: e.OccurredAt, Test: e.Test,
+		GroupKey: GroupKey(r.Group, e), ATLAS: r.ATLAS, ATTACK: r.ATTACK, OWASP: r.OWASP, OccurredAt: e.OccurredAt,
+		Test:  e.Test,
 		Facts: map[string]string{"event_kind": truncate(e.Kind, 512), "count": strconv.Itoa(f.Count)},
 	}
 	if !r.Builtin() && s.Basis.Confirmed() {
