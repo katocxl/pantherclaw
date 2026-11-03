@@ -233,7 +233,9 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 	if r.scope.Kind == pack.ScopeCompliance {
 		// Like a range pack: `pclaw verify` checks the receipts it cites.
 		r.include.Receipts = true
-		if b.complianceData, err = b.loadCompliance(); errors.Is(err, errCompliance) {
+		if b.complianceData, err = b.loadCompliance(); errors.Is(err, errComplianceEdition) {
+			return s.fail(ctx, org, id, CodeEditionRequired)
+		} else if errors.Is(err, errCompliance) {
 			return s.fail(ctx, org, id, CodeComplianceUnavailable)
 		} else if err != nil {
 			return err

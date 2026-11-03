@@ -23,7 +23,14 @@ import (
 // row, or on a server that does not build them.
 const CodeComplianceUnavailable = "COMPLIANCE_UNAVAILABLE"
 
-var errCompliance = errors.New("packbuild: no compliance report for this pack")
+// CodeEditionRequired marks a compliance pack whose framework the org's
+// edition no longer includes (D545): no retry can build it.
+const CodeEditionRequired = "EDITION_REQUIRED"
+
+var (
+	errCompliance        = errors.New("packbuild: no compliance report for this pack")
+	errComplianceEdition = errors.New("packbuild: the edition does not include this framework")
+)
 
 // Compliance derives a framework's coverage for the caller in ctx, the
 // pack's creator (internal/compliance/app.Service.Report).
@@ -56,9 +63,7 @@ func (b *builder) loadCompliance() (*complianceData, error) {
 		return nil, err
 	}
 	report, err := b.s.Compliance.Report(b.ctx, domain.Framework(row.Framework), row.PeriodStart, row.PeriodEnd)
-	if permanent(err) {
-		return nil, errors.Join(errCompliance, err)
-	} else if err != nil {
+	if err := classify(err); err != nil {
 		return nil, err
 	}
 	data, err := pack.Canonical(report)
@@ -73,10 +78,20 @@ func (b *builder) loadCompliance() (*complianceData, error) {
 	}, nil
 }
 
-// permanent reports a report error no retry can mend: the pack fails at once
-// with CodeComplianceUnavailable rather than staying pending.
-func permanent(err error) bool {
-	return errors.Is(err, coapp.ErrBadPeriod) || errors.Is(err, coapp.ErrUnknown) || errors.Is(err, coapp.ErrUnavailable)
+// classify marks a report error no retry can mend, so the pack fails at once
+// rather than staying pending: an edition that lacks the framework with
+// CodeEditionRequired, the rest with CodeComplianceUnavailable. Any other
+// error is returned as it is and retried.
+func classify(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, coapp.ErrEdition):
+		return errors.Join(errComplianceEdition, err)
+	case errors.Is(err, coapp.ErrBadPeriod) || errors.Is(err, coapp.ErrUnknown) || errors.Is(err, coapp.ErrUnavailable):
+		return errors.Join(errCompliance, err)
+	}
+	return err
 }
 
 // citedTransactions lists the transactions the report cites, once each: the

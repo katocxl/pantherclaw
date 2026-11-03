@@ -12,21 +12,36 @@ import (
 )
 
 // TestComplianceReportErrorsThatNoRetryMends: a bad period, an unknown
-// framework or a server with no store fail the pack at once; anything else
-// (a database hiccup) is retried.
+// framework or a server with no store fail the pack at once as unavailable;
+// anything else (a database hiccup) is retried.
 // Covers: F894
 func TestComplianceReportErrorsThatNoRetryMends(t *testing.T) {
 	for _, err := range []error{coapp.ErrBadPeriod, coapp.ErrUnknown, coapp.ErrUnavailable, fmt.Errorf("wrapped: %w", coapp.ErrBadPeriod)} {
-		if !permanent(err) {
-			t.Errorf("%v is retried", err)
-		}
-		if !errors.Is(errors.Join(errCompliance, err), errCompliance) {
-			t.Errorf("%v does not fail the pack", err)
+		got := classify(err)
+		if !errors.Is(got, errCompliance) || errors.Is(got, errComplianceEdition) || !errors.Is(got, err) {
+			t.Errorf("%v: %v", err, got)
 		}
 	}
-	for _, err := range []error{nil, errors.New("connection reset"), coapp.ErrEdition} {
-		if permanent(err) {
-			t.Errorf("%v fails the pack at once", err)
+	if classify(nil) != nil {
+		t.Error("no error became one")
+	}
+	hiccup := errors.New("connection reset")
+	if got := classify(hiccup); got != hiccup {
+		t.Errorf("a passing error is not retried: %v", got)
+	}
+}
+
+// TestComplianceEditionFailsThePack: an edition that no longer includes the
+// framework fails the pack with EDITION_REQUIRED, never a retry (D545).
+// Covers: F897
+func TestComplianceEditionFailsThePack(t *testing.T) {
+	for _, err := range []error{coapp.ErrEdition, fmt.Errorf("wrapped: %w", coapp.ErrEdition)} {
+		got := classify(err)
+		if !errors.Is(got, errComplianceEdition) || errors.Is(got, errCompliance) {
+			t.Errorf("%v: %v", err, got)
 		}
+	}
+	if CodeEditionRequired != "EDITION_REQUIRED" {
+		t.Errorf("code %q", CodeEditionRequired)
 	}
 }
