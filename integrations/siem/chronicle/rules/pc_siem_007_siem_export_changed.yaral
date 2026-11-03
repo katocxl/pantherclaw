@@ -8,7 +8,7 @@ rule pc_siem_007_siem_export_changed {
 
   events:
     $e.metadata.vendor_name = "PantherClaw"
-    re.regex($e.metadata.product_event_type, `^audit\.siem\.destination_`)
+    ($e.metadata.product_event_type = "audit.siem.destination_created" or $e.metadata.product_event_type = "audit.siem.destination_activated" or $e.metadata.product_event_type = "audit.siem.destination_state_changed" or $e.metadata.product_event_type = "audit.siem.destination_secret_rotated" or $e.metadata.product_event_type = "audit.siem.destination_signature_scheme_set")
     $e.additional.fields["ocsf_test"] != "true"
 
   condition:

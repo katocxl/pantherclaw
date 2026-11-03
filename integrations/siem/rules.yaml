@@ -29,6 +29,7 @@ rules:
   - id: pc-siem-007
     title: PantherClaw SIEM export changed
     severity: medium
+    # Listed event codes only: a routine retry (siem-destination-retried) is not a change.
     fires_on: [siem-destination-state-changed]
   - id: pc-siem-008
     title: PantherClaw discovered an unclaimed agent

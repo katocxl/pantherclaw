@@ -25,25 +25,35 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/triggerstest"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	detengine "github.com/katocxl/pantherclaw/internal/detection/engine"
+	"github.com/katocxl/pantherclaw/internal/detection/pack"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	hubdomain "github.com/katocxl/pantherclaw/internal/hub/domain"
 	"github.com/katocxl/pantherclaw/internal/hub/seed"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	reflexapp "github.com/katocxl/pantherclaw/internal/reflex/app"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // TestRange_ScenariosPlaybooks runs each response playbook of the Hub (G0 M27
 // D508) on the real trigger service and engine, on the platform feed of a
-// fresh organization, with the security steps' platform ties replaced by
-// recorders. A playbook that can contain is run twice: on a CONFIRMED alert
-// it suspends the triggering run and opens a case; on an inferred one it
-// suspends nothing and still opens the case (D514). It is part of `task
-// range`.
+// fresh Business organization, with the security steps' platform ties
+// replaced by recorders. Each signal playbook starts from the audit entry the
+// producing code writes, through the detection engine's built-in or published
+// custom rules and Reflex's own alert and incident entries (D539): no alert
+// is written by hand. A refused delegation revokes the grant it exceeded; a
+// refused issue names no grant and only opens a case; an incident naming a
+// run suspends it when its basis is confirmed, and an inferred one suspends
+// nothing (D514). Leaked-key and poisoned-mcp-server only open a case. It is
+// part of `task range`.
 //
 // Covers: F942, F943
 func TestRange_ScenariosPlaybooks(t *testing.T) {
@@ -66,59 +76,151 @@ func TestRange_ScenariosPlaybooks(t *testing.T) {
 			t.Fatal(err)
 		}
 		b := body.(hubdomain.AutomationBody)
-		switch it.Entry.Name {
-		case "pc.playbook.leaked-key":
-			pbSignal(t, b, "reflex.alert", "pc.identity.key_new_network")
-		case "pc.playbook.poisoned-mcp-server":
-			pbSignal(t, b, "reflex.alert", "pc.tools.drift")
-		case "pc.playbook.rogue-sub-agent":
-			pbSignal(t, b, "reflex.alert", "pc.authority.self_issue")
-		case "pc.playbook.compromised-laptop":
-			pbSignal(t, b, "reflex.incident", "")
-		case "pc.playbook.data-flow-hold-escalation":
-			t.Run(it.Entry.Name, func(t *testing.T) { pbDataFlowHold(t, b) })
-		case "pc.playbook.offboarded-owner":
-			t.Run(it.Entry.Name, func(t *testing.T) { pbOffboardedOwner(t, b) })
-		default:
-			t.Fatalf("no range run for %s", it.Entry.Name)
-		}
+		t.Run(it.Entry.Name, func(t *testing.T) {
+			switch it.Entry.Name {
+			case "pc.playbook.leaked-key":
+				pbCaseOnly(t, b, pbNetworkChanged())
+			case "pc.playbook.poisoned-mcp-server":
+				pbCaseOnly(t, b, pbDrift())
+			case "pc.playbook.rogue-sub-agent":
+				pbRogueSubAgent(t, b)
+			case "pc.playbook.compromised-laptop":
+				pbCompromisedLaptop(t, b)
+			case "pc.playbook.data-flow-hold-escalation":
+				pbDataFlowHold(t, b)
+			case "pc.playbook.offboarded-owner":
+				pbOffboardedOwner(t, b)
+			default:
+				t.Fatalf("no range run for %s", it.Entry.Name)
+			}
+		})
 	}
 }
 
-// pbSignal runs a containing playbook on a confirmed and on an inferred
-// signal of kind (reflex.alert or reflex.incident).
-func pbSignal(t *testing.T, b hubdomain.AutomationBody, kind, rule string) {
-	t.Helper()
-	for _, basis := range []string{"OBSERVED", "INFERRED"} {
-		t.Run("pc.playbook."+strings.TrimPrefix(b.AutomationName, "hub-playbook-")+"/"+basis, func(t *testing.T) {
+// The audit entries the producing code writes: identity/app tokens.go
+// networkChanged, connections/app drift.go, grants/app delegate.go and
+// service.go, grants/app grantEvent.
+var (
+	pbAgent    = "0192f942-0000-7000-8000-0000000019a1"
+	pbInstance = "0192f942-0000-7000-8000-0000000019e1"
+	pbParent   = "0192f942-0000-7000-8000-0000000019b1"
+	pbChild    = "0192f942-0000-7000-8000-0000000019b2"
+	pbRun      = "0192f942-0000-7000-8000-0000000019c1"
+	pbConn     = "0192f942-0000-7000-8000-0000000019d1"
+)
+
+func pbNetworkChanged() audit.Event {
+	return audit.Event{
+		Name: "security.instance_network_changed", Actor: evdomain.Actor{Type: "system", ID: "identity"}, Outcome: audit.Success,
+		Object:  &audit.Object{Type: "instance", ID: pbInstance},
+		Details: map[string]string{"agent_id": pbAgent, "from_network": "10.0.0.0/24", "to_network": "192.0.2.0/24"},
+	}
+}
+
+func pbDrift() audit.Event {
+	return audit.Event{
+		Name: "package.transitioned", Actor: evdomain.Actor{Type: "gateway", ID: pbInstance}, Outcome: audit.Success,
+		Object: &audit.Object{Type: "package_version", ID: "acme/refunds@1.0.0"},
+		Details: map[string]string{
+			"from": "ACTIVE", "to": "QUARANTINED", "reason": "upstream_drift", "connection_id": pbConn, "upstream_tool": "get_refund",
+			"expected_digest": "sha256:aa", "observed_digest": "sha256:bb", "description_scan": "clean",
+		},
+	}
+}
+
+func pbDelegateRefused() audit.Event {
+	return audit.Event{
+		Name: "grant.delegate_refused", Actor: evdomain.Actor{Type: "instance", ID: pbInstance}, Outcome: audit.Denied,
+		ReasonCode: "DELEGATION_EXCEEDS_PARENT", Object: &audit.Object{Type: "grant", ID: pbParent},
+		Details: map[string]string{"agent": pbAgent, "parent": pbParent, "attempted": "grant.delegate"},
+	}
+}
+
+func pbIssueRefused() audit.Event {
+	return audit.Event{
+		Name: "grant.issue_refused", Actor: evdomain.Actor{Type: "service_account", ID: pbInstance}, Outcome: audit.Denied,
+		ReasonCode: "HUMAN_ONLY", Details: map[string]string{"attempted": "grant.issue", "agent": pbAgent},
+	}
+}
+
+func pbDelegated() audit.Event {
+	return audit.Event{
+		Name: "grant.delegated", Actor: evdomain.Actor{Type: "instance", ID: pbInstance}, Outcome: audit.Success,
+		Object:  &audit.Object{Type: "grant", ID: pbChild},
+		Details: map[string]string{"parent": pbParent, "parent_revision": "1", "child_run": pbRun},
+	}
+}
+
+// pbCaseOnly: the alert names a key or a connection, which a person revokes
+// or disables; the playbook only opens a case.
+func pbCaseOnly(t *testing.T, b hubdomain.AutomationBody, ev audit.Event) {
+	r := newPBRange(t, b)
+	x := r.produce(t, ev)
+	r.drive(t, x)
+	if st := r.step(t, x, "case"); st != "DONE" || r.cases.count() != 1 {
+		t.Fatalf("case: %s, %d opened", st, r.cases.count())
+	}
+	if len(r.container.scopes()) != 0 || len(r.grants.revoked()) != 0 {
+		t.Fatal("a case-only playbook contained something")
+	}
+}
+
+// pbRogueSubAgent: pc.authority.self_issue fires on both refusals; only the
+// refused delegation names a grant, and that grant is revoked.
+func pbRogueSubAgent(t *testing.T, b hubdomain.AutomationBody) {
+	for _, c := range []struct {
+		name string
+		ev   audit.Event
+		want []string
+	}{
+		{"delegate_refused", pbDelegateRefused(), []string{pbParent}},
+		{"issue_refused", pbIssueRefused(), nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
 			r := newPBRange(t, b)
-			run := ids.NewV7().String()
-			fields := map[string]any{
-				"id": ids.NewV7().String(), "state": "OPEN", "severity": "HIGH", "basis": basis,
-				"subjects": []map[string]string{{"type": "run", "id": run}},
+			x := r.produce(t, c.ev)
+			r.drive(t, x)
+			if got := r.grants.revoked(); !slices.Equal(got, c.want) {
+				t.Fatalf("revoked %v, want %v", got, c.want)
 			}
-			if kind == "reflex.alert" {
-				fields["rule"], fields["attention"] = rule, "ALERT"
-			} else {
-				fields["attention"] = "INCIDENT"
+			want := "DONE"
+			if c.want == nil {
+				want = "SKIPPED"
 			}
-			x := r.record(t, kind, fields)
+			if st := r.step(t, x, "contain"); st != want {
+				t.Fatalf("contain: %s, want %s", st, want)
+			}
+			if st := r.step(t, x, "case"); st != "DONE" || r.cases.count() != 1 {
+				t.Fatalf("case: %s, %d opened", st, r.cases.count())
+			}
+		})
+	}
+}
+
+// pbCompromisedLaptop: no built-in rule opens an incident naming a run, so a
+// customer's published rule does: on a delegation, naming the child run. A
+// confirmed incident suspends the run; an inferred one suspends nothing.
+func pbCompromisedLaptop(t *testing.T, b hubdomain.AutomationBody) {
+	for _, basis := range []string{"OBSERVED", "INFERRED"} {
+		t.Run(basis, func(t *testing.T) {
+			r := newPBRange(t, b)
+			r.publish(t, strings.Replace(pbIncidentRule, "basis: OBSERVED", "basis: "+basis, 1))
+			x := r.produce(t, pbDelegated())
 			r.drive(t, x)
 			contained := r.container.scopes()
-			switch basis {
-			case "OBSERVED":
-				if !slices.Equal(contained, []string{"run:" + run}) {
-					t.Fatalf("a confirmed signal contained %v, want the triggering run %s", contained, run)
+			if basis == "OBSERVED" {
+				if !slices.Equal(contained, []string{"run:" + pbRun}) {
+					t.Fatalf("a confirmed incident contained %v, want the run %s", contained, pbRun)
 				}
 				if st := r.step(t, x, "contain"); st != "DONE" {
-					t.Fatalf("contain on a confirmed signal: %s", st)
+					t.Fatalf("contain on a confirmed incident: %s", st)
 				}
-			default:
+			} else {
 				if len(contained) != 0 {
-					t.Fatalf("an inferred signal contained %v", contained)
+					t.Fatalf("an inferred incident contained %v", contained)
 				}
 				if st := r.step(t, x, "contain"); st != "SKIPPED" {
-					t.Fatalf("contain on an inferred signal: %s", st)
+					t.Fatalf("contain on an inferred incident: %s", st)
 				}
 			}
 			if st := r.step(t, x, "case"); st != "DONE" || r.cases.count() != 1 {
@@ -128,9 +230,40 @@ func pbSignal(t *testing.T, b hubdomain.AutomationBody, kind, rule string) {
 	}
 }
 
+const pbIncidentRule = `id: org.range.delegated_incident
+version: "1"
+title: Delegation under watch
+description: A customer's rule that opens an incident on every delegation, naming the child run.
+severity: HIGH
+attention: INCIDENT
+basis: OBSERVED
+edition: business
+on: [audit.grant.delegated]
+group: run
+tests:
+  - name: a delegation
+    fires: true
+    events:
+      - kind: audit.grant.delegated
+        actor_type: instance
+        actor_id: 01930000-0000-7000-8000-0000000000i1
+        outcome: success
+        subjects: {grant: 01930000-0000-7000-8000-0000000000b2, run: 01930000-0000-7000-8000-0000000000c1}
+  - name: a refused delegation
+    fires: false
+    events:
+      - kind: audit.grant.delegate_refused
+        actor_type: instance
+        actor_id: 01930000-0000-7000-8000-0000000000i1
+        outcome: denied
+        subjects: {grant: 01930000-0000-7000-8000-0000000000b1}
+`
+
 // pbDataFlowHold: a decision held for its data flow starts the playbook; it
 // opens a case and follows the approval request until a person decides it.
-// It decides nothing itself.
+// It decides nothing itself. No range scenario produces a data-flow hold;
+// the m16 exit journey does (TestE2E_M16_DataFlowHold), so this entry has the
+// shape the pipeline writes.
 func pbDataFlowHold(t *testing.T, b hubdomain.AutomationBody) {
 	r := newPBRange(t, b)
 	x := r.record(t, "receipt.decision", map[string]any{
@@ -171,18 +304,19 @@ func pbOffboardedOwner(t *testing.T, b hubdomain.AutomationBody) {
 	if r.failures.count() != 1 || r.cases.count() != 1 {
 		t.Fatalf("owned failures %d, cases %d; want 1 and 1", r.failures.count(), r.cases.count())
 	}
-	if len(r.container.scopes()) != 0 {
+	if len(r.container.scopes()) != 0 || len(r.grants.revoked()) != 0 {
 		t.Fatal("the offboarding playbook contained something")
 	}
 }
 
-// pbRange is one organization with one playbook enabled FULL on Business.
+// pbRange is one Business organization with one playbook enabled FULL.
 type pbRange struct {
 	f         *triggerstest.Fixture
 	a         triggerstest.Automation
 	svc       *triggers.Service
 	engine    *pgengine.Engine
 	container *pbContainer
+	grants    *pbGrants
 	cases     *pbCounter
 	failures  *pbCounter
 	approvals *pbApprovals
@@ -191,12 +325,15 @@ type pbRange struct {
 func newPBRange(t *testing.T, b hubdomain.AutomationBody) *pbRange {
 	t.Helper()
 	f := triggerstest.New(t)
-	r := &pbRange{f: f, container: &pbContainer{}, cases: &pbCounter{}, failures: &pbCounter{}, approvals: &pbApprovals{request: ids.NewV7()}}
+	r := &pbRange{
+		f: f, container: &pbContainer{}, grants: &pbGrants{}, cases: &pbCounter{}, failures: &pbCounter{},
+		approvals: &pbApprovals{request: ids.NewV7()},
+	}
 	business := triggerstest.Editions{Edition: billing.Business}
 	reg := steps.Generic(steps.Deps{})
 	for k, s := range securitysteps.All(securitysteps.Deps{
 		Container: r.container, Actions: securitysteps.Actions{}, Cases: pbCases{r.cases}, Failures: pbFailures{r.failures},
-		Owners: securitysteps.StoreOwners{}, Approvals: r.approvals,
+		Owners: securitysteps.StoreOwners{}, Approvals: r.approvals, Grants: r.grants,
 		Review: securitysteps.ReviewDeps{Unused: pbUnused{}, Drafts: pbDrafts{}},
 	}) {
 		reg[k] = s
@@ -208,9 +345,16 @@ func newPBRange(t *testing.T, b hubdomain.AutomationBody) *pbRange {
 	e.Editions = business
 	r.engine = e
 	r.svc = triggers.New(triggers.Deps{Pool: f.Pool, Starter: e, Editions: business, Executions: e, Log: pclog.Discard()})
-	// The draft a Hub install makes, with the review date a person sets
-	// before validating it.
+	// The draft a Hub install makes, with what a person sets before
+	// validating it: the review date and, for a playbook that revokes, whose
+	// grants it may revoke.
 	def := b.Definition + "review_by: \"" + time.Now().AddDate(0, 0, 30).Format(time.DateOnly) + "\"\n"
+	if strings.Contains(def, "REVOKE_GRANT") {
+		def = strings.Replace(def, "authority:\n  principal: self\n", "authority:\n  principal: self\n  revocable:\n    all: true\n", 1)
+		if !strings.Contains(def, "revocable:") {
+			t.Fatal("no authority block to set revocable on")
+		}
+	}
 	r.a = m21Enabled(t, f, b.AutomationName, def)
 	r.feed(t) // the cursor starts at the head: history never triggers
 	return r
@@ -226,6 +370,86 @@ func (r *pbRange) feed(t *testing.T) triggers.FeedResult {
 		t.Fatal(err)
 	}
 	return res
+}
+
+// pbEnts is the organization's edition for detections and Reflex.
+var pbEnts = ents{billing.Business}
+
+// publish creates and publishes a custom detection rule as a security admin
+// (Business), with its tests.
+func (r *pbRange) publish(t *testing.T, content string) {
+	t.Helper()
+	env, err := detengine.NewEnv(celenv.DefaultLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	det := &reflexapp.Detections{Pool: r.f.Pool, Env: env, Ents: pbEnts}
+	ctx := r.f.As(td.KindUser, td.RoleSecurityAdmin)
+	c, err := det.CreateCustomRule(ctx, content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := det.PublishCustomRule(ctx, c.Custom.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// produce records ev as its producing code does, runs the detection engine
+// over the feed with Reflex's own raiser, feeds the triggers and returns the
+// execution they started.
+func (r *pbRange) produce(t *testing.T, ev audit.Event) ids.UUID {
+	t.Helper()
+	eng := r.detector(t)
+	r.detect(t, eng) // a new detection cursor starts at the head (D59 M4)
+	r.f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := audit.Record(ctx, tx, ev)
+		return err
+	})
+	if r.detect(t, eng) == 0 {
+		t.Fatalf("%s raised no signal", ev.Name)
+	}
+	r.feed(t)
+	return r.execution(t)
+}
+
+// detector is the detection engine with the built-in pack, the org's
+// published custom rules and Reflex's own raiser, on Business.
+func (r *pbRange) detector(t *testing.T) *detengine.Engine {
+	t.Helper()
+	env, err := detengine.NewEnv(celenv.DefaultLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := pack.Load(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &detengine.Engine{
+		Pool: r.f.Pool, Builtin: p.Rules, PackVersion: p.Version, Env: env,
+		Raiser: (&reflexapp.Hooks{Ents: pbEnts}).Raiser(), Sink: &failures.Sink{}, Ents: pbEnts,
+	}
+}
+
+// detect chains the ledger and runs the engine over the feed until it is
+// read, returning the signals raised.
+func (r *pbRange) detect(t *testing.T, eng *detengine.Engine) int {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := ledger.ChainAll(ctx, r.f.Pool, r.f.Org, 1000); err != nil {
+		t.Fatal(err)
+	}
+	signals := 0
+	for range 50 {
+		res, err := eng.Process(ctx, r.f.Org)
+		if err != nil {
+			t.Fatal(err)
+		}
+		signals += res.Signals
+		if res.Events == 0 && res.To == res.From {
+			break
+		}
+	}
+	return signals
 }
 
 // record appends one ledger entry, feeds it to the triggers and returns the
@@ -245,11 +469,43 @@ func (r *pbRange) record(t *testing.T, kind string, fields map[string]any) ids.U
 		return err
 	})
 	r.feed(t)
+	return r.execution(t)
+}
+
+// execution is the one execution the playbook started.
+func (r *pbRange) execution(t *testing.T) ids.UUID {
+	t.Helper()
 	var x ids.UUID
 	r.f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
 		return tx.QueryRow(ctx, "SELECT id FROM pc.automation_executions WHERE org_id = $1 AND automation_id = $2", r.f.Org, r.a.ID).Scan(&x)
 	})
 	return x
+}
+
+// pbGrants records the grants contain REVOKE_GRANT revokes.
+type pbGrants struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (*pbGrants) IssueForAutomation(context.Context, pgx.Tx, steps.LaunchIssue) (ids.UUID, error) {
+	return ids.UUID{}, errors.New("no launch in the playbooks")
+}
+
+func (g *pbGrants) RevokeForAutomation(_ context.Context, _ pgx.Tx, in steps.GrantRevoke) ([]ids.UUID, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if in.Grant == nil {
+		return nil, errors.New("no grant named")
+	}
+	g.calls = append(g.calls, in.Grant.String())
+	return []ids.UUID{*in.Grant}, nil
+}
+
+func (g *pbGrants) revoked() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return slices.Clone(g.calls)
 }
 
 // drive advances the execution, waking its waits, until it ends.

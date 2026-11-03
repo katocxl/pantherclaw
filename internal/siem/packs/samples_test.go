@@ -82,6 +82,7 @@ func sampleEvents() map[string]feed.Event {
 		"kill-switch-engaged":            audit("audit.security.kill_switch_engaged", "SUCCESS"),
 		"kill-switch-restored":           audit("audit.security.kill_switch_restored", "SUCCESS"),
 		"siem-destination-state-changed": audit("audit.siem.destination_state_changed", "SUCCESS"),
+		"siem-destination-retried":       audit("audit.siem.destination_retried", "SUCCESS"),
 		"agent-discovered":               audit("audit.agent.discovered", "SUCCESS"),
 	}
 }

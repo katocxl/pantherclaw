@@ -138,10 +138,10 @@
       "kind": "Scheduled",
       "name": "[concat(parameters('workspace'), '/Microsoft.SecurityInsights/0192f944-0000-7000-8000-000000000007')]",
       "properties": {
-        "description": "A SIEM export destination was created, activated, paused, disabled or had its secret rotated. A paused export is a blind spot in this very SIEM.",
+        "description": "A SIEM export destination was created, activated, paused, disabled or resumed, or had its secret or signature scheme changed. A paused export is a blind spot in this very SIEM. A routine retry is not listed.",
         "displayName": "PantherClaw SIEM export changed",
         "enabled": false,
-        "query": "PantherClawOCSF_CL\n| where tostring(Ocsf.metadata.event_code) startswith \"audit.siem.destination_\"\n| where not(Ocsf.metadata.labels has \"test\")",
+        "query": "PantherClawOCSF_CL\n| where tostring(Ocsf.metadata.event_code) in (\"audit.siem.destination_created\", \"audit.siem.destination_activated\", \"audit.siem.destination_state_changed\", \"audit.siem.destination_secret_rotated\", \"audit.siem.destination_signature_scheme_set\")\n| where not(Ocsf.metadata.labels has \"test\")",
         "queryFrequency": "PT5M",
         "queryPeriod": "PT6M",
         "severity": "Medium",

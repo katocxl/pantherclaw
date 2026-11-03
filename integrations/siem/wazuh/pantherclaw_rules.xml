@@ -64,7 +64,7 @@
 
   <rule id="100717" level="8">
     <if_sid>100700</if_sid>
-    <field name="metadata.event_code" type="pcre2">^audit\.siem\.destination_</field>
+    <field name="metadata.event_code" type="pcre2">^audit\.siem\.destination_(created|activated|state_changed|secret_rotated|signature_scheme_set)$</field>
     <description>pc-siem-007: PantherClaw SIEM export changed</description>
     <group>pc-siem-007,</group>
   </rule>

@@ -484,6 +484,20 @@ func TestHubSeed_Automations(t *testing.T) {
 				t.Fatal(err)
 			}
 			business := slices.Contains(def.Kinds(), autodomain.KindContain)
+			// A draft that revokes beyond its execution names no revocable
+			// scope: a person sets it before it validates, as with the review
+			// date (G0 M27 D539).
+			if revokesBeyond(def) {
+				if def.Authority.Revocable != nil {
+					t.Error("an item names whose grants it may revoke: a person must set that")
+				}
+				if !slices.ContainsFunc(autodomain.Validate(ctx, def, automationEnv{now: start, business: business}), func(f autodomain.Finding) bool {
+					return f.Code == autodomain.CodeLimitRange && f.Path == "/authority/revocable"
+				}) {
+					t.Error("a draft that revokes grants validated with no revocable scope")
+				}
+				def.Authority.Revocable = &autodomain.AgentScope{All: true}
+			}
 			for _, f := range autodomain.Validate(ctx, def, automationEnv{now: start, business: business}) {
 				if f.Severity == autodomain.SeverityError {
 					t.Errorf("%s %s: %s", f.Code, f.Path, f.Message)
@@ -531,6 +545,18 @@ func TestHubSeed_Automations(t *testing.T) {
 			}
 		})
 	}
+}
+
+// revokesBeyond reports a step that revokes grants beyond its execution.
+func revokesBeyond(def *autodomain.Definition) bool {
+	for _, s := range def.Do {
+		if k, ok := autodomain.Catalog[s.Step]; ok && k.ConfirmRevocable {
+			if w, err := s.DecodeWith(); err == nil && autodomain.RevokesBeyondExecution(w) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TestHubSeed_NoCode: no file of the tree is a script or a program, and no

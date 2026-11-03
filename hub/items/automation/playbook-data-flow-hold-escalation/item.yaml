@@ -5,7 +5,10 @@ title: "Playbook: data-flow hold escalation"
 summary: >-
   When an action is held because of where its data would go, open a case,
   remind the approvers, escalate the request and finish when a person decides
-  it. It never decides the request and contains nothing.
+  it. It never decides the request and contains nothing. It starts only when
+  the data flow is the hold's deciding reason: a hold that another approval
+  requirement decides first carries DATA_FLOW_HOLD only among its other
+  reasons, which the trigger can't read. Runs on Team.
 body:
   automation_name: hub-playbook-data-flow-hold
   purpose: Make sure a person decides every action held for its data flow, and keep a case of it.

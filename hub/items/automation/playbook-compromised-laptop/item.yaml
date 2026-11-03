@@ -3,19 +3,20 @@ version: 1.0.0
 kind: automation
 title: "Playbook: compromised laptop"
 summary: >-
-  When a high or critical incident opens on a confirmed signal, suspend the run
-  behind it and open a case to check the machine it ran from. An incident a
-  person opened, or one that rests on an inference, only opens the case.
-  Rotating keys and wiping the machine stay a person's steps. The contain step
-  needs Business.
+  When a high or critical incident opens, open a case first so a person checks
+  the machine, then, when the incident rests on a confirmed signal and names a
+  run, suspend that run. None of PantherClaw's own rules opens an incident that
+  names a run, so the suspension follows only your custom rules; otherwise only
+  the case opens. Rotating keys and wiping the machine stay a person's steps.
+  This playbook needs Business; on Team it does not run.
 body:
   automation_name: hub-playbook-compromised-laptop
-  purpose: Suspend the run behind a confirmed severe incident and open a case so a person checks the machine it ran from.
+  purpose: Open a case on a severe incident so a person checks the machine, and suspend the run a confirmed incident names.
   work_kind: SECURITY_WORK
   definition: |
     apiVersion: automations.pantherclaw.dev/v1
     kind: Automation
-    purpose: "Suspend the run behind a confirmed severe incident and open a case so a person checks the machine it ran from."
+    purpose: "Open a case on a severe incident so a person checks the machine, and suspend the run a confirmed incident names."
     work_kind: SECURITY_WORK
     when:
       event:
@@ -24,26 +25,18 @@ body:
         params:
           signal: {from: attrs.id, type: uuid}
           basis: {from: attrs.basis, type: enum, values: [OBSERVED, RULE_MATCH, INFERRED, HYPOTHESIS], required: false}
+          run: {from: subjects.run, type: uuid, required: false}
       dedupe:
         key: "{{params.signal}}"
         window: 1d
     authority:
       principal: self
       platform:
-        - step: contain
-          scopes: [TRIGGER_RUN]
         - step: open_case
           scopes: [TRIGGER_SUBJECTS]
+        - step: contain
+          scopes: [TRIGGER_RUN]
     do:
-      - id: contain
-        step: contain
-        when: '"basis" in trigger.params && trigger.params.basis in ["OBSERVED", "RULE_MATCH"]'
-        with:
-          action: SUSPEND_RUN
-          subject: TRIGGER_RUN
-          reason: "Compromised laptop playbook: confirmed incident {{params.signal}}."
-        timeout: 15m
-        on_failure: ESCALATE
       - id: case
         step: open_case
         with:
@@ -52,6 +45,15 @@ body:
             - Which machine and workload key did the run use?
             - Which other agents and keys live on that machine?
             - Has a person rotated those keys and checked the machine?
+      - id: contain
+        step: contain
+        when: '"basis" in trigger.params && trigger.params.basis in ["OBSERVED", "RULE_MATCH"] && "run" in trigger.params'
+        with:
+          action: SUSPEND_RUN
+          subject: TRIGGER_RUN
+          reason: "Compromised laptop playbook: confirmed incident {{params.signal}}."
+        timeout: 15m
+        on_failure: ESCALATE
     finish_when:
       - step: case
         condition: CASE_OPENED

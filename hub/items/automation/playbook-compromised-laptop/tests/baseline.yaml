@@ -1,49 +1,59 @@
-- name: a_confirmed_incident_suspends_the_run_and_opens_a_case
+- name: a_confirmed_incident_on_a_run_opens_a_case_and_suspends_the_run
   kind: NORMAL
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000301, basis: OBSERVED}
+    params: {signal: 0192f942-0000-7000-8000-000000000301, basis: OBSERVED, run: 0192f942-0000-7000-8000-000000000302}
     subjects: [{type: run, id: 0192f942-0000-7000-8000-000000000302}]
   stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
     contain: [{state: WAITING}, {state: DONE, effect: CHANGED, refs: [response_action]}]
+  expect:
+    state: SUCCEEDED
+    steps: {case: DONE, contain: DONE}
+- name: a_confirmed_incident_without_a_run_only_opens_a_case
+  kind: CUSTOM
+  trigger:
+    params: {signal: 0192f942-0000-7000-8000-000000000307, basis: OBSERVED}
+    subjects: [{type: transaction, id: 0192f942-0000-7000-8000-000000000308}]
+  stubs:
     case: [{state: DONE, effect: CHANGED, refs: [case]}]
   expect:
     state: SUCCEEDED
-    steps: {contain: DONE, case: DONE}
+    steps: {case: DONE, contain: SKIPPED}
 - name: an_incident_a_person_opened_only_opens_a_case
   kind: CUSTOM
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000303}
+    params: {signal: 0192f942-0000-7000-8000-000000000303, run: 0192f942-0000-7000-8000-000000000309}
   stubs:
     case: [{state: DONE, effect: CHANGED, refs: [case]}]
   expect:
     state: SUCCEEDED
-    steps: {contain: SKIPPED, case: DONE}
-- name: the_containment_is_refused
+    steps: {case: DONE, contain: SKIPPED}
+- name: the_suspension_is_refused_after_the_case_opened
   kind: DENIED
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000304, basis: RULE_MATCH}
+    params: {signal: 0192f942-0000-7000-8000-000000000304, basis: OBSERVED, run: 0192f942-0000-7000-8000-00000000030a}
   stubs:
-    contain: [{state: FAILED, reason: CONTAINMENT_UNSUPPORTED}]
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    contain: [{state: FAILED, reason: AUTHORITY_CHANGED}]
   expect:
-    state: FAILED
-    reason: CONTAINMENT_UNSUPPORTED
-    steps: {contain: FAILED}
-- name: the_containment_does_not_hold_in_time
+    state: SUCCEEDED
+    steps: {case: DONE, contain: FAILED}
+- name: the_suspension_does_not_hold_in_time
   kind: TIMEOUT
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000305, basis: OBSERVED}
+    params: {signal: 0192f942-0000-7000-8000-000000000305, basis: OBSERVED, run: 0192f942-0000-7000-8000-00000000030b}
   stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
     contain: [{state: WAITING}]
   expect:
-    state: FAILED
-    reason: TIMEOUT
-    steps: {contain: FAILED}
+    state: SUCCEEDED
+    steps: {case: DONE, contain: FAILED}
 - name: the_same_incident_twice_starts_one_execution
   kind: DUPLICATE
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000306, basis: OBSERVED}
+    params: {signal: 0192f942-0000-7000-8000-000000000306, basis: OBSERVED, run: 0192f942-0000-7000-8000-00000000030c}
   stubs:
-    contain: [{state: DONE, effect: CHANGED, refs: [response_action]}]
     case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    contain: [{state: DONE, effect: CHANGED, refs: [response_action]}]
   expect:
     state: SUCCEEDED

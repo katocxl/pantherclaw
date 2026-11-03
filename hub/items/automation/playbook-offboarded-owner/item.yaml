@@ -5,7 +5,7 @@ title: "Playbook: offboarded owner"
 summary: >-
   When a person who owns agents leaves, start this by hand with the agent: it
   asks you to name a new owner, drafts and simulates a restriction of unused
-  authority, and opens a case. Nothing is revoked or published.
+  authority, and opens a case. Nothing is revoked or published. Runs on Team.
 body:
   automation_name: hub-playbook-offboarded-owner
   purpose: Find a new owner for an agent whose owner left, and propose a restriction of the authority nobody uses.

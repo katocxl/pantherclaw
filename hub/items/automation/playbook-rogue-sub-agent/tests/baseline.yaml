@@ -1,49 +1,59 @@
-- name: a_confirmed_self_issue_suspends_the_run_and_opens_a_case
+- name: a_confirmed_refused_delegation_opens_a_case_and_revokes_its_grant
   kind: NORMAL
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000401, basis: OBSERVED}
-    subjects: [{type: run, id: 0192f942-0000-7000-8000-000000000402}]
+    params: {signal: 0192f942-0000-7000-8000-000000000401, basis: OBSERVED, grant: 0192f942-0000-7000-8000-000000000402}
+    subjects: [{type: grant, id: 0192f942-0000-7000-8000-000000000402}, {type: agent, id: 0192f942-0000-7000-8000-000000000407}]
   stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
     contain: [{state: WAITING}, {state: DONE, effect: CHANGED, refs: [response_action]}]
+  expect:
+    state: SUCCEEDED
+    steps: {case: DONE, contain: DONE}
+- name: a_confirmed_refused_issue_names_no_grant_and_only_opens_a_case
+  kind: CUSTOM
+  trigger:
+    params: {signal: 0192f942-0000-7000-8000-000000000408, basis: OBSERVED}
+    subjects: [{type: agent, id: 0192f942-0000-7000-8000-000000000407}]
+  stubs:
     case: [{state: DONE, effect: CHANGED, refs: [case]}]
   expect:
     state: SUCCEEDED
-    steps: {contain: DONE, case: DONE}
+    steps: {case: DONE, contain: SKIPPED}
 - name: an_inferred_deep_chain_only_opens_a_case
   kind: CUSTOM
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000403, basis: INFERRED}
+    params: {signal: 0192f942-0000-7000-8000-000000000403, basis: INFERRED, grant: 0192f942-0000-7000-8000-000000000409}
   stubs:
     case: [{state: DONE, effect: CHANGED, refs: [case]}]
   expect:
     state: SUCCEEDED
-    steps: {contain: SKIPPED, case: DONE}
-- name: the_containment_is_refused
+    steps: {case: DONE, contain: SKIPPED}
+- name: the_revocation_is_refused_after_the_case_opened
   kind: DENIED
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000404, basis: OBSERVED}
+    params: {signal: 0192f942-0000-7000-8000-000000000404, basis: OBSERVED, grant: 0192f942-0000-7000-8000-00000000040a}
   stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
     contain: [{state: FAILED, reason: CONTAINMENT_UNSUPPORTED}]
   expect:
-    state: FAILED
-    reason: CONTAINMENT_UNSUPPORTED
-    steps: {contain: FAILED}
-- name: the_containment_does_not_hold_in_time
+    state: SUCCEEDED
+    steps: {case: DONE, contain: FAILED}
+- name: the_revocation_does_not_hold_in_time
   kind: TIMEOUT
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000405, basis: OBSERVED}
+    params: {signal: 0192f942-0000-7000-8000-000000000405, basis: RULE_MATCH, grant: 0192f942-0000-7000-8000-00000000040b}
   stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
     contain: [{state: WAITING}]
   expect:
-    state: FAILED
-    reason: TIMEOUT
-    steps: {contain: FAILED}
+    state: SUCCEEDED
+    steps: {case: DONE, contain: FAILED}
 - name: the_same_alert_twice_starts_one_execution
   kind: DUPLICATE
   trigger:
-    params: {signal: 0192f942-0000-7000-8000-000000000406, basis: OBSERVED}
+    params: {signal: 0192f942-0000-7000-8000-000000000406, basis: OBSERVED, grant: 0192f942-0000-7000-8000-00000000040c}
   stubs:
-    contain: [{state: DONE, effect: CHANGED, refs: [response_action]}]
     case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    contain: [{state: DONE, effect: CHANGED, refs: [response_action]}]
   expect:
     state: SUCCEEDED
