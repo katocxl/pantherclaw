@@ -820,7 +820,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 
 ### M28 — Threat map
 **HR:** HR-680..689 · **F:** F960–F976 · **ADR:** 0055 · **G0:** [g0/M28.md](g0/M28.md).
-- **Catalogue and mappings** (founder decision Q1): ATLAS and ATT&CK Enterprise in full, pinned by sha256, ids and names only. Every technique is mapped, Outside PantherClaw, or No PantherClaw control yet; a closure test fails the build otherwise.
+- **Catalogue and mappings** (founder decision Q1): ATLAS and ATT&CK Enterprise in full, pinned by sha256, ids and names only. Every technique is mapped, Outside PantherClaw, or No PantherClaw control yet; built-in rules, library scenarios and campaigns carry ids or a one-line reason they map none; a closure test fails the build otherwise.
 - **Lanes** ([ADR-0055](adr/0055-mitre-threat-map.md)): Prevent, Detect, Respond and Test from PantherClaw's own records, with a reason and a fix on every gap. The organization's own rules are stated, never evidence; tests never raise a status; no score.
 - **Signals and exports:** alerts, incidents, cases and range results carry techniques into OCSF `attacks[]` and the six SIEM packs; a signed `threat_map` pack re-derived offline; an ATT&CK Navigator layer; `pclaw threats`; the MCP tool `technique_coverage` (HR-655..657 amended).
 - **Editions** (founder decisions Q2 and 2026-11-03): matrix, technique pages, gaps and labels in the console on every edition; API key and token reads, exports, MCP and posture gaps on Team; history and drop alerts on Business.
