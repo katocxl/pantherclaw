@@ -52,3 +52,8 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [pclaw-mcp-catalog.md](pclaw-mcp-catalog.md) | M24 | `pclaw mcp catalog`: the organization's approved MCP servers, modes, revoke and export |
 | [pclaw-mcp-inspect.md](pclaw-mcp-inspect.md) | M24 | `pclaw mcp inspect`: run an MCP server in the sandbox on your own machine and check it |
 | [device-scan.md](device-scan.md) | M24 | Scheduled metadata scans on managed devices with Intune or Jamf |
+| [behavior-profiles.md](behavior-profiles.md) | M27 | Behaviour profiles and approval context (Business), alert `basis`, and why a contain step runs only on a CONFIRMED alert |
+| [content-signals.md](content-signals.md) | M27 | Opt-in, restrict-only content signals (Business): modes, what is and is not scanned, the out-of-process classifier, what a flag holds |
+| [response-playbooks.md](response-playbooks.md) | M27 | The six Hub response playbooks (Team): install as a draft, why none contains, what a person does |
+| [siem-packs.md](siem-packs.md) | M27 | SIEM content packs for Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma: ingest, what was not checked, acting on exported alerts |
+| [pclaw-mcp-self.md](pclaw-mcp-self.md) | M27 | `pclaw mcp self`: a read-only MCP server for a SOC agent, the Investigator role and the server's audit of each read (Team) |

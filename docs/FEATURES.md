@@ -815,26 +815,26 @@ Analytics use PantherClaw's own transactions and never contain automatically (F7
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| F930 | Behaviour profiles | A `BehaviorProfile` per agent from PantherClaw's own `pc.transactions`, never the ledger or outside logs. It extends `pc.drift.behavior` and is labelled inference. | Next | Business | M27 | F399, F787 |
-| F931 | Profile job | A background job builds profiles, following the outcome metrics job. | Next | Business | M27 | new |
-| F932 | Simulated history | A labelled generator of history, split from real history. | Next | Business | M27 | F630 |
-| F933 | Unvalidated thresholds | `definition_status` gains UNVALIDATED, shown until real data exists. | Next | Business | M27 | F801 |
-| F934 | Approval context | "Never done X" shows beside the approval display, outside the binding, labelled inference. No decision reads it. | Next | Business | M27 | new |
-| F935 | Alert basis | `reflex.alert` gains `basis`. Automation validation refuses a contain step on an INFERRED alert. A customer's own SOAR on exported alerts is outside PantherClaw's control. | Next | Business | M27 | F800 |
-| F936 | Content signals | Opt-in, restrict-only signals on tool results and outbound bodies, with no safety claim. A written amendment to F789 (ADR-0050). Core protection works the same with signals off. | Next | Business | M27 | F789 |
-| F937 | Content classifier port | `ContentClassifier` in `internal/contentsignals/ports`, with built-in Go regex and entropy checks. | Next | Business | M27 | new |
-| F938 | Outside classifier | An out-of-process adapter to a customer-run local service. No third-party API adapter and no in-process model. | Next | Business | M27 | new |
-| F939 | Gateway content scan | `internal/gateway/contentscan` scans tool results and outbound bodies, bounded at 64 KiB, stored nowhere. A finding keeps kind and location, never value. | Next | Business | M27 | new |
-| F940 | Restrict-only facts | A flag becomes a fact on the run, read by later decisions: hold or deny, never allow. Alerts are labelled inference. | Next | Business | M27 | F793 |
-| F941 | Content signal rollout | Opt-in per organization, Watching first, ACTIVE by step-up. It stays on at lapse until a person turns it off. It says "no known flags", and hook, SDK and delegated faces show as not inspected. | Next | Business | M27 | F801 |
-| F942 | Playbook library | Six governed playbooks in `hub/`: leaked key, poisoned MCP server, compromised laptop, rogue sub-agent, data-flow hold escalation, offboarded owner. Install makes a draft, and each is range tested. | Next | Team | M27 | F793 |
-| F943 | Custom playbooks | Customer-made playbooks. As for every automation, a contain step runs only on CONFIRMED alerts. | Next | Business | M27 | F800 |
-| F944 | SIEM packs | `integrations/siem/` for Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, Apache-2.0, built on OCSF export. | Next | Business | M27 | new |
-| F945 | Golden OCSF samples | Each pack is tested on golden OCSF samples. No store certification is claimed. | Next | Business | M27 | F801 |
-| F946 | `pclaw mcp self` | A stdio MCP server with tools `search`, `explain_decision`, `run_timeline` and `breach_radius`. | Next | Team | M27 | new |
-| F947 | Closed read list | The server reaches a closed allow-list of read procedures, tested so that no write is reachable. | Next | Team | M27 | new |
-| F948 | Investigator role | A read-only service role, `investigator`, and all record text labelled untrusted. | Next | Team | M27 | new |
-| F949 | Server-side audit | The server audits every call of that set by that role, so a client can't skip it. | Next | Team | M27 | new |
+| F930 | Behaviour profiles | Per agent: tools, volumes, destinations, hours, sequences and spend, from the agent's own `pc.transactions`, never the ledger. `GetAgentProfile` under `behavior.read`, labelled INFERRED and UNVALIDATED. | Next | Business | M27 | F399, F787 |
+| F931 | Simulated history | A labelled generator, a package used by tests and the exit run. Its rows sit in `pc.behavior_simulated_actions`, range agents only, apart from real data. | Next | Business | M27 | F630 |
+| F932 | Inferred behaviour alerts | Deviations raise alerts through Reflex: source `behavior`, rule `pc.drift.behavior.<kind>`, basis INFERRED, attention at most ALERT. The thresholds are unvalidated. | Next | Business | M27 | F399, F801 |
+| F933 | Alert basis | `basis` on `reflex.alert` and the `alert.inferred` event. A contain step runs only on CONFIRMED alerts, in every automation; an inference never contains automatically. | Next | Business | M27 | F800 |
+| F934 | Approval context | `GetBehaviorContext(approval_id)` shows what is new about a held action against the agent's allowed actions before it, outside the approval binding. No decision reads it. | Next | Business | M27 | new |
+| F935 | M27 exit | A simulated incident detected, explained and contained by a person. Under `scoped_incident_containment` an inferred alert on a real agent skips contain (`UNCONFIRMED_SIGNAL`). | Next | Business | M27 | new |
+| F936 | Content signal settings | `ContentSignalService` `GetSettings` and `SetMode`: OFF, WATCHING, then ACTIVE by a person's security-key step-up. Opt-in and restrict-only, a written amendment to F789 (ADR-0050). | Next | Business | M27 | F789 |
+| F937 | Built-in classifier | Pure Go regex and entropy: injection phrases, secret formats, high entropy, email addresses, card and national id numbers. Listed phrases and formats only. | Next | Business | M27 | new |
+| F938 | Gateway content scan | Tool results and outbound bodies, after secret-echo redaction, bounded at 64 KiB and stored nowhere. A finding is a kind and a location, never a value. | Next | Business | M27 | new |
+| F939 | Restrict-only run fact | A result flag holds later writes on the run tree; reads pass. `run.content_flags` lets an org's own rule deny. Nothing allows or lifts on a flag. | Next | Business | M27 | F793 |
+| F940 | Out-of-process classifier | An adapter to a customer-run service on a loopback or private address, set in the gateway's own config. No third-party API adapter and no in-process model. | Next | Business | M27 | new |
+| F941 | Inference wording | Content alerts have basis INFERRED. Results read "no known flags", never "clean"; hook, SDK, AuthZEN and local faces and delegated outcomes show as not inspected. | Next | Business | M27 | F801 |
+| F942 | Response playbook library | Six Hub playbooks: leaked key, poisoned MCP server, rogue sub-agent, compromised laptop, data-flow hold escalation, offboarded owner. Install makes a draft. All six run on Team. | Next | Team | M27 | new |
+| F943 | No library playbook contains | Each playbook opens a case for a person, who suspends, revokes or rotates. Every automation, library or custom, contains only on CONFIRMED alerts. | Next | Team | M27 | F800 |
+| F944 | SIEM content packs | Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, with the same eight single-event rules on OCSF 1.9 export. Sentinel and Wazuh need a batch-splitting forwarder, not built yet. | Next | Business | M27 | new |
+| F945 | Golden OCSF samples | Byte for byte the mapper's output. Each rule, read from the vendor's own file, fires on exactly its listed samples. No vendor engine ran; each README says so. | Next | Business | M27 | F801 |
+| F946 | Investigator role | A service-account role with eight read permissions. The server admits it only on WhatHappened, GetRunTimeline, Search and GetGraph; elsewhere it does not count. | Next | Team | M27 | new |
+| F947 | `pclaw mcp self` | A stdio MCP server with four read tools: `search`, `explain_decision`, `run_timeline`, `breach_radius`. Bounded inputs, agent-safe refusals, no model. | Next | Team | M27 | new |
+| F948 | Server-side read audit | The server records `audit.self_mcp.read` for each read and gate refusal by the Investigator role, before the first response byte, so a client can't skip it. | Next | Team | M27 | new |
+| F949 | Untrusted record labels | Every record a tool returns sits under `UNTRUSTED_RECORD_DATA`, cleaned, cut to 2000 runes and JSON-escaped. Record text is data, never an instruction. | Next | Team | M27 | new |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
