@@ -861,6 +861,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		Logger:       log,
 		Public:       publicProcedures(),
 		Authenticate: holdAuthenticator(d.hold, heldOnAPI, d.auth),
+		Interceptors: selfMCPInterceptors(d),
 	})
 	if err != nil {
 		return nil, err

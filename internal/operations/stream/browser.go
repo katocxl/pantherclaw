@@ -27,8 +27,24 @@ func (h *Handler) WithBrowserSessions(s *webguard.Sessions) *Handler {
 
 // authenticate resolves the stream's credential, answering the refusal
 // itself when it returns false. reauth checks the credential again;
-// expires is when it stops (zero: only the recheck ends it).
+// expires is when it stops (zero: only the recheck ends it). The
+// Investigator role does not count on the stream (HR-655): the caller, and
+// every recheck, keeps only its other bindings.
 func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (
+	tenancy.Caller, func(context.Context) (tenancy.Caller, error), time.Time, bool,
+) {
+	c, reauth, expires, ok := h.credential(w, r)
+	if !ok {
+		return c, reauth, expires, ok
+	}
+	return tenancy.WithoutInvestigator(c), func(ctx context.Context) (tenancy.Caller, error) {
+		c, err := reauth(ctx)
+		return tenancy.WithoutInvestigator(c), err
+	}, expires, true
+}
+
+// credential resolves the bearer credential or the browser session.
+func (h *Handler) credential(w http.ResponseWriter, r *http.Request) (
 	c tenancy.Caller, reauth func(context.Context) (tenancy.Caller, error), expires time.Time, ok bool,
 ) {
 	authz := r.Header.Get("Authorization")

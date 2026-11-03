@@ -184,6 +184,7 @@ func (e *authzenEndpoint) authenticate(ctx context.Context, r *http.Request) (po
 		}
 		return point{}, err
 	}
+	c = tapp.WithoutInvestigator(c) // the role counts on its four reads only (HR-655)
 	if c.Human() || c.Principal.Kind != td.KindServiceAccount || c.Credential != tapp.CredAccessToken ||
 		c.Require(td.PermAuthZENEvaluate, td.OrgPath(c.Org)) != nil {
 		return point{}, errNotPoint

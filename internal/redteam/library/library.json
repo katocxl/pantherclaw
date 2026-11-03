@@ -270,5 +270,13 @@
   "RT-161": {
     "digest": "fab8930014279e3dd0c27479c7f7205c9cce30854091f4be0e71ea5fde60cf77",
     "tier": "business"
+  },
+  "RT-163": {
+    "digest": "8e31542a3ab9d5051abd26a12d380dca343b32ccaf57f0f173464243581a4586",
+    "tier": "business"
+  },
+  "RT-164": {
+    "digest": "67d92aaa712b4ca427424223e2ef2edb3cceaa6e0eec3d8bf22ada2f35210c24",
+    "tier": "business"
   }
 }

@@ -34,8 +34,8 @@ var m7HumanOnly = []domain.Permission{
 func TestM7_EvidencePermissionsAndRoles(t *testing.T) {
 	want := map[domain.Permission][]domain.RoleName{
 		domain.PermEvidenceRead: {
-			domain.RoleAgentOwner, domain.RoleAuditor, domain.RoleDeveloper, domain.RoleOrgAdmin, domain.RoleReconciler,
-			domain.RoleRecordsManager, domain.RoleResponder, domain.RoleSecurityAdmin,
+			domain.RoleAgentOwner, domain.RoleAuditor, domain.RoleDeveloper, domain.RoleInvestigator, domain.RoleOrgAdmin,
+			domain.RoleReconciler, domain.RoleRecordsManager, domain.RoleResponder, domain.RoleSecurityAdmin,
 		},
 		domain.PermEvidenceExport:          {domain.RoleAuditor, domain.RoleSecurityAdmin},
 		domain.PermTransactionReconcile:    {domain.RoleReconciler, domain.RoleSecurityAdmin},

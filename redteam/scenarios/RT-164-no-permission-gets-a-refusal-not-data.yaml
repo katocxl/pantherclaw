@@ -1,0 +1,30 @@
+apiVersion: pantherclaw.range/v1
+id: RT-164
+title: A caller with no permission gets a refusal, and an Investigator key reaches no write
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-279]
+rules: [HR-655, HR-656, HR-659, HR-400]
+requires: [payments]
+harness_only: true
+steps:
+  # A service account that holds no reads: the tool answers the agent-safe
+  # refusal and no record.
+  - id: no-permission
+    do: selfmcp.probe
+    with: {attack: no_permission}
+    expect:
+      outcome: REFUSED
+      reason: PERMISSION_DENIED
+      decisive_control: HR-659
+  # An Investigator's key taken off the tool layer and pointed at what its
+  # search.read declares.
+  - id: save-query-with-the-key
+    do: selfmcp.probe
+    with: {attack: write_with_the_key}
+    expect:
+      outcome: REFUSED
+      reason: INVESTIGATOR_READS_ONLY
+      decisive_control: HR-655

@@ -67,6 +67,9 @@ type Options struct {
 	// Authenticate authenticates every non-public procedure. When it is nil,
 	// every non-public procedure is refused.
 	Authenticate Authenticator
+	// Interceptors run after authentication and request validation, in
+	// order, around the handlers.
+	Interceptors []connect.ServerInterceptor
 }
 
 // NewServer returns a connect.Server with the PantherClaw interceptor chain.
@@ -80,14 +83,15 @@ func NewServer(opts Options) (*connect.Server, error) {
 		return nil, fmt.Errorf("rpc: protovalidate: %w", err)
 	}
 	public := slices.Clone(opts.Public)
-	return connect.NewServer(
+	chain := []connect.ServerInterceptor{
 		recoverInterceptor(log),
 		requestIDInterceptor,
 		observeInterceptor(log),
 		errorInterceptor(log),
 		authInterceptor(public, opts.Authenticate),
 		validateInterceptor(v),
-	), nil
+	}
+	return connect.NewServer(append(chain, opts.Interceptors...)...), nil
 }
 
 // Mount installs the server's procedures on mux with message size limits.

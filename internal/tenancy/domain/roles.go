@@ -46,6 +46,8 @@ const (
 	RoleScopeAdmin RoleName = "scope_admin"
 	// G0 M24 device scans (D236, HR-589).
 	RoleScanner RoleName = "scanner"
+	// G0 M27 PantherClaw's own MCP server (D510, HR-655).
+	RoleInvestigator RoleName = "investigator"
 )
 
 // Role is a named set of permissions and the scope types it may be bound at.
@@ -300,6 +302,14 @@ var roles = []Role{
 		Name: RoleScanner, Title: "Scanner", Scopes: anyScope, ServiceOnly: true,
 		Description: "For the service account of a device scan: submits scan findings for its scope and nothing else (HR-589). Beyond its own org, a key taken from a laptop reads nothing: not business units, teams or environments. Bound only to service accounts.",
 		Permissions: []Permission{PermOrgRead, PermAgentScanSubmit},
+	},
+	{
+		Name: RoleInvestigator, Title: "Investigator", Scopes: anyScope, ServiceOnly: true,
+		Description: "For the service account of a customer's SOC agent behind pclaw mcp self: reads what happened, a run's timeline, search results and breach radius in its scope, and nothing else (HR-655). Holds no write. The server admits this role on those four reads only, audits each one and ignores it on every other procedure, so its search.read and evidence.read never reach saved queries, model drafting or bundle export. Restricted evidence stays out. Bound only to service accounts.",
+		Permissions: []Permission{
+			PermOrgRead, PermSearchRead, PermEvidenceRead, PermExposureRead,
+			PermAgentRead, PermRunRead, PermGrantRead, PermIncidentRead,
+		},
 	},
 }
 
