@@ -50,9 +50,10 @@ import (
 // producing code writes, through the detection engine's built-in or published
 // custom rules and Reflex's own alert and incident entries (D539): no alert
 // is written by hand. A refused delegation revokes the grant it exceeded; a
-// refused issue names no grant and only opens a case; an incident naming a
-// run suspends it when its basis is confirmed, and an inferred one suspends
-// nothing (D514). Leaked-key and poisoned-mcp-server only open a case. It is
+// refused issue names no grant and only opens a case; a confirmed incident
+// naming no run and a customer's (inferred, D526 P6) incident naming one
+// suspend nothing (D514). Leaked-key and poisoned-mcp-server only open a
+// case. It is
 // part of `task range`.
 //
 // Covers: F942, F943
@@ -107,6 +108,7 @@ var (
 	pbChild    = "0192f942-0000-7000-8000-0000000019b2"
 	pbRun      = "0192f942-0000-7000-8000-0000000019c1"
 	pbConn     = "0192f942-0000-7000-8000-0000000019d1"
+	pbTxn      = "0192f942-0000-7000-8000-0000000019f1"
 )
 
 func pbNetworkChanged() audit.Event {
@@ -197,31 +199,36 @@ func pbRogueSubAgent(t *testing.T, b hubdomain.AutomationBody) {
 	}
 }
 
-// pbCompromisedLaptop: no built-in rule opens an incident naming a run, so a
-// customer's published rule does: on a delegation, naming the child run. A
-// confirmed incident suspends the run; an inferred one suspends nothing.
+// pbCompromisedLaptop: a confirmed built-in incident (an action tampered in
+// flight, which pages) names a transaction, not a run, so it suspends
+// nothing. No built-in rule opens an incident naming a run; a customer's
+// published rule can, on a delegation naming the child run, but its basis is
+// INFERRED at most (D526 P6), so it suspends nothing either. Both open the
+// case.
 func pbCompromisedLaptop(t *testing.T, b hubdomain.AutomationBody) {
-	for _, basis := range []string{"OBSERVED", "INFERRED"} {
-		t.Run(basis, func(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		rule string
+		ev   audit.Event
+	}{
+		{"a confirmed incident on a transaction", "", audit.Event{
+			Name: "security.action_tampered", Actor: evdomain.Actor{Type: "gateway", ID: pbInstance}, Outcome: audit.Denied,
+			ReasonCode: "ACTION_TAMPERED", Object: &audit.Object{Type: "transaction", ID: pbTxn},
+		}},
+		{"a customer's incident on a run", pbIncidentRule, pbDelegated()},
+	} {
+		t.Run(c.name, func(t *testing.T) {
 			r := newPBRange(t, b)
-			r.publish(t, strings.Replace(pbIncidentRule, "basis: OBSERVED", "basis: "+basis, 1))
-			x := r.produce(t, pbDelegated())
+			if c.rule != "" {
+				r.publish(t, c.rule)
+			}
+			x := r.produce(t, c.ev)
 			r.drive(t, x)
-			contained := r.container.scopes()
-			if basis == "OBSERVED" {
-				if !slices.Equal(contained, []string{"run:" + pbRun}) {
-					t.Fatalf("a confirmed incident contained %v, want the run %s", contained, pbRun)
-				}
-				if st := r.step(t, x, "contain"); st != "DONE" {
-					t.Fatalf("contain on a confirmed incident: %s", st)
-				}
-			} else {
-				if len(contained) != 0 {
-					t.Fatalf("an inferred incident contained %v", contained)
-				}
-				if st := r.step(t, x, "contain"); st != "SKIPPED" {
-					t.Fatalf("contain on an inferred incident: %s", st)
-				}
+			if contained := r.container.scopes(); len(contained) != 0 {
+				t.Fatalf("contained %v", contained)
+			}
+			if st := r.step(t, x, "contain"); st != "SKIPPED" {
+				t.Fatalf("contain: %s, want SKIPPED", st)
 			}
 			if st := r.step(t, x, "case"); st != "DONE" || r.cases.count() != 1 {
 				t.Fatalf("case: %s, %d opened", st, r.cases.count())
@@ -236,7 +243,7 @@ title: Delegation under watch
 description: A customer's rule that opens an incident on every delegation, naming the child run.
 severity: HIGH
 attention: INCIDENT
-basis: OBSERVED
+basis: INFERRED
 edition: business
 on: [audit.grant.delegated]
 group: run

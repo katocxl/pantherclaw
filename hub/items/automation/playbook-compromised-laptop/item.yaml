@@ -6,8 +6,8 @@ summary: >-
   When a high or critical incident opens, open a case first so a person checks
   the machine, then, when the incident rests on a confirmed signal and names a
   run, suspend that run. None of PantherClaw's own rules opens an incident that
-  names a run, so the suspension follows only your custom rules; otherwise only
-  the case opens. Rotating keys and wiping the machine stay a person's steps.
+  names a run, and an incident from your own rules is never confirmed, so today
+  only the case opens. Rotating keys and wiping the machine stay a person's steps.
   This playbook needs Business; on Team it does not run.
 body:
   automation_name: hub-playbook-compromised-laptop

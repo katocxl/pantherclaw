@@ -242,7 +242,9 @@ func detect(t *testing.T, e feed.Event, extra ...*detengine.Compiled) []reflexdo
 }
 
 // customIncidentRule stands in for a customer's own rule that opens an
-// incident naming a run: none of the built-in rules does.
+// incident naming a run: none of the built-in rules does. It declares
+// OBSERVED, as an older publication could; the engine raises it as
+// INFERRED all the same (D526 P6).
 func customIncidentRule(t *testing.T) *detengine.Compiled {
 	t.Helper()
 	env, err := detengine.NewEnv(celenv.DefaultLimits)
@@ -422,9 +424,10 @@ func one(t *testing.T, sigs []reflexdomain.Signal, rule string) reflexdomain.Sig
 // engine's own rules, to the trigger's parameters and the engine's simulator.
 // A refused delegation names the grant it exceeded, and on a confirmed basis
 // that grant is revoked; a refused issue names none, and only the case opens.
-// An incident that names a run suspends it; one that names a transaction
-// does not. Every basis other than OBSERVED and RULE_MATCH, and none at all,
-// contains nothing; the case opens on every path.
+// A confirmed built-in incident names a transaction, not a run, and does not
+// suspend; a customer's incident naming a run is inference (D526 P6) and does
+// not suspend either. Every basis other than OBSERVED and RULE_MATCH, and
+// none at all, contains nothing; the case opens on every path.
 //
 // Covers: F943
 func TestT278_AnUnconfirmedSignalContainsNothing(t *testing.T) {
@@ -433,18 +436,22 @@ func TestT278_AnUnconfirmedSignalContainsNothing(t *testing.T) {
 		name, kind string
 		p          playbook
 		sig        reflexdomain.Signal
+		basis      reflexdomain.Basis // what the engine raised
 		contained  bool
 	}{
-		{"a refused delegation", reflexdomain.KindAlert, rogue, one(t, detect(t, delegateRefused(t)), "pc.authority.self_issue"), true},
-		{"a refused issue", reflexdomain.KindAlert, rogue, one(t, detect(t, issueRefused(t)), "pc.authority.self_issue"), false},
-		{"an incident on a run", reflexdomain.KindIncident, laptop, one(t, detect(t, delegated(t), customIncidentRule(t)), "org.playbooks.delegated_incident"), true},
-		{"an incident on a transaction", reflexdomain.KindIncident, laptop, one(t, detect(t, tampered(t)), "pc.integrity.action_tampered"), false},
+		{"a refused delegation", reflexdomain.KindAlert, rogue, one(t, detect(t, delegateRefused(t)), "pc.authority.self_issue"), reflexdomain.BasisObserved, true},
+		{"a refused issue", reflexdomain.KindAlert, rogue, one(t, detect(t, issueRefused(t)), "pc.authority.self_issue"), reflexdomain.BasisObserved, false},
+		{"a customer's incident on a run", reflexdomain.KindIncident, laptop, one(t, detect(t, delegated(t), customIncidentRule(t)), "org.playbooks.delegated_incident"), reflexdomain.BasisInferred, false},
+		{"an incident on a transaction", reflexdomain.KindIncident, laptop, one(t, detect(t, tampered(t)), "pc.integrity.action_tampered"), reflexdomain.BasisObserved, false},
 	}
 	for _, c := range cases {
-		if c.sig.Basis != reflexdomain.BasisObserved {
-			t.Fatalf("%s: basis %s", c.name, c.sig.Basis)
+		if c.sig.Basis != c.basis {
+			t.Fatalf("%s: basis %s, want %s", c.name, c.sig.Basis, c.basis)
 		}
 		for _, basis := range []reflexdomain.Basis{reflexdomain.BasisObserved, "RULE_MATCH", "INFERRED", "HYPOTHESIS", ""} {
+			if basis.Confirmed() && !c.basis.Confirmed() {
+				continue // no producer raises this signal confirmed
+			}
 			e := signalEvent(c.kind, c.sig)
 			e.Attrs["basis"] = string(basis)
 			if basis == "" {

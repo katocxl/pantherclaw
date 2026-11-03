@@ -306,7 +306,10 @@ func TestIngest_ChronicleParserLoopsOverTheBatch(t *testing.T) {
 			t.Errorf("the parser lacks %q", want)
 		}
 	}
-	loop := parser[strings.Index(parser, "for index, ev in data.events {"):]
+	_, loop, ok := strings.Cut(parser, "for index, ev in data.events {")
+	if !ok {
+		t.Fatal("the parser has no loop over data.events")
+	}
 	if !strings.Contains(loop, `mutate { merge => { "@output" => "event" } }`) {
 		t.Error("the loop does not write an event per entry")
 	}

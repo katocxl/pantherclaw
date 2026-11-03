@@ -114,12 +114,12 @@ func TestSamples_AreWhatTheExporterWrites(t *testing.T) {
 		enc = append(enc, '\n')
 		file := filepath.Join(packRoot, "samples", name+".json")
 		if *update {
-			if err := os.WriteFile(file, enc, 0o644); err != nil { //nolint:gosec // a sample is a public repository file
+			if err := os.WriteFile(file, enc, 0o644); err != nil {
 				t.Fatal(err)
 			}
 			continue
 		}
-		got, err := os.ReadFile(file) //nolint:gosec // a fixed path in the repository
+		got, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,10 +151,10 @@ func TestSamples_AreWhatTheExporterWrites(t *testing.T) {
 	}
 	body = append(body, '\n')
 	if *update {
-		if err := os.MkdirAll(filepath.Dir(filepath.Join(packRoot, batchFile)), 0o755); err != nil { //nolint:gosec // a public repository directory
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(packRoot, batchFile)), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(packRoot, batchFile), body, 0o644); err != nil { //nolint:gosec // a sample is a public repository file
+		if err := os.WriteFile(filepath.Join(packRoot, batchFile), body, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -257,7 +257,7 @@ func samples(t *testing.T) map[string]fields {
 	}
 	out := map[string]fields{}
 	for _, file := range files {
-		raw, err := os.ReadFile(file) //nolint:gosec // a fixed path in the repository
+		raw, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
