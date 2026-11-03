@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+package domain
+
+import (
+	"strings"
+	"unicode/utf8"
+
+	"github.com/katocxl/pantherclaw/internal/threatmap/catalog"
+)
+
+// MaxTechniqueWhy bounds one technique_why line (G0 M28 D714).
+const MaxTechniqueWhy = 200
+
+// MaxTechniques bounds each of a file's atlas and attack lists.
+const MaxTechniques = 16
+
+// CheckTechniques checks the MITRE techniques of a library scenario or
+// campaign (G0 M28 D714): each atlas id is in the pinned ATLAS catalogue,
+// each attack id in the pinned ATT&CK Enterprise catalogue, each once, and
+// technique_why gives every id, and nothing else, one line of at most 200
+// characters that cites the id in parentheses, exactly like asi_why.
+func CheckTechniques(atlas, attack []string, why map[string]string) error {
+	if len(atlas) > MaxTechniques || len(attack) > MaxTechniques {
+		return invalid("at most %d atlas and %d attack techniques", MaxTechniques, MaxTechniques)
+	}
+	seen := map[string]bool{}
+	check := func(name string, ids []string, known func(string) bool) error {
+		for _, id := range ids {
+			if !known(id) {
+				return invalid("%s: %q is not a technique of the pinned catalogue", name, id)
+			}
+			if seen[id] {
+				return invalid("%s: duplicate %q", name, id)
+			}
+			seen[id] = true
+		}
+		return nil
+	}
+	if err := check("atlas", atlas, catalog.KnownATLAS); err != nil {
+		return err
+	}
+	if err := check("attack", attack, catalog.KnownATTACK); err != nil {
+		return err
+	}
+	if len(why) != len(seen) {
+		return invalid("technique_why must give one reason for each atlas and attack technique")
+	}
+	for id := range seen {
+		w, ok := why[id]
+		switch {
+		case !ok:
+			return invalid("technique_why gives no reason for %s", id)
+		case strings.TrimSpace(w) == "" || strings.ContainsAny(w, "\r\n") || utf8.RuneCountInString(w) > MaxTechniqueWhy:
+			return invalid("technique_why %s must be one line of at most %d characters", id, MaxTechniqueWhy)
+		case !strings.Contains(w, "("+id+")"):
+			return invalid("technique_why %s must cite the technique as (%s)", id, id)
+		}
+	}
+	return nil
+}
