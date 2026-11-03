@@ -17,9 +17,9 @@ import (
 )
 
 const advanceBehaviorCursor = `-- name: AdvanceBehaviorCursor :execrows
-UPDATE pc.behavior_cursors SET scanned_to = $1, scanned_id = $2
+UPDATE pc.behavior_cursors SET scanned_to = $1, scanned_id = coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
 WHERE org_id = $3 AND origin = $4 AND scanned_to = $5
-  AND scanned_id = $6
+  AND scanned_id = coalesce($6::uuid, '00000000-0000-0000-0000-000000000000')
 `
 
 type AdvanceBehaviorCursorParams struct {
@@ -31,7 +31,9 @@ type AdvanceBehaviorCursorParams struct {
 	FromID    ids.UUID
 }
 
-// Compare-and-set: a second job in the same hour moves nothing.
+// Compare-and-set: a second job in the same hour moves nothing. A zero
+// ids.UUID is sent as NULL, so it is mapped back to the nil id here and in
+// BehaviorBatch.
 func (q *Queries) AdvanceBehaviorCursor(ctx context.Context, arg AdvanceBehaviorCursorParams) (int64, error) {
 	result, err := q.db.Exec(ctx, advanceBehaviorCursor,
 		arg.ScannedTo,
@@ -152,7 +154,7 @@ FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
 WHERE t.org_id = $1 AND t.simulated = $2::boolean
-  AND (t.created_at, t.id) > ($3::timestamptz, $4::uuid) AND t.created_at < $5
+  AND (t.created_at, t.id) > ($3::timestamptz, coalesce($4::uuid, '00000000-0000-0000-0000-000000000000')) AND t.created_at < $5
 ORDER BY t.created_at, t.id
 LIMIT $6
 `

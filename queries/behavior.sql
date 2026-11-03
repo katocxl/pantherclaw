@@ -16,7 +16,7 @@ FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.simulated = sqlc.arg(simulated)::boolean
-  AND (t.created_at, t.id) > (sqlc.arg(since)::timestamptz, sqlc.arg(since_id)::uuid) AND t.created_at < sqlc.arg(until)
+  AND (t.created_at, t.id) > (sqlc.arg(since)::timestamptz, coalesce(sqlc.arg(since_id)::uuid, '00000000-0000-0000-0000-000000000000')) AND t.created_at < sqlc.arg(until)
 ORDER BY t.created_at, t.id
 LIMIT sqlc.arg(max_rows);
 
@@ -93,10 +93,12 @@ VALUES (sqlc.arg(org_id), sqlc.arg(origin), sqlc.arg(scanned_to))
 ON CONFLICT (org_id, origin) DO NOTHING;
 
 -- name: AdvanceBehaviorCursor :execrows
--- Compare-and-set: a second job in the same hour moves nothing.
-UPDATE pc.behavior_cursors SET scanned_to = sqlc.arg(scanned_to), scanned_id = sqlc.arg(scanned_id)
+-- Compare-and-set: a second job in the same hour moves nothing. A zero
+-- ids.UUID is sent as NULL, so it is mapped back to the nil id here and in
+-- BehaviorBatch.
+UPDATE pc.behavior_cursors SET scanned_to = sqlc.arg(scanned_to), scanned_id = coalesce(sqlc.arg(scanned_id)::uuid, '00000000-0000-0000-0000-000000000000')
 WHERE org_id = sqlc.arg(org_id) AND origin = sqlc.arg(origin) AND scanned_to = sqlc.arg(from_time)
-  AND scanned_id = sqlc.arg(from_id);
+  AND scanned_id = coalesce(sqlc.arg(from_id)::uuid, '00000000-0000-0000-0000-000000000000');
 
 -- name: BehaviorCollectionStarted :one
 -- Whether the org ever collected.
