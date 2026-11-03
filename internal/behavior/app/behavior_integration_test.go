@@ -174,9 +174,9 @@ func TestHR642_RealAndSimulatedNeverMeet(t *testing.T) {
 	if res := f.rollup(); res.Profiles != 2 || res.Signals != 0 {
 		t.Fatalf("first run: %+v", res)
 	}
-	real, err := f.svc.Profile(f.responder(), f.agent, bdomain.OriginReal)
-	if err != nil || real.State != bdomain.StateCollected || real.Actions != 60 || real.ActiveDays != 10 {
-		t.Fatalf("real profile: %+v %v", real, err)
+	rp, err := f.svc.Profile(f.responder(), f.agent, bdomain.OriginReal)
+	if err != nil || rp.State != bdomain.StateCollected || rp.Actions != 60 || rp.ActiveDays != 10 {
+		t.Fatalf("real profile: %+v %v", rp, err)
 	}
 	sim, err := f.svc.Profile(f.responder(), f.rangeAgent, bdomain.OriginSimulated)
 	if err != nil || sim.State != bdomain.StateCollected || sim.Actions != 14*3*2 {
@@ -231,22 +231,36 @@ func TestHR643_TheRollupPagesAndReportsItsCaps(t *testing.T) {
 	for i := range 5 {
 		f.txn(f.run, false, "odd.tool"+string(rune('a'+i)), "ALLOW", at.Add(time.Duration(i)*time.Millisecond))
 	}
-	// The first page is a, b and c: c's instant is left for the next run.
-	const cursor = `SELECT count(*) FROM pc.behavior_cursors WHERE org_id = $1 AND origin = 'REAL'
-		AND scanned_to = (SELECT created_at FROM pc.transactions WHERE org_id = $1 AND operation = 'odd.toolc')`
+	// The first page is a, b and c, and the cursor is c's key, (created_at,
+	// id): the next run starts right after it (D548).
+	const cursor = `SELECT count(*) FROM pc.behavior_cursors k JOIN pc.transactions t ON t.org_id = k.org_id
+		AND t.operation = 'odd.toolc' WHERE k.org_id = $1 AND k.origin = 'REAL' AND k.scanned_to = t.created_at AND k.scanned_id = t.id`
 	const capped = `SELECT count(*) FROM pc.operational_failures WHERE org_id = $1 AND kind = 'behavior.cap_reached' AND state = 'OPEN'`
 	f.rollup()
 	if n := f.count(cursor, f.org); n != 1 {
-		t.Fatal("the cursor moved past what the first page processed")
+		t.Fatal("the cursor is not at the first page's last row")
 	}
 	if n := f.count(capped, f.org); n != 1 {
 		t.Fatalf("cap failures = %d", n)
 	}
 	f.rollup()
 	f.rollup()
-	const tools = `SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND rule_id = 'pc.drift.behavior.new_tool' AND facts ->> 'value' LIKE 'odd.tool%'`
-	if n := f.count(tools, f.org); n != 5 {
+	const tools = `SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND rule_id = 'pc.drift.behavior.new_tool' AND facts ->> 'value' LIKE $2`
+	if n := f.count(tools, f.org, "odd.tool%"); n != 5 {
 		t.Fatalf("new-tool alerts after paging = %d, want 5", n)
+	}
+
+	// Seven actions at one instant, three to a page: the keyset compares each
+	// once and skips none (D548).
+	same := time.Now()
+	for i := range 7 {
+		f.txn(f.run, false, "same.tool"+string(rune('a'+i)), "ALLOW", same)
+	}
+	for range 4 {
+		f.rollup()
+	}
+	if n := f.count(tools, f.org, "same.tool%"); n != 7 {
+		t.Fatalf("new-tool alerts at one instant = %d, want 7", n)
 	}
 
 	// A baseline cap is per agent, and reported too.
@@ -261,6 +275,48 @@ func TestHR643_TheRollupPagesAndReportsItsCaps(t *testing.T) {
 	}
 	if n := g.count(capped, g.org); n != 1 {
 		t.Fatalf("baseline cap failures = %d", n)
+	}
+}
+
+// TestHR643_EveryAgentsTurnComesPastTheCap: past MaxAgents, a run profiles
+// the least recently profiled agents, never-profiled ones first, so no agent
+// is left out run after run (D548). Covers: F930
+func TestHR643_EveryAgentsTurnComesPastTheCap(t *testing.T) {
+	f := newFx(t)
+	second, run := ids.NewV7(), ids.NewV7()
+	f.exec(`INSERT INTO pc.agents (org_id, id, name, state, created_by, team_id, environment_id, owner_user_id, execution_context, claimed_at)
+		VALUES ($1, $2, 'bot-2', 'VERIFIED', 'test', $3, $4, $5, 'service', now())`, f.org, second, f.team, f.env, f.user)
+	f.exec(`INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_user_id, principal_user_id, principal_source, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $5, 'launcher', now() + interval '1 hour')`, f.org, run, second, f.env, f.user)
+	f.history()
+	at := time.Now().Add(-time.Hour)
+	f.txn(run, false, "repo.read", "ALLOW", at)
+	f.roll.MaxAgents = 1
+	const profiled = `SELECT count(*) FROM pc.behavior_profiles WHERE org_id = $1 AND origin = 'REAL'`
+	if res := f.rollup(); res.Profiles != 1 {
+		t.Fatalf("first run: %+v", res)
+	}
+	f.rollup()
+	if n := f.count(profiled, f.org); n != 2 {
+		t.Fatalf("profiled agents after two capped runs = %d, want 2", n)
+	}
+	// The third run goes back to the one profiled longest ago.
+	const oldest = `SELECT agent_id::text FROM pc.behavior_profiles WHERE org_id = $1 AND origin = 'REAL' ORDER BY computed_at LIMIT 1`
+	var first string
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, oldest, f.org).Scan(&first)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.rollup()
+	var now string
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, oldest, f.org).Scan(&now)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if now == first {
+		t.Fatal("the third run did not profile the agent profiled longest ago")
 	}
 }
 

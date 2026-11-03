@@ -567,7 +567,6 @@ func (v *validator) steps() {
 	}
 }
 
-// startsOnInference reports a trigger that names an inferred alert.
 // startsOnAlert reports an event trigger on one alert or incident, the only
 // trigger a contain step can run on (D514).
 func (v *validator) startsOnAlert() bool {
@@ -575,6 +574,7 @@ func (v *validator) startsOnAlert() bool {
 	return w.Event != nil && (w.Event.On == "alert.raised" || w.Event.On == "incident.opened")
 }
 
+// startsOnInference reports a trigger that names an inferred alert.
 func (v *validator) startsOnInference() bool {
 	w := v.d.When
 	return (w.Event != nil && w.Event.On == EventAlertInferred) || (w.Threshold != nil && w.Threshold.On == EventAlertInferred)

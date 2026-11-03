@@ -43,6 +43,8 @@ const (
 	// MaxSignals is the most alerts one rollup raises per origin. The rest
 	// report one owned failure.
 	MaxSignals = 200
+	// MaxSignalsPerAgent is each agent's share of MaxSignals.
+	MaxSignalsPerAgent = 20
 	// settleAfter keeps the newest actions for the next run: a transaction
 	// stamped before this one started may not have committed yet.
 	settleAfter = 2 * time.Minute
@@ -147,16 +149,18 @@ func (r *Rollup) lapsed(ctx context.Context, tx db.TenantTx, org ids.OrgID) erro
 func (r *Rollup) origin(ctx context.Context, tx db.TenantTx, origin bdomain.Origin, now time.Time) (Result, error) {
 	q := dbq.New(tx)
 	org := tx.OrgID()
-	scanned, err := q.BehaviorScannedTo(ctx, org, string(origin))
+	row, err := q.BehaviorScannedTo(ctx, org, string(origin))
 	first := db.IsNoRows(err)
 	if err != nil && !first {
 		return Result{}, err
 	}
+	from := key{At: row.ScannedTo, ID: row.ScannedID}
+	scanned := from.At
 	var capped []string
-	to := now
+	to := key{At: now}
 	var deviations []found
 	if !first {
-		batch, cutoff, cut, err := loadBatch(ctx, q, org, origin, scanned, now, cmp.Or(r.MaxBatch, MaxBatch))
+		batch, cutoff, cut, err := loadBatch(ctx, q, org, origin, from, now, cmp.Or(r.MaxBatch, MaxBatch))
 		if err != nil {
 			return Result{}, err
 		}
@@ -181,7 +185,7 @@ func (r *Rollup) origin(ctx context.Context, tx db.TenantTx, origin bdomain.Orig
 			}
 		}
 	}
-	res, more, err := r.profiles(ctx, q, org, origin, to)
+	res, more, err := r.profiles(ctx, q, org, origin, to.At)
 	if err != nil {
 		return Result{}, err
 	}
@@ -194,7 +198,7 @@ func (r *Rollup) origin(ctx context.Context, tx db.TenantTx, origin bdomain.Orig
 			return Result{}, err
 		}
 	}
-	return res, advance(ctx, q, org, origin, first, scanned, to)
+	return res, advance(ctx, q, org, origin, first, from, to)
 }
 
 // profiles saves the profile, as of until, of each agent active in the
@@ -231,13 +235,13 @@ func (r *Rollup) profiles(ctx context.Context, q *dbq.Queries, org ids.OrgID, or
 	return res, capped, nil
 }
 
-func advance(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomain.Origin, first bool, from, to time.Time) error {
+func advance(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomain.Origin, first bool, from, to key) error {
 	if first {
-		_, err := q.StartBehaviorCursor(ctx, org, string(origin), to)
+		_, err := q.StartBehaviorCursor(ctx, org, string(origin), to.At)
 		return err
 	}
 	n, err := q.AdvanceBehaviorCursor(ctx, dbq.AdvanceBehaviorCursorParams{
-		ScannedTo: to, OrgID: org, Origin: string(origin), FromTime: from,
+		ScannedTo: to.At, ScannedID: to.ID, OrgID: org, Origin: string(origin), FromTime: from.At, FromID: from.ID,
 	})
 	if err != nil {
 		return err
@@ -254,29 +258,32 @@ func sortedAgents(m map[ids.UUID][]bdomain.Action) []ids.UUID {
 	return out
 }
 
-// loadBatch reads one origin's actions in [since, until), oldest first, at
-// most maxRows of them. It returns the actions it processes, the time the
-// cursor may move to, and whether the cap bit. When it bites, the last
-// instant of the page is left for the next run, so no action is skipped;
-// only a page that is all one instant is taken whole and the cursor moves
-// past that instant.
-func loadBatch(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomain.Origin, since, until time.Time, maxRows int) (
-	[]bdomain.Action, time.Time, bool, error,
+// key is the rollup cursor, a keyset on (created_at, id): every transaction
+// up to it, in that order, has been compared. A zero ID means none at At.
+type key struct {
+	At time.Time
+	ID ids.UUID
+}
+
+// loadBatch reads one origin's actions after since and before until, in
+// (created_at, id) order, at most maxRows of them. It returns them, the key
+// the cursor may move to, and whether the cap bit. A capped page ends at its
+// last row, so the next run starts right after it and no row is skipped,
+// however many share an instant (D548).
+func loadBatch(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomain.Origin, since key, until time.Time, maxRows int) (
+	[]bdomain.Action, key, bool, error,
 ) {
 	rows, err := q.BehaviorBatch(ctx, dbq.BehaviorBatchParams{
-		OrgID: org, Simulated: origin == bdomain.OriginSimulated, Since: since, Until: until, MaxRows: int32(maxRows), //nolint:gosec // a small bound
+		OrgID: org, Simulated: origin == bdomain.OriginSimulated, Since: since.At, SinceID: since.ID, Until: until,
+		MaxRows: int32(maxRows), //nolint:gosec // a small bound
 	})
 	if err != nil {
-		return nil, time.Time{}, false, err
+		return nil, key{}, false, err
 	}
-	cutoff, cut := until, len(rows) == maxRows
+	cutoff, cut := key{At: until}, len(rows) == maxRows
 	if cut {
-		last := rows[len(rows)-1].CreatedAt
-		if before := slices.IndexFunc(rows, func(x dbq.BehaviorBatchRow) bool { return x.CreatedAt.Equal(last) }); before > 0 {
-			rows, cutoff = rows[:before], last
-		} else {
-			cutoff = last.Add(time.Microsecond)
-		}
+		last := rows[len(rows)-1]
+		cutoff = key{At: last.CreatedAt, ID: last.ID}
 	}
 	out := make([]bdomain.Action, 0, len(rows))
 	for _, x := range rows {
@@ -296,7 +303,7 @@ func loadBatch(ctx context.Context, q *dbq.Queries, org ids.OrgID, origin bdomai
 }
 
 // baseline is the profile of one agent's known actions of one origin in
-// [since, until): allowed and run, plus generated history for SIMULATED
+// [since, until): allowed (a FINAL decision), plus generated history for SIMULATED
 // (HR-642). Held, denied and open actions are only counted. At most maxRows
 // of each kind are read, the newest; cut says the cap bit (D526).
 func baseline(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent ids.UUID, origin bdomain.Origin, since, until time.Time,
@@ -356,7 +363,8 @@ func baseline(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent ids.UUID
 	return p, cut, nil
 }
 
-// known: allowed and ran. An OPEN transaction is still being evaluated.
+// known: allowed, a FINAL decision (00025: OPEN or FINAL is the decision's
+// state, not execution). An OPEN transaction is still being evaluated.
 func known(decision, state string) bool {
 	return (decision == "ALLOW" || decision == "ALLOW_WITH_OBLIGATIONS") && state == "FINAL"
 }
@@ -379,18 +387,46 @@ type found struct {
 	profile bdomain.BehaviorProfile
 }
 
+// raise raises at most MaxSignals alerts, each agent at most
+// MaxSignalsPerAgent, taken in turn across agents so one agent can't crowd
+// the others out. What is left is counted in one overflow failure (D548).
 func (r *Rollup) raise(ctx context.Context, tx db.TenantTx, origin bdomain.Origin, ds []found, now time.Time) (int, error) {
+	chosen := shares(ds)
 	raised := 0
-	for i, d := range ds {
-		if i == MaxSignals {
-			return raised, r.overflow(ctx, tx, origin, len(ds)-i, now)
-		}
+	for _, d := range chosen {
 		if _, err := r.Raiser.Raise(ctx, tx.Pgx(), signal(tx.OrgID(), origin, d)); err != nil {
 			return raised, err
 		}
 		raised++
 	}
+	if more := len(ds) - raised; more > 0 {
+		return raised, r.overflow(ctx, tx, origin, more, now)
+	}
 	return raised, nil
+}
+
+// shares picks the deviations one run raises: in turn across agents (in
+// the order they first appear), at most MaxSignalsPerAgent each and
+// MaxSignals in all.
+func shares(ds []found) []found {
+	var order []ids.UUID
+	byAgent := map[ids.UUID][]found{}
+	for _, d := range ds {
+		a := d.Action.Agent
+		if _, ok := byAgent[a]; !ok {
+			order = append(order, a)
+		}
+		byAgent[a] = append(byAgent[a], d)
+	}
+	var out []found
+	for turn := 0; turn < MaxSignalsPerAgent && len(out) < MaxSignals; turn++ {
+		for _, a := range order {
+			if turn < len(byAgent[a]) && len(out) < MaxSignals {
+				out = append(out, byAgent[a][turn])
+			}
+		}
+	}
+	return out
 }
 
 func (r *Rollup) overflow(ctx context.Context, tx db.TenantTx, origin bdomain.Origin, more int, now time.Time) error {

@@ -17,8 +17,11 @@
 CREATE TABLE pc.behavior_cursors (
     org_id     uuid        NOT NULL REFERENCES pc.orgs (id),
     origin     text        NOT NULL CHECK (origin IN ('REAL', 'SIMULATED')),
-    -- Transactions before this time have been compared.
+    -- A keyset: transactions up to (scanned_to, scanned_id), in
+    -- (created_at, id) order, have been compared. The nil id means none at
+    -- scanned_to yet.
     scanned_to timestamptz NOT NULL,
+    scanned_id uuid        NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     started_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, origin)
 );
@@ -81,7 +84,7 @@ $$;
 
 GRANT SELECT ON pc.behavior_cursors, pc.behavior_profiles TO pc_app;
 GRANT INSERT (org_id, origin, scanned_to) ON pc.behavior_cursors TO pc_app;
-GRANT UPDATE (scanned_to) ON pc.behavior_cursors TO pc_app;
+GRANT UPDATE (scanned_to, scanned_id) ON pc.behavior_cursors TO pc_app;
 GRANT INSERT (org_id, agent_id, origin, state, window_start, window_end, actions, active_days, method, truncated, body, computed_at)
     ON pc.behavior_profiles TO pc_app;
 GRANT UPDATE (state, window_start, window_end, actions, active_days, method, truncated, body, computed_at)

@@ -117,8 +117,8 @@ type ApprovalContext struct {
 }
 
 // Context reads what stands out about the action behind an approval request,
-// against a baseline of the agent's actions that were allowed and ran
-// before it (D526). It never writes, and nothing the approval binds or
+// against a baseline of the agent's actions that were allowed (a FINAL
+// decision) before it (D526). It never writes, and nothing the approval binds or
 // decides reads it (HR-645). The caller must be able to read the approval
 // itself. A simulated action is set against simulated activity (HR-642).
 func (s *Service) Context(ctx context.Context, approval ids.UUID) (ApprovalContext, error) {

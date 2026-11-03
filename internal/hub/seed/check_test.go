@@ -35,6 +35,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/policy/scenario"
 	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
 	"github.com/katocxl/pantherclaw/internal/redteam/library"
+	reflexapp "github.com/katocxl/pantherclaw/internal/reflex/app"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
@@ -350,6 +351,34 @@ func TestHubSeed_DetectionRulesAreAlertOnly(t *testing.T) {
 				if !res.Passed {
 					t.Errorf("tests/events.yaml: %+v", res)
 				}
+			}
+		})
+	}
+}
+
+// TestHubSeed_DetectionRulesInstall: each detection_rule item passes the
+// custom-rule compile a Hub install goes through (CreateCustomRule): a Hub
+// rule is a custom rule, so its basis is at most INFERRED (D526 P6, D548).
+//
+// Covers: F849
+func TestHubSeed_DetectionRulesInstall(t *testing.T) {
+	env, err := dengine.NewEnv(celenv.DefaultLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	det := &reflexapp.Detections{Env: env}
+	items := ofKind(t, domain.KindDetectionRule)
+	if len(items) == 0 {
+		t.Fatal("no detection_rule items")
+	}
+	for _, it := range items {
+		t.Run(it.Entry.Name, func(t *testing.T) {
+			body, err := it.Item.DecodeBody()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := det.CheckCustomRule(body.(domain.DetectionRuleBody).Content); err != nil {
+				t.Errorf("CreateCustomRule would refuse it: %v", err)
 			}
 		})
 	}

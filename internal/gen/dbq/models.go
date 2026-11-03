@@ -814,6 +814,7 @@ type PcBehaviorCursor struct {
 	OrgID     ids.OrgID
 	Origin    string
 	ScannedTo time.Time
+	ScannedID ids.UUID
 	StartedAt time.Time
 }
 

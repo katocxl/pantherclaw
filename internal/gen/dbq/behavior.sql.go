@@ -17,24 +17,29 @@ import (
 )
 
 const advanceBehaviorCursor = `-- name: AdvanceBehaviorCursor :execrows
-UPDATE pc.behavior_cursors SET scanned_to = $1
-WHERE org_id = $2 AND origin = $3 AND scanned_to = $4
+UPDATE pc.behavior_cursors SET scanned_to = $1, scanned_id = $2
+WHERE org_id = $3 AND origin = $4 AND scanned_to = $5
+  AND scanned_id = $6
 `
 
 type AdvanceBehaviorCursorParams struct {
 	ScannedTo time.Time
+	ScannedID ids.UUID
 	OrgID     ids.OrgID
 	Origin    string
 	FromTime  time.Time
+	FromID    ids.UUID
 }
 
 // Compare-and-set: a second job in the same hour moves nothing.
 func (q *Queries) AdvanceBehaviorCursor(ctx context.Context, arg AdvanceBehaviorCursorParams) (int64, error) {
 	result, err := q.db.Exec(ctx, advanceBehaviorCursor,
 		arg.ScannedTo,
+		arg.ScannedID,
 		arg.OrgID,
 		arg.Origin,
 		arg.FromTime,
+		arg.FromID,
 	)
 	if err != nil {
 		return 0, err
@@ -43,7 +48,7 @@ func (q *Queries) AdvanceBehaviorCursor(ctx context.Context, arg AdvanceBehavior
 }
 
 const behaviorAgents = `-- name: BehaviorAgents :many
-SELECT DISTINCT a.agent_id
+SELECT a.agent_id
 FROM (SELECT r.agent_id
       FROM pc.transactions t
       JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
@@ -54,7 +59,10 @@ FROM (SELECT r.agent_id
       FROM pc.behavior_simulated_actions h
       WHERE $2::boolean AND h.org_id = $1
         AND h.occurred_at >= $3 AND h.occurred_at < $4) a
-ORDER BY a.agent_id
+LEFT JOIN pc.behavior_profiles p ON p.org_id = $1 AND p.agent_id = a.agent_id
+    AND p.origin = CASE WHEN $2::boolean THEN 'SIMULATED' ELSE 'REAL' END
+GROUP BY a.agent_id, p.computed_at
+ORDER BY p.computed_at ASC NULLS FIRST, a.agent_id
 LIMIT $5
 `
 
@@ -68,6 +76,8 @@ type BehaviorAgentsParams struct {
 
 // The agents with activity of one kind in a range: their transactions, and
 // for the SIMULATED origin their generated history too (HR-642).
+// The least recently profiled first, never-profiled before all, so past the
+// cap every agent's turn comes (D548).
 func (q *Queries) BehaviorAgents(ctx context.Context, arg BehaviorAgentsParams) ([]ids.UUID, error) {
 	rows, err := q.db.Query(ctx, behaviorAgents,
 		arg.OrgID,
@@ -142,15 +152,16 @@ FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
 WHERE t.org_id = $1 AND t.simulated = $2::boolean
-  AND t.created_at >= $3 AND t.created_at < $4
+  AND (t.created_at, t.id) > ($3::timestamptz, $4::uuid) AND t.created_at < $5
 ORDER BY t.created_at, t.id
-LIMIT $5
+LIMIT $6
 `
 
 type BehaviorBatchParams struct {
 	OrgID     ids.OrgID
 	Simulated bool
 	Since     time.Time
+	SinceID   ids.UUID
 	Until     time.Time
 	MaxRows   int32
 }
@@ -183,6 +194,7 @@ func (q *Queries) BehaviorBatch(ctx context.Context, arg BehaviorBatchParams) ([
 		arg.OrgID,
 		arg.Simulated,
 		arg.Since,
+		arg.SinceID,
 		arg.Until,
 		arg.MaxRows,
 	)
@@ -261,8 +273,8 @@ type BehaviorKnownActionsRow struct {
 	Currency         *string
 }
 
-// One agent's known actions of one kind in a range, newest first: allowed
-// and run, the transaction FINAL (D526). A hold, a denial or a retry of
+// One agent's known actions of one kind in a range, newest first: allowed,
+// a FINAL decision (D526). A hold, a denial or a retry of
 // either is never known. The cap is per agent and keeps the most recent.
 func (q *Queries) BehaviorKnownActions(ctx context.Context, arg BehaviorKnownActionsParams) ([]BehaviorKnownActionsRow, error) {
 	rows, err := q.db.Query(ctx, behaviorKnownActions,
@@ -333,14 +345,19 @@ func (q *Queries) BehaviorNotAllowedCount(ctx context.Context, arg BehaviorNotAl
 }
 
 const behaviorScannedTo = `-- name: BehaviorScannedTo :one
-SELECT scanned_to FROM pc.behavior_cursors WHERE org_id = $1 AND origin = $2
+SELECT scanned_to, scanned_id FROM pc.behavior_cursors WHERE org_id = $1 AND origin = $2
 `
 
-func (q *Queries) BehaviorScannedTo(ctx context.Context, orgID ids.OrgID, origin string) (time.Time, error) {
+type BehaviorScannedToRow struct {
+	ScannedTo time.Time
+	ScannedID ids.UUID
+}
+
+func (q *Queries) BehaviorScannedTo(ctx context.Context, orgID ids.OrgID, origin string) (BehaviorScannedToRow, error) {
 	row := q.db.QueryRow(ctx, behaviorScannedTo, orgID, origin)
-	var scanned_to time.Time
-	err := row.Scan(&scanned_to)
-	return scanned_to, err
+	var i BehaviorScannedToRow
+	err := row.Scan(&i.ScannedTo, &i.ScannedID)
+	return i, err
 }
 
 const behaviorSimulatedHistory = `-- name: BehaviorSimulatedHistory :many

@@ -15,7 +15,7 @@ body:
       look when the agent is new to releasing.
     severity: LOW
     attention: ALERT
-    basis: OBSERVED
+    basis: INFERRED
     owasp: [ASI02]
     edition: business
     on: [receipt.decision]

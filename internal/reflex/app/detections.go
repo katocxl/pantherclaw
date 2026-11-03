@@ -182,6 +182,14 @@ func (s *Detections) GetStatus(ctx context.Context) (Status, error) {
 	return out, err
 }
 
+// CheckCustomRule runs content through the compile CreateCustomRule,
+// TestCustomRule and PublishCustomRule use, without storing anything: the
+// Hub seed checks every detection_rule item with it (D548).
+func (s *Detections) CheckCustomRule(content string) error {
+	_, err := s.compile(content)
+	return err
+}
+
 // compile parses, validates and compiles custom rule content.
 func (s *Detections) compile(content string) (*engine.Compiled, error) {
 	if s.Env == nil {

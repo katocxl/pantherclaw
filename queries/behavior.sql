@@ -16,14 +16,14 @@ FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 LEFT JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.simulated = sqlc.arg(simulated)::boolean
-  AND t.created_at >= sqlc.arg(since) AND t.created_at < sqlc.arg(until)
+  AND (t.created_at, t.id) > (sqlc.arg(since)::timestamptz, sqlc.arg(since_id)::uuid) AND t.created_at < sqlc.arg(until)
 ORDER BY t.created_at, t.id
 LIMIT sqlc.arg(max_rows);
 
 -- name: BehaviorAgents :many
 -- The agents with activity of one kind in a range: their transactions, and
 -- for the SIMULATED origin their generated history too (HR-642).
-SELECT DISTINCT a.agent_id
+SELECT a.agent_id
 FROM (SELECT r.agent_id
       FROM pc.transactions t
       JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
@@ -34,12 +34,17 @@ FROM (SELECT r.agent_id
       FROM pc.behavior_simulated_actions h
       WHERE sqlc.arg(simulated)::boolean AND h.org_id = sqlc.arg(org_id)
         AND h.occurred_at >= sqlc.arg(since) AND h.occurred_at < sqlc.arg(until)) a
-ORDER BY a.agent_id
+-- The least recently profiled first, never-profiled before all, so past the
+-- cap every agent's turn comes (D548).
+LEFT JOIN pc.behavior_profiles p ON p.org_id = sqlc.arg(org_id) AND p.agent_id = a.agent_id
+    AND p.origin = CASE WHEN sqlc.arg(simulated)::boolean THEN 'SIMULATED' ELSE 'REAL' END
+GROUP BY a.agent_id, p.computed_at
+ORDER BY p.computed_at ASC NULLS FIRST, a.agent_id
 LIMIT sqlc.arg(max_rows);
 
 -- name: BehaviorKnownActions :many
--- One agent's known actions of one kind in a range, newest first: allowed
--- and run, the transaction FINAL (D526). A hold, a denial or a retry of
+-- One agent's known actions of one kind in a range, newest first: allowed,
+-- a FINAL decision (D526). A hold, a denial or a retry of
 -- either is never known. The cap is per agent and keeps the most recent.
 SELECT t.id, t.run_id, t.operation, t.connection_id,
        coalesce(c.destination_class, '')::text AS destination_class, t.created_at, t.amount, t.currency
@@ -80,7 +85,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(run_ref), s
         sqlc.arg(seed));
 
 -- name: BehaviorScannedTo :one
-SELECT scanned_to FROM pc.behavior_cursors WHERE org_id = sqlc.arg(org_id) AND origin = sqlc.arg(origin);
+SELECT scanned_to, scanned_id FROM pc.behavior_cursors WHERE org_id = sqlc.arg(org_id) AND origin = sqlc.arg(origin);
 
 -- name: StartBehaviorCursor :execrows
 INSERT INTO pc.behavior_cursors (org_id, origin, scanned_to)
@@ -89,8 +94,9 @@ ON CONFLICT (org_id, origin) DO NOTHING;
 
 -- name: AdvanceBehaviorCursor :execrows
 -- Compare-and-set: a second job in the same hour moves nothing.
-UPDATE pc.behavior_cursors SET scanned_to = sqlc.arg(scanned_to)
-WHERE org_id = sqlc.arg(org_id) AND origin = sqlc.arg(origin) AND scanned_to = sqlc.arg(from_time);
+UPDATE pc.behavior_cursors SET scanned_to = sqlc.arg(scanned_to), scanned_id = sqlc.arg(scanned_id)
+WHERE org_id = sqlc.arg(org_id) AND origin = sqlc.arg(origin) AND scanned_to = sqlc.arg(from_time)
+  AND scanned_id = sqlc.arg(from_id);
 
 -- name: BehaviorCollectionStarted :one
 -- Whether the org ever collected.

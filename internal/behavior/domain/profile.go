@@ -90,8 +90,9 @@ type Action struct {
 	Currency string
 	// Generated marks made-up history: no transaction backs it (HR-642).
 	Generated bool
-	// Known marks an action that was allowed and ran (decision ALLOW or
-	// ALLOW_WITH_OBLIGATIONS, transaction FINAL), or generated history. Only
+	// Known marks an action that was allowed, a FINAL decision (ALLOW or
+	// ALLOW_WITH_OBLIGATIONS, transaction state FINAL), or generated
+	// history. FINAL is the decision's state, not proof the action ran. Only
 	// a known action makes a tool, connection, hour or sequence known: a
 	// hold, a denial or a retry of either never does (D526).
 	Known bool
@@ -143,8 +144,8 @@ type Body struct {
 	Spend        []Spend       `json:"spend"`
 	// The lists that were cut: a value missing from a cut list says nothing.
 	CutTools, CutDestinations, CutSequences bool `json:",omitzero"`
-	// NotAllowed counts the actions in the window that were not allowed and
-	// run: held, denied, refused or still open. They are counted apart and
+	// NotAllowed counts the actions in the window without a FINAL allow:
+	// held, denied, refused or still open. They are counted apart and
 	// none of them is in the lists above (D526).
 	NotAllowed int64 `json:"not_allowed"`
 }
