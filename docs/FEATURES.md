@@ -45,6 +45,7 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M25 | Prove it to the auditor: framework coverage, compliance reports, real-agent campaigns |
 | M26 | Enterprise identity: IdP access, MCP client authorization, SCIM, SAML, SaaS agent discovery |
 | M27 | Agent Detection & Response: behaviour profiles, content signals, playbooks, SIEM packs, the read-only MCP server |
+| M28 | Threat map: MITRE ATLAS and ATT&CK Enterprise lanes from evidence, labels on signals and exports, signed report, Navigator export, history |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -84,6 +85,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | Transparency anchoring (Rekor v2 + RFC 3161) | — | Yes | Yes | Yes |
 | SIEM export (OCSF 1.9) & SOAR response requests | — | — | Yes | Yes |
 | Threat detections | Core built-ins | Core built-ins | Advanced built-ins + custom rules | Advanced built-ins + custom rules |
+| MITRE threat map | Matrix, technique pages and gaps in the console | + CLI, MCP and API reads, signed report, Navigator export, posture gaps | + history and drop alerts | + history and drop alerts |
 | Red-team range | Community scenarios | Community scenarios | Full library (≥ 30 scenarios) | Full library (≥ 30 scenarios) |
 | Deployment | Self-hosted single node | + hybrid (hosted control plane, from v1.0); SaaS post-1.0 | + hybrid (hosted control plane, from v1.0); SaaS post-1.0 | + hybrid fleet management, multi-org |
 | FIPS 140-3 build | — | — | — | Yes |
@@ -874,9 +876,33 @@ Analytics use PantherClaw's own transactions and never contain automatically (F7
 | F944 | SIEM content packs | Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, with the same eight single-event rules on OCSF 1.9 export. Sentinel and Wazuh need a batch-splitting forwarder, not built yet. | Next | Business | M27 | new |
 | F945 | Golden OCSF samples | Byte for byte the mapper's output. Each rule, read from the vendor's own file, fires on exactly its listed samples. No vendor engine ran; each README says so. | Next | Business | M27 | F801 |
 | F946 | Investigator role | A service-account role with eight read permissions. The server admits it only on WhatHappened, GetRunTimeline, Search and GetGraph; elsewhere it does not count. | Next | Team | M27 | new |
-| F947 | `pclaw mcp self` | A stdio MCP server with four read tools: `search`, `explain_decision`, `run_timeline`, `breach_radius`. Bounded inputs, agent-safe refusals, no model. | Next | Team | M27 | new |
+| F947 | `pclaw mcp self` | A stdio MCP server with five read tools: `search`, `explain_decision`, `run_timeline`, `breach_radius`, `technique_coverage` (M28). Bounded inputs, agent-safe refusals, no model. | Next | Team | M27 | new |
 | F948 | Server-side read audit | The server records `audit.self_mcp.read` for each read and gate refusal by the Investigator role, before the first response byte, so a client can't skip it. | Next | Team | M27 | new |
 | F949 | Untrusted record labels | Every record a tool returns sits under `UNTRUSTED_RECORD_DATA`, cleaned, cut to 2000 runes and JSON-escaped. Record text is data, never an instruction. | Next | Team | M27 | new |
+
+### M28 rows: Threat map
+
+The map shows PantherClaw's controls per MITRE technique and the evidence for them, never a score or a claim about how well an organization is defended (F797, F801). Techniques outside PantherClaw need other tools ([G0 M28](g0/M28.md), [ADR-0055](adr/0055-mitre-threat-map.md)). F977–F979 are unused.
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F960 | Threat map matrix | ATLAS and ATT&CK Enterprise in full: tactics, techniques, four lanes (Prevent, Detect, Respond, Test) and a status per technique, with counts per tactic and no total. Console reads every edition; API key reads Team. | Next | Community | M28 | F797, F801 |
+| F961 | Technique page | Per technique and sub-technique: MITRE name and link, each lane's controls, rules, automations and scenarios with their state and evidence, and Seen counts for 30 days. | Next | Community | M28 | F801 |
+| F962 | Gaps with fixes | Every partial or gap lane states its reason and a fix: enable a rule, end a suppression, send events, route through the gateway, install or enable a playbook, run a scenario, or upgrade. | Next | Community | M28 | F801 |
+| F963 | Agent and environment filter | Prevent and Seen narrow to one agent or environment in the caller's scope; Detect, Respond and Test are organization-wide and marked so. | Next | Community | M28 | new |
+| F964 | Technique labels | Alerts, incidents, cases, range results and detection rules carry ATLAS and ATT&CK ids; incidents and cases hold their alerts' union. Behaviour and content signals take theirs from a table. | Next | Community | M28 | new |
+| F965 | OCSF `attacks[]` | OCSF export fills `finding_info.attacks[]` for alerts and incidents: technique, sub-technique, tactic and catalogue version, both frameworks. The ledger and feed now keep atlas, attack and owasp. | Next | Business | M28 | F534 |
+| F966 | SIEM pack MITRE fields | All six packs carry ATT&CK tactics and techniques per rule from `rules.yaml`, and read each event's techniques from OCSF; Splunk through a lookup. | Next | Business | M28 | new |
+| F967 | MCP technique coverage | `pclaw mcp self` gains `technique_coverage`, one technique's lanes for the organization or one agent, and `search` a technique filter for alerts and incidents. | Next | Team | M28 | new |
+| F968 | Signed threat-map report | Pack scope `threat_map` with the fixed statement, catalogue and mapping digests and every input; `pclaw verify` re-derives every technique offline. | Next | Team | M28 | F527 |
+| F969 | Navigator export | An ATT&CK Navigator layer: one colour and a comment per technique and tactic, the statement as description, no score or gradient. | Next | Team | M28 | new |
+| F970 | `pclaw threats` | `matrix`, `technique`, `gaps`, `export navigator`, `export report` and `history`, with `--json`; every text output ends with the statement. Team or higher, with an API key or access token. | Next | Team | M28 | new |
+| F971 | Threat-map posture gaps | The posture queue's `threatmap` source: a rule off, a playbook not installed or disabled, a failed test, one finding per fix target naming its techniques. | Next | Team | M28 | F797 |
+| F972 | Threat-map history | A daily snapshot per organization, environment and framework, kept 400 days; per-day status counts and per-technique changes. | Next | Business | M28 | new |
+| F973 | Drop alerts | A lane that falls from EVIDENCED, or a test from PASSED to FAILED, writes `audit.threatmap.lane_lost` and raises `pc.threatmap.lane_lost`, once a day per technique and lane. | Next | Business | M28 | new |
+| F974 | Pinned MITRE catalogue | ATT&CK Enterprise and ATLAS pinned by version and sha256, ids, names and tactics only, updated by reviewed pull request; `MITRE_MAPPING.md` generated and checked in `task check`. | Next | Community | M28 | new |
+| F975 | Console threat map | Evidence › Threat map: tabs per framework, the matrix with lane marks and legend, tactic counts, filters, a technique drawer with gaps; exports on Team, history on Business. | Next | Community | M28 | new |
+| F976 | Console chips and agent link | Technique chips on alert, incident, case, range result and detection rule views; the agent page links to that agent's map. | Next | Community | M28 | new |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
@@ -932,7 +958,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 
 Checked on 2026-10-09 by a script that parsed every table row with a Source column and expanded the ranges, after ADR-0017, ADR-0018 and ADR-0019 added PN-002.8, PN-016.3, PN-023 and PN-024 and moved four rows to M14; row counts updated on 2026-10-20 after G0 UI added PN-025, PN-026 and the new rows F803–F830.
 
-- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows F831–F949 of M22–M27 come on top of these counts as each milestone lands; they are new rows, not catalog IDs.
+- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows F831–F976 of M22–M28 come on top of these counts as each milestone lands; they are new rows, not catalog IDs.
 - **Coverage:** 802 of 802 catalog IDs (F001–F802) appear in at least one Source cell. None are missing and none are out of range.
 - **Format checks:** every row ID matches its convention, and no row ID repeats. Every Phase, Edition and Milestone value is valid. Every "What the backend delivers" cell is ≤ 36 words.
 
