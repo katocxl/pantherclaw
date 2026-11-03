@@ -17,10 +17,10 @@ The Hub library has six response playbooks under `hub/items/automation/playbook-
 
 ## Why none contains
 
-A playbook may contain only a subject its real alerts carry, on a CONFIRMED alert (OBSERVED or RULE_MATCH). No alert does that today:
+A playbook may contain only a subject its real alerts carry, on a CONFIRMED alert (OBSERVED or RULE_MATCH). No built-in alert does that today:
 - Leaked key and poisoned MCP server: their alerts name a key's instance or a connection, not a run. Revoking a key or disabling a connection is a person's action.
 - Rogue sub-agent: its alert covers a refused delegation, a refused issue and a refused revision alike, and the trigger can't tell them apart. A refused revision names the grant the caller chose, possibly another agent's, so revoking the named grant could let an attacker choose whose grant is revoked.
-- Compromised laptop: no built-in incident names a run, and an organization's own rule raises INFERRED at most, so it cannot suspend a run.
+- Compromised laptop: no built-in incident names a run, and an organization's own rule raises a CONFIRMED incident only for a version two people confirmed (HR-666). The playbook suspends nothing either way; a person does.
 
 Containment comes back to the library when alerts carry the source event and the run where one exists.
 
