@@ -63,7 +63,7 @@ type Scenario struct {
 	// ASIWhy gives each tag one line on how the scenario exercises that risk
 	// as OWASP defines it (D531).
 	ASIWhy map[string]string `json:"asi_why,omitempty"`
-	// ATLAS and ATTACK are the MITRE ATLAS and ATT&CK Enterprise techniques a
+	// ATLAS and ATTACK are the ATLAS and ATT&CK Enterprise techniques a
 	// library scenario tests (G0 M28 D714); TechniqueWhy gives each id one
 	// line, citing it in parentheses. Metadata: never part of the digest
 	// of what runs. A customer scenario carries none of them.

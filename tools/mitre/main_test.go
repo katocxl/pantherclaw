@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
+//nolint:misspell // MITRE is a proper noun (the ATT&CK and ATLAS publisher) and mitre-attack its STIX source name.
 package main
 
 import (
@@ -68,7 +69,7 @@ func TestHR682_GeneratorReadsATLASv6(t *testing.T) {
 		}
 	}
 	if strings.Contains(got, "never copied") {
-		t.Error("a description reached the catalogue")
+		t.Error("a description reached the catalog")
 	}
 	if !strings.HasSuffix(got, "}\n") || strings.Contains(got, "\r") {
 		t.Error("output must be LF with a trailing newline")

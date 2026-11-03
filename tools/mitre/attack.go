@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
+//nolint:misspell // MITRE is a proper noun (the ATT&CK and ATLAS publisher) and mitre-attack its STIX source name.
 package main
 
 import (
@@ -165,7 +166,7 @@ func buildATTACK(src []byte, pin Pin) (*Catalog, error) {
 	return c, checkParents(c)
 }
 
-// checkParents requires every sub-technique's parent in the catalogue.
+// checkParents requires every sub-technique's parent in the catalog.
 func checkParents(c *Catalog) error {
 	ids := map[string]bool{}
 	for _, t := range c.Techniques {
@@ -173,7 +174,7 @@ func checkParents(c *Catalog) error {
 	}
 	for _, t := range c.Techniques {
 		if t.Parent != "" && !ids[t.Parent] {
-			return shape("technique %s: parent %s is not in the catalogue", t.ID, t.Parent)
+			return shape("technique %s: parent %s is not in the catalog", t.ID, t.Parent)
 		}
 	}
 	return nil

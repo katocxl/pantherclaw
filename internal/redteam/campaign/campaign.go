@@ -95,7 +95,7 @@ type File struct {
 	// ASI are the OWASP Top 10 for Agentic Applications risks the campaign
 	// exercises by OWASP's definition, ascending (D529).
 	ASI []string `json:"asi,omitzero"`
-	// ATLAS and ATTACK are the MITRE techniques the campaign exercises, with
+	// ATLAS and ATTACK are the techniques the campaign exercises, with
 	// one line each in TechniqueWhy (G0 M28 D714). Labels only: a campaign
 	// never feeds a threat-map lane.
 	ATLAS        []string          `json:"atlas,omitzero"`

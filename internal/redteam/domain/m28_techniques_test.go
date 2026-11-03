@@ -50,7 +50,7 @@ func TestHR683_ScenarioTechniquesComeFromTheCatalogueWithAReason(t *testing.T) {
 }
 
 // TestHR685_CustomerScenarioCarriesNoTechnique: a customer-authored (CX)
-// scenario is the customer's word, so it cannot say which MITRE technique
+// scenario is the customer's word, so it cannot say which ATLAS or ATT&CK technique
 // it tests; only PantherClaw's library scenarios feed the threat map.
 // Covers: F974, HR-685
 func TestHR685_CustomerScenarioCarriesNoTechnique(t *testing.T) {

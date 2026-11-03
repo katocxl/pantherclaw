@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Command mitre regenerates PantherClaw's pinned MITRE catalogues (G0 M28
+// Command mitre regenerates PantherClaw's pinned MITRE catalogs (G0 M28
 // D711, D711a): internal/threatmap/catalog/attack-enterprise.json from
 // MITRE ATT&CK Enterprise (STIX 2.1, attack-stix-data) and
 // internal/threatmap/catalog/atlas.json from MITRE ATLAS (atlas-data, format
@@ -16,6 +16,8 @@
 //
 // It never runs in CI or `task check`: `task mitre:update` runs it after a
 // reviewed edit of pins.json.
+//
+//nolint:misspell // MITRE is a proper noun (the ATT&CK and ATLAS publisher), not "miter".
 package main
 
 import (
@@ -37,7 +39,7 @@ import (
 	"time"
 )
 
-// Format is the generated catalogue's format id (D711).
+// Format is the generated catalog's format id (D711).
 const Format = "pantherclaw.mitre-catalog/v1"
 
 // Framework ids, as internal/threatmap/catalog names them (D710).
@@ -121,9 +123,9 @@ func run(args []string, stderr io.Writer) int {
 }
 
 // update reads the pins, fetches and checks both sources, builds both
-// catalogues and only then writes them.
+// catalogs and only then writes them.
 func update(root string, fetch func(string) ([]byte, error)) error {
-	raw, err := os.ReadFile(filepath.Join(root, "tools", "mitre", "pins.json"))
+	raw, err := os.ReadFile(filepath.Join(root, "tools", "mitre", "pins.json")) //nolint:gosec // G304: the pins file under the -root the developer gave
 	if err != nil {
 		return err
 	}
@@ -184,7 +186,7 @@ func fetchPinned(p Pin, fetch func(string) ([]byte, error)) ([]byte, error) {
 	return b, nil
 }
 
-// encode writes a catalogue sorted by id, 2-space JSON, LF, with a trailing
+// encode writes a catalog sorted by id, 2-space JSON, LF, with a trailing
 // newline (D711).
 func encode(c *Catalog) ([]byte, error) {
 	slices.SortFunc(c.Tactics, func(a, b Tactic) int { return strings.Compare(a.ID, b.ID) })

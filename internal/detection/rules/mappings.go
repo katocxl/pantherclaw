@@ -9,12 +9,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/threatmap/catalog"
 )
 
-// RetiredATLAS holds the ATLAS ids a rule could name before the pinned
-// catalogue (G0 M28 D711, D711a) that the pinned ATLAS release no longer
-// lists: they stay accepted so stored custom rules keep parsing, and the
-// threat-map closure test refuses them in PantherClaw's own mappings (D715).
-// Never add to it: a later MITRE release that drops an id deprecates it in
-// the catalogue instead.
+// RetiredATLAS holds the ATLAS ids earlier releases listed that the pinned
+// ATLAS release dropped, among them every id of the list rules accepted
+// before the pinned catalog (G0 M28 D711, D711a): they stay accepted so
+// stored custom rules keep parsing, and the threat-map closure test refuses
+// them in PantherClaw's own mappings (D715).
 var RetiredATLAS = map[string]bool{
 	"AML.T0019": true, "AML.T0024.000": true, "AML.T0024.001": true, "AML.T0024.002": true,
 	"AML.T0056": true, "AML.T0057": true, "AML.T0058": true, "AML.T0104": true,
@@ -25,11 +24,11 @@ var RetiredATLAS = map[string]bool{
 var owaspRisks = []string{"ASI01", "ASI02", "ASI03", "ASI04", "ASI05", "ASI06", "ASI07", "ASI08", "ASI09", "ASI10"}
 
 // KnownATLAS reports whether id is an ATLAS technique or sub-technique of
-// the pinned catalogue, or a retired one (D711).
+// the pinned catalog, or a retired one (D711).
 func KnownATLAS(id string) bool { return catalog.KnownATLAS(id) || RetiredATLAS[id] }
 
 // KnownATTACK reports whether id is an ATT&CK Enterprise technique or
-// sub-technique of the pinned catalogue (D711).
+// sub-technique of the pinned catalog (D711).
 func KnownATTACK(id string) bool { return catalog.KnownATTACK(id) }
 
 // KnownOWASP reports whether id is a listed OWASP agentic risk.

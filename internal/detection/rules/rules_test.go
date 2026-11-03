@@ -99,17 +99,17 @@ func TestHR682_RetiredATLASIdsAreOnlyThoseThePinnedCatalogueLacks(t *testing.T) 
 	}
 	for id := range rules.RetiredATLAS {
 		if catalog.Known(id) {
-			t.Errorf("%s is in the pinned catalogue, so it is not retired", id)
+			t.Errorf("%s is in the pinned catalog, so it is not retired", id)
 		}
 		if !rules.KnownATLAS(id) {
 			t.Errorf("%s: a retired id stays accepted", id)
 		}
 	}
 	// Every id of the closed list rules accepted before the pinned
-	// catalogue (G0 M10 D9, as published in 2025) is still known.
+	// catalog (G0 M10 D9, as published in 2025) is still known.
 	for _, id := range preCatalogATLAS {
 		if !rules.KnownATLAS(id) {
-			t.Errorf("%s was accepted before the catalogue and must stay so", id)
+			t.Errorf("%s was accepted before the catalog and must stay so", id)
 		}
 	}
 }

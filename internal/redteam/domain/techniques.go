@@ -16,9 +16,9 @@ const MaxTechniqueWhy = 200
 // MaxTechniques bounds each of a file's atlas and attack lists.
 const MaxTechniques = 16
 
-// CheckTechniques checks the MITRE techniques of a library scenario or
-// campaign (G0 M28 D714): each atlas id is in the pinned ATLAS catalogue,
-// each attack id in the pinned ATT&CK Enterprise catalogue, each once, and
+// CheckTechniques checks the techniques of a library scenario or
+// campaign (G0 M28 D714): each atlas id is in the pinned ATLAS catalog,
+// each attack id in the pinned ATT&CK Enterprise catalog, each once, and
 // technique_why gives every id, and nothing else, one line of at most 200
 // characters that cites the id in parentheses, exactly like asi_why.
 func CheckTechniques(atlas, attack []string, why map[string]string) error {
@@ -29,7 +29,7 @@ func CheckTechniques(atlas, attack []string, why map[string]string) error {
 	check := func(name string, ids []string, known func(string) bool) error {
 		for _, id := range ids {
 			if !known(id) {
-				return invalid("%s: %q is not a technique of the pinned catalogue", name, id)
+				return invalid("%s: %q is not a technique of the pinned catalog", name, id)
 			}
 			if seen[id] {
 				return invalid("%s: duplicate %q", name, id)

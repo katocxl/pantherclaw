@@ -70,7 +70,7 @@ type Rule struct {
 	Attention   reflexdomain.Attention `json:"attention"`
 	Basis       reflexdomain.Basis     `json:"basis"`
 	ATLAS       []string               `json:"atlas"`
-	// ATTACK are the MITRE ATT&CK Enterprise techniques the rule maps to (G0
+	// ATTACK are the ATT&CK Enterprise techniques the rule maps to (G0
 	// M28 D714). TechniquesNone says in one line why a built-in rule maps to
 	// no technique; a custom rule never carries it.
 	ATTACK         []string   `json:"attack"`

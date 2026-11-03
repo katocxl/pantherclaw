@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
+//nolint:misspell // MITRE is a proper noun (the ATT&CK and ATLAS publisher), and tools/mitre a path.
 package catalog_test
 
 import (
@@ -48,7 +49,7 @@ func TestHR682_CatalogsLoadAndMatchTheirPins(t *testing.T) {
 			case c.Framework != f || c.Format != catalog.Format:
 				t.Fatalf("framework %q format %q", c.Framework, c.Format)
 			case c.Version != p[f].Version || c.SourceURL != p[f].URL || c.SourceSHA256 != p[f].SHA256:
-				t.Errorf("catalogue %s %s %s does not match pins.json %+v", c.Version, c.SourceURL, c.SourceSHA256, p[f])
+				t.Errorf("catalog %s %s %s does not match pins.json %+v", c.Version, c.SourceURL, c.SourceSHA256, p[f])
 			case c.Notice == "" || !strings.Contains(c.Notice, "MITRE"):
 				t.Errorf("notice %q", c.Notice)
 			case len(c.Tactics) == 0 || len(c.Matrix()) == 0:
@@ -104,7 +105,7 @@ func TestHR682_DigestIsStable(t *testing.T) {
 		}
 	}
 	if catalog.Digest(catalog.FrameworkATLAS) == catalog.Digest(catalog.FrameworkATTACK) {
-		t.Error("both catalogues share a digest")
+		t.Error("both catalogs share a digest")
 	}
 }
 
