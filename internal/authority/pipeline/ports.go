@@ -40,6 +40,10 @@ type Identity struct {
 	// JKT is the thumbprint of the key that signed the request; approvals
 	// bind it (HR-030).
 	JKT string
+	// Proof is how the request was proven: "" for a PAP/1 proof, "bearer"
+	// for an MCP access token (G0 M26 D402, HR-627). Policy sees it as
+	// `workload.proof`.
+	Proof string
 }
 
 // Request is one action to decide. Gateway is the id of the gateway asking,
@@ -120,6 +124,10 @@ type Run struct {
 	// Ancestors are the launchers and principals of every ancestor run,
 	// nearest first: none of them may approve the run's actions (HR-036).
 	Ancestors []gdomain.Principal
+	// ScopeOperations, when set, are the only operations the run may act
+	// on: the scope an identity assertion narrowed its grant to (G0 M26
+	// D408). Empty is the whole grant.
+	ScopeOperations []string
 }
 
 // RunConsequenceCounts are how a run's actions stand downstream (G0 M17

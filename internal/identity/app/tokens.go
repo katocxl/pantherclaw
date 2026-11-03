@@ -79,7 +79,8 @@ func (s *Service) IssueToken(ctx context.Context, in TokenInput) (Issued, error)
 		if subtle.ConstantTimeCompare([]byte(r.Jkt), []byte(in.Proof.JKT())) != 1 {
 			return pap.Err(pap.CodeKeyMismatch)
 		}
-		if r.State != "ADMITTED" {
+		if r.State != "ADMITTED" || r.EnrolledVia == EnrolledMcpClient {
+			// An MCP client's instance is outside every PAP/1 path (D408.1).
 			return pap.Err(pap.CodeInstanceNotAdmitted)
 		}
 		// A sandbox instance acts only inside its open session (G0 M9

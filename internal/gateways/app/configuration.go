@@ -33,6 +33,10 @@ type Configuration struct {
 	// KindConfigs are the M14 kinds' configurations of those connections,
 	// by connection id (*pb.PostgresConfig, *pb.A2AConfig; G0 M14 D64).
 	KindConfigs map[ids.UUID]proto.Message
+	// McpIssuer is the org's authorization server issuer while its MCP
+	// authorization is on (G0 M26 D402); the gateway serves the OAuth route
+	// of its MCP face only then.
+	McpIssuer string
 }
 
 // Configuration returns the calling gateway's configuration: its
@@ -83,7 +87,10 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 		if out.GitHub, err = q.GatewayConnectionGitHub(ctx, id.Org, id.Gateway); err != nil {
 			return err
 		}
-		out.Captures, err = q.GatewayCaptureProfiles(ctx, id.Org, id.Gateway)
+		if out.Captures, err = q.GatewayCaptureProfiles(ctx, id.Org, id.Gateway); err != nil {
+			return err
+		}
+		out.McpIssuer, err = s.mcpIssuer(ctx, q, id.Org)
 		return err
 	})
 	return out, err

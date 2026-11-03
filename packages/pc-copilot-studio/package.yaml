@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed package for SaaS agent discovery from Microsoft Copilot Studio
+# (G0 M26 D407, D534; F925). A connection of this package lets a gateway read
+# the metadata of the agents in one Dataverse organization: the bot and
+# botcomponent tables through the Dataverse Web API, with fixed columns, and
+# never a prompt, instruction, knowledge content or conversation (HR-635). Its
+# credential is of kind oauth_client: PantherClaw holds an Entra application's
+# client secret and mints a token for each scan (scope
+# https://<org>.crm.dynamics.com/.default); the token, never the secret, is
+# placed on the request. The base URL is the Dataverse organization's URL.
+#
+# The scan is the gateway's own (a saas_scan lease), not an agent's action:
+# no operation here is agent-facing, and the only one is the connection test.
+#
+# UNCONFIRMED: the API shape is taken from Microsoft's published table
+# reference and checked only against synthetic fixtures and the simulator
+# (pantherclaw-sim copilot-studio), until a real tenant check. Any answer the
+# collector does not expect is reported as not scanned, never as none found
+# (HR-637).
+format: 1
+name: pc.copilot-studio
+version: 1.0.0
+publisher: pantherclaw
+summary: Read the metadata of the agents in a Microsoft Copilot Studio environment (API shape unconfirmed)
+
+definitions:
+  # The connection test: a token minted with the application's credential,
+  # then WhoAmI, which names the organization the connection reaches.
+  - operation: copilot_studio.whoami.read
+    summary: Read which Dataverse organization the connection reaches (the connection test)
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-01
+    dispatch:
+      http:
+        method: GET
+        path: /api/data/v9.2/WhoAmI

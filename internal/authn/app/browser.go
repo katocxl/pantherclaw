@@ -372,11 +372,27 @@ func (b *Browser) Callback(ctx context.Context, providerName string, params url.
 	if failed != nil {
 		return refuse(failed.reason, failed.detail, failed.err)
 	}
+	out, err := b.openSession(ctx, org, claims, providerName, row.NextPath, row.MaxAge != nil, meta)
+	if err != nil {
+		return BrowserSignIn{}, err
+	}
+	if out.Reason != "" {
+		return refuse(out.Reason, "", nil)
+	}
+	return out, nil
+}
+
+// openSession signs a verified identity in: it must be an enabled user of
+// the org, and the session gets a secret that did not exist before this
+// moment (no fixation, HR-150). When it is not, out.Reason says why.
+func (b *Browser) openSession(ctx context.Context, org ids.OrgID, claims IDClaims, providerName, next string, recent bool,
+	meta ClientMeta,
+) (BrowserSignIn, error) {
 	secret, err := credential.New(credential.BrowserSession, "", org)
 	if err != nil {
 		return BrowserSignIn{}, err
 	}
-	out := BrowserSignIn{Org: org, Next: row.NextPath}
+	out := BrowserSignIn{Org: org, Next: next}
 	err = b.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		u, err := q.UserByIdentity(ctx, org, claims.Issuer, claims.Subject)
@@ -421,17 +437,16 @@ func (b *Browser) Callback(ctx context.Context, providerName string, params url.
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: "authn.login", Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "browser_session", ID: out.Session.String()},
-			Details: map[string]string{"method": "browser", "provider": providerName, "recent": boolString(row.MaxAge != nil)},
+			Details: map[string]string{"method": "browser", "provider": providerName, "recent": boolString(recent)},
 		})
 		return err
 	})
 	if err != nil {
 		return BrowserSignIn{}, err
 	}
-	if out.Reason != "" {
-		return refuse(out.Reason, "", nil)
+	if out.Reason == "" {
+		out.Secret = secret.Reveal()
 	}
-	out.Secret = secret.Reveal()
 	return out, nil
 }
 

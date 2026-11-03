@@ -19,6 +19,7 @@ import (
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	saas "github.com/katocxl/pantherclaw/internal/saasdiscovery/domain"
 )
 
 // Notifier queues a notification in the caller's transaction.
@@ -166,7 +167,10 @@ func noticeRecipients(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent 
 // or "unknown".
 func observedKind(observed []byte) string {
 	var o map[string]string
-	if json.Unmarshal(observed, &o) != nil || (!githubKinds[o["kind"]] && !localKinds[o["kind"]]) {
+	if json.Unmarshal(observed, &o) != nil {
+		return "unknown"
+	}
+	if _, isSaaS := saas.Attributes(o["kind"]); !isSaaS && !githubKinds[o["kind"]] && !localKinds[o["kind"]] {
 		return "unknown"
 	}
 	return o["kind"]

@@ -1,0 +1,46 @@
+apiVersion: pantherclaw.range/v1
+id: RT-150
+title: An IdP assertion only uses a grant the person already holds, and a replayed, expired or misaddressed one gains nothing
+category: boundary
+suite: platform
+tier: business
+attacker: A4
+threats: [T-266]
+rules: [HR-620, HR-622]
+requires: [payments]
+harness_only: true
+steps:
+  # The person's own grant, through the IdP: the tool runs.
+  - id: granted
+    do: idp.probe
+    with: {attack: granted}
+    expect:
+      outcome: ALLOW
+  - id: no-grant
+    do: idp.probe
+    with: {attack: no_grant}
+    expect:
+      outcome: REFUSED
+      reason: NO_GRANT
+      decisive_control: HR-620
+  - id: replayed-assertion
+    do: idp.probe
+    with: {attack: replayed_assertion}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_GRANT
+      decisive_control: HR-622
+  - id: expired-assertion
+    do: idp.probe
+    with: {attack: expired_assertion}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_GRANT
+      decisive_control: HR-622
+  - id: wrong-audience
+    do: idp.probe
+    with: {attack: wrong_audience}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_GRANT
+      decisive_control: HR-622

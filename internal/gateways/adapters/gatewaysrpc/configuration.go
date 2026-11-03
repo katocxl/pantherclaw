@@ -76,6 +76,9 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 		})
 	}
 	out.CaptureProfiles = captureProfiles(c)
+	if c.McpIssuer != "" {
+		out.McpAccess = &pb.GatewayMcpAccess{Issuer: c.McpIssuer}
+	}
 	return out, nil
 }
 

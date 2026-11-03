@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed package for SaaS agent discovery from ChatGPT Enterprise (G0 M26
+# D407, D534; F925). A connection of this package lets a gateway read the
+# metadata of one workspace's custom GPTs through OpenAI's Compliance API:
+# names, sharing, owner references, tool kinds and action hosts, and never
+# instructions, files or conversations (HR-635). Its credential is of kind
+# static: the workspace's compliance key, placed by the gateway on each read
+# and never held by an agent.
+#
+# The scan is the gateway's own (a saas_scan lease), not an agent's action:
+# no operation here is agent-facing, and the only one is the connection test.
+#
+# UNCONFIRMED: OpenAI's Compliance API reference needs an enterprise sign-in,
+# so the paths and fields here are checked only against synthetic fixtures and
+# the simulator (pantherclaw-sim chatgpt-enterprise), until a real tenant
+# check. Any answer the collector does not expect is reported as not scanned,
+# never as none found (HR-637).
+format: 1
+name: pc.chatgpt-enterprise
+version: 1.0.0
+publisher: pantherclaw
+summary: Read the metadata of a ChatGPT Enterprise workspace's custom GPTs (API shape unconfirmed)
+
+definitions:
+  # The connection test: a read of the workspaces the key may read.
+  - operation: chatgpt_enterprise.workspaces.read
+    summary: List the workspaces the compliance key may read (the connection test)
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-01
+    dispatch:
+      http:
+        method: GET
+        path: /v1/compliance/workspaces

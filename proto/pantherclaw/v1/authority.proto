@@ -584,13 +584,13 @@ message RecordExecutionResponse {
 // parsing it; the Authority verifies everything again.
 message WorkloadCredentials {
   // Workload token from "Authorization: PAP <token>"; empty for a key-only
-  // proof.
+  // proof. On the gateway's OAuth route it is the bearer token: the Authority
+  // tells the two apart by the token's type alone (G0 M26 D408).
   string workload_token = 1 [(buf.validate.field).string.max_len = 8192];
-  // PAP-Proof header value.
-  string proof = 2 [(buf.validate.field).string = {
-    min_len: 16
-    max_len: 8192
-  }];
+  // PAP-Proof header value. Empty only with a pap-mcp+jwt token: a missing
+  // proof never selects bearer mode, and a pap-wt+jwt token without one is
+  // refused.
+  string proof = 2 [(buf.validate.field).string.max_len = 8192];
   // SHA-256 of the raw request body, computed before any parsing.
   bytes body_sha256 = 3 [(buf.validate.field).bytes.len = 32];
   // HTTP method of the workload's request.
