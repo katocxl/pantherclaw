@@ -9,6 +9,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "pantherclaw/v1/connections.proto";
 import "pantherclaw/v1/connectors.proto";
+import "pantherclaw/v1/content_signals.proto";
 import "pantherclaw/v1/gateway_facts.proto";
 import "pantherclaw/v1/github.proto";
 
@@ -535,6 +536,9 @@ message GetConfigurationResponse {
   // The active, unexpired capture profiles covering those connections
   // (G0 M7 design decision 10, HR-199); none when capture is off.
   repeated GatewayCaptureProfile capture_profiles = 8;
+  // The org's content signal mode (G0 M27 D507): the gateway scans nothing
+  // at OFF, and unset is OFF.
+  ContentSignalMode content_signal_mode = 9;
 }
 
 // GatewayCaptureProfile tells a gateway which bodies to capture.

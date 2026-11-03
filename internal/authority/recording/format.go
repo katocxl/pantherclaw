@@ -69,6 +69,10 @@ type Request struct {
 	// PayloadFindings are the gateway's findings (HR-225); a replay needs
 	// them to reach the same decision.
 	PayloadFindings []PayloadFinding `json:"payload_findings,omitzero"`
+	// ContentFindings are the outbound content flags (G0 M27 D507).
+	ContentFindings []PayloadFinding `json:"content_findings,omitzero"`
+	// ContentScan is the gateway's scan marker (G0 M27 D533).
+	ContentScan string `json:"content_scan,omitzero"`
 }
 
 // PayloadFinding is a credential format and where it was found.
@@ -101,6 +105,8 @@ type Reads struct {
 	Variants     []Variants    `json:"variants,omitzero"`
 	HoldSettings *HoldSettings `json:"hold_settings,omitzero"`
 	Sensitive    *Sensitive    `json:"sensitive_reads,omitzero"`
+	// Content is the content signal read (G0 M27 D507).
+	Content *Content `json:"content_signals,omitzero"`
 	// CustomerRules is the read of the org's customer consequence rules
 	// (pipeline 6, G0 M17 D106); earlier recordings have none.
 	CustomerRules   *CustomerRules    `json:"customer_rules,omitzero"`
@@ -526,4 +532,13 @@ type CustomerRule struct {
 	// Pin is the definition of its consequence operation, when the org had
 	// an ACTIVE one.
 	Pin *actionir.Definition `json:"pin,omitzero"`
+}
+
+// Content is the read of the org's content signal mode and a run tree's
+// flags (G0 M27 D507): a mode and kinds, never a value.
+type Content struct {
+	Run   string   `json:"run"`
+	Mode  string   `json:"mode,omitzero"`
+	Kinds []string `json:"kinds,omitzero"`
+	Err   string   `json:"err,omitzero"`
 }

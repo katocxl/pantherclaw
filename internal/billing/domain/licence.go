@@ -312,6 +312,10 @@ func (e Entitlements) ExternalPolicyChecks() bool { return e.businessPlus() }
 // model drafting (G16, F181, F304; G0 M21 D304): Business and above.
 func (e Entitlements) ModelDrafting() bool { return e.businessPlus() }
 
+// ContentSignals reports whether the edition turns on content signals (G0
+// M27 D507): Business and above. A lapse never turns one off (HR-652).
+func (e Entitlements) ContentSignals() bool { return e.businessPlus() }
+
 func (e Entitlements) businessPlus() bool { return e.Edition == Business || e.Edition == Enterprise }
 
 // Governed automations and fleet governance (G0 M11 part 2 D12). The

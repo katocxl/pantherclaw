@@ -13,6 +13,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	csdomain "github.com/katocxl/pantherclaw/internal/contentsignals/domain"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
@@ -93,7 +94,7 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 	for _, f := range req.GetPayloadFindings() {
 		findings = append(findings, pipeline.PayloadFinding{Kind: f.GetKind(), Location: f.GetLocation()})
 	}
-	res, err := h.svc.Authorize(ctx, gw, req.GetActionIr(), creds, findings...)
+	res, err := h.svc.authorizeContent(ctx, gw, req.GetActionIr(), creds, contentOf(req.GetContentFindings()), scanOf(req.GetContentScan()), findings...)
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +232,10 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 	receipt, err := h.svc.RecordExecution(ctx, gw, Execution{
 		Permit: id, Outcome: outcome, TargetStatus: req.GetTargetStatus(),
 		ResponseDigest: req.GetResponseDigest(), DispatchMS: req.GetDispatchMs(), TargetRef: req.GetTargetRef(),
-		Access:    accessOf(req.GetCredentialAccess()),
-		DataScope: dataScopeOf(req.GetDataScope()),
+		Access:          accessOf(req.GetCredentialAccess()),
+		DataScope:       dataScopeOf(req.GetDataScope()),
+		ContentFindings: contentOf(req.GetContentFindings()),
+		ContentScan:     scanOf(req.GetContentScan()),
 	})
 	if err != nil {
 		return nil, err
@@ -355,4 +358,30 @@ var consequenceLabels = map[consequences.Label]pantherclawv1.ConsequenceLabel{
 // ConsequenceLabel is a label's protobuf value.
 func ConsequenceLabel(l consequences.Label) pantherclawv1.ConsequenceLabel {
 	return consequenceLabels[l]
+}
+
+// contentOf maps a body's content flags (G0 M27 D507). A kind outside the
+// closed list becomes a scan_incomplete here, never kept as sent (D533).
+func contentOf(in []*pantherclawv1.ContentFinding) []pipeline.PayloadFinding {
+	var out []pipeline.PayloadFinding
+	for _, f := range in {
+		c := csdomain.Closed(csdomain.Finding{Kind: f.GetKind(), Location: f.GetLocation()})
+		out = append(out, pipeline.PayloadFinding{Kind: c.Kind, Location: c.Location})
+	}
+	return out
+}
+
+// scanOf maps the gateway's scan marker (G0 M27 D533); a gateway from before
+// M27 sends none.
+func scanOf(s pantherclawv1.ContentScan) string {
+	switch s {
+	case pantherclawv1.ContentScan_CONTENT_SCAN_SCANNED:
+		return csdomain.ScanScanned
+	case pantherclawv1.ContentScan_CONTENT_SCAN_OFF:
+		return csdomain.ScanOff
+	case pantherclawv1.ContentScan_CONTENT_SCAN_FACE_NOT_SCANNED:
+		return csdomain.ScanFaceNotScanned
+	case pantherclawv1.ContentScan_CONTENT_SCAN_UNSPECIFIED:
+	}
+	return ""
 }

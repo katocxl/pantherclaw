@@ -117,6 +117,9 @@ type Evaluation struct {
 	// PayloadFindings are the gateway's findings (HR-225), sorted; the
 	// decision receipt carries them.
 	PayloadFindings []PayloadFinding
+	// ContentFindings are the outbound payload's content flags (G0 M27 D507),
+	// sorted, capped, never a value.
+	ContentFindings []PayloadFinding
 	Decision        adomain.Decision
 	Checklist       []Item
 	Obligations     []pdomain.Obligation
@@ -268,7 +271,10 @@ type state struct {
 	gAction *gdomain.Action
 	facts   map[string]fdomain.Value
 	// risk is the open identity-risk signal policy sees (G0 M16 D82).
-	risk    *papp.Risk
+	risk *papp.Risk
+	// content is the org's content signal mode and the run tree's flags (G0
+	// M27 D507).
+	content ContentState
 	used    []fdomain.Fact
 	covered bool
 	// held are the HOLD_WRITES controls covering a write (step 3); step 8
@@ -738,7 +744,7 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		return
 	}
 	s.policy = pol
-	if !p.identityRisk(ctx, s) || !p.classify(ctx, s) { // G0 M16 D82 (risk.go), D80 (classification.go)
+	if !p.identityRisk(ctx, s) || !p.classify(ctx, s) || !p.contentSignals(ctx, s) { // G0 M16 D82 (risk.go), D80 (classification.go), G0 M27 D507 (content.go)
 		return
 	}
 	var reqs []fdomain.Requirement
@@ -874,6 +880,7 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	p.external(ctx, s) // G0 M16 D81 (external.go)
 	s.disclosure()
 	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
+	s.contentHold()         // G0 M27 D507, D512 (content.go)
 	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
@@ -917,6 +924,7 @@ func (s *state) policyInput() papp.Input {
 		in.Run = &papp.Run{
 			ID: s.ev.RunID.String(), AgentID: s.run.AgentID.String(),
 			ConsequencesPending: s.runCons.Pending, ConsequencesUnconfirmed: s.runCons.Unconfirmed,
+			ContentFlags: s.runContentFlags(),
 		}
 	}
 	if s.conn != nil {

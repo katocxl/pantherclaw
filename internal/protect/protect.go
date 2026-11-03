@@ -102,6 +102,10 @@ const (
 	// M24 D223, HR-586): always held for a second person, whatever the
 	// TOOL_MEANING mode (AlwaysProtected).
 	SurfaceCatalogMode Surface = "mcp.catalog.mode"
+	// SurfaceContentSignalMode takes content signals out of ACTIVE (G0 M27
+	// D512, HR-652): always held for a second person, whatever the
+	// TOOL_MEANING mode (AlwaysProtected).
+	SurfaceContentSignalMode Surface = "content.signals.mode"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -131,6 +135,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermConnectionManage
 	case SurfaceCatalogMode:
 		return td.PermCatalogManage
+	case SurfaceContentSignalMode:
+		return td.PermContentManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}
@@ -144,7 +150,7 @@ func (s Surface) Permission() td.Permission {
 func (s Surface) AlwaysProtected() bool {
 	return s == SurfaceConsequenceRule ||
 		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly ||
-		s == SurfaceCatalogMode
+		s == SurfaceCatalogMode || s == SurfaceContentSignalMode
 }
 
 // Change domains and kinds of internal/changes (D6).

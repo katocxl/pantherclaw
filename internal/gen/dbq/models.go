@@ -1324,6 +1324,21 @@ type PcContainmentControl struct {
 	RestorationID *ids.UUID
 }
 
+type PcContentSignalSetting struct {
+	OrgID     ids.OrgID
+	Mode      string
+	UpdatedBy *string
+	UpdatedAt time.Time
+}
+
+type PcContentSignalWouldHold struct {
+	OrgID   ids.OrgID
+	Reason  string
+	Count   int64
+	FirstAt time.Time
+	LastAt  time.Time
+}
+
 type PcCounter struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID

@@ -60,6 +60,8 @@ type World struct {
 	hold  *holdState
 	final *finalState
 	flow  *flowState
+	// content is the org's content signal state (G0 M27 D507).
+	content pipeline.ContentState
 }
 
 // New returns a world for org with p pinned and every definition ACTIVE.

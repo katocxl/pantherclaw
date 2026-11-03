@@ -25,12 +25,19 @@ import (
 // D103) count the run's actions whose predicted consequences are still
 // being verified, and those with a consequence UNCONFIRMED or
 // NOT_VERIFIABLE; both are 0 without a run.
+//
+// `run.content_flags` lists the content flag kinds on the run tree and the
+// action (G0 M27 D512): empty without a run and unless the org is ACTIVE.
 const runType = "pc.Run"
 
 // Run is the server's record of the action's run.
 type Run struct {
 	ID, AgentID                                  string
 	ConsequencesPending, ConsequencesUnconfirmed int
+	// ContentFlags are the content flag kinds on the run (G0 M27 D512), only
+	// when the org is ACTIVE. A rule can deny on them and nothing allows on
+	// them (HR-648).
+	ContentFlags []string
 }
 
 // RunSchema is the typed shape of `run`.
@@ -39,6 +46,7 @@ var RunSchema = celenv.Schema{runType: {Name: runType, Fields: map[string]celenv
 	"agent_id":                 {Type: cel.StringType},
 	"consequences_pending":     {Type: cel.IntType},
 	"consequences_unconfirmed": {Type: cel.IntType},
+	"content_flags":            {Type: cel.ListType(cel.StringType)},
 }}}
 
 // RunVariable declares `run`.
@@ -49,11 +57,15 @@ func RunRecord(r *Run) *celenv.Record {
 	fields := map[string]ref.Val{
 		"id": types.String(""), "agent_id": types.String(""),
 		"consequences_pending": types.Int(0), "consequences_unconfirmed": types.Int(0),
+		"content_flags": types.DefaultTypeAdapter.NativeToValue([]string{}),
 	}
 	if r != nil {
 		fields["id"], fields["agent_id"] = types.String(r.ID), types.String(r.AgentID)
 		fields["consequences_pending"] = types.Int(r.ConsequencesPending)
 		fields["consequences_unconfirmed"] = types.Int(r.ConsequencesUnconfirmed)
+		if r.ContentFlags != nil {
+			fields["content_flags"] = types.DefaultTypeAdapter.NativeToValue(r.ContentFlags)
+		}
 	}
 	return &celenv.Record{TypeName: runType, Fields: fields}
 }

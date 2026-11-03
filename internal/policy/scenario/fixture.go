@@ -563,6 +563,11 @@ func (f *fixture) SensitiveReads(context.Context, ids.OrgID, ids.UUID) ([]pipeli
 	return nil, nil
 }
 
+// ContentSignals implements pipeline.Reader: a policy test case has none.
+func (f *fixture) ContentSignals(context.Context, ids.OrgID, ids.UUID) (pipeline.ContentState, error) {
+	return pipeline.ContentState{}, nil
+}
+
 // RunConsequences implements pipeline.Reader: the case's counts.
 func (f *fixture) RunConsequences(context.Context, ids.OrgID, ids.UUID) (pipeline.RunConsequenceCounts, error) {
 	return f.runs, nil

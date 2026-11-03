@@ -316,13 +316,14 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 
-	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D()}
+	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: contentSink(pool)}
 	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, consoleBaseURL(cfg.Auth.PublicURL, ext), log)
 	if err != nil {
 		return err
 	}
 	// The operator's maintenance hold: no decision from any path (HR-379).
 	svc.WithMaintenanceHold(cfg.Maintenance.Hold)
+	svc.WithContentOutbound(authorityStore.ContentOutbound) // G0 M27 D507
 	if err := auditMaintenanceHold(ctx, pool, cfg.Maintenance.Hold, log); err != nil {
 		return err
 	}
@@ -978,6 +979,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM17Rules(rs, d)
 	registerM18IdPs(rs, d)
 	registerM24Catalog(rs, d)
+	registerM27Content(rs, d)
 	authzen := registerAuthZEN(rs, d)
 	registerUITenancy(rs, d)
 	registerUsage(rs, d)

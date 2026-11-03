@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/contentsignals/adapters/outofprocess"
 	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
@@ -61,6 +62,16 @@ type Config struct {
 		// (G0 M7): 1 second to 10 minutes, default 10 seconds.
 		VerifyEvery config.Duration `json:"verify_every" env:"PC_GW_CONTROL_VERIFY_EVERY"`
 	} `json:"control"`
+	// ContentSignals is the gateway's side of content signals (G0 M27 D507):
+	// whether anything is scanned is the org's mode. The classifier is the
+	// operator's own and is named only here, never by the server.
+	ContentSignals struct {
+		// ClassifierURL is a customer-run local classifier, an IP literal on
+		// loopback or a private network; empty runs the built-in alone.
+		ClassifierURL string `json:"classifier_url" env:"PC_GW_CONTENT_CLASSIFIER_URL"`
+		// ClassifierTimeout bounds one call: at most 5s, default 250ms.
+		ClassifierTimeout config.Duration `json:"classifier_timeout" env:"PC_GW_CONTENT_CLASSIFIER_TIMEOUT"`
+	} `json:"content_signals"`
 	// Egress is what the gateway may reach (HR-071, HR-077). The targets
 	// themselves are the connections the server configures.
 	Egress struct {
@@ -187,6 +198,14 @@ func (c *Config) Validate() error {
 	}
 	if _, err := baseURL(c.PublicURL); err != nil {
 		errs = append(errs, fmt.Errorf("public_url: %w", err))
+	}
+	if u := c.ContentSignals.ClassifierURL; u != "" {
+		if err := outofprocess.CheckURL(u); err != nil {
+			errs = append(errs, fmt.Errorf("content_signals.classifier_url: %w", err))
+		}
+	}
+	if d := c.ContentSignals.ClassifierTimeout.D(); d < 0 || d > 5*time.Second {
+		errs = append(errs, errors.New("content_signals.classifier_timeout must be at most 5s"))
 	}
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))

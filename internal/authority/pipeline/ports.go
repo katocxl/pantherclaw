@@ -53,6 +53,13 @@ type Request struct {
 	// PayloadFindings are the credential-shaped values the gateway found in
 	// the action's payload (HR-225): they only ever add a requirement.
 	PayloadFindings []PayloadFinding
+	// ContentFindings are the outbound payload's content flags (G0 M27 D507),
+	// sorted, capped, never a value.
+	ContentFindings []PayloadFinding
+	// ContentScan is what the gateway says it did with the outbound body
+	// (G0 M27 D533): csdomain.ScanScanned, ScanOff, ScanFaceNotScanned, or
+	// empty from a gateway before M27.
+	ContentScan string
 }
 
 // PayloadFinding is one credential-shaped value in an action's payload: its
@@ -307,6 +314,9 @@ type Reader interface {
 	// class not among them, so every class read is there. Classes and ids
 	// only, never content (HR-434).
 	SensitiveReads(ctx context.Context, org ids.OrgID, run ids.UUID) ([]SensitiveRead, error)
+	// ContentSignals returns the org's content signal mode and the flags on
+	// the root of run's tree (G0 M27 D507), kinds only, never a value.
+	ContentSignals(ctx context.Context, org ids.OrgID, run ids.UUID) (ContentState, error)
 	// RunConsequences returns how the run's actions stand downstream (G0
 	// M17 D103). It is read only for a policy that uses
 	// run.consequences_pending or run.consequences_unconfirmed.
@@ -412,4 +422,11 @@ type ExternalVerdict struct {
 	Decision    string
 	Reasons     []string
 	Unavailable string
+}
+
+// ContentState is the org's content signal mode and the kinds flagged on a
+// run tree (G0 M27 D507). Only the built-in provider writes those (HR-648).
+type ContentState struct {
+	Mode  string
+	Kinds []string
 }

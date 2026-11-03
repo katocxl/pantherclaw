@@ -33,6 +33,8 @@ type Configuration struct {
 	// KindConfigs are the M14 kinds' configurations of those connections,
 	// by connection id (*pb.PostgresConfig, *pb.A2AConfig; G0 M14 D64).
 	KindConfigs map[ids.UUID]proto.Message
+	// ContentMode is the org's content signal mode (G0 M27 D507).
+	ContentMode string
 }
 
 // Configuration returns the calling gateway's configuration: its
@@ -53,6 +55,9 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 		if known == g.ConfigVersion {
 			out.Unchanged = true
 			return nil
+		}
+		if out.ContentMode, err = q.ContentSignalMode(ctx, id.Org); err != nil {
+			return err
 		}
 		conns, err := q.GatewayConnections(ctx, id.Org, id.Gateway)
 		if err != nil {

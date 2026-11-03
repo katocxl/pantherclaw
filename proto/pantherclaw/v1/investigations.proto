@@ -337,7 +337,8 @@ message GetPrecedingContextResponse {
   google.protobuf.Timestamp end_time = 5;
   // Items, by kind then time.
   repeated ContextItem items = 6;
-  // NOT_COLLECTED: external-content provenance is not recorded yet.
+  // NOT_COLLECTED, unless the org has content signals on (G0 M27 D504): then
+  // FLAGGED, NO_KNOWN_FLAGS or NOT_INSPECTED.
   string content_provenance = 7;
   // The caller's scope is narrower than the organization.
   bool scope_limited = 8;
