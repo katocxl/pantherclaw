@@ -245,6 +245,37 @@ func (a *Adapter) Load(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn 
 	return p.Config, nil
 }
 
+var _ ports.KindPinned = (*Adapter)(nil)
+
+// CurrentPin returns the proposed configuration if there is one, else the
+// confirmed one even if it drifted, as Save takes it (a *capp.A2AConfig), with
+// its state. Unlike Load it serves a read and an edit, not a gateway.
+func (a *Adapter) CurrentPin(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID) (any, string, error) {
+	q := dbq.New(tx)
+	p, err := Get(ctx, q, org, conn, StateProposed)
+	if errors.Is(err, ErrNotFound) {
+		p, err = Get(ctx, q, org, conn, StateActive)
+	}
+	if errors.Is(err, ErrNotFound) {
+		return nil, "", nil
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	cfg, err := fromProto(p.Config)
+	if err != nil {
+		return nil, "", err
+	}
+	state := capp.A2APinActive
+	switch {
+	case p.State == StateProposed:
+		state = capp.A2APinProposed
+	case p.DriftedAt != nil:
+		state = capp.A2APinDrifted
+	}
+	return cfg, state, nil
+}
+
 var _ ports.KindGatewayCheck = (*Adapter)(nil)
 
 // CheckGateway validates the connection's pins for the gateway it moves
@@ -300,6 +331,26 @@ func ToProto(c *capp.A2AConfig) *pb.A2AConfig {
 		out.PeerScope = &pb.A2APeerScope{Bounds: c.PeerScope.Bounds, Limits: c.PeerScope.Limits}
 	}
 	return out
+}
+
+// fromProto is a stored configuration as Save takes it, without what a save
+// reads anew: the card and its digest.
+func fromProto(c *pb.A2AConfig) (*capp.A2AConfig, error) {
+	out := &capp.A2AConfig{
+		CardURL: c.GetCardUrl(), CardKeys: c.GetCardKeys(), Skills: slices.Clone(c.GetSkills()),
+		Interface:      capp.A2AInterface{Protocol: c.GetInterface().GetProtocol(), URL: c.GetInterface().GetUrl()},
+		MaxAnswerBytes: c.GetMaxAnswerBytes(), MaxStreamSeconds: c.GetMaxStreamSeconds(),
+		PublicURL: c.GetPublicUrl(),
+	}
+	if s := c.GetPeerAgentId(); s != "" {
+		id, err := ids.ParseUUID(s)
+		if err != nil {
+			return nil, ErrShape
+		}
+		out.PeerAgent = &id
+		out.PeerScope = &capp.A2APeerScope{Bounds: c.GetPeerScope().GetBounds(), Limits: c.GetPeerScope().GetLimits()}
+	}
+	return out, nil
 }
 
 // DriftHook records a reported card drift on the connection's ACTIVE pin

@@ -50,6 +50,10 @@ type UpdateInput struct {
 	// from narrowing.
 	Postgres *PostgresConfig `json:",omitzero"`
 	A2A      *A2AConfig      `json:",omitzero"`
+	// A2APublicURL changes only an a2a connection's public URL, in the
+	// configuration that is current when the update runs, so a held update
+	// stores the URL and no configuration (SetA2APublicURL).
+	A2APublicURL *string `json:",omitzero"`
 }
 
 // change is one changed field with its old and new values and whether it
@@ -349,9 +353,28 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			}
 			set("connector", connectorSummary(&cur), specView(spec), true)
 		}
+		peer := in.A2A
+		if in.A2APublicURL != nil {
+			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil {
+				return ErrShape
+			}
+			current, _, err := s.currentA2A(ctx, tx, c.Org, conn.ID)
+			if err != nil {
+				return err
+			}
+			if current == nil {
+				return ErrA2ANotPinned
+			}
+			if current.PublicURL == *in.A2APublicURL {
+				return ErrA2AURLUnchanged
+			}
+			set("public_url", current.PublicURL, *in.A2APublicURL, true)
+			current.PublicURL = *in.A2APublicURL
+			peer = current
+		}
 		var kc *kindConfig
-		if in.Postgres != nil || in.A2A != nil {
-			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, in.A2A)
+		if in.Postgres != nil || peer != nil {
+			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer)
 			if err != nil {
 				return err
 			}
@@ -404,7 +427,10 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 					return err
 				}
 			}
-			out, err = load(ctx, q, after)
+			if out, err = load(ctx, q, after); err != nil {
+				return err
+			}
+			out.A2AStatus, err = s.a2aStatus(ctx, tx, c.Org, after)
 			return err
 		}
 		if !slices.ContainsFunc(changes, func(ch change) bool { return ch.weakens }) {

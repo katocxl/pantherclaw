@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json/v2"
 	"encoding/pem"
+	"errors"
 	"net/netip"
 	"net/url"
 	"regexp"
@@ -96,6 +97,18 @@ var (
 	ErrA2AConfig = pcerr.New(pcerr.InvalidArgument, "A2A_CONFIG_INVALID",
 		"an a2a connection needs an https agent card URL, a JSONRPC or HTTP+JSON interface, distinct skill ids, "+
 			"a peer scope exactly when it names a peer agent, and limits in range")
+	// ErrA2AKeyPrivate refuses card keys that carry private key material,
+	// which a pin must never store. A stored pin holding such a key stays as
+	// it is and cannot be saved again.
+	ErrA2AKeyPrivate = pcerr.New(pcerr.InvalidArgument, "A2A_CARD_KEY_PRIVATE",
+		"card keys must be public keys: remove the private members from the JWKS")
+	// ErrA2ANotPinned: the connection has no pin to change.
+	ErrA2ANotPinned = pcerr.New(pcerr.FailedPrecondition, "A2A_NOT_PINNED",
+		"this a2a connection has no pin to change")
+	// ErrA2AURLUnchanged: the public URL is already the one asked for, so
+	// nothing is fetched, held or proposed.
+	ErrA2AURLUnchanged = pcerr.New(pcerr.FailedPrecondition, "A2A_URL_UNCHANGED",
+		"the public URL is already set to that value")
 )
 
 // identRE is a manifest identifier: lower case, never quoted (D15).
@@ -237,6 +250,40 @@ type A2APeerScope struct {
 	Limits []byte `json:"limits,omitempty"`
 }
 
+// A2A pin states, as a read shows them.
+const (
+	A2APinProposed = "PROPOSED"
+	A2APinActive   = "ACTIVE"
+	A2APinDrifted  = "DRIFTED"
+)
+
+// A2AStatus is what a read shows of an a2a connection's pin; the public URL
+// may not be serving yet. The card and its keys stay out of it.
+type A2AStatus struct {
+	PublicURL, PinState string
+}
+
+// jwkPrivateMembers are the JWK members that hold private or symmetric key
+// material (RFC 7518 section 6).
+var jwkPrivateMembers = []string{"d", "p", "q", "dp", "dq", "qi", "oth", "k"}
+
+// hasPrivateKey reports a JWKS with private key material in any of its keys.
+// A document that is no JWKS is left to the card key check at the pin.
+func hasPrivateKey(jwks []byte) bool {
+	var set struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	if json.Unmarshal(jwks, &set) != nil {
+		return false
+	}
+	return slices.ContainsFunc(set.Keys, func(key map[string]any) bool {
+		return slices.ContainsFunc(jwkPrivateMembers, func(m string) bool {
+			_, ok := key[m]
+			return ok
+		})
+	})
+}
+
 // Check checks an a2a configuration and fills its defaults. simulated
 // allows http on a loopback or private address literal (a simulator,
 // HR-221); otherwise both URLs are https. What depends on the card itself
@@ -257,6 +304,9 @@ func (c A2AConfig) Check(simulated bool) (A2AConfig, error) {
 		c.MaxStreamSeconds < 1 || c.MaxStreamSeconds > MaxA2AStreamSeconds,
 		(c.PeerAgent == nil) != (c.PeerScope == nil):
 		return A2AConfig{}, ErrA2AConfig
+	}
+	if hasPrivateKey(c.CardKeys) {
+		return A2AConfig{}, ErrA2AKeyPrivate
 	}
 	for i, s := range c.Skills {
 		if s == "" || len(s) > maxA2ASkill || strings.ContainsFunc(s, func(r rune) bool { return r < 0x21 || r > 0x7e }) ||
@@ -346,6 +396,50 @@ func publicAddr(a netip.Addr) bool { return !httpx.DeniedAddr(a, nil) }
 func (s *Service) WithKindConfigs(k *ports.KindConfigs) *Service {
 	s.kinds = k
 	return s
+}
+
+// SetA2APublicURL changes only an a2a connection's public URL, at the revision
+// the caller read: a weakening update like any change of its configuration,
+// saved as a new proposal that serves once a person confirms it. Empty leaves
+// the card unsigned. The save reads the peer's card again, so the proposal pins
+// the card as read now. The URL already set is refused before any of that.
+func (s *Service) SetA2APublicURL(ctx context.Context, id ids.UUID, publicURL string, revision int32) (Connection, error) {
+	return s.Update(ctx, UpdateInput{ID: id, Revision: revision, A2APublicURL: &publicURL})
+}
+
+// currentA2A is the a2a configuration an edit starts from and its pin state:
+// nil without a pin.
+func (s *Service) currentA2A(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID) (*A2AConfig, string, error) {
+	store, ok := s.kinds.Get(KindA2A)
+	if !ok {
+		return nil, "", ErrKindNotImplemented
+	}
+	pinned, ok := store.(ports.KindPinned)
+	if !ok {
+		return nil, "", ErrKindNotImplemented
+	}
+	cfg, state, err := pinned.CurrentPin(ctx, tx, org, conn)
+	if err != nil {
+		return nil, "", err
+	}
+	peer, _ := cfg.(*A2AConfig)
+	return peer, state, nil
+}
+
+// a2aStatus is what a read shows of conn's pin: nil for another kind, without
+// a pin, or without a store that can tell.
+func (s *Service) a2aStatus(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn dbq.PcConnection) (*A2AStatus, error) {
+	if conn.Kind != KindA2A {
+		return nil, nil
+	}
+	peer, state, err := s.currentA2A(ctx, tx, org, conn.ID)
+	if errors.Is(err, ErrKindNotImplemented) {
+		return nil, nil
+	}
+	if err != nil || peer == nil {
+		return nil, err
+	}
+	return &A2AStatus{PublicURL: peer.PublicURL, PinState: state}, nil
 }
 
 // kindConfig is a validated M14 configuration and the store it goes to.

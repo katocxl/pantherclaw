@@ -144,6 +144,9 @@ type Connection struct {
 	// GitHub is the GitHub App installation behind it (G0 M8); nil without
 	// one.
 	GitHub *dbq.PcConnectionGithub
+	// A2AStatus is an a2a connection's public URL and pin state, set by Get
+	// and Update and never by List; nil otherwise.
+	A2AStatus *A2AStatus
 }
 
 // CreateInput is a new connection. Zero values take the defaults.
@@ -561,7 +564,10 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (Connection, error) {
 		} else if err != nil {
 			return err
 		}
-		out, err = load(ctx, q, conn)
+		if out, err = load(ctx, q, conn); err != nil {
+			return err
+		}
+		out.A2AStatus, err = s.a2aStatus(ctx, tx, c.Org, conn)
 		return err
 	})
 	return out, err
