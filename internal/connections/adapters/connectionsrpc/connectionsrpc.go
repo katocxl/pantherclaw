@@ -55,6 +55,10 @@ var (
 		capp.StateActive: pb.ConnectionState_CONNECTION_STATE_ACTIVE, capp.StateQuarantined: pb.ConnectionState_CONNECTION_STATE_QUARANTINED,
 		capp.StateRetired: pb.ConnectionState_CONNECTION_STATE_RETIRED,
 	}
+	pinStates = map[string]pb.A2APinState{
+		capp.A2APinProposed: pb.A2APinState_A2A_PIN_STATE_PROPOSED, capp.A2APinActive: pb.A2APinState_A2A_PIN_STATE_ACTIVE,
+		capp.A2APinDrifted: pb.A2APinState_A2A_PIN_STATE_DRIFTED,
+	}
 )
 
 func invert[K, V comparable](m map[K]V) map[V]K {
@@ -94,6 +98,9 @@ func connectionOf(c capp.Connection) *pb.Connection {
 	}
 	if c.GitHub != nil {
 		out.Github = githubOf(*c.GitHub)
+	}
+	if c.A2AStatus != nil {
+		out.A2AStatus = &pb.A2AStatus{PublicUrl: c.A2AStatus.PublicURL, PinState: pinStates[c.A2AStatus.PinState]}
 	}
 	return out
 }
@@ -232,6 +239,19 @@ func (h *Handler) UpdateConnection(ctx context.Context, req *pb.UpdateConnection
 		return nil, err
 	}
 	return &pb.UpdateConnectionResponse{Connection: connectionOf(c)}, nil
+}
+
+// SetA2APublicUrl implements ConnectionServiceHandler.
+func (h *Handler) SetA2APublicUrl(ctx context.Context, req *pb.SetA2APublicUrlRequest) (*pb.SetA2APublicUrlResponse, error) {
+	id, err := parseID(req.GetConnectionId())
+	if err != nil {
+		return nil, err
+	}
+	c, err := h.s.SetA2APublicURL(ctx, id, req.GetPublicUrl(), req.GetRevision())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.SetA2APublicUrlResponse{Connection: connectionOf(c)}, nil
 }
 
 // SetRouteMode implements ConnectionServiceHandler.

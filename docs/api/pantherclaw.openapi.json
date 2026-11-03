@@ -7026,6 +7026,168 @@
         }
       }
     },
+    "/pantherclaw.v1.ComplianceService/ListFrameworks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ComplianceService"
+        ],
+        "summary": "ListFrameworks",
+        "description": "ListFrameworks lists every framework, and whether this edition reads it.\n permission: compliance.read",
+        "operationId": "pantherclaw.v1.ComplianceService.ListFrameworks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListFrameworksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListFrameworksResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ComplianceService/GetFrameworkCoverage": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ComplianceService"
+        ],
+        "summary": "GetFrameworkCoverage",
+        "description": "GetFrameworkCoverage derives each control of a framework for a period,\n from the records the caller may read.\n permission: compliance.read",
+        "operationId": "pantherclaw.v1.ComplianceService.GetFrameworkCoverage",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetFrameworkCoverageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetFrameworkCoverageResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ComplianceService/ListComplianceReports": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ComplianceService"
+        ],
+        "summary": "ListComplianceReports",
+        "description": "ListComplianceReports lists the signed reports made so far, newest\n first, with their parameters and digest. A report's pack lasts 7 days;\n this row does not, so the same parameters can be exported again, and an\n equal digest shows nothing changed.\n permission: compliance.read",
+        "operationId": "pantherclaw.v1.ComplianceService.ListComplianceReports",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListComplianceReportsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListComplianceReportsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.GitHubService/ProveIdentity": {
       "post": {
         "tags": [
@@ -7772,6 +7934,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.UpdateConnectionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ConnectionService/SetA2APublicUrl": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ConnectionService"
+        ],
+        "summary": "SetA2APublicUrl",
+        "description": "SetA2APublicUrl changes only an a2a connection's public URL. The server\n starts from the proposed pin, else the active one, so open edits survive,\n and saves a new proposal, a weakening change that serves once a person\n confirms it with a security key. Like every save, it fetches the peer's\n card again and the proposal pins the digest of what it read, which may\n differ from the current pin's; the pin page shows both. A URL equal to the\n current one is refused with A2A_URL_UNCHANGED before any fetch.\n permission: connection.manage",
+        "operationId": "pantherclaw.v1.ConnectionService.SetA2APublicUrl",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetA2APublicUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetA2APublicUrlResponse"
                 }
               }
             }
@@ -47454,6 +47670,489 @@
         "title": "UpdateFleetCohortResponse",
         "additionalProperties": false
       },
+      "pantherclaw.v1.ComplianceFramework": {
+        "type": "string",
+        "title": "ComplianceFramework",
+        "enum": [
+          "COMPLIANCE_FRAMEWORK_UNSPECIFIED",
+          "COMPLIANCE_FRAMEWORK_OWASP_ASI",
+          "COMPLIANCE_FRAMEWORK_NIST_AI_RMF",
+          "COMPLIANCE_FRAMEWORK_EU_AI_ACT_DEPLOYER",
+          "COMPLIANCE_FRAMEWORK_ISO_42001",
+          "COMPLIANCE_FRAMEWORK_SOC2"
+        ],
+        "description": "ComplianceFramework is a control table (D300)."
+      },
+      "pantherclaw.v1.ControlState": {
+        "type": "string",
+        "title": "ControlState",
+        "enum": [
+          "CONTROL_STATE_UNSPECIFIED",
+          "CONTROL_STATE_EVIDENCED",
+          "CONTROL_STATE_PARTIAL",
+          "CONTROL_STATE_GAP",
+          "CONTROL_STATE_STATED"
+        ],
+        "description": "ControlState is what the records say of a control (D302)."
+      },
+      "pantherclaw.v1.ComplianceControl": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ControlState"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "evidence",
+            "description": "evidence lists the sources that held something for this control."
+          },
+          "simulatedOnly": {
+            "type": "boolean",
+            "title": "simulated_only",
+            "description": "simulated_only: everything in evidence is simulated."
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceControlGap"
+            },
+            "title": "gaps"
+          }
+        },
+        "title": "ComplianceControl",
+        "additionalProperties": false,
+        "description": "ComplianceControl is one control of a framework."
+      },
+      "pantherclaw.v1.ComplianceControlGap": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "reason: outside_permission, no_records, simulated_only, not_exercised,\n test_failed, reported_only, not_stated, outside_records or limit."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "source is empty for a gap of the control as a whole."
+          },
+          "detail": {
+            "type": "string",
+            "title": "detail"
+          }
+        },
+        "title": "ComplianceControlGap",
+        "additionalProperties": false,
+        "description": "ComplianceControlGap is one thing a control lacks."
+      },
+      "pantherclaw.v1.ComplianceEvidenceRef": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "type",
+            "description": "type: transaction, approval, grant, coverage, range or campaign."
+          },
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "simulated": {
+            "type": "boolean",
+            "title": "simulated",
+            "description": "simulated is what the record itself says."
+          }
+        },
+        "title": "ComplianceEvidenceRef",
+        "additionalProperties": false,
+        "description": "ComplianceEvidenceRef points at a record behind a count."
+      },
+      "pantherclaw.v1.ComplianceFrameworkInfo": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "controlCount": {
+            "type": "integer",
+            "title": "control_count",
+            "format": "int32"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "available",
+            "description": "available: this edition reads it. Otherwise it needs Business."
+          }
+        },
+        "title": "ComplianceFrameworkInfo",
+        "additionalProperties": false,
+        "description": "ComplianceFrameworkInfo is one framework."
+      },
+      "pantherclaw.v1.ComplianceReportInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "packId": {
+            "type": "string",
+            "title": "pack_id",
+            "description": "pack_id is the evidence pack that holds it, while that pack lasts."
+          },
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework"
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "reportSha256": {
+            "type": "string",
+            "title": "report_sha256",
+            "description": "report_sha256 is the hex digest of compliance.json, empty until built."
+          }
+        },
+        "title": "ComplianceReportInfo",
+        "additionalProperties": false,
+        "description": "ComplianceReportInfo is one signed report's parameters and digest."
+      },
+      "pantherclaw.v1.ComplianceSourceCount": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "source: receipts, approvals, grants, coverage, range or campaign."
+          },
+          "readable": {
+            "type": "boolean",
+            "title": "readable",
+            "description": "readable false: the caller may not read this source, and the counts say\n nothing."
+          },
+          "real": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "real",
+            "format": "int64"
+          },
+          "simulated": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "simulated",
+            "format": "int64"
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceEvidenceRef"
+            },
+            "title": "refs"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "truncated: the source held more than a report reads."
+          }
+        },
+        "title": "ComplianceSourceCount",
+        "additionalProperties": false,
+        "description": "ComplianceSourceCount is what one source held in the period."
+      },
+      "pantherclaw.v1.ComplianceStatedCount": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "field",
+            "description": "field: ai_act_role or ai_act_risk."
+          },
+          "readable": {
+            "type": "boolean",
+            "title": "readable"
+          },
+          "stated": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "stated",
+            "format": "int64"
+          },
+          "unset": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unset",
+            "format": "int64"
+          }
+        },
+        "title": "ComplianceStatedCount",
+        "additionalProperties": false,
+        "description": "ComplianceStatedCount is one stated field across the org's agents."
+      },
+      "pantherclaw.v1.ComplianceTestCount": {
+        "type": "object",
+        "properties": {
+          "tag": {
+            "type": "string",
+            "title": "tag"
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "source: range or campaign."
+          },
+          "held": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "held",
+            "format": "int64"
+          },
+          "failed": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "failed",
+            "format": "int64"
+          },
+          "reported": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "reported",
+            "format": "int64",
+            "description": "reported: a client or edge report no server record confirms."
+          },
+          "notExercised": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "not_exercised",
+            "format": "int64",
+            "description": "not_exercised: the test ran, this part of it did not."
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceEvidenceRef"
+            },
+            "title": "refs"
+          }
+        },
+        "title": "ComplianceTestCount",
+        "additionalProperties": false,
+        "description": "ComplianceTestCount is one OWASP tag's results from one test source. Test\n results are simulated by construction."
+      },
+      "pantherclaw.v1.GetFrameworkCoverageRequest": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework",
+            "not": {
+              "enum": [
+                "COMPLIANCE_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "startTime": {
+            "title": "start_time",
+            "description": "Start, inclusive.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "description": "End, exclusive.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetFrameworkCoverageRequest",
+        "required": [
+          "startTime",
+          "endTime",
+          "framework"
+        ],
+        "additionalProperties": false,
+        "description": "GetFrameworkCoverageRequest names a framework and a period.\nend_time must be after start_time, at most 366 days later:\n```\nthis.end_time \u003e this.start_time \u0026\u0026 this.end_time - this.start_time \u003c= duration('8784h')\n```\n\n"
+      },
+      "pantherclaw.v1.GetFrameworkCoverageResponse": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework"
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "realRecords": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "real_records",
+            "format": "int64",
+            "description": "real_records and simulated_records split the period's activity (F630)."
+          },
+          "simulatedRecords": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "simulated_records",
+            "format": "int64"
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceControl"
+            },
+            "title": "controls"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceSourceCount"
+            },
+            "title": "sources"
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceTestCount"
+            },
+            "title": "tests"
+          },
+          "stated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceStatedCount"
+            },
+            "title": "stated"
+          },
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "description": "statement is the fixed sentence every report carries."
+          }
+        },
+        "title": "GetFrameworkCoverageResponse",
+        "additionalProperties": false,
+        "description": "GetFrameworkCoverageResponse is one framework's coverage for a period."
+      },
+      "pantherclaw.v1.ListComplianceReportsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Page size, at most 200; 0 for the default."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256
+          }
+        },
+        "title": "ListComplianceReportsRequest",
+        "additionalProperties": false,
+        "description": "ListComplianceReportsRequest pages through reports."
+      },
+      "pantherclaw.v1.ListComplianceReportsResponse": {
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceReportInfo"
+            },
+            "title": "reports"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListComplianceReportsResponse",
+        "additionalProperties": false,
+        "description": "ListComplianceReportsResponse is one page, newest first."
+      },
+      "pantherclaw.v1.ListFrameworksRequest": {
+        "type": "object",
+        "title": "ListFrameworksRequest",
+        "additionalProperties": false,
+        "description": "ListFrameworksRequest takes nothing."
+      },
+      "pantherclaw.v1.ListFrameworksResponse": {
+        "type": "object",
+        "properties": {
+          "frameworks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFrameworkInfo"
+            },
+            "title": "frameworks"
+          }
+        },
+        "title": "ListFrameworksResponse",
+        "additionalProperties": false,
+        "description": "ListFrameworksResponse lists every framework."
+      },
       "pantherclaw.v1.ConnectorState": {
         "type": "string",
         "title": "ConnectorState",
@@ -48580,6 +49279,17 @@
         "additionalProperties": false,
         "description": "UnlinkIdentityResponse is empty."
       },
+      "pantherclaw.v1.A2APinState": {
+        "type": "string",
+        "title": "A2APinState",
+        "enum": [
+          "A2A_PIN_STATE_UNSPECIFIED",
+          "A2A_PIN_STATE_PROPOSED",
+          "A2A_PIN_STATE_ACTIVE",
+          "A2A_PIN_STATE_DRIFTED"
+        ],
+        "description": "A2APinState is where the pin behind an A2AStatus stands."
+      },
       "pantherclaw.v1.AccessMode": {
         "type": "string",
         "title": "AccessMode",
@@ -49024,6 +49734,24 @@
           "bounds"
         ]
       },
+      "pantherclaw.v1.A2AStatus": {
+        "type": "object",
+        "properties": {
+          "publicUrl": {
+            "type": "string",
+            "title": "public_url",
+            "description": "The URL the card is signed for. It may not be serving yet: see pin_state."
+          },
+          "pinState": {
+            "title": "pin_state",
+            "description": "The state of the pin that public_url comes from.",
+            "$ref": "#/components/schemas/pantherclaw.v1.A2APinState"
+          }
+        },
+        "title": "A2AStatus",
+        "additionalProperties": false,
+        "description": "A2AStatus is what a read shows of an a2a connection's pin: the proposed pin\n if there is one, else the active one, drifted included."
+      },
       "pantherclaw.v1.AddInventoryNoteRequest": {
         "type": "object",
         "properties": {
@@ -49231,8 +49959,13 @@
           },
           "a2a": {
             "title": "a2a",
-            "description": "a2a is an a2a connection's configuration and pinned card.",
+            "description": "Not returned: a2a_status is what a read shows of an a2a connection.",
             "$ref": "#/components/schemas/pantherclaw.v1.A2AConfig"
+          },
+          "a2aStatus": {
+            "title": "a2a_status",
+            "description": "An a2a connection's public URL and pin state, on GetConnection and\n UpdateConnection; unset on ListConnections.",
+            "$ref": "#/components/schemas/pantherclaw.v1.A2AStatus"
           },
           "modelRelay": {
             "type": "boolean",
@@ -51337,6 +52070,53 @@
         "title": "RevokeCredentialResponse",
         "additionalProperties": false,
         "description": "RevokeCredentialResponse confirms it."
+      },
+      "pantherclaw.v1.SetA2APublicUrlRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "revision": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+            "title": "revision",
+            "format": "int32",
+            "description": "The revision the caller read; a stale revision is refused."
+          },
+          "publicUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "public_url",
+            "maxLength": 2048,
+            "description": "The new URL; empty leaves the card unsigned."
+          }
+        },
+        "title": "SetA2APublicUrlRequest",
+        "additionalProperties": false,
+        "description": "SetA2APublicUrlRequest sets an a2a connection's public URL.",
+        "required": [
+          "connectionId",
+          "revision"
+        ]
+      },
+      "pantherclaw.v1.SetA2APublicUrlResponse": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "title": "connection",
+            "description": "The connection.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Connection"
+          }
+        },
+        "title": "SetA2APublicUrlResponse",
+        "additionalProperties": false,
+        "description": "SetA2APublicUrlResponse returns the connection; its a2a_status names the pin\n state, so the console can link the pin page."
       },
       "pantherclaw.v1.SetRouteModeRequest": {
         "type": "object",
@@ -56104,6 +56884,19 @@
           },
           {
             "properties": {
+              "compliance": {
+                "title": "compliance",
+                "description": "One framework's coverage for a period, as a signed report (G0 M25 D301).",
+                "$ref": "#/components/schemas/pantherclaw.v1.PackCompliance"
+              }
+            },
+            "title": "compliance",
+            "required": [
+              "compliance"
+            ]
+          },
+          {
+            "properties": {
               "runId": {
                 "type": "string",
                 "title": "run_id",
@@ -56858,6 +57651,32 @@
         "title": "ListEvidencePacksResponse",
         "additionalProperties": false,
         "description": "ListEvidencePacksResponse returns a page."
+      },
+      "pantherclaw.v1.PackCompliance": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ComplianceFramework",
+            "not": {
+              "enum": [
+                "COMPLIANCE_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "period": {
+            "title": "period",
+            "description": "The period.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PackTimeRange"
+          }
+        },
+        "title": "PackCompliance",
+        "required": [
+          "period",
+          "framework"
+        ],
+        "additionalProperties": false,
+        "description": "PackCompliance names a report: a framework and a period. The pack holds\n compliance.json and the receipts it cites, and its statement is its own: it\n shows evidence and gaps, and is not a certification or statement of\n compliance. The framework's edition applies."
       },
       "pantherclaw.v1.PackContents": {
         "type": "object",
@@ -95747,6 +96566,10 @@
     {
       "name": "pantherclaw.v1.CohortService",
       "description": "CohortService groups agents into fleet cohorts (G0 M11 part 2, D40;\n F600, F601, HR-291). A fleet cohort is its static members (at most\n 1,000) plus the agents its optional rule matches (team, environment,\n task type), with an owner and an optional grant baseline. It only\n organizes: it grants nothing, and its baseline is a template a person\n issues grants from. These are not the policy rollout cohorts of\n PolicyRolloutService.\n\n Needs the Team edition. A cohort's scope is the narrowest one holding\n its rule's scope (a team, an environment, or the org for a task type\n alone) and its static members. Every change is made by a person holding\n cohort.manage there (and where each agent added or removed lives);\n reads need agent.read there. Agents outside the reader's scope are\n left out and never counted."
+    },
+    {
+      "name": "pantherclaw.v1.ComplianceService",
+      "description": "ComplianceService reads coverage of a framework from PantherClaw's own\n records (G0 M25 D300-D304, D311, D312; F890-F899; HR-600..606; OWASP ASI\n and NIST AI RMF on Team and above, the EU AI Act, ISO 42001 and SOC 2 on\n Business and above).\n\n Coverage shows evidence and gaps. It is not a certification or a statement\n of compliance: there is no score, and nothing here says a customer meets a\n framework. Each control is EVIDENCED, PARTIAL, GAP or STATED; a statement\n a person made is STATED and never evidence, and simulated activity is\n counted apart and labelled. What the caller may not read is a gap that says\n so, never a count of nothing. A signed report of the same coverage is an\n evidence pack of scope compliance (EvidenceService.CreateEvidencePack)."
     },
     {
       "name": "pantherclaw.v1.GitHubService",

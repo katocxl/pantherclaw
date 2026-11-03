@@ -98,3 +98,14 @@ func (k *KindConfigs) Drift(kind string) (KindDrift, bool) {
 type KindGatewayCheck interface {
 	CheckGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection, gateway ids.UUID) error
 }
+
+// KindPinned is an optional part of a KindConfig whose configurations are
+// pinned and confirmed: what a read shows and an edit of one field starts
+// from.
+type KindPinned interface {
+	// CurrentPin returns the proposed configuration if there is one, else the
+	// confirmed one even if it drifted, as a Save takes it, with its state.
+	// cfg is nil when the connection has no pin. It never decides what serves:
+	// that is Load.
+	CurrentPin(ctx context.Context, tx db.TenantTx, org ids.OrgID, connection ids.UUID) (cfg any, state string, err error)
+}
