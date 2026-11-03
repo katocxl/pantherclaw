@@ -47473,6 +47473,27 @@
             "title": "close_time",
             "description": "When it was closed; unset otherwise.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "atlas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 64
+            },
+            "title": "atlas",
+            "maxItems": 64,
+            "description": "The union of the MITRE ATLAS and ATT\u0026CK techniques of the alert or\n incident it was opened from and of the alerts and incidents it links,\n sorted, at most 64 each (G0 M28 D718).\n PROVISIONAL field numbers until post-M27's proto changes land (D703)."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 64
+            },
+            "title": "attack",
+            "maxItems": 64
           }
         },
         "title": "Case",
@@ -73313,6 +73334,17 @@
             "type": "boolean",
             "title": "test",
             "description": "A test alert, capped at ALERT; it never pages."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "attack",
+            "maxItems": 16,
+            "description": "MITRE ATT\u0026CK techniques of the rule that raised it (G0 M28 D718).\n PROVISIONAL field number until post-M27's proto changes land (D703)."
           }
         },
         "title": "Alert",
@@ -73681,6 +73713,27 @@
           "updateTime": {
             "title": "update_time",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "atlas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 64
+            },
+            "title": "atlas",
+            "maxItems": 64,
+            "description": "The union of its alerts' MITRE ATLAS and ATT\u0026CK techniques, sorted, at\n most 64 each (G0 M28 D718).\n PROVISIONAL field numbers until post-M27's proto changes land (D703)."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 64
+            },
+            "title": "attack",
+            "maxItems": 64
           }
         },
         "title": "Incident",
@@ -88314,6 +88367,27 @@
             "type": "string",
             "title": "origin",
             "description": "origin is \"library\" or \"customer\" (customer-authored), derived by the\n server from the scenario id."
+          },
+          "atlas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "atlas",
+            "maxItems": 16,
+            "description": "The MITRE ATLAS and ATT\u0026CK techniques the library scenario tests, from\n the server's library, set only when origin is \"library\" and the digest\n is the library's (G0 M28 D718).\n PROVISIONAL field numbers until post-M27's proto changes land (D703)."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "attack",
+            "maxItems": 16
           }
         },
         "title": "RangeResult",

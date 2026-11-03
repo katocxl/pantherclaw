@@ -288,6 +288,22 @@ message RangeResult {
   // origin is "library" or "customer" (customer-authored), derived by the
   // server from the scenario id.
   string origin = 9;
+  // The MITRE ATLAS and ATT&CK techniques the library scenario tests, from
+  // the server's library, set only when origin is "library" and the digest
+  // is the library's (G0 M28 D718).
+  // PROVISIONAL field numbers until post-M27's proto changes land (D703).
+  repeated string atlas = 10 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
+  repeated string attack = 11 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
 }
 
 message RecordResultResponse {
