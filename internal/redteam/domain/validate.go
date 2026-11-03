@@ -270,6 +270,14 @@ func (s *Scenario) Validate() error {
 			return invalid("asi_why %s must be one line of at most %d characters", tag, maxASIWhy)
 		}
 	}
+	// A customer scenario is the customer's word: it is no evidence for a
+	// technique (G0 M28 D714, HR-685).
+	if customer && (len(s.ATLAS) > 0 || len(s.ATTACK) > 0 || len(s.TechniqueWhy) > 0) {
+		return invalid("techniques are for library scenarios")
+	}
+	if err := CheckTechniques(s.ATLAS, s.ATTACK, s.TechniqueWhy); err != nil {
+		return err
+	}
 	for _, r := range s.Requires {
 		if !slices.Contains(capabilities, r) {
 			return invalid("requires %q must be one of %v", r, capabilities)

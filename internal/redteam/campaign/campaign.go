@@ -94,12 +94,18 @@ type File struct {
 	Threats    []string `json:"threats,omitzero"`
 	// ASI are the OWASP Top 10 for Agentic Applications risks the campaign
 	// exercises by OWASP's definition, ascending (D529).
-	ASI      []string         `json:"asi,omitzero"`
-	Rules    []string         `json:"rules,omitzero"`
-	Task     string           `json:"task"`
-	Plants   []Plant          `json:"plants,omitzero"`
-	Attempts []domain.Attempt `json:"attempts"`
-	Script   []Step           `json:"script"`
+	ASI []string `json:"asi,omitzero"`
+	// ATLAS and ATTACK are the techniques the campaign exercises, with
+	// one line each in TechniqueWhy (G0 M28 D714). Labels only: a campaign
+	// never feeds a threat-map lane.
+	ATLAS        []string          `json:"atlas,omitzero"`
+	ATTACK       []string          `json:"attack,omitzero"`
+	TechniqueWhy map[string]string `json:"technique_why,omitzero"`
+	Rules        []string          `json:"rules,omitzero"`
+	Task         string            `json:"task"`
+	Plants       []Plant           `json:"plants,omitzero"`
+	Attempts     []domain.Attempt  `json:"attempts"`
+	Script       []Step            `json:"script"`
 }
 
 var asiRE = regexp.MustCompile(`^ASI(0[1-9]|10)$`)
@@ -159,6 +165,9 @@ func (f *File) Validate() error {
 		return bad("1..%d attempts", maxAttempts)
 	case !validASI(f.ASI):
 		return bad("asi: OWASP risks ASI01..ASI10, ascending, each once")
+	}
+	if err := rtdomain.CheckTechniques(f.ATLAS, f.ATTACK, f.TechniqueWhy); err != nil {
+		return bad("%v", err)
 	}
 	seen := map[string]bool{}
 	for _, p := range f.Plants {

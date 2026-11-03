@@ -1,0 +1,12 @@
+{
+  "attack": {
+    "version": "20.0",
+    "url": "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/v20.0/enterprise-attack/enterprise-attack-20.0.json",
+    "sha256": "81113ba98afa2928f3dcff62022539f7ce30c315c32e14422f11ff95ce534352"
+  },
+  "atlas": {
+    "version": "2026.10",
+    "url": "https://raw.githubusercontent.com/mitre-atlas/atlas-data/v2026.10/dist/v6/ATLAS-2026.10.yaml",
+    "sha256": "ac41ee9f99a47084ba5fdfc77ae83a28687e12390240fffeb37df7914ffe142d"
+  }
+}

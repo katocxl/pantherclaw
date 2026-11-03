@@ -3,7 +3,7 @@
 
 // Package rules parses, validates and compiles detection rules (G0 M10 D9).
 // A rule is a YAML document: what it is (id, version, title, severity,
-// attention, basis, ATLAS and OWASP mappings, edition), which feed events
+// attention, basis, ATLAS, ATT&CK and OWASP mappings, edition), which feed events
 // it reads (on), a CEL condition over one event (match), at most one
 // stateful detector (window, first_seen or sequence), how its alerts group
 // and its tests. Rules only raise signals; nothing in a rule can act.
@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
@@ -69,15 +70,20 @@ type Rule struct {
 	Attention   reflexdomain.Attention `json:"attention"`
 	Basis       reflexdomain.Basis     `json:"basis"`
 	ATLAS       []string               `json:"atlas"`
-	OWASP       []string               `json:"owasp"`
-	Edition     string                 `json:"edition"`
-	On          []string               `json:"on"`
-	Match       string                 `json:"match,omitzero"`
-	Window      *Window                `json:"window,omitzero"`
-	FirstSeen   *FirstSeen             `json:"first_seen,omitzero"`
-	Sequence    *Sequence              `json:"sequence,omitzero"`
-	Group       string                 `json:"group,omitzero"`
-	Tests       []Test                 `json:"tests"`
+	// ATTACK are the ATT&CK Enterprise techniques the rule maps to (G0
+	// M28 D714). TechniquesNone says in one line why a built-in rule maps to
+	// no technique; a custom rule never carries it.
+	ATTACK         []string   `json:"attack"`
+	TechniquesNone string     `json:"techniques_none"`
+	OWASP          []string   `json:"owasp"`
+	Edition        string     `json:"edition"`
+	On             []string   `json:"on"`
+	Match          string     `json:"match,omitzero"`
+	Window         *Window    `json:"window,omitzero"`
+	FirstSeen      *FirstSeen `json:"first_seen,omitzero"`
+	Sequence       *Sequence  `json:"sequence,omitzero"`
+	Group          string     `json:"group,omitzero"`
+	Tests          []Test     `json:"tests"`
 }
 
 // Window counts matching events per group over a sliding duration; it
@@ -194,7 +200,7 @@ func (r *Rule) Validate() error {
 		return invalid(id, "edition must be community or business")
 	case len(r.On) == 0 && r.Sequence == nil, len(r.On) > MaxOn:
 		return invalid(id, "on lists 1..%d event kinds", MaxOn)
-	case len(r.ATLAS) > reflexdomain.MaxMappings || len(r.OWASP) > reflexdomain.MaxMappings:
+	case len(r.ATLAS) > reflexdomain.MaxMappings || len(r.ATTACK) > reflexdomain.MaxMappings || len(r.OWASP) > reflexdomain.MaxMappings:
 		return invalid(id, "at most %d mappings each", reflexdomain.MaxMappings)
 	case r.Group != "" && !slices.Contains(groups, r.Group):
 		return invalid(id, "group must be one of %v", groups)
@@ -203,6 +209,14 @@ func (r *Rule) Validate() error {
 		if !KnownATLAS(a) {
 			return invalid(id, "ATLAS technique %q", a)
 		}
+	}
+	for _, a := range r.ATTACK {
+		if !KnownATTACK(a) {
+			return invalid(id, "ATT&CK technique %q", a)
+		}
+	}
+	if err := r.checkTechniquesNone(); err != nil {
+		return err
 	}
 	for _, o := range r.OWASP {
 		if !KnownOWASP(o) {
@@ -369,4 +383,26 @@ func KindMatches(on []string, kind string) bool {
 		}
 	}
 	return false
+}
+
+// MaxTechniquesNone bounds a built-in rule's techniques_none line (G0 M28
+// D714).
+const MaxTechniquesNone = 200
+
+// checkTechniquesNone: techniques_none is one line of 1..200 characters on
+// a built-in rule that maps to no technique; a custom rule never carries it
+// (G0 M28 D714).
+func (r *Rule) checkTechniquesNone() error {
+	if r.TechniquesNone == "" {
+		return nil
+	}
+	switch why := r.TechniquesNone; {
+	case !r.Builtin():
+		return invalid(r.ID, "techniques_none is for built-in rules")
+	case len(r.ATLAS) > 0 || len(r.ATTACK) > 0:
+		return invalid(r.ID, "a built-in rule maps to atlas or attack techniques, or says techniques_none, not both")
+	case strings.TrimSpace(why) == "" || strings.ContainsAny(why, "\r\n") || utf8.RuneCountInString(why) > MaxTechniquesNone:
+		return invalid(r.ID, "techniques_none must be one line of at most %d characters", MaxTechniquesNone)
+	}
+	return nil
 }

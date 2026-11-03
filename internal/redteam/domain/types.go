@@ -62,10 +62,17 @@ type Scenario struct {
 	ASI []string `json:"asi,omitempty"`
 	// ASIWhy gives each tag one line on how the scenario exercises that risk
 	// as OWASP defines it (D531).
-	ASIWhy      map[string]string `json:"asi_why,omitempty"`
-	Requires    []string          `json:"requires,omitempty"`
-	HarnessOnly bool              `json:"harness_only,omitzero"`
-	Steps       []Step            `json:"steps"`
+	ASIWhy map[string]string `json:"asi_why,omitempty"`
+	// ATLAS and ATTACK are the ATLAS and ATT&CK Enterprise techniques a
+	// library scenario tests (G0 M28 D714); TechniqueWhy gives each id one
+	// line, citing it in parentheses. Metadata: never part of the digest
+	// of what runs. A customer scenario carries none of them.
+	ATLAS        []string          `json:"atlas,omitempty"`
+	ATTACK       []string          `json:"attack,omitempty"`
+	TechniqueWhy map[string]string `json:"technique_why,omitempty"`
+	Requires     []string          `json:"requires,omitempty"`
+	HarnessOnly  bool              `json:"harness_only,omitzero"`
+	Steps        []Step            `json:"steps"`
 }
 
 // Step is one action of a scenario. With holds the kind's arguments as JSON;
