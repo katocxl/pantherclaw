@@ -10,6 +10,9 @@ rules: [HR-324, HR-326]
 asi: [ASI07]
 asi_why:
   ASI07: "Insecure inter-agent communication (ASI07): a peer agent asked by a requester tries to act past the requester's grant."
+atlas: [AML.T0118.001]
+technique_why:
+  AML.T0118.001: "Direct agent communication (AML.T0118.001): a peer agent asked by a requester tries to act past the requester's grant."
 requires: [a2a.send, payments]
 harness_only: false
 steps:

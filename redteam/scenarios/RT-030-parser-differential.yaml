@@ -10,6 +10,7 @@ rules: [HR-075, HR-103]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent sends tool input another parser reads differently from policy."
+techniques_none: "Tests PantherClaw's own strict parsing: tool input another parser would read differently is refused."
 requires: [payments]
 harness_only: false
 steps:

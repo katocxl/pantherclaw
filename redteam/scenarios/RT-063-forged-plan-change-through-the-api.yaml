@@ -7,6 +7,7 @@ tier: business
 attacker: A8
 threats: [T-162, T-163]
 rules: [HR-354, HR-355, HR-361]
+techniques_none: "Tests PantherClaw's own billing: no API call, forged status or replayed event changes a plan."
 requires: [billing]
 harness_only: true
 steps:

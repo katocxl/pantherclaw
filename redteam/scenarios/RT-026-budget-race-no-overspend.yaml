@@ -10,6 +10,11 @@ rules: [HR-048, HR-049]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent runs refunds concurrently to spend past its grant's budget."
+atlas: [AML.T0048.000]
+attack: [T1657]
+technique_why:
+  AML.T0048.000: "Financial harm (AML.T0048.000): the agent runs refunds concurrently to spend past its budget."
+  T1657: "Financial theft (T1657): concurrent refunds try to move more money than the grant allows."
 requires: [payments]
 harness_only: false
 steps:

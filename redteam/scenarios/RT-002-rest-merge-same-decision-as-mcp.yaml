@@ -10,6 +10,9 @@ rules: [HR-201]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the same unreviewed merge through the REST face instead of MCP."
+atlas: [AML.T0053]
+technique_why:
+  AML.T0053: "AI agent tool invocation (AML.T0053): the agent calls the same unreviewed merge through the REST face instead of MCP."
 requires: [github]
 harness_only: false
 steps:

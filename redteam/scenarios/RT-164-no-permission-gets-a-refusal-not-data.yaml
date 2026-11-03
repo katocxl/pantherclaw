@@ -7,6 +7,7 @@ tier: business
 attacker: A8
 threats: [T-279]
 rules: [HR-655, HR-656, HR-659, HR-400]
+techniques_none: "Tests PantherClaw's own permissions: a caller with no permission gets a refusal, not data."
 requires: [payments]
 harness_only: true
 steps:

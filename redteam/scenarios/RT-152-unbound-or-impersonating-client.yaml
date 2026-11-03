@@ -7,6 +7,11 @@ tier: business
 attacker: A4
 threats: [T-268]
 rules: [HR-623, HR-624]
+atlas: [AML.T0091.000]
+attack: [T1550.001]
+technique_why:
+  AML.T0091.000: "Application access token (AML.T0091.000): an unbound or impersonating client tries to obtain and use a token."
+  T1550.001: "Application access token (T1550.001): tokens of a removed binding are tried after it is cut off."
 requires: [payments]
 harness_only: true
 steps:

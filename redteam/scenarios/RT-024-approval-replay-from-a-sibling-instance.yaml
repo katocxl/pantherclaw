@@ -10,6 +10,9 @@ rules: [HR-030, HR-006]
 asi: [ASI03]
 asi_why:
   ASI03: "Identity and privilege abuse (ASI03): another instance of the agent tries to use the run an approved refund was held in."
+attack: [T1548]
+technique_why:
+  T1548: "Abuse elevation control mechanism (T1548): another instance of the agent tries to use the approval of a refund held in another run."
 requires: [payments, person]
 harness_only: false
 steps:

@@ -7,6 +7,11 @@ tier: business
 attacker: A1
 threats: [T-281]
 rules: [HR-658, HR-583]
+atlas: [AML.T0051.001]
+attack: [T1698]
+technique_why:
+  AML.T0051.001: "Indirect prompt injection (AML.T0051.001): a poisoned record read through pclaw mcp self carries instructions."
+  T1698: "Indirect prompt injection (T1698): the poisoned record reaches the agent as a tool result."
 requires: [payments, billing]
 harness_only: true
 steps:

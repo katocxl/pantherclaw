@@ -10,6 +10,11 @@ rules: [HR-188]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): a completed tool action is repeated by replaying its action token at the target."
+atlas: [AML.T0091.000]
+attack: [T1550.001]
+technique_why:
+  AML.T0091.000: "Application access token (AML.T0091.000): a completed action's token is replayed at the target."
+  T1550.001: "Application access token (T1550.001): the replayed action token stands in for a fresh authorization."
 requires: [payments]
 harness_only: false
 steps:

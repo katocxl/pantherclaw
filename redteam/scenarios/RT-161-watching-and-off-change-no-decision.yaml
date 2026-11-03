@@ -7,6 +7,7 @@ tier: business
 attacker: A1
 threats: [T-277]
 rules: [HR-647]
+techniques_none: "Tests PantherClaw's own content signal modes: WATCHING and OFF change no decision."
 requires: [jira.comment]
 # The operator step sets the mode without the step-up a person's change takes.
 harness_only: true

@@ -11,6 +11,7 @@ asi: [ASI08, ASI10]
 asi_why:
   ASI08: "Cascading failures (ASI08): an agent stopped by the kill switch must not carry its next action on."
   ASI10: "Rogue agents (ASI10): a person stops an agent acting out of line, and its next action is refused."
+techniques_none: "Tests PantherClaw's own containment: the kill switch refuses the next action within a second."
 requires: [payments]
 harness_only: true
 steps:
