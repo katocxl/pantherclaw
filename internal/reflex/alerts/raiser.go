@@ -101,7 +101,7 @@ func (r *Raiser) RaiseTx(ctx context.Context, tx db.TenantTx, s reflexdomain.Sig
 	case reflexdomain.AttentionTelemetry:
 		return Raised{Attention: s.Attention}, nil
 	case reflexdomain.AttentionLive:
-		if _, err := ledger.Append(ctx, tx, reflexdomain.KindLive, Actor, entryBody(s, ids.UUID{}, "")); err != nil {
+		if _, err := ledger.Append(ctx, tx, reflexdomain.KindLive, Actor, EntryBody(s, ids.UUID{}, "")); err != nil {
 			return Raised{}, fmt.Errorf("alerts: live entry: %w", err)
 		}
 		return Raised{Attention: s.Attention}, nil
@@ -212,15 +212,15 @@ func Write(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal, suppressi
 	}); err != nil {
 		return Raised{}, fmt.Errorf("alerts: event: %w", err)
 	}
-	if _, err := ledger.Append(ctx, tx, reflexdomain.KindAlert, Actor, entryBody(s, row.ID, row.State)); err != nil {
+	if _, err := ledger.Append(ctx, tx, reflexdomain.KindAlert, Actor, EntryBody(s, row.ID, row.State)); err != nil {
 		return Raised{}, fmt.Errorf("alerts: ledger: %w", err)
 	}
 	return res, nil
 }
 
-// entryBody is the canonical ledger body of an alert or live event: ids,
+// EntryBody is the canonical ledger body of an alert or live event: ids,
 // rule references and subjects only, at most 8 KiB (D6).
-func entryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
+func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 	type body struct {
 		ID          string                 `json:"id,omitzero"`
 		Source      string                 `json:"source"`

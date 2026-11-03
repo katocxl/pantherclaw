@@ -278,6 +278,20 @@ func IncidentEntry(ctx context.Context, tx db.TenantTx, inc dbq.PcIncident, subj
 // (G0 M27 D500): an incident opened by an inference is still an inference
 // to an automation. A person's change carries none.
 func incidentEntry(ctx context.Context, tx db.TenantTx, inc dbq.PcIncident, subjects []reflexdomain.Subject, basis reflexdomain.Basis) error {
+	body, err := IncidentEntryBody(inc, subjects, basis)
+	if err != nil {
+		return err
+	}
+	if _, err := ledger.Append(ctx, tx, reflexdomain.KindIncident, alerts.Actor, body); err != nil {
+		return fmt.Errorf("reflex: incident entry: %w", err)
+	}
+	return nil
+}
+
+// IncidentEntryBody is the body of an incident's reflex.incident ledger
+// entry, as incidentEntry writes it; at most 16 subjects, and the basis only
+// when one is set.
+func IncidentEntryBody(inc dbq.PcIncident, subjects []reflexdomain.Subject, basis reflexdomain.Basis) ([]byte, error) {
 	if subjects == nil {
 		subjects = []reflexdomain.Subject{}
 	}
@@ -291,12 +305,5 @@ func incidentEntry(ctx context.Context, tx db.TenantTx, inc dbq.PcIncident, subj
 	if basis != "" {
 		fields["basis"] = string(basis)
 	}
-	body, err := canonical(fields)
-	if err != nil {
-		return err
-	}
-	if _, err := ledger.Append(ctx, tx, reflexdomain.KindIncident, alerts.Actor, body); err != nil {
-		return fmt.Errorf("reflex: incident entry: %w", err)
-	}
-	return nil
+	return canonical(fields)
 }

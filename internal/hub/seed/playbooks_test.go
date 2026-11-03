@@ -21,12 +21,15 @@ import (
 	"github.com/katocxl/pantherclaw/internal/detection/rules"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/hub/domain"
 	"github.com/katocxl/pantherclaw/internal/hub/seed"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
+	reflexapp "github.com/katocxl/pantherclaw/internal/reflex/app"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 )
@@ -40,9 +43,25 @@ import (
 // delegation, with nothing in the trigger to tell them apart. Each opens a
 // case for a person, and all six run on Team.
 
-// effectful are the steps a library playbook never uses: they contain, revoke
-// or stop launches.
-var effectful = []string{autodomain.KindContain, autodomain.KindRevokeGrant, autodomain.KindPauseLaunches}
+// containingGraph is a v2 definition whose only step node contains: what a
+// containing node in a graph playbook looks like to Definition.Contains.
+const containingGraph = `apiVersion: automations.pantherclaw.dev/v2
+kind: Automation
+purpose: A graph that contains.
+work_kind: SECURITY_WORK
+when:
+  event:
+    on: alert.raised
+authority:
+  principal: self
+nodes:
+  - id: hold
+    step: contain
+    with: {action: SUSPEND_RUN, subject: TRIGGER_RUN}
+    next: done
+  - id: done
+    outcome: SUCCEEDED
+`
 
 var playbookNames = []string{
 	"pc.playbook.compromised-laptop", "pc.playbook.data-flow-hold-escalation", "pc.playbook.leaked-key",
@@ -102,23 +121,41 @@ func TestPlaybooks_TheLibrary(t *testing.T) {
 	}
 }
 
-// TestHR653_NoLibraryPlaybookContains: no library playbook contains, revokes
-// or pauses launches, since no real alert names a subject it could act on
-// safely (D539, D550). Every playbook validates on Team and says so, every
-// signal-started one opens its case as its first step and says it contains
-// nothing, and none names a revocable scope.
+// TestHR653_NoLibraryPlaybookContains: no library playbook contains or
+// revokes beyond its own execution, since no real alert names a subject it
+// could act on safely (D539, D550). What counts as containing is the
+// automations domain's own answer (Definition.Contains, which a v2 graph's
+// step nodes reach through Parse), and no step is of a kind the catalog marks
+// as revoking beyond the execution. Every playbook validates on Team and
+// says so, every signal-started one opens its case as its first step and says
+// it contains nothing, and none names a revocable scope.
 //
 // Covers: F943
 func TestHR653_NoLibraryPlaybookContains(t *testing.T) {
+	graph, err := autodomain.Parse([]byte(containingGraph))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !graph.Contains() {
+		t.Fatal("Contains misses a containing node of a v2 graph")
+	}
 	for _, p := range playbooks(t) {
 		name := p.item.Entry.Name
+		if p.def.Contains() {
+			t.Errorf("%s contains", name)
+		}
 		all := slices.Clone(p.def.Do)
 		if p.def.IfFails != nil {
 			all = append(all, p.def.IfFails.Compensate...)
 		}
+		for _, n := range p.def.Nodes {
+			if n.Step != "" {
+				all = append(all, autodomain.StepSpec{ID: n.ID, Step: n.Step})
+			}
+		}
 		for _, s := range all {
-			if slices.Contains(effectful, s.Step) {
-				t.Errorf("%s/%s: a library playbook uses %s", name, s.ID, s.Step)
+			if autodomain.Catalog[s.Step].ConfirmRevocable {
+				t.Errorf("%s/%s: a library playbook uses %s, which can revoke beyond its execution", name, s.ID, s.Step)
 			}
 		}
 		if p.def.Authority.Revocable != nil {
@@ -230,15 +267,31 @@ tests:
 
 // signalEvent is the feed event Reflex writes for a raised alert (kind
 // reflex.alert) or an opened incident (reflex.incident): the signal's
-// subjects and basis, as reflexEntry reads them.
-func signalEvent(kind string, s reflexdomain.Signal) feed.Event {
-	return feed.Event{
-		Kind: kind, OccurredAt: s.OccurredAt, Outcome: "OPEN", Subjects: s.Subjects,
-		Attrs: map[string]string{
-			"id": ids.NewV7().String(), "rule": s.RuleID, "severity": string(s.Severity),
-			"attention": string(s.Attention), "basis": string(s.Basis),
-		},
+// subjects and basis. The ledger body is Reflex's own (the Raiser's alert
+// entry, or the incident entry the grouping hook writes), read back the way
+// the feed reads every entry.
+func signalEvent(t *testing.T, kind string, s reflexdomain.Signal) feed.Event {
+	t.Helper()
+	var body []byte
+	switch kind {
+	case reflexdomain.KindAlert:
+		body = alerts.EntryBody(s, ids.NewV7(), alerts.StateOpen)
+	case reflexdomain.KindIncident:
+		var err error
+		body, err = reflexapp.IncidentEntryBody(dbq.PcIncident{
+			ID: ids.NewV7(), Title: s.Title, Severity: string(s.Severity), State: "OPEN", GroupKey: s.GroupKey,
+		}, s.Subjects, s.Basis)
+		if err != nil {
+			t.Fatal(err)
+		}
+	default:
+		t.Fatalf("signalEvent: kind %q", kind)
 	}
+	e, err := feed.Normalize(kind, alerts.Actor.Type, alerts.Actor.ID, s.OccurredAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
 }
 
 // simulate starts p from e as the trigger service would (its event, where
@@ -391,7 +444,7 @@ func TestT278_NoSignalContainsAnything(t *testing.T) {
 			t.Fatalf("%s: basis %s, want %s", c.name, c.sig.Basis, c.basis)
 		}
 		if c.name == "a refused revision of another agent's grant" {
-			if g, ok := signalEvent(c.kind, c.sig).Subject(reflexdomain.SubjectGrant); !ok || g != otherID.String() {
+			if g, ok := signalEvent(t, c.kind, c.sig).Subject(reflexdomain.SubjectGrant); !ok || g != otherID.String() {
 				t.Fatalf("%s: the alert names grant %q, want the other agent's %s", c.name, g, otherID)
 			}
 		}
@@ -399,7 +452,7 @@ func TestT278_NoSignalContainsAnything(t *testing.T) {
 			if basis.Confirmed() && !c.basis.Confirmed() {
 				continue // no producer raises this signal confirmed
 			}
-			e := signalEvent(c.kind, c.sig)
+			e := signalEvent(t, c.kind, c.sig)
 			e.Attrs["basis"] = string(basis)
 			if basis == "" {
 				delete(e.Attrs, "basis")
