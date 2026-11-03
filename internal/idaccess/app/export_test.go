@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/url"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
@@ -22,5 +23,10 @@ func (f *CodeFlow) SpendCode(ctx context.Context, org ids.OrgID, code string) (d
 func (f *CodeFlow) FinishCode(ctx context.Context, org ids.OrgID, row dbq.PcMcpAuthorizationCode, form url.Values) (
 	authnapp.TokenResponse, error,
 ) {
-	return f.finishCode(ctx, org, row, form.Get("client_id"), form, f.Clock.Now())
+	out, err := f.finishCode(ctx, org, row, form.Get("client_id"), form, f.Clock.Now())
+	var r refusal
+	if errors.As(err, &r) {
+		return authnapp.TokenResponse{}, f.fail(ctx, r.oe, r.reason) // as AuthorizationCode answers it
+	}
+	return out, err
 }
