@@ -76,8 +76,8 @@ var Prevent = []PreventControl{
 	{
 		ID: "prevent.grant_scope", Title: "Grants name the operations, targets and limits an agent may use", Surface: SurfaceAuthority,
 		ReasonCodes: []string{"NO_GRANT", "OPERATION_NOT_GRANTED", "TARGET_NOT_GRANTED", "OUTSIDE_GUARDRAIL", "GRANT_LIMIT_EXCEEDED"},
-		HR:          []string{"HR-045", "HR-046", "HR-620"}, Requires: RequiresAlways,
-		Techniques: []string{"AML.T0053", "AML.T0101", "AML.T0036", "T1213", "T1485", "T1565.001", "T1606"},
+		HR:          []string{"HR-045", "HR-046"}, Requires: RequiresAlways,
+		Techniques: []string{"AML.T0053", "AML.T0101", "AML.T0036", "T1213", "T1485", "T1565.001"},
 		Why: map[string]string{
 			"AML.T0053": "AI agent tool invocation (AML.T0053): a tool call outside the agent's grant is denied before it runs.",
 			"AML.T0101": "Data destruction via AI agent tool invocation (AML.T0101): a delete the grant does not name is denied.",
@@ -85,7 +85,17 @@ var Prevent = []PreventControl{
 			"T1213":     "Data from information repositories (T1213): an agent's read outside its granted targets is denied.",
 			"T1485":     "Data destruction (T1485): a destructive operation the grant does not name is denied.",
 			"T1565.001": "Stored data manipulation (T1565.001): a write the grant does not name is denied.",
-			"T1606":     "Forge web credentials (T1606): an IdP assertion only narrows a grant the person holds; with no matching grant it is refused.",
+		},
+	},
+	{
+		// G0 M28 D714f: no reason code, like sandbox_closure; the verifier's
+		// refusal is the token endpoint's invalid_grant, not a decision.
+		ID: "prevent.idp_assertion", Title: "Only a verified IdP assertion narrows a grant the person holds", Surface: SurfaceCredential,
+		HR:         []string{"HR-620", "HR-622"},
+		Requires:   RequiresAlways,
+		Techniques: []string{"T1606"},
+		Why: map[string]string{
+			"T1606": "Forge web credentials (T1606): the ID-JAG verifier refuses forged, replayed and misaddressed assertions; RT-150 tests it.",
 		},
 	},
 	{
