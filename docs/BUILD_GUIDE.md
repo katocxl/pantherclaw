@@ -792,11 +792,10 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Migrations `00270`–`00273` (`00274`–`00279` spare).
 
 ### M25 — Prove it to the auditor
-**HR:** HR-600..612 · **F:** F890–F909 · **ADR:** 0047 · **G0:** [g0/M25.md](g0/M25.md).
-- **Frameworks and reports** ([ADR-0047](adr/0047-compliance-reports-and-real-agent-campaigns.md), founder decision H4): OWASP ASI and NIST AI RMF on Team; ISO 42001, the EU AI Act deployer view and SOC 2 on Business. Control states with no score, and never "compliant". A report is its own pack scope, made only from PantherClaw's own records, and what its creator can't read is a gap.
-- **Campaigns** (Business, founder decision H6): attacks on a range twin of the customer's agent, with the customer's key in a local relay beside the sandbox. The server derives boundary outcomes, not exercised is a gap, and campaigns never enter an assurance pack. CI uses a scripted stand-in.
-- **Console** (private stream): the framework view.
-- Migrations `00280`–`00282` (`00283`–`00289` spare); new permission `compliance.read`.
+**HR:** HR-600..615 · **F:** F890–F901 · **ADR:** 0047 · **G0:** [g0/M25.md](g0/M25.md).
+- **Frameworks and reports** ([ADR-0047](adr/0047-compliance-reports-and-real-agent-campaigns.md), founder decision H4): OWASP ASI and NIST AI RMF on Team; ISO 42001, the EU AI Act deployer view and SOC 2 on Business. Control states with no score, never "compliant". A report is its own pack scope, made only from PantherClaw's own records, re-derived offline by `pclaw verify` M25 or later.
+- **Campaigns** (Business, founder decisions H6 and H10): RT-140..RT-149 against a range twin of the customer's agent, with the key in a local relay beside the sandbox and a narrow model route, a written exception to HR-075. The database binds each run to its step, and the server derives outcomes.
+- Migrations `00280`–`00282` (`00283`–`00289` spare); new permission `compliance.read`. Upgrade the server before gateways.
 
 ### M26 — Enterprise identity
 

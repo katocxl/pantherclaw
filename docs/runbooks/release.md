@@ -25,4 +25,6 @@ Users pin the image digests in `sandbox.images` ([sandbox.md](sandbox.md), "Use 
 
 **Upgrade notes:** migration `00246` (M21) backfills and builds its UNIQUE inside the migration's transaction, so automation runs pause while it backfills and builds, in proportion to `pc.automation_step_attempts`. Migration `00257` (M22) builds a partial index on `pc.transactions` the same way: the index is small, but the build reads the whole table and new transactions wait until it ends, in proportion to `pc.transactions`.
 
+**Upgrade order from M25:** upgrade the server before the gateways. A gateway of this release reports a model relay's serving state as LOCAL_RELAY, a value an older server does not know, and that server refuses the gateway's whole status report, not just that connection ([pclaw-redteam-campaign.md](pclaw-redteam-campaign.md)).
+
 **If the release job fails under harden-runner block mode:** read the blocked endpoint in the job summary, add it to `allowed-endpoints` in a PR (G1), and re-run by deleting and re-pushing the tag only if no release was published.
