@@ -1,0 +1,40 @@
+apiVersion: pantherclaw.range/v1
+id: RT-151
+title: An MCP access token works only as a bearer token on its own server, and a workload token never passes as one
+category: boundary
+suite: platform
+tier: business
+attacker: A4
+threats: [T-267]
+rules: [HR-626]
+requires: [payments]
+harness_only: true
+steps:
+  - id: mcp-token-on-pap-route
+    do: idp.probe
+    with: {attack: mcp_token_on_pap_route}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_TOKEN
+      decisive_control: HR-626
+  - id: workload-token-on-oauth-route
+    do: idp.probe
+    with: {attack: workload_token_on_oauth_route}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_TOKEN
+      decisive_control: HR-626
+  - id: token-for-other-server
+    do: idp.probe
+    with: {attack: token_for_other_server}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_TOKEN
+      decisive_control: HR-626
+  - id: proof-on-oauth-route
+    do: idp.probe
+    with: {attack: proof_on_oauth_route}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_REQUEST
+      decisive_control: HR-626

@@ -150,7 +150,7 @@ func (s *Service) decide(ctx context.Context, req ExternalRequest) (ExternalResu
 	}
 	res, err := s.decider.Authorize(ctx, gw.final(), pipeline.Request{
 		Org: gw.Org, Action: p,
-		Identity: pipeline.Identity{InstanceID: id.Instance.Instance, AgentID: id.Instance.Agent, AttestationLevel: id.Level, JKT: id.JKT},
+		Identity: pipeline.Identity{InstanceID: id.Instance.Instance, AgentID: id.Instance.Agent, AttestationLevel: id.Level, JKT: id.JKT, Proof: id.Proof},
 	})
 	if err != nil {
 		return ExternalResult{}, err

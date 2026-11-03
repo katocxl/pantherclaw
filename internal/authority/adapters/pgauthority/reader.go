@@ -360,8 +360,9 @@ func (s *snapshot) Run(ctx context.Context, org ids.OrgID, id ids.UUID) (pipelin
 	}
 	out := pipeline.Run{
 		AgentID: row.AgentID, EnvironmentID: row.EnvironmentID, Active: row.Live, TaskRef: row.TaskRef, Simulated: row.Simulated,
-		Principal: principal(row.PrincipalUserID, row.PrincipalSaID, nil),
-		Launcher:  principal(row.LauncherUserID, row.LauncherSaID, row.LauncherInstanceID),
+		Principal:       principal(row.PrincipalUserID, row.PrincipalSaID, nil),
+		Launcher:        principal(row.LauncherUserID, row.LauncherSaID, row.LauncherInstanceID),
+		ScopeOperations: row.ScopeOperations,
 	}
 	if row.ParentRunID != nil {
 		ancestors, err := dbq.New(s.tx).RunAncestors(ctx, org, id)

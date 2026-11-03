@@ -124,7 +124,7 @@ func (s *Service) StartForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 		if out, err = view(r, r.State); err != nil {
 			return err
 		}
-		return record(ctx, tx, evdomain.Actor{Type: launcher.Kind, ID: launcher.ID}, "run.started", out)
+		return recordStart(ctx, tx, evdomain.Actor{Type: launcher.Kind, ID: launcher.ID}, out)
 	})
 	return out, err
 }

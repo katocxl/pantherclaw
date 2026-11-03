@@ -113,7 +113,10 @@ type Run struct {
 	// GrantID is the grant whose authority the run uses (nil: none, so its
 	// actions are denied NO_GRANT).
 	GrantID *ids.UUID
-	TaskRef string
+	// ScopeOperations narrow the run within its grant (G0 M26 D400): nil
+	// is the whole grant.
+	ScopeOperations []string
+	TaskRef         string
 	// Simulated runs belong to range agents or descend from one (HR-220);
 	// fixed when the run starts.
 	Simulated bool
@@ -144,7 +147,8 @@ func view(r dbq.PcRun, state string) (Run, error) {
 		Launcher:        actorOf(r.LauncherUserID, r.LauncherSaID, r.LauncherInstanceID),
 		Principal:       actorOf(r.PrincipalUserID, r.PrincipalSaID, nil),
 		PrincipalSource: r.PrincipalSource, ParentRunID: r.ParentRunID, Depth: int(r.Depth), GrantID: r.GrantID, TaskRef: r.TaskRef,
-		Simulated: r.Simulated, State: state, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, EndedAt: r.EndedAt,
+		ScopeOperations: r.ScopeOperations,
+		Simulated:       r.Simulated, State: state, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, EndedAt: r.EndedAt,
 	}
 	if r.SubjectIssuer != nil {
 		out.SubjectIssuer = *r.SubjectIssuer
@@ -329,7 +333,7 @@ func (s *Service) StartRun(ctx context.Context, in StartInput) (Run, error) {
 		if out, err = view(r, r.State); err != nil {
 			return err
 		}
-		return record(ctx, tx, c.Actor(), "run.started", out)
+		return recordStart(ctx, tx, c.Actor(), out)
 	})
 	return out, err
 }
@@ -457,7 +461,7 @@ func startChildRunTx(ctx context.Context, tx db.TenantTx, in ChildInput, minutes
 		if out, err = view(r, r.State); err != nil {
 			return err
 		}
-		return record(ctx, tx, evdomain.Actor{Type: "instance", ID: inst.ID.String()}, "run.started", out)
+		return recordStart(ctx, tx, evdomain.Actor{Type: "instance", ID: inst.ID.String()}, out)
 	}()
 	return out, err
 }
@@ -624,7 +628,7 @@ func admittedInstance(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent,
 	return err
 }
 
-func record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name string, r Run) error {
+func recordStart(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r Run) error {
 	details := map[string]string{
 		"agent_id": r.AgentID.String(), "principal_source": r.PrincipalSource,
 		"principal": r.Principal.Kind + ":" + r.Principal.ID, "depth": strconv.Itoa(r.Depth),
@@ -639,7 +643,7 @@ func record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name stri
 		details["parent_run_id"] = r.ParentRunID.String()
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: name, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()}, Details: details,
+		Name: "run.started", Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()}, Details: details,
 	})
 	return err
 }

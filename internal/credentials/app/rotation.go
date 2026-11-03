@@ -896,7 +896,7 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 		details["old_version_id"] = r.OldCredentialID.String()
 		return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_confirmed", r.ConnectionID, r.ID, details)
 	case txdomain.PurposeFollowUp, txdomain.PurposeReconcile, txdomain.PurposeTargetLog, txdomain.PurposeOrgScan,
-		txdomain.PurposeConnectionTest, txdomain.PurposeConsequence:
+		txdomain.PurposeSaaSScan, txdomain.PurposeConnectionTest, txdomain.PurposeConsequence:
 		return done, txapp.ErrLease
 	}
 	return done, txapp.ErrLease

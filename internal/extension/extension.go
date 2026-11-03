@@ -20,10 +20,12 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/provisioning/ports"
 )
 
 // Deployment names the kind of deployment the server runs as (config
@@ -59,6 +61,10 @@ type Set struct {
 	// Validate is a start-up check; an error stops the server
 	// (DEPLOYMENT_CONFIG). Nil means no check.
 	Validate func(Deps) error
+	// AuditPrefixes are the audit kind prefixes this set writes, each one
+	// of AuditKindPrefixes. Its Mount gets an AuditRecorder limited to them
+	// (D528); none means it may write no audit record.
+	AuditPrefixes []string
 }
 
 // RouteAuth is how an extension route authenticates its caller.
@@ -107,8 +113,17 @@ type Deps struct {
 	// Authz checks the session principal's permissions; while it is nil
 	// every session route refuses. Mount only.
 	Authz Authorizer
-	// Audit records billing events in the org's audit ledger. Mount only.
+	// Audit records extension events in the org's audit ledger. Mount only.
 	Audit AuditRecorder
+	// Directory is the core's provisioning directory, for SCIM (G0 M26
+	// D405). Mount only.
+	Directory ports.Directory
+	// SignIn is the core's side of a SAML sign-in (G0 M26 D405). Mount only.
+	SignIn ports.SignIn
+	// ClientIP returns a request's client address with the core's rule:
+	// forwarding headers count only from the configured trusted proxies
+	// (D527). Mount only; never nil there.
+	ClientIP func(*http.Request) string
 }
 
 // Authorizer checks a permission for the principal of a session route's
@@ -119,17 +134,123 @@ type Authorizer interface {
 }
 
 // AuditRecorder records one event in an org's audit ledger. kind must
-// start with "billing."; fields are small and never hold secrets (the core
-// bounds and checks them).
+// start with one of AuditKindPrefixes; fields are small and never hold
+// secrets (the core bounds and checks them).
 type AuditRecorder interface {
 	Record(ctx context.Context, orgID, kind string, fields map[string]string) error
 }
 
-// AuditKindPrefix is the prefix every extension audit kind carries.
-const AuditKindPrefix = "billing."
+// AuditKindPrefixes are the prefixes an extension audit kind may carry
+// (G0 M26 D405). Each names its extension as the ledger's actor.
+var AuditKindPrefixes = []string{"billing.", "scim.", "saml."}
+
+// CoreAuditKinds are the kinds the core itself writes under those
+// prefixes. No extension may write one, so a ledger entry of such a kind is
+// always the core's (D528).
+var CoreAuditKinds = map[string]bool{
+	"billing.comp_granted": true, "billing.comp_revoked": true, "billing.checkout_recorded": true,
+	"billing.subscription_bound": true, "billing.subscription_duplicate": true, "billing.subscription_ended": true,
+	"billing.plan_event_ignored": true, "billing.plan_applied": true, "billing.lapse_reminder": true,
+	"scim.user_created": true, "scim.user_changed": true, "scim.user_deleted": true, "scim.user_deprovisioned": true,
+	"scim.user_deprovision_refused": true, "scim.parts_dropped": true,
+	"scim.group_created": true, "scim.group_changed": true, "scim.group_deleted": true,
+	"scim.group_role_mapping_added": true, "scim.group_role_mapping_removed": true,
+	"scim.token_created": true, "scim.token_activated": true, "scim.token_revoked": true,
+	"saml.connection_put": true, "saml.connection_disabled": true,
+}
+
+// ErrAuditKind refuses an audit kind outside the set's own prefixes, or one
+// the core writes.
+var ErrAuditKind = errors.New("extension: audit kind not this extension's")
+
+// limitedAudit is an AuditRecorder limited to one set's prefixes.
+type limitedAudit struct {
+	next     AuditRecorder
+	prefixes []string
+}
+
+func (a limitedAudit) Record(ctx context.Context, orgID, kind string, fields map[string]string) error {
+	if CoreAuditKinds[kind] || !slices.ContainsFunc(a.prefixes, func(p string) bool {
+		return slices.Contains(AuditKindPrefixes, p) && strings.HasPrefix(kind, p)
+	}) {
+		return ErrAuditKind
+	}
+	return a.next.Record(ctx, orgID, kind, fields)
+}
+
+// LimitAudit returns rec limited to prefixes; nil when rec is nil.
+func LimitAudit(rec AuditRecorder, prefixes []string) AuditRecorder {
+	if rec == nil {
+		return nil
+	}
+	return limitedAudit{next: rec, prefixes: slices.Clone(prefixes)}
+}
+
+// mountOf is s's Mount with Deps.Audit limited to s's prefixes.
+func mountOf(s Set) func(Deps) ([]Route, error) {
+	return func(d Deps) ([]Route, error) {
+		d.Audit = LimitAudit(d.Audit, s.AuditPrefixes)
+		return s.Mount(d)
+	}
+}
 
 // Present reports whether s adds anything to the core server.
 func (s Set) Present() bool { return s.Console != nil || s.Mount != nil || s.Validate != nil }
+
+// ErrTwoConsoles stops a build that composes two consoles.
+var ErrTwoConsoles = errors.New("extension: more than one console")
+
+// Compose returns one Set that adds what each of sets adds, in order (G0
+// M26 D405): every Validate runs, the first error stopping the server, and
+// the routes of every Mount are mounted together. Two sets with a console
+// fail at Validate, and two routes that collide fail at mounting: either
+// way the server does not start.
+func Compose(sets ...Set) Set {
+	var out Set
+	var mounts []func(Deps) ([]Route, error)
+	var checks []func(Deps) error
+	for _, s := range sets {
+		if s.Console != nil {
+			if out.Console != nil {
+				return Set{Validate: func(Deps) error { return ErrTwoConsoles }}
+			}
+			out.Console = s.Console
+		}
+		if s.Mount != nil {
+			mounts = append(mounts, mountOf(s))
+		}
+		// The composed set may write what any of its sets may; each set's
+		// own Mount is still limited to its own prefixes.
+		out.AuditPrefixes = append(out.AuditPrefixes, s.AuditPrefixes...)
+		if s.Validate != nil {
+			checks = append(checks, s.Validate)
+		}
+	}
+	if len(mounts) > 0 {
+		out.Mount = func(d Deps) ([]Route, error) {
+			var routes []Route
+			for _, m := range mounts {
+				rs, err := m(d)
+				if err != nil {
+					return nil, err
+				}
+				routes = append(routes, rs...)
+			}
+			return routes, nil
+		}
+	}
+	if len(checks) > 0 {
+		out.Validate = func(d Deps) error {
+			for _, c := range checks {
+				if err := c(d); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+	return out
+}
 
 // BillingLinks binds billing-provider subscriptions to orgs, only through
 // checkouts the server created (a webhook's own org hint is never

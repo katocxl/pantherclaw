@@ -118,6 +118,14 @@ func (g *Gateway) verifyDue(ctx context.Context) {
 			}()
 			continue
 		}
+		if l.Purpose == "saas_scan" {
+			scans.Add(1)
+			go func() {
+				defer scans.Done()
+				g.saasScan(ctx, conn, l, claimed)
+			}()
+			continue
+		}
 		var o dispatch.Observation
 		var err error
 		if l.Purpose == dispatch.PurposeRotationTest || l.Purpose == dispatch.PurposeRotationConfirm {

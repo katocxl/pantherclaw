@@ -65,7 +65,11 @@ type Request struct {
 	Agent       string         `json:"agent"`
 	Attestation int            `json:"attestation"`
 	JKT         string         `json:"jkt,omitzero"`
-	Gateway     string         `json:"gateway"`
+	// Proof is "bearer" for an MCP access token (G0 M26 D402, HR-627);
+	// recordings made before it have none and replay as PAP/1, as they
+	// were, so the format version is unchanged.
+	Proof   string `json:"proof,omitzero"`
+	Gateway string `json:"gateway"`
 	// PayloadFindings are the gateway's findings (HR-225); a replay needs
 	// them to reach the same decision.
 	PayloadFindings []PayloadFinding `json:"payload_findings,omitzero"`
@@ -217,7 +221,10 @@ type Run struct {
 	Active      bool     `json:"active,omitzero"`
 	TaskRef     string   `json:"task_ref,omitzero"`
 	Ancestors   []string `json:"ancestors,omitzero"`
-	Err         string   `json:"err,omitzero"`
+	// ScopeOperations narrow the run (G0 M26 D408); recordings made before
+	// them have none and replay with the whole grant, as they were.
+	ScopeOperations []string `json:"scope_operations,omitzero"`
+	Err             string   `json:"err,omitzero"`
 }
 
 // Agent is an agent read.

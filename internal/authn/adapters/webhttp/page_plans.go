@@ -91,7 +91,10 @@ var pagePlans = map[string]PagePlan{
 
 	changes.Path + "/{id}/confirm-options": on(ChangePage),
 	changes.Path + "/{id}/confirm":         on(ChangePage),
-	changes.Path + "/{id}/decline":         on(pantherclawv1connect.ChangeServiceDeclineChangeRequestProcedure),
+	// Consenting creates no access, but starts what a run of the org's
+	// agent uses (G0 M26 D408.4).
+	mcpConsentPath:                 on(ChangePage),
+	changes.Path + "/{id}/decline": on(pantherclawv1connect.ChangeServiceDeclineChangeRequestProcedure),
 
 	policyapp.ChangesPath + "/{id}/confirm-options": on(pantherclawv1connect.PolicyServicePublishPolicyVersionProcedure),
 	policyapp.ChangesPath + "/{id}/confirm":         on(pantherclawv1connect.PolicyServicePublishPolicyVersionProcedure),

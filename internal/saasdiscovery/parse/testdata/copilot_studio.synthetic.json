@@ -1,0 +1,73 @@
+{
+  "_fixture": {
+    "label": "SYNTHETIC",
+    "note": "Written by hand from Microsoft's published Dataverse table reference (bot, botcomponent), read 2026-11-01. No real capture exists yet: no tenant, person or agent here is real, and every id is made up.",
+    "uncertain_fields": [
+      "The recording wrapper (environment, bots, botcomponents) is PantherClaw's own: two OData collection responses side by side.",
+      "_ownerid_value and _parentbotid_value follow Dataverse's lookup-column naming; the table reference names the columns ownerid and parentbotid.",
+      "Which botcomponent rows are an agent's tools: types 1 and 13 (Skill) are counted as skills, 16 as knowledge. Copilot Studio's newer actions may sit under other types; a real capture must confirm."
+    ]
+  },
+  "environment": "00000000-5a5a-4000-8000-00000000e001",
+  "bots": {
+    "@odata.context": "https://synthetic.invalid/api/data/v9.2/$metadata#bots",
+    "value": [
+      {
+        "botid": "00000000-5a5a-4000-8000-0000000000a1",
+        "name": "SYNTHETIC HR helper",
+        "schemaname": "syn_hrhelper",
+        "statecode": 0,
+        "statuscode": 1,
+        "authenticationmode": 2,
+        "authenticationtrigger": 1,
+        "accesscontrolpolicy": 2,
+        "publishedon": "2026-09-01T10:00:00Z",
+        "createdon": "2026-08-01T10:00:00Z",
+        "modifiedon": "2026-09-01T10:00:00Z",
+        "_ownerid_value": "00000000-5a5a-4000-8000-0000000000c1",
+        "configuration": "SYNTHETIC-CONFIGURATION-NEVER-KEPT",
+        "authenticationconfiguration": "SYNTHETIC-AUTH-CONFIGURATION-NEVER-KEPT",
+        "iconbase64": "SYNTHETICICONNEVERKEPT"
+      },
+      {
+        "botid": "00000000-5a5a-4000-8000-0000000000a2",
+        "name": "SYNTHETIC open helpdesk",
+        "schemaname": "syn_helpdesk",
+        "statecode": 0,
+        "statuscode": 1,
+        "authenticationmode": 1,
+        "authenticationtrigger": 0,
+        "accesscontrolpolicy": 0,
+        "createdon": "2026-08-02T10:00:00Z",
+        "modifiedon": "2026-08-03T10:00:00Z",
+        "_ownerid_value": "00000000-5a5a-4000-8000-0000000000c2"
+      }
+    ]
+  },
+  "botcomponents": {
+    "value": [
+      {
+        "botcomponentid": "00000000-5a5a-4000-8000-0000000000d1",
+        "name": "SYNTHETIC holiday lookup",
+        "componenttype": 13,
+        "_parentbotid_value": "00000000-5a5a-4000-8000-0000000000a1",
+        "content": "SYNTHETIC-INSTRUCTIONS-NEVER-KEPT",
+        "data": "SYNTHETIC-OBI-DATA-NEVER-KEPT",
+        "description": "SYNTHETIC-DESCRIPTION-NEVER-KEPT"
+      },
+      {
+        "botcomponentid": "00000000-5a5a-4000-8000-0000000000d2",
+        "name": "SYNTHETIC policy site",
+        "componenttype": 16,
+        "_parentbotid_value": "00000000-5a5a-4000-8000-0000000000a1"
+      },
+      {
+        "botcomponentid": "00000000-5a5a-4000-8000-0000000000d3",
+        "name": "SYNTHETIC greeting topic",
+        "componenttype": 9,
+        "_parentbotid_value": "00000000-5a5a-4000-8000-0000000000a2",
+        "content": "SYNTHETIC-TOPIC-NEVER-KEPT"
+      }
+    ]
+  }
+}

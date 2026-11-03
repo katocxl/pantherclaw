@@ -296,6 +296,10 @@ func (a *Access) SetUserState(ctx context.Context, id td.UserID, state td.Accoun
 				return err
 			}
 			details["sessions_revoked"] = strconv.FormatInt(n, 10)
+			// A person's decision: from now on SCIM can't undo it (D406).
+			if err := q.ClearSCIMDisabled(ctx, c.Org, r.ID); err != nil {
+				return err
+			}
 		}
 		if err := guard(ctx); err != nil {
 			return err
@@ -304,6 +308,30 @@ func (a *Access) SetUserState(ctx context.Context, id td.UserID, state td.Accoun
 		return record(ctx, tx, c, event, "user", r.ID, details)
 	})
 	return out, err
+}
+
+// GuardAdmins is guardAdmins for a change made outside this package: the
+// provisioning directory takes the same lock and makes the same check
+// (HR-484).
+func GuardAdmins(ctx context.Context, q *dbq.Queries, org ids.OrgID) (func(context.Context) error, error) {
+	return guardAdmins(ctx, q, org)
+}
+
+// BindingTarget checks a scope as CreateRoleBinding does and returns its
+// columns, for a group role mapping (G0 M26 D406).
+func BindingTarget(ctx context.Context, q *dbq.Queries, c Caller, role td.RoleName, scope td.Scope) (bu, team, env *ids.UUID, err error) {
+	var arg dbq.InsertRoleBindingParams
+	if err := checkScope(ctx, q, c.Org, scope, &arg); err != nil {
+		return nil, nil, nil, err
+	}
+	path, err := scopePath(ctx, q, c.Org, scope)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := c.CheckBindCeiling(role, path); err != nil {
+		return nil, nil, nil, err
+	}
+	return arg.BusinessUnitID, arg.TeamID, arg.EnvironmentID, nil
 }
 
 // guardAdmins protects the last Org Admin. It serializes admin-changing
