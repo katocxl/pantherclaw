@@ -25,11 +25,11 @@ The export posts signed Standard Webhooks batches: `{"type": "pantherclaw.ocsf.b
 | Wazuh | Can't split: a decoder reads one line as one event. It needs one OCSF event per line |
 | Sigma | States the field layout the rules expect |
 
-**Sentinel and Wazuh need a forwarder that splits the batch first. That forwarder isn't built yet.**
+**Sentinel and Wazuh need the batch split first.** `pclaw siem forward` ([siem-forwarder.md](siem-forwarder.md)) does it: it writes one event per line to a file that the Azure Monitor Agent or the Wazuh agent reads.
 
 - The signature is not verified inside any SIEM. Nothing there refuses an old timestamp or dedupes `metadata.uid`.
 - Several SIEMs want a token or key the export doesn't send: HEC, the Chronicle feed, Sentinel.
-- A verifying forwarder is a later piece. Until then, keep ingest endpoints reachable only from PantherClaw or a checking proxy.
+- `pclaw siem forward` checks the signature, the timestamp and re-sends before it writes. It writes to a file only and adds no token. Without it, keep ingest endpoints reachable only from PantherClaw or a checking proxy.
 
 ## What is and isn't proven
 
