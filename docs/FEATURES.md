@@ -85,7 +85,7 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 | Transparency anchoring (Rekor v2 + RFC 3161) | — | Yes | Yes | Yes |
 | SIEM export (OCSF 1.9) & SOAR response requests | — | — | Yes | Yes |
 | Threat detections | Core built-ins | Core built-ins | Advanced built-ins + custom rules | Advanced built-ins + custom rules |
-| MITRE threat map | Matrix, technique pages and gaps in the console | + CLI, MCP and API reads, signed report, Navigator export, posture gaps | + history and drop alerts | + history and drop alerts |
+| MITRE threat map | Matrix, technique pages, gaps and labels in the console | + CLI, MCP and API reads, signed report, Navigator export, posture gaps | + history and drop alerts | + history and drop alerts |
 | Red-team range | Community scenarios | Community scenarios | Full library (≥ 30 scenarios) | Full library (≥ 30 scenarios) |
 | Deployment | Self-hosted single node | + hybrid (hosted control plane, from v1.0); SaaS post-1.0 | + hybrid (hosted control plane, from v1.0); SaaS post-1.0 | + hybrid fleet management, multi-org |
 | FIPS 140-3 build | — | — | — | Yes |
@@ -875,7 +875,7 @@ Analytics use PantherClaw's own transactions and never contain automatically (F7
 | F943 | No library playbook contains | Each playbook opens a case for a person, who suspends, revokes or rotates. Every automation, library or custom, contains only on CONFIRMED alerts. | Next | Team | M27 | F800 |
 | F944 | SIEM content packs | Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, with the same eight single-event rules on OCSF 1.9 export. Sentinel and Wazuh need a batch-splitting forwarder, not built yet. | Next | Business | M27 | new |
 | F945 | Golden OCSF samples | Byte for byte the mapper's output. Each rule, read from the vendor's own file, fires on exactly its listed samples. No vendor engine ran; each README says so. | Next | Business | M27 | F801 |
-| F946 | Investigator role | A service-account role with eight read permissions. The server admits it only on WhatHappened, GetRunTimeline, Search and GetGraph; elsewhere it does not count. | Next | Team | M27 | new |
+| F946 | Investigator role | A service-account role with nine read permissions. The server admits it only on WhatHappened, GetRunTimeline, Search, GetGraph and GetThreatTechnique (M28); elsewhere it does not count. | Next | Team | M27 | new |
 | F947 | `pclaw mcp self` | A stdio MCP server with five read tools: `search`, `explain_decision`, `run_timeline`, `breach_radius`, `technique_coverage` (M28). Bounded inputs, agent-safe refusals, no model. | Next | Team | M27 | new |
 | F948 | Server-side read audit | The server records `audit.self_mcp.read` for each read and gate refusal by the Investigator role, before the first response byte, so a client can't skip it. | Next | Team | M27 | new |
 | F949 | Untrusted record labels | Every record a tool returns sits under `UNTRUSTED_RECORD_DATA`, cleaned, cut to 2000 runes and JSON-escaped. Record text is data, never an instruction. | Next | Team | M27 | new |
