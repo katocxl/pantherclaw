@@ -289,7 +289,7 @@ func TestHR637_OneUnreadRecordHidesNoOtherChange(t *testing.T) {
 	}
 	unread, _, observed, _ := e.discovery(t, "g-bad")
 	if n := e.count(t, changes, e.org, unread, string(adomain.ChangeDiscoveryChanged)); n != 0 ||
-		!strings.Contains(observed, `"tool_kinds":"browser"`) || strings.Contains(observed, "tools_incomplete") || strings.Contains(observed, `"unread"`) {
+		!strings.Contains(observed, `"tool_kinds": "browser"`) || strings.Contains(observed, "tools_incomplete") || strings.Contains(observed, `"unread"`) {
 		t.Fatalf("the unread GPT: %d changes, %s", n, observed)
 	}
 }
