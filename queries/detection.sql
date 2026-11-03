@@ -30,6 +30,15 @@ VALUES (sqlc.arg(org_id), sqlc.arg(rule_id), sqlc.arg(consecutive_errors), sqlc.
 ON CONFLICT (org_id, rule_id) DO UPDATE SET consecutive_errors = EXCLUDED.consecutive_errors,
     last_error = coalesce(EXCLUDED.last_error, pc.detection_rule_state.last_error), updated_at = now();
 
+-- name: TouchDetectionRuleInput :exec
+-- When input matching the rule last arrived (G0 M28 D716): the newest
+-- occurred_at of a batch's matching events, written in the transaction that
+-- advances the cursor. It never moves back.
+INSERT INTO pc.detection_rule_state (org_id, rule_id, last_input_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(rule_id), sqlc.arg(last_input_at)::timestamptz)
+ON CONFLICT (org_id, rule_id) DO UPDATE SET last_input_at =
+    greatest(coalesce(pc.detection_rule_state.last_input_at, '-infinity'::timestamptz), EXCLUDED.last_input_at);
+
 -- name: DisableDetectionRule :execrows
 UPDATE pc.detection_rule_state SET disabled_at = now(), disabled_reason = sqlc.arg(reason), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND rule_id = sqlc.arg(rule_id) AND disabled_at IS NULL;
