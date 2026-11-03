@@ -36,6 +36,9 @@ var reflexCoreProcedures = map[string]td.Permission{
 	pantherclawv1connect.DetectionServicePublishCustomRuleProcedure:  td.PermDetectionManage,
 	pantherclawv1connect.DetectionServiceDisableCustomRuleProcedure:  td.PermDetectionManage,
 	pantherclawv1connect.DetectionServiceEnableRuleProcedure:         td.PermDetectionManage,
+	// Two-person confirmed custom rules (HR-666).
+	pantherclawv1connect.DetectionServiceRequestCustomRuleConfirmationProcedure:  td.PermDetectionManage,
+	pantherclawv1connect.DetectionServiceWithdrawCustomRuleConfirmationProcedure: td.PermDetectionManage,
 }
 
 func init() { maps.Copy(procedurePermissions, reflexCoreProcedures) }

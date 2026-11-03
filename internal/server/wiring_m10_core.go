@@ -90,6 +90,9 @@ func registerReflexCore(rs *connect.Server, d apiDeps) {
 	if d.billing != nil {
 		det.Ents = d.billing
 	}
+	// A custom rule version's confirmation waits for a second person
+	// (HR-666).
+	det.RegisterProtect(d.m11protect.gate)
 	pantherclawv1connect.RegisterIncidentServiceHandler(rs, reflexrpc.NewIncidents(&reflexapp.Incidents{Pool: d.pool, Hooks: c.hooks}))
 	pantherclawv1connect.RegisterDetectionServiceHandler(rs, reflexrpc.NewDetections(det))
 }
