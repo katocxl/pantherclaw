@@ -43,6 +43,8 @@ type stixObject struct {
 	Platforms       []string    `json:"x_mitre_platforms"`
 	Deprecated      bool        `json:"x_mitre_deprecated"`
 	Revoked         bool        `json:"revoked"`
+	Domains         []string    `json:"x_mitre_domains"`
+	MitreVersion    string      `json:"x_mitre_version"`
 }
 
 var (
@@ -75,7 +77,7 @@ func buildATTACK(src []byte, pin Pin) (*Catalog, error) {
 	if b.Type != "bundle" {
 		return nil, shape("type %q, want bundle", b.Type)
 	}
-	var matrices []stixObject
+	var matrices, collections []stixObject
 	tactics := map[string]stixObject{} // by STIX id
 	var patterns []stixObject
 	for _, raw := range b.Objects {
@@ -84,6 +86,8 @@ func buildATTACK(src []byte, pin Pin) (*Catalog, error) {
 			return nil, err
 		}
 		switch o.Type {
+		case "x-mitre-collection":
+			collections = append(collections, o)
 		case "x-mitre-matrix":
 			matrices = append(matrices, o)
 		case "x-mitre-tactic":
@@ -91,6 +95,15 @@ func buildATTACK(src []byte, pin Pin) (*Catalog, error) {
 		case "attack-pattern":
 			patterns = append(patterns, o)
 		}
+		switch o.Type {
+		case "x-mitre-matrix", "x-mitre-tactic", "attack-pattern":
+			if !slices.Contains(o.Domains, "enterprise-attack") {
+				return nil, shape("%s %s is not in the enterprise-attack domain", o.Type, o.ID)
+			}
+		}
+	}
+	if len(collections) != 1 || collections[0].MitreVersion != pin.Version {
+		return nil, shape("the bundle must hold one x-mitre-collection of version %q", pin.Version)
 	}
 	if len(matrices) != 1 {
 		return nil, shape("%d matrices, want 1", len(matrices))
