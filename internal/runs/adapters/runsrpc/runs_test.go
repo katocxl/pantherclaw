@@ -12,11 +12,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/runs/app"
 )
 
-// TestD670_ARunReadsItsPrincipalSourceAndOperations: an ID-JAG run reads
+// TestRunsrpc_PrincipalSourceAndOperationsOfARun: an ID-JAG run reads
 // PRINCIPAL_SOURCE_ID_JAG and the operations it is narrowed to; the other
 // stored sources keep their values, and a run without operations reads the
 // whole grant (none listed).
-func TestD670_ARunReadsItsPrincipalSourceAndOperations(t *testing.T) {
+func TestRunsrpc_PrincipalSourceAndOperationsOfARun(t *testing.T) {
 	for source, want := range map[string]pantherclawv1.PrincipalSource{
 		app.SourceLauncher:     pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_LAUNCHER,
 		app.SourceSubjectToken: pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_SUBJECT_TOKEN,
@@ -44,10 +44,10 @@ var storedSources = []string{
 	app.SourceLauncher, app.SourceSubjectToken, app.SourceParentRun, app.SourceAutomation, app.SourceIDJAG,
 }
 
-// TestD670a_EveryStoredPrincipalSourceReadsAProtoValue: no run reads
+// TestRunsrpc_PrincipalSourceEveryStoredSourceReadsAProtoValue: no run reads
 // PRINCIPAL_SOURCE_UNSPECIFIED; each source a run can store maps to its own
 // defined proto value, and the mapper knows no other source.
-func TestD670a_EveryStoredPrincipalSourceReadsAProtoValue(t *testing.T) {
+func TestRunsrpc_PrincipalSourceEveryStoredSourceReadsAProtoValue(t *testing.T) {
 	seen := map[pantherclawv1.PrincipalSource]string{}
 	for _, source := range storedSources {
 		got := RunProto(app.Run{ID: ids.NewV7(), PrincipalSource: source}).GetPrincipalSource()

@@ -442,12 +442,12 @@ func TestHR022_StartRunBindsOnlyAMatchingRootGrant(t *testing.T) {
 	wantCode(t, "no grants configured", err, pcerr.FailedPrecondition, "GRANTS_UNAVAILABLE")
 }
 
-// TestD670_RunReadsShowTheIDJAGSourceAndItsOperations: a run an ID-JAG
+// TestRunsrpc_PrincipalSourceIDJAGAndOperationsOnRunReads: a run an ID-JAG
 // assertion started reads PRINCIPAL_SOURCE_ID_JAG and the operations it is
 // narrowed to through GetRun and ListRuns; the signed-in person's own run
 // reads PRINCIPAL_SOURCE_LAUNCHER and lists no operations (the whole grant;
 // G0 M26 D400, D408).
-func TestD670_RunReadsShowTheIDJAGSourceAndItsOperations(t *testing.T) {
+func TestRunsrpc_PrincipalSourceIDJAGAndOperationsOnRunReads(t *testing.T) {
 	w := newWorld(t)
 	w.svc.WithGrants(&grantspg.Store{Pool: w.pool})
 	agent := w.agent(t)
