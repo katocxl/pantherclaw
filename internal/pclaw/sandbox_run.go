@@ -117,6 +117,39 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
+	_, err = runSandbox(ctx, a, f, sandboxExtra{})
+	return err
+}
+
+// sandboxExtra is what a campaign adds to a sandbox run (G0 M25 D313): the
+// edge's model route and the agent's extra environment. The zero value is a
+// plain `pclaw sandbox run`.
+type sandboxExtra struct {
+	// modelHost and modelConnection (the relay's name) give the edge its
+	// model route; placeholder is the agent's model key variables' value.
+	modelHost, modelConnection, placeholder string
+	// env are extra NAME=VALUE entries for the agent; never a credential.
+	env []string
+}
+
+// sandboxResult is what a sandbox run leaves for its caller.
+type sandboxResult struct {
+	Run    string
+	Routes []sandbox.Route
+	// Code is the agent's exit code.
+	Code int
+}
+
+// runSandbox is `pclaw sandbox run` with a campaign's additions. It returns
+// the run and the routes the edge saw; an agent's non-zero exit is an error
+// after both are recorded.
+func runSandbox(ctx context.Context, a *app, f sandboxRunFlags, x sandboxExtra) (sandboxResult, error) {
+	var res sandboxResult
+	err := runSandboxInto(ctx, a, f, x, &res)
+	return res, err
+}
+
+func runSandboxInto(ctx context.Context, a *app, f sandboxRunFlags, x sandboxExtra, out *sandboxResult) error {
 	gwAddr, err := gatewayAddr(f.gateway, f.gatewayAddr)
 	if err != nil {
 		return err
@@ -210,6 +243,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 		GatewayURL: f.gateway, GatewayAddr: gwAddr, GatewayDial: gatewayDial(f.gateway, f.gatewayAddr), Hosts: started.GetAgentHosts(), Connections: f.connections, MappedAddrs: mapped,
 		Run: run.GetRun().GetId(), KeyFile: kf, TokenFile: tokenFile, ProbeKey: probeKey, HostKey: hostKey, Canary: cn, CanaryPorts: ports,
 		HostPorts: []int{gwPort}, Dir: dir, BeforeProbe: a.beforeProbe,
+		ModelHost: x.modelHost, ModelConnection: x.modelConnection, ModelPlaceholder: x.placeholder,
 	})
 	defer func() {
 		if err := box.Close(context.WithoutCancel(ctx)); err != nil {
@@ -219,7 +253,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return fmt.Errorf("starting the sandbox: %w", err)
 	}
-	if err := box.PrepareAgent(ctx, sandbox.Agent{Image: f.image, Args: f.args, Workspace: f.workspace}); err != nil {
+	if err := box.PrepareAgent(ctx, sandbox.Agent{Image: f.image, Args: f.args, Env: x.env, Workspace: f.workspace}); err != nil {
 		return fmt.Errorf("preparing the agent: %w", err)
 	}
 	if f.workspace != "" {
@@ -232,6 +266,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 		return fmt.Errorf("running the probes: %w", err)
 	}
 	runID := run.GetRun().GetId()
+	out.Run = runID
 	for _, r := range []struct{ kind, compact string }{{"sandbox", evidence.Sandbox}, {"control", evidence.Control}} {
 		if _, err := sb.SubmitProbeReport(ctx, &pantherclawv1.SubmitProbeReportRequest{SessionId: session, Report: r.compact, RunId: runID}); err != nil {
 			return fmt.Errorf("the %s report: %w", r.kind, err)
@@ -254,7 +289,13 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := reportRoutes(ctx, sb, box, session, a.stderr); err != nil {
+	out.Code = code
+	routes, err := box.Routes(ctx)
+	if err != nil {
+		return err
+	}
+	out.Routes = routes
+	if err := reportRoutes(ctx, sb, routes, session, a.stderr); err != nil {
 		return err
 	}
 	if f.out != "" {
@@ -265,7 +306,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 		printChanges(a.stdout, f.out, changes)
 	}
 	if code != 0 {
-		return fmt.Errorf("the agent exited with code %d", code)
+		return &agentExitError{code: code}
 	}
 	return nil
 }
@@ -374,10 +415,9 @@ func printClosures(w io.Writer, closures []*pantherclawv1.SandboxClosure) {
 // reportRoutes sends the server the routes the edge saw the agent take
 // before the session ends: the destinations it refused and the
 // credentials it stripped (HR-214).
-func reportRoutes(ctx context.Context, sb pantherclawv1connect.SandboxServiceClient, box *sandbox.Sandbox, session string, w io.Writer) error {
-	routes, err := box.Routes(ctx)
-	if err != nil || len(routes) == 0 {
-		return err
+func reportRoutes(ctx context.Context, sb pantherclawv1connect.SandboxServiceClient, routes []sandbox.Route, session string, w io.Writer) error {
+	if len(routes) == 0 {
+		return nil
 	}
 	req := &pantherclawv1.ReportRoutesRequest{SessionId: session}
 	for _, r := range routes {

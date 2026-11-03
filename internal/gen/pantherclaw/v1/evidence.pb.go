@@ -2056,6 +2056,63 @@ func (x *PackTimeRange) GetEndTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// PackCompliance names a report: a framework and a period. The pack holds
+// compliance.json and the receipts it cites, and its statement is its own: it
+// shows evidence and gaps, and is not a certification or statement of
+// compliance. The framework's edition applies.
+type PackCompliance struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Framework ComplianceFramework    `protobuf:"varint,1,opt,name=framework,proto3,enum=pantherclaw.v1.ComplianceFramework" json:"framework,omitempty"`
+	// The period.
+	Period        *PackTimeRange `protobuf:"bytes,2,opt,name=period,proto3" json:"period,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PackCompliance) Reset() {
+	*x = PackCompliance{}
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PackCompliance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PackCompliance) ProtoMessage() {}
+
+func (x *PackCompliance) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PackCompliance.ProtoReflect.Descriptor instead.
+func (*PackCompliance) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *PackCompliance) GetFramework() ComplianceFramework {
+	if x != nil {
+		return x.Framework
+	}
+	return ComplianceFramework_COMPLIANCE_FRAMEWORK_UNSPECIFIED
+}
+
+func (x *PackCompliance) GetPeriod() *PackTimeRange {
+	if x != nil {
+		return x.Period
+	}
+	return nil
+}
+
 // PackContents is what a pack holds besides each transaction's states.
 type PackContents struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2076,7 +2133,7 @@ type PackContents struct {
 
 func (x *PackContents) Reset() {
 	*x = PackContents{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2088,7 +2145,7 @@ func (x *PackContents) String() string {
 func (*PackContents) ProtoMessage() {}
 
 func (x *PackContents) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2101,7 +2158,7 @@ func (x *PackContents) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PackContents.ProtoReflect.Descriptor instead.
 func (*PackContents) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PackContents) GetReceipts() bool {
@@ -2151,6 +2208,7 @@ type CreateEvidencePackRequest struct {
 	//	*CreateEvidencePackRequest_AgentId
 	//	*CreateEvidencePackRequest_TimeRange
 	//	*CreateEvidencePackRequest_AutomationExecutionId
+	//	*CreateEvidencePackRequest_Compliance
 	Scope isCreateEvidencePackRequest_Scope `protobuf_oneof:"scope"`
 	// For a run or an agent: only the transactions created in this range.
 	Within *PackTimeRange `protobuf:"bytes,5,opt,name=within,proto3" json:"within,omitempty"`
@@ -2162,7 +2220,7 @@ type CreateEvidencePackRequest struct {
 
 func (x *CreateEvidencePackRequest) Reset() {
 	*x = CreateEvidencePackRequest{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2174,7 +2232,7 @@ func (x *CreateEvidencePackRequest) String() string {
 func (*CreateEvidencePackRequest) ProtoMessage() {}
 
 func (x *CreateEvidencePackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2187,7 +2245,7 @@ func (x *CreateEvidencePackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEvidencePackRequest.ProtoReflect.Descriptor instead.
 func (*CreateEvidencePackRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CreateEvidencePackRequest) GetScope() isCreateEvidencePackRequest_Scope {
@@ -2242,6 +2300,15 @@ func (x *CreateEvidencePackRequest) GetAutomationExecutionId() string {
 	return ""
 }
 
+func (x *CreateEvidencePackRequest) GetCompliance() *PackCompliance {
+	if x != nil {
+		if x, ok := x.Scope.(*CreateEvidencePackRequest_Compliance); ok {
+			return x.Compliance
+		}
+	}
+	return nil
+}
+
 func (x *CreateEvidencePackRequest) GetWithin() *PackTimeRange {
 	if x != nil {
 		return x.Within
@@ -2286,6 +2353,11 @@ type CreateEvidencePackRequest_AutomationExecutionId struct {
 	AutomationExecutionId string `protobuf:"bytes,7,opt,name=automation_execution_id,json=automationExecutionId,proto3,oneof"`
 }
 
+type CreateEvidencePackRequest_Compliance struct {
+	// One framework's coverage for a period, as a signed report (G0 M25 D301).
+	Compliance *PackCompliance `protobuf:"bytes,8,opt,name=compliance,proto3,oneof"`
+}
+
 func (*CreateEvidencePackRequest_Transactions) isCreateEvidencePackRequest_Scope() {}
 
 func (*CreateEvidencePackRequest_RunId) isCreateEvidencePackRequest_Scope() {}
@@ -2295,6 +2367,8 @@ func (*CreateEvidencePackRequest_AgentId) isCreateEvidencePackRequest_Scope() {}
 func (*CreateEvidencePackRequest_TimeRange) isCreateEvidencePackRequest_Scope() {}
 
 func (*CreateEvidencePackRequest_AutomationExecutionId) isCreateEvidencePackRequest_Scope() {}
+
+func (*CreateEvidencePackRequest_Compliance) isCreateEvidencePackRequest_Scope() {}
 
 // EvidencePack is a pack's state and, when ready, its signed manifest.
 type EvidencePack struct {
@@ -2331,7 +2405,7 @@ type EvidencePack struct {
 
 func (x *EvidencePack) Reset() {
 	*x = EvidencePack{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2343,7 +2417,7 @@ func (x *EvidencePack) String() string {
 func (*EvidencePack) ProtoMessage() {}
 
 func (x *EvidencePack) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2356,7 +2430,7 @@ func (x *EvidencePack) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvidencePack.ProtoReflect.Descriptor instead.
 func (*EvidencePack) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *EvidencePack) GetId() string {
@@ -2461,7 +2535,7 @@ type CreateEvidencePackResponse struct {
 
 func (x *CreateEvidencePackResponse) Reset() {
 	*x = CreateEvidencePackResponse{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2473,7 +2547,7 @@ func (x *CreateEvidencePackResponse) String() string {
 func (*CreateEvidencePackResponse) ProtoMessage() {}
 
 func (x *CreateEvidencePackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2486,7 +2560,7 @@ func (x *CreateEvidencePackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEvidencePackResponse.ProtoReflect.Descriptor instead.
 func (*CreateEvidencePackResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CreateEvidencePackResponse) GetPack() *EvidencePack {
@@ -2507,7 +2581,7 @@ type GetEvidencePackRequest struct {
 
 func (x *GetEvidencePackRequest) Reset() {
 	*x = GetEvidencePackRequest{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2519,7 +2593,7 @@ func (x *GetEvidencePackRequest) String() string {
 func (*GetEvidencePackRequest) ProtoMessage() {}
 
 func (x *GetEvidencePackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2532,7 +2606,7 @@ func (x *GetEvidencePackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEvidencePackRequest.ProtoReflect.Descriptor instead.
 func (*GetEvidencePackRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{28}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetEvidencePackRequest) GetId() string {
@@ -2553,7 +2627,7 @@ type GetEvidencePackResponse struct {
 
 func (x *GetEvidencePackResponse) Reset() {
 	*x = GetEvidencePackResponse{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2565,7 +2639,7 @@ func (x *GetEvidencePackResponse) String() string {
 func (*GetEvidencePackResponse) ProtoMessage() {}
 
 func (x *GetEvidencePackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2578,7 +2652,7 @@ func (x *GetEvidencePackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEvidencePackResponse.ProtoReflect.Descriptor instead.
 func (*GetEvidencePackResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{29}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetEvidencePackResponse) GetPack() *EvidencePack {
@@ -2601,7 +2675,7 @@ type ListEvidencePacksRequest struct {
 
 func (x *ListEvidencePacksRequest) Reset() {
 	*x = ListEvidencePacksRequest{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2613,7 +2687,7 @@ func (x *ListEvidencePacksRequest) String() string {
 func (*ListEvidencePacksRequest) ProtoMessage() {}
 
 func (x *ListEvidencePacksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2626,7 +2700,7 @@ func (x *ListEvidencePacksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEvidencePacksRequest.ProtoReflect.Descriptor instead.
 func (*ListEvidencePacksRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{30}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListEvidencePacksRequest) GetPageSize() int32 {
@@ -2656,7 +2730,7 @@ type ListEvidencePacksResponse struct {
 
 func (x *ListEvidencePacksResponse) Reset() {
 	*x = ListEvidencePacksResponse{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2668,7 +2742,7 @@ func (x *ListEvidencePacksResponse) String() string {
 func (*ListEvidencePacksResponse) ProtoMessage() {}
 
 func (x *ListEvidencePacksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2681,7 +2755,7 @@ func (x *ListEvidencePacksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEvidencePacksResponse.ProtoReflect.Descriptor instead.
 func (*ListEvidencePacksResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{31}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListEvidencePacksResponse) GetPacks() []*EvidencePack {
@@ -2709,7 +2783,7 @@ type DownloadEvidencePackRequest struct {
 
 func (x *DownloadEvidencePackRequest) Reset() {
 	*x = DownloadEvidencePackRequest{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2721,7 +2795,7 @@ func (x *DownloadEvidencePackRequest) String() string {
 func (*DownloadEvidencePackRequest) ProtoMessage() {}
 
 func (x *DownloadEvidencePackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2734,7 +2808,7 @@ func (x *DownloadEvidencePackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadEvidencePackRequest.ProtoReflect.Descriptor instead.
 func (*DownloadEvidencePackRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{32}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DownloadEvidencePackRequest) GetId() string {
@@ -2761,7 +2835,7 @@ type DownloadEvidencePackResponse struct {
 
 func (x *DownloadEvidencePackResponse) Reset() {
 	*x = DownloadEvidencePackResponse{}
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2773,7 +2847,7 @@ func (x *DownloadEvidencePackResponse) String() string {
 func (*DownloadEvidencePackResponse) ProtoMessage() {}
 
 func (x *DownloadEvidencePackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2786,7 +2860,7 @@ func (x *DownloadEvidencePackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadEvidencePackResponse.ProtoReflect.Descriptor instead.
 func (*DownloadEvidencePackResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{33}
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *DownloadEvidencePackResponse) GetChunk() []byte {
@@ -2821,7 +2895,7 @@ var File_pantherclaw_v1_evidence_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_evidence_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpantherclaw/v1/evidence.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1epantherclaw/v1/authority.proto\"\xd7\x03\n" +
+	"\x1dpantherclaw/v1/evidence.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1epantherclaw/v1/authority.proto\x1a\x1fpantherclaw/v1/compliance.proto\"\xd7\x03\n" +
 	"\x0fLedgerIntegrity\x12:\n" +
 	"\x05state\x18\x01 \x01(\x0e2$.pantherclaw.v1.LedgerIntegrityStateR\x05state\x12!\n" +
 	"\ffailure_code\x18\x02 \x01(\tR\vfailureCode\x12\x1d\n" +
@@ -2975,20 +3049,27 @@ const file_pantherclaw_v1_evidence_proto_rawDesc = "" +
 	"\n" +
 	"start_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tstartTime\x12=\n" +
 	"\bend_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\aendTime:\xac\x01\xbaH\xa8\x01\x1a\xa5\x01\n" +
-	"\x0fpack_time_range\x129end_time must be after start_time, at most 366 days later\x1aWthis.end_time > this.start_time && this.end_time - this.start_time <= duration('8784h')\"\xa2\x01\n" +
+	"\x0fpack_time_range\x129end_time must be after start_time, at most 366 days later\x1aWthis.end_time > this.start_time && this.end_time - this.start_time <= duration('8784h')\"\x9e\x01\n" +
+	"\x0ePackCompliance\x12M\n" +
+	"\tframework\x18\x01 \x01(\x0e2#.pantherclaw.v1.ComplianceFrameworkB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\tframework\x12=\n" +
+	"\x06period\x18\x02 \x01(\v2\x1d.pantherclaw.v1.PackTimeRangeB\x06\xbaH\x03\xc8\x01\x01R\x06period\"\xa2\x01\n" +
 	"\fPackContents\x12\x1a\n" +
 	"\breceipts\x18\x01 \x01(\bR\breceipts\x12\x1a\n" +
 	"\bversions\x18\x02 \x01(\bR\bversions\x12\x1c\n" +
 	"\tapprovals\x18\x03 \x01(\bR\tapprovals\x12 \n" +
 	"\vcontainment\x18\x04 \x01(\bR\vcontainment\x12\x1a\n" +
-	"\bcaptures\x18\x05 \x01(\bR\bcaptures\"\xb8\x03\n" +
+	"\bcaptures\x18\x05 \x01(\bR\bcaptures\"\xfa\x03\n" +
 	"\x19CreateEvidencePackRequest\x12F\n" +
 	"\ftransactions\x18\x01 \x01(\v2 .pantherclaw.v1.PackTransactionsH\x00R\ftransactions\x12!\n" +
 	"\x06run_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x05runId\x12%\n" +
 	"\bagent_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\aagentId\x12>\n" +
 	"\n" +
 	"time_range\x18\x04 \x01(\v2\x1d.pantherclaw.v1.PackTimeRangeH\x00R\ttimeRange\x12B\n" +
-	"\x17automation_execution_id\x18\a \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x15automationExecutionId\x125\n" +
+	"\x17automation_execution_id\x18\a \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x15automationExecutionId\x12@\n" +
+	"\n" +
+	"compliance\x18\b \x01(\v2\x1e.pantherclaw.v1.PackComplianceH\x00R\n" +
+	"compliance\x125\n" +
 	"\x06within\x18\x05 \x01(\v2\x1d.pantherclaw.v1.PackTimeRangeR\x06within\x12>\n" +
 	"\ainclude\x18\x06 \x01(\v2\x1c.pantherclaw.v1.PackContentsB\x06\xbaH\x03\xc8\x01\x01R\aincludeB\x0e\n" +
 	"\x05scope\x12\x05\xbaH\x02\b\x01\"\x94\x04\n" +
@@ -3076,7 +3157,7 @@ func file_pantherclaw_v1_evidence_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_evidence_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_evidence_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_pantherclaw_v1_evidence_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_pantherclaw_v1_evidence_proto_goTypes = []any{
 	(LedgerIntegrityState)(0),            // 0: pantherclaw.v1.LedgerIntegrityState
 	(AnchorState)(0),                     // 1: pantherclaw.v1.AnchorState
@@ -3105,87 +3186,92 @@ var file_pantherclaw_v1_evidence_proto_goTypes = []any{
 	(*ReplayDecisionResponse)(nil),       // 24: pantherclaw.v1.ReplayDecisionResponse
 	(*PackTransactions)(nil),             // 25: pantherclaw.v1.PackTransactions
 	(*PackTimeRange)(nil),                // 26: pantherclaw.v1.PackTimeRange
-	(*PackContents)(nil),                 // 27: pantherclaw.v1.PackContents
-	(*CreateEvidencePackRequest)(nil),    // 28: pantherclaw.v1.CreateEvidencePackRequest
-	(*EvidencePack)(nil),                 // 29: pantherclaw.v1.EvidencePack
-	(*CreateEvidencePackResponse)(nil),   // 30: pantherclaw.v1.CreateEvidencePackResponse
-	(*GetEvidencePackRequest)(nil),       // 31: pantherclaw.v1.GetEvidencePackRequest
-	(*GetEvidencePackResponse)(nil),      // 32: pantherclaw.v1.GetEvidencePackResponse
-	(*ListEvidencePacksRequest)(nil),     // 33: pantherclaw.v1.ListEvidencePacksRequest
-	(*ListEvidencePacksResponse)(nil),    // 34: pantherclaw.v1.ListEvidencePacksResponse
-	(*DownloadEvidencePackRequest)(nil),  // 35: pantherclaw.v1.DownloadEvidencePackRequest
-	(*DownloadEvidencePackResponse)(nil), // 36: pantherclaw.v1.DownloadEvidencePackResponse
-	(*timestamppb.Timestamp)(nil),        // 37: google.protobuf.Timestamp
-	(*ChecklistItem)(nil),                // 38: pantherclaw.v1.ChecklistItem
-	(Decision)(0),                        // 39: pantherclaw.v1.Decision
+	(*PackCompliance)(nil),               // 27: pantherclaw.v1.PackCompliance
+	(*PackContents)(nil),                 // 28: pantherclaw.v1.PackContents
+	(*CreateEvidencePackRequest)(nil),    // 29: pantherclaw.v1.CreateEvidencePackRequest
+	(*EvidencePack)(nil),                 // 30: pantherclaw.v1.EvidencePack
+	(*CreateEvidencePackResponse)(nil),   // 31: pantherclaw.v1.CreateEvidencePackResponse
+	(*GetEvidencePackRequest)(nil),       // 32: pantherclaw.v1.GetEvidencePackRequest
+	(*GetEvidencePackResponse)(nil),      // 33: pantherclaw.v1.GetEvidencePackResponse
+	(*ListEvidencePacksRequest)(nil),     // 34: pantherclaw.v1.ListEvidencePacksRequest
+	(*ListEvidencePacksResponse)(nil),    // 35: pantherclaw.v1.ListEvidencePacksResponse
+	(*DownloadEvidencePackRequest)(nil),  // 36: pantherclaw.v1.DownloadEvidencePackRequest
+	(*DownloadEvidencePackResponse)(nil), // 37: pantherclaw.v1.DownloadEvidencePackResponse
+	(*timestamppb.Timestamp)(nil),        // 38: google.protobuf.Timestamp
+	(*ChecklistItem)(nil),                // 39: pantherclaw.v1.ChecklistItem
+	(Decision)(0),                        // 40: pantherclaw.v1.Decision
+	(ComplianceFramework)(0),             // 41: pantherclaw.v1.ComplianceFramework
 }
 var file_pantherclaw_v1_evidence_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.LedgerIntegrity.state:type_name -> pantherclaw.v1.LedgerIntegrityState
-	37, // 1: pantherclaw.v1.LedgerIntegrity.fail_time:type_name -> google.protobuf.Timestamp
-	37, // 2: pantherclaw.v1.LedgerIntegrity.verify_time:type_name -> google.protobuf.Timestamp
+	38, // 1: pantherclaw.v1.LedgerIntegrity.fail_time:type_name -> google.protobuf.Timestamp
+	38, // 2: pantherclaw.v1.LedgerIntegrity.verify_time:type_name -> google.protobuf.Timestamp
 	1,  // 3: pantherclaw.v1.LedgerIntegrity.anchor_state:type_name -> pantherclaw.v1.AnchorState
-	37, // 4: pantherclaw.v1.LedgerIntegrity.anchor_period:type_name -> google.protobuf.Timestamp
-	37, // 5: pantherclaw.v1.Checkpoint.create_time:type_name -> google.protobuf.Timestamp
+	38, // 4: pantherclaw.v1.LedgerIntegrity.anchor_period:type_name -> google.protobuf.Timestamp
+	38, // 5: pantherclaw.v1.Checkpoint.create_time:type_name -> google.protobuf.Timestamp
 	4,  // 6: pantherclaw.v1.ListCheckpointsResponse.checkpoints:type_name -> pantherclaw.v1.Checkpoint
 	3,  // 7: pantherclaw.v1.ListCheckpointsResponse.integrity:type_name -> pantherclaw.v1.LedgerIntegrity
 	4,  // 8: pantherclaw.v1.GetCheckpointResponse.checkpoint:type_name -> pantherclaw.v1.Checkpoint
 	13, // 9: pantherclaw.v1.ExportBundleRequest.transactions:type_name -> pantherclaw.v1.BundleTransactions
 	15, // 10: pantherclaw.v1.ExportBundleRequest.range:type_name -> pantherclaw.v1.BundleRange
 	14, // 11: pantherclaw.v1.ExportBundleRequest.closures:type_name -> pantherclaw.v1.BundleClosures
-	37, // 12: pantherclaw.v1.Anchor.period:type_name -> google.protobuf.Timestamp
+	38, // 12: pantherclaw.v1.Anchor.period:type_name -> google.protobuf.Timestamp
 	1,  // 13: pantherclaw.v1.Anchor.state:type_name -> pantherclaw.v1.AnchorState
-	37, // 14: pantherclaw.v1.Anchor.create_time:type_name -> google.protobuf.Timestamp
-	37, // 15: pantherclaw.v1.Anchor.anchor_time:type_name -> google.protobuf.Timestamp
+	38, // 14: pantherclaw.v1.Anchor.create_time:type_name -> google.protobuf.Timestamp
+	38, // 15: pantherclaw.v1.Anchor.anchor_time:type_name -> google.protobuf.Timestamp
 	18, // 16: pantherclaw.v1.ListAnchorsResponse.anchors:type_name -> pantherclaw.v1.Anchor
-	38, // 17: pantherclaw.v1.ReplayDifference.original:type_name -> pantherclaw.v1.ChecklistItem
-	38, // 18: pantherclaw.v1.ReplayDifference.replayed:type_name -> pantherclaw.v1.ChecklistItem
+	39, // 17: pantherclaw.v1.ReplayDifference.original:type_name -> pantherclaw.v1.ChecklistItem
+	39, // 18: pantherclaw.v1.ReplayDifference.replayed:type_name -> pantherclaw.v1.ChecklistItem
 	22, // 19: pantherclaw.v1.ReplayDecisionResponse.incomplete:type_name -> pantherclaw.v1.ReplayLimitation
-	39, // 20: pantherclaw.v1.ReplayDecisionResponse.decision:type_name -> pantherclaw.v1.Decision
-	38, // 21: pantherclaw.v1.ReplayDecisionResponse.checklist:type_name -> pantherclaw.v1.ChecklistItem
-	39, // 22: pantherclaw.v1.ReplayDecisionResponse.original_decision:type_name -> pantherclaw.v1.Decision
-	38, // 23: pantherclaw.v1.ReplayDecisionResponse.original_checklist:type_name -> pantherclaw.v1.ChecklistItem
+	40, // 20: pantherclaw.v1.ReplayDecisionResponse.decision:type_name -> pantherclaw.v1.Decision
+	39, // 21: pantherclaw.v1.ReplayDecisionResponse.checklist:type_name -> pantherclaw.v1.ChecklistItem
+	40, // 22: pantherclaw.v1.ReplayDecisionResponse.original_decision:type_name -> pantherclaw.v1.Decision
+	39, // 23: pantherclaw.v1.ReplayDecisionResponse.original_checklist:type_name -> pantherclaw.v1.ChecklistItem
 	23, // 24: pantherclaw.v1.ReplayDecisionResponse.differences:type_name -> pantherclaw.v1.ReplayDifference
-	37, // 25: pantherclaw.v1.PackTimeRange.start_time:type_name -> google.protobuf.Timestamp
-	37, // 26: pantherclaw.v1.PackTimeRange.end_time:type_name -> google.protobuf.Timestamp
-	25, // 27: pantherclaw.v1.CreateEvidencePackRequest.transactions:type_name -> pantherclaw.v1.PackTransactions
-	26, // 28: pantherclaw.v1.CreateEvidencePackRequest.time_range:type_name -> pantherclaw.v1.PackTimeRange
-	26, // 29: pantherclaw.v1.CreateEvidencePackRequest.within:type_name -> pantherclaw.v1.PackTimeRange
-	27, // 30: pantherclaw.v1.CreateEvidencePackRequest.include:type_name -> pantherclaw.v1.PackContents
-	2,  // 31: pantherclaw.v1.EvidencePack.state:type_name -> pantherclaw.v1.EvidencePackState
-	27, // 32: pantherclaw.v1.EvidencePack.include:type_name -> pantherclaw.v1.PackContents
-	37, // 33: pantherclaw.v1.EvidencePack.create_time:type_name -> google.protobuf.Timestamp
-	37, // 34: pantherclaw.v1.EvidencePack.ready_time:type_name -> google.protobuf.Timestamp
-	37, // 35: pantherclaw.v1.EvidencePack.expire_time:type_name -> google.protobuf.Timestamp
-	29, // 36: pantherclaw.v1.CreateEvidencePackResponse.pack:type_name -> pantherclaw.v1.EvidencePack
-	29, // 37: pantherclaw.v1.GetEvidencePackResponse.pack:type_name -> pantherclaw.v1.EvidencePack
-	29, // 38: pantherclaw.v1.ListEvidencePacksResponse.packs:type_name -> pantherclaw.v1.EvidencePack
-	5,  // 39: pantherclaw.v1.EvidenceService.ListCheckpoints:input_type -> pantherclaw.v1.ListCheckpointsRequest
-	7,  // 40: pantherclaw.v1.EvidenceService.GetCheckpoint:input_type -> pantherclaw.v1.GetCheckpointRequest
-	9,  // 41: pantherclaw.v1.EvidenceService.GetInclusionProof:input_type -> pantherclaw.v1.GetInclusionProofRequest
-	11, // 42: pantherclaw.v1.EvidenceService.GetConsistencyProof:input_type -> pantherclaw.v1.GetConsistencyProofRequest
-	16, // 43: pantherclaw.v1.EvidenceService.ExportBundle:input_type -> pantherclaw.v1.ExportBundleRequest
-	19, // 44: pantherclaw.v1.EvidenceService.ListAnchors:input_type -> pantherclaw.v1.ListAnchorsRequest
-	21, // 45: pantherclaw.v1.EvidenceService.ReplayDecision:input_type -> pantherclaw.v1.ReplayDecisionRequest
-	28, // 46: pantherclaw.v1.EvidenceService.CreateEvidencePack:input_type -> pantherclaw.v1.CreateEvidencePackRequest
-	31, // 47: pantherclaw.v1.EvidenceService.GetEvidencePack:input_type -> pantherclaw.v1.GetEvidencePackRequest
-	33, // 48: pantherclaw.v1.EvidenceService.ListEvidencePacks:input_type -> pantherclaw.v1.ListEvidencePacksRequest
-	35, // 49: pantherclaw.v1.EvidenceService.DownloadEvidencePack:input_type -> pantherclaw.v1.DownloadEvidencePackRequest
-	6,  // 50: pantherclaw.v1.EvidenceService.ListCheckpoints:output_type -> pantherclaw.v1.ListCheckpointsResponse
-	8,  // 51: pantherclaw.v1.EvidenceService.GetCheckpoint:output_type -> pantherclaw.v1.GetCheckpointResponse
-	10, // 52: pantherclaw.v1.EvidenceService.GetInclusionProof:output_type -> pantherclaw.v1.GetInclusionProofResponse
-	12, // 53: pantherclaw.v1.EvidenceService.GetConsistencyProof:output_type -> pantherclaw.v1.GetConsistencyProofResponse
-	17, // 54: pantherclaw.v1.EvidenceService.ExportBundle:output_type -> pantherclaw.v1.ExportBundleResponse
-	20, // 55: pantherclaw.v1.EvidenceService.ListAnchors:output_type -> pantherclaw.v1.ListAnchorsResponse
-	24, // 56: pantherclaw.v1.EvidenceService.ReplayDecision:output_type -> pantherclaw.v1.ReplayDecisionResponse
-	30, // 57: pantherclaw.v1.EvidenceService.CreateEvidencePack:output_type -> pantherclaw.v1.CreateEvidencePackResponse
-	32, // 58: pantherclaw.v1.EvidenceService.GetEvidencePack:output_type -> pantherclaw.v1.GetEvidencePackResponse
-	34, // 59: pantherclaw.v1.EvidenceService.ListEvidencePacks:output_type -> pantherclaw.v1.ListEvidencePacksResponse
-	36, // 60: pantherclaw.v1.EvidenceService.DownloadEvidencePack:output_type -> pantherclaw.v1.DownloadEvidencePackResponse
-	50, // [50:61] is the sub-list for method output_type
-	39, // [39:50] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	38, // 25: pantherclaw.v1.PackTimeRange.start_time:type_name -> google.protobuf.Timestamp
+	38, // 26: pantherclaw.v1.PackTimeRange.end_time:type_name -> google.protobuf.Timestamp
+	41, // 27: pantherclaw.v1.PackCompliance.framework:type_name -> pantherclaw.v1.ComplianceFramework
+	26, // 28: pantherclaw.v1.PackCompliance.period:type_name -> pantherclaw.v1.PackTimeRange
+	25, // 29: pantherclaw.v1.CreateEvidencePackRequest.transactions:type_name -> pantherclaw.v1.PackTransactions
+	26, // 30: pantherclaw.v1.CreateEvidencePackRequest.time_range:type_name -> pantherclaw.v1.PackTimeRange
+	27, // 31: pantherclaw.v1.CreateEvidencePackRequest.compliance:type_name -> pantherclaw.v1.PackCompliance
+	26, // 32: pantherclaw.v1.CreateEvidencePackRequest.within:type_name -> pantherclaw.v1.PackTimeRange
+	28, // 33: pantherclaw.v1.CreateEvidencePackRequest.include:type_name -> pantherclaw.v1.PackContents
+	2,  // 34: pantherclaw.v1.EvidencePack.state:type_name -> pantherclaw.v1.EvidencePackState
+	28, // 35: pantherclaw.v1.EvidencePack.include:type_name -> pantherclaw.v1.PackContents
+	38, // 36: pantherclaw.v1.EvidencePack.create_time:type_name -> google.protobuf.Timestamp
+	38, // 37: pantherclaw.v1.EvidencePack.ready_time:type_name -> google.protobuf.Timestamp
+	38, // 38: pantherclaw.v1.EvidencePack.expire_time:type_name -> google.protobuf.Timestamp
+	30, // 39: pantherclaw.v1.CreateEvidencePackResponse.pack:type_name -> pantherclaw.v1.EvidencePack
+	30, // 40: pantherclaw.v1.GetEvidencePackResponse.pack:type_name -> pantherclaw.v1.EvidencePack
+	30, // 41: pantherclaw.v1.ListEvidencePacksResponse.packs:type_name -> pantherclaw.v1.EvidencePack
+	5,  // 42: pantherclaw.v1.EvidenceService.ListCheckpoints:input_type -> pantherclaw.v1.ListCheckpointsRequest
+	7,  // 43: pantherclaw.v1.EvidenceService.GetCheckpoint:input_type -> pantherclaw.v1.GetCheckpointRequest
+	9,  // 44: pantherclaw.v1.EvidenceService.GetInclusionProof:input_type -> pantherclaw.v1.GetInclusionProofRequest
+	11, // 45: pantherclaw.v1.EvidenceService.GetConsistencyProof:input_type -> pantherclaw.v1.GetConsistencyProofRequest
+	16, // 46: pantherclaw.v1.EvidenceService.ExportBundle:input_type -> pantherclaw.v1.ExportBundleRequest
+	19, // 47: pantherclaw.v1.EvidenceService.ListAnchors:input_type -> pantherclaw.v1.ListAnchorsRequest
+	21, // 48: pantherclaw.v1.EvidenceService.ReplayDecision:input_type -> pantherclaw.v1.ReplayDecisionRequest
+	29, // 49: pantherclaw.v1.EvidenceService.CreateEvidencePack:input_type -> pantherclaw.v1.CreateEvidencePackRequest
+	32, // 50: pantherclaw.v1.EvidenceService.GetEvidencePack:input_type -> pantherclaw.v1.GetEvidencePackRequest
+	34, // 51: pantherclaw.v1.EvidenceService.ListEvidencePacks:input_type -> pantherclaw.v1.ListEvidencePacksRequest
+	36, // 52: pantherclaw.v1.EvidenceService.DownloadEvidencePack:input_type -> pantherclaw.v1.DownloadEvidencePackRequest
+	6,  // 53: pantherclaw.v1.EvidenceService.ListCheckpoints:output_type -> pantherclaw.v1.ListCheckpointsResponse
+	8,  // 54: pantherclaw.v1.EvidenceService.GetCheckpoint:output_type -> pantherclaw.v1.GetCheckpointResponse
+	10, // 55: pantherclaw.v1.EvidenceService.GetInclusionProof:output_type -> pantherclaw.v1.GetInclusionProofResponse
+	12, // 56: pantherclaw.v1.EvidenceService.GetConsistencyProof:output_type -> pantherclaw.v1.GetConsistencyProofResponse
+	17, // 57: pantherclaw.v1.EvidenceService.ExportBundle:output_type -> pantherclaw.v1.ExportBundleResponse
+	20, // 58: pantherclaw.v1.EvidenceService.ListAnchors:output_type -> pantherclaw.v1.ListAnchorsResponse
+	24, // 59: pantherclaw.v1.EvidenceService.ReplayDecision:output_type -> pantherclaw.v1.ReplayDecisionResponse
+	31, // 60: pantherclaw.v1.EvidenceService.CreateEvidencePack:output_type -> pantherclaw.v1.CreateEvidencePackResponse
+	33, // 61: pantherclaw.v1.EvidenceService.GetEvidencePack:output_type -> pantherclaw.v1.GetEvidencePackResponse
+	35, // 62: pantherclaw.v1.EvidenceService.ListEvidencePacks:output_type -> pantherclaw.v1.ListEvidencePacksResponse
+	37, // 63: pantherclaw.v1.EvidenceService.DownloadEvidencePack:output_type -> pantherclaw.v1.DownloadEvidencePackResponse
+	53, // [53:64] is the sub-list for method output_type
+	42, // [42:53] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_evidence_proto_init() }
@@ -3194,17 +3280,19 @@ func file_pantherclaw_v1_evidence_proto_init() {
 		return
 	}
 	file_pantherclaw_v1_authority_proto_init()
+	file_pantherclaw_v1_compliance_proto_init()
 	file_pantherclaw_v1_evidence_proto_msgTypes[13].OneofWrappers = []any{
 		(*ExportBundleRequest_Transactions)(nil),
 		(*ExportBundleRequest_Range)(nil),
 		(*ExportBundleRequest_Closures)(nil),
 	}
-	file_pantherclaw_v1_evidence_proto_msgTypes[25].OneofWrappers = []any{
+	file_pantherclaw_v1_evidence_proto_msgTypes[26].OneofWrappers = []any{
 		(*CreateEvidencePackRequest_Transactions)(nil),
 		(*CreateEvidencePackRequest_RunId)(nil),
 		(*CreateEvidencePackRequest_AgentId)(nil),
 		(*CreateEvidencePackRequest_TimeRange)(nil),
 		(*CreateEvidencePackRequest_AutomationExecutionId)(nil),
+		(*CreateEvidencePackRequest_Compliance)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -3212,7 +3300,7 @@ func file_pantherclaw_v1_evidence_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_evidence_proto_rawDesc), len(file_pantherclaw_v1_evidence_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   34,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

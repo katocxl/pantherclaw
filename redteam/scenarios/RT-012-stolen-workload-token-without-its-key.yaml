@@ -7,6 +7,9 @@ tier: community
 attacker: A4
 threats: [T-032]
 rules: [HR-090]
+asi: [ASI03]
+asi_why:
+  ASI03: "Identity and privilege abuse (ASI03): a stolen workload token is used without the key it is bound to."
 requires: [github]
 harness_only: false
 steps:

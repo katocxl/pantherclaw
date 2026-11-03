@@ -713,6 +713,9 @@ func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
+	if conn.GetModelRelay() {
+		timeout = ModelCallTimeout // a client's timeout spans the whole stream
+	}
 	c, err := egress.NewClient(conn.GetBaseUrl(), timeout, conn.GetMaxResponseBytes(), e.allowed)
 	if err != nil {
 		return clientEntry{}, err

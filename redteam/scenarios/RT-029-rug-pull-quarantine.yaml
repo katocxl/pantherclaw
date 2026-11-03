@@ -7,6 +7,9 @@ tier: business
 attacker: A3
 threats: [T-019, T-088]
 rules: [HR-081]
+asi: [ASI04]
+asi_why:
+  ASI04: "Agentic supply chain (ASI04): a pinned tool package is swapped after review (a rug pull)."
 requires: [mcp]
 harness_only: true
 steps:

@@ -167,6 +167,7 @@ func (a *app) clients() (clients, error) {
 			transactions:    pantherclawv1connect.NewTransactionServiceClient(c),
 			reconciliations: pantherclawv1connect.NewReconciliationServiceClient(c),
 			evidence:        pantherclawv1connect.NewEvidenceServiceClient(c),
+			compliance:      pantherclawv1connect.NewComplianceServiceClient(c),
 		},
 		m8gClients:        m8gClients{github: pantherclawv1connect.NewGitHubServiceClient(c)},
 		m11RolloutClients: m11RolloutClients{rollouts: pantherclawv1connect.NewPolicyRolloutServiceClient(c)},

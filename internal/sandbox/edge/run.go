@@ -69,8 +69,14 @@ type Config struct {
 	// read for every request.
 	BindingFile string `json:"binding_file,omitzero"`
 	// Placeholder is the value of the connector's credential variables
-	// (connector mode): not reported when stripped.
+	// (connector mode), or of the agent's model key variables (a campaign):
+	// not reported when stripped.
 	Placeholder string `json:"placeholder,omitzero"`
+	// ModelHost and ModelConnection, set for a campaign (G0 M25 D313), map
+	// the one model host to the gateway's model face for that relay
+	// connection, with streaming. Sandbox mode only.
+	ModelHost       string `json:"model_host,omitzero"`
+	ModelConnection string `json:"model_connection,omitzero"`
 }
 
 // ReadConfig reads a configuration file strictly.
@@ -86,6 +92,8 @@ func ReadConfig(path string) (Config, error) {
 	switch {
 	case c.Format != ConfigFormat:
 		return Config{}, fmt.Errorf("edge: format %q, want %s", c.Format, ConfigFormat)
+	case c.Mode != ModeSandbox && (c.ModelHost != "" || c.ModelConnection != ""):
+		return Config{}, errors.New("edge: only a sandbox's edge has a model route")
 	case c.Mode == ModeConnector && (c.Listen == "" || c.Subnet == "" || c.BindingFile == "" || c.KeyFile != "" || c.TokenFile != ""):
 		return Config{}, errors.New("edge: a connector's edge needs listen, subnet and binding_file, and has no workload key or token")
 	case c.Mode == ModeConnector:
@@ -145,6 +153,7 @@ func Run(ctx context.Context, c Config, out io.Writer, log *slog.Logger) error {
 		o.Binding = read(c.BindingFile)
 		o.Placeholder = c.Placeholder
 	default:
+		o.ModelHost, o.ModelConnection, o.Placeholder = c.ModelHost, c.ModelConnection, c.Placeholder
 		kf, err := workloadclient.ReadKeyFile(c.KeyFile)
 		if err != nil {
 			return err

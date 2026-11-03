@@ -11,12 +11,18 @@ const (
 	ServingCircuitOpen      = "CIRCUIT_OPEN"
 	ServingDriftQuarantined = "DRIFT_QUARANTINED"
 	ServingNotLoaded        = "NOT_LOADED"
+	// ServingLocalRelay is a campaign's model relay: the model face serves
+	// it and it has no package to load (G0 M25 D313, D525 L4).
+	ServingLocalRelay = "LOCAL_RELAY"
 )
 
-// ServingState says whether the engine serves conn now: its circuit is
-// open, the last drift check of its revision found a drifted tool, its
-// package did not load, or it is served. It only reads.
+// ServingState says whether the engine serves conn now: it is a model relay,
+// its circuit is open, the last drift check of its revision found a drifted
+// tool, its package did not load, or it is served. It only reads.
 func (e *Engine) ServingState(conn *control.Connection) string {
+	if IsModelRelay(conn) {
+		return ServingLocalRelay
+	}
 	if conn.Package == nil {
 		return ServingNotLoaded
 	}

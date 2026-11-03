@@ -235,6 +235,8 @@ type GatewayHandler struct {
 	inventories Inventories
 	// cards signs the A2A cards gateways serve (G0 M24 D232).
 	cards CardSigner
+	// modelCalls decides the model face's calls (G0 M25 D313).
+	modelCalls ModelCalls
 }
 
 // NewGateway returns the GatewayService handler.

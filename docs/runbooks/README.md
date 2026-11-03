@@ -52,3 +52,5 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [pclaw-mcp-catalog.md](pclaw-mcp-catalog.md) | M24 | `pclaw mcp catalog`: the organization's approved MCP servers, modes, revoke and export |
 | [pclaw-mcp-inspect.md](pclaw-mcp-inspect.md) | M24 | `pclaw mcp inspect`: run an MCP server in the sandbox on your own machine and check it |
 | [device-scan.md](device-scan.md) | M24 | Scheduled metadata scans on managed devices with Intune or Jamf |
+| [pclaw-compliance.md](pclaw-compliance.md) | M25 | `pclaw compliance`: framework coverage, signed compliance reports with evidence and gaps, and offline verification |
+| [pclaw-redteam-campaign.md](pclaw-redteam-campaign.md) | M25 | `pclaw redteam campaign run`: attack campaigns against a range twin, with your model key in a local relay |

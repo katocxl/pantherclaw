@@ -7,6 +7,9 @@ tier: business
 attacker: A1
 threats: [T-011]
 rules: [HR-048, HR-049]
+asi: [ASI02]
+asi_why:
+  ASI02: "Tool misuse (ASI02): the agent runs refunds concurrently to spend past its grant's budget."
 requires: [payments]
 harness_only: false
 steps:

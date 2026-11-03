@@ -7,6 +7,9 @@ tier: business
 attacker: A1
 threats: [T-148]
 rules: [HR-324, HR-326]
+asi: [ASI07]
+asi_why:
+  ASI07: "Insecure inter-agent communication (ASI07): a peer agent asked by a requester tries to act past the requester's grant."
 requires: [a2a.send, payments]
 harness_only: false
 steps:

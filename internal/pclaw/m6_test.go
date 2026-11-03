@@ -76,6 +76,15 @@ func TestM6ConnectionCommands(t *testing.T) {
 		c.GetDefaultMode() != pantherclawv1.RouteMode_ROUTE_MODE_ENFORCE || c.GetDestinationClass() != pantherclawv1.DestinationClass_DESTINATION_CLASS_UNSPECIFIED {
 		t.Fatalf("connection create = %d %q, request %v", code, errs, c)
 	}
+	if c.GetModelRelay() || c.GetSimulated() {
+		t.Fatalf("a plain connection asked for a model relay: %v", c)
+	}
+	// A campaign's model relay (G0 M25 D313).
+	code, _, errs = run(t, env, "connection", "create", "relay", "--kind", "http", "--gateway", "0192aaaa-bbbb-7ccc-8ddd-000000000001",
+		"--package", "model-relay", "--base-url", "http://127.0.0.1:9911", "--access", "none", "--simulated", "--model-relay")
+	if c = rc.create; code != 0 || !c.GetModelRelay() || !c.GetSimulated() {
+		t.Fatalf("model relay create = %d %q, request %v", code, errs, c)
+	}
 	if code, _, errs := run(t, env, "connection", "create", "x", "--kind", "ftp"); code == 0 || !strings.Contains(errs, "--kind") {
 		t.Fatalf("bad kind = %d %q", code, errs)
 	}
