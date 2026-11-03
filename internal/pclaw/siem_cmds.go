@@ -20,10 +20,9 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
-// `pclaw siem forward` (founder decision FD8, D660; F950, HR-662) receives
-// the SIEM export, verifies each batch and writes its OCSF events as NDJSON
-// to a file or stdout, for a SIEM agent that reads files (Sentinel's Azure
-// Monitor Agent, Wazuh). It needs no PantherClaw login: the JWKS is public
+// `pclaw siem forward` (F950, HR-662) receives the SIEM export, verifies
+// each batch and writes its OCSF events as NDJSON to a file or stdout, for
+// a SIEM agent that reads files (Sentinel's Azure Monitor Agent, Wazuh). It needs no PantherClaw login: the JWKS is public
 // and the secrets come from files or the environment, never an argument.
 // Diagnostics go to stderr, so `--out -` leaves stdout to the events.
 

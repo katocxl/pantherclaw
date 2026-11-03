@@ -1,6 +1,6 @@
 # Runbook — `pclaw siem forward`
 
-**Milestone:** M27 follow-up (founder decision FD8, D660; F950, HR-662, T-284). **Audience:** SOC teams. **Edition:** Business, as the [SIEM export](siem-export.md) it receives.
+**Milestone:** M27 follow-up (F950, HR-662, T-284). **Audience:** SOC teams. **Edition:** Business, as the [SIEM export](siem-export.md) it receives.
 
 `pclaw siem forward` receives PantherClaw's SIEM export, verifies each batch and appends each of its OCSF events as one line to a file, or writes it to stdout. A SIEM agent that reads files then takes the events in: Sentinel's Azure Monitor Agent as a custom text log, Wazuh's `localfile` as JSON. It is how the [Sentinel](../../integrations/siem/sentinel/README.md) and [Wazuh](../../integrations/siem/wazuh/README.md) packs get one event per line.
 

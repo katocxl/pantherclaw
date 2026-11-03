@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package siemforward is `pclaw siem forward` (founder decision FD8, D660;
-// F950, HR-662, T-284): a receiver for PantherClaw's SIEM export that runs
-// next to a SIEM agent which can only read files. It accepts a batch only
+// Package siemforward is `pclaw siem forward` (F950, HR-662, T-284): a
+// receiver for PantherClaw's SIEM export that runs next to a SIEM agent
+// which can only read files. It accepts a batch only
 // when every configured signature scheme verifies it: the HMAC `v1,`
 // signature with one of at most two secrets, and the Ed25519 `v1a,`
 // signature with a key of the org's webhook JWKS, both over
@@ -35,7 +35,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/siem/ocsf"
 )
 
-// Limits and defaults (D660).
+// Limits and defaults.
 const (
 	// DefaultListen is where the forwarder listens unless told otherwise:
 	// loopback, so plain HTTP is allowed there.
