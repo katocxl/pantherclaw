@@ -54,10 +54,14 @@ type Compiled struct {
 	// Digest is the hex SHA-256 of the rule's content; PackVersion is the
 	// built-in pack's version (empty for a custom rule).
 	Digest, PackVersion string
-	match               *celenv.Program
-	steps               []*celenv.Program
-	window, horizon     time.Duration
-	within              time.Duration
+	// Confirmed reports a custom rule version whose content a second person
+	// confirmed (HR-666): its signals are RULE_MATCH. Only the engine sets
+	// it, from the rule's open confirmation.
+	Confirmed       bool
+	match           *celenv.Program
+	steps           []*celenv.Program
+	window, horizon time.Duration
+	within          time.Duration
 }
 
 // Compile compiles r's conditions in env.
