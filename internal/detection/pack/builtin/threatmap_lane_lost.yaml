@@ -14,6 +14,7 @@ basis: OBSERVED
 techniques_none: "Reports a drop in this organization's own coverage, not an attacker technique."
 edition: business
 on: [audit.threatmap.lane_lost]
+group: target
 tests:
   - name: lane dropped
     fires: true
