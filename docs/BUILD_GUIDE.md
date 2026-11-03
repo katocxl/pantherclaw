@@ -501,7 +501,7 @@ Each milestone starts with a G0 brief in [GATES_AND_REVIEW.md](security/GATES_AN
 ```
 M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M12 → v0.1.0 preview
    → M11.1 → M10 → M11 → M14 → UI → M13 → v1.0 → M15 → M16 → M17 → M18 → M19 → M20 → M21
-   → M22 → M23 → M24 → M25 → M26 → M27
+   → M22 → M23 → M24 → M25 → M26 → M27 → M28
 ```
 
 M15 and M16 are post-1.0 milestones (founder, 2026-10-29: coding continues while the v1.0 testing steps are postponed); M15 lands before M16 ([G0 M15](g0/M15.md), founder decision F9).
@@ -509,6 +509,7 @@ M19 is a post-1.0 milestone (founder, 2026-10-29: coding continues while the v1.
 M21 is a post-1.0 milestone that lands after M20, in migration-number order ([G0 M21](g0/M21.md)).
 M22, M23 and M24 are post-1.0 milestones built in parallel as one wave (founder, 2026-10-31: all coding comes before live testing and founder steps); they land in migration-number order.
 M25, M26 and M27 are the second such wave: they build in parallel after M24 has landed, and land in migration-number order.
+M28 is a post-1.0 milestone that lands after M27 ([G0 M28](g0/M28.md)); its streams build in parallel and land as one exit pull request.
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -813,9 +814,18 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Content signals** (Business, [ADR-0050](adr/0050-content-signals-boundary-amendment.md), V5, a written amendment to F789): opt-in and restrict-only, OFF then WATCHING then ACTIVE by step-up, failing closed as a hold in ACTIVE, with no safety claim. Findings keep kind and location, never value. Upgrade gateways before ACTIVE.
 - **Playbooks** (Team): six in `hub/`, a draft on install; none contains, each opens a case for a person.
 - **SIEM packs** (Business): six in `integrations/siem/`, Apache-2.0, on OCSF export, tested offline on golden samples, with no vendor engine run and no store certification.
-- **MCP server** (Team, founder decision H9): `pclaw mcp self`, four reads, the Investigator role admitted only on those reads, and the server's audit of each. The assistant is parked.
+- **MCP server** (Team, founder decision H9): `pclaw mcp self`, five reads (the fifth, `technique_coverage`, from M28), the Investigator role admitted only on those reads, and the server's audit of each. The assistant is parked.
 - **Console** (private stream): the baseline view.
 - Migrations `00300`–`00303` (S27a `00300`, `00301`, `00303`; S27b `00302`; `00304`–`00309` spare).
+
+### M28 — Threat map
+**HR:** HR-680..689 · **F:** F960–F976 · **ADR:** 0055 · **G0:** [g0/M28.md](g0/M28.md).
+- **Catalogue and mappings** (founder decision Q1): ATLAS and ATT&CK Enterprise in full, pinned by sha256, ids and names only. Every technique is mapped, Outside PantherClaw, or No PantherClaw control yet; a closure test fails the build otherwise.
+- **Lanes** ([ADR-0055](adr/0055-mitre-threat-map.md)): Prevent, Detect, Respond and Test from PantherClaw's own records, with a reason and a fix on every gap. The organization's own rules are stated, never evidence; tests never raise a status; no score.
+- **Signals and exports:** alerts, incidents, cases and range results carry techniques into OCSF `attacks[]` and the six SIEM packs; a signed `threat_map` pack re-derived offline; an ATT&CK Navigator layer; `pclaw threats`; the MCP tool `technique_coverage` (HR-655..657 amended).
+- **Editions** (founder decisions Q2 and 2026-11-03): matrix, technique pages, gaps and labels in the console on every edition; API key and token reads, exports, MCP and posture gaps on Team; history and drop alerts on Business.
+- **Console** (private stream): Evidence › Threat map and technique chips.
+- Migrations `00320`–`00322` (`00323`–`00329` spare); new permission `threatmap.read` (Go only).
 
 ---
 
