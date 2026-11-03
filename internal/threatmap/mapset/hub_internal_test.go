@@ -72,6 +72,8 @@ func hubTable(t *testing.T) HubTable {
 			}
 			slices.Sort(ids)
 			table.Playbooks = append(table.Playbooks, HubPlaybook{Name: it.Entry.Name, Rules: slices.Compact(ids)})
+		case hubdomain.KindPolicyTemplate, hubdomain.KindRangeScenario, hubdomain.KindToolPackage:
+			// Name no technique (D714b: rules and playbooks only).
 		}
 	}
 	slices.SortFunc(table.Rules, func(a, b HubRule) int { return strings.Compare(a.ID, b.ID) })
