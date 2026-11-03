@@ -2036,8 +2036,8 @@ type RecordExecutionRequest struct {
 	// scan_incomplete (not_scanned).
 	ContentScan ContentScan `protobuf:"varint,11,opt,name=content_scan,json=contentScan,proto3,enum=pantherclaw.v1.ContentScan" json:"content_scan,omitempty"`
 	// The credential of the permit's connection, when the gateway opened it
-	// for this dispatch, an App key it minted with included (HR-660); unset
-	// otherwise. A connector's egress credential is not named. The Authority
+	// for this dispatch, or opened the pool this dispatch reused, an App key
+	// it minted with included (HR-660); unset otherwise. A connector's egress credential is not named. The Authority
 	// accepts it only when it is a version of the permit's connection's
 	// credential, and then names it on the receipt.
 	CredentialUsed *CredentialUsed `protobuf:"bytes,12,opt,name=credential_used,json=credentialUsed,proto3" json:"credential_used,omitempty"`

@@ -510,8 +510,8 @@ message RecordExecutionRequest {
   // scan_incomplete (not_scanned).
   ContentScan content_scan = 11;
   // The credential of the permit's connection, when the gateway opened it
-  // for this dispatch, an App key it minted with included (HR-660); unset
-  // otherwise. A connector's egress credential is not named. The Authority
+  // for this dispatch, or opened the pool this dispatch reused, an App key
+  // it minted with included (HR-660); unset otherwise. A connector's egress credential is not named. The Authority
   // accepts it only when it is a version of the permit's connection's
   // credential, and then names it on the receipt.
   CredentialUsed credential_used = 12;

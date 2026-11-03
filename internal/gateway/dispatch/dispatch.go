@@ -1153,10 +1153,10 @@ func (e *Engine) openCredential(ctx context.Context, conn *control.Connection) (
 // credentialUseKey carries a dispatch's credentialUse in its context.
 type credentialUseKey struct{}
 
-// credentialUse is the sealed credential a dispatch opened (HR-660):
-// the dispatch's own connection's, by id and version, never its value.
-// Opens of another connection's credential are not its own and are not
-// kept.
+// credentialUse is the sealed credential of the dispatch's own connection,
+// when the gateway opened it for this dispatch, or opened the pool this
+// dispatch reused (HR-660): by id and version, never its value. Opens of
+// another connection's credential are not its own and are not kept.
 type credentialUse struct {
 	conn    string
 	mu      sync.Mutex
@@ -1191,8 +1191,9 @@ func usedCredentialVersion(ctx context.Context, conn, id string, version int32) 
 	u.id, u.version = id, version
 }
 
-// credentialUsed is what the dispatch in ctx opened, for its record; nil
-// when it opened nothing.
+// credentialUsed is the credential the gateway opened for the dispatch in
+// ctx, or opened the pool this dispatch reused, for its record; nil when
+// there is none.
 func credentialUsed(ctx context.Context) *pb.CredentialUsed {
 	u, ok := ctx.Value(credentialUseKey{}).(*credentialUse)
 	if !ok {

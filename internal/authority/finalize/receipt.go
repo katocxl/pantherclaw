@@ -324,8 +324,9 @@ type Execution struct {
 	// csdomain.ScanScanned and the rest, or empty from a gateway before M27.
 	ContentScan string
 	// Credential is the credential of the permit's connection, when the
-	// gateway opened it for the dispatch (HR-660); nil otherwise. The store
-	// accepts it only as a version of that connection's credential.
+	// gateway opened it for this dispatch, or opened the pool this dispatch
+	// reused (HR-660); nil otherwise. The store accepts it only as a version
+	// of that connection's credential.
 	Credential *CredentialUsed
 }
 
