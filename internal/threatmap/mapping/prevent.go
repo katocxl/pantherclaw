@@ -76,8 +76,8 @@ var Prevent = []PreventControl{
 	{
 		ID: "prevent.grant_scope", Title: "Grants name the operations, targets and limits an agent may use", Surface: SurfaceAuthority,
 		ReasonCodes: []string{"NO_GRANT", "OPERATION_NOT_GRANTED", "TARGET_NOT_GRANTED", "OUTSIDE_GUARDRAIL", "GRANT_LIMIT_EXCEEDED"},
-		HR:          []string{"HR-045", "HR-046"}, Requires: RequiresAlways,
-		Techniques: []string{"AML.T0053", "AML.T0101", "AML.T0036", "T1213", "T1485", "T1565.001"},
+		HR:          []string{"HR-045", "HR-046", "HR-620"}, Requires: RequiresAlways,
+		Techniques: []string{"AML.T0053", "AML.T0101", "AML.T0036", "T1213", "T1485", "T1565.001", "T1606"},
 		Why: map[string]string{
 			"AML.T0053": "AI agent tool invocation (AML.T0053): a tool call outside the agent's grant is denied before it runs.",
 			"AML.T0101": "Data destruction via AI agent tool invocation (AML.T0101): a delete the grant does not name is denied.",
@@ -85,6 +85,7 @@ var Prevent = []PreventControl{
 			"T1213":     "Data from information repositories (T1213): an agent's read outside its granted targets is denied.",
 			"T1485":     "Data destruction (T1485): a destructive operation the grant does not name is denied.",
 			"T1565.001": "Stored data manipulation (T1565.001): a write the grant does not name is denied.",
+			"T1606":     "Forge web credentials (T1606): an IdP assertion only narrows a grant the person holds; with no matching grant it is refused.",
 		},
 	},
 	{
@@ -124,9 +125,10 @@ var Prevent = []PreventControl{
 		ID: "prevent.workload_proof", Title: "Every call proves the agent's key, once, with a fresh nonce", Surface: SurfaceCredential,
 		ReasonCodes: []string{"key_mismatch", "proof_replay", "use_nonce", "invalid_proof", "IDENTITY_UNVERIFIED"},
 		HR:          []string{"HR-090", "HR-091"}, Requires: RequiresAlways,
-		Techniques: []string{"AML.T0091.000", "T1550.001"},
+		Techniques: []string{"AML.T0091.000", "AML.T0073", "T1550.001"},
 		Why: map[string]string{
 			"AML.T0091.000": "Application access token (AML.T0091.000): a stolen token without its key, or with a replayed proof, is refused.",
+			"AML.T0073":     "Impersonation (AML.T0073): an enforcement point asking for decisions as an agent it cannot prove to be is refused.",
 			"T1550.001":     "Application access token (T1550.001): a token used apart from the bound key or with a used proof is refused.",
 		},
 	},
@@ -134,9 +136,10 @@ var Prevent = []PreventControl{
 		ID: "prevent.approval_independence", Title: "A held action needs an independent person, for the exact action", Surface: SurfaceAuthority,
 		ReasonCodes: []string{"GRANT_REQUIRES_APPROVAL", "ACTION_TAMPERED"},
 		HR:          []string{"HR-036", "HR-006", "HR-207"}, Requires: RequiresAlways,
-		Techniques: []string{"T1548"},
+		Techniques: []string{"AML.T0073", "T1548"},
 		Why: map[string]string{
-			"T1548": "Abuse elevation control mechanism (T1548): self-approval, reused approvals and changes after approval are refused.",
+			"AML.T0073": "Impersonation (AML.T0073): a Slack action posing as a person's approval releases nothing.",
+			"T1548":     "Abuse elevation control mechanism (T1548): self-approval, reused approvals and changes after approval are refused.",
 		},
 	},
 	{
@@ -165,17 +168,22 @@ var Prevent = []PreventControl{
 		HR:       []string{"HR-122", "HR-214"},
 		Requires: RequiresAlways,
 		Techniques: []string{
-			"AML.T0105", "T1611", "T1552.005", "T1552.004", "T1071.004", "T1048", "T1095", "T1105",
+			"AML.T0105", "AML.T0025", "AML.T0072", "T1611", "T1552.005", "T1071.004", "T1048", "T1095", "T1105",
+			"T1041", "T1572", "T1090",
 		},
 		Why: map[string]string{
 			"AML.T0105": "Escape to host (AML.T0105): the sandbox has no route to the host, its gateway or docker.sock.",
+			"AML.T0025": "Exfiltration via cyber means (AML.T0025): every path out of the sandbox but the edge has no route.",
+			"AML.T0072": "Cyber communication channel (AML.T0072): a command channel from the sandbox has no route but the edge.",
 			"T1611":     "Escape to host (T1611): sandbox networks reach neither the host nor the Docker socket.",
 			"T1552.005": "Cloud instance metadata API (T1552.005): the metadata address has no route from the sandbox.",
-			"T1552.004": "Private keys (T1552.004): a found SSH key has no route to port 22 from the sandbox.",
 			"T1071.004": "DNS (T1071.004): the sandbox has no resolver route to the internet.",
 			"T1048":     "Exfiltration over alternative protocol (T1048): IPv6, ICMP and raw ports have no route out of the sandbox.",
 			"T1095":     "Non-application layer protocol (T1095): ICMP and raw sockets have no route out of the sandbox.",
 			"T1105":     "Ingress tool transfer (T1105): the edge refuses every host without a mapped connection.",
+			"T1041":     "Exfiltration over C2 channel (T1041): a command channel from the sandbox has no route out but the edge.",
+			"T1572":     "Protocol tunneling (T1572): a tunnel from the sandbox has no route out but the edge, which maps each call.",
+			"T1090":     "Proxy (T1090): a proxy outside the edge has no route from the sandbox.",
 		},
 	},
 	{
@@ -220,11 +228,12 @@ var Prevent = []PreventControl{
 		ID: "prevent.content_hold", Title: "In ACTIVE, flagged content holds the run's later writes", Surface: SurfaceGateway,
 		ReasonCodes: []string{"CONTENT_FLAG_HOLD"},
 		HR:          []string{"HR-648", "HR-650"}, Requires: RequiresContentSignalsActive,
-		Techniques: []string{"AML.T0051.001", "AML.T0110.002", "AML.T0099", "T1698"},
+		Techniques: []string{"AML.T0051.001", "AML.T0110.002", "AML.T0099", "AML.T0093", "T1698"},
 		Why: map[string]string{
 			"AML.T0051.001": "Indirect prompt injection (AML.T0051.001): after an injection phrase is flagged, the run's writes wait for a person.",
 			"AML.T0110.002": "AI agent tool poisoning, runtime response (AML.T0110.002): a flagged tool result holds the run's later writes.",
 			"AML.T0099":     "AI agent tool data poisoning (AML.T0099): poisoned data a tool returns, once flagged, holds the run's later writes.",
+			"AML.T0093":     "Prompt infiltration via public-facing application (AML.T0093): a hostile SaaS field returned to the agent, once flagged, holds the run's later writes.",
 			"T1698":         "Indirect prompt injection (T1698): a write carrying or following flagged text is held.",
 		},
 	},

@@ -590,14 +590,9 @@
     "techniques_none": "A functional run of PantherClaw's own allow path: a refund within limits."
   },
   "RT-039": {
-    "digest": "2d25cdca383b11c7e93b404d6c7b606eec237c1077f0a5bac97dfc4bc5a0410c",
+    "digest": "e80a62d92a9e0d457d2eae326efa384f0a73f8aaa8f167da246cef4c91cdc78b",
     "tier": "business",
-    "atlas": [
-      "AML.T0081"
-    ],
-    "technique_why": {
-      "AML.T0081": "Modify AI agent configuration (AML.T0081): a live Stripe key is swapped into the agent's test connection."
-    }
+    "techniques_none": "Tests PantherClaw's own test/live separation: a live key in a test connection sends nothing."
   },
   "RT-040": {
     "digest": "bd5269ab6de6542f269931c99372067e164c5e538a99e3af2d2dcb0cb82d090b",
@@ -908,7 +903,7 @@
     }
   },
   "RT-122": {
-    "digest": "bf5ab45d85f2beef6cecd04460e94be4e5c8e7547907a8e78d440fcb5f772bec",
+    "digest": "b94a750e32dafa3049c8d5994bbfb8e12bd795a1bc52ddd3c6aacdcb973ef0c9",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -916,12 +911,7 @@
     "asi_why": {
       "ASI02": "Tool misuse (ASI02): the agent's ECS deploy reaches past its role's account."
     },
-    "attack": [
-      "T1610"
-    ],
-    "technique_why": {
-      "T1610": "Deploy container (T1610): the agent's ECS deploy tries to reach past its role's account."
-    }
+    "techniques_none": "Tests PantherClaw's own ECS verifier: a deploy outside the connection role's account is refused, and ECS alone confirms a rollout."
   },
   "RT-150": {
     "digest": "c936ab796ee843ec26b576ea57cecc196734ff10f68da9f54da3547193b8a839",

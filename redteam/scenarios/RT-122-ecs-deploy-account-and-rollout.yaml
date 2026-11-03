@@ -10,9 +10,7 @@ rules: [HR-525, HR-190, HR-191]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent's ECS deploy reaches past its role's account."
-attack: [T1610]
-technique_why:
-  T1610: "Deploy container (T1610): the agent's ECS deploy tries to reach past its role's account."
+techniques_none: "Tests PantherClaw's own ECS verifier: a deploy outside the connection role's account is refused, and ECS alone confirms a rollout."
 requires: [aws.ecs.deploy]
 # On a live range this would be a real deploy to a real service.
 harness_only: true
