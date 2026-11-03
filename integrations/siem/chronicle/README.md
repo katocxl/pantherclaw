@@ -18,7 +18,7 @@ PantherClaw posts each batch as one JSON body: `{"type":"pantherclaw.ocsf.batch"
 
 The parser does the split. It drops anything that isn't a batch, loops over `data.events`, and writes one UDM event per entry. Each event's `ocsf_test` is `true` when the entry carries the `test` label.
 
-**The webhook signature is not verified.** Chronicle doesn't read the Standard Webhooks headers, so anyone holding the feed's keys can write events that the rules will trust. A webhook feed also wants its API key and secret on each request, and the export sends neither. Until a verifying forwarder ships with PantherClaw (a later piece), something you run must add them.
+**The webhook signature is not verified.** Chronicle doesn't read the Standard Webhooks headers, so anyone holding the feed's keys can write events that the rules will trust. A webhook feed also wants its API key and secret on each request, and the export sends neither. `pclaw siem forward` verifies the signature, but it writes the events to a file and adds no key ([runbook](../../../docs/runbooks/siem-forwarder.md)), so something you run must add them.
 
 ## What was not checked
 

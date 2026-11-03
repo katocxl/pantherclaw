@@ -805,16 +805,6 @@ Reports show evidence and gaps and are not a certification or statement of compl
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| F890 | OWASP and NIST coverage | Framework tables map OWASP ASI and NIST AI RMF controls to the evidence kinds that can show them. | Next | Team | M25 | new |
-| F891 | ISO, EU and SOC 2 coverage | The same tables for ISO 42001, the EU AI Act deployer view and SOC 2. | Next | Business | M25 | new |
-| F892 | Control states | Each control is EVIDENCED, PARTIAL, GAP or STATED, with no score and never "compliant". AI Act fields are STATED, never evidence. Simulated evidence is split and labelled. | Next | Team | M25 | F527, F630, F801 |
-| F893 | Framework coverage API | `ComplianceService` lists frameworks and returns controls with state, evidence references and gap reasons for a time range. Reading needs `compliance.read`. | Next | Team | M25 | new |
-| F894 | Compliance report pack | A signed pack of its own scope `compliance`, with its own Kind and fixed statement, re-derived offline by `pclaw verify`. Export needs `evidence.export` and stays ClassSafety. | Next | Team | M25 | F527 |
-| F895 | Report header | States the range, the simulated split and a fixed statement: this shows evidence and gaps and is not a certification or statement of compliance. | Next | Team | M25 | F801 |
-| F896 | Stored reports | A `pc.compliance_reports` row keeps the digest and parameters, so a report re-exports after the pack's 7 days. | Next | Team | M25 | new |
-| F897 | Own-records evidence | Evidence comes only from receipts, approvals, grants, coverage, range and campaign results. What the creator can't read is a gap. | Next | Team | M25 | F801 |
-| F898 | ASI tags on scenarios | Range scenarios carry ASI tags. ASI05 and ASI06 read as gaps unless a real source maps them. | Next | Team | M25 | F801 |
-| F899 | Framework view | A console view of controls, states, evidence and gaps per framework, with no score, in the edition of its data. | Next | Team | M25 | F797 |
 | F890 | Framework control table | Controls and the evidence each reads for OWASP ASI, NIST AI RMF, the EU AI Act deployer view, ISO 42001 and SOC 2. An obligation no record reaches is listed as a gap. | Next | Team | M25 | new |
 | F891 | Control states | EVIDENCED, PARTIAL, GAP, STATED, with no score and never "compliant". Not exercised is a gap. A reported result lifts nothing: it is a `reported_only` gap. | Next | Team | M25 | F527, F801 |
 | F892 | Coverage API | `ComplianceService`: `ListFrameworks`, `GetFrameworkCoverage`, `ListComplianceReports`, under `compliance.read`; `pclaw compliance frameworks`, `coverage` and `reports`. | Next | Team | M25 | new |
@@ -827,6 +817,7 @@ Reports show evidence and gaps and are not a certification or statement of compl
 | F899 | M25 exit | `test/e2e/m25_exit_e2e_test.go`: a report on simulators with gaps shown, verified offline. | Next | Team | M25 | new |
 | F900 | Campaign library and results | RT-140..RT-149, embedded in the server. Outcomes derived by the server from every run bound to each step, worst wins; results name the image and say twin, not production. | Next | Business | M25 | F630, F801 |
 | F901 | Campaign runner and model relay | `pclaw redteam campaign run` with the customer's key in a local relay, and a narrow gateway model route, off unless a campaign is open. | Next | Business | M25 | new |
+| F953 | Console framework coverage view | Per framework and period, the view shows the server's statement verbatim and each control's state (EVIDENCED, PARTIAL, GAP or STATED) with a simulated-only mark. It lists gaps with their reasons ("Outside your permission", never "no records"), evidence references and sources, and keeps real and simulated records apart. Stored reports are listed and export as an evidence pack. No score, no percentage, never "compliant"; each framework in its own edition. | Next | Team | M25 | F797 |
 
 ### M26 rows: Enterprise identity
 
@@ -871,12 +862,14 @@ Analytics use PantherClaw's own transactions and never contain automatically (F7
 | F941 | Inference wording | Content alerts have basis INFERRED. Results read "no known flags", never "clean"; hook, SDK, AuthZEN and local faces and delegated outcomes show as not inspected. | Next | Business | M27 | F801 |
 | F942 | Response playbook library | Six Hub playbooks: leaked key, poisoned MCP server, rogue sub-agent, compromised laptop, data-flow hold escalation, offboarded owner. Install makes a draft. All six run on Team. | Next | Team | M27 | new |
 | F943 | No library playbook contains | Each playbook opens a case for a person, who suspends, revokes or rotates. Every automation, library or custom, contains only on CONFIRMED alerts. | Next | Team | M27 | F800 |
-| F944 | SIEM content packs | Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, with the same eight single-event rules on OCSF 1.9 export. Sentinel and Wazuh need a batch-splitting forwarder, not built yet. | Next | Business | M27 | new |
+| F944 | SIEM content packs | Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, with the same eight single-event rules on OCSF 1.9 export. Sentinel and Wazuh take the export through `pclaw siem forward` (F950), which verifies each batch and writes one event per line. | Next | Business | M27 | new |
 | F945 | Golden OCSF samples | Byte for byte the mapper's output. Each rule, read from the vendor's own file, fires on exactly its listed samples. No vendor engine ran; each README says so. | Next | Business | M27 | F801 |
 | F946 | Investigator role | A service-account role with eight read permissions. The server admits it only on WhatHappened, GetRunTimeline, Search and GetGraph; elsewhere it does not count. | Next | Team | M27 | new |
 | F947 | `pclaw mcp self` | A stdio MCP server with four read tools: `search`, `explain_decision`, `run_timeline`, `breach_radius`. Bounded inputs, agent-safe refusals, no model. | Next | Team | M27 | new |
 | F948 | Server-side read audit | The server records `audit.self_mcp.read` for each read and gate refusal by the Investigator role, before the first response byte, so a client can't skip it. | Next | Team | M27 | new |
 | F949 | Untrusted record labels | Every record a tool returns sits under `UNTRUSTED_RECORD_DATA`, cleaned, cut to 2000 runes and JSON-escaped. Record text is data, never an instruction. | Next | Team | M27 | new |
+| F950 | `pclaw siem forward` | A local forwarder for SIEMs that can't check Standard Webhooks signatures. It verifies HMAC and Ed25519 (`v1a`) signatures, the time window and replays, then appends each OCSF event of a verified batch as one JSON line to a file or stdout. Setup for Sentinel (Azure Monitor Agent custom text log) and Wazuh (`localfile` json). | Next | Business | M27 | PN-018, F944 |
+| F951 | Confirmed custom rules | A person asks to confirm one published version of a custom detection rule, and a second person with `detection.manage` confirms it with a security key. That version's alerts are then RULE_MATCH, so automations may contain on them. Publishing another version, a disable or a withdrawal ends the confirmation at once, and the alerts are INFERRED again. People only, no API keys. | Next | Business | M27 | PN-006.1, F800 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
@@ -932,7 +925,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 
 Checked on 2026-10-09 by a script that parsed every table row with a Source column and expanded the ranges, after ADR-0017, ADR-0018 and ADR-0019 added PN-002.8, PN-016.3, PN-023 and PN-024 and moved four rows to M14; row counts updated on 2026-10-20 after G0 UI added PN-025, PN-026 and the new rows F803–F830.
 
-- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows F831–F949 of M22–M27 come on top of these counts as each milestone lands; they are new rows, not catalog IDs.
+- **Rows:** 370 in total: 360 pillar rows (81 of them PN rows covering 26 new features, PN-001–PN-026; 28 new-feature rows F803–F830) and 10 boundary rows. The rows from F831 on, added from M22 on, come on top of these counts as each milestone or follow-up lands; they are new rows, not catalog IDs.
 - **Coverage:** 802 of 802 catalog IDs (F001–F802) appear in at least one Source cell. None are missing and none are out of range.
 - **Format checks:** every row ID matches its convention, and no row ID repeats. Every Phase, Edition and Milestone value is valid. Every "What the backend delivers" cell is ≤ 36 words.
 

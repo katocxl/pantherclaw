@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -33,6 +34,13 @@ var (
 	ErrTestsFailed   = pcerr.New(pcerr.FailedPrecondition, "RULE_TESTS_FAILED", "the rule needs a passing firing and non-firing test")
 	ErrTooManyRules  = pcerr.New(pcerr.ResourceExhausted, "TOO_MANY_RULES", "at most 100 published custom rules")
 	ErrRuleNotLoaded = pcerr.New(pcerr.FailedPrecondition, "DETECTIONS_OFF", "detections are off: the built-in pack failed its integrity check")
+	// The two-person confirmation of a custom rule version (HR-666).
+	ErrNotPublishedVersion = pcerr.New(pcerr.FailedPrecondition, "CUSTOM_RULE_NOT_PUBLISHED_VERSION",
+		"only the rule's published version can be confirmed")
+	ErrAlreadyConfirmed = pcerr.New(pcerr.FailedPrecondition, "CUSTOM_RULE_ALREADY_CONFIRMED", "this version is already confirmed")
+	ErrRuleChanged      = pcerr.New(pcerr.FailedPrecondition, "CUSTOM_RULE_CHANGED",
+		"the rule is no longer published at the version and content that was asked to be confirmed")
+	ErrReason = pcerr.New(pcerr.InvalidArgument, "REASON_INVALID", "a reason of 1 to 500 characters is required")
 )
 
 // Detections serves the detection rules.
@@ -43,6 +51,9 @@ type Detections struct {
 	PackErr     error
 	Env         *celenv.Env
 	Ents        Entitlements
+	// Protect holds a custom rule confirmation for a second person
+	// (RegisterProtect, HR-666); nil refuses every confirmation.
+	Protect *protect.Gate
 }
 
 // Rule is one rule as the org runs it.
@@ -53,6 +64,11 @@ type Rule struct {
 	Licensed bool
 	Custom   *dbq.PcCustomDetectionRule
 	State    *dbq.DetectionRuleStatesRow
+	// Confirmation is the version's two-person confirmation while it
+	// applies (HR-666); PendingConfirmation the protected change waiting
+	// to confirm the version.
+	Confirmation        *dbq.PcCustomDetectionRuleConfirmation
+	PendingConfirmation ids.UUID
 }
 
 // RuleList is the org's rules and the pack's state.
@@ -137,16 +153,37 @@ func (s *Detections) ListRules(ctx context.Context) (RuleList, error) {
 		if err != nil {
 			return err
 		}
+		confirmed, err := q.OpenCustomRuleConfirmations(ctx, c.Org)
+		if err != nil {
+			return err
+		}
+		confirmations := map[string]*dbq.PcCustomDetectionRuleConfirmation{}
+		for i := range confirmed {
+			confirmations[confirmed[i].RuleID] = &confirmed[i]
+		}
+		pending, err := q.PendingCustomRuleConfirmations(ctx, c.Org)
+		if err != nil {
+			return err
+		}
 		licensed := s.custom(ctx) == nil
 		for i := range custom {
-			r, err := rules.Parse([]byte(custom[i].Content))
+			row := &custom[i]
+			r, err := rules.Parse([]byte(row.Content))
 			if err != nil {
 				continue
 			}
-			out.Rules = append(out.Rules, Rule{
-				Rule: r, Digest: hex.EncodeToString(custom[i].ContentDigest), Custom: &custom[i], State: byID[r.ID],
-				Licensed: licensed,
-			})
+			rule := Rule{
+				Rule: r, Digest: hex.EncodeToString(row.ContentDigest), Custom: row, State: byID[r.ID], Licensed: licensed,
+			}
+			if cf := confirmations[row.RuleID]; applies(cf, *row) {
+				rule.Confirmation = cf
+			}
+			for _, p := range pending {
+				if p.Subject == row.RuleID && p.Version == row.Version {
+					rule.PendingConfirmation = p.ID
+				}
+			}
+			out.Rules = append(out.Rules, rule)
 		}
 		return nil
 	}, db.ReadOnly())
@@ -348,6 +385,10 @@ func (s *Detections) PublishCustomRule(ctx context.Context, id ids.UUID) (Rule, 
 		if len(superseded) > 0 {
 			details["superseded"] = superseded[0].String()
 		}
+		// A new version drops the old one's confirmation (HR-666).
+		if err := endConfirmations(ctx, q, c, row.RuleID, confirmationSuperseded, nil, details); err != nil {
+			return err
+		}
 		entry, err := audit.Record(ctx, tx, audit.Event{
 			Name: "detection.rule_published", Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "detection_rule", ID: row.RuleID}, Details: details,
@@ -406,9 +447,14 @@ func (s *Detections) DisableCustomRule(ctx context.Context, id ids.UUID, reason 
 		if n == 0 {
 			return ErrState
 		}
+		// Disabling the version drops its confirmation (HR-666).
+		details := map[string]string{}
+		if err := endConfirmations(ctx, q, c, row.RuleID, confirmationDisabled, []int32{row.Version}, details); err != nil {
+			return err
+		}
 		r, _ := rules.Parse([]byte(row.Content))
 		out = Rule{Rule: r, Digest: hex.EncodeToString(row.ContentDigest), Custom: &row}
-		return detectionAudit(ctx, tx, c, "detection.rule_disabled", row, nil)
+		return detectionAudit(ctx, tx, c, "detection.rule_disabled", row, details)
 	})
 	return out, err
 }
