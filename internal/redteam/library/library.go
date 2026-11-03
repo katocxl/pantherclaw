@@ -13,6 +13,7 @@ import (
 	_ "embed"
 	"encoding/json/v2"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -27,7 +28,7 @@ type Entry struct {
 	ASI []string `json:"asi,omitzero"`
 	// ASIWhy says, per tag, how the scenario exercises that risk (D531).
 	ASIWhy map[string]string `json:"asi_why,omitzero"`
-	// ATLAS and ATTACK are the MITRE techniques the scenario tests, with one
+	// ATLAS and ATTACK are the techniques the scenario tests, with one
 	// line each in TechniqueWhy (G0 M28 D714).
 	ATLAS        []string          `json:"atlas,omitzero"`
 	ATTACK       []string          `json:"attack,omitzero"`
@@ -53,7 +54,7 @@ type CampaignEntry struct {
 	Attempts []domain.Attempt `json:"attempts"`
 	// ASI are the OWASP agentic risks the campaign file tags (D529).
 	ASI []string `json:"asi,omitzero"`
-	// ATLAS and ATTACK are the MITRE techniques the campaign file tags, with
+	// ATLAS and ATTACK are the techniques the campaign file tags, with
 	// one line each in TechniqueWhy (G0 M28 D714); labels, never evidence.
 	ATLAS        []string          `json:"atlas,omitzero"`
 	ATTACK       []string          `json:"attack,omitzero"`
@@ -77,6 +78,9 @@ func Campaign(id string) (CampaignEntry, bool) {
 	return e, ok
 }
 
+// Campaigns returns a copy of every library campaign, by id.
+func Campaigns() map[string]CampaignEntry { return maps.Clone(campaigns) }
+
 // CampaignASI returns the OWASP agentic risks (ASI01..ASI10) a library
 // campaign exercises, as its file tags them, ascending; nil for an id that
 // is no library campaign or carries no tag (D529).
@@ -99,8 +103,8 @@ func All() map[string]Entry {
 	return out
 }
 
-// ByTechnique returns the ids of the library scenarios that test a MITRE
-// technique (G0 M28 D714): those naming id itself, or naming a
+// ByTechnique returns the ids of the library scenarios that test an ATLAS or
+// ATT&CK technique (G0 M28 D714): those naming id itself, or naming a
 // sub-technique whose parent is id, in atlas or attack; sorted.
 func ByTechnique(id string) []string {
 	var out []string
