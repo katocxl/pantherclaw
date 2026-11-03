@@ -207,7 +207,7 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 			return cerr
 		case cerr != nil:
 			refused = cerr
-			return nil
+			return nil //nolint:nilerr // the refusal is returned once the replay record has committed
 		}
 		n, err = q.InsertAuthReplay(ctx, dbq.InsertAuthReplayParams{
 			OrgID: org, Issuer: "instance:" + inst.ID.String(), Jti: v.JTI, ExpiresAt: v.ExpiresAt,
