@@ -171,14 +171,21 @@ func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
 	if report.Split.Real != before.Split.Real || report.Split.Simulated <= before.Split.Simulated {
 		t.Fatalf("simulator traffic counted as real: before %+v, after %+v %+v", before.Split, report.Split, report.Inputs.Sources)
 	}
-	was := map[string]domain.State{}
-	for _, c := range before.Controls {
-		was[c.ID] = c.State
-	}
+	// HR-602: a control is EVIDENCED only on real records of its own record
+	// sources. A held test may complete that evidence (the stack's team agent
+	// holds real grants, so ASI07 can be), never stand in for it.
 	shown := false
 	for _, c := range report.Controls {
-		if c.State == domain.Evidenced && was[c.ID] != domain.Evidenced {
-			t.Errorf("%s is evidenced by simulators alone", c.ID)
+		if c.State == domain.Evidenced {
+			hasReal := false
+			for _, src := range c.Evidence {
+				if !slices.Contains(domain.TestSources(), src) && sourceOf(*report, src).Real > 0 {
+					hasReal = true
+				}
+			}
+			if c.SimulatedOnly || !hasReal {
+				t.Errorf("%s is evidenced by simulators alone: %+v", c.ID, c)
+			}
 		}
 		if c.ID != "ASI05" && c.ID != "ASI06" && (c.State == domain.Gap || c.State == domain.Partial) && len(c.Gaps) > 0 {
 			shown = true

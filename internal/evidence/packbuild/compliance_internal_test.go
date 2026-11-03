@@ -26,7 +26,7 @@ func TestComplianceReportErrorsThatNoRetryMends(t *testing.T) {
 		t.Error("no error became one")
 	}
 	hiccup := errors.New("connection reset")
-	if got := classify(hiccup); got != hiccup {
+	if got := classify(hiccup); !errors.Is(got, hiccup) || errors.Is(got, errCompliance) || errors.Is(got, errComplianceEdition) {
 		t.Errorf("a passing error is not retried: %v", got)
 	}
 }
