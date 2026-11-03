@@ -110,6 +110,16 @@ const (
 	SurfaceAssertionClient Surface = "idaccess.client.bind"
 	SurfaceMcpAccess       Surface = "idaccess.mcp_access.enable"
 	SurfaceMcpClient       Surface = "idaccess.mcp_client.allow"
+	// The provisioning surfaces (G0 M26 D406, D409): always held for a second
+	// person, whatever the CUSTODY mode (AlwaysProtected). A SCIM token does
+	// nothing until its activation applies; a SAML connection is an
+	// organization identity provider (HR-481); a mapping gives a group's
+	// members a role, or takes it away.
+	SurfaceSCIMTokenActivate  Surface = "scim.token.activate" //nolint:gosec // G101: a surface name, not a credential
+	SurfaceSAMLConnectionPut  Surface = "saml.connection.put"
+	SurfaceSAMLDisable        Surface = "saml.connection.disable"
+	SurfaceGroupMappingAdd    Surface = "group.role_mapping.add"
+	SurfaceGroupMappingRemove Surface = "group.role_mapping.remove"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -134,7 +144,8 @@ func (s Surface) Permission() td.Permission {
 	case SurfaceConsequenceRule:
 		return td.PermConsequenceRuleManage
 	case SurfaceIdentityProviderPut, SurfaceIdentityProviderDisable, SurfaceIdentityProviderOwnOnly,
-		SurfaceAssertionIssuer, SurfaceAssertionClient, SurfaceMcpAccess, SurfaceMcpClient:
+		SurfaceAssertionIssuer, SurfaceAssertionClient, SurfaceMcpAccess, SurfaceMcpClient,
+		SurfaceSCIMTokenActivate, SurfaceSAMLConnectionPut, SurfaceSAMLDisable, SurfaceGroupMappingAdd, SurfaceGroupMappingRemove:
 		return td.PermIdentityProviderManage
 	case SurfaceTicketFieldOwner:
 		return td.PermConnectionManage
@@ -154,7 +165,9 @@ func (s Surface) AlwaysProtected() bool {
 	return s == SurfaceConsequenceRule ||
 		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly ||
 		s == SurfaceCatalogMode ||
-		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient
+		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient ||
+		s == SurfaceSCIMTokenActivate || s == SurfaceSAMLConnectionPut || s == SurfaceSAMLDisable ||
+		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove
 }
 
 // Change domains and kinds of internal/changes (D6).

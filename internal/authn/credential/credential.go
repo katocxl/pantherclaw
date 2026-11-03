@@ -15,6 +15,7 @@
 //	pcl_<org>_<secret>         browser sign-in state (M5)
 //	pcu_<platform>_<secret>    account browser session (G0 UI D8)
 //	pcm_<platform>_<secret>    sign-in state without an org (G0 UI D8)
+//	pcv_<org>_<secret>         SCIM bearer token (G0 M26 D405)
 //
 // <org> is the org's UUID as 32 lowercase hex digits; <secret> is 256 random
 // bits in 43 base62 characters. Only hashes are stored. Service-account
@@ -63,6 +64,8 @@ const (
 	// console's session cookie for a member of the support staff inside a
 	// customer org under an approved grant; its <org> is that org.
 	SupportSession Kind = "pcp"
+	// SCIMToken is an identity provider's SCIM bearer token (G0 M26 D405).
+	SCIMToken Kind = "pcv"
 )
 
 // Env labels API keys by deployment, so that a key made for one deployment
@@ -214,7 +217,7 @@ func (k Kind) valid() bool {
 	switch k {
 	case APIKey, Invitation, DeviceCode, RefreshToken, OAuthState, EnrollmentToken:
 		return true
-	case BrowserSession, LoginState, GatewayEnrollmentToken, AccountSession, AccountLoginState, SupportSession:
+	case BrowserSession, LoginState, GatewayEnrollmentToken, AccountSession, AccountLoginState, SupportSession, SCIMToken:
 		return true
 	}
 	return false

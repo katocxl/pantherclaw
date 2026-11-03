@@ -309,6 +309,10 @@ func (d *Deletion) scrub(ctx context.Context, account ids.UUID, r db.OrgRef) err
 		if err := q.PseudonymiseAccountUser(ctx, tombstone(), r.Org, r.ID); err != nil {
 			return err
 		}
+		// The SCIM userName and externalId may name the person (G0 M26).
+		if err := q.ClearSCIMExternalID(ctx, r.Org, r.ID); err != nil {
+			return err
+		}
 		if _, err := q.RevokeUserSessions(ctx, ptrString("USER_DISABLED"), r.Org, r.ID); err != nil {
 			return err
 		}
