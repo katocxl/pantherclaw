@@ -38769,6 +38769,31 @@
         "title": "RequestedEntry",
         "additionalProperties": false
       },
+      "pantherclaw.v1.CredentialUsed": {
+        "type": "object",
+        "properties": {
+          "credentialId": {
+            "type": "string",
+            "title": "credential_id",
+            "format": "uuid",
+            "description": "The credential's id."
+          },
+          "version": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+            "title": "version",
+            "format": "int32",
+            "description": "Its version."
+          }
+        },
+        "title": "CredentialUsed",
+        "additionalProperties": false,
+        "description": "CredentialUsed names a sealed credential by id and version, never its\n value (HR-660).",
+        "required": [
+          "credentialId",
+          "version"
+        ]
+      },
       "pantherclaw.v1.DataScopeApplied": {
         "type": "object",
         "properties": {
@@ -39452,6 +39477,18 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.ContentScan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "credentialUsed": {
+            "title": "credential_used",
+            "description": "The sealed credential the gateway opened for this dispatch, an App key\n it minted with included (HR-660); unset when it opened none. The\n Authority accepts it only when it is a version of the permit's\n connection's credential, and then names it on the receipt.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.CredentialUsed"
               },
               {
                 "type": "null"

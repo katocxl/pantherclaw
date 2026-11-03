@@ -323,6 +323,17 @@ type Execution struct {
 	// ContentScan is the gateway's word on the tool result (G0 M27 D533):
 	// csdomain.ScanScanned and the rest, or empty from a gateway before M27.
 	ContentScan string
+	// Credential is the sealed credential the gateway opened for the
+	// dispatch (HR-660); nil when it opened none. The store accepts it
+	// only as a version of the permit's connection's credential.
+	Credential *CredentialUsed
+}
+
+// CredentialUsed names a sealed credential by id and version, never its
+// value (HR-660).
+type CredentialUsed struct {
+	ID      ids.UUID
+	Version int32
 }
 
 // DataScopeApplied is what applying a read's data scope did to its answer:
@@ -376,6 +387,11 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 	}
 	if x.TargetRef != "" {
 		pap["target_ref"] = x.TargetRef
+	}
+	if c := x.Credential; c != nil {
+		// Only as the store checked it against the permit's connection; a
+		// receipt the sweeper writes never has one (HR-660).
+		pap["credential"] = map[string]any{"id": c.ID.String(), "version": c.Version}
 	}
 	if a := e.Access; a != nil {
 		access := map[string]any{

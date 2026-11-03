@@ -182,7 +182,7 @@ func subject(def *defs.Definition, a actionir.ActionIR) (githubfacts.Subject, bo
 // owner/repo with scopes at the GitHub API base (gitHubAPI).
 func (e *Engine) mint(ctx context.Context, conn *control.Connection, base, owner, repo string, scopes map[string]string, c broker.Sender,
 ) (*broker.Installation, error) {
-	app, err := e.openApp(conn)
+	app, err := e.openApp(ctx, conn)
 	if err != nil {
 		return nil, err
 	}

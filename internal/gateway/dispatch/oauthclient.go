@@ -22,7 +22,7 @@ const maxTokenAnswer = 64 << 10
 // the seal must bind. The client secret is cleared as soon as the token
 // request is sent; the caller clears the token when the dispatch ends.
 func (e *Engine) clientToken(ctx context.Context, conn *control.Connection) (*broker.ClientToken, error) {
-	oc, err := e.openOAuthClient(conn)
+	oc, err := e.openOAuthClient(ctx, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -32,11 +32,11 @@ func (e *Engine) clientToken(ctx context.Context, conn *control.Connection) (*br
 
 // openOAuthClient opens the connection's OAuth client credential; the
 // caller clears it.
-func (e *Engine) openOAuthClient(conn *control.Connection) (credentials.OAuthClient, error) {
+func (e *Engine) openOAuthClient(ctx context.Context, conn *control.Connection) (credentials.OAuthClient, error) {
 	if conn.Credential.GetKind() != credentials.KindOAuthClient {
 		return credentials.OAuthClient{}, errKind
 	}
-	plain, err := e.openCredential(conn)
+	plain, err := e.openCredential(ctx, conn)
 	if err != nil {
 		return credentials.OAuthClient{}, err
 	}

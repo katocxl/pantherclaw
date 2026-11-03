@@ -62,6 +62,26 @@ type World struct {
 	flow  *flowState
 	// content is the org's content signal state (G0 M27 D507).
 	content pipeline.ContentState
+	// credentials are the connections' sealed credential versions, in any
+	// state, as pc.credentials holds them (HR-660).
+	credentials map[credentialKey]bool
+}
+
+// credentialKey is one version of a connection's sealed credential.
+type credentialKey struct {
+	id, connection ids.UUID
+	version        int32
+}
+
+// PutCredential records version of credential id as connection's, as
+// pc.credentials does.
+func (w *World) PutCredential(id, connection ids.UUID, version int32) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.credentials == nil {
+		w.credentials = map[credentialKey]bool{}
+	}
+	w.credentials[credentialKey{id: id, connection: connection, version: version}] = true
 }
 
 // New returns a world for org with p pinned and every definition ACTIVE.

@@ -509,6 +509,20 @@ message RecordExecutionRequest {
   // gateway-carried result without CONTENT_SCAN_SCANNED flags the run as
   // scan_incomplete (not_scanned).
   ContentScan content_scan = 11;
+  // The sealed credential the gateway opened for this dispatch, an App key
+  // it minted with included (HR-660); unset when it opened none. The
+  // Authority accepts it only when it is a version of the permit's
+  // connection's credential, and then names it on the receipt.
+  CredentialUsed credential_used = 12;
+}
+
+// CredentialUsed names a sealed credential by id and version, never its
+// value (HR-660).
+message CredentialUsed {
+  // The credential's id.
+  string credential_id = 1 [(buf.validate.field).string.uuid = true];
+  // Its version.
+  int32 version = 2 [(buf.validate.field).int32.gt = 0];
 }
 
 // DataScopeApplied is what applying a read's data scope did to its answer

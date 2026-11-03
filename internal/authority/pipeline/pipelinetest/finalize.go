@@ -387,6 +387,14 @@ func (w *World) RecordExecution(_ context.Context, _ ids.OrgID, gatewayID string
 	if p.dispatch.AccessMode != "" {
 		x.AccessMode = p.dispatch.AccessMode
 	}
+	if c := e.Credential; c != nil {
+		// As the database store checks it (HR-660).
+		conn := p.dispatch.Connection
+		if conn == nil || !w.credentials[credentialKey{id: c.ID, connection: *conn, version: c.Version}] {
+			return "", finalize.ErrCredentialNotOfConnection
+		}
+		x.Credential = &finalize.CredentialUsed{ID: c.ID, Version: c.Version}
+	}
 	if e.Outcome == finalize.Delegated {
 		if !finalize.Delegable(p.channel, p.dispatch.AccessMode) {
 			return "", finalize.ErrNotCooperative

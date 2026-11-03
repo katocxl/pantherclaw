@@ -859,6 +859,7 @@ Analytics use PantherClaw's own transactions and never contain automatically (F7
 | F947 | `pclaw mcp self` | A stdio MCP server with four read tools: `search`, `explain_decision`, `run_timeline`, `breach_radius`. Bounded inputs, agent-safe refusals, no model. | Next | Team | M27 | new |
 | F948 | Server-side read audit | The server records `audit.self_mcp.read` for each read and gate refusal by the Investigator role, before the first response byte, so a client can't skip it. | Next | Team | M27 | new |
 | F949 | Untrusted record labels | Every record a tool returns sits under `UNTRUSTED_RECORD_DATA`, cleaned, cut to 2000 runes and JSON-escaped. Record text is data, never an instruction. | Next | Team | M27 | new |
+| F952 | Credential version on receipts | An execution receipt names the credential id and version the gateway opened for the dispatch, an App key used to mint included, after the server checks that it belongs to the permit's connection. Receipts the sweeper writes carry none; the claim is optional in PAP-1 §9.2. | Next | Community | M27 | F461 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
