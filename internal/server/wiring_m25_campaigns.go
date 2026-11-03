@@ -26,8 +26,18 @@ func newCampaigns(d apiDeps) *capp.Service {
 	return svc
 }
 
+// modelCalls decides the gateway's model face calls (D313); it needs no
+// licence check, since an open campaign has already passed one.
+func modelCalls(pool *db.Pool) *capp.Service {
+	return &capp.Service{Store: pgcampaigns.Store{Pool: pool}}
+}
+
 // campaignResults is the read port compliance evidence uses (D312).
 func campaignResults(pool *db.Pool) ports.ResultReader { return pgcampaigns.Store{Pool: pool} }
+
+// campaignRoutes stores a range agent's sandbox route reports on its open
+// campaign step (D525 L6).
+func campaignRoutes() ports.RouteRecorder { return pgcampaigns.Store{} }
 
 // appendCampaignJobs adds the campaign abandon sweep to the schedule.
 func appendCampaignJobs(sched []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, log *slog.Logger) ([]*river.PeriodicJob, error) {

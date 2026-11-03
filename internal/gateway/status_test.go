@@ -71,6 +71,26 @@ func TestHR410_AReplicaReportsItsStatusAndAFailedReportNeverStopsServing(t *test
 	}
 }
 
+// TestHR410_AModelRelayReportsAsALocalRelay: a campaign's model relay has no
+// package by design, so it reports LOCAL_RELAY, never NOT_LOADED; an
+// unmarked connection without a package still reports NOT_LOADED (D525 L4).
+// Covers: PN-010.6
+func TestHR410_AModelRelayReportsAsALocalRelay(t *testing.T) {
+	h := setup(t)
+	relay := &control.Connection{GatewayConnection: &pb.GatewayConnection{
+		Id: "0192aaaa-bbbb-7ccc-8ddd-0000000000f1", Name: "relay", Kind: "http", Simulated: true, ModelRelay: true, State: "ACTIVE",
+	}}
+	unloaded := &control.Connection{GatewayConnection: &pb.GatewayConnection{
+		Id: "0192aaaa-bbbb-7ccc-8ddd-0000000000f2", Name: "plain", Kind: "http", State: "ACTIVE",
+	}}
+	if got := servingStates[h.gw.engine.ServingState(relay)]; got != pb.ConnectionServingState_CONNECTION_SERVING_STATE_LOCAL_RELAY {
+		t.Fatalf("relay: %s", got)
+	}
+	if got := servingStates[h.gw.engine.ServingState(unloaded)]; got != pb.ConnectionServingState_CONNECTION_SERVING_STATE_NOT_LOADED {
+		t.Fatalf("unloaded: %s", got)
+	}
+}
+
 // TestHR410_AVersionIsCutOnARuneBoundary: a long non-ASCII version or
 // build is cut to 64 bytes and stays valid UTF-8, so the report still
 // marshals (G0 M15 D42).

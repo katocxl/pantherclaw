@@ -927,17 +927,28 @@ type PcCampaign struct {
 	State             string
 	StartedAt         time.Time
 	FinishedAt        *time.Time
+	OpenStep          *string
+}
+
+type PcCampaignRoute struct {
+	OrgID      ids.OrgID
+	CampaignID ids.UUID
+	ScenarioID string
+	Kind       string
+	Locator    string
+	RecordedAt time.Time
 }
 
 type PcCampaignRun struct {
 	OrgID          ids.OrgID
 	CampaignID     ids.UUID
 	RunID          ids.UUID
-	ScenarioID     *string
+	ScenarioID     string
 	ModelHost      string
 	Requests       int64
 	BytesToModel   int64
 	BytesFromModel int64
+	BytesReserved  int64
 }
 
 type PcCampaignStep struct {
@@ -1191,6 +1202,7 @@ type PcConnection struct {
 	UpdatedAt        time.Time
 	AgentHosts       []string
 	Simulated        bool
+	ModelRelay       bool
 }
 
 type PcConnectionCapability struct {

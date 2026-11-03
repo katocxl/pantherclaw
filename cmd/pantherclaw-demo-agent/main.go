@@ -34,8 +34,13 @@ Commands:
   blocked OWNER/REPO               blocked: a push with the PAT found in /workspace/.env over HTTPS, and over SSH
                                    (the key in /workspace/.ssh/id_ed25519, to github.com and GitHub's address)
   attack OWNER/REPO NUMBER SHA     held, then blocked, in one run
+  campaign                         the scripted stand-in of an attack campaign: one call to the model host with the
+                                   placeholder key, then each step of /workspace/.pclaw-campaign/script.json
 
 Without --branch and --file, allowed names its branch and file with a random suffix, so that it can run again on the same repository; it prints the names it chose.
+  dial ADDR...                     tries each HOST:PORT directly over TCP and as HTTP through the sandbox's proxy
+  listen ADDR                      outside a sandbox: a stand-in relay listening on HOST:PORT, printing "accepted
+                                   REMOTE" for every connection (tests run it on a container network)
   help, -h, --help                 this text
 
 One line per attempt: "name STATUS body" for HTTP, "ssh ADDRESS reached|blocked" for SSH.
@@ -55,6 +60,27 @@ func main() {
 		return
 	}
 	cmd, args := args[0], args[1:]
+	if cmd == "campaign" {
+		os.Exit(campaign("/workspace/.pclaw-campaign/script.json"))
+	}
+	if cmd == "dial" {
+		if len(args) == 0 {
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(2)
+		}
+		for _, addr := range args {
+			dial(addr)
+		}
+		return
+	}
+	if cmd == "listen" {
+		if len(args) != 1 {
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(2)
+		}
+		listen(args[0])
+		os.Exit(1)
+	}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	suffix := rand.Text()[:8]
@@ -135,6 +161,55 @@ func push(repo string) {
 		} else {
 			say("ssh", addr, "blocked")
 		}
+	}
+}
+
+// dial tries to reach addr directly over TCP, then as an HTTP request through
+// the sandbox's proxy, and prints "dial ADDR reached|blocked" and "proxy ADDR
+// STATUS REFUSED-BY BODY" (a campaign's model relay must be reachable by
+// neither, D525 L1).
+func dial(addr string) {
+	if c, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", addr); err == nil {
+		_ = c.Close()
+		say("dial", addr, "reached")
+	} else {
+		say("dial", addr, "blocked")
+	}
+	req, _ := http.NewRequest(http.MethodPost, "http://"+addr+"/v1/messages", strings.NewReader("{}")) //nolint:noctx,gosec // a one-shot agent; G704: it sends what it is told to, through the sandbox proxy
+	res, err := client.Do(req)                                                                         //nolint:gosec // G704: as above
+	if err != nil {
+		say("proxy", addr, answer(nil, err))
+		return
+	}
+	defer func() { _ = res.Body.Close() }()
+	refused := res.Header.Get("PC-Refused-By")
+	if refused == "" {
+		refused = "-"
+	}
+	say("proxy", addr, refused, answer(res, nil))
+}
+
+// listen is a stand-in for a relay on a container network: it prints
+// "accepted REMOTE" for every connection and answers it, so that a test can
+// count from the container's log what reached it (D543 R-L4). It returns
+// only on an error.
+func listen(addr string) {
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", addr)
+	if err != nil {
+		say("listen", addr, "error", err)
+		return
+	}
+	say("listening", ln.Addr())
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			say("accept error", err)
+			return
+		}
+		say("accepted", c.RemoteAddr())
+		_ = c.SetDeadline(time.Now().Add(5 * time.Second))
+		_, _ = io.WriteString(c, "HTTP/1.1 200 OK\r\nContent-Length: 22\r\nConnection: close\r\n\r\nreached-relay-address\n")
+		_ = c.Close()
 	}
 }
 

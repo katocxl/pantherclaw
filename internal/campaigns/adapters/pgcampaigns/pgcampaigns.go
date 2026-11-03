@@ -68,7 +68,32 @@ func (t *txn) Connection(ctx context.Context, id ids.UUID) (app.ConnectionRef, b
 	} else if err != nil {
 		return app.ConnectionRef{}, false, err
 	}
-	return app.ConnectionRef{ID: c.ID, Simulated: c.Simulated}, true, nil
+	return app.ConnectionRef{ID: c.ID, Simulated: c.Simulated, ModelRelay: c.ModelRelay}, true, nil
+}
+
+func (t *txn) RelayConnection(ctx context.Context, id ids.UUID) (app.RelayRef, bool, error) {
+	c, err := t.q.CampaignRelayConnection(ctx, t.org, id)
+	if db.IsNoRows(err) {
+		return app.RelayRef{}, false, nil
+	} else if err != nil {
+		return app.RelayRef{}, false, err
+	}
+	return app.RelayRef{Gateway: c.GatewayID, Simulated: c.Simulated, ModelRelay: c.ModelRelay, Active: c.State == "ACTIVE"}, true, nil
+}
+
+func (t *txn) AddModelRequest(ctx context.Context, campaign, run ids.UUID, bytes, reserve, total int64) (bool, error) {
+	_, err := t.q.AddModelRequest(ctx, dbq.AddModelRequestParams{
+		OrgID: t.org, CampaignID: campaign, RunID: run, Bytes: bytes, Reserve: reserve, RunTotal: total,
+	})
+	if db.IsNoRows(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (t *txn) AddModelAnswer(ctx context.Context, campaign, run ids.UUID, bytes, reserve int64) (bool, error) {
+	n, err := t.q.AddModelAnswer(ctx, dbq.AddModelAnswerParams{OrgID: t.org, CampaignID: campaign, RunID: run, Bytes: bytes, Reserve: reserve})
+	return n > 0, err
 }
 
 func campaignOf(c dbq.PcCampaign) domain.Campaign {
@@ -206,8 +231,8 @@ func (t *txn) Run(ctx context.Context, id ids.UUID) (domain.RunRecord, bool, err
 	return domain.RunRecord{ID: r.ID, Agent: r.AgentID, Simulated: r.Simulated, Created: r.CreatedAt}, true, nil
 }
 
-func (t *txn) Transactions(ctx context.Context, run ids.UUID) ([]domain.Transaction, error) {
-	rows, err := t.q.CampaignRunTransactions(ctx, t.org, run)
+func (t *txn) WorstTransactions(ctx context.Context, runs []ids.UUID, operations []string) ([]domain.Transaction, error) {
+	rows, err := t.q.CampaignWorstTransactions(ctx, t.org, runs, operations)
 	if err != nil {
 		return nil, err
 	}
@@ -221,10 +246,46 @@ func (t *txn) Transactions(ctx context.Context, run ids.UUID) ([]domain.Transact
 	return out, nil
 }
 
-func (t *txn) SetRunScenario(ctx context.Context, c domain.Campaign, run ids.UUID, scenario string) error {
-	return t.q.SetCampaignRunScenario(ctx, dbq.SetCampaignRunScenarioParams{
-		OrgID: t.org, CampaignID: c.ID, RunID: run, ScenarioID: &scenario, ModelHost: c.ModelHost,
-	})
+func (t *txn) OpenStep(ctx context.Context, campaign ids.UUID, scenario string) (bool, error) {
+	n, err := t.q.OpenCampaignStep(ctx, &scenario, t.org, campaign)
+	return n > 0, err
+}
+
+func (t *txn) BoundRuns(ctx context.Context, campaign ids.UUID) (map[ids.UUID]string, error) {
+	rows, err := t.q.CampaignBoundRuns(ctx, t.org, campaign)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[ids.UUID]string, len(rows))
+	for _, r := range rows {
+		out[r.RunID] = r.ScenarioID
+	}
+	return out, nil
+}
+
+func (t *txn) StepRoutes(ctx context.Context, campaign ids.UUID, scenario string, maxRows int32) ([]domain.Route, error) {
+	rows, err := t.q.CampaignStepRoutes(ctx, dbq.CampaignStepRoutesParams{OrgID: t.org, CampaignID: campaign, ScenarioID: scenario, MaxRows: maxRows})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Route, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.Route{Kind: r.Kind, Locator: r.Locator})
+	}
+	return out, nil
+}
+
+// RecordCampaignRoutes stores a range agent's sandbox route report on its
+// open campaign's open step, if any (D525 L6): the only source of
+// NOT_ROUTED_REPORTED. Nothing is stored for an agent with no open step.
+func (Store) RecordCampaignRoutes(ctx context.Context, tx db.TenantTx, org ids.OrgID, agent ids.UUID, routes []domain.Route) error {
+	q := dbq.New(tx)
+	for _, r := range routes {
+		if _, err := q.InsertCampaignRoute(ctx, dbq.InsertCampaignRouteParams{Kind: r.Kind, Locator: r.Locator, OrgID: org, RangeAgentID: agent}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *txn) Usage(ctx context.Context, campaign ids.UUID) ([]app.Usage, error) {
@@ -234,11 +295,10 @@ func (t *txn) Usage(ctx context.Context, campaign ids.UUID) ([]app.Usage, error)
 	}
 	out := make([]app.Usage, 0, len(rows))
 	for _, r := range rows {
-		u := app.Usage{Run: r.RunID, ModelHost: r.ModelHost, Requests: r.Requests, BytesToModel: r.BytesToModel, BytesFromModel: r.BytesFromModel}
-		if r.ScenarioID != nil {
-			u.Scenario = *r.ScenarioID
-		}
-		out = append(out, u)
+		out = append(out, app.Usage{
+			Run: r.RunID, Scenario: r.ScenarioID, ModelHost: r.ModelHost, Requests: r.Requests, BytesToModel: r.BytesToModel,
+			BytesFromModel: r.BytesFromModel,
+		})
 	}
 	return out, nil
 }

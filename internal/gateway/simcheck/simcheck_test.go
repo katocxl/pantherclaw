@@ -92,6 +92,36 @@ func TestHR221_TheTeamsAndAWSSimulatorsAnswerTheHandshake(t *testing.T) {
 	}
 }
 
+// TestHR613_AModelRelayAnswersOnlyTheModelFace: a relay passes the model
+// face's check, which asks for its kind, and fails every other: a mapped call
+// never reaches it, and the model face never reaches another simulator
+// (G0 M25 D313).
+//
+// Covers: F906
+func TestHR613_AModelRelayAnswersOnlyTheModelFace(t *testing.T) {
+	relay := httptest.NewServer(simhandshake.Wrap(ModelRelayKind, http.NotFoundHandler()))
+	defer relay.Close()
+	other := httptest.NewServer(simhandshake.Wrap("github", http.NotFoundHandler()))
+	defer other.Close()
+	if err := New().VerifyKind(t.Context(), "conn", relay.URL, ModelRelayKind, client(t, relay.URL)); err != nil {
+		t.Fatalf("the model face's check: %v", err)
+	}
+	if err := New().Verify(t.Context(), "conn", relay.URL, client(t, relay.URL)); !errors.Is(err, ErrUnverified) {
+		t.Fatalf("a mapped call's check passed a relay: %v", err)
+	}
+	if err := New().VerifyKind(t.Context(), "conn", other.URL, ModelRelayKind, client(t, other.URL)); !errors.Is(err, ErrUnverified) {
+		t.Fatalf("the model face passed another simulator: %v", err)
+	}
+	// The two checks are remembered apart.
+	c := New()
+	if err := c.VerifyKind(t.Context(), "conn", relay.URL, ModelRelayKind, client(t, relay.URL)); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Verify(t.Context(), "conn", relay.URL, client(t, relay.URL)); !errors.Is(err, ErrUnverified) {
+		t.Fatalf("a cached relay check passed a mapped call: %v", err)
+	}
+}
+
 func TestVerifyRefusesWhatIsNotASimulator(t *testing.T) {
 	good := payments.New(payments.Faults{}, pclog.Discard()).Handler()
 	for name, h := range map[string]http.Handler{

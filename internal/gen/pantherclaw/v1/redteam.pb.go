@@ -1999,7 +1999,9 @@ func (x *CampaignRoute) GetLocator() string {
 	return ""
 }
 
-// CampaignRunReport names the run of one campaign and what its edge saw.
+// CampaignRunReport names a run the runner saw for one campaign. The server
+// refuses one its own binding contradicts; routes are not read (the edge's
+// stored reports are).
 type CampaignRunReport struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ScenarioId    string                 `protobuf:"bytes,1,opt,name=scenario_id,json=scenarioId,proto3" json:"scenario_id,omitempty"`
@@ -2060,6 +2062,94 @@ func (x *CampaignRunReport) GetRoutes() []*CampaignRoute {
 	return nil
 }
 
+type StartCampaignStepRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CampaignId    string                 `protobuf:"bytes,1,opt,name=campaign_id,json=campaignId,proto3" json:"campaign_id,omitempty"`
+	ScenarioId    string                 `protobuf:"bytes,2,opt,name=scenario_id,json=scenarioId,proto3" json:"scenario_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartCampaignStepRequest) Reset() {
+	*x = StartCampaignStepRequest{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartCampaignStepRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartCampaignStepRequest) ProtoMessage() {}
+
+func (x *StartCampaignStepRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartCampaignStepRequest.ProtoReflect.Descriptor instead.
+func (*StartCampaignStepRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *StartCampaignStepRequest) GetCampaignId() string {
+	if x != nil {
+		return x.CampaignId
+	}
+	return ""
+}
+
+func (x *StartCampaignStepRequest) GetScenarioId() string {
+	if x != nil {
+		return x.ScenarioId
+	}
+	return ""
+}
+
+type StartCampaignStepResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartCampaignStepResponse) Reset() {
+	*x = StartCampaignStepResponse{}
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartCampaignStepResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartCampaignStepResponse) ProtoMessage() {}
+
+func (x *StartCampaignStepResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartCampaignStepResponse.ProtoReflect.Descriptor instead.
+func (*StartCampaignStepResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{25}
+}
+
 type FinishCampaignRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CampaignId    string                 `protobuf:"bytes,1,opt,name=campaign_id,json=campaignId,proto3" json:"campaign_id,omitempty"`
@@ -2070,7 +2160,7 @@ type FinishCampaignRequest struct {
 
 func (x *FinishCampaignRequest) Reset() {
 	*x = FinishCampaignRequest{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2082,7 +2172,7 @@ func (x *FinishCampaignRequest) String() string {
 func (*FinishCampaignRequest) ProtoMessage() {}
 
 func (x *FinishCampaignRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2095,7 +2185,7 @@ func (x *FinishCampaignRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinishCampaignRequest.ProtoReflect.Descriptor instead.
 func (*FinishCampaignRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *FinishCampaignRequest) GetCampaignId() string {
@@ -2133,7 +2223,7 @@ type CampaignStep struct {
 
 func (x *CampaignStep) Reset() {
 	*x = CampaignStep{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2145,7 +2235,7 @@ func (x *CampaignStep) String() string {
 func (*CampaignStep) ProtoMessage() {}
 
 func (x *CampaignStep) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2158,7 +2248,7 @@ func (x *CampaignStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CampaignStep.ProtoReflect.Descriptor instead.
 func (*CampaignStep) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CampaignStep) GetScenarioId() string {
@@ -2238,7 +2328,7 @@ type CampaignCounts struct {
 
 func (x *CampaignCounts) Reset() {
 	*x = CampaignCounts{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2250,7 +2340,7 @@ func (x *CampaignCounts) String() string {
 func (*CampaignCounts) ProtoMessage() {}
 
 func (x *CampaignCounts) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2263,7 +2353,7 @@ func (x *CampaignCounts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CampaignCounts.ProtoReflect.Descriptor instead.
 func (*CampaignCounts) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CampaignCounts) GetHeld() int32 {
@@ -2317,7 +2407,7 @@ type CampaignModelUsage struct {
 
 func (x *CampaignModelUsage) Reset() {
 	*x = CampaignModelUsage{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2329,7 +2419,7 @@ func (x *CampaignModelUsage) String() string {
 func (*CampaignModelUsage) ProtoMessage() {}
 
 func (x *CampaignModelUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2342,7 +2432,7 @@ func (x *CampaignModelUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CampaignModelUsage.ProtoReflect.Descriptor instead.
 func (*CampaignModelUsage) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CampaignModelUsage) GetRunId() string {
@@ -2415,7 +2505,7 @@ type Campaign struct {
 
 func (x *Campaign) Reset() {
 	*x = Campaign{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2427,7 +2517,7 @@ func (x *Campaign) String() string {
 func (*Campaign) ProtoMessage() {}
 
 func (x *Campaign) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[28]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2440,7 +2530,7 @@ func (x *Campaign) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Campaign.ProtoReflect.Descriptor instead.
 func (*Campaign) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{28}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Campaign) GetId() string {
@@ -2565,7 +2655,7 @@ type FinishCampaignResponse struct {
 
 func (x *FinishCampaignResponse) Reset() {
 	*x = FinishCampaignResponse{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2577,7 +2667,7 @@ func (x *FinishCampaignResponse) String() string {
 func (*FinishCampaignResponse) ProtoMessage() {}
 
 func (x *FinishCampaignResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[29]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2590,7 +2680,7 @@ func (x *FinishCampaignResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinishCampaignResponse.ProtoReflect.Descriptor instead.
 func (*FinishCampaignResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{29}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *FinishCampaignResponse) GetCampaign() *Campaign {
@@ -2616,7 +2706,7 @@ type GetCampaignRequest struct {
 
 func (x *GetCampaignRequest) Reset() {
 	*x = GetCampaignRequest{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2628,7 +2718,7 @@ func (x *GetCampaignRequest) String() string {
 func (*GetCampaignRequest) ProtoMessage() {}
 
 func (x *GetCampaignRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[30]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2641,7 +2731,7 @@ func (x *GetCampaignRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCampaignRequest.ProtoReflect.Descriptor instead.
 func (*GetCampaignRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{30}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetCampaignRequest) GetCampaignId() string {
@@ -2662,7 +2752,7 @@ type GetCampaignResponse struct {
 
 func (x *GetCampaignResponse) Reset() {
 	*x = GetCampaignResponse{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2674,7 +2764,7 @@ func (x *GetCampaignResponse) String() string {
 func (*GetCampaignResponse) ProtoMessage() {}
 
 func (x *GetCampaignResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[31]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2687,7 +2777,7 @@ func (x *GetCampaignResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCampaignResponse.ProtoReflect.Descriptor instead.
 func (*GetCampaignResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{31}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetCampaignResponse) GetCampaign() *Campaign {
@@ -2722,7 +2812,7 @@ type ListCampaignsRequest struct {
 
 func (x *ListCampaignsRequest) Reset() {
 	*x = ListCampaignsRequest{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2734,7 +2824,7 @@ func (x *ListCampaignsRequest) String() string {
 func (*ListCampaignsRequest) ProtoMessage() {}
 
 func (x *ListCampaignsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[32]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2747,7 +2837,7 @@ func (x *ListCampaignsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCampaignsRequest.ProtoReflect.Descriptor instead.
 func (*ListCampaignsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{32}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListCampaignsRequest) GetRangeAgentId() string {
@@ -2781,7 +2871,7 @@ type ListCampaignsResponse struct {
 
 func (x *ListCampaignsResponse) Reset() {
 	*x = ListCampaignsResponse{}
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2793,7 +2883,7 @@ func (x *ListCampaignsResponse) String() string {
 func (*ListCampaignsResponse) ProtoMessage() {}
 
 func (x *ListCampaignsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[33]
+	mi := &file_pantherclaw_v1_redteam_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2806,7 +2896,7 @@ func (x *ListCampaignsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCampaignsResponse.ProtoReflect.Descriptor instead.
 func (*ListCampaignsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{33}
+	return file_pantherclaw_v1_redteam_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListCampaignsResponse) GetCampaigns() []*Campaign {
@@ -2974,7 +3064,13 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\vscenario_id\x18\x01 \x01(\tB\x13\xbaH\x10r\x0e2\f^RT-14[0-9]$R\n" +
 	"scenarioId\x12\x1f\n" +
 	"\x06run_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\x12?\n" +
-	"\x06routes\x18\x03 \x03(\v2\x1d.pantherclaw.v1.CampaignRouteB\b\xbaH\x05\x92\x01\x02\x10@R\x06routes\"\x83\x01\n" +
+	"\x06routes\x18\x03 \x03(\v2\x1d.pantherclaw.v1.CampaignRouteB\b\xbaH\x05\x92\x01\x02\x10@R\x06routes\"{\n" +
+	"\x18StartCampaignStepRequest\x12)\n" +
+	"\vcampaign_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
+	"campaignId\x124\n" +
+	"\vscenario_id\x18\x02 \x01(\tB\x13\xbaH\x10r\x0e2\f^RT-14[0-9]$R\n" +
+	"scenarioId\"\x1b\n" +
+	"\x19StartCampaignStepResponse\"\x83\x01\n" +
 	"\x15FinishCampaignRequest\x12)\n" +
 	"\vcampaign_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
 	"campaignId\x12?\n" +
@@ -3082,7 +3178,7 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x1aCAMPAIGN_BASIS_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cCAMPAIGN_BASIS_SERVER_RECORD\x10\x01\x12\x1e\n" +
 	"\x1aCAMPAIGN_BASIS_EDGE_REPORT\x10\x02\x12\x17\n" +
-	"\x13CAMPAIGN_BASIS_NONE\x10\x032\xb9\a\n" +
+	"\x13CAMPAIGN_BASIS_NONE\x10\x032\xa3\b\n" +
 	"\fRangeService\x12S\n" +
 	"\n" +
 	"StartRange\x12!.pantherclaw.v1.StartRangeRequest\x1a\".pantherclaw.v1.StartRangeResponse\x12Y\n" +
@@ -3092,7 +3188,8 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\n" +
 	"ListRanges\x12!.pantherclaw.v1.ListRangesRequest\x1a\".pantherclaw.v1.ListRangesResponse\"\x03\x90\x02\x01\x12t\n" +
 	"\x15ExportAssuranceReport\x12,.pantherclaw.v1.ExportAssuranceReportRequest\x1a-.pantherclaw.v1.ExportAssuranceReportResponse\x12\\\n" +
-	"\rStartCampaign\x12$.pantherclaw.v1.StartCampaignRequest\x1a%.pantherclaw.v1.StartCampaignResponse\x12_\n" +
+	"\rStartCampaign\x12$.pantherclaw.v1.StartCampaignRequest\x1a%.pantherclaw.v1.StartCampaignResponse\x12h\n" +
+	"\x11StartCampaignStep\x12(.pantherclaw.v1.StartCampaignStepRequest\x1a).pantherclaw.v1.StartCampaignStepResponse\x12_\n" +
 	"\x0eFinishCampaign\x12%.pantherclaw.v1.FinishCampaignRequest\x1a&.pantherclaw.v1.FinishCampaignResponse\x12[\n" +
 	"\vGetCampaign\x12\".pantherclaw.v1.GetCampaignRequest\x1a#.pantherclaw.v1.GetCampaignResponse\"\x03\x90\x02\x01\x12a\n" +
 	"\rListCampaigns\x12$.pantherclaw.v1.ListCampaignsRequest\x1a%.pantherclaw.v1.ListCampaignsResponse\"\x03\x90\x02\x01B\xc5\x01\n" +
@@ -3111,7 +3208,7 @@ func file_pantherclaw_v1_redteam_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_redteam_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_pantherclaw_v1_redteam_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_pantherclaw_v1_redteam_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_pantherclaw_v1_redteam_proto_goTypes = []any{
 	(RangeState)(0),                       // 0: pantherclaw.v1.RangeState
 	(RangeVerdict)(0),                     // 1: pantherclaw.v1.RangeVerdict
@@ -3143,21 +3240,23 @@ var file_pantherclaw_v1_redteam_proto_goTypes = []any{
 	(*StartCampaignResponse)(nil),         // 27: pantherclaw.v1.StartCampaignResponse
 	(*CampaignRoute)(nil),                 // 28: pantherclaw.v1.CampaignRoute
 	(*CampaignRunReport)(nil),             // 29: pantherclaw.v1.CampaignRunReport
-	(*FinishCampaignRequest)(nil),         // 30: pantherclaw.v1.FinishCampaignRequest
-	(*CampaignStep)(nil),                  // 31: pantherclaw.v1.CampaignStep
-	(*CampaignCounts)(nil),                // 32: pantherclaw.v1.CampaignCounts
-	(*CampaignModelUsage)(nil),            // 33: pantherclaw.v1.CampaignModelUsage
-	(*Campaign)(nil),                      // 34: pantherclaw.v1.Campaign
-	(*FinishCampaignResponse)(nil),        // 35: pantherclaw.v1.FinishCampaignResponse
-	(*GetCampaignRequest)(nil),            // 36: pantherclaw.v1.GetCampaignRequest
-	(*GetCampaignResponse)(nil),           // 37: pantherclaw.v1.GetCampaignResponse
-	(*ListCampaignsRequest)(nil),          // 38: pantherclaw.v1.ListCampaignsRequest
-	(*ListCampaignsResponse)(nil),         // 39: pantherclaw.v1.ListCampaignsResponse
-	(*timestamppb.Timestamp)(nil),         // 40: google.protobuf.Timestamp
+	(*StartCampaignStepRequest)(nil),      // 30: pantherclaw.v1.StartCampaignStepRequest
+	(*StartCampaignStepResponse)(nil),     // 31: pantherclaw.v1.StartCampaignStepResponse
+	(*FinishCampaignRequest)(nil),         // 32: pantherclaw.v1.FinishCampaignRequest
+	(*CampaignStep)(nil),                  // 33: pantherclaw.v1.CampaignStep
+	(*CampaignCounts)(nil),                // 34: pantherclaw.v1.CampaignCounts
+	(*CampaignModelUsage)(nil),            // 35: pantherclaw.v1.CampaignModelUsage
+	(*Campaign)(nil),                      // 36: pantherclaw.v1.Campaign
+	(*FinishCampaignResponse)(nil),        // 37: pantherclaw.v1.FinishCampaignResponse
+	(*GetCampaignRequest)(nil),            // 38: pantherclaw.v1.GetCampaignRequest
+	(*GetCampaignResponse)(nil),           // 39: pantherclaw.v1.GetCampaignResponse
+	(*ListCampaignsRequest)(nil),          // 40: pantherclaw.v1.ListCampaignsRequest
+	(*ListCampaignsResponse)(nil),         // 41: pantherclaw.v1.ListCampaignsResponse
+	(*timestamppb.Timestamp)(nil),         // 42: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_redteam_proto_depIdxs = []int32{
 	6,  // 0: pantherclaw.v1.StartRangeRequest.scenarios:type_name -> pantherclaw.v1.RangeScenarioDecl
-	40, // 1: pantherclaw.v1.StartRangeResponse.start_time:type_name -> google.protobuf.Timestamp
+	42, // 1: pantherclaw.v1.StartRangeResponse.start_time:type_name -> google.protobuf.Timestamp
 	9,  // 2: pantherclaw.v1.RangeStepInput.expect:type_name -> pantherclaw.v1.RangeExpect
 	9,  // 3: pantherclaw.v1.RangeStepInput.observed:type_name -> pantherclaw.v1.RangeExpect
 	1,  // 4: pantherclaw.v1.RecordResultRequest.verdict:type_name -> pantherclaw.v1.RangeVerdict
@@ -3169,12 +3268,12 @@ var file_pantherclaw_v1_redteam_proto_depIdxs = []int32{
 	1,  // 10: pantherclaw.v1.RangeResult.verdict:type_name -> pantherclaw.v1.RangeVerdict
 	1,  // 11: pantherclaw.v1.RangeResult.claimed_verdict:type_name -> pantherclaw.v1.RangeVerdict
 	12, // 12: pantherclaw.v1.RangeResult.steps:type_name -> pantherclaw.v1.RangeStep
-	40, // 13: pantherclaw.v1.RangeResult.record_time:type_name -> google.protobuf.Timestamp
+	42, // 13: pantherclaw.v1.RangeResult.record_time:type_name -> google.protobuf.Timestamp
 	13, // 14: pantherclaw.v1.RecordResultResponse.result:type_name -> pantherclaw.v1.RangeResult
 	6,  // 15: pantherclaw.v1.Range.scenarios:type_name -> pantherclaw.v1.RangeScenarioDecl
 	0,  // 16: pantherclaw.v1.Range.state:type_name -> pantherclaw.v1.RangeState
-	40, // 17: pantherclaw.v1.Range.start_time:type_name -> google.protobuf.Timestamp
-	40, // 18: pantherclaw.v1.Range.finish_time:type_name -> google.protobuf.Timestamp
+	42, // 17: pantherclaw.v1.Range.start_time:type_name -> google.protobuf.Timestamp
+	42, // 18: pantherclaw.v1.Range.finish_time:type_name -> google.protobuf.Timestamp
 	16, // 19: pantherclaw.v1.Range.counts:type_name -> pantherclaw.v1.RangeCounts
 	17, // 20: pantherclaw.v1.FinishRangeResponse.range:type_name -> pantherclaw.v1.Range
 	13, // 21: pantherclaw.v1.FinishRangeResponse.results:type_name -> pantherclaw.v1.RangeResult
@@ -3182,21 +3281,21 @@ var file_pantherclaw_v1_redteam_proto_depIdxs = []int32{
 	13, // 23: pantherclaw.v1.GetRangeResponse.results:type_name -> pantherclaw.v1.RangeResult
 	17, // 24: pantherclaw.v1.ListRangesResponse.ranges:type_name -> pantherclaw.v1.Range
 	25, // 25: pantherclaw.v1.StartCampaignRequest.campaigns:type_name -> pantherclaw.v1.CampaignDecl
-	40, // 26: pantherclaw.v1.StartCampaignResponse.start_time:type_name -> google.protobuf.Timestamp
+	42, // 26: pantherclaw.v1.StartCampaignResponse.start_time:type_name -> google.protobuf.Timestamp
 	28, // 27: pantherclaw.v1.CampaignRunReport.routes:type_name -> pantherclaw.v1.CampaignRoute
 	29, // 28: pantherclaw.v1.FinishCampaignRequest.runs:type_name -> pantherclaw.v1.CampaignRunReport
 	4,  // 29: pantherclaw.v1.CampaignStep.outcome:type_name -> pantherclaw.v1.CampaignOutcome
 	5,  // 30: pantherclaw.v1.CampaignStep.basis:type_name -> pantherclaw.v1.CampaignBasis
 	3,  // 31: pantherclaw.v1.Campaign.state:type_name -> pantherclaw.v1.CampaignState
-	40, // 32: pantherclaw.v1.Campaign.start_time:type_name -> google.protobuf.Timestamp
-	40, // 33: pantherclaw.v1.Campaign.finish_time:type_name -> google.protobuf.Timestamp
-	32, // 34: pantherclaw.v1.Campaign.counts:type_name -> pantherclaw.v1.CampaignCounts
-	34, // 35: pantherclaw.v1.FinishCampaignResponse.campaign:type_name -> pantherclaw.v1.Campaign
-	31, // 36: pantherclaw.v1.FinishCampaignResponse.steps:type_name -> pantherclaw.v1.CampaignStep
-	34, // 37: pantherclaw.v1.GetCampaignResponse.campaign:type_name -> pantherclaw.v1.Campaign
-	31, // 38: pantherclaw.v1.GetCampaignResponse.steps:type_name -> pantherclaw.v1.CampaignStep
-	33, // 39: pantherclaw.v1.GetCampaignResponse.model_usage:type_name -> pantherclaw.v1.CampaignModelUsage
-	34, // 40: pantherclaw.v1.ListCampaignsResponse.campaigns:type_name -> pantherclaw.v1.Campaign
+	42, // 32: pantherclaw.v1.Campaign.start_time:type_name -> google.protobuf.Timestamp
+	42, // 33: pantherclaw.v1.Campaign.finish_time:type_name -> google.protobuf.Timestamp
+	34, // 34: pantherclaw.v1.Campaign.counts:type_name -> pantherclaw.v1.CampaignCounts
+	36, // 35: pantherclaw.v1.FinishCampaignResponse.campaign:type_name -> pantherclaw.v1.Campaign
+	33, // 36: pantherclaw.v1.FinishCampaignResponse.steps:type_name -> pantherclaw.v1.CampaignStep
+	36, // 37: pantherclaw.v1.GetCampaignResponse.campaign:type_name -> pantherclaw.v1.Campaign
+	33, // 38: pantherclaw.v1.GetCampaignResponse.steps:type_name -> pantherclaw.v1.CampaignStep
+	35, // 39: pantherclaw.v1.GetCampaignResponse.model_usage:type_name -> pantherclaw.v1.CampaignModelUsage
+	36, // 40: pantherclaw.v1.ListCampaignsResponse.campaigns:type_name -> pantherclaw.v1.Campaign
 	7,  // 41: pantherclaw.v1.RangeService.StartRange:input_type -> pantherclaw.v1.StartRangeRequest
 	11, // 42: pantherclaw.v1.RangeService.RecordResult:input_type -> pantherclaw.v1.RecordResultRequest
 	15, // 43: pantherclaw.v1.RangeService.FinishRange:input_type -> pantherclaw.v1.FinishRangeRequest
@@ -3204,21 +3303,23 @@ var file_pantherclaw_v1_redteam_proto_depIdxs = []int32{
 	21, // 45: pantherclaw.v1.RangeService.ListRanges:input_type -> pantherclaw.v1.ListRangesRequest
 	23, // 46: pantherclaw.v1.RangeService.ExportAssuranceReport:input_type -> pantherclaw.v1.ExportAssuranceReportRequest
 	26, // 47: pantherclaw.v1.RangeService.StartCampaign:input_type -> pantherclaw.v1.StartCampaignRequest
-	30, // 48: pantherclaw.v1.RangeService.FinishCampaign:input_type -> pantherclaw.v1.FinishCampaignRequest
-	36, // 49: pantherclaw.v1.RangeService.GetCampaign:input_type -> pantherclaw.v1.GetCampaignRequest
-	38, // 50: pantherclaw.v1.RangeService.ListCampaigns:input_type -> pantherclaw.v1.ListCampaignsRequest
-	8,  // 51: pantherclaw.v1.RangeService.StartRange:output_type -> pantherclaw.v1.StartRangeResponse
-	14, // 52: pantherclaw.v1.RangeService.RecordResult:output_type -> pantherclaw.v1.RecordResultResponse
-	18, // 53: pantherclaw.v1.RangeService.FinishRange:output_type -> pantherclaw.v1.FinishRangeResponse
-	20, // 54: pantherclaw.v1.RangeService.GetRange:output_type -> pantherclaw.v1.GetRangeResponse
-	22, // 55: pantherclaw.v1.RangeService.ListRanges:output_type -> pantherclaw.v1.ListRangesResponse
-	24, // 56: pantherclaw.v1.RangeService.ExportAssuranceReport:output_type -> pantherclaw.v1.ExportAssuranceReportResponse
-	27, // 57: pantherclaw.v1.RangeService.StartCampaign:output_type -> pantherclaw.v1.StartCampaignResponse
-	35, // 58: pantherclaw.v1.RangeService.FinishCampaign:output_type -> pantherclaw.v1.FinishCampaignResponse
-	37, // 59: pantherclaw.v1.RangeService.GetCampaign:output_type -> pantherclaw.v1.GetCampaignResponse
-	39, // 60: pantherclaw.v1.RangeService.ListCampaigns:output_type -> pantherclaw.v1.ListCampaignsResponse
-	51, // [51:61] is the sub-list for method output_type
-	41, // [41:51] is the sub-list for method input_type
+	30, // 48: pantherclaw.v1.RangeService.StartCampaignStep:input_type -> pantherclaw.v1.StartCampaignStepRequest
+	32, // 49: pantherclaw.v1.RangeService.FinishCampaign:input_type -> pantherclaw.v1.FinishCampaignRequest
+	38, // 50: pantherclaw.v1.RangeService.GetCampaign:input_type -> pantherclaw.v1.GetCampaignRequest
+	40, // 51: pantherclaw.v1.RangeService.ListCampaigns:input_type -> pantherclaw.v1.ListCampaignsRequest
+	8,  // 52: pantherclaw.v1.RangeService.StartRange:output_type -> pantherclaw.v1.StartRangeResponse
+	14, // 53: pantherclaw.v1.RangeService.RecordResult:output_type -> pantherclaw.v1.RecordResultResponse
+	18, // 54: pantherclaw.v1.RangeService.FinishRange:output_type -> pantherclaw.v1.FinishRangeResponse
+	20, // 55: pantherclaw.v1.RangeService.GetRange:output_type -> pantherclaw.v1.GetRangeResponse
+	22, // 56: pantherclaw.v1.RangeService.ListRanges:output_type -> pantherclaw.v1.ListRangesResponse
+	24, // 57: pantherclaw.v1.RangeService.ExportAssuranceReport:output_type -> pantherclaw.v1.ExportAssuranceReportResponse
+	27, // 58: pantherclaw.v1.RangeService.StartCampaign:output_type -> pantherclaw.v1.StartCampaignResponse
+	31, // 59: pantherclaw.v1.RangeService.StartCampaignStep:output_type -> pantherclaw.v1.StartCampaignStepResponse
+	37, // 60: pantherclaw.v1.RangeService.FinishCampaign:output_type -> pantherclaw.v1.FinishCampaignResponse
+	39, // 61: pantherclaw.v1.RangeService.GetCampaign:output_type -> pantherclaw.v1.GetCampaignResponse
+	41, // 62: pantherclaw.v1.RangeService.ListCampaigns:output_type -> pantherclaw.v1.ListCampaignsResponse
+	52, // [52:63] is the sub-list for method output_type
+	41, // [41:52] is the sub-list for method input_type
 	41, // [41:41] is the sub-list for extension type_name
 	41, // [41:41] is the sub-list for extension extendee
 	0,  // [0:41] is the sub-list for field type_name
@@ -3235,7 +3336,7 @@ func file_pantherclaw_v1_redteam_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_redteam_proto_rawDesc), len(file_pantherclaw_v1_redteam_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   34,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

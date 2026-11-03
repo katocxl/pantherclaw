@@ -265,6 +265,9 @@ message Connection {
   PostgresConfig postgres = 31;
   // a2a is an a2a connection's configuration and pinned card.
   A2AConfig a2a = 32;
+  // Whether the connection is a campaign's model relay (G0 M25 D313): only
+  // the gateway's model face serves it, and only during an open campaign.
+  bool model_relay = 33;
 }
 
 // PostgresConfig is a postgres connection (G0 M14 D15): where the database
@@ -587,6 +590,10 @@ message CreateConnectionRequest {
   PostgresConfig postgres = 22;
   // a2a is required for, and only for, an a2a connection.
   A2AConfig a2a = 23;
+  // Creates a campaign's model relay (G0 M25 D313): a simulated http
+  // connection with no package, no agent hosts and no credential. Fixed for
+  // the connection's life.
+  bool model_relay = 24;
 }
 
 // CreateConnectionResponse returns the connection.

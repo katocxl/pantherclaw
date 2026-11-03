@@ -24,19 +24,38 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/redteam/library"
 	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 )
 
-// oneCampaign is one finished campaign, standing in for the campaign store
-// until the campaign exit runs one for real.
-type oneCampaign struct{ id ids.UUID }
+// oneCampaign is one finished campaign of two library campaigns, as the
+// campaign store returns it: RT-140 (ASI01, ASI02) held at the gateway and
+// RT-148 (ASI03) only reported by the edge. Its set digest is the library's,
+// so its steps carry the library's tags.
+type oneCampaign struct {
+	id  ids.UUID
+	set string
+}
+
+func newCampaign(t *testing.T) oneCampaign {
+	t.Helper()
+	var set []cdomain.Declared
+	for _, id := range []string{"RT-140", "RT-148"} {
+		e, ok := library.Campaign(id)
+		if !ok {
+			t.Fatalf("no library campaign %s", id)
+		}
+		set = append(set, cdomain.Declared{ID: id, Digest: e.Digest})
+	}
+	return oneCampaign{id: ids.NewV7(), set: cdomain.SetDigest(set)}
+}
 
 func (c oneCampaign) CampaignResults(context.Context, ids.OrgID, cports.Filter) (cports.Results, error) {
 	return cports.Results{Items: []cports.Result{{
-		Campaign: cdomain.Campaign{ID: c.id, State: cdomain.Finished},
+		Campaign: cdomain.Campaign{ID: c.id, State: cdomain.Finished, SetDigest: c.set, Scenarios: []string{"RT-140", "RT-148"}},
 		Steps: []cdomain.Step{
-			{Scenario: "RT-001", ID: "merge", Outcome: cdomain.Held, Basis: cdomain.ServerRecord},
-			{Scenario: "RT-006", ID: "route", Outcome: cdomain.NotRoutedReported, Basis: cdomain.EdgeReport},
+			{Scenario: "RT-140", ID: "merge", Outcome: cdomain.Held, Basis: cdomain.ServerRecord},
+			{Scenario: "RT-148", ID: "route", Outcome: cdomain.NotRoutedReported, Basis: cdomain.EdgeReport},
 		},
 	}}}, nil
 }
@@ -63,10 +82,7 @@ func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
 	p := s.proof(t)
 	ctx := context.Background()
 	svc := app.New(s.pool, p.origin).WithPacks(func(context.Context, db.TenantTx, ids.OrgID, ids.UUID) error { return nil }, teamEdition{})
-	campaign := ids.NewV7()
-	compliance := &coapp.Service{Pool: s.pool, Ents: teamEdition{}, Campaigns: campaignresults.Reader{
-		Results: oneCampaign{campaign}, Tags: campaignresults.LibraryTags,
-	}}
+	compliance := &coapp.Service{Pool: s.pool, Ents: teamEdition{}, Campaigns: campaignresults.Library(newCampaign(t))}
 	builder := &packbuild.Service{
 		Pool: s.pool, Keys: p.reg, LogOrigin: p.origin, Explorer: &txapp.Explorer{Pool: s.pool}, Bundles: app.New(s.pool, p.origin),
 		Log: pclog.Discard(), Compliance: compliance,

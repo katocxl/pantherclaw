@@ -13,6 +13,7 @@ import (
 	_ "embed"
 	"encoding/json/v2"
 	"fmt"
+	"slices"
 
 	"github.com/katocxl/pantherclaw/internal/campaigns/domain"
 )
@@ -44,6 +45,8 @@ type CampaignEntry struct {
 	Digest   string           `json:"digest"`
 	Tier     string           `json:"tier"`
 	Attempts []domain.Attempt `json:"attempts"`
+	// ASI are the OWASP agentic risks the campaign file tags (D529).
+	ASI []string `json:"asi,omitzero"`
 }
 
 //go:embed campaigns.json
@@ -61,6 +64,13 @@ var campaigns = func() map[string]CampaignEntry {
 func Campaign(id string) (CampaignEntry, bool) {
 	e, ok := campaigns[id]
 	return e, ok
+}
+
+// CampaignASI returns the OWASP agentic risks (ASI01..ASI10) a library
+// campaign exercises, as its file tags them, ascending; nil for an id that
+// is no library campaign or carries no tag (D529).
+func CampaignASI(id string) []string {
+	return slices.Clone(campaigns[id].ASI)
 }
 
 // Lookup returns the library's entry for an RT id.

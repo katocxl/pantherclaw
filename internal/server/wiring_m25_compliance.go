@@ -15,7 +15,7 @@ import (
 )
 
 func complianceService(pool *db.Pool, bill *billing.Service) *coapp.Service {
-	s := &coapp.Service{Pool: pool, Campaigns: campaignresults.Reader{Results: campaignResults(pool), Tags: campaignresults.LibraryTags}}
+	s := &coapp.Service{Pool: pool, Campaigns: campaignresults.Library(campaignResults(pool))}
 	if bill != nil {
 		s.Ents = bill
 	}

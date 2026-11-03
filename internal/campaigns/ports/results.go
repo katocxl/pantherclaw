@@ -11,8 +11,17 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/campaigns/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
+
+// RouteRecorder stores the routes a range agent's sandbox edge reported on
+// the agent's open campaign step, if any (G0 M25 D525 L6), inside the
+// reporting transaction. Those stored reports are the only source of a
+// NOT_ROUTED_REPORTED outcome.
+type RouteRecorder interface {
+	RecordCampaignRoutes(ctx context.Context, tx db.TenantTx, org ids.OrgID, agent ids.UUID, routes []domain.Route) error
+}
 
 // Filter picks finished campaigns: Start <= finish time < End, of one range
 // agent when Agent is set.

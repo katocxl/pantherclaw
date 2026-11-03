@@ -66,6 +66,10 @@ func New() *Checker { return &Checker{now: time.Now, ok: map[string]time.Time{}}
 // handshake (now, or within the last TTL). cl is the connection's egress
 // client.
 func (c *Checker) Verify(ctx context.Context, connectionID, baseURL string, cl Client) error {
+	return c.verify(ctx, connectionID, baseURL, "", cl)
+}
+
+func (c *Checker) verify(ctx context.Context, connectionID, baseURL, kind string, cl Client) error {
 	u, err := LocalLiteral(baseURL)
 	if err != nil {
 		return err
@@ -77,7 +81,7 @@ func (c *Checker) Verify(ctx context.Context, connectionID, baseURL string, cl C
 	if found && c.now().Sub(at) < TTL {
 		return nil
 	}
-	if err := handshake(ctx, u, cl); err != nil {
+	if err := handshake(ctx, u, kind, cl); err != nil {
 		c.mu.Lock()
 		delete(c.ok, key)
 		c.mu.Unlock()
@@ -114,7 +118,7 @@ type answer struct {
 	Nonce     string `json:"nonce"`
 }
 
-func handshake(ctx context.Context, base *url.URL, cl Client) error {
+func handshake(ctx context.Context, base *url.URL, kind string, cl Client) error {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return fmt.Errorf("%w: %w", ErrUnverified, err)
@@ -145,13 +149,28 @@ func handshake(ctx context.Context, base *url.URL, cl Client) error {
 		return fmt.Errorf("%w: answer", ErrUnverified)
 	case a.Simulator != "pantherclaw-sim" || a.Nonce != nonce:
 		return fmt.Errorf("%w: answer", ErrUnverified)
-	case !slices.Contains(simKinds, a.Kind):
+	case !slices.Contains(simKinds, a.Kind), kind != "" && a.Kind != kind:
 		return fmt.Errorf("%w: kind", ErrUnverified)
+	case kind == "" && a.Kind == ModelRelayKind:
+		// A relay holds a real model key: only the model face, which asks
+		// for the kind, may send to it, never a mapped call (D313).
+		return fmt.Errorf("%w: a model relay serves only the model face", ErrUnverified)
 	}
 	return nil
 }
 
 // simKinds are the simulators a handshake may name: payments, mcp and
-// github, the M14 simulators stripe, slack and a2a (G0 M14 D46), and the M20
-// simulators jira, gitlab, teams and aws (D254).
-var simKinds = []string{"payments", "mcp", "github", "stripe", "slack", "a2a", "jira", "gitlab", "teams", "aws"}
+// github, the M14 simulators stripe, slack and a2a (G0 M14 D46), the M20
+// simulators jira, gitlab, teams and aws (D254), and a campaign's model relay
+// (G0 M25 D313).
+var simKinds = []string{"payments", "mcp", "github", "stripe", "slack", "a2a", "jira", "gitlab", "teams", "aws", "model-relay"}
+
+// ModelRelayKind is the handshake kind of a campaign's model relay.
+const ModelRelayKind = "model-relay"
+
+// VerifyKind is Verify for a connection that must answer as kind: a target
+// that answers as another simulator is refused. A result is remembered per
+// connection, base URL and kind.
+func (c *Checker) VerifyKind(ctx context.Context, connectionID, baseURL, kind string, cl Client) error {
+	return c.verify(ctx, connectionID+"\x00"+kind, baseURL, kind, cl)
+}
