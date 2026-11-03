@@ -21,7 +21,19 @@ const MaxTechniques = 16
 // each attack id in the pinned ATT&CK Enterprise catalog, each once, and
 // technique_why gives every id, and nothing else, one line of at most 200
 // characters that cites the id in parentheses, exactly like asi_why.
-func CheckTechniques(atlas, attack []string, why map[string]string) error {
+// techniques_none (D714b) replaces all three on a file that tests
+// PantherClaw itself: one line of 1–200 characters. A file with neither
+// parses; the closure test requires one of them on every library file.
+func CheckTechniques(atlas, attack []string, why map[string]string, none string) error {
+	if none != "" {
+		switch {
+		case len(atlas) > 0 || len(attack) > 0 || len(why) > 0:
+			return invalid("techniques_none replaces atlas, attack and technique_why")
+		case strings.TrimSpace(none) == "" || strings.ContainsAny(none, "\r\n") || utf8.RuneCountInString(none) > MaxTechniqueWhy:
+			return invalid("techniques_none must be one line of at most %d characters", MaxTechniqueWhy)
+		}
+		return nil
+	}
 	if len(atlas) > MaxTechniques || len(attack) > MaxTechniques {
 		return invalid("at most %d atlas and %d attack techniques", MaxTechniques, MaxTechniques)
 	}

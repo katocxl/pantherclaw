@@ -70,9 +70,13 @@ type Scenario struct {
 	ATLAS        []string          `json:"atlas,omitempty"`
 	ATTACK       []string          `json:"attack,omitempty"`
 	TechniqueWhy map[string]string `json:"technique_why,omitempty"`
-	Requires     []string          `json:"requires,omitempty"`
-	HarnessOnly  bool              `json:"harness_only,omitzero"`
-	Steps        []Step            `json:"steps"`
+	// TechniquesNone replaces ATLAS and ATTACK on a library scenario that
+	// tests PantherClaw itself, not an attacker technique: one line (G0 M28
+	// D714b). Such a scenario never feeds the Test lane.
+	TechniquesNone string   `json:"techniques_none,omitempty"`
+	Requires       []string `json:"requires,omitempty"`
+	HarnessOnly    bool     `json:"harness_only,omitzero"`
+	Steps          []Step   `json:"steps"`
 }
 
 // Step is one action of a scenario. With holds the kind's arguments as JSON;
