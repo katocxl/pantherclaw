@@ -270,6 +270,7 @@ type PcAlert struct {
 	Test          bool
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	Attack        []string
 }
 
 type PcAlertEvent struct {
@@ -1046,6 +1047,8 @@ type PcCase struct {
 	OperationalClosedAt *time.Time
 	ClosedAt            *time.Time
 	ContainedAt         *time.Time
+	Atlas               []string
+	Attack              []string
 }
 
 type PcCaseEntry struct {
@@ -2635,6 +2638,8 @@ type PcIncident struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	ContainedAt *time.Time
+	Atlas       []string
+	Attack      []string
 }
 
 type PcIncidentEvent struct {

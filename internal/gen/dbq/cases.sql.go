@@ -249,7 +249,7 @@ func (q *Queries) CaseOpenQuestions(ctx context.Context, orgID ids.UUID, caseID 
 }
 
 const casesLinking = `-- name: CasesLinking :many
-SELECT DISTINCT c.org_id, c.id, c.title, c.source, c.opened_by_type, c.opened_by_id, c.alert_id, c.incident_id, c.state, c.owner_id, c.follow_up_owner_id, c.disposition, c.impact, c.head_seq, c.head_hash, c.created_at, c.updated_at, c.operational_closed_at, c.closed_at, c.contained_at FROM pc.cases c
+SELECT DISTINCT c.org_id, c.id, c.title, c.source, c.opened_by_type, c.opened_by_id, c.alert_id, c.incident_id, c.state, c.owner_id, c.follow_up_owner_id, c.disposition, c.impact, c.head_seq, c.head_hash, c.created_at, c.updated_at, c.operational_closed_at, c.closed_at, c.contained_at, c.atlas, c.attack FROM pc.cases c
 JOIN pc.case_entries l ON l.org_id = c.org_id AND l.case_id = c.id
 WHERE c.org_id = $1 AND l.kind = 'LINK' AND l.ref_kind = $2 AND l.ref_id = $3
   AND NOT pc.case_entry_superseded(l.org_id, l.id)
@@ -305,6 +305,8 @@ func (q *Queries) CasesLinking(ctx context.Context, arg CasesLinkingParams) ([]P
 			&i.OperationalClosedAt,
 			&i.ClosedAt,
 			&i.ContainedAt,
+			&i.Atlas,
+			&i.Attack,
 		); err != nil {
 			return nil, err
 		}
@@ -317,7 +319,7 @@ func (q *Queries) CasesLinking(ctx context.Context, arg CasesLinkingParams) ([]P
 }
 
 const getCase = `-- name: GetCase :one
-SELECT org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, state, owner_id, follow_up_owner_id, disposition, impact, head_seq, head_hash, created_at, updated_at, operational_closed_at, closed_at, contained_at FROM pc.cases WHERE org_id = $1 AND id = $2
+SELECT org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, state, owner_id, follow_up_owner_id, disposition, impact, head_seq, head_hash, created_at, updated_at, operational_closed_at, closed_at, contained_at, atlas, attack FROM pc.cases WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetCase(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcCase, error) {
@@ -344,6 +346,8 @@ func (q *Queries) GetCase(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (Pc
 		&i.OperationalClosedAt,
 		&i.ClosedAt,
 		&i.ContainedAt,
+		&i.Atlas,
+		&i.Attack,
 	)
 	return i, err
 }
@@ -392,10 +396,16 @@ func (q *Queries) GetCaseEntry(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 
 const insertCase = `-- name: InsertCase :one
 
-INSERT INTO pc.cases (org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id)
+INSERT INTO pc.cases (org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, atlas, attack)
 VALUES ($1, $2, $3, $4, $5,
-    $6, $7, $8)
-RETURNING org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, state, owner_id, follow_up_owner_id, disposition, impact, head_seq, head_hash, created_at, updated_at, operational_closed_at, closed_at, contained_at
+    $6, $7, $8,
+    pc.technique_union(
+        (SELECT a.atlas FROM pc.alerts a WHERE a.org_id = $1 AND a.id = $7),
+        (SELECT i.atlas FROM pc.incidents i WHERE i.org_id = $1 AND i.id = $8)),
+    pc.technique_union(
+        (SELECT a.attack FROM pc.alerts a WHERE a.org_id = $1 AND a.id = $7),
+        (SELECT i.attack FROM pc.incidents i WHERE i.org_id = $1 AND i.id = $8)))
+RETURNING org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, state, owner_id, follow_up_owner_id, disposition, impact, head_seq, head_hash, created_at, updated_at, operational_closed_at, closed_at, contained_at, atlas, attack
 `
 
 type InsertCaseParams struct {
@@ -415,7 +425,8 @@ type InsertCaseParams struct {
 // Cases (G0 M10 D19, HR-245, HR-246). Entries are only ever inserted; the
 // triggers of migration 00122 derive their columns, chain them and move the
 // case.
-// The insert trigger sets the genesis head.
+// The insert trigger sets the genesis head. A case opened from an alert or
+// an incident starts with the union of their techniques (G0 M28 D718).
 func (q *Queries) InsertCase(ctx context.Context, arg InsertCaseParams) (PcCase, error) {
 	row := q.db.QueryRow(ctx, insertCase,
 		arg.OrgID,
@@ -449,6 +460,8 @@ func (q *Queries) InsertCase(ctx context.Context, arg InsertCaseParams) (PcCase,
 		&i.OperationalClosedAt,
 		&i.ClosedAt,
 		&i.ContainedAt,
+		&i.Atlas,
+		&i.Attack,
 	)
 	return i, err
 }
@@ -583,7 +596,7 @@ func (q *Queries) ListCaseEntries(ctx context.Context, arg ListCaseEntriesParams
 }
 
 const listCases = `-- name: ListCases :many
-SELECT org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, state, owner_id, follow_up_owner_id, disposition, impact, head_seq, head_hash, created_at, updated_at, operational_closed_at, closed_at, contained_at FROM pc.cases
+SELECT org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, state, owner_id, follow_up_owner_id, disposition, impact, head_seq, head_hash, created_at, updated_at, operational_closed_at, closed_at, contained_at, atlas, attack FROM pc.cases
 WHERE org_id = $1
   AND (cardinality($2::text[]) = 0 OR state = ANY ($2::text[]))
   AND ($3::uuid IS NULL OR owner_id = $3 OR follow_up_owner_id = $3)
@@ -652,6 +665,8 @@ func (q *Queries) ListCases(ctx context.Context, arg ListCasesParams) ([]PcCase,
 			&i.OperationalClosedAt,
 			&i.ClosedAt,
 			&i.ContainedAt,
+			&i.Atlas,
+			&i.Attack,
 		); err != nil {
 			return nil, err
 		}
@@ -664,7 +679,7 @@ func (q *Queries) ListCases(ctx context.Context, arg ListCasesParams) ([]PcCase,
 }
 
 const lockCase = `-- name: LockCase :one
-SELECT org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, state, owner_id, follow_up_owner_id, disposition, impact, head_seq, head_hash, created_at, updated_at, operational_closed_at, closed_at, contained_at FROM pc.cases WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, state, owner_id, follow_up_owner_id, disposition, impact, head_seq, head_hash, created_at, updated_at, operational_closed_at, closed_at, contained_at, atlas, attack FROM pc.cases WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 // The case row lock serialises appends; the head it returns numbers the
@@ -693,6 +708,8 @@ func (q *Queries) LockCase(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (P
 		&i.OperationalClosedAt,
 		&i.ClosedAt,
 		&i.ContainedAt,
+		&i.Atlas,
+		&i.Attack,
 	)
 	return i, err
 }
