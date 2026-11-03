@@ -10,6 +10,9 @@
 3. **Profiles are inference, and they say so** (D502, HR-644). Every profile, context and alert is labelled INFERRED and UNVALIDATED, and says that a quiet result is not a clean one. Behaviour alerts have basis INFERRED and attention of at most ALERT. It extends `pc.drift.behavior` and F399, using `BehaviorProfile`, not `cohorts.Baseline`.
 4. **Simulated history is apart** (D502, D524, HR-642). It lives in `pc.behavior_simulated_actions`, range agents only, enforced by the database, and is compared only with simulated activity. A simulated signal is a Test signal (HR-222).
 5. **Inference never contains** (D500, D514, D516, D526, H4, HR-640). `reflex.alert` gains `basis`. A contain step runs only on a CONFIRMED alert (OBSERVED or RULE_MATCH), for every automation, library or custom. Otherwise it skips with `UNCONFIRMED_SIGNAL`, and a definition on `alert.inferred` that would contain is refused. Custom detection rules are capped at INFERRED. This is stricter than F800.
+
+   **Note (2026-11-03, founder's decision on confirmed custom rules).** Since 2026-11-03 a custom rule version confirmed by two people is not capped: its alerts are RULE_MATCH ([HR-666](../security/HARDENING_RULES.md)).
+
 6. **Inference never decides** (D501, D526, HR-645, HR-646). Approval context shows beside the approval, outside the binding, compared with the agent's allowed actions before the held action, never with a stored profile. No decision reads it. HR-030, HR-034 and HR-240 are unchanged.
 
 **Consequences.**
@@ -18,4 +21,4 @@
 - Profiles do not exist for what PantherClaw never saw. An agent outside the gateway has no profile, and the arguments of its actions are not read.
 - The agent shapes its own baseline. Thresholds are guesses until real history exists, and the product says so.
 
-**Alternatives.** Ingesting outside logs (V6(b), against F787); automatic containment on a strong inference (H4, F800); confirmed custom rules driving containment (a two-person path is a follow-up); putting "never done X" inside the approval binding (a decision would then rest on inference); comparing approval context with the stored profile (a hold and its retries could make the action look usual); reading the ledger (D502 chose `pc.transactions`); reusing `cohorts.Baseline` (it is not what N13 needs).
+**Alternatives.** Ingesting outside logs (V6(b), against F787); automatic containment on a strong inference (H4, F800); confirmed custom rules driving containment (a two-person path was built after M27: HR-666); putting "never done X" inside the approval binding (a decision would then rest on inference); comparing approval context with the stored profile (a hold and its retries could make the action look usual); reading the ledger (D502 chose `pc.transactions`); reusing `cohorts.Baseline` (it is not what N13 needs).

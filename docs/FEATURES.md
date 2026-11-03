@@ -868,6 +868,7 @@ Analytics use PantherClaw's own transactions and never contain automatically (F7
 | F947 | `pclaw mcp self` | A stdio MCP server with four read tools: `search`, `explain_decision`, `run_timeline`, `breach_radius`. Bounded inputs, agent-safe refusals, no model. | Next | Team | M27 | new |
 | F948 | Server-side read audit | The server records `audit.self_mcp.read` for each read and gate refusal by the Investigator role, before the first response byte, so a client can't skip it. | Next | Team | M27 | new |
 | F949 | Untrusted record labels | Every record a tool returns sits under `UNTRUSTED_RECORD_DATA`, cleaned, cut to 2000 runes and JSON-escaped. Record text is data, never an instruction. | Next | Team | M27 | new |
+| F951 | Confirmed custom rules | A person asks to confirm one published version of a custom detection rule, and a second person with `detection.manage` confirms it with a security key. That version's alerts are then RULE_MATCH, so automations may contain on them. Publishing another version, a disable or a withdrawal ends the confirmation at once, and the alerts are INFERRED again. People only, no API keys. | Next | Business | M27 | PN-006.1, F800 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 

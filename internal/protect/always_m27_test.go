@@ -33,3 +33,23 @@ func TestHR652_LeavingActiveIsAlwaysProtected(t *testing.T) {
 		t.Fatalf("without a Gate: %v %v applied %v", held, err, applied)
 	}
 }
+
+// TestHR666_ConfirmingACustomRuleIsAlwaysProtected: confirming a custom
+// detection rule version always waits for a second person, needs
+// detection.manage, and fails closed without a Gate.
+//
+// Covers: F951
+func TestHR666_ConfirmingACustomRuleIsAlwaysProtected(t *testing.T) {
+	s := protect.SurfaceCustomRuleConfirm
+	if s != "detection.custom_rule.confirm" || !s.AlwaysProtected() || s.Permission() != td.PermDetectionManage {
+		t.Fatalf("%s: always %v, permission %s", s, s.AlwaysProtected(), s.Permission())
+	}
+	applied := false
+	var g *protect.Gate
+	held, err := g.Hold(context.Background(), db.TenantTx{}, tenancy.Caller{}, protect.Change{
+		Category: protect.ConsequenceRules, Surface: s, Subject: "org.rule", Widening: []string{"custom_rule_basis"},
+	}, func(context.Context) error { applied = true; return nil })
+	if !errors.Is(err, protect.ErrUnavailable) || held != nil || applied {
+		t.Fatalf("without a Gate: %v %v applied %v", held, err, applied)
+	}
+}

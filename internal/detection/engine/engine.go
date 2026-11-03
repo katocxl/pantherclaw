@@ -250,10 +250,15 @@ func (e *Engine) ruleSet(ctx context.Context, tx db.TenantTx, q *dbq.Queries, en
 		if disabled[r.RuleID] {
 			continue
 		}
-		c, err := CustomRule(e.Env, r.Content, Recorded{
+		rec := Recorded{
 			Stored: r.ContentDigest, Published: r.RecordedDigest, LedgerPresent: r.LedgerPresent,
 			LedgerBodyRemoved: r.LedgerBodyRemoved, Ledger: r.LedgerDigest,
-		})
+		}
+		if r.ConfirmedVersion == r.Version {
+			// A confirmation of another version never applies (HR-666).
+			rec.Confirmed = r.ConfirmedDigest
+		}
+		c, err := CustomRule(e.Env, r.Content, rec)
 		if err != nil {
 			if err := e.report(ctx, tx, reflexdomain.Failure{
 				Org: tx.OrgID(), Kind: FailureCustomIntegrity, DedupeKey: FailureCustomIntegrity + ":" + r.ID.String(),
@@ -284,12 +289,16 @@ type Recorded struct {
 	// it (LedgerBodyRemoved).
 	LedgerPresent, LedgerBodyRemoved bool
 	Ledger                           string
+	// Confirmed is the content digest of the version's open two-person
+	// confirmation (HR-666), empty when none applies to this version.
+	Confirmed []byte
 }
 
 // CustomRule parses and compiles a published custom rule after checking
 // that its content, its stored digest, the append-only published digest
 // and, while retention keeps it, the ledger-recorded digest agree (HR-241,
-// D59 L2).
+// D59 L2). The rule is Confirmed only when its content also matches the
+// digest its confirmation was bound to (HR-666).
 func CustomRule(env *celenv.Env, content string, r Recorded) (*Compiled, error) {
 	sum := sha256.Sum256([]byte(content))
 	switch {
@@ -305,7 +314,12 @@ func CustomRule(env *celenv.Env, content string, r Recorded) (*Compiled, error) 
 	if rule.Builtin() {
 		return nil, fmt.Errorf("%w: a custom rule id starts with org", rules.ErrInvalid)
 	}
-	return Compile(env, rule, hex.EncodeToString(sum[:]), "")
+	c, err := Compile(env, rule, hex.EncodeToString(sum[:]), "")
+	if err != nil {
+		return nil, err
+	}
+	c.Confirmed = len(r.Confirmed) > 0 && bytes.Equal(sum[:], r.Confirmed)
+	return c, nil
 }
 
 func (e *Engine) overflow(ctx context.Context, tx db.TenantTx, q *dbq.Queries, c *Compiled) error {
