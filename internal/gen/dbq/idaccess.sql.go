@@ -1104,9 +1104,11 @@ func (q *Queries) SpendMcpAuthorizationCode(ctx context.Context, orgID ids.OrgID
 const spentMcpAuthorizationCodeRun = `-- name: SpentMcpAuthorizationCodeRun :one
 SELECT run_id FROM pc.mcp_authorization_codes
 WHERE org_id = $1 AND code_hash = $2 AND used_at IS NOT NULL
+FOR UPDATE
 `
 
-// A spent code presented again: the run it started, if any.
+// A spent code presented again: the run it started, if any. The lock waits
+// for a redemption still in flight.
 func (q *Queries) SpentMcpAuthorizationCodeRun(ctx context.Context, orgID ids.OrgID, codeHash []byte) (*ids.UUID, error) {
 	row := q.db.QueryRow(ctx, spentMcpAuthorizationCodeRun, orgID, codeHash)
 	var run_id *ids.UUID
