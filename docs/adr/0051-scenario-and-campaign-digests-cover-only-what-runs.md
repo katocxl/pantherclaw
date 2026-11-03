@@ -16,5 +16,6 @@
 - A change to anything that runs (a step, an expectation, a saved value, a requirement, a plant, an attempt, the script) changes the digest, and a test shows this for each member kept. The server refuses the edited file as not the library's.
 - Digests stored before the switch no longer match, so results recorded before it don't map to the library and don't count toward a compliance report; a baseline comparison reports their scenarios as changed and still compares them (HR-226). Running the range again counts it.
 - The id, tier and tags are outside the digest. They still come from the library built into the server, as before (HR-467, T-204, T-260).
+- `pclaw redteam run` and `pclaw redteam campaign run` compute digests locally. With a `pclaw` from before the switch and a server after it, or the reverse, the server refuses every library scenario (`RANGE_SCENARIO_NOT_LIBRARY`) and campaign (`CAMPAIGN_NOT_LIBRARY`): upgrade both together.
 
 **Alternatives.** Keeping the whole-file digest: a tag fix would unmap every result. Keeping a list of legacy digests: the founder chose to switch now with none.
