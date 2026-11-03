@@ -39,8 +39,8 @@ var (
 		"the organization's edition could not be checked; try again")
 )
 
-// selfMCPAuditName is the event of one read by the role: kind
-// audit.self_mcp.read.
+// selfMCPAuditName is the event of one read by the role, or by a caller
+// that sent the client header (HR-663): kind audit.self_mcp.read.
 const selfMCPAuditName = "self_mcp.read"
 
 // The header `pclaw mcp self` sends on every call (selfmcp.ClientHeader,
