@@ -424,3 +424,29 @@ func TestHR161_RefusedGrantChangesAreAudited(t *testing.T) {
 		t.Errorf("issue refusal: %+v", rec.events[0])
 	}
 }
+
+// TestHR665_RefusedDelegationNamesItsRun: a refused delegation names the run
+// that tried to delegate, so its alert carries the run (HR-665); a refused
+// issue or revision names none.
+func TestHR665_RefusedDelegationNamesItsRun(t *testing.T) {
+	f := setup(t, allPerms)
+	rec := &refusals{}
+	f.svc.Refusals = rec
+	g := f.issue(t)
+	if _, _, err := f.svc.Revise(as(ids.NewV7(), tdomain.KindServiceAccount), app.ReviseRequest{ID: g.ID, Revision: 1, Bounds: g.Bounds}); !errors.Is(err, app.ErrHumanOnly) {
+		t.Fatal(err)
+	}
+	parentRun := f.run(g.ID, ids.UUID{})
+	if _, _, err := f.delegate(t, parentRun, `{"operations": ["payments.*"]}`); err == nil {
+		t.Fatal("widening delegation accepted")
+	}
+	if len(rec.events) != 2 {
+		t.Fatalf("refusals %d, want 2", len(rec.events))
+	}
+	if _, ok := rec.events[0].Details["run"]; ok {
+		t.Errorf("a refused revision names a run: %+v", rec.events[0])
+	}
+	if ev := rec.events[1]; ev.Name != "grant.delegate_refused" || ev.Details["run"] != parentRun.ID.String() {
+		t.Errorf("delegation refusal: %+v, want run %s", ev, parentRun.ID)
+	}
+}

@@ -1,0 +1,46 @@
+name: pc.playbook.rogue-sub-agent-contain
+version: 1.0.0
+kind: automation
+title: "Playbook: rogue sub-agent, contain"
+summary: >-
+  When a CONFIRMED alert says an agent tried to delegate more than its own
+  grant holds, suspend the run that tried, the run the alert names. Needs
+  Business.
+body:
+  automation_name: hub-playbook-rogue-sub-agent-contain
+  purpose: Suspend the run a confirmed refused-delegation alert names.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Suspend the run a confirmed refused-delegation alert names."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: alert.raised
+        where: >-
+          event.attrs["rule"] in ["pc.authority.self_issue", "pc.authority.self_approve", "pc.delegation.depth_anomaly"]
+          && event.attrs["event_kind"] == "audit.grant.delegate_refused" && "run" in event.subjects
+        params:
+          signal: {from: attrs.id, type: uuid}
+      dedupe:
+        key: "{{params.signal}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: contain
+          scopes: [TRIGGER_RUN]
+    do:
+      - id: contain
+        step: contain
+        with:
+          action: SUSPEND_RUN
+          subject: TRIGGER_RUN
+          reason: "Contained automatically: the run tried to delegate beyond its grant (signal {{params.signal}})."
+        timeout: 15m
+    finish_when:
+      - step: contain
+        condition: CONTAINMENT_CONFIRMED
+    limits:
+      deadline: 1h

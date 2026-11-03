@@ -119,7 +119,7 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 	if conn.GetAccessMode() == "pantherclaw_held" && conn.GetKind() == "mcp" && conn.Credential.GetKind() == credentials.KindGitHubApp {
 		list = func(ctx context.Context) (*upstreamCredential, error) { return e.listCredential(ctx, conn) }
 	}
-	declared, refusal, err := e.pinnedParams(callCtx, conn, ce, tool, list)
+	declared, refusal, err := e.pinnedParams(callCtx, conn, ce, tool, want.Txn, list)
 	switch {
 	case err != nil:
 		// The server could not be listed: the call was never sent.
@@ -286,6 +286,9 @@ type Drift struct {
 	// server's instruction-like content scan (G0 M10 D47); nil when the tool
 	// is gone or listed no description.
 	Description *string
+	// Transaction is the call whose own check found the drift; empty from
+	// CheckDrift. The server takes the run from its own row of it (HR-665).
+	Transaction string
 }
 
 // CheckDrift lists a kind-mcp connection's upstream tools, with its
@@ -468,8 +471,9 @@ func (e *Engine) refusedUpstream(conn *control.Connection, operation string) str
 // pinned definition, from the last check of the connection's revision.
 // With none yet, or a stale one, it checks first, with the credential
 // list gives for the listing. refusal says the tool must not be called;
-// err that the server could not be listed.
-func (e *Engine) pinnedParams(ctx context.Context, conn *control.Connection, ce clientEntry, tool string,
+// err that the server could not be listed. Each drift the check finds is
+// reported with txn, the transaction of the call that checked.
+func (e *Engine) pinnedParams(ctx context.Context, conn *control.Connection, ce clientEntry, tool, txn string,
 	list func(context.Context) (*upstreamCredential, error),
 ) (params []mcpheader.Param, refusal string, err error) {
 	e.mu.Lock()
@@ -487,6 +491,7 @@ func (e *Engine) pinnedParams(ctx context.Context, conn *control.Connection, ce 
 		}
 		for _, dr := range drifts {
 			if e.onDrift != nil {
+				dr.Transaction = txn
 				e.onDrift(ctx, conn.GetId(), dr)
 			}
 		}

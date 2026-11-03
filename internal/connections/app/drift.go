@@ -52,10 +52,16 @@ func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id id
 // ObservedDescription is the tool description a gateway observed with its
 // drift report: the text (nil when the gateway sent none), whether the
 // gateway cut it short, and the SHA-256 of the whole description.
+// Transaction is the call whose own check observed the drift (zero from a
+// periodic check): the drift's run is that transaction's, read from the
+// server's own row of it through this connection, never from the gateway
+// (HR-665). With no such row the report is processed without a run, never
+// refused, so no quarantine is lost.
 type ObservedDescription struct {
-	Text      *string
-	Truncated bool
-	Digest    string
+	Text        *string
+	Truncated   bool
+	Digest      string
+	Transaction ids.UUID
 }
 
 // ReportDriftDescribed is ReportDrift with the tool description the
@@ -97,6 +103,10 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 		if conn.GatewayID != gateway || conn.Kind != KindMCP {
 			return ErrNotFound
 		}
+		run, err := driftRun(ctx, q, org, conn.ID, description.Transaction)
+		if err != nil {
+			return err
+		}
 		pin, err := q.PinnedPackageRaw(ctx, org, conn.Package)
 		if db.IsNoRows(err) {
 			return ErrPackage
@@ -113,13 +123,16 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 		if conn.Simulated {
 			// HR-222: a simulator's drift changes nothing real: no epoch, no
 			// quarantine, no notification. The gateway still refuses locally.
+			details := map[string]string{
+				"simulated": "true", "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
+				"description_scan": scan,
+			}
+			if !run.IsZero() {
+				details["run"] = run.String()
+			}
 			_, err := audit.Record(ctx, tx, audit.Event{
 				Name: "connection.drift_reported", Actor: c.Audit, Outcome: audit.Success,
-				Object: &audit.Object{Type: "connection", ID: conn.ID.String()},
-				Details: map[string]string{
-					"simulated": "true", "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
-					"description_scan": scan,
-				},
+				Object: &audit.Object{Type: "connection", ID: conn.ID.String()}, Details: details,
 			})
 			return err
 		}
@@ -156,7 +169,7 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 		})); err != nil {
 			return err
 		}
-		if _, err := audit.Record(ctx, tx, DriftQuarantinedEvent(c.Audit, conn.ID, conn.Package, pin.Version, from, tool, expected, observed, scan)); err != nil {
+		if _, err := audit.Record(ctx, tx, DriftQuarantinedEvent(c.Audit, conn.ID, conn.Package, pin.Version, from, tool, expected, observed, scan, run)); err != nil {
 			return err
 		}
 		// A person reviews the quarantined version again (PN-006.2, HR-244).
@@ -181,19 +194,39 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 
 // DriftQuarantinedEvent is the package.transitioned audit event of a package
 // version quarantined because an upstream tool of the connection drifted
-// from its reviewed definition (PN-006.2, F401).
+// from its reviewed definition (PN-006.2, F401). run is the run of the call
+// whose own check found the drift, zero when none is known (a periodic
+// check, or a transaction the server has no row of): only a known run is
+// named (HR-665).
 func DriftQuarantinedEvent(actor evdomain.Actor, connection ids.UUID, pkg, version string, from domain.State,
-	tool, expected, observed, scan string,
+	tool, expected, observed, scan string, run ids.UUID,
 ) audit.Event {
+	details := map[string]string{
+		"from": string(from), "to": string(domain.StateQuarantined), "reason": ReasonUpstreamDrift,
+		"connection_id": connection.String(), "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
+		"description_scan": scan,
+	}
+	if !run.IsZero() {
+		details["run"] = run.String()
+	}
 	return audit.Event{
 		Name: "package.transitioned", Actor: actor, Outcome: audit.Success,
-		Object: &audit.Object{Type: "package_version", ID: trust.Key(pkg, version)},
-		Details: map[string]string{
-			"from": string(from), "to": string(domain.StateQuarantined), "reason": ReasonUpstreamDrift,
-			"connection_id": connection.String(), "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
-			"description_scan": scan,
-		},
+		Object: &audit.Object{Type: "package_version", ID: trust.Key(pkg, version)}, Details: details,
 	}
+}
+
+// driftRun is the run of the org's own transaction txn through connection,
+// zero when txn is zero or names no such transaction (HR-665): a drift
+// report is never refused for its transaction.
+func driftRun(ctx context.Context, q *dbq.Queries, org ids.OrgID, connection, txn ids.UUID) (ids.UUID, error) {
+	if txn.IsZero() {
+		return ids.UUID{}, nil
+	}
+	run, err := q.DriftTransactionRun(ctx, org, txn, &connection)
+	if db.IsNoRows(err) {
+		return ids.UUID{}, nil
+	}
+	return run, err
 }
 
 // reviewed reports whether a definition dispatches to the upstream tool

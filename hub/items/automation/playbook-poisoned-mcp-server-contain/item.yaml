@@ -1,0 +1,45 @@
+name: pc.playbook.poisoned-mcp-server-contain
+version: 1.0.0
+kind: automation
+title: "Playbook: poisoned MCP server, contain"
+summary: >-
+  When a CONFIRMED alert says an MCP tool changed under a call, suspend the
+  run of that call, the run the alert names. Needs Business.
+body:
+  automation_name: hub-playbook-poisoned-mcp-server-contain
+  purpose: Suspend the run a confirmed tool-drift alert names.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Suspend the run a confirmed tool-drift alert names."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: alert.raised
+        where: >-
+          event.attrs["rule"] in ["pc.tools.drift", "pc.tools.description_injection"]
+          && event.attrs["event_kind"] == "audit.package.transitioned" && "run" in event.subjects
+        params:
+          signal: {from: attrs.id, type: uuid}
+      dedupe:
+        key: "{{params.signal}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: contain
+          scopes: [TRIGGER_RUN]
+    do:
+      - id: contain
+        step: contain
+        with:
+          action: SUSPEND_RUN
+          subject: TRIGGER_RUN
+          reason: "Contained automatically: an MCP tool changed under the run's call (signal {{params.signal}})."
+        timeout: 15m
+    finish_when:
+      - step: contain
+        condition: CONTAINMENT_CONFIRMED
+    limits:
+      deadline: 1h
