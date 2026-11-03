@@ -47,11 +47,13 @@ ORDER BY id
 LIMIT sqlc.arg(page_limit);
 
 -- Admission (HR-094): only a pending instance whose admission deadline has
--- not passed.
+-- not passed. An MCP client's instance is admitted only by its allow-list
+-- change (HR-625), never here.
 -- name: AdmitInstance :one
 UPDATE pc.agent_instances
 SET state = 'ADMITTED', decided_by = sqlc.arg(decided_by), decided_at = now(), expires_at = NULL, updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING_ADMISSION' AND expires_at > now()
+  AND enrolled_via <> 'mcp_client'
 RETURNING *;
 
 -- name: CloseInstance :one

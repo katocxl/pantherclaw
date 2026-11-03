@@ -2471,9 +2471,12 @@ func (x *RecordExecutionResponse) GetReceipt() string {
 type WorkloadCredentials struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Workload token from "Authorization: PAP <token>"; empty for a key-only
-	// proof.
+	// proof. On the gateway's OAuth route it is the bearer token: the Authority
+	// tells the two apart by the token's type alone (G0 M26 D408).
 	WorkloadToken string `protobuf:"bytes,1,opt,name=workload_token,json=workloadToken,proto3" json:"workload_token,omitempty"`
-	// PAP-Proof header value.
+	// PAP-Proof header value. Empty only with a pap-mcp+jwt token: a missing
+	// proof never selects bearer mode, and a pap-wt+jwt token without one is
+	// refused.
 	Proof string `protobuf:"bytes,2,opt,name=proof,proto3" json:"proof,omitempty"`
 	// SHA-256 of the raw request body, computed before any parsing.
 	BodySha256 []byte `protobuf:"bytes,3,opt,name=body_sha256,json=bodySha256,proto3" json:"body_sha256,omitempty"`
@@ -3842,11 +3845,10 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\"\b\x18\x80\x80\x80\x80\x04(\x01R\x04size\x12\x1c\n" +
 	"\ttruncated\x18\x05 \x01(\bR\ttruncated\"3\n" +
 	"\x17RecordExecutionResponse\x12\x18\n" +
-	"\areceipt\x18\x01 \x01(\tR\areceipt\"\x88\x02\n" +
+	"\areceipt\x18\x01 \x01(\tR\areceipt\"\x86\x02\n" +
 	"\x13WorkloadCredentials\x12/\n" +
-	"\x0eworkload_token\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\rworkloadToken\x12 \n" +
-	"\x05proof\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x10\x18\x80@R\x05proof\x12(\n" +
+	"\x0eworkload_token\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\rworkloadToken\x12\x1e\n" +
+	"\x05proof\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x05proof\x12(\n" +
 	"\vbody_sha256\x18\x03 \x01(\fB\a\xbaH\x04z\x02h R\n" +
 	"bodySha256\x12%\n" +
 	"\x03htm\x18\x04 \x01(\tB\x13\xbaH\x10r\x0e2\f^[A-Z]{3,7}$R\x03htm\x12\x1d\n" +

@@ -36,6 +36,9 @@ type Agent struct {
 	RetiredAt         *time.Time
 	// RangeAgent: all its runs are simulated (G0 M12, HR-220); immutable.
 	RangeAgent bool
+	// External: it lives in a SaaS tenant and is only observed (G0 M26 D407,
+	// HR-639). It stays DISCOVERED, with no key path.
+	External bool
 	// What people state about the agent's risk (G0 M24 D230).
 	RiskTier    domain.RiskTier
 	DataClasses []string
@@ -90,6 +93,9 @@ type Discovery struct {
 	FirstSeenAt   time.Time
 	LastSeenAt    time.Time
 	Observed      map[string]string
+	// Status words an external agent's discovery ("owner set, external
+	// agent"); "" for any other.
+	Status string
 }
 
 // Summary answers who owns an agent, what it is for and how its identity
@@ -130,7 +136,7 @@ func agentView(r dbq.PcAgent) Agent {
 		ID: r.ID, Name: r.Name, Purpose: r.Purpose, State: domain.State(r.State), CreatedBy: r.CreatedBy,
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, ClaimedAt: r.ClaimedAt, RetiredAt: r.RetiredAt,
 		RangeAgent: r.RangeAgent, RiskTier: domain.RiskTier(r.RiskTier), DataClasses: r.DataClasses,
-		AIActRole: domain.AIActRole(r.AiActRole), AIActRisk: domain.AIActRisk(r.AiActRisk),
+		AIActRole: domain.AIActRole(r.AiActRole), AIActRisk: domain.AIActRisk(r.AiActRisk), External: r.External,
 	}
 	for dst, src := range map[*ids.UUID]*ids.UUID{
 		&a.TeamID: r.TeamID, &a.EnvironmentID: r.EnvironmentID, &a.OwnerUserID: r.OwnerUserID,
@@ -240,6 +246,10 @@ func (inv *Inventory) Get(ctx context.Context, id ids.UUID) (Summary, error) {
 		d, err := q.GetAgentDiscovery(ctx, c.Org, r.ID)
 		if err == nil {
 			out.Discovery = discoveryView(d)
+			if a.External {
+				out.Discovery.Status = domain.ExternalStatus(out.Discovery.State)
+				out.NextAction = domain.ExternalNextAction(out.Discovery.State)
+			}
 		} else if !db.IsNoRows(err) {
 			return err
 		}

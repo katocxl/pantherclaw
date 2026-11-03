@@ -153,7 +153,7 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 						// A rotation test or confirmation (G0 M20 S20c).
 						rt, err := q.LeasedRotationTask(ctx, dbq.LeasedRotationTaskParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
 						if db.IsNoRows(err) {
-							return s.ticketSync(ctx, tx, org, gateway, r, hash[:], &out)
+							return s.saasOrTicket(ctx, tx, q, org, gateway, r, hash[:], &out)
 						} else if err != nil {
 							return err
 						}
@@ -352,6 +352,9 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 		// An organization scan whose lease expired failed (G5 review
 		// follow-up): it never stays PENDING.
 		if _, err := q.FailExpiredOrgScans(ctx, org); err != nil {
+			return err
+		}
+		if _, err := q.FailExpiredSaasScans(ctx, org); err != nil {
 			return err
 		}
 		// A ticket sync task that expired has no report coming.

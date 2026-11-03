@@ -830,8 +830,26 @@ Reports show evidence and gaps and are not a certification or statement of compl
 
 ### M26 rows: Enterprise identity
 
+PantherClaw is the per-task layer behind the customer's IdP. An assertion uses or narrows an existing grant and never creates one (HR-146). All of this is tested on simulators and synthetic fixtures, and real tenant checks stay pending (F801) ([G0 M26](g0/M26.md)). F914–F917 are unused.
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
+| F910 | IdP assertion access | ID-JAG assertions through jwt-bearer use or narrow an existing grant, per task and run, or are refused `NO_GRANT`. `AssertionVerifier` with an `idjag` adapter naming draft-06; tested on a simulated Okta. | Next | Team | M26 | F801 |
+| F911 | Issuers and client bindings | Organization assertion issuers and client-to-agent bindings, each a two-person protected change; disabling or removing is immediate. The client authenticates with an admitted instance's key. | Next | Team | M26 | new |
+| F912 | MCP authorization | Off by default per org. `pap-mcp+jwt` for one gateway server, 5 minutes, re-verified on every call at `/mcp-oauth/{connection}`. `workload.proof == "bearer"` is level 0. | Next | Team | M26 | F801 |
+| F913 | Allow-listed MCP clients | Clients by Client ID Metadata Document, two-person allow-listing, code flow with PKCE and consent, rotating refresh tokens. A changed document is refused until a second person takes it. | Next | Team | M26 | new |
+| F918 | SCIM 2.0 Users | Create, read, list with exact filters (userName without case), replace, patch, delete. Enterprise to add; reads and deprovisioning in every edition. | Next | Enterprise | M26 | new |
+| F919 | SCIM 2.0 Groups | Groups and members. Enterprise to add; reads and removals in every edition. | Next | Enterprise | M26 | new |
+| F920 | Group role mappings | Mappings as two-person protected changes, never to a role that binds roles or to Emergency Responder. Enterprise to add; removal in every edition. | Next | Enterprise | M26 | new |
+| F921 | SAML connections | SAML connections as protected changes. Enterprise to add; disabling in every edition. | Next | Enterprise | M26 | new |
+| F922 | SAML sign-in | SP-initiated SAML sign-in for existing users, with a signed assertion. Every edition for an ACTIVE connection. | Next | Enterprise | M26 | new |
+| F923 | Enterprise server build | `pantherclaw-server-ee`: the core server with the enterprise package, with no billing and no console, built from a private repository. | Next | Enterprise | M26 | new |
+| F924 | `pclaw discover import` | `pclaw discover import --source <s> --file <f>` parses an exported recording on the admin's machine and sends the metadata. | Next | Business | M26 | new |
+| F925 | SaaS collector | A gateway collects from Copilot Studio and ChatGPT Enterprise through a connection, under a `saas_scan` lease, tested on simulators with SYNTHETIC rows. | Next | Business | M26 | F801 |
+| F926 | Change detection | Material attributes recorded and announced, dismissed findings reopened, misses counted only by complete runs, vanished noticed once. | Next | Business | M26 | new |
+| F927 | External agents | Found agents land DISCOVERED, observe-only, marked `external`, with `Agent.external` on the API. | Next | Business | M26 | new |
+| F928 | Owners and the queue | `SetSaasAgentOwner` sets an owner only. The ranked queue's `saas` source shows unowned external agents and tenants left partly unread. | Next | Business | M26 | new |
+| F929 | SaaS discovery edition | `SaaSDiscovery()` is Business and above: the API, the CLI import and the queue source answer EDITION_REQUIRED below it. | Next | Business | M26 | new |
 
 ### M27 rows: Agent Detection & Response
 

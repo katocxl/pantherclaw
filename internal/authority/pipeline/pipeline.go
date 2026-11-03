@@ -54,6 +54,9 @@ const (
 	ReasonPolicyEvaluation    = "POLICY_EVALUATION_ERROR"
 	ReasonRulesNotApplicable  = "RULES_NOT_APPLICABLE"
 	ReasonGrantRequiresHold   = "GRANT_REQUIRES_APPROVAL"
+	// ReasonOutsideRunScope: the run was narrowed to operations that do not
+	// include this one (G0 M26 D408).
+	ReasonOutsideRunScope = "OUTSIDE_RUN_SCOPE"
 	// ReasonSecretInPayload: the gateway found a credential-shaped value in
 	// the action's payload; a person must approve it (HR-225).
 	ReasonSecretInPayload      = "SECRET_IN_PAYLOAD" //nolint:gosec // G101: a reason code, not a credential
@@ -636,6 +639,10 @@ func (p *Pipeline) authority(s *state) {
 		s.cl.add(StepAuthority, adomain.Deny, gdomain.ReasonGrantMismatch, "the grant is for another agent, principal or environment", "")
 		return
 	}
+	if ops := s.run.ScopeOperations; len(ops) > 0 && !slices.Contains(ops, s.a.Operation) {
+		s.cl.add(StepAuthority, adomain.Deny, ReasonOutsideRunScope, "the run is narrowed to operations that do not include "+s.a.Operation, "")
+		return
+	}
 	s.covered = true // coverage proper follows in meaning()
 }
 
@@ -917,7 +924,10 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 
 // policyInput is what the policy is evaluated with.
 func (s *state) policyInput() papp.Input {
-	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now, Waivers: s.waivers(s.a.Operation), Risk: s.risk}
+	in := papp.Input{
+		Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now, Waivers: s.waivers(s.a.Operation), Risk: s.risk,
+		Workload: &papp.Workload{Proof: s.req.Identity.Proof, Attestation: s.req.Identity.AttestationLevel},
+	}
 	if s.ownRun() {
 		// The server's run record, found by the request's run id and checked
 		// against the agent's verified identity, never the request itself.

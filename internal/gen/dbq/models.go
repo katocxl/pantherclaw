@@ -173,6 +173,7 @@ type PcAgent struct {
 	DataClasses       []string
 	AiActRole         string
 	AiActRisk         string
+	External          bool
 }
 
 type PcAgentChange struct {
@@ -2463,6 +2464,36 @@ type PcGrantRevision struct {
 	Flows           []byte
 }
 
+type PcGroup struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Issuer      string
+	DisplayName string
+	ExternalID  *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type PcGroupMember struct {
+	OrgID   ids.OrgID
+	GroupID ids.UUID
+	UserID  ids.UUID
+	AddedAt time.Time
+}
+
+type PcGroupRoleMapping struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	GroupID        ids.UUID
+	Role           string
+	ScopeType      string
+	BusinessUnitID *ids.UUID
+	TeamID         *ids.UUID
+	EnvironmentID  *ids.UUID
+	CreatedBy      string
+	CreatedAt      time.Time
+}
+
 type PcHoldSlot struct {
 	OrgID     ids.OrgID
 	ScopeKind string
@@ -2748,11 +2779,57 @@ type PcLoginRequest struct {
 	ConsumedAt   *time.Time
 }
 
+type PcMcpAuthorizationCode struct {
+	OrgID           ids.OrgID
+	CodeHash        []byte
+	ClientID        ids.UUID
+	UserID          ids.UUID
+	RedirectUri     string
+	CodeChallenge   string
+	Resource        string
+	ScopeOperations []string
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	UsedAt          *time.Time
+	RunID           *ids.UUID
+	ReusedAt        *time.Time
+}
+
 type PcMcpCatalogSetting struct {
 	OrgID     ids.OrgID
 	Mode      string
 	UpdatedBy *string
 	UpdatedAt time.Time
+}
+
+type PcMcpClient struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ClientUrl      string
+	AgentID        ids.UUID
+	InstanceID     ids.UUID
+	ClientName     string
+	RedirectUris   []string
+	DocumentDigest []byte
+	State          string
+	CreatedBy      ids.UUID
+	CreatedAt      time.Time
+	ActivatedAt    *time.Time
+	RemovedBy      *ids.UUID
+	RemovedAt      *time.Time
+}
+
+type PcMcpRefreshToken struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	FamilyID  ids.UUID
+	TokenHash []byte
+	ClientID  ids.UUID
+	RunID     ids.UUID
+	Resource  string
+	State     string
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 type PcMcpServer struct {
@@ -2921,6 +2998,38 @@ type PcOrg struct {
 	DeletedAt        *time.Time
 }
 
+type PcOrgAssertionClient struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	IssuerID    ids.UUID
+	ClientID    string
+	AgentID     ids.UUID
+	State       string
+	CreatedBy   ids.UUID
+	CreatedAt   time.Time
+	ActivatedAt *time.Time
+	RemovedBy   *ids.UUID
+	RemovedAt   *time.Time
+}
+
+type PcOrgAssertionIssuer struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Name        string
+	Issuer      string
+	Audience    string
+	Tenant      *string
+	Algorithms  []string
+	State       string
+	CreatedBy   ids.UUID
+	CreatedAt   time.Time
+	UpdatedBy   ids.UUID
+	UpdatedAt   time.Time
+	ActivatedAt *time.Time
+	DisabledBy  *ids.UUID
+	DisabledAt  *time.Time
+}
+
 type PcOrgContainment struct {
 	OrgID        ids.OrgID
 	Epoch        int64
@@ -2986,6 +3095,14 @@ type PcOrgIdentityProviderSetting struct {
 	OwnProvidersOnly bool
 	UpdatedBy        ids.UUID
 	UpdatedAt        time.Time
+}
+
+type PcOrgMcpAccess struct {
+	OrgID      ids.OrgID
+	Enabled    bool
+	GatewayUrl *string
+	UpdatedBy  ids.UUID
+	UpdatedAt  time.Time
 }
 
 type PcOrgTermsAcceptance struct {
@@ -3726,6 +3843,7 @@ type PcRoleBinding struct {
 	EnvironmentID    *ids.UUID
 	CreatedBy        string
 	CreatedAt        time.Time
+	Provisioned      bool
 }
 
 type PcRun struct {
@@ -3754,6 +3872,40 @@ type PcRun struct {
 	EndedAt               *time.Time
 	Simulated             bool
 	AutomationExecutionID *ids.UUID
+	ScopeOperations       []string
+}
+
+type PcSaasScanRun struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	Source         string
+	Origin         string
+	Tenant         string
+	ConnectionID   *ids.UUID
+	VerificationID *ids.UUID
+	State          string
+	Counts         []byte
+	Scanned        []string
+	NotScanned     []byte
+	StartedBy      string
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
+}
+
+type PcSamlConnection struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	IdpEntityID  string
+	Issuer       *string
+	SsoUrl       string
+	Certificates []string
+	State        string
+	CreatedBy    string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	ActivatedAt  *time.Time
+	DisabledAt   *time.Time
 }
 
 type PcSandboxSession struct {
@@ -3808,6 +3960,35 @@ type PcSchemaInfo struct {
 	ID        int16
 	Version   int64
 	AppliedAt time.Time
+}
+
+type PcScimToken struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Name             string
+	Issuer           string
+	SubjectAttribute string
+	SecretHash       []byte
+	Hint             string
+	State            string
+	CreatedBy        string
+	CreatedAt        time.Time
+	ExpiresAt        time.Time
+	ActivatedAt      *time.Time
+	RevokedAt        *time.Time
+	LastUsedAt       *time.Time
+}
+
+type PcScimUser struct {
+	OrgID           ids.OrgID
+	UserID          ids.UUID
+	UserName        *string
+	ExternalID      *string
+	DisabledByScim  bool
+	DeprovisionedAt *time.Time
+	DeletedAt       *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type PcSecurityEventOutbox struct {

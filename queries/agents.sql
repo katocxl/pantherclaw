@@ -172,7 +172,7 @@ SELECT agent_id::uuid AS agent_id, min(missed_scans)::int AS missed_scans, max(l
        bool_and(vanish_notified_at IS NOT NULL)::boolean AS vanished
 FROM pc.discoveries
 WHERE org_id = sqlc.arg(org_id) AND agent_id = ANY (sqlc.arg(agent_ids)::uuid[])
-  AND source IN ('scan', 'github_scan', 'ci_scan') AND state <> 'DISMISSED'
+  AND source IN ('scan', 'github_scan', 'ci_scan', 'copilot_studio', 'chatgpt_enterprise') AND state <> 'DISMISSED'
 GROUP BY agent_id;
 
 -- name: MoveDiscovery :exec

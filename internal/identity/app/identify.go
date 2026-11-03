@@ -10,7 +10,9 @@ import (
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/idaccess/adapters/mcptoken"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
+	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -34,6 +36,12 @@ type Identified struct {
 	JKT string
 	// AgentState is the agent's state after this request.
 	AgentState string
+	// Proof is how the request was proven: "" for a PAP/1 proof, "bearer"
+	// for a pap-mcp+jwt (G0 M26 D402, HR-627).
+	Proof string
+	// Bearer is the verified MCP access token, set only when Proof is
+	// "bearer".
+	Bearer *mcptoken.Token
 }
 
 // Identify verifies a forwarded request for org (PAP-1 §4, §7.1; HR-021):
@@ -46,6 +54,15 @@ type Identified struct {
 func (s *Service) Identify(ctx context.Context, org ids.OrgID, in IdentifyInput) (Identified, error) {
 	if in.Request.Token == "" {
 		return Identified{}, pap.Err(pap.CodeInvalidToken) // a key-only proof is an unknown workload
+	}
+	// The mode comes from the token's type alone, never from a missing
+	// proof (D408): a pap-mcp+jwt is bearer, anything else is PAP/1, which
+	// still requires its proof and refuses the OAuth route.
+	if _, typ, err := jws.Unverified(in.Request.Token); err == nil && typ == mcptoken.TokenType {
+		return s.identifyBearer(ctx, org, in)
+	}
+	if OAuthRoute(in.Request.URL) {
+		return Identified{}, pap.Err(pap.CodeInvalidToken)
 	}
 	verifier, err := s.TokenVerifier()
 	if err != nil {
@@ -66,7 +83,7 @@ func (s *Service) Identify(ctx context.Context, org ids.OrgID, in IdentifyInput)
 	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		r, err := q.GetInstance(ctx, org, tok.Instance.Instance)
-		if db.IsNoRows(err) || (err == nil && (r.AgentID != tok.Instance.Agent || r.State != "ADMITTED")) {
+		if db.IsNoRows(err) || (err == nil && (r.AgentID != tok.Instance.Agent || r.State != "ADMITTED" || r.EnrolledVia == EnrolledMcpClient)) {
 			return pap.Err(pap.CodeInstanceNotAdmitted)
 		} else if err != nil {
 			return err

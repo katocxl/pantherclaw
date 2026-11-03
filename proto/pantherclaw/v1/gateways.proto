@@ -547,9 +547,17 @@ message GetConfigurationResponse {
   // The active, unexpired capture profiles covering those connections
   // (G0 M7 design decision 10, HR-199); none when capture is off.
   repeated GatewayCaptureProfile capture_profiles = 8;
+  // The org's MCP authorization route (G0 M26 D402); unset while it is off.
+  GatewayMcpAccess mcp_access = 9;
   // The org's content signal mode (G0 M27 D507): the gateway scans nothing
   // at OFF, and unset is OFF.
-  ContentSignalMode content_signal_mode = 9;
+  ContentSignalMode content_signal_mode = 10;
+}
+
+// GatewayMcpAccess turns on the OAuth route of a gateway's MCP face.
+message GatewayMcpAccess {
+  // The org's authorization server issuer, for protected resource metadata.
+  string issuer = 1;
 }
 
 // GatewayCaptureProfile tells a gateway which bodies to capture.
