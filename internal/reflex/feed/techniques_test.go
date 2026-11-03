@@ -49,6 +49,10 @@ func TestHR684_LongTechniqueListIsCutNotDropped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The full list stays on the event for the export (D718b).
+	if len(e.ATLAS) != 64 || e.ATLAS[0] != "AML.T0000.000" || e.ATLAS[63] != "AML.T0063.000" {
+		t.Fatalf("event ATLAS %d ids: %v", len(e.ATLAS), e.ATLAS)
+	}
 	got := e.Attrs["atlas"]
 	if got == "" || len(got) > feed.MaxAttrValue {
 		t.Fatalf("atlas attr %d bytes: %q", len(got), got)
