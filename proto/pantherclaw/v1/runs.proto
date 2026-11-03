@@ -72,6 +72,9 @@ enum PrincipalSource {
   // the launcher is the instance of the client the assertion was issued to
   // (G0 M26 D400, D408).
   PRINCIPAL_SOURCE_ID_JAG = 4;
+  // The principal an automation version declares, which a confirmer
+  // consented to (G0 M11 part 2 D10).
+  PRINCIPAL_SOURCE_AUTOMATION = 5;
 }
 
 // Actor is one party in a run's actor chain.

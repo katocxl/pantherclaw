@@ -56,6 +56,7 @@ var (
 		app.SourceSubjectToken: pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_SUBJECT_TOKEN,
 		app.SourceParentRun:    pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_PARENT_RUN,
 		app.SourceIDJAG:        pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_ID_JAG,
+		app.SourceAutomation:   pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_AUTOMATION,
 	}
 )
 

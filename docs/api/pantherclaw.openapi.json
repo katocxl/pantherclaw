@@ -66787,7 +66787,8 @@
           "PRINCIPAL_SOURCE_LAUNCHER",
           "PRINCIPAL_SOURCE_SUBJECT_TOKEN",
           "PRINCIPAL_SOURCE_PARENT_RUN",
-          "PRINCIPAL_SOURCE_ID_JAG"
+          "PRINCIPAL_SOURCE_ID_JAG",
+          "PRINCIPAL_SOURCE_AUTOMATION"
         ],
         "description": "PrincipalSource says how the represented principal was established."
       },

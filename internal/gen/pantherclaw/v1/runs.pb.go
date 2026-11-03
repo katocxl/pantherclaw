@@ -157,6 +157,9 @@ const (
 	// the launcher is the instance of the client the assertion was issued to
 	// (G0 M26 D400, D408).
 	PrincipalSource_PRINCIPAL_SOURCE_ID_JAG PrincipalSource = 4
+	// The principal an automation version declares, which a confirmer
+	// consented to (G0 M11 part 2 D10).
+	PrincipalSource_PRINCIPAL_SOURCE_AUTOMATION PrincipalSource = 5
 )
 
 // Enum value maps for PrincipalSource.
@@ -167,6 +170,7 @@ var (
 		2: "PRINCIPAL_SOURCE_SUBJECT_TOKEN",
 		3: "PRINCIPAL_SOURCE_PARENT_RUN",
 		4: "PRINCIPAL_SOURCE_ID_JAG",
+		5: "PRINCIPAL_SOURCE_AUTOMATION",
 	}
 	PrincipalSource_value = map[string]int32{
 		"PRINCIPAL_SOURCE_UNSPECIFIED":   0,
@@ -174,6 +178,7 @@ var (
 		"PRINCIPAL_SOURCE_SUBJECT_TOKEN": 2,
 		"PRINCIPAL_SOURCE_PARENT_RUN":    3,
 		"PRINCIPAL_SOURCE_ID_JAG":        4,
+		"PRINCIPAL_SOURCE_AUTOMATION":    5,
 	}
 )
 
@@ -1030,13 +1035,14 @@ const file_pantherclaw_v1_runs_proto_rawDesc = "" +
 	"\x10SubjectTokenType\x12\"\n" +
 	"\x1eSUBJECT_TOKEN_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bSUBJECT_TOKEN_TYPE_ID_TOKEN\x10\x01\x12#\n" +
-	"\x1fSUBJECT_TOKEN_TYPE_ACCESS_TOKEN\x10\x02*\xb4\x01\n" +
+	"\x1fSUBJECT_TOKEN_TYPE_ACCESS_TOKEN\x10\x02*\xd5\x01\n" +
 	"\x0fPrincipalSource\x12 \n" +
 	"\x1cPRINCIPAL_SOURCE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19PRINCIPAL_SOURCE_LAUNCHER\x10\x01\x12\"\n" +
 	"\x1ePRINCIPAL_SOURCE_SUBJECT_TOKEN\x10\x02\x12\x1f\n" +
 	"\x1bPRINCIPAL_SOURCE_PARENT_RUN\x10\x03\x12\x1b\n" +
-	"\x17PRINCIPAL_SOURCE_ID_JAG\x10\x042\xc6\x02\n" +
+	"\x17PRINCIPAL_SOURCE_ID_JAG\x10\x04\x12\x1f\n" +
+	"\x1bPRINCIPAL_SOURCE_AUTOMATION\x10\x052\xc6\x02\n" +
 	"\n" +
 	"RunService\x12M\n" +
 	"\bStartRun\x12\x1f.pantherclaw.v1.StartRunRequest\x1a .pantherclaw.v1.StartRunResponse\x12L\n" +
