@@ -55,6 +55,7 @@ var (
 		app.SourceLauncher:     pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_LAUNCHER,
 		app.SourceSubjectToken: pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_SUBJECT_TOKEN,
 		app.SourceParentRun:    pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_PARENT_RUN,
+		app.SourceIDJAG:        pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_ID_JAG,
 	}
 )
 
@@ -82,6 +83,7 @@ func RunProto(r app.Run) *pantherclawv1.Run {
 		SubjectIssuer: r.SubjectIssuer, SubjectSubject: r.SubjectSubject, ParentRunId: optID(r.ParentRunID),
 		Depth: int32(r.Depth), TaskRef: r.TaskRef, State: stateToProto[r.State], EndReason: r.EndReason, //nolint:gosec // G115: at most 8
 		CreateTime: ts(r.CreatedAt), ExpireTime: ts(r.ExpiresAt), GrantId: optID(r.GrantID),
+		ScopeOperations: r.ScopeOperations,
 	}
 	for _, a := range r.ActorChain {
 		out.ActorChain = append(out.ActorChain, actor(a))

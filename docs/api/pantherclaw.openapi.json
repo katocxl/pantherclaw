@@ -66786,7 +66786,8 @@
           "PRINCIPAL_SOURCE_UNSPECIFIED",
           "PRINCIPAL_SOURCE_LAUNCHER",
           "PRINCIPAL_SOURCE_SUBJECT_TOKEN",
-          "PRINCIPAL_SOURCE_PARENT_RUN"
+          "PRINCIPAL_SOURCE_PARENT_RUN",
+          "PRINCIPAL_SOURCE_ID_JAG"
         ],
         "description": "PrincipalSource says how the represented principal was established."
       },
@@ -67110,6 +67111,14 @@
             "type": "string",
             "title": "grant_id",
             "description": "The grant whose authority the run uses; empty for a run without one,\n whose actions are denied (NO_GRANT)."
+          },
+          "scopeOperations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "scope_operations",
+            "description": "The operations the run is narrowed to within its grant (G0 M26 D400);\n empty for the whole grant."
           }
         },
         "title": "Run",

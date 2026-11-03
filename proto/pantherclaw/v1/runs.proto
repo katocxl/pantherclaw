@@ -68,6 +68,10 @@ enum PrincipalSource {
   PRINCIPAL_SOURCE_SUBJECT_TOKEN = 2;
   // Inherited from the parent run.
   PRINCIPAL_SOURCE_PARENT_RUN = 3;
+  // An Identity Assertion JWT Authorization Grant (ID-JAG) proved the user;
+  // the launcher is the instance of the client the assertion was issued to
+  // (G0 M26 D400, D408).
+  PRINCIPAL_SOURCE_ID_JAG = 4;
 }
 
 // Actor is one party in a run's actor chain.
@@ -119,6 +123,9 @@ message Run {
   // The grant whose authority the run uses; empty for a run without one,
   // whose actions are denied (NO_GRANT).
   string grant_id = 19;
+  // The operations the run is narrowed to within its grant (G0 M26 D400);
+  // empty for the whole grant.
+  repeated string scope_operations = 20;
 }
 
 // StartRunRequest starts a run.

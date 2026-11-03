@@ -153,6 +153,10 @@ const (
 	PrincipalSource_PRINCIPAL_SOURCE_SUBJECT_TOKEN PrincipalSource = 2
 	// Inherited from the parent run.
 	PrincipalSource_PRINCIPAL_SOURCE_PARENT_RUN PrincipalSource = 3
+	// An Identity Assertion JWT Authorization Grant (ID-JAG) proved the user;
+	// the launcher is the instance of the client the assertion was issued to
+	// (G0 M26 D400, D408).
+	PrincipalSource_PRINCIPAL_SOURCE_ID_JAG PrincipalSource = 4
 )
 
 // Enum value maps for PrincipalSource.
@@ -162,12 +166,14 @@ var (
 		1: "PRINCIPAL_SOURCE_LAUNCHER",
 		2: "PRINCIPAL_SOURCE_SUBJECT_TOKEN",
 		3: "PRINCIPAL_SOURCE_PARENT_RUN",
+		4: "PRINCIPAL_SOURCE_ID_JAG",
 	}
 	PrincipalSource_value = map[string]int32{
 		"PRINCIPAL_SOURCE_UNSPECIFIED":   0,
 		"PRINCIPAL_SOURCE_LAUNCHER":      1,
 		"PRINCIPAL_SOURCE_SUBJECT_TOKEN": 2,
 		"PRINCIPAL_SOURCE_PARENT_RUN":    3,
+		"PRINCIPAL_SOURCE_ID_JAG":        4,
 	}
 )
 
@@ -294,9 +300,12 @@ type Run struct {
 	EndTime *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	// The grant whose authority the run uses; empty for a run without one,
 	// whose actions are denied (NO_GRANT).
-	GrantId       string `protobuf:"bytes,19,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	GrantId string `protobuf:"bytes,19,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	// The operations the run is narrowed to within its grant (G0 M26 D400);
+	// empty for the whole grant.
+	ScopeOperations []string `protobuf:"bytes,20,rep,name=scope_operations,json=scopeOperations,proto3" json:"scope_operations,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Run) Reset() {
@@ -460,6 +469,13 @@ func (x *Run) GetGrantId() string {
 		return x.GrantId
 	}
 	return ""
+}
+
+func (x *Run) GetScopeOperations() []string {
+	if x != nil {
+		return x.ScopeOperations
+	}
+	return nil
 }
 
 // StartRunRequest starts a run.
@@ -940,7 +956,7 @@ const file_pantherclaw_v1_runs_proto_rawDesc = "" +
 	"\x19pantherclaw/v1/runs.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"+\n" +
 	"\x05Actor\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xa4\x06\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\xcf\x06\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x1f\n" +
@@ -966,7 +982,8 @@ const file_pantherclaw_v1_runs_proto_rawDesc = "" +
 	"\vexpire_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\x125\n" +
 	"\bend_time\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x19\n" +
-	"\bgrant_id\x18\x13 \x01(\tR\agrantId\"\xa6\x04\n" +
+	"\bgrant_id\x18\x13 \x01(\tR\agrantId\x12)\n" +
+	"\x10scope_operations\x18\x14 \x03(\tR\x0fscopeOperations\"\xa6\x04\n" +
 	"\x0fStartRunRequest\x12#\n" +
 	"\bagent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x12.\n" +
 	"\vinstance_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\n" +
@@ -1013,12 +1030,13 @@ const file_pantherclaw_v1_runs_proto_rawDesc = "" +
 	"\x10SubjectTokenType\x12\"\n" +
 	"\x1eSUBJECT_TOKEN_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bSUBJECT_TOKEN_TYPE_ID_TOKEN\x10\x01\x12#\n" +
-	"\x1fSUBJECT_TOKEN_TYPE_ACCESS_TOKEN\x10\x02*\x97\x01\n" +
+	"\x1fSUBJECT_TOKEN_TYPE_ACCESS_TOKEN\x10\x02*\xb4\x01\n" +
 	"\x0fPrincipalSource\x12 \n" +
 	"\x1cPRINCIPAL_SOURCE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19PRINCIPAL_SOURCE_LAUNCHER\x10\x01\x12\"\n" +
 	"\x1ePRINCIPAL_SOURCE_SUBJECT_TOKEN\x10\x02\x12\x1f\n" +
-	"\x1bPRINCIPAL_SOURCE_PARENT_RUN\x10\x032\xc6\x02\n" +
+	"\x1bPRINCIPAL_SOURCE_PARENT_RUN\x10\x03\x12\x1b\n" +
+	"\x17PRINCIPAL_SOURCE_ID_JAG\x10\x042\xc6\x02\n" +
 	"\n" +
 	"RunService\x12M\n" +
 	"\bStartRun\x12\x1f.pantherclaw.v1.StartRunRequest\x1a .pantherclaw.v1.StartRunResponse\x12L\n" +
