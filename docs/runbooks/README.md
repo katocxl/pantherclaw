@@ -62,3 +62,4 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [response-playbooks.md](response-playbooks.md) | M27 | The six Hub response playbooks (Team): install as a draft, why none contains, what a person does |
 | [siem-packs.md](siem-packs.md) | M27 | SIEM content packs for Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma: ingest, what was not checked, acting on exported alerts |
 | [pclaw-mcp-self.md](pclaw-mcp-self.md) | M27 | `pclaw mcp self`: a read-only MCP server for a SOC agent, the Investigator role and the server's audit of each read (Team) |
+| [threat-map.md](threat-map.md) | M28 | The threat map: MITRE ATLAS and ATT&CK Enterprise lanes, gaps and fixes, `pclaw threats`, the signed report, the Navigator layer and history |

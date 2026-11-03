@@ -96,6 +96,6 @@ PantherClaw is itself a mitigation product for these risks; this table maps what
 | CWE-807 | Reliance on untrusted inputs in a security decision | Agent claims | HR-022, HR-023 |
 | CWE-1021 | Improper restriction of rendered UI layers (clickjacking) | Approval page | `frame-ancestors 'none'` |
 
-## 6. MITRE ATLAS (detection mapping)
+## 6. MITRE ATLAS and ATT&CK Enterprise (detection and threat-map mapping)
 
-Detections (pillar 12) carry ATLAS technique references where applicable (e.g. LLM prompt injection — direct/indirect, LLM plugin compromise, exfiltration via ML inference API, erode ML model integrity). The mapping table lives with each detection rule in `internal/detections/rules/` and is exported in OCSF findings.
+Built-in detection rules carry MITRE ATLAS ids (`atlas:`) and ATT&CK Enterprise ids (`attack:`), or a one-line `techniques_none:` saying why they map none. The rules live in `internal/detection/rules/` and the built-in pack in `internal/detection/pack/builtin/`. Ids are checked against the pinned MITRE catalogues in `internal/threatmap/catalog` (M28). Alerts keep the ids, incidents and cases hold their alerts' union, and the OCSF export carries them in `finding_info.attacks[]`, one entry per technique and tactic with the catalogue version, for both frameworks. Every technique of both matrices, mapped, outside PantherClaw or with no PantherClaw control yet, is listed in [MITRE_MAPPING.md](MITRE_MAPPING.md), generated from the code.
