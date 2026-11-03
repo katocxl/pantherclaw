@@ -1,5 +1,5 @@
 name: pc.detect.merge-denial-burst
-version: 1.0.0
+version: 1.1.0
 kind: detection_rule
 title: Burst of refused merges in a run
 summary: >-
@@ -17,6 +17,7 @@ body:
     attention: ALERT
     basis: INFERRED
     owasp: [ASI02, ASI10]
+    atlas: [AML.T0133]
     edition: business
     on: [receipt.decision]
     match: event.decision in ["DENY", "CANNOT_AUTHORIZE"] && event.operation == "github.pull.merge"

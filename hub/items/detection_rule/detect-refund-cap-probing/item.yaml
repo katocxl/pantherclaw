@@ -1,5 +1,5 @@
 name: pc.detect.refund-cap-probing
-version: 1.0.0
+version: 1.1.0
 kind: detection_rule
 title: Refunds refused at the cap, repeatedly
 summary: >-
@@ -17,6 +17,8 @@ body:
     attention: ALERT
     basis: INFERRED
     owasp: [ASI02, ASI10]
+    atlas: [AML.T0133, AML.T0048.000]
+    attack: [T1657]
     edition: business
     on: [receipt.decision]
     match: event.decision == "DENY" && event.reason == "REFUND_OVER_CAP"
