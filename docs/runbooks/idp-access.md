@@ -44,6 +44,7 @@ Permissions: `identity_provider.manage` for changes, `identity_provider.read` fo
 
 - `pap-mcp+jwt` lives 5 minutes, names one gateway server, and is re-verified by the Authority on every call. It is signed with the `mcp_tokens` key purpose and is never accepted as a workload token.
 - The code flow needs PKCE S256, a signed-in person, and their consent on a page that names the client, the agent and the server. Codes last 60 seconds and are single use. The page warns when the redirect is a plain-HTTP loopback address.
+- A `pap-mcp+jwt` is not sender-constrained: a stolen one works from anywhere for up to 5 minutes, at the one server it names (R-69).
 - Refresh tokens exist only for the code flow. They rotate on every use and end with the run.
 - **A reused code or refresh token ends its run.** A spent code presented again, or a rotated refresh token used again, revokes the run and its descendants (end reason `authorization_code_reused` or `refresh_token_reused`). A refresh reuse also kills the whole token family. Each raises an audited event, and the notice says the run was ended.
 

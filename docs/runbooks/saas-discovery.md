@@ -26,6 +26,8 @@ pclaw discover import --source chatgpt_enterprise --file recording.json
 - **ChatGPT Enterprise:** package `pc.chatgpt-enterprise`, credential kind `static` (a compliance key). The scan reads `GET /v1/compliance/workspaces/{id}/gpts`. No field filter is known, so a page may carry a GPT's instructions; the gateway's first decode drops them and clears the page. PantherClaw does not bind the workspace to the connection: it relies on the Compliance API refusing a workspace the key does not reach. A refused or unreachable workspace fails the run with `tenant` not scanned.
 - Neither package exposes a tool to agents.
 
+**Stated limit:** for ChatGPT Enterprise, PantherClaw does not check that the workspace belongs to the connection's tenant. It relies on OpenAI's Compliance API refusing a workspace the key does not reach. Copilot Studio is checked by WhoAmI.
+
 ## Reading results
 
 - `GetSaasScan` and `ListSaasScans` show state (PENDING, RUNNING, DONE, FAILED), counts, `scanned` and `not_scanned`. Empty findings with `not_scanned` set means unread, never none found.

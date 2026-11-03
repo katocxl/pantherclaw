@@ -19,7 +19,7 @@
 **Consequences.**
 - The IdP can only reach what a PantherClaw grant already allows, so an IdP-side grant with no matching PantherClaw grant fails with `NO_GRANT`. Customers must set up both.
 - ID-JAG can change without touching the rest of the code, since the draft stays behind one adapter.
-- Bearer tokens are weaker than PAP/1 proofs: a stolen token works from anywhere for up to 5 minutes at one server. Audience, lifetime, the policy check on each call and the attribute policy can refuse are what limit it.
+- Bearer tokens are weaker than PAP/1 proofs: a stolen token works from anywhere for up to 5 minutes at one server. Audience, lifetime, the policy check on each call, revocation when the run ends and the attribute policy can refuse are what limit it (R-69).
 - R-08 stays accepted: a customer's IdP admin can still act as the people they control, create identities that look like distinct people, and change groups with no second person. An assertion or a group gives such an admin nothing a grant or a non-admin role does not already allow.
 - A deprovisioned person's API keys stay active until someone rotates or revokes them; the posture queue shows each one.
 - The `00291` Down migration refuses, deleting nothing, while evidence still refers to its runs or instances.
