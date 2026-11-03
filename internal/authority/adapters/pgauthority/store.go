@@ -489,20 +489,29 @@ func writeReceipt(ctx context.Context, tx db.TenantTx, org ids.OrgID, txn ids.UU
 	return writeInputs(ctx, tx, org, txn, evaluation, r.Inputs)
 }
 
+// TamperedEvent is the security.action_tampered audit event (HR-006): the
+// gateway presented another action under a used run and action id. An event
+// about a range run's transaction says so (HR-222).
+func TamperedEvent(gatewayID string, txn ids.UUID, simulated bool) audit.Event {
+	var details map[string]string
+	if simulated {
+		details = map[string]string{"simulated": "true"}
+	}
+	return audit.Event{
+		Name: "security.action_tampered", Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Denied,
+		ReasonCode: "ACTION_TAMPERED", Object: &audit.Object{Type: "transaction", ID: txn.String()}, Details: details,
+	}
+}
+
 // Tamper implements finalize.Store.
 func (s *Store) Tamper(ctx context.Context, org ids.OrgID, prev finalize.Stored, receipt *finalize.Receipt, gatewayID string) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		// HR-222: an event about a range run's transaction says so.
-		var details map[string]string
-		if sim, err := dbq.New(tx).TransactionSimulated(ctx, org, prev.TransactionID); err != nil {
+		sim, err := dbq.New(tx).TransactionSimulated(ctx, org, prev.TransactionID)
+		if err != nil {
 			return err
-		} else if sim {
-			details = map[string]string{"simulated": "true"}
 		}
-		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "security.action_tampered", Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Denied,
-			ReasonCode: "ACTION_TAMPERED", Object: &audit.Object{Type: "transaction", ID: prev.TransactionID.String()}, Details: details,
-		}); err != nil {
+		if _, err := audit.Record(ctx, tx, TamperedEvent(gatewayID, prev.TransactionID, sim)); err != nil {
 			return err
 		}
 		if prev.Final || receipt == nil {

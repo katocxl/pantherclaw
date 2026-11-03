@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+title: PantherClaw SIEM export changed
+id: 0192f944-0000-7000-8000-000000000007
+status: experimental
+description: >-
+  A SIEM export destination was created, activated, paused, disabled or resumed, or had its secret or signature scheme changed. A paused export is a blind spot in this very SIEM. A routine retry is not listed.
+author: PantherClaw
+date: 2026-11-01
+tags:
+  - pc-siem-007
+logsource:
+  product: pantherclaw
+  service: ocsf
+detection:
+  selection:
+    metadata.event_code:
+      - 'audit.siem.destination_created'
+      - 'audit.siem.destination_activated'
+      - 'audit.siem.destination_state_changed'
+      - 'audit.siem.destination_secret_rotated'
+      - 'audit.siem.destination_signature_scheme_set'
+  simulated:
+    metadata.labels|contains: test
+  condition: selection and not simulated
+falsepositives:
+  - Routine secret rotation.
+level: medium

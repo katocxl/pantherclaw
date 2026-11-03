@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+title: PantherClaw enforcement coverage invalidated
+id: 0192f944-0000-7000-8000-000000000004
+status: experimental
+description: >-
+  A coverage record for an agent or connection was invalidated, so what used to be enforced may no longer be.
+author: PantherClaw
+date: 2026-11-01
+tags:
+  - pc-siem-004
+logsource:
+  product: pantherclaw
+  service: ocsf
+detection:
+  selection:
+    metadata.event_code: 'coverage.invalidation'
+  simulated:
+    metadata.labels|contains: test
+  condition: selection and not simulated
+falsepositives:
+  - A planned change to a gateway or connection.
+level: medium

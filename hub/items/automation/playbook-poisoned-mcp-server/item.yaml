@@ -1,0 +1,46 @@
+name: pc.playbook.poisoned-mcp-server
+version: 1.0.0
+kind: automation
+title: "Playbook: poisoned MCP server"
+summary: >-
+  When an alert says an MCP tool changed under an agent, or a tool description
+  reads like instructions, open a case so a person reviews the server. It
+  contains nothing: the alert names a connection, not a run, and disabling a
+  connection or revoking the server is a person's action. Runs on Team.
+body:
+  automation_name: hub-playbook-poisoned-mcp-server
+  purpose: Open a case on a tool-drift or tool-injection alert so a person reviews the MCP server.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Open a case on a tool-drift or tool-injection alert so a person reviews the MCP server."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: alert.raised
+        where: event.attrs["rule"] in ["pc.tools.drift", "pc.tools.description_injection"]
+        params:
+          signal: {from: attrs.id, type: uuid}
+      dedupe:
+        key: "{{params.signal}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: open_case
+          scopes: [TRIGGER_SUBJECTS]
+    do:
+      - id: case
+        step: open_case
+        with:
+          title: "Review the MCP server behind signal {{params.signal}}"
+          questions:
+            - Which tool changed, and does its new description or schema ask the agent to do anything?
+            - Which other agents use this server?
+            - Should a person disable the connection or revoke the server in the MCP catalog?
+    finish_when:
+      - step: case
+        condition: CASE_OPENED
+    limits:
+      deadline: 1h

@@ -156,14 +156,12 @@ func AuthKindFrom(ctx context.Context) (string, bool) {
 	return k, ok
 }
 
-// Record writes ev to the ledger in tx (the privileged change's transaction).
-// Under an automation's attribution context (automationctx) the details
-// also name the automation, version, execution and trigger (G0 M11 part 2
-// D8, HR-274).
-func Record(ctx context.Context, tx db.TenantTx, ev Event) (domain.Entry, error) {
+// Entry is the ledger kind and canonical body Record writes for ev, after
+// the same validation and annotation.
+func Entry(ctx context.Context, ev Event) (string, []byte, error) {
 	ev, err := annotated(ctx, ev)
 	if err != nil {
-		return domain.Entry{}, err
+		return "", nil, err
 	}
 	body, err := domain.CanonicalBody(struct {
 		Name       string            `json:"name"`
@@ -173,9 +171,21 @@ func Record(ctx context.Context, tx db.TenantTx, ev Event) (domain.Entry, error)
 		Details    map[string]string `json:"details,omitempty"`
 	}{ev.Name, ev.Outcome, ev.ReasonCode, ev.Object, ev.Details})
 	if err != nil {
+		return "", nil, err
+	}
+	return "audit." + ev.Name, body, nil
+}
+
+// Record writes ev to the ledger in tx (the privileged change's transaction).
+// Under an automation's attribution context (automationctx) the details
+// also name the automation, version, execution and trigger (G0 M11 part 2
+// D8, HR-274).
+func Record(ctx context.Context, tx db.TenantTx, ev Event) (domain.Entry, error) {
+	kind, body, err := Entry(ctx, ev)
+	if err != nil {
 		return domain.Entry{}, err
 	}
-	e, err := ledger.Append(ctx, tx, "audit."+ev.Name, ev.Actor, body)
+	e, err := ledger.Append(ctx, tx, kind, ev.Actor, body)
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("audit: %w", err)
 	}

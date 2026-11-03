@@ -1,0 +1,9 @@
+{
+  "metadata.vendor_name": {"ocsf": "metadata.product.vendor_name"},
+  "metadata.product_event_type": {"ocsf": "metadata.event_code"},
+  "additional.fields[\"ocsf_class_uid\"]": {"ocsf": "class_uid"},
+  "additional.fields[\"ocsf_activity_id\"]": {"ocsf": "activity_id"},
+  "additional.fields[\"ocsf_severity_id\"]": {"ocsf": "severity_id"},
+  "additional.fields[\"ocsf_status_id\"]": {"ocsf": "status_id"},
+  "additional.fields[\"ocsf_test\"]": {"ocsf": "metadata.labels", "contains": "test"}
+}

@@ -1,0 +1,48 @@
+name: pc.playbook.rogue-sub-agent
+version: 1.0.0
+kind: automation
+title: "Playbook: rogue sub-agent"
+summary: >-
+  When an alert says an agent tried to widen or approve its own authority, open
+  a case so a person reviews the chain. It contains nothing: the same alert
+  covers a refused delegation, a refused issue and a refused revision, and a
+  refused revision names the grant the caller chose, so revoking the named
+  grant could revoke someone else's. Revoking is a person's action. Runs on
+  Team.
+body:
+  automation_name: hub-playbook-rogue-sub-agent
+  purpose: Open a case on an agent that tried to give itself authority, so a person reviews and revokes.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Open a case on an agent that tried to give itself authority, so a person reviews and revokes."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: alert.raised
+        where: event.attrs["rule"] in ["pc.authority.self_issue", "pc.authority.self_approve", "pc.delegation.depth_anomaly"]
+        params:
+          signal: {from: attrs.id, type: uuid}
+      dedupe:
+        key: "{{params.signal}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: open_case
+          scopes: [TRIGGER_SUBJECTS]
+    do:
+      - id: case
+        step: open_case
+        with:
+          title: "Review the delegation behind signal {{params.signal}}"
+          questions:
+            - Which parent run started this agent, and what did it try to delegate, issue, revise or approve?
+            - Did the agent use any authority it gave itself?
+            - Which grants of the chain should a person revoke?
+    finish_when:
+      - step: case
+        condition: CASE_OPENED
+    limits:
+      deadline: 1h

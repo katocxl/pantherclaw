@@ -152,6 +152,7 @@ var procedureClasses = map[string]entitlements.Class{
 	"/pantherclaw.v1.ConnectionService/RestoreConnection":                       entitlements.ClassSafety,
 	"/pantherclaw.v1.ConnectionService/RetireConnection":                        entitlements.ClassSafety,
 	"/pantherclaw.v1.ConnectionService/RevokeCredential":                        entitlements.ClassSafety,
+	"/pantherclaw.v1.ConnectionService/SetA2APublicUrl":                         entitlements.ClassChange,
 	"/pantherclaw.v1.ConnectionService/SetRouteMode":                            entitlements.ClassChange,
 	"/pantherclaw.v1.ConnectionService/TestConnection":                          entitlements.ClassChange,
 	"/pantherclaw.v1.ConnectionService/UpdateConnection":                        entitlements.ClassChange,

@@ -174,12 +174,12 @@ func signal(e feed.Event) bool { return e.Kind == kindAlert || e.Kind == kindInc
 // detailConfirmed is the trigger detail that marks a CONFIRMED alert.
 const detailConfirmed = "confirmed"
 
-// eventField reads a parameter source path of an event (ParamSpec.from for
+// EventField reads a parameter source path of an event (ParamSpec.from for
 // event and threshold triggers): kind, actor_type, actor_id, decision,
 // reason, operation, mode, outcome, environment, destination_class,
 // subjects.<type> (its first id) or attrs.<key>. ok is false when the
 // event has no such value.
-func eventField(e feed.Event, path string) (string, bool) {
+func EventField(e feed.Event, path string) (string, bool) {
 	if t, ok := strings.CutPrefix(path, "subjects."); ok {
 		for _, s := range e.Subjects {
 			if string(s.Type) == t {

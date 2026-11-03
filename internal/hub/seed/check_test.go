@@ -76,7 +76,7 @@ func TestHubSeed_Counts(t *testing.T) {
 	for _, it := range items(t) {
 		count[it.Entry.Kind]++
 	}
-	want := map[domain.Kind]int{domain.KindPolicyTemplate: 6, domain.KindDetectionRule: 8, domain.KindRangeScenario: 5, domain.KindAutomation: 3}
+	want := map[domain.Kind]int{domain.KindPolicyTemplate: 6, domain.KindDetectionRule: 8, domain.KindRangeScenario: 5, domain.KindAutomation: 9}
 	if !maps.Equal(count, want) {
 		t.Fatalf("seed %v, want %v", count, want)
 	}
@@ -441,7 +441,11 @@ func TestHubSeed_RangeScenariosAreCustomerAuthored(t *testing.T) {
 // automationEnv is an organization where every lookup holds and nothing is
 // irreversible: the checks that are org-specific run when a person enables
 // the draft.
-type automationEnv struct{ now time.Time }
+type automationEnv struct {
+	now time.Time
+	// business adds the Business edition to Team.
+	business bool
+}
 
 var automationOwner = ids.NewV7()
 
@@ -465,12 +469,16 @@ func (automationEnv) EligibleApprovers(context.Context, autodomain.GateWith, ids
 	return 2, nil
 }
 
-func (automationEnv) Edition(x autodomain.Edition) bool { return x == autodomain.EditionTeam }
+func (e automationEnv) Edition(x autodomain.Edition) bool {
+	return x == autodomain.EditionTeam || e.business && x == autodomain.EditionBusiness
+}
 
 // TestHubSeed_Automations: each definition parses as a draft does, carries no
 // review date to go stale, validates with no error on the Team edition once a
 // person sets one, starts with nothing that acts on its own, and runs its
-// baseline tests on the engine's simulator (HR-287).
+// baseline tests on the engine's simulator (HR-287). A playbook with a contain
+// step validates on Business: on Team its only errors are that the contain
+// step needs Business (HR-284).
 //
 // Covers: F849
 func TestHubSeed_Automations(t *testing.T) {
@@ -496,7 +504,7 @@ func TestHubSeed_Automations(t *testing.T) {
 			if def.Purpose != b.Purpose || string(def.WorkKind) != b.WorkKind {
 				t.Errorf("the definition says %q, %s", def.Purpose, def.WorkKind)
 			}
-			if !slices.ContainsFunc(autodomain.Validate(ctx, def, automationEnv{start}), func(f autodomain.Finding) bool {
+			if !slices.ContainsFunc(autodomain.Validate(ctx, def, automationEnv{now: start}), func(f autodomain.Finding) bool {
 				return f.Code == autodomain.CodeReviewDate
 			}) {
 				t.Error("a draft without a review date validated: a person must set one")
@@ -504,9 +512,31 @@ func TestHubSeed_Automations(t *testing.T) {
 			if err := json.Unmarshal([]byte(`"`+start.AddDate(0, 0, 30).Format(time.DateOnly)+`"`), &def.ReviewBy); err != nil {
 				t.Fatal(err)
 			}
-			for _, f := range autodomain.Validate(ctx, def, automationEnv{start}) {
+			business := slices.Contains(def.Kinds(), autodomain.KindContain)
+			// A draft that revokes beyond its execution names no revocable
+			// scope: a person sets it before it validates, as with the review
+			// date (G0 M27 D539).
+			if revokesBeyond(def) {
+				if def.Authority.Revocable != nil {
+					t.Error("an item names whose grants it may revoke: a person must set that")
+				}
+				if !slices.ContainsFunc(autodomain.Validate(ctx, def, automationEnv{now: start, business: business}), func(f autodomain.Finding) bool {
+					return f.Code == autodomain.CodeLimitRange && f.Path == "/authority/revocable"
+				}) {
+					t.Error("a draft that revokes grants validated with no revocable scope")
+				}
+				def.Authority.Revocable = &autodomain.AgentScope{All: true}
+			}
+			for _, f := range autodomain.Validate(ctx, def, automationEnv{now: start, business: business}) {
 				if f.Severity == autodomain.SeverityError {
 					t.Errorf("%s %s: %s", f.Code, f.Path, f.Message)
+				}
+			}
+			if business {
+				for _, f := range autodomain.Validate(ctx, def, automationEnv{now: start}) {
+					if f.Severity == autodomain.SeverityError && (f.Code != autodomain.CodeUnsupportedCapability || !strings.Contains(f.Message, "business")) {
+						t.Errorf("on Team: %s %s: %s", f.Code, f.Path, f.Message)
+					}
 				}
 			}
 			tests, err := templates.ParseTests(it.Entry.Name, def, it.Tests["baseline.yaml"])
@@ -544,6 +574,18 @@ func TestHubSeed_Automations(t *testing.T) {
 			}
 		})
 	}
+}
+
+// revokesBeyond reports a step that revokes grants beyond its execution.
+func revokesBeyond(def *autodomain.Definition) bool {
+	for _, s := range def.Do {
+		if k, ok := autodomain.Catalog[s.Step]; ok && k.ConfirmRevocable {
+			if w, err := s.DecodeWith(); err == nil && autodomain.RevokesBeyondExecution(w) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TestHubSeed_NoCode: no file of the tree is a script or a program, and no

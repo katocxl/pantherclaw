@@ -1,0 +1,46 @@
+name: pc.playbook.compromised-laptop
+version: 1.0.0
+kind: automation
+title: "Playbook: compromised laptop"
+summary: >-
+  When a high or critical incident opens, open a case so a person checks the
+  machine. It contains nothing: no incident names the run on that machine
+  today, so suspending runs, rotating keys and wiping the machine stay a
+  person's steps. Runs on Team.
+body:
+  automation_name: hub-playbook-compromised-laptop
+  purpose: Open a case on a severe incident so a person checks the machine.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Open a case on a severe incident so a person checks the machine."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: incident.opened
+        where: event.attrs["severity"] in ["HIGH", "CRITICAL"]
+        params:
+          signal: {from: attrs.id, type: uuid}
+      dedupe:
+        key: "{{params.signal}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: open_case
+          scopes: [TRIGGER_SUBJECTS]
+    do:
+      - id: case
+        step: open_case
+        with:
+          title: "Check the machine behind incident {{params.signal}}"
+          questions:
+            - Which machine and workload key did the run use?
+            - Which other agents and keys live on that machine?
+            - Has a person suspended the runs, rotated those keys and checked the machine?
+    finish_when:
+      - step: case
+        condition: CASE_OPENED
+    limits:
+      deadline: 1h
