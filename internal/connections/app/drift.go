@@ -156,15 +156,7 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 		})); err != nil {
 			return err
 		}
-		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "package.transitioned", Actor: c.Audit, Outcome: audit.Success,
-			Object: &audit.Object{Type: "package_version", ID: trust.Key(conn.Package, pin.Version)},
-			Details: map[string]string{
-				"from": string(from), "to": string(domain.StateQuarantined), "reason": ReasonUpstreamDrift,
-				"connection_id": conn.ID.String(), "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
-				"description_scan": scan,
-			},
-		}); err != nil {
+		if _, err := audit.Record(ctx, tx, DriftQuarantinedEvent(c.Audit, conn.ID, conn.Package, pin.Version, from, tool, expected, observed, scan)); err != nil {
 			return err
 		}
 		// A person reviews the quarantined version again (PN-006.2, HR-244).
@@ -185,6 +177,23 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 		return false, err
 	}
 	return quarantined, nil
+}
+
+// DriftQuarantinedEvent is the package.transitioned audit event of a package
+// version quarantined because an upstream tool of the connection drifted
+// from its reviewed definition (PN-006.2, F401).
+func DriftQuarantinedEvent(actor evdomain.Actor, connection ids.UUID, pkg, version string, from domain.State,
+	tool, expected, observed, scan string,
+) audit.Event {
+	return audit.Event{
+		Name: "package.transitioned", Actor: actor, Outcome: audit.Success,
+		Object: &audit.Object{Type: "package_version", ID: trust.Key(pkg, version)},
+		Details: map[string]string{
+			"from": string(from), "to": string(domain.StateQuarantined), "reason": ReasonUpstreamDrift,
+			"connection_id": connection.String(), "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
+			"description_scan": scan,
+		},
+	}
 }
 
 // reviewed reports whether a definition dispatches to the upstream tool

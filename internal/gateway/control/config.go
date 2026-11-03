@@ -56,6 +56,9 @@ type Connection struct {
 	// Captures are the active capture profiles covering the connection (G0
 	// M7 design decision 10, HR-199); none when capture is off.
 	Captures []*pb.GatewayCaptureProfile
+	// ContentSignals is the org's content signal mode (G0 M27 D507): nothing is
+	// scanned unless it is WATCHING or ACTIVE.
+	ContentSignals pb.ContentSignalMode
 }
 
 // Mode is a route's mode: its explicit one, or the connection's default.
@@ -231,7 +234,10 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 		if !ok && (!gc.GetModelRelay() || !gc.GetSimulated()) {
 			return nil, fmt.Errorf("%w: connection %s uses a package that was not sent", ErrConfig, gc.GetName())
 		}
-		c := &Connection{GatewayConnection: gc, Package: pkg.pkg, Mapper: pkg.mapper, Modes: map[string]string{}, Credential: creds[gc.GetId()]}
+		c := &Connection{
+			GatewayConnection: gc, Package: pkg.pkg, Mapper: pkg.mapper, Modes: map[string]string{}, Credential: creds[gc.GetId()],
+			ContentSignals: res.GetContentSignalMode(),
+		}
 		for _, r := range gc.GetRoutes() {
 			c.Modes[r.GetRoute()] = r.GetMode()
 		}

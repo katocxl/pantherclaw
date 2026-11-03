@@ -89,6 +89,22 @@ func TestHR441_OnlyTheBuiltinProviderDeclaresIdentityRisk(t *testing.T) {
 	}
 }
 
+// TestHR648_OnlyTheBuiltinProviderDeclaresTheContentFlag: a provider cannot
+// declare pc.content.flag, so no fact from outside can set or clear a flag.
+// Covers: F939
+func TestHR648_OnlyTheBuiltinProviderDeclaresTheContentFlag(t *testing.T) {
+	flag := Declaration{Name: NameContentFlag, Type: TypeObject, SubjectType: SubjectRun, MaxLag: MaxLagCeiling}
+	p := provider()
+	p.Facts = append(p.Facts, flag)
+	if p.Validate(nil) == nil {
+		t.Error("a service account's provider declared pc.content.flag")
+	}
+	builtin := Provider{ID: ids.NewV7(), Org: org, Name: BuiltinProvider, Builtin: true, State: ProviderActive, Facts: []Declaration{flag}}
+	if err := builtin.Validate(nil); err != nil {
+		t.Fatalf("the built-in provider: %v", err)
+	}
+}
+
 // TestHR435_SourceIsOneCleanLine: a source with a line break is refused;
 // control, format and bidi characters are stripped from what is kept.
 // Covers: F366

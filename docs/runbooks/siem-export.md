@@ -43,3 +43,7 @@ When delivery is **FAILING**, PantherClaw raises an owned failure (owner and nex
 ## 5. Pause or disable
 
 A destination is PAUSED or DISABLED through the `siem.proto` API (`siem.manage`); neither receives batches. Pausing keeps the cursor, so a resumed destination continues where it stopped. Every change is audited.
+
+## 6. Acting on exported alerts
+
+An alert's basis is in `unmapped.pantherclaw_uncertainty`. PantherClaw's automations contain only on CONFIRMED alerts (OBSERVED or RULE_MATCH). **A customer's own SOAR or script acting on exported alerts is outside PantherClaw's control:** the refusal does not reach it, so read the basis before acting. The content packs for six SIEMs are in [siem-packs.md](siem-packs.md).

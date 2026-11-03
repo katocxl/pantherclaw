@@ -33,10 +33,15 @@ func TestHR234_RecordingFromBeforeRolloutsReplaysIdentically(t *testing.T) {
 }
 
 // TestHR234_RecordingOfThisVersionReplaysIdentically: a recording made by
-// pipeline version 6 (testdata, the same hold recorded by this code)
-// replays the same way.
+// pipeline version 6 (testdata, the same hold recorded by that code)
+// replays the same way. Version 7 added content signals (G0 M27 D507); a
+// version 6 recording read none and replays in version 6 mode, and version
+// 7 recordings are replayed live in TestHR234 scenarios of recording_test.
 func TestHR234_RecordingOfThisVersionReplaysIdentically(t *testing.T) {
-	replaysIdentically(t, "recording_v6_hold", pipeline.Version)
+	if pipeline.Version != 7 {
+		t.Fatalf("pipeline version %d: record a golden fixture for it", pipeline.Version)
+	}
+	replaysIdentically(t, "recording_v6_hold", 6)
 }
 
 // replaysIdentically checks the golden recording name, made by pipeline

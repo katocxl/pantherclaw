@@ -104,6 +104,9 @@ func (s *contain) reason(sc autodomain.StepContext, w *autodomain.ContainWith) s
 }
 
 func (s *contain) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
+	if !sc.Execution.Trigger.Confirmed {
+		return autodomain.UnconfirmedSkip(), nil
+	}
 	w, target, reason := s.plan(sc)
 	if reason != "" {
 		return failed(reason)
@@ -183,6 +186,9 @@ func (s *contain) settle(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 }
 
 func (s *contain) Poll(ctx context.Context, tx pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
+	if !sc.Execution.Trigger.Confirmed {
+		return autodomain.UnconfirmedSkip(), nil
+	}
 	action, ok := parseID(own(sc)[OutAction])
 	if !ok {
 		return s.Run(ctx, tx, sc)
@@ -257,6 +263,9 @@ func (s *contain) escalate(ctx context.Context, tx pgx.Tx, sc autodomain.StepCon
 }
 
 func (s *contain) Preview(_ context.Context, _ pgx.Tx, sc autodomain.StepContext) (autodomain.StepResult, error) {
+	if !sc.Execution.Trigger.Confirmed {
+		return autodomain.UnconfirmedSkip(), nil
+	}
 	w, target, reason := s.plan(sc)
 	if reason != "" {
 		return previewRefused(reason)

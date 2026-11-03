@@ -5622,6 +5622,114 @@
         }
       }
     },
+    "/pantherclaw.v1.BehaviorService/GetAgentProfile": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BehaviorService"
+        ],
+        "summary": "GetAgentProfile",
+        "description": "GetAgentProfile returns an agent's profile of one origin.\n permission: behavior.read",
+        "operationId": "pantherclaw.v1.BehaviorService.GetAgentProfile",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetAgentProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetAgentProfileResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BehaviorService/GetBehaviorContext": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BehaviorService"
+        ],
+        "summary": "GetBehaviorContext",
+        "description": "GetBehaviorContext returns what stands out about a held action, to show\n beside the approval display. It is not part of that display and an\n approval never binds it.\n permission: behavior.read",
+        "operationId": "pantherclaw.v1.BehaviorService.GetBehaviorContext",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetBehaviorContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetBehaviorContextResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.CaseService/OpenCase": {
       "post": {
         "tags": [
@@ -9122,6 +9230,438 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetKillSwitchResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/CreateIdentityProvider": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "CreateIdentityProvider",
+        "description": "CreateIdentityProvider stores a PENDING provider and files its\n activation.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdentityProviderService.CreateIdentityProvider",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateIdentityProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateIdentityProviderResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/UpdateIdentityProvider": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "UpdateIdentityProvider",
+        "description": "UpdateIdentityProvider files a change of a provider (and activates a\n DISABLED one). An empty client_secret keeps the stored one.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdentityProviderService.UpdateIdentityProvider",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.UpdateIdentityProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.UpdateIdentityProviderResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/DisableIdentityProvider": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "DisableIdentityProvider",
+        "description": "DisableIdentityProvider files turning a provider off.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdentityProviderService.DisableIdentityProvider",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableIdentityProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableIdentityProviderResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/SetOwnProvidersOnly": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "SetOwnProvidersOnly",
+        "description": "SetOwnProvidersOnly files the org's own_providers_only setting.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdentityProviderService.SetOwnProvidersOnly",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetOwnProvidersOnlyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetOwnProvidersOnlyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/GetIdentityProvider": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "GetIdentityProvider",
+        "description": "GetIdentityProvider returns one provider.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdentityProviderService.GetIdentityProvider",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetIdentityProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetIdentityProviderResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdentityProviderService/ListIdentityProviders": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdentityProviderService"
+        ],
+        "summary": "ListIdentityProviders",
+        "description": "ListIdentityProviders lists the org's providers by name (at most 100)\n and its own_providers_only setting.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdentityProviderService.ListIdentityProviders",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListIdentityProvidersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListIdentityProvidersResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ContentSignalService/GetSettings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ContentSignalService"
+        ],
+        "summary": "GetSettings",
+        "description": "GetSettings reads the mode and what WATCHING would have held.\n permission: content.read",
+        "operationId": "pantherclaw.v1.ContentSignalService.GetSettings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetSettingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ContentSignalService/SetMode": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ContentSignalService"
+        ],
+        "summary": "SetMode",
+        "description": "SetMode changes the mode (a person). OFF moves only to WATCHING, and\n ACTIVE is reached only from WATCHING with a fresh security-key step-up.\n Leaving ACTIVE files a protected change and returns it: nothing changes\n until a second person confirms it.\n permission: content.manage",
+        "operationId": "pantherclaw.v1.ContentSignalService.SetMode",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetModeResponse"
                 }
               }
             }
@@ -17711,330 +18251,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetIssuerEntryResponse"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Unsupported media type, no body"
-          }
-        }
-      }
-    },
-    "/pantherclaw.v1.IdentityProviderService/CreateIdentityProvider": {
-      "post": {
-        "tags": [
-          "pantherclaw.v1.IdentityProviderService"
-        ],
-        "summary": "CreateIdentityProvider",
-        "description": "CreateIdentityProvider stores a PENDING provider and files its\n activation.\n permission: identity_provider.manage",
-        "operationId": "pantherclaw.v1.IdentityProviderService.CreateIdentityProvider",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/pantherclaw.v1.CreateIdentityProviderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/pantherclaw.v1.CreateIdentityProviderResponse"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Unsupported media type, no body"
-          }
-        }
-      }
-    },
-    "/pantherclaw.v1.IdentityProviderService/UpdateIdentityProvider": {
-      "post": {
-        "tags": [
-          "pantherclaw.v1.IdentityProviderService"
-        ],
-        "summary": "UpdateIdentityProvider",
-        "description": "UpdateIdentityProvider files a change of a provider (and activates a\n DISABLED one). An empty client_secret keeps the stored one.\n permission: identity_provider.manage",
-        "operationId": "pantherclaw.v1.IdentityProviderService.UpdateIdentityProvider",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/pantherclaw.v1.UpdateIdentityProviderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/pantherclaw.v1.UpdateIdentityProviderResponse"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Unsupported media type, no body"
-          }
-        }
-      }
-    },
-    "/pantherclaw.v1.IdentityProviderService/DisableIdentityProvider": {
-      "post": {
-        "tags": [
-          "pantherclaw.v1.IdentityProviderService"
-        ],
-        "summary": "DisableIdentityProvider",
-        "description": "DisableIdentityProvider files turning a provider off.\n permission: identity_provider.manage",
-        "operationId": "pantherclaw.v1.IdentityProviderService.DisableIdentityProvider",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/pantherclaw.v1.DisableIdentityProviderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/pantherclaw.v1.DisableIdentityProviderResponse"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Unsupported media type, no body"
-          }
-        }
-      }
-    },
-    "/pantherclaw.v1.IdentityProviderService/SetOwnProvidersOnly": {
-      "post": {
-        "tags": [
-          "pantherclaw.v1.IdentityProviderService"
-        ],
-        "summary": "SetOwnProvidersOnly",
-        "description": "SetOwnProvidersOnly files the org's own_providers_only setting.\n permission: identity_provider.manage",
-        "operationId": "pantherclaw.v1.IdentityProviderService.SetOwnProvidersOnly",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/pantherclaw.v1.SetOwnProvidersOnlyRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/pantherclaw.v1.SetOwnProvidersOnlyResponse"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Unsupported media type, no body"
-          }
-        }
-      }
-    },
-    "/pantherclaw.v1.IdentityProviderService/GetIdentityProvider": {
-      "post": {
-        "tags": [
-          "pantherclaw.v1.IdentityProviderService"
-        ],
-        "summary": "GetIdentityProvider",
-        "description": "GetIdentityProvider returns one provider.\n permission: identity_provider.read",
-        "operationId": "pantherclaw.v1.IdentityProviderService.GetIdentityProvider",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/pantherclaw.v1.GetIdentityProviderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/pantherclaw.v1.GetIdentityProviderResponse"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Unsupported media type, no body"
-          }
-        }
-      }
-    },
-    "/pantherclaw.v1.IdentityProviderService/ListIdentityProviders": {
-      "post": {
-        "tags": [
-          "pantherclaw.v1.IdentityProviderService"
-        ],
-        "summary": "ListIdentityProviders",
-        "description": "ListIdentityProviders lists the org's providers by name (at most 100)\n and its own_providers_only setting.\n permission: identity_provider.read",
-        "operationId": "pantherclaw.v1.IdentityProviderService.ListIdentityProviders",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/pantherclaw.v1.ListIdentityProvidersRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/pantherclaw.v1.ListIdentityProvidersResponse"
                 }
               }
             }
@@ -39532,6 +39748,17 @@
         ],
         "description": "ConsequenceState is what a consequence rule said about an action\n (HR-206)."
       },
+      "pantherclaw.v1.ContentScan": {
+        "type": "string",
+        "title": "ContentScan",
+        "enum": [
+          "CONTENT_SCAN_UNSPECIFIED",
+          "CONTENT_SCAN_SCANNED",
+          "CONTENT_SCAN_OFF",
+          "CONTENT_SCAN_FACE_NOT_SCANNED"
+        ],
+        "description": "ContentScan is whether the gateway scanned a body for content signals (G0\n M27 D533). Only SCANNED counts as scanned; the Authority decides for\n itself which faces are declared unscanned."
+      },
       "pantherclaw.v1.Decision": {
         "type": "string",
         "title": "Decision",
@@ -39668,6 +39895,30 @@
             "title": "payload_findings",
             "maxItems": 16,
             "description": "Credential-shaped values the gateway found in the action's payload\n (HR-225). Each makes the Authority require a person's approval; none\n can lift a requirement. At most 16, sorted, never the value."
+          },
+          "contentFindings": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ContentFinding"
+            },
+            "title": "content_findings",
+            "maxItems": 16,
+            "description": "Content flags the gateway found in the outbound body (G0 M27 D507,\n HR-648): the Authority reads the org's mode itself, and a flag can only\n add a hold. At most 16, sorted, never the value."
+          },
+          "contentScan": {
+            "title": "content_scan",
+            "description": "Whether the gateway scanned the outbound body (G0 M27 D533). In ACTIVE a\n call on a gateway-carried channel without CONTENT_SCAN_SCANNED is a\n scan_incomplete (not_scanned) and holds.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ContentScan"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "AuthorizeRequest",
@@ -39997,6 +40248,30 @@
         "title": "Consequence",
         "additionalProperties": false,
         "description": "Consequence is what one consequence rule said about an action (F405)."
+      },
+      "pantherclaw.v1.ContentFinding": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "pattern": "^[a-z_]{1,32}$",
+            "description": "injection_phrase, secret_format, high_entropy, pii_email, pii_card,\n pii_national_id, classifier_flag or scan_incomplete."
+          },
+          "location": {
+            "type": "string",
+            "title": "location",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Where, such as result/content/0/text; for scan_incomplete, over_bound,\n classifier_unavailable or builtin_failed."
+          }
+        },
+        "title": "ContentFinding",
+        "additionalProperties": false,
+        "description": "ContentFinding is one content flag: a kind and a location, never a value\n (G0 M27 D507, HR-649).",
+        "required": [
+          "kind",
+          "location"
+        ]
       },
       "pantherclaw.v1.CredentialAccess": {
         "type": "object",
@@ -40785,6 +41060,30 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.DataScopeApplied"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contentFindings": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ContentFinding"
+            },
+            "title": "content_findings",
+            "maxItems": 16,
+            "description": "Content flags on the tool result (G0 M27 D507, HR-648): they land on the\n run, for later decisions. Empty for a delegated outcome, which is not\n inspected. At most 16, sorted, never the value."
+          },
+          "contentScan": {
+            "title": "content_scan",
+            "description": "Whether the gateway scanned the tool result (G0 M27 D533). In ACTIVE a\n gateway-carried result without CONTENT_SCAN_SCANNED flags the run as\n scan_incomplete (not_scanned).",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ContentScan"
               },
               {
                 "type": "null"
@@ -46633,6 +46932,413 @@
           }
         },
         "title": "ParamsEntry",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.BehaviorDeviationKind": {
+        "type": "string",
+        "title": "BehaviorDeviationKind",
+        "enum": [
+          "BEHAVIOR_DEVIATION_KIND_UNSPECIFIED",
+          "BEHAVIOR_DEVIATION_KIND_NEW_TOOL",
+          "BEHAVIOR_DEVIATION_KIND_NEW_DESTINATION",
+          "BEHAVIOR_DEVIATION_KIND_UNUSUAL_HOUR",
+          "BEHAVIOR_DEVIATION_KIND_NEW_SEQUENCE",
+          "BEHAVIOR_DEVIATION_KIND_VOLUME_SPIKE",
+          "BEHAVIOR_DEVIATION_KIND_SPEND_SPIKE"
+        ],
+        "description": "BehaviorDeviationKind is one way an action stands out."
+      },
+      "pantherclaw.v1.BehaviorOrigin": {
+        "type": "string",
+        "title": "BehaviorOrigin",
+        "enum": [
+          "BEHAVIOR_ORIGIN_UNSPECIFIED",
+          "BEHAVIOR_ORIGIN_REAL",
+          "BEHAVIOR_ORIGIN_SIMULATED"
+        ],
+        "description": "BehaviorOrigin says which activity a profile rests on."
+      },
+      "pantherclaw.v1.BehaviorProfileState": {
+        "type": "string",
+        "title": "BehaviorProfileState",
+        "enum": [
+          "BEHAVIOR_PROFILE_STATE_UNSPECIFIED",
+          "BEHAVIOR_PROFILE_STATE_COLLECTED",
+          "BEHAVIOR_PROFILE_STATE_INSUFFICIENT_HISTORY",
+          "BEHAVIOR_PROFILE_STATE_NOT_COLLECTED"
+        ],
+        "description": "BehaviorProfileState says what a read can rest on."
+      },
+      "pantherclaw.v1.BehaviorContextLine": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.BehaviorDeviationKind"
+          },
+          "text": {
+            "type": "string",
+            "title": "text",
+            "description": "Plain text built from recorded names, for example \"Never done\n github.push in the last 30 days\". Not markup."
+          }
+        },
+        "title": "BehaviorContextLine",
+        "additionalProperties": false,
+        "description": "BehaviorContextLine is one thing that stands out about a held action."
+      },
+      "pantherclaw.v1.BehaviorDestination": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "Empty when the action named no connection."
+          },
+          "destinationClass": {
+            "type": "string",
+            "title": "destination_class"
+          },
+          "count": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "count",
+            "format": "int64"
+          }
+        },
+        "title": "BehaviorDestination",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.BehaviorProfile": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id"
+          },
+          "origin": {
+            "title": "origin",
+            "$ref": "#/components/schemas/pantherclaw.v1.BehaviorOrigin"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.BehaviorProfileState"
+          },
+          "windowStartTime": {
+            "title": "window_start_time",
+            "description": "The range it covers. Unset when NOT_COLLECTED.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "windowEndTime": {
+            "title": "window_end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "actionCount": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "action_count",
+            "format": "int64"
+          },
+          "activeDays": {
+            "type": "integer",
+            "title": "active_days",
+            "format": "int32"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BehaviorTool"
+            },
+            "title": "tools"
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BehaviorDestination"
+            },
+            "title": "destinations"
+          },
+          "hours": {
+            "type": "array",
+            "items": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            },
+            "title": "hours",
+            "description": "Actions per hour of the UTC day, 24 entries. Empty when NOT_COLLECTED."
+          },
+          "volumes": {
+            "title": "volumes",
+            "$ref": "#/components/schemas/pantherclaw.v1.BehaviorVolumes"
+          },
+          "sequences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BehaviorSequence"
+            },
+            "title": "sequences"
+          },
+          "spend": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BehaviorSpend"
+            },
+            "title": "spend"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "The history was longer than the method keeps, or a list was cut: \"new\"\n comparisons on a cut list are off."
+          },
+          "basis": {
+            "type": "string",
+            "title": "basis",
+            "description": "INFERRED, always (F648)."
+          },
+          "definitionStatus": {
+            "type": "string",
+            "title": "definition_status",
+            "description": "UNVALIDATED: the thresholds have not been checked on real incidents\n (F801)."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "Plain words stating that this is inference."
+          },
+          "asOfTime": {
+            "title": "as_of_time",
+            "description": "When the rollup computed this. Unset when NOT_COLLECTED.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "BehaviorProfile",
+        "additionalProperties": false,
+        "description": "BehaviorProfile is what an agent usually does."
+      },
+      "pantherclaw.v1.BehaviorSequence": {
+        "type": "object",
+        "properties": {
+          "fromOperation": {
+            "type": "string",
+            "title": "from_operation"
+          },
+          "toOperation": {
+            "type": "string",
+            "title": "to_operation"
+          },
+          "count": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "count",
+            "format": "int64"
+          }
+        },
+        "title": "BehaviorSequence",
+        "additionalProperties": false,
+        "description": "BehaviorSequence is one operation that followed another in a run."
+      },
+      "pantherclaw.v1.BehaviorSpend": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "currency"
+          },
+          "medianDaily": {
+            "type": "string",
+            "title": "median_daily"
+          },
+          "maxDaily": {
+            "type": "string",
+            "title": "max_daily"
+          },
+          "days": {
+            "type": "integer",
+            "title": "days",
+            "format": "int32"
+          }
+        },
+        "title": "BehaviorSpend",
+        "additionalProperties": false,
+        "description": "BehaviorSpend is what the agent's allowed actions named, per active day of\n spending. It is what was asked for, not what settled."
+      },
+      "pantherclaw.v1.BehaviorTool": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "operation"
+          },
+          "count": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "count",
+            "format": "int64"
+          }
+        },
+        "title": "BehaviorTool",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.BehaviorVolumes": {
+        "type": "object",
+        "properties": {
+          "medianDaily": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "median_daily",
+            "format": "int64"
+          },
+          "p90Daily": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "p90_daily",
+            "format": "int64"
+          },
+          "maxDaily": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_daily",
+            "format": "int64"
+          },
+          "maxHourly": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_hourly",
+            "format": "int64"
+          }
+        },
+        "title": "BehaviorVolumes",
+        "additionalProperties": false,
+        "description": "BehaviorVolumes are actions per active day, and the busiest hour."
+      },
+      "pantherclaw.v1.GetAgentProfileRequest": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid"
+          },
+          "origin": {
+            "title": "origin",
+            "description": "Defaults to REAL.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.BehaviorOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "GetAgentProfileRequest",
+        "additionalProperties": false,
+        "required": [
+          "agentId"
+        ]
+      },
+      "pantherclaw.v1.GetAgentProfileResponse": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "title": "profile",
+            "$ref": "#/components/schemas/pantherclaw.v1.BehaviorProfile"
+          }
+        },
+        "title": "GetAgentProfileResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetBehaviorContextRequest": {
+        "type": "object",
+        "properties": {
+          "approvalId": {
+            "type": "string",
+            "title": "approval_id",
+            "format": "uuid"
+          }
+        },
+        "title": "GetBehaviorContextRequest",
+        "additionalProperties": false,
+        "required": [
+          "approvalId"
+        ]
+      },
+      "pantherclaw.v1.GetBehaviorContextResponse": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "title": "agent_id"
+          },
+          "origin": {
+            "title": "origin",
+            "$ref": "#/components/schemas/pantherclaw.v1.BehaviorOrigin"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.BehaviorProfileState"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BehaviorContextLine"
+            },
+            "title": "lines",
+            "description": "What stands out. Empty does not mean the action is safe (F801)."
+          },
+          "actionCount": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "action_count",
+            "format": "int64"
+          },
+          "activeDays": {
+            "type": "integer",
+            "title": "active_days",
+            "format": "int32"
+          },
+          "basis": {
+            "type": "string",
+            "title": "basis",
+            "description": "INFERRED, always (F648)."
+          },
+          "definitionStatus": {
+            "type": "string",
+            "title": "definition_status",
+            "description": "UNVALIDATED (F801)."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "Plain words stating that this is inference, outside what the approval\n binds."
+          },
+          "asOfTime": {
+            "title": "as_of_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetBehaviorContextResponse",
         "additionalProperties": false
       },
       "pantherclaw.v1.AppendCaseEntryRequest": {
@@ -54554,6 +55260,500 @@
         "title": "KillSwitchRestore",
         "additionalProperties": false,
         "description": "KillSwitchRestore is a proposal to restore after the kill switch."
+      },
+      "pantherclaw.v1.CreateIdentityProviderRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 32,
+            "minLength": 1,
+            "description": "Name: 1-32 lowercase letters, digits or hyphens."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "HTTPS issuer URL on a public host."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "maxLength": 256,
+            "minLength": 1,
+            "description": "OAuth client id."
+          },
+          "clientSecret": {
+            "type": "string",
+            "title": "client_secret",
+            "maxLength": 4096,
+            "minLength": 1,
+            "format": "byte",
+            "description": "OAuth client secret, sealed at once."
+          },
+          "trustEmail": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "trust_email",
+            "description": "Trust the email claim without email_verified."
+          }
+        },
+        "title": "CreateIdentityProviderRequest",
+        "additionalProperties": false,
+        "description": "CreateIdentityProviderRequest describes a provider.",
+        "required": [
+          "name",
+          "issuer",
+          "clientId",
+          "clientSecret"
+        ]
+      },
+      "pantherclaw.v1.CreateIdentityProviderResponse": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "title": "provider",
+            "description": "The PENDING provider.",
+            "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
+          },
+          "change": {
+            "title": "change",
+            "description": "The filed activation.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "CreateIdentityProviderResponse",
+        "additionalProperties": false,
+        "description": "CreateIdentityProviderResponse is the PENDING provider and its filed\n activation."
+      },
+      "pantherclaw.v1.DisableIdentityProviderRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Provider id."
+          }
+        },
+        "title": "DisableIdentityProviderRequest",
+        "additionalProperties": false,
+        "description": "DisableIdentityProviderRequest names a provider.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DisableIdentityProviderResponse": {
+        "type": "object",
+        "properties": {
+          "change": {
+            "title": "change",
+            "description": "The filed change.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "DisableIdentityProviderResponse",
+        "additionalProperties": false,
+        "description": "DisableIdentityProviderResponse is the filed change."
+      },
+      "pantherclaw.v1.GetIdentityProviderRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Provider id."
+          }
+        },
+        "title": "GetIdentityProviderRequest",
+        "additionalProperties": false,
+        "description": "GetIdentityProviderRequest names a provider.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetIdentityProviderResponse": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "title": "provider",
+            "description": "The provider.",
+            "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
+          }
+        },
+        "title": "GetIdentityProviderResponse",
+        "additionalProperties": false,
+        "description": "GetIdentityProviderResponse is the provider."
+      },
+      "pantherclaw.v1.IdentityProvider": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Provider id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name, in the sign-in callback path (/oauth2/callback/\u003cname\u003e)."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "Issuer URL."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "description": "OAuth client id."
+          },
+          "trustEmail": {
+            "type": "boolean",
+            "title": "trust_email",
+            "description": "Whether the email claim is trusted without email_verified."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE or DISABLED."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who created it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by",
+            "description": "Who last changed it."
+          },
+          "updateTime": {
+            "title": "update_time",
+            "description": "When it last changed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it first became ACTIVE; its issuer is fixed from then on.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "disableTime": {
+            "title": "disable_time",
+            "description": "When it was disabled.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "IdentityProvider",
+        "additionalProperties": false,
+        "description": "IdentityProvider is an organization's provider. Its client secret is\n never returned."
+      },
+      "pantherclaw.v1.ListIdentityProvidersRequest": {
+        "type": "object",
+        "title": "ListIdentityProvidersRequest",
+        "additionalProperties": false,
+        "description": "ListIdentityProvidersRequest has no fields."
+      },
+      "pantherclaw.v1.ListIdentityProvidersResponse": {
+        "type": "object",
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
+            },
+            "title": "providers",
+            "description": "Providers by name."
+          },
+          "ownProvidersOnly": {
+            "type": "boolean",
+            "title": "own_providers_only",
+            "description": "Whether the org signs in with its own providers alone."
+          }
+        },
+        "title": "ListIdentityProvidersResponse",
+        "additionalProperties": false,
+        "description": "ListIdentityProvidersResponse is the org's providers and setting."
+      },
+      "pantherclaw.v1.ProtectedChangeFiled": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id",
+            "description": "Protected change id."
+          },
+          "changeRequestId": {
+            "type": "string",
+            "title": "change_request_id",
+            "description": "Change request id, confirmed on its page."
+          },
+          "strandedAdminIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "stranded_admin_ids",
+            "description": "Active org admins who would lose their last sign-in provider."
+          }
+        },
+        "title": "ProtectedChangeFiled",
+        "additionalProperties": false,
+        "description": "ProtectedChangeFiled is the protected change a write filed: it applies\n when a second person confirms its change request."
+      },
+      "pantherclaw.v1.SetOwnProvidersOnlyRequest": {
+        "type": "object",
+        "properties": {
+          "ownProvidersOnly": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "own_providers_only",
+            "description": "Sign in with the org's own providers alone."
+          }
+        },
+        "title": "SetOwnProvidersOnlyRequest",
+        "additionalProperties": false,
+        "description": "SetOwnProvidersOnlyRequest is the setting asked for."
+      },
+      "pantherclaw.v1.SetOwnProvidersOnlyResponse": {
+        "type": "object",
+        "properties": {
+          "change": {
+            "title": "change",
+            "description": "The filed change.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "SetOwnProvidersOnlyResponse",
+        "additionalProperties": false,
+        "description": "SetOwnProvidersOnlyResponse is the filed change."
+      },
+      "pantherclaw.v1.UpdateIdentityProviderRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Provider id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 32,
+            "minLength": 1,
+            "description": "Name."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "Issuer; it must stay the same once the provider has been ACTIVE."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "maxLength": 256,
+            "minLength": 1,
+            "description": "OAuth client id."
+          },
+          "clientSecret": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "client_secret",
+            "maxLength": 4096,
+            "format": "byte",
+            "description": "New client secret; empty keeps the stored one."
+          },
+          "trustEmail": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "trust_email",
+            "description": "Trust the email claim without email_verified."
+          }
+        },
+        "title": "UpdateIdentityProviderRequest",
+        "additionalProperties": false,
+        "description": "UpdateIdentityProviderRequest is a provider's new settings.",
+        "required": [
+          "id",
+          "name",
+          "issuer",
+          "clientId"
+        ]
+      },
+      "pantherclaw.v1.UpdateIdentityProviderResponse": {
+        "type": "object",
+        "properties": {
+          "change": {
+            "title": "change",
+            "description": "The filed change.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "UpdateIdentityProviderResponse",
+        "additionalProperties": false,
+        "description": "UpdateIdentityProviderResponse is the filed change."
+      },
+      "pantherclaw.v1.ContentSignalMode": {
+        "type": "string",
+        "title": "ContentSignalMode",
+        "enum": [
+          "CONTENT_SIGNAL_MODE_UNSPECIFIED",
+          "CONTENT_SIGNAL_MODE_OFF",
+          "CONTENT_SIGNAL_MODE_WATCHING",
+          "CONTENT_SIGNAL_MODE_ACTIVE"
+        ],
+        "description": "ContentSignalMode is what the org does with content signals."
+      },
+      "pantherclaw.v1.ContentSignalSettings": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "title": "mode",
+            "$ref": "#/components/schemas/pantherclaw.v1.ContentSignalMode"
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by",
+            "description": "Empty until the mode was first changed."
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "wouldHold": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ContentWouldHold"
+            },
+            "title": "would_hold",
+            "description": "What WATCHING would have held, most first: the step-up to ACTIVE shows\n it (D512)."
+          },
+          "notInspected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "not_inspected",
+            "description": "The faces content signals do not see into: hook, sdk, authzen, local and\n delegated. What comes through them is not inspected, and never reads as\n no known flags."
+          },
+          "notInspectedNote": {
+            "type": "string",
+            "title": "not_inspected_note",
+            "description": "The settings' plain sentence about them: hook, SDK, AuthZEN and local\n connections are not scanned, and re-encoded, split or paraphrased content\n passes (D532, D533)."
+          }
+        },
+        "title": "ContentSignalSettings",
+        "additionalProperties": false,
+        "description": "ContentSignalSettings are the org's settings."
+      },
+      "pantherclaw.v1.ContentWouldHold": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "count": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "count",
+            "format": "int64"
+          },
+          "firstTime": {
+            "title": "first_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastTime": {
+            "title": "last_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ContentWouldHold",
+        "additionalProperties": false,
+        "description": "ContentWouldHold is how many times WATCHING would have held, for one\n reason: a finding kind, over_bound, classifier_unavailable or\n builtin_failed."
+      },
+      "pantherclaw.v1.GetSettingsRequest": {
+        "type": "object",
+        "title": "GetSettingsRequest",
+        "additionalProperties": false,
+        "description": "GetSettingsRequest asks for the settings."
+      },
+      "pantherclaw.v1.GetSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "title": "settings",
+            "$ref": "#/components/schemas/pantherclaw.v1.ContentSignalSettings"
+          }
+        },
+        "title": "GetSettingsResponse",
+        "additionalProperties": false,
+        "description": "GetSettingsResponse holds the settings."
+      },
+      "pantherclaw.v1.SetModeRequest": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "title": "mode",
+            "$ref": "#/components/schemas/pantherclaw.v1.ContentSignalMode",
+            "not": {
+              "enum": [
+                "CONTENT_SIGNAL_MODE_UNSPECIFIED"
+              ]
+            }
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "SetModeRequest",
+        "additionalProperties": false,
+        "description": "SetModeRequest changes the mode.",
+        "required": [
+          "mode",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.SetModeResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "title": "settings",
+            "$ref": "#/components/schemas/pantherclaw.v1.ContentSignalSettings"
+          },
+          "change": {
+            "title": "change",
+            "description": "Set when the change waits for a second person: settings are unchanged.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "SetModeResponse",
+        "additionalProperties": false,
+        "description": "SetModeResponse is what SetMode did."
       },
       "pantherclaw.v1.AccessControlMode": {
         "type": "string",
@@ -64713,6 +65913,11 @@
             "title": "mcp_access",
             "description": "The org's MCP authorization route (G0 M26 D402); unset while it is off.",
             "$ref": "#/components/schemas/pantherclaw.v1.GatewayMcpAccess"
+          },
+          "contentSignalMode": {
+            "title": "content_signal_mode",
+            "description": "The org's content signal mode (G0 M27 D507): the gateway scans nothing\n at OFF, and unset is OFF.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ContentSignalMode"
           }
         },
         "title": "GetConfigurationResponse",
@@ -71359,357 +72564,6 @@
         "additionalProperties": false,
         "description": "WithdrawIssuerProposalResponse returns the withdrawn revision."
       },
-      "pantherclaw.v1.CreateIdentityProviderRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "name",
-            "maxLength": 32,
-            "minLength": 1,
-            "description": "Name: 1-32 lowercase letters, digits or hyphens."
-          },
-          "issuer": {
-            "type": "string",
-            "title": "issuer",
-            "maxLength": 512,
-            "minLength": 1,
-            "description": "HTTPS issuer URL on a public host."
-          },
-          "clientId": {
-            "type": "string",
-            "title": "client_id",
-            "maxLength": 256,
-            "minLength": 1,
-            "description": "OAuth client id."
-          },
-          "clientSecret": {
-            "type": "string",
-            "title": "client_secret",
-            "maxLength": 4096,
-            "minLength": 1,
-            "format": "byte",
-            "description": "OAuth client secret, sealed at once."
-          },
-          "trustEmail": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "title": "trust_email",
-            "description": "Trust the email claim without email_verified."
-          }
-        },
-        "title": "CreateIdentityProviderRequest",
-        "additionalProperties": false,
-        "description": "CreateIdentityProviderRequest describes a provider.",
-        "required": [
-          "name",
-          "issuer",
-          "clientId",
-          "clientSecret"
-        ]
-      },
-      "pantherclaw.v1.CreateIdentityProviderResponse": {
-        "type": "object",
-        "properties": {
-          "provider": {
-            "title": "provider",
-            "description": "The PENDING provider.",
-            "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
-          },
-          "change": {
-            "title": "change",
-            "description": "The filed activation.",
-            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
-          }
-        },
-        "title": "CreateIdentityProviderResponse",
-        "additionalProperties": false,
-        "description": "CreateIdentityProviderResponse is the PENDING provider and its filed\n activation."
-      },
-      "pantherclaw.v1.DisableIdentityProviderRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "id",
-            "format": "uuid",
-            "description": "Provider id."
-          }
-        },
-        "title": "DisableIdentityProviderRequest",
-        "additionalProperties": false,
-        "description": "DisableIdentityProviderRequest names a provider.",
-        "required": [
-          "id"
-        ]
-      },
-      "pantherclaw.v1.DisableIdentityProviderResponse": {
-        "type": "object",
-        "properties": {
-          "change": {
-            "title": "change",
-            "description": "The filed change.",
-            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
-          }
-        },
-        "title": "DisableIdentityProviderResponse",
-        "additionalProperties": false,
-        "description": "DisableIdentityProviderResponse is the filed change."
-      },
-      "pantherclaw.v1.GetIdentityProviderRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "id",
-            "format": "uuid",
-            "description": "Provider id."
-          }
-        },
-        "title": "GetIdentityProviderRequest",
-        "additionalProperties": false,
-        "description": "GetIdentityProviderRequest names a provider.",
-        "required": [
-          "id"
-        ]
-      },
-      "pantherclaw.v1.GetIdentityProviderResponse": {
-        "type": "object",
-        "properties": {
-          "provider": {
-            "title": "provider",
-            "description": "The provider.",
-            "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
-          }
-        },
-        "title": "GetIdentityProviderResponse",
-        "additionalProperties": false,
-        "description": "GetIdentityProviderResponse is the provider."
-      },
-      "pantherclaw.v1.IdentityProvider": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "id",
-            "description": "Provider id."
-          },
-          "name": {
-            "type": "string",
-            "title": "name",
-            "description": "Name, in the sign-in callback path (/oauth2/callback/\u003cname\u003e)."
-          },
-          "issuer": {
-            "type": "string",
-            "title": "issuer",
-            "description": "Issuer URL."
-          },
-          "clientId": {
-            "type": "string",
-            "title": "client_id",
-            "description": "OAuth client id."
-          },
-          "trustEmail": {
-            "type": "boolean",
-            "title": "trust_email",
-            "description": "Whether the email claim is trusted without email_verified."
-          },
-          "state": {
-            "type": "string",
-            "title": "state",
-            "description": "PENDING, ACTIVE or DISABLED."
-          },
-          "createdBy": {
-            "type": "string",
-            "title": "created_by",
-            "description": "Who created it."
-          },
-          "createTime": {
-            "title": "create_time",
-            "description": "When it was created.",
-            "$ref": "#/components/schemas/google.protobuf.Timestamp"
-          },
-          "updatedBy": {
-            "type": "string",
-            "title": "updated_by",
-            "description": "Who last changed it."
-          },
-          "updateTime": {
-            "title": "update_time",
-            "description": "When it last changed.",
-            "$ref": "#/components/schemas/google.protobuf.Timestamp"
-          },
-          "activateTime": {
-            "title": "activate_time",
-            "description": "When it first became ACTIVE; its issuer is fixed from then on.",
-            "$ref": "#/components/schemas/google.protobuf.Timestamp"
-          },
-          "disableTime": {
-            "title": "disable_time",
-            "description": "When it was disabled.",
-            "$ref": "#/components/schemas/google.protobuf.Timestamp"
-          }
-        },
-        "title": "IdentityProvider",
-        "additionalProperties": false,
-        "description": "IdentityProvider is an organization's provider. Its client secret is\n never returned."
-      },
-      "pantherclaw.v1.ListIdentityProvidersRequest": {
-        "type": "object",
-        "title": "ListIdentityProvidersRequest",
-        "additionalProperties": false,
-        "description": "ListIdentityProvidersRequest has no fields."
-      },
-      "pantherclaw.v1.ListIdentityProvidersResponse": {
-        "type": "object",
-        "properties": {
-          "providers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.IdentityProvider"
-            },
-            "title": "providers",
-            "description": "Providers by name."
-          },
-          "ownProvidersOnly": {
-            "type": "boolean",
-            "title": "own_providers_only",
-            "description": "Whether the org signs in with its own providers alone."
-          }
-        },
-        "title": "ListIdentityProvidersResponse",
-        "additionalProperties": false,
-        "description": "ListIdentityProvidersResponse is the org's providers and setting."
-      },
-      "pantherclaw.v1.ProtectedChangeFiled": {
-        "type": "object",
-        "properties": {
-          "protectedChangeId": {
-            "type": "string",
-            "title": "protected_change_id",
-            "description": "Protected change id."
-          },
-          "changeRequestId": {
-            "type": "string",
-            "title": "change_request_id",
-            "description": "Change request id, confirmed on its page."
-          },
-          "strandedAdminIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "title": "stranded_admin_ids",
-            "description": "Active org admins who would lose their last sign-in provider."
-          }
-        },
-        "title": "ProtectedChangeFiled",
-        "additionalProperties": false,
-        "description": "ProtectedChangeFiled is the protected change a write filed: it applies\n when a second person confirms its change request."
-      },
-      "pantherclaw.v1.SetOwnProvidersOnlyRequest": {
-        "type": "object",
-        "properties": {
-          "ownProvidersOnly": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "title": "own_providers_only",
-            "description": "Sign in with the org's own providers alone."
-          }
-        },
-        "title": "SetOwnProvidersOnlyRequest",
-        "additionalProperties": false,
-        "description": "SetOwnProvidersOnlyRequest is the setting asked for."
-      },
-      "pantherclaw.v1.SetOwnProvidersOnlyResponse": {
-        "type": "object",
-        "properties": {
-          "change": {
-            "title": "change",
-            "description": "The filed change.",
-            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
-          }
-        },
-        "title": "SetOwnProvidersOnlyResponse",
-        "additionalProperties": false,
-        "description": "SetOwnProvidersOnlyResponse is the filed change."
-      },
-      "pantherclaw.v1.UpdateIdentityProviderRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "id",
-            "format": "uuid",
-            "description": "Provider id."
-          },
-          "name": {
-            "type": "string",
-            "title": "name",
-            "maxLength": 32,
-            "minLength": 1,
-            "description": "Name."
-          },
-          "issuer": {
-            "type": "string",
-            "title": "issuer",
-            "maxLength": 512,
-            "minLength": 1,
-            "description": "Issuer; it must stay the same once the provider has been ACTIVE."
-          },
-          "clientId": {
-            "type": "string",
-            "title": "client_id",
-            "maxLength": 256,
-            "minLength": 1,
-            "description": "OAuth client id."
-          },
-          "clientSecret": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "title": "client_secret",
-            "maxLength": 4096,
-            "format": "byte",
-            "description": "New client secret; empty keeps the stored one."
-          },
-          "trustEmail": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "title": "trust_email",
-            "description": "Trust the email claim without email_verified."
-          }
-        },
-        "title": "UpdateIdentityProviderRequest",
-        "additionalProperties": false,
-        "description": "UpdateIdentityProviderRequest is a provider's new settings.",
-        "required": [
-          "id",
-          "name",
-          "issuer",
-          "clientId"
-        ]
-      },
-      "pantherclaw.v1.UpdateIdentityProviderResponse": {
-        "type": "object",
-        "properties": {
-          "change": {
-            "title": "change",
-            "description": "The filed change.",
-            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
-          }
-        },
-        "title": "UpdateIdentityProviderResponse",
-        "additionalProperties": false,
-        "description": "UpdateIdentityProviderResponse is the filed change."
-      },
       "pantherclaw.v1.AllowMcpClientRequest": {
         "type": "object",
         "properties": {
@@ -73961,7 +74815,7 @@
           "contentProvenance": {
             "type": "string",
             "title": "content_provenance",
-            "description": "NOT_COLLECTED: external-content provenance is not recorded yet."
+            "description": "NOT_COLLECTED, unless the org has content signals on (G0 M27 D504): then\n FLAGGED, NO_KNOWN_FLAGS or NOT_INSPECTED."
           },
           "scopeLimited": {
             "type": "boolean",
@@ -80172,7 +81026,7 @@
           "definitionStatus": {
             "type": "string",
             "title": "definition_status",
-            "description": "SIGNED_OFF: the founder signed the definition off (G17)."
+            "description": "SIGNED_OFF: the founder signed the definition off (G17). UNVALIDATED: no\n one has checked it against real incidents (G0 M27 D502, F801)."
           },
           "points": {
             "type": "array",
@@ -100130,6 +100984,10 @@
       "description": "TriggerService starts automations and manages what may start them (G0\n M11 part 2 D16–D23, D53, D59; F2; HR-275..278; Team).\n\n Every occurrence that could start an automation — a schedule, a platform\n event, a condition or threshold, a person's start, a signed inbound\n event — is one trigger record, accepted or refused. Trigger data reaches\n a definition only as its declared, typed, bounded parameters (HR-276);\n one execution starts per dedupe key (HR-277); loops, depth, hourly caps\n and paused automations are refused or queued as declared (HR-278).\n\n Inbound event sources and automation destinations are created PENDING\n and show their Standard Webhooks secret once. Activating them, rotating\n their secrets and starting a version that requires a step-up need a\n fresh security-key step-up of a browser session: over the API those\n calls answer STEP_UP_REQUIRED, and the confirm page (confirm_url) makes\n them (D53). Every change is made by a person."
     },
     {
+      "name": "pantherclaw.v1.BehaviorService",
+      "description": "BehaviorService reads what the behaviour analytics inferred from an org's\n own transactions (G0 M27 D501, D502, D506; F930-F935; HR-641 to HR-646;\n Business edition).\n\n Everything here is inference on unvalidated thresholds. It never reaches a\n decision: no authorization step and no approval binding reads it, and an\n inferred alert never contains anything by itself. Real and simulated\n activity stay apart. A profile that was not collected says so, never zero."
+    },
+    {
       "name": "pantherclaw.v1.CaseService",
       "description": "CaseService manages investigation cases (G0 M10 D19; F237, F244, F248,\n F249, F251, F571, F299; HR-245–HR-247). Cases need the Team edition.\n\n A case is an append-only list of entries: facts with evidence,\n hypotheses with confidence and alternatives, questions with an owner,\n answers, notes, impact, links, owner and state changes. A later entry\n may supersede an earlier one; nothing is changed or deleted. Every entry\n is chained to the one before it and recorded in the evidence ledger.\n The database enforces the closure rules: CONTAINED needs every linked\n containment action confirmed or a reason none is needed; CLOSED needs an\n impact, a disposition, a fact, and a follow-up owner while questions are\n open, and straight from OPEN also the containment rule. A closed case\n never loses the owner of a question still open. A person's question names\n its owner; a link is superseded only by a link of the same kind, with a\n reason.\n\n A case is read with case.read and changed with case.manage (a person\n only) over the whole organization or over every agent the case is about.\n A case the caller may not read is reported as not found."
     },
@@ -100164,6 +101022,14 @@
     {
       "name": "pantherclaw.v1.ContainmentService",
       "description": "ContainmentService shows the org's containment state (G0 M6). The kill\n switch is engaged and restored only on the emergency-stop page\n (/containment), because both need a WebAuthn step-up on a browser session\n and restoring needs two people (HR-113, G0 M6 decision 2); no RPC changes\n it."
+    },
+    {
+      "name": "pantherclaw.v1.IdentityProviderService",
+      "description": "IdentityProviderService manages an organization's own OpenID Connect\n providers (G0 M18 D155, G6; PN-012.7; HR-481..484), next to the\n deployment's. People sign in to the org through the deployment's\n providers and the org's ACTIVE ones, or through the org's alone when\n own_providers_only is on.\n\n Every create, change, disable and own_providers_only change is a\n two-person protected change in every protect mode: the call files it\n and returns its change request, and it applies when a different person\n holding identity_provider.manage confirms it with a security key. Every\n org admin is notified. Only a person may file one.\n\n A provider's issuer is HTTPS on a public host, and it can't change once\n the provider has been ACTIVE. Its client secret is sealed and never\n returned. Disabling a provider, or turning own_providers_only on, is\n refused when no active org admin would have a provider left to sign in\n with; the change request lists the admins who would lose theirs.\n\n Creating, activating and changing a provider need the Enterprise\n edition; disabling one and reading work in every edition, and ACTIVE\n providers keep signing people in after a downgrade."
+    },
+    {
+      "name": "pantherclaw.v1.ContentSignalService",
+      "description": "ContentSignalService is the org's opt-in content signals (G0 M27 D503-D505,\n D507, D512; F936; HR-647..652; Business edition).\n\n Content signals are restrict-only and make no safety claim. The gateway\n scans tool results and outbound bodies and keeps none of it: a finding is a\n kind and a location. A flag can hold a later write, or an org's own rule\n may deny on it; nothing can allow or lift on it. No flags reads \"no known\n flags\", never clean or safe. Hook, SDK, AuthZEN and local connections are not\n scanned, and delegated outcomes are not inspected."
     },
     {
       "name": "pantherclaw.v1.CoverageService",
@@ -100256,10 +101122,6 @@
     {
       "name": "pantherclaw.v1.IdentityService",
       "description": "IdentityService administers PAP/1 workload identity (Badge; PAP-1 §3,\n ADR-0013, ADR-0018, G0 M3): enrollment tokens, agent instances and their\n admission, and trusted-issuer entries for L2 attestation. Workloads\n themselves use WorkloadService."
-    },
-    {
-      "name": "pantherclaw.v1.IdentityProviderService",
-      "description": "IdentityProviderService manages an organization's own OpenID Connect\n providers (G0 M18 D155, G6; PN-012.7; HR-481..484), next to the\n deployment's. People sign in to the org through the deployment's\n providers and the org's ACTIVE ones, or through the org's alone when\n own_providers_only is on.\n\n Every create, change, disable and own_providers_only change is a\n two-person protected change in every protect mode: the call files it\n and returns its change request, and it applies when a different person\n holding identity_provider.manage confirms it with a security key. Every\n org admin is notified. Only a person may file one.\n\n A provider's issuer is HTTPS on a public host, and it can't change once\n the provider has been ACTIVE. Its client secret is sealed and never\n returned. Disabling a provider, or turning own_providers_only on, is\n refused when no active org admin would have a provider left to sign in\n with; the change request lists the admins who would lose theirs.\n\n Creating, activating and changing a provider need the Enterprise\n edition; disabling one and reading work in every edition, and ACTIVE\n providers keep signing people in after a downgrade."
     },
     {
       "name": "pantherclaw.v1.IdpAccessService",

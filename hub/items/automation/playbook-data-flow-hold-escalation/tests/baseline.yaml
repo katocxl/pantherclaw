@@ -1,0 +1,44 @@
+- name: the_hold_is_decided_after_escalation
+  kind: NORMAL
+  trigger:
+    params: {txn: 0192f942-0000-7000-8000-000000000501}
+  stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    remind: [{state: DONE, effect: CHANGED, refs: [approval_request]}]
+    escalate: [{state: DONE, effect: CHANGED, refs: [approval_request]}]
+    resolved: [{state: WAITING}, {state: DONE, refs: [approval_request]}]
+  expect:
+    state: SUCCEEDED
+    steps: {case: DONE, pause: DONE, remind: DONE, escalate: DONE, resolved: DONE}
+- name: the_reminder_is_refused
+  kind: DENIED
+  trigger:
+    params: {txn: 0192f942-0000-7000-8000-000000000502}
+  stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    remind: [{state: FAILED, reason: AUTHORITY_CHANGED}]
+  expect:
+    state: PARTIALLY_COMPLETED
+    reason: AUTHORITY_CHANGED
+    steps: {case: DONE, remind: FAILED}
+- name: nobody_decides_in_time
+  kind: TIMEOUT
+  trigger:
+    params: {txn: 0192f942-0000-7000-8000-000000000503}
+  stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+    remind: [{state: DONE, effect: CHANGED, refs: [approval_request]}]
+    escalate: [{state: DONE, effect: CHANGED, refs: [approval_request]}]
+    resolved: [{state: WAITING}]
+  expect:
+    state: PARTIALLY_COMPLETED
+    reason: TIMEOUT
+    steps: {escalate: DONE, resolved: FAILED}
+- name: the_same_hold_twice_starts_one_execution
+  kind: DUPLICATE
+  trigger:
+    params: {txn: 0192f942-0000-7000-8000-000000000504}
+  stubs:
+    resolved: [{state: DONE, refs: [approval_request]}]
+  expect:
+    state: SUCCEEDED

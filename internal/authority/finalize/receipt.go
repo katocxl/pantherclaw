@@ -317,6 +317,12 @@ type Execution struct {
 	// DataScope is what the gateway's data scope did to the answer (G0 M14
 	// D102), counts only; nil when none applied.
 	DataScope *DataScopeApplied
+	// ContentFindings are the tool result's content flags (G0 M27 D507), kinds
+	// and locations only.
+	ContentFindings []pipeline.PayloadFinding
+	// ContentScan is the gateway's word on the tool result (G0 M27 D533):
+	// csdomain.ScanScanned and the rest, or empty from a gateway before M27.
+	ContentScan string
 }
 
 // DataScopeApplied is what applying a read's data scope did to its answer:

@@ -76,6 +76,7 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 		})
 	}
 	out.CaptureProfiles = captureProfiles(c)
+	out.ContentSignalMode = contentModes[c.ContentMode]
 	if c.McpIssuer != "" {
 		out.McpAccess = &pb.GatewayMcpAccess{Issuer: c.McpIssuer}
 	}
@@ -106,4 +107,12 @@ func captureProfiles(c gwapp.Configuration) []*pb.GatewayCaptureProfile {
 		}
 	}
 	return out
+}
+
+// contentModes are the org's content signal modes on the wire; anything else
+// is unset, which a gateway treats as OFF.
+var contentModes = map[string]pb.ContentSignalMode{
+	"OFF":      pb.ContentSignalMode_CONTENT_SIGNAL_MODE_OFF,
+	"WATCHING": pb.ContentSignalMode_CONTENT_SIGNAL_MODE_WATCHING,
+	"ACTIVE":   pb.ContentSignalMode_CONTENT_SIGNAL_MODE_ACTIVE,
 }

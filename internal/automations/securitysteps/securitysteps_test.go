@@ -136,7 +136,7 @@ func sc(kind string, with any, scopes ...string) autodomain.StepContext {
 				{Type: reflexdomain.SubjectAgent, ID: trigAgent.String()},
 				{Type: reflexdomain.SubjectConnection, ID: trigConn.String()},
 				{Type: reflexdomain.SubjectTransaction, ID: trigTxn.String()},
-			}},
+			}, Confirmed: true},
 		},
 		Def:     &autodomain.Definition{Authority: autodomain.Authority{Platform: []autodomain.PlatformScope{{Step: kind, Scopes: scopes}}}},
 		Spec:    autodomain.StepSpec{ID: "step-1", Step: kind},
@@ -209,6 +209,41 @@ func TestHR284_ContainActsOnlyOnTheTriggersRunOrGrant(t *testing.T) {
 				t.Fatalf("result = %+v, effects %d", r, f.effects())
 			}
 		})
+	}
+}
+
+// TestHR640_ContainRunsOnlyOnAConfirmedAlert: whatever a definition says, a
+// contain step whose trigger isn't a CONFIRMED alert (an inferred one, or
+// no alert at all) skips with a reason, in every mode and on every entry
+// point, and asks the Container for nothing (D514). Covers: F933
+func TestHR640_ContainRunsOnlyOnAConfirmedAlert(t *testing.T) {
+	for _, with := range []struct {
+		w     autodomain.ContainWith
+		scope string
+	}{
+		{autodomain.ContainWith{Action: autodomain.ContainSuspendRun, Subject: autodomain.SubjectTriggerRun}, autodomain.ScopeTriggerRun},
+		{autodomain.ContainWith{Action: autodomain.ContainRevokeGrant, Subject: autodomain.SubjectTriggerGrant}, autodomain.ScopeTriggerGrant},
+	} {
+		for trigger, set := range map[string]func(*autodomain.TriggerRef){
+			"inferred alert": func(r *autodomain.TriggerRef) { r.Inferred, r.Confirmed = true, false },
+			"not an alert":   func(r *autodomain.TriggerRef) { r.Inferred, r.Confirmed = false, false },
+		} {
+			f := &fakes{status: actionConfirmed, revoked: []ids.UUID{trigGrant}}
+			s := &contain{d: f.deps()}
+			c := sc(autodomain.KindContain, &with.w, with.scope)
+			set(&c.Execution.Trigger)
+			for name, step := range map[string]func(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error){
+				"run": s.Run, "poll": s.Poll, "preview": s.Preview,
+			} {
+				r, err := step(context.Background(), nil, c)
+				if err != nil || r.State != autodomain.StepSkipped || r.Reason != autodomain.ReasonUnconfirmedSignal || r.Effect != autodomain.EffectNone {
+					t.Fatalf("%s on %s, %s: %+v %v", with.w.Action, trigger, name, r, err)
+				}
+			}
+			if f.effects() != 0 || len(f.cases) != 0 || len(f.failures) != 0 {
+				t.Fatalf("%s acted on %s: effects %d", with.w.Action, trigger, f.effects())
+			}
+		}
 	}
 }
 

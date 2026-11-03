@@ -15,7 +15,7 @@ body:
       refused. The rule sees the refusal reason, never the text.
     severity: HIGH
     attention: ALERT
-    basis: OBSERVED
+    basis: INFERRED
     owasp: [ASI02]
     edition: business
     on: [receipt.decision]

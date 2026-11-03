@@ -1,0 +1,42 @@
+- name: an_owner_is_asked_for_and_a_restriction_drafted
+  kind: NORMAL
+  trigger:
+    params: {agent: 0192f942-0000-7000-8000-000000000601}
+  stubs:
+    assign: [{state: DONE, effect: CHANGED, refs: [owned_failure]}]
+    draft: [{state: DONE, refs: [proposal]}]
+    simulate: [{state: WAITING}, {state: DONE, refs: [simulation]}]
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+  expect:
+    state: SUCCEEDED
+    steps: {assign: DONE, draft: DONE, simulate: DONE, case: DONE}
+- name: the_assignment_is_refused
+  kind: DENIED
+  trigger:
+    params: {agent: 0192f942-0000-7000-8000-000000000602}
+  stubs:
+    assign: [{state: FAILED, reason: AUTHORITY_CHANGED}]
+  expect:
+    state: FAILED
+    reason: AUTHORITY_CHANGED
+    steps: {assign: FAILED}
+- name: the_simulation_does_not_finish_in_time
+  kind: TIMEOUT
+  trigger:
+    params: {agent: 0192f942-0000-7000-8000-000000000603}
+  stubs:
+    assign: [{state: DONE, effect: CHANGED, refs: [owned_failure]}]
+    draft: [{state: DONE, refs: [proposal]}]
+    simulate: [{state: WAITING}]
+  expect:
+    state: PARTIALLY_COMPLETED
+    reason: TIMEOUT
+    steps: {draft: DONE, simulate: FAILED}
+- name: the_same_agent_twice
+  kind: DUPLICATE
+  trigger:
+    params: {agent: 0192f942-0000-7000-8000-000000000604}
+  stubs:
+    case: [{state: DONE, effect: CHANGED, refs: [case]}]
+  expect:
+    state: SUCCEEDED

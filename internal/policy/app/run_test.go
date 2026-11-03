@@ -41,6 +41,37 @@ func TestPolicySeesTheRun(t *testing.T) {
 	}
 }
 
+// TestHR648_ARuleMayDenyOnContentFlags (G0 M27 D512): an org's rule reads
+// `run.content_flags`; without a run or a flag the list is empty and the rule
+// passes.
+//
+// Covers: F939
+func TestHR648_ARuleMayDenyOnContentFlags(t *testing.T) {
+	f := newFixture(t)
+	c, err := f.compile(refundRule("flagged", domain.Forbid, `"injection_phrase" in run.content_flags`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := f.refund("30.00", "duplicate")
+	for _, tc := range []struct {
+		run  *Run
+		want domain.Verdict
+	}{
+		{&Run{ID: "r1", ContentFlags: []string{"injection_phrase"}}, domain.VerdictDeny},
+		{&Run{ID: "r1", ContentFlags: []string{"pii_email"}}, domain.VerdictPass},
+		{&Run{ID: "r1"}, domain.VerdictPass},
+		{nil, domain.VerdictPass},
+	} {
+		out, err := c.Evaluate(context.Background(), f.def(a.Operation), a, Input{Budget: 10_000, Run: tc.run})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out.Verdict != tc.want {
+			t.Errorf("run %+v: %s, want %s", tc.run, out.Verdict, tc.want)
+		}
+	}
+}
+
 // TestReadsRunConsequencesScansEveryCELSite (G0 M17 D103, D141): the
 // Authority reads the run's consequence counts only for a bundle that
 // ReadsRunConsequences says uses them, so a count referenced in any CEL

@@ -1570,7 +1570,8 @@ type GetPrecedingContextResponse struct {
 	EndTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	// Items, by kind then time.
 	Items []*ContextItem `protobuf:"bytes,6,rep,name=items,proto3" json:"items,omitempty"`
-	// NOT_COLLECTED: external-content provenance is not recorded yet.
+	// NOT_COLLECTED, unless the org has content signals on (G0 M27 D504): then
+	// FLAGGED, NO_KNOWN_FLAGS or NOT_INSPECTED.
 	ContentProvenance string `protobuf:"bytes,7,opt,name=content_provenance,json=contentProvenance,proto3" json:"content_provenance,omitempty"`
 	// The caller's scope is narrower than the organization.
 	ScopeLimited  bool `protobuf:"varint,8,opt,name=scope_limited,json=scopeLimited,proto3" json:"scope_limited,omitempty"`

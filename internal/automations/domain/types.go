@@ -239,6 +239,8 @@ const (
 	ReasonToolQuarantined     = "TOOL_QUARANTINED"
 	ReasonUsageExceeded       = "USAGE_EXCEEDED"
 	ReasonNotPromoted         = "NOT_PROMOTED"
+	ReasonInferredSignal      = "INFERRED_SIGNAL"
+	ReasonUnconfirmedSignal   = "UNCONFIRMED_SIGNAL"
 )
 
 // FinishCondition is what a finish_when entry requires of its step (D3).

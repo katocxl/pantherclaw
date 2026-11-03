@@ -1,0 +1,70 @@
+name: pc.playbook.data-flow-hold-escalation
+version: 1.0.0
+kind: automation
+title: "Playbook: data-flow hold escalation"
+summary: >-
+  When an action is held because of where its data would go, open a case,
+  remind the approvers, escalate the request and finish when a person decides
+  it. It never decides the request and contains nothing. It starts only when
+  the data flow is the hold's deciding reason: a hold that another approval
+  requirement decides first carries DATA_FLOW_HOLD only among its other
+  reasons, which the trigger can't read. Runs on Team.
+body:
+  automation_name: hub-playbook-data-flow-hold
+  purpose: Make sure a person decides every action held for its data flow, and keep a case of it.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Make sure a person decides every action held for its data flow, and keep a case of it."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: action.held
+        where: event.reason == "DATA_FLOW_HOLD"
+        params:
+          txn: {from: subjects.transaction, type: uuid}
+      dedupe:
+        key: "{{params.txn}}"
+        window: 3d
+    authority:
+      principal: self
+      platform:
+        - step: open_case
+          scopes: [TRIGGER_SUBJECTS]
+        - step: remind_approvers
+          scopes: [TRIGGER_REQUEST]
+        - step: escalate_approval
+          scopes: [TRIGGER_REQUEST]
+        - step: wait_resolution
+          scopes: [TRIGGER_REQUEST]
+    do:
+      - id: case
+        step: open_case
+        with:
+          title: "Data-flow hold on transaction {{params.txn}}"
+          questions:
+            - Where would the data have gone, and was it meant to?
+            - Who decided the request, and why?
+      - id: pause
+        step: wait
+        with:
+          duration: 30m
+      - id: remind
+        step: remind_approvers
+        with:
+          request: TRIGGER_REQUEST
+      - id: escalate
+        step: escalate_approval
+        with:
+          request: TRIGGER_REQUEST
+      - id: resolved
+        step: wait_resolution
+        with:
+          request: TRIGGER_REQUEST
+        timeout: 24h
+    finish_when:
+      - step: resolved
+        condition: APPROVAL_RESOLVED
+    limits:
+      deadline: 2d

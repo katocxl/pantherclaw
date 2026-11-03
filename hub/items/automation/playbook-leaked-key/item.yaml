@@ -1,0 +1,46 @@
+name: pc.playbook.leaked-key
+version: 1.0.0
+kind: automation
+title: "Playbook: leaked key"
+summary: >-
+  When an alert says a workload key was used from a new network, or a secret
+  was refused on its way out, open a case so a person rotates the key. It
+  contains nothing: the alert names a key's instance and agent, not a run, and
+  revoking a key is a person's action. Runs on Team.
+body:
+  automation_name: hub-playbook-leaked-key
+  purpose: Open a case on a leaked-key alert so a person rotates or revokes the key.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Open a case on a leaked-key alert so a person rotates or revokes the key."
+    work_kind: SECURITY_WORK
+    when:
+      event:
+        on: alert.raised
+        where: event.attrs["rule"] in ["pc.identity.key_new_network", "org.hub.secret_outbound_refused"]
+        params:
+          signal: {from: attrs.id, type: uuid}
+      dedupe:
+        key: "{{params.signal}}"
+        window: 1d
+    authority:
+      principal: self
+      platform:
+        - step: open_case
+          scopes: [TRIGGER_SUBJECTS]
+    do:
+      - id: case
+        step: open_case
+        with:
+          title: "Rotate the key behind signal {{params.signal}}"
+          questions:
+            - Which credential or workload key leaked, and where else is it used?
+            - Has a person rotated or revoked it?
+            - Should a person suspend the runs that used it?
+    finish_when:
+      - step: case
+        condition: CASE_OPENED
+    limits:
+      deadline: 1h

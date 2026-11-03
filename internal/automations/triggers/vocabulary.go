@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 )
 
@@ -24,7 +25,10 @@ import (
 //	grant.revoked      audit.grant.revoked
 //	coverage.lost      coverage.invalidation, or coverage.snapshot whose
 //	                   state fell below its previous state
-//	alert.raised       reflex.alert (written once, when an alert is raised)
+//	alert.raised       reflex.alert (written once, when an alert is raised),
+//	                   on any basis
+//	alert.inferred     reflex.alert whose basis is an inference or hypothesis
+//	                   (G0 M27 D500); no contain step may start from it
 //	incident.opened    reflex.incident whose state is OPEN (opened or
 //	                   reopened)
 //	case.closed        reflex.case whose case entry moves the case to CLOSED
@@ -43,6 +47,7 @@ const (
 	VocabGrantRevoked       = "grant.revoked"
 	VocabCoverageLost       = "coverage.lost"
 	VocabAlertRaised        = "alert.raised"
+	VocabAlertInferred      = "alert.inferred"
 	VocabIncidentOpened     = "incident.opened"
 	VocabCaseClosed         = "case.closed"
 	VocabAgentDiscovered    = "agent.discovered"
@@ -63,10 +68,15 @@ const (
 	kindCase         = "reflex.case"
 )
 
+// attrBasis is the event attribute and trigger detail naming a signal's
+// basis.
+const attrBasis = "basis"
+
 var vocabulary = []string{
 	VocabActionDecided, VocabActionHeld, VocabActionDenied, VocabEffectRecorded, VocabRunEnded, VocabGrantIssued,
 	VocabGrantRevoked, VocabCoverageLost, VocabAlertRaised, VocabIncidentOpened, VocabCaseClosed,
 	VocabAgentDiscovered, VocabApprovalExpired, VocabAutomationFinished, VocabDiscoveryChanged, VocabDiscoveryVanished,
+	VocabAlertInferred,
 }
 
 // Vocabulary lists the event names.
@@ -113,6 +123,8 @@ func Means(name string, e feed.Event, f Facts) bool {
 		return ok && ok2 && cur < prev
 	case VocabAlertRaised:
 		return e.Kind == kindAlert
+	case VocabAlertInferred:
+		return e.Kind == kindAlert && inferred(e)
 	case VocabIncidentOpened:
 		return e.Kind == kindIncident && e.Outcome == "OPEN"
 	case VocabCaseClosed:
@@ -131,12 +143,43 @@ func Means(name string, e feed.Event, f Facts) bool {
 	return false
 }
 
-// eventField reads a parameter source path of an event (ParamSpec.from for
+// inferred reports a Reflex alert or incident that rests on an inference
+// (G0 M27 D500). An alert with no readable basis counts as one; an incident
+// names a basis only when a signal opened it, never for a person's change.
+func inferred(e feed.Event) bool {
+	b, named := e.Attrs[attrBasis]
+	switch e.Kind {
+	case kindAlert:
+		return reflexdomain.Basis(b).Inferred()
+	case kindIncident:
+		return named && reflexdomain.Basis(b).Inferred()
+	}
+	return false
+}
+
+// confirmed reports a Reflex alert or incident that is a CONFIRMED alert:
+// its basis was observed or matched by a rule (G0 M27 D514). An incident a
+// person changed names no basis and isn't one.
+func confirmed(e feed.Event) bool {
+	if e.Kind != kindAlert && e.Kind != kindIncident {
+		return false
+	}
+	b, named := e.Attrs[attrBasis]
+	return named && reflexdomain.Basis(b).Confirmed()
+}
+
+// signal reports a Reflex alert or incident.
+func signal(e feed.Event) bool { return e.Kind == kindAlert || e.Kind == kindIncident }
+
+// detailConfirmed is the trigger detail that marks a CONFIRMED alert.
+const detailConfirmed = "confirmed"
+
+// EventField reads a parameter source path of an event (ParamSpec.from for
 // event and threshold triggers): kind, actor_type, actor_id, decision,
 // reason, operation, mode, outcome, environment, destination_class,
 // subjects.<type> (its first id) or attrs.<key>. ok is false when the
 // event has no such value.
-func eventField(e feed.Event, path string) (string, bool) {
+func EventField(e feed.Event, path string) (string, bool) {
 	if t, ok := strings.CutPrefix(path, "subjects."); ok {
 		for _, s := range e.Subjects {
 			if string(s.Type) == t {
