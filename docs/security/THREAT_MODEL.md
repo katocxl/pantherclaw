@@ -120,7 +120,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-034 | Licence-key forgery or check removal | A12 | Code | Revenue loss | Offline Ed25519 root (HR-063); legal (BSL) | M1 |
 | T-035 | GitHub OIDC mis-binding (name reuse, forks, same-repository pull-request runs, `pull_request_target`) | A4 | Attestation | Impersonation | HR-093 | M3 |
 | T-036 | Package signing compromise, rollback to bad mapping, malicious mapping | A10, A7 | Packages | Total bypass | HR-063, HR-123, HR-124 | M4 |
-| T-037 | API attacks: IDOR, mass assignment, injection, CSRF, OIDC mix-up, session fixation | A5, A8, A9 | TB4 | Unauthorized changes | SB-2, HR-104; authz on every call; sqlc parameterization | M2/M5 |
+| T-037 | API attacks: IDOR, mass assignment, injection, CSRF, OIDC mix-up, session fixation | A5, A8, A9 | TB4 | Unauthorized changes | SB-2, HR-104, HR-646; authz on every call; sqlc parameterization | M2/M5 |
 | T-038 | Red-team scenario run against live targets | A5 | Range | Real damage | HR-120, HR-220, HR-221 | M12 |
 | T-090 | Range leakage into real state: a simulated run or connection spends a real envelope budget, quarantines a real package, bumps a real epoch, appears in coverage or route inventories, or notifies as if real | A5, A1 | Range | Real agents blocked or misreported | HR-222, HR-220 | M12 |
 | T-091 | Forged or inflated assurance report, or a stale baseline: a runner claims verdicts the server did not observe, counts transactions of another agent, reuses an old pack, or the gate is skipped | A5, A1 | Range | False assurance | HR-224, HR-226 | M12 |
@@ -324,7 +324,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 
 | ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
 |---|---|---|---|---|---|---|
-| T-274 | An inference is used to contain: a wrong guess, or an attacker shaping an agent's behaviour, suspends runs or revokes grants with no person involved | A1, A5 | TB4 | Disruption from a guess | HR-640, HR-641, HR-643, HR-644, HR-645, HR-646; contain only on CONFIRMED alerts, inference labelled and off the decision path | M27 |
+| T-274 | An inference is used to contain: a wrong guess, or an attacker shaping an agent's behaviour, suspends runs or revokes grants with no person involved | A1, A5 | TB4 | Disruption from a guess | HR-640, HR-641, HR-643, HR-644, HR-645; contain only on CONFIRMED alerts, inference labelled and off the decision path | M27 |
 | T-275 | Simulated data pollutes real data: made-up history shifts a real agent's profile, hides a deviation or raises a real alert | A1, A5 | TB4 | A wrong profile; a hidden or false alert | HR-642; simulated history in its own table, compared only with simulated | M27 |
 | T-276 | A content flag is abused to widen or to silently lose a restriction: a forged or stale flag, a policy, an exception or a lapse is used to allow an action or lift a hold, or a mode change passes unnoticed | A2, A1, A5 | TB2, TB11 | Weakened enforcement; false assurance | HR-647, HR-648, HR-651, HR-652; restrict only, a step-up, a second person to leave ACTIVE, on through a lapse | M27 |
 | T-277 | Content handling: the scan becomes a store or leak of tool content, a resource drain on the gateway, or is dodged by padding or by stalling the classifier | A1, A7 | TB2 | Disclosure of what it found; a scan that silently stops | HR-649, HR-650; kind and location only, stored nowhere, an incomplete scan holds | M27 |
