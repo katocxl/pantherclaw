@@ -19,19 +19,23 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
 	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
 	"github.com/katocxl/pantherclaw/internal/automations/steps"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/triggerstest"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	connapp "github.com/katocxl/pantherclaw/internal/connections/app"
 	detengine "github.com/katocxl/pantherclaw/internal/detection/engine"
 	"github.com/katocxl/pantherclaw/internal/detection/pack"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	hubdomain "github.com/katocxl/pantherclaw/internal/hub/domain"
 	"github.com/katocxl/pantherclaw/internal/hub/seed"
+	identityapp "github.com/katocxl/pantherclaw/internal/identity/app"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -46,15 +50,15 @@ import (
 // TestRange_ScenariosPlaybooks runs each response playbook of the Hub (G0 M27
 // D508) on the real trigger service and engine, on the platform feed of a
 // fresh Business organization, with the security steps' platform ties
-// replaced by recorders. Each signal playbook starts from the audit entry the
-// producing code writes, through the detection engine's built-in or published
-// custom rules and Reflex's own alert and incident entries (D539): no alert
-// is written by hand. A refused delegation revokes the grant it exceeded; a
-// refused issue names no grant and only opens a case; a confirmed incident
-// naming no run and a customer's (inferred, D526 P6) incident naming one
-// suspend nothing (D514). Leaked-key and poisoned-mcp-server only open a
-// case. It is
-// part of `task range`.
+// replaced by recorders. Each signal playbook starts from the audit event its
+// producer builds (the producer's own builder), recorded with audit.Record,
+// through the detection engine's built-in or published custom rules and
+// Reflex's own alert and incident entries (D539): no alert is written by
+// hand. No playbook contains (D550): a refused delegation, a refused issue
+// and a refused revision of another agent's grant revoke nothing; a
+// confirmed incident naming a transaction and a customer's (inferred, D526
+// P6) incident naming a run suspend nothing; each opens its case. It is part
+// of `task range`.
 //
 // Covers: F942, F943
 func TestRange_ScenariosPlaybooks(t *testing.T) {
@@ -80,13 +84,19 @@ func TestRange_ScenariosPlaybooks(t *testing.T) {
 		t.Run(it.Entry.Name, func(t *testing.T) {
 			switch it.Entry.Name {
 			case "pc.playbook.leaked-key":
-				pbCaseOnly(t, b, pbNetworkChanged())
+				pbCaseOnly(t, b, pbSignal{"network_changed", "", identityapp.NetworkChangedEvent(pbInstance, pbAgent, "10.0.0.0/24", "192.0.2.0/24")})
 			case "pc.playbook.poisoned-mcp-server":
-				pbCaseOnly(t, b, pbDrift())
+				pbCaseOnly(t, b, pbSignal{"drift", "", connapp.DriftQuarantinedEvent(evdomain.Actor{Type: "gateway", ID: pbGateway}, pbConn,
+					"acme/refunds", "1.0.0", "ACTIVE", "get_refund", "sha256:aa", "sha256:bb", "clean")})
 			case "pc.playbook.rogue-sub-agent":
-				pbRogueSubAgent(t, b)
+				pbCaseOnly(t, b,
+					pbSignal{"delegate_refused", "", grantsapp.DelegateRefusedEvent(pbInstance, pbParent, pbAgent)},
+					pbSignal{"issue_refused", "", grantsapp.IssueRefusedEvent(pbSA, "grant.issue", pbAgent, ids.UUID{})},
+					pbSignal{"revise_refused_other_agents_grant", "", grantsapp.IssueRefusedEvent(pbSA, "grant.revise", ids.UUID{}, pbOther)})
 			case "pc.playbook.compromised-laptop":
-				pbCompromisedLaptop(t, b)
+				pbCaseOnly(t, b,
+					pbSignal{"confirmed_incident_on_a_transaction", "", pgauthority.TamperedEvent(pbGateway, pbTxn, false)},
+					pbSignal{"customer_incident_on_a_run", pbIncidentRule, grantsapp.DelegatedEvent(pbInstance, pbChild, pbParent, 1, pbRun)})
 			case "pc.playbook.data-flow-hold-escalation":
 				pbDataFlowHold(t, b)
 			case "pc.playbook.offboarded-owner":
@@ -98,140 +108,53 @@ func TestRange_ScenariosPlaybooks(t *testing.T) {
 	}
 }
 
-// The audit entries the producing code writes: identity/app tokens.go
-// networkChanged, connections/app drift.go, grants/app delegate.go and
-// service.go, grants/app grantEvent.
 var (
-	pbAgent    = "0192f942-0000-7000-8000-0000000019a1"
-	pbInstance = "0192f942-0000-7000-8000-0000000019e1"
-	pbParent   = "0192f942-0000-7000-8000-0000000019b1"
-	pbChild    = "0192f942-0000-7000-8000-0000000019b2"
-	pbRun      = "0192f942-0000-7000-8000-0000000019c1"
-	pbConn     = "0192f942-0000-7000-8000-0000000019d1"
-	pbTxn      = "0192f942-0000-7000-8000-0000000019f1"
+	pbAgent    = pbUUID("0192f942-0000-7000-8000-0000000019a1")
+	pbInstance = pbUUID("0192f942-0000-7000-8000-0000000019e1")
+	pbParent   = pbUUID("0192f942-0000-7000-8000-0000000019b1")
+	pbChild    = pbUUID("0192f942-0000-7000-8000-0000000019b2")
+	pbRun      = pbUUID("0192f942-0000-7000-8000-0000000019c1")
+	pbConn     = pbUUID("0192f942-0000-7000-8000-0000000019d1")
+	pbTxn      = pbUUID("0192f942-0000-7000-8000-0000000019f1")
+	pbOther    = pbUUID("0192f942-0000-7000-8000-0000000019f2") // another agent's grant
+	pbGateway  = "0192f942-0000-7000-8000-0000000019f3"
+	pbSA       = evdomain.Actor{Type: "service_account", ID: "0192f942-0000-7000-8000-0000000019f4"}
 )
 
-func pbNetworkChanged() audit.Event {
-	return audit.Event{
-		Name: "security.instance_network_changed", Actor: evdomain.Actor{Type: "system", ID: "identity"}, Outcome: audit.Success,
-		Object:  &audit.Object{Type: "instance", ID: pbInstance},
-		Details: map[string]string{"agent_id": pbAgent, "from_network": "10.0.0.0/24", "to_network": "192.0.2.0/24"},
+func pbUUID(s string) ids.UUID {
+	u, err := ids.ParseUUID(s)
+	if err != nil {
+		panic(err)
 	}
+	return u
 }
 
-func pbDrift() audit.Event {
-	return audit.Event{
-		Name: "package.transitioned", Actor: evdomain.Actor{Type: "gateway", ID: pbInstance}, Outcome: audit.Success,
-		Object: &audit.Object{Type: "package_version", ID: "acme/refunds@1.0.0"},
-		Details: map[string]string{
-			"from": "ACTIVE", "to": "QUARANTINED", "reason": "upstream_drift", "connection_id": pbConn, "upstream_tool": "get_refund",
-			"expected_digest": "sha256:aa", "observed_digest": "sha256:bb", "description_scan": "clean",
-		},
-	}
+// pbSignal is one producer's audit event, with the custom rule the
+// organization publishes first, if any.
+type pbSignal struct {
+	name, rule string
+	ev         audit.Event
 }
 
-func pbDelegateRefused() audit.Event {
-	return audit.Event{
-		Name: "grant.delegate_refused", Actor: evdomain.Actor{Type: "instance", ID: pbInstance}, Outcome: audit.Denied,
-		ReasonCode: "DELEGATION_EXCEEDS_PARENT", Object: &audit.Object{Type: "grant", ID: pbParent},
-		Details: map[string]string{"agent": pbAgent, "parent": pbParent, "attempted": "grant.delegate"},
-	}
-}
-
-func pbIssueRefused() audit.Event {
-	return audit.Event{
-		Name: "grant.issue_refused", Actor: evdomain.Actor{Type: "service_account", ID: pbInstance}, Outcome: audit.Denied,
-		ReasonCode: "HUMAN_ONLY", Details: map[string]string{"attempted": "grant.issue", "agent": pbAgent},
-	}
-}
-
-func pbDelegated() audit.Event {
-	return audit.Event{
-		Name: "grant.delegated", Actor: evdomain.Actor{Type: "instance", ID: pbInstance}, Outcome: audit.Success,
-		Object:  &audit.Object{Type: "grant", ID: pbChild},
-		Details: map[string]string{"parent": pbParent, "parent_revision": "1", "child_run": pbRun},
-	}
-}
-
-// pbCaseOnly: the alert names a key or a connection, which a person revokes
-// or disables; the playbook only opens a case.
-func pbCaseOnly(t *testing.T, b hubdomain.AutomationBody, ev audit.Event) {
-	r := newPBRange(t, b)
-	x := r.produce(t, ev)
-	r.drive(t, x)
-	if st := r.step(t, x, "case"); st != "DONE" || r.cases.count() != 1 {
-		t.Fatalf("case: %s, %d opened", st, r.cases.count())
-	}
-	if len(r.container.scopes()) != 0 || len(r.grants.revoked()) != 0 {
-		t.Fatal("a case-only playbook contained something")
-	}
-}
-
-// pbRogueSubAgent: pc.authority.self_issue fires on both refusals; only the
-// refused delegation names a grant, and that grant is revoked.
-func pbRogueSubAgent(t *testing.T, b hubdomain.AutomationBody) {
-	for _, c := range []struct {
-		name string
-		ev   audit.Event
-		want []string
-	}{
-		{"delegate_refused", pbDelegateRefused(), []string{pbParent}},
-		{"issue_refused", pbIssueRefused(), nil},
-	} {
-		t.Run(c.name, func(t *testing.T) {
+// pbCaseOnly: each signal starts the playbook, which opens its case and
+// contains, revokes and suspends nothing.
+func pbCaseOnly(t *testing.T, b hubdomain.AutomationBody, signals ...pbSignal) {
+	for _, s := range signals {
+		t.Run(s.name, func(t *testing.T) {
 			r := newPBRange(t, b)
-			x := r.produce(t, c.ev)
+			if s.rule != "" {
+				r.publish(t, s.rule)
+			}
+			x := r.produce(t, s.ev)
 			r.drive(t, x)
-			if got := r.grants.revoked(); !slices.Equal(got, c.want) {
-				t.Fatalf("revoked %v, want %v", got, c.want)
-			}
-			want := "DONE"
-			if c.want == nil {
-				want = "SKIPPED"
-			}
-			if st := r.step(t, x, "contain"); st != want {
-				t.Fatalf("contain: %s, want %s", st, want)
-			}
 			if st := r.step(t, x, "case"); st != "DONE" || r.cases.count() != 1 {
 				t.Fatalf("case: %s, %d opened", st, r.cases.count())
 			}
-		})
-	}
-}
-
-// pbCompromisedLaptop: a confirmed built-in incident (an action tampered in
-// flight, which pages) names a transaction, not a run, so it suspends
-// nothing. No built-in rule opens an incident naming a run; a customer's
-// published rule can, on a delegation naming the child run, but its basis is
-// INFERRED at most (D526 P6), so it suspends nothing either. Both open the
-// case.
-func pbCompromisedLaptop(t *testing.T, b hubdomain.AutomationBody) {
-	for _, c := range []struct {
-		name string
-		rule string
-		ev   audit.Event
-	}{
-		{"a confirmed incident on a transaction", "", audit.Event{
-			Name: "security.action_tampered", Actor: evdomain.Actor{Type: "gateway", ID: pbInstance}, Outcome: audit.Denied,
-			ReasonCode: "ACTION_TAMPERED", Object: &audit.Object{Type: "transaction", ID: pbTxn},
-		}},
-		{"a customer's incident on a run", pbIncidentRule, pbDelegated()},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			r := newPBRange(t, b)
-			if c.rule != "" {
-				r.publish(t, c.rule)
+			if st := r.step(t, x, "contain"); st != "none" {
+				t.Fatalf("a contain step ran: %s", st)
 			}
-			x := r.produce(t, c.ev)
-			r.drive(t, x)
-			if contained := r.container.scopes(); len(contained) != 0 {
-				t.Fatalf("contained %v", contained)
-			}
-			if st := r.step(t, x, "contain"); st != "SKIPPED" {
-				t.Fatalf("contain: %s, want SKIPPED", st)
-			}
-			if st := r.step(t, x, "case"); st != "DONE" || r.cases.count() != 1 {
-				t.Fatalf("case: %s, %d opened", st, r.cases.count())
+			if c, g := r.container.scopes(), r.grants.revoked(); len(c) != 0 || len(g) != 0 {
+				t.Fatalf("contained %v, revoked %v", c, g)
 			}
 		})
 	}
@@ -352,16 +275,9 @@ func newPBRange(t *testing.T, b hubdomain.AutomationBody) *pbRange {
 	e.Editions = business
 	r.engine = e
 	r.svc = triggers.New(triggers.Deps{Pool: f.Pool, Starter: e, Editions: business, Executions: e, Log: pclog.Discard()})
-	// The draft a Hub install makes, with what a person sets before
-	// validating it: the review date and, for a playbook that revokes, whose
-	// grants it may revoke.
+	// The draft a Hub install makes, with the review date a person sets
+	// before validating it.
 	def := b.Definition + "review_by: \"" + time.Now().AddDate(0, 0, 30).Format(time.DateOnly) + "\"\n"
-	if strings.Contains(def, "REVOKE_GRANT") {
-		def = strings.Replace(def, "authority:\n  principal: self\n", "authority:\n  principal: self\n  revocable:\n    all: true\n", 1)
-		if !strings.Contains(def, "revocable:") {
-			t.Fatal("no authority block to set revocable on")
-		}
-	}
 	r.a = m21Enabled(t, f, b.AutomationName, def)
 	r.feed(t) // the cursor starts at the head: history never triggers
 	return r
@@ -489,7 +405,7 @@ func (r *pbRange) execution(t *testing.T) ids.UUID {
 	return x
 }
 
-// pbGrants records the grants contain REVOKE_GRANT revokes.
+// pbGrants records any grant a playbook step revokes: none should.
 type pbGrants struct {
 	mu    sync.Mutex
 	calls []string

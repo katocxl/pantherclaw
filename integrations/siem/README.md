@@ -49,8 +49,8 @@ The rules read one OCSF event at a time, with its field names unchanged. Each pa
 | Splunk | `pantherclaw:ocsf:batch` sourcetype on HEC's raw endpoint |
 | Elastic | Logstash pipeline (an ingest pipeline can't split) |
 | Chronicle | The custom parser loops over `data.events` |
-| Sentinel | Not possible: a data collection rule returns one row per record |
-| Wazuh | Not possible: a decoder reads one line into one event |
+| Sentinel | Not possible: a data collection rule returns one row per record. It needs a forwarder that splits the batch first, which isn't built yet |
+| Wazuh | Not possible: a decoder reads one line into one event. It needs a forwarder that splits the batch first, which isn't built yet |
 | Sigma | Not applicable: the README states the field layout the rules expect |
 
 **The signature is not verified inside any SIEM.** None of them reads the Standard Webhooks headers. Anyone who can post to the ingest endpoint can therefore write events the rules will trust, and nothing refuses an old timestamp or drops a duplicate `metadata.uid`. Several SIEMs also want a token or key that the export doesn't send. A forwarder that verifies the signature and adds those is a later piece of PantherClaw; it is not here. Until then, keep each ingest endpoint reachable only from PantherClaw or from something you run that checks the signature.

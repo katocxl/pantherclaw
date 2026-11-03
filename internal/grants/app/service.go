@@ -447,6 +447,16 @@ func (s *Service) refuse(ctx context.Context, c tapp.Caller, op string, agent, g
 	if s.Refusals == nil {
 		return ErrHumanOnly
 	}
+	if err := s.Refusals.RecordRefusal(context.WithoutCancel(ctx), c.Org, IssueRefusedEvent(c.Actor(), op, agent, grant)); err != nil {
+		return errors.Join(ErrHumanOnly, err)
+	}
+	return ErrHumanOnly
+}
+
+// IssueRefusedEvent is the grant.issue_refused audit event: a non-human
+// actor attempted op (grant.issue for agent, or grant.revise of grant). A
+// revision names the grant the caller chose, whoever's it is.
+func IssueRefusedEvent(actor evdomain.Actor, op string, agent, grant ids.UUID) audit.Event {
 	details := map[string]string{"attempted": op}
 	obj := (*audit.Object)(nil)
 	if !agent.IsZero() {
@@ -455,11 +465,8 @@ func (s *Service) refuse(ctx context.Context, c tapp.Caller, op string, agent, g
 	if !grant.IsZero() {
 		obj = &audit.Object{Type: "grant", ID: grant.String()}
 	}
-	if err := s.Refusals.RecordRefusal(context.WithoutCancel(ctx), c.Org, audit.Event{
-		Name: "grant.issue_refused", Actor: c.Actor(), Outcome: audit.Denied, ReasonCode: "HUMAN_ONLY", Object: obj,
+	return audit.Event{
+		Name: "grant.issue_refused", Actor: actor, Outcome: audit.Denied, ReasonCode: "HUMAN_ONLY", Object: obj,
 		Details: details,
-	}); err != nil {
-		return errors.Join(ErrHumanOnly, err)
 	}
-	return ErrHumanOnly
 }

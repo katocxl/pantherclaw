@@ -300,7 +300,7 @@ func (s *Service) consider(ctx context.Context, tx db.TenantTx, ls []listener, e
 			continue
 		}
 		if l.event != nil {
-			params, perr := ExtractFields(l.event.Params, func(p string) (string, bool) { return eventField(e, p) })
+			params, perr := ExtractFields(l.event.Params, func(p string) (string, bool) { return EventField(e, p) })
 			detail := map[string]string{"seq": fmt.Sprint(e.Seq), "entry": e.ID.String(), "kind": e.Kind, "event": on}
 			switch {
 			case confirmed(e):

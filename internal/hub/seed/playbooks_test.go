@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
@@ -18,7 +19,9 @@ import (
 	detengine "github.com/katocxl/pantherclaw/internal/detection/engine"
 	"github.com/katocxl/pantherclaw/internal/detection/pack"
 	"github.com/katocxl/pantherclaw/internal/detection/rules"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/hub/domain"
 	"github.com/katocxl/pantherclaw/internal/hub/seed"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
@@ -29,20 +32,17 @@ import (
 )
 
 // The response playbook library (G0 M27 D508, N14): six automations in hub/.
-// A contain step acts only on a CONFIRMED alert (D514) and only on a subject
-// the trigger carries (D539): rogue-sub-agent revokes the grant a refused
-// delegation names, compromised-laptop suspends the run an incident names.
-// The case opens first, so it opens on every path.
+// None contains (D539, D550): a playbook may contain only a subject its real
+// alerts carry, on a confirmed basis, and no real alert does that today.
+// Leaked-key's and poisoned-mcp-server's alerts name a key or a connection;
+// no confirmed incident names a run; and the rogue sub-agent alert covers a
+// refused revision, whose grant the caller chose, alike with a refused
+// delegation, with nothing in the trigger to tell them apart. Each opens a
+// case for a person, and all six run on Team.
 
-// confirmedOnly is the start of every library contain step's condition: the
-// basis was observed or matched by a rule. The engine also skips a contain step
-// whose trigger isn't a CONFIRMED alert; this keeps the playbook's own intent
-// readable in the draft. The condition goes on to require the step's subject.
-const confirmedOnly = `"basis" in trigger.params && trigger.params.basis in ["OBSERVED", "RULE_MATCH"]`
-
-// subjectParam is the parameter that carries a contain subject, read from the
-// trigger's subjects.
-var subjectParam = map[string]string{autodomain.SubjectTriggerRun: "run", autodomain.SubjectTriggerGrant: "grant"}
+// effectful are the steps a library playbook never uses: they contain, revoke
+// or stop launches.
+var effectful = []string{autodomain.KindContain, autodomain.KindRevokeGrant, autodomain.KindPauseLaunches}
 
 var playbookNames = []string{
 	"pc.playbook.compromised-laptop", "pc.playbook.data-flow-hold-escalation", "pc.playbook.leaked-key",
@@ -85,14 +85,6 @@ func book(t *testing.T, name string) playbook {
 	return playbook{}
 }
 
-func containSteps(d *autodomain.Definition) []autodomain.StepSpec {
-	all := slices.Clone(d.Do)
-	if d.IfFails != nil {
-		all = append(all, d.IfFails.Compensate...)
-	}
-	return slices.DeleteFunc(all, func(s autodomain.StepSpec) bool { return s.Step != autodomain.KindContain })
-}
-
 // TestPlaybooks_TheLibrary: the six playbooks D508 names, each an automation
 // item a Hub install turns into a draft (HR-561).
 //
@@ -110,105 +102,58 @@ func TestPlaybooks_TheLibrary(t *testing.T) {
 	}
 }
 
-// TestHR653_PlaybooksContainOnlyOnConfirmedAlerts: a library contain step
-// starts only from a raised alert or an opened incident, never from
-// alert.inferred, comes after the case, escalates when it fails, and runs only
-// on a confirmed basis and when the trigger carries its subject, read from
-// the trigger's subjects. Only rogue-sub-agent and compromised-laptop contain;
-// they say they need Business and don't run on Team, and the other four say
-// they run on Team.
+// TestHR653_NoLibraryPlaybookContains: no library playbook contains, revokes
+// or pauses launches, since no real alert names a subject it could act on
+// safely (D539, D550). Every playbook validates on Team and says so, every
+// signal-started one opens its case as its first step and says it contains
+// nothing, and none names a revocable scope.
 //
 // Covers: F943
-func TestHR653_PlaybooksContainOnlyOnConfirmedAlerts(t *testing.T) {
-	var containing []string
+func TestHR653_NoLibraryPlaybookContains(t *testing.T) {
 	for _, p := range playbooks(t) {
 		name := p.item.Entry.Name
-		steps := containSteps(p.def)
-		if len(steps) == 0 {
-			if !strings.Contains(p.item.Entry.Summary, "Runs on Team.") {
-				t.Errorf("%s: the summary does not say it runs on Team", name)
+		all := slices.Clone(p.def.Do)
+		if p.def.IfFails != nil {
+			all = append(all, p.def.IfFails.Compensate...)
+		}
+		for _, s := range all {
+			if slices.Contains(effectful, s.Step) {
+				t.Errorf("%s/%s: a library playbook uses %s", name, s.ID, s.Step)
 			}
+		}
+		if p.def.Authority.Revocable != nil {
+			t.Errorf("%s names a revocable scope", name)
+		}
+		if !strings.Contains(p.item.Entry.Summary, "Runs on Team.") {
+			t.Errorf("%s: the summary does not say it runs on Team", name)
+		}
+		def := *p.def
+		def.ReviewBy = autodomain.NewDate(time.Now().AddDate(0, 0, 30))
+		if f := autodomain.Validate(context.Background(), &def, automationEnv{now: time.Now()}); len(f) != 0 {
+			t.Errorf("%s does not validate on Team: %+v", name, f)
+		}
+		if p.def.When.Event == nil || !strings.HasPrefix(p.def.When.Event.On, "alert.") && !strings.HasPrefix(p.def.When.Event.On, "incident.") {
 			continue
 		}
-		containing = append(containing, name)
-		if !strings.Contains(p.item.Entry.Summary, "needs Business; on Team it does not run") {
-			t.Errorf("%s: the summary does not say it needs Business and does not run on Team", name)
+		if p.def.Do[0].Step != autodomain.KindOpenCase {
+			t.Errorf("%s: the first step is %s, not the case", name, p.def.Do[0].Step)
 		}
-		if p.def.When.Event == nil {
-			t.Fatalf("%s: a contain step without a signal trigger", name)
+		if !strings.Contains(p.item.Entry.Summary, "contains nothing") {
+			t.Errorf("%s: the summary does not say it contains nothing", name)
 		}
-		if on := p.def.When.Event.On; on != "alert.raised" && on != "incident.opened" {
-			t.Errorf("%s: a contain step starts from %s", name, on)
-		}
-		caseAt := slices.IndexFunc(p.def.Do, func(s autodomain.StepSpec) bool { return s.Step == autodomain.KindOpenCase })
-		for _, s := range steps {
-			w, err := s.DecodeWith()
-			if err != nil {
-				t.Fatal(err)
-			}
-			c := w.(*autodomain.ContainWith)
-			param, ok := subjectParam[c.Subject]
-			if !ok {
-				t.Fatalf("%s/%s: subject %s", name, s.ID, c.Subject)
-			}
-			if want := confirmedOnly + ` && "` + param + `" in trigger.params`; s.When != want {
-				t.Errorf("%s/%s: when %q, want %q", name, s.ID, s.When, want)
-			}
-			spec, ok := p.def.When.Event.Params[param]
-			if !ok || spec.From != "subjects."+param || spec.IsRequired() {
-				t.Errorf("%s: parameter %s is %+v, want an optional read of subjects.%s", name, param, spec, param)
-			}
-			if at := slices.IndexFunc(p.def.Do, func(x autodomain.StepSpec) bool { return x.ID == s.ID }); caseAt < 0 || at < caseAt {
-				t.Errorf("%s/%s: the case does not open before the contain step", name, s.ID)
-			}
-			if s.OnFailure != autodomain.OnFailureEscalate {
-				t.Errorf("%s/%s: on_failure %q", name, s.ID, s.OnFailure)
-			}
-		}
-		for _, s := range p.def.Do {
-			if s.Step == autodomain.KindRevokeGrant {
-				t.Errorf("%s/%s: a library playbook uses revoke_grant", name, s.ID)
-			}
-		}
-		// The validator refuses the same playbook started from an inferred
-		// alert (D500).
-		inf := *p.def
-		ev := *p.def.When.Event
-		ev.On = autodomain.EventAlertInferred
-		inf.When.Event = &ev
-		if !slices.ContainsFunc(autodomain.Validate(context.Background(), &inf, automationEnv{now: time.Now(), business: true}),
-			func(f autodomain.Finding) bool { return f.Code == autodomain.CodeContainOnInferred }) {
-			t.Errorf("%s: started from %s, no %s", name, autodomain.EventAlertInferred, autodomain.CodeContainOnInferred)
-		}
-	}
-	if want := []string{"pc.playbook.compromised-laptop", "pc.playbook.rogue-sub-agent"}; !slices.Equal(containing, want) {
-		t.Errorf("containing playbooks %v, want %v", containing, want)
 	}
 }
 
-// produced is the feed event of an audit entry exactly as audit.Record writes
-// it for ev: the body the ledger holds, read by the feed's own normalizer.
-func produced(t *testing.T, name string, actor evdomain.Actor, outcome, reason string, object *[2]string, details map[string]string) feed.Event {
+// produced is the feed event of the audit entry audit.Record writes for ev
+// (audit.Entry: the kind and body the ledger holds), read by the feed's own
+// normalizer. ev comes from the producer's own builder.
+func produced(t *testing.T, ev audit.Event) feed.Event {
 	t.Helper()
-	type obj struct {
-		Type string `json:"type"`
-		ID   string `json:"id"`
-	}
-	var o *obj
-	if object != nil {
-		o = &obj{object[0], object[1]}
-	}
-	body, err := evdomain.CanonicalBody(struct {
-		Name       string            `json:"name"`
-		Outcome    string            `json:"outcome"`
-		ReasonCode string            `json:"reason_code,omitempty"`
-		Object     *obj              `json:"object,omitempty"`
-		Details    map[string]string `json:"details,omitempty"`
-	}{name, outcome, reason, o, details})
+	kind, body, err := audit.Entry(context.Background(), ev)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, err := feed.Normalize("audit."+name, actor.Type, actor.ID, time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC), body)
+	e, err := feed.Normalize(kind, ev.Actor.Type, ev.Actor.ID, time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC), body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,25 +241,9 @@ func signalEvent(kind string, s reflexdomain.Signal) feed.Event {
 	}
 }
 
-// eventField reads a parameter source as the trigger service does
-// (triggers.eventField): subjects.<type> is the first id of that type,
-// attrs.<key> an attribute.
-func eventField(e feed.Event) func(string) (string, bool) {
-	return func(path string) (string, bool) {
-		if typ, ok := strings.CutPrefix(path, "subjects."); ok {
-			return e.Subject(reflexdomain.SubjectType(typ))
-		}
-		if k, ok := strings.CutPrefix(path, "attrs."); ok {
-			v, ok := e.Attrs[k]
-			return v, ok
-		}
-		return "", false
-	}
-}
-
 // simulate starts p from e as the trigger service would (its event, where
-// clause and parameters) and runs it on the engine's simulator with every
-// effectful step done.
+// clause and parameters) and runs it on the engine's simulator, the case
+// opening.
 func simulate(t *testing.T, p playbook, e feed.Event) map[string]autodomain.StepState {
 	t.Helper()
 	ctx := context.Background()
@@ -325,7 +254,7 @@ func simulate(t *testing.T, p playbook, e feed.Event) map[string]autodomain.Step
 	if ok, err := triggers.MatchEvent(ctx, w.Where, e); err != nil || !ok {
 		t.Fatalf("%s: the where clause does not match: %v", p.item.Entry.Name, err)
 	}
-	vals, err := triggers.ExtractFields(w.Params, eventField(e))
+	vals, err := triggers.ExtractFields(w.Params, func(p string) (string, bool) { return triggers.EventField(e, p) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +282,6 @@ func simulate(t *testing.T, p playbook, e feed.Event) map[string]autodomain.Step
     params: {%s}
     subjects: [%s]
   stubs:
-    contain: [{state: DONE, effect: CHANGED, refs: [response_action]}]
     case: [{state: DONE, effect: CHANGED, refs: [case]}]
   expect:
     state: SUCCEEDED
@@ -377,34 +305,48 @@ func simulate(t *testing.T, p playbook, e feed.Event) map[string]autodomain.Step
 // The audit entries the producing code writes (grants/app delegate.go
 // refuseDelegation, service.go refuse and grantEvent, pgauthority
 // store.go tampered).
+// The audit events the producers write, from their own builders (grants/app
+// DelegateRefusedEvent, IssueRefusedEvent and DelegatedEvent, pgauthority
+// TamperedEvent): a change to a producer changes these.
 var (
-	agentID  = "0192f942-0000-7000-8000-0000000009a1"
-	parentID = "0192f942-0000-7000-8000-0000000009b1"
-	childID  = "0192f942-0000-7000-8000-0000000009b2"
-	runID    = "0192f942-0000-7000-8000-0000000009c1"
-	txnID    = "0192f942-0000-7000-8000-0000000009d1"
-	instance = evdomain.Actor{Type: "instance", ID: "0192f942-0000-7000-8000-0000000009e1"}
+	agentID  = mustUUID("0192f942-0000-7000-8000-0000000009a1")
+	parentID = mustUUID("0192f942-0000-7000-8000-0000000009b1")
+	childID  = mustUUID("0192f942-0000-7000-8000-0000000009b2")
+	runID    = mustUUID("0192f942-0000-7000-8000-0000000009c1")
+	txnID    = mustUUID("0192f942-0000-7000-8000-0000000009d1")
+	otherID  = mustUUID("0192f942-0000-7000-8000-0000000009f1") // another agent's grant
+	instance = mustUUID("0192f942-0000-7000-8000-0000000009e1")
 	sa       = evdomain.Actor{Type: "service_account", ID: "0192f942-0000-7000-8000-0000000009e2"}
 )
 
+// reviseRefused is a refused revision of a grant the caller chose, here
+// another agent's.
+func reviseRefused(t *testing.T) feed.Event {
+	return produced(t, grantsapp.IssueRefusedEvent(sa, "grant.revise", ids.UUID{}, otherID))
+}
+
 func delegateRefused(t *testing.T) feed.Event {
-	return produced(t, "grant.delegate_refused", instance, "denied", "DELEGATION_EXCEEDS_PARENT", &[2]string{"grant", parentID},
-		map[string]string{"agent": agentID, "parent": parentID, "attempted": "grant.delegate"})
+	return produced(t, grantsapp.DelegateRefusedEvent(instance, parentID, agentID))
 }
 
 func issueRefused(t *testing.T) feed.Event {
-	return produced(t, "grant.issue_refused", sa, "denied", "HUMAN_ONLY", nil,
-		map[string]string{"attempted": "grant.issue", "agent": agentID})
+	return produced(t, grantsapp.IssueRefusedEvent(sa, "grant.issue", agentID, ids.UUID{}))
 }
 
 func delegated(t *testing.T) feed.Event {
-	return produced(t, "grant.delegated", instance, "success", "", &[2]string{"grant", childID},
-		map[string]string{"parent": parentID, "parent_revision": "1", "child_run": runID})
+	return produced(t, grantsapp.DelegatedEvent(instance, childID, parentID, 1, runID))
 }
 
 func tampered(t *testing.T) feed.Event {
-	return produced(t, "security.action_tampered", evdomain.Actor{Type: "gateway", ID: "gw-1"}, "denied", "ACTION_TAMPERED",
-		&[2]string{"transaction", txnID}, nil)
+	return produced(t, pgauthority.TamperedEvent("gw-1", txnID, false))
+}
+
+func mustUUID(s string) ids.UUID {
+	u, err := ids.ParseUUID(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }
 
 // one is the single signal of rule among sigs.
@@ -419,34 +361,39 @@ func one(t *testing.T, sigs []reflexdomain.Signal, rule string) reflexdomain.Sig
 	return reflexdomain.Signal{}
 }
 
-// TestT278_AnUnconfirmedSignalContainsNothing drives each containing playbook
-// from the audit entry the producing code writes, through the detection
-// engine's own rules, to the trigger's parameters and the engine's simulator.
-// A refused delegation names the grant it exceeded, and on a confirmed basis
-// that grant is revoked; a refused issue names none, and only the case opens.
-// A confirmed built-in incident names a transaction, not a run, and does not
-// suspend; a customer's incident naming a run is inference (D526 P6) and does
-// not suspend either. Every basis other than OBSERVED and RULE_MATCH, and
-// none at all, contains nothing; the case opens on every path.
+// TestT278_NoSignalContainsAnything drives each signal playbook from the
+// audit entry the producing code writes, through the detection engine's own
+// rules, to the trigger's parameters and the engine's simulator, on every
+// basis the producer can raise and every weaker one. A refused delegation, a
+// refused issue and a refused revision of another agent's grant all raise
+// pc.authority.self_issue, which the trigger can't tell apart, so
+// rogue-sub-agent revokes none of them; a confirmed incident naming a
+// transaction and a customer's incident naming a run (raised INFERRED, D526
+// P6) suspend nothing. Only the case opens, on every path (D550).
 //
 // Covers: F943
-func TestT278_AnUnconfirmedSignalContainsNothing(t *testing.T) {
+func TestT278_NoSignalContainsAnything(t *testing.T) {
 	rogue, laptop := book(t, "pc.playbook.rogue-sub-agent"), book(t, "pc.playbook.compromised-laptop")
 	cases := []struct {
 		name, kind string
 		p          playbook
 		sig        reflexdomain.Signal
 		basis      reflexdomain.Basis // what the engine raised
-		contained  bool
 	}{
-		{"a refused delegation", reflexdomain.KindAlert, rogue, one(t, detect(t, delegateRefused(t)), "pc.authority.self_issue"), reflexdomain.BasisObserved, true},
-		{"a refused issue", reflexdomain.KindAlert, rogue, one(t, detect(t, issueRefused(t)), "pc.authority.self_issue"), reflexdomain.BasisObserved, false},
-		{"a customer's incident on a run", reflexdomain.KindIncident, laptop, one(t, detect(t, delegated(t), customIncidentRule(t)), "org.playbooks.delegated_incident"), reflexdomain.BasisInferred, false},
-		{"an incident on a transaction", reflexdomain.KindIncident, laptop, one(t, detect(t, tampered(t)), "pc.integrity.action_tampered"), reflexdomain.BasisObserved, false},
+		{"a refused delegation", reflexdomain.KindAlert, rogue, one(t, detect(t, delegateRefused(t)), "pc.authority.self_issue"), reflexdomain.BasisObserved},
+		{"a refused issue", reflexdomain.KindAlert, rogue, one(t, detect(t, issueRefused(t)), "pc.authority.self_issue"), reflexdomain.BasisObserved},
+		{"a refused revision of another agent's grant", reflexdomain.KindAlert, rogue, one(t, detect(t, reviseRefused(t)), "pc.authority.self_issue"), reflexdomain.BasisObserved},
+		{"a customer's incident on a run", reflexdomain.KindIncident, laptop, one(t, detect(t, delegated(t), customIncidentRule(t)), "org.playbooks.delegated_incident"), reflexdomain.BasisInferred},
+		{"an incident on a transaction", reflexdomain.KindIncident, laptop, one(t, detect(t, tampered(t)), "pc.integrity.action_tampered"), reflexdomain.BasisObserved},
 	}
 	for _, c := range cases {
 		if c.sig.Basis != c.basis {
 			t.Fatalf("%s: basis %s, want %s", c.name, c.sig.Basis, c.basis)
+		}
+		if c.name == "a refused revision of another agent's grant" {
+			if g, ok := signalEvent(c.kind, c.sig).Subject(reflexdomain.SubjectGrant); !ok || g != otherID.String() {
+				t.Fatalf("%s: the alert names grant %q, want the other agent's %s", c.name, g, otherID)
+			}
 		}
 		for _, basis := range []reflexdomain.Basis{reflexdomain.BasisObserved, "RULE_MATCH", "INFERRED", "HYPOTHESIS", ""} {
 			if basis.Confirmed() && !c.basis.Confirmed() {
@@ -458,12 +405,8 @@ func TestT278_AnUnconfirmedSignalContainsNothing(t *testing.T) {
 				delete(e.Attrs, "basis")
 			}
 			last := simulate(t, c.p, e)
-			want := autodomain.StepSkipped
-			if c.contained && basis.Confirmed() {
-				want = autodomain.StepDone
-			}
-			if last["contain"] != want || last["case"] != autodomain.StepDone {
-				t.Errorf("%s on basis %q: contain %s, case %s; want contain %s, case DONE", c.name, basis, last["contain"], last["case"], want)
+			if last["case"] != autodomain.StepDone || len(last) != 1 {
+				t.Errorf("%s on basis %q: steps %v, want only the case, DONE", c.name, basis, last)
 			}
 		}
 	}
