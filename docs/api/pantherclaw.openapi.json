@@ -17721,6 +17721,708 @@
         }
       }
     },
+    "/pantherclaw.v1.IdpAccessService/CreateAssertionIssuer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "CreateAssertionIssuer",
+        "description": "CreateAssertionIssuer stores a PENDING issuer and files its activation.\n Its discovery document is read over HTTPS through the egress guard.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.CreateAssertionIssuer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreateAssertionIssuerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreateAssertionIssuerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/DisableAssertionIssuer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "DisableAssertionIssuer",
+        "description": "DisableAssertionIssuer turns an issuer off at once.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.DisableAssertionIssuer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableAssertionIssuerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableAssertionIssuerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/ListAssertionIssuers": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "ListAssertionIssuers",
+        "description": "ListAssertionIssuers lists the org's issuers by name (at most 100).\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdpAccessService.ListAssertionIssuers",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListAssertionIssuersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListAssertionIssuersResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/BindAssertionClient": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "BindAssertionClient",
+        "description": "BindAssertionClient files that a client id of an issuer acts as one\n agent.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.BindAssertionClient",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.BindAssertionClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.BindAssertionClientResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/RemoveAssertionClient": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "RemoveAssertionClient",
+        "description": "RemoveAssertionClient removes a binding at once.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.RemoveAssertionClient",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveAssertionClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveAssertionClientResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/ListAssertionClients": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "ListAssertionClients",
+        "description": "ListAssertionClients lists an issuer's bindings (at most 100).\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdpAccessService.ListAssertionClients",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListAssertionClientsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListAssertionClientsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/GetMcpAccess": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "GetMcpAccess",
+        "description": "GetMcpAccess returns the org's MCP authorization setting. It is off\n until a person turns it on.\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdpAccessService.GetMcpAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetMcpAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetMcpAccessResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/EnableMcpAccess": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "EnableMcpAccess",
+        "description": "EnableMcpAccess files turning MCP authorization on.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.EnableMcpAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.EnableMcpAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.EnableMcpAccessResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/DisableMcpAccess": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "DisableMcpAccess",
+        "description": "DisableMcpAccess turns MCP authorization off at once.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.DisableMcpAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DisableMcpAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DisableMcpAccessResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/AllowMcpClient": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "AllowMcpClient",
+        "description": "AllowMcpClient files that a client URL acts as one enrolled agent.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.AllowMcpClient",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AllowMcpClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AllowMcpClientResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/RemoveMcpClient": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "RemoveMcpClient",
+        "description": "RemoveMcpClient removes a client at once: its tokens stop on their next\n use and its instance is revoked.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.RemoveMcpClient",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveMcpClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveMcpClientResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/RefreshMcpClientDocument": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "RefreshMcpClientDocument",
+        "description": "RefreshMcpClientDocument files taking an active client's changed\n metadata document: until a second person confirms it, the client keeps\n the document confirmed before.\n permission: identity_provider.manage",
+        "operationId": "pantherclaw.v1.IdpAccessService.RefreshMcpClientDocument",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RefreshMcpClientDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RefreshMcpClientDocumentResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IdpAccessService/ListMcpClients": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IdpAccessService"
+        ],
+        "summary": "ListMcpClients",
+        "description": "ListMcpClients lists the allow-list (at most 100).\n permission: identity_provider.read",
+        "operationId": "pantherclaw.v1.IdpAccessService.ListMcpClients",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListMcpClientsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListMcpClientsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.IncidentService/ListAlerts": {
       "post": {
         "tags": [
@@ -38857,14 +39559,16 @@
             ],
             "title": "workload_token",
             "maxLength": 8192,
-            "description": "Workload token from \"Authorization: PAP \u003ctoken\u003e\"; empty for a key-only\n proof."
+            "description": "Workload token from \"Authorization: PAP \u003ctoken\u003e\"; empty for a key-only\n proof. On the gateway's OAuth route it is the bearer token: the Authority\n tells the two apart by the token's type alone (G0 M26 D408)."
           },
           "proof": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "title": "proof",
             "maxLength": 8192,
-            "minLength": 16,
-            "description": "PAP-Proof header value."
+            "description": "PAP-Proof header value. Empty only with a pap-mcp+jwt token: a missing\n proof never selects bearer mode, and a pap-wt+jwt token without one is\n refused."
           },
           "bodySha256": {
             "type": "string",
@@ -38901,7 +39605,6 @@
         "additionalProperties": false,
         "description": "WorkloadCredentials are a workload's PAP/1 request credentials as the\n gateway received them (PAP-1 §4). The gateway hashes the raw body before\n parsing it; the Authority verifies everything again.",
         "required": [
-          "proof",
           "bodySha256",
           "htm",
           "htu"
@@ -61583,6 +62286,19 @@
         "additionalProperties": false,
         "description": "GatewayConnection is a connection as its gateway sees it."
       },
+      "pantherclaw.v1.GatewayMcpAccess": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "The org's authorization server issuer, for protected resource metadata."
+          }
+        },
+        "title": "GatewayMcpAccess",
+        "additionalProperties": false,
+        "description": "GatewayMcpAccess turns on the OAuth route of a gateway's MCP face."
+      },
       "pantherclaw.v1.GatewayPackage": {
         "type": "object",
         "properties": {
@@ -61789,6 +62505,11 @@
             },
             "title": "capture_profiles",
             "description": "The active, unexpired capture profiles covering those connections\n (G0 M7 design decision 10, HR-199); none when capture is off."
+          },
+          "mcpAccess": {
+            "title": "mcp_access",
+            "description": "The org's MCP authorization route (G0 M26 D402); unset while it is off.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GatewayMcpAccess"
           }
         },
         "title": "GetConfigurationResponse",
@@ -68743,6 +69464,631 @@
         "title": "UpdateIdentityProviderResponse",
         "additionalProperties": false,
         "description": "UpdateIdentityProviderResponse is the filed change."
+      },
+      "pantherclaw.v1.AllowMcpClientRequest": {
+        "type": "object",
+        "properties": {
+          "clientUrl": {
+            "type": "string",
+            "title": "client_url",
+            "maxLength": 1024,
+            "minLength": 10,
+            "format": "uri",
+            "description": "Client ID Metadata Document URL: HTTPS with a path."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "description": "The enrolled agent."
+          }
+        },
+        "title": "AllowMcpClientRequest",
+        "additionalProperties": false,
+        "description": "AllowMcpClientRequest allow-lists a client URL.",
+        "required": [
+          "clientUrl",
+          "agentId"
+        ]
+      },
+      "pantherclaw.v1.AllowMcpClientResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The PENDING client.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpClient"
+          },
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "AllowMcpClientResponse",
+        "additionalProperties": false,
+        "description": "AllowMcpClientResponse names the client and its change request."
+      },
+      "pantherclaw.v1.AssertionClient": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Binding id."
+          },
+          "issuerId": {
+            "type": "string",
+            "title": "issuer_id",
+            "description": "The issuer."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "description": "The client id assertions name."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "description": "The agent it acts as."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE or REMOVED."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "AssertionClient",
+        "additionalProperties": false,
+        "description": "AssertionClient pins a client id of an issuer to one agent."
+      },
+      "pantherclaw.v1.AssertionIssuer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Issuer id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "Issuer URL, fixed once the issuer has been ACTIVE."
+          },
+          "audience": {
+            "type": "string",
+            "title": "audience",
+            "description": "The audience an assertion must name, fixed once ACTIVE."
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "description": "The tenant a multi-tenant issuer's assertion must carry."
+          },
+          "algorithms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "algorithms",
+            "description": "Allowed signature algorithms."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE or DISABLED."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it first became ACTIVE.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "AssertionIssuer",
+        "additionalProperties": false,
+        "description": "AssertionIssuer is an identity provider whose assertions the org accepts."
+      },
+      "pantherclaw.v1.BindAssertionClientRequest": {
+        "type": "object",
+        "properties": {
+          "issuerId": {
+            "type": "string",
+            "title": "issuer_id",
+            "format": "uuid",
+            "description": "Issuer id."
+          },
+          "clientId": {
+            "type": "string",
+            "title": "client_id",
+            "maxLength": 512,
+            "minLength": 1,
+            "description": "The client id assertions name."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "format": "uuid",
+            "description": "The enrolled agent."
+          }
+        },
+        "title": "BindAssertionClientRequest",
+        "additionalProperties": false,
+        "description": "BindAssertionClientRequest pins a client id to an agent.",
+        "required": [
+          "issuerId",
+          "clientId",
+          "agentId"
+        ]
+      },
+      "pantherclaw.v1.BindAssertionClientResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The PENDING binding.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AssertionClient"
+          },
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "BindAssertionClientResponse",
+        "additionalProperties": false,
+        "description": "BindAssertionClientResponse names the binding and its change request."
+      },
+      "pantherclaw.v1.CreateAssertionIssuerRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "pattern": "^[a-z0-9-]{1,32}$",
+            "description": "Name."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "maxLength": 512,
+            "minLength": 9,
+            "format": "uri",
+            "description": "Issuer URL, HTTPS on a public host."
+          },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "tenant",
+            "maxLength": 256,
+            "description": "The tenant, for a multi-tenant issuer only."
+          },
+          "algorithms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxItems": 3,
+              "minItems": 1,
+              "uniqueItems": true,
+              "enum": [
+                "RS256",
+                "ES256",
+                "EdDSA"
+              ]
+            },
+            "title": "algorithms",
+            "maxItems": 3,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Allowed signature algorithms."
+          }
+        },
+        "title": "CreateAssertionIssuerRequest",
+        "additionalProperties": false,
+        "description": "CreateAssertionIssuerRequest adds an issuer.",
+        "required": [
+          "name",
+          "issuer",
+          "algorithms"
+        ]
+      },
+      "pantherclaw.v1.CreateAssertionIssuerResponse": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "title": "issuer",
+            "description": "The PENDING issuer.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AssertionIssuer"
+          },
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "CreateAssertionIssuerResponse",
+        "additionalProperties": false,
+        "description": "CreateAssertionIssuerResponse names the issuer and its change request."
+      },
+      "pantherclaw.v1.DisableAssertionIssuerRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Issuer id."
+          }
+        },
+        "title": "DisableAssertionIssuerRequest",
+        "additionalProperties": false,
+        "description": "DisableAssertionIssuerRequest names an issuer.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DisableAssertionIssuerResponse": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "title": "issuer",
+            "description": "The DISABLED issuer.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AssertionIssuer"
+          }
+        },
+        "title": "DisableAssertionIssuerResponse",
+        "additionalProperties": false,
+        "description": "DisableAssertionIssuerResponse is the issuer now."
+      },
+      "pantherclaw.v1.DisableMcpAccessRequest": {
+        "type": "object",
+        "title": "DisableMcpAccessRequest",
+        "additionalProperties": false,
+        "description": "DisableMcpAccessRequest turns MCP authorization off."
+      },
+      "pantherclaw.v1.DisableMcpAccessResponse": {
+        "type": "object",
+        "properties": {
+          "access": {
+            "title": "access",
+            "description": "The setting.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpAccess"
+          }
+        },
+        "title": "DisableMcpAccessResponse",
+        "additionalProperties": false,
+        "description": "DisableMcpAccessResponse is the setting now."
+      },
+      "pantherclaw.v1.EnableMcpAccessRequest": {
+        "type": "object",
+        "properties": {
+          "gatewayUrl": {
+            "type": "string",
+            "title": "gateway_url",
+            "maxLength": 512,
+            "minLength": 9,
+            "format": "uri",
+            "description": "The gateway URL protected resources live under."
+          }
+        },
+        "title": "EnableMcpAccessRequest",
+        "additionalProperties": false,
+        "description": "EnableMcpAccessRequest turns MCP authorization on.",
+        "required": [
+          "gatewayUrl"
+        ]
+      },
+      "pantherclaw.v1.EnableMcpAccessResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "EnableMcpAccessResponse",
+        "additionalProperties": false,
+        "description": "EnableMcpAccessResponse names the change request."
+      },
+      "pantherclaw.v1.GetMcpAccessRequest": {
+        "type": "object",
+        "title": "GetMcpAccessRequest",
+        "additionalProperties": false,
+        "description": "GetMcpAccessRequest reads the setting."
+      },
+      "pantherclaw.v1.GetMcpAccessResponse": {
+        "type": "object",
+        "properties": {
+          "access": {
+            "title": "access",
+            "description": "The setting.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpAccess"
+          }
+        },
+        "title": "GetMcpAccessResponse",
+        "additionalProperties": false,
+        "description": "GetMcpAccessResponse is the setting."
+      },
+      "pantherclaw.v1.ListAssertionClientsRequest": {
+        "type": "object",
+        "properties": {
+          "issuerId": {
+            "type": "string",
+            "title": "issuer_id",
+            "format": "uuid",
+            "description": "Issuer id."
+          }
+        },
+        "title": "ListAssertionClientsRequest",
+        "additionalProperties": false,
+        "description": "ListAssertionClientsRequest names an issuer.",
+        "required": [
+          "issuerId"
+        ]
+      },
+      "pantherclaw.v1.ListAssertionClientsResponse": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.AssertionClient"
+            },
+            "title": "clients",
+            "description": "Bindings."
+          }
+        },
+        "title": "ListAssertionClientsResponse",
+        "additionalProperties": false,
+        "description": "ListAssertionClientsResponse is the issuer's bindings."
+      },
+      "pantherclaw.v1.ListAssertionIssuersRequest": {
+        "type": "object",
+        "title": "ListAssertionIssuersRequest",
+        "additionalProperties": false,
+        "description": "ListAssertionIssuersRequest lists issuers."
+      },
+      "pantherclaw.v1.ListAssertionIssuersResponse": {
+        "type": "object",
+        "properties": {
+          "issuers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.AssertionIssuer"
+            },
+            "title": "issuers",
+            "description": "Issuers by name."
+          }
+        },
+        "title": "ListAssertionIssuersResponse",
+        "additionalProperties": false,
+        "description": "ListAssertionIssuersResponse is the org's issuers."
+      },
+      "pantherclaw.v1.ListMcpClientsRequest": {
+        "type": "object",
+        "title": "ListMcpClientsRequest",
+        "additionalProperties": false,
+        "description": "ListMcpClientsRequest lists the allow-list."
+      },
+      "pantherclaw.v1.ListMcpClientsResponse": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.McpClient"
+            },
+            "title": "clients",
+            "description": "Clients."
+          }
+        },
+        "title": "ListMcpClientsResponse",
+        "additionalProperties": false,
+        "description": "ListMcpClientsResponse is the allow-list."
+      },
+      "pantherclaw.v1.McpAccess": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "enabled",
+            "description": "Whether the gateway's OAuth route is on."
+          },
+          "gatewayUrl": {
+            "type": "string",
+            "title": "gateway_url",
+            "description": "The gateway URL protected resources live under."
+          },
+          "issuer": {
+            "type": "string",
+            "title": "issuer",
+            "description": "The org's authorization server issuer."
+          }
+        },
+        "title": "McpAccess",
+        "additionalProperties": false,
+        "description": "McpAccess is the org's MCP authorization setting."
+      },
+      "pantherclaw.v1.McpClient": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Client entry id."
+          },
+          "clientUrl": {
+            "type": "string",
+            "title": "client_url",
+            "description": "Client ID Metadata Document URL."
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "description": "The enrolled agent it acts as."
+          },
+          "instanceId": {
+            "type": "string",
+            "title": "instance_id",
+            "description": "The instance it acts through; no PAP/1 proof can use it."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "PENDING, ACTIVE or REMOVED."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "clientName": {
+            "type": "string",
+            "title": "client_name",
+            "description": "The client's own name in the confirmed document: untrusted text."
+          },
+          "redirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "redirect_uris",
+            "description": "The redirect URIs of the confirmed document."
+          },
+          "documentDigest": {
+            "type": "string",
+            "title": "document_digest",
+            "description": "SHA-256 of the confirmed document, hex."
+          }
+        },
+        "title": "McpClient",
+        "additionalProperties": false,
+        "description": "McpClient is one allow-listed standard MCP client."
+      },
+      "pantherclaw.v1.RefreshMcpClientDocumentRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Client entry id."
+          }
+        },
+        "title": "RefreshMcpClientDocumentRequest",
+        "additionalProperties": false,
+        "description": "RefreshMcpClientDocumentRequest names an active client.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RefreshMcpClientDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The client as confirmed so far.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpClient"
+          },
+          "clientName": {
+            "type": "string",
+            "title": "client_name",
+            "description": "The live document's name: untrusted text."
+          },
+          "redirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "redirect_uris",
+            "description": "The live document's redirect URIs."
+          },
+          "requestId": {
+            "type": "string",
+            "title": "request_id",
+            "description": "The change request a second person confirms."
+          }
+        },
+        "title": "RefreshMcpClientDocumentResponse",
+        "additionalProperties": false,
+        "description": "RefreshMcpClientDocumentResponse is the change a second person confirms."
+      },
+      "pantherclaw.v1.RemoveAssertionClientRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Binding id."
+          }
+        },
+        "title": "RemoveAssertionClientRequest",
+        "additionalProperties": false,
+        "description": "RemoveAssertionClientRequest names a binding.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RemoveAssertionClientResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The REMOVED binding.",
+            "$ref": "#/components/schemas/pantherclaw.v1.AssertionClient"
+          }
+        },
+        "title": "RemoveAssertionClientResponse",
+        "additionalProperties": false,
+        "description": "RemoveAssertionClientResponse is the binding now."
+      },
+      "pantherclaw.v1.RemoveMcpClientRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Client entry id."
+          }
+        },
+        "title": "RemoveMcpClientRequest",
+        "additionalProperties": false,
+        "description": "RemoveMcpClientRequest names a client.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RemoveMcpClientResponse": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "title": "client",
+            "description": "The REMOVED client.",
+            "$ref": "#/components/schemas/pantherclaw.v1.McpClient"
+          }
+        },
+        "title": "RemoveMcpClientResponse",
+        "additionalProperties": false,
+        "description": "RemoveMcpClientResponse is the client now."
       },
       "pantherclaw.v1.Alert": {
         "type": "object",
@@ -94792,6 +96138,10 @@
     {
       "name": "pantherclaw.v1.IdentityProviderService",
       "description": "IdentityProviderService manages an organization's own OpenID Connect\n providers (G0 M18 D155, G6; PN-012.7; HR-481..484), next to the\n deployment's. People sign in to the org through the deployment's\n providers and the org's ACTIVE ones, or through the org's alone when\n own_providers_only is on.\n\n Every create, change, disable and own_providers_only change is a\n two-person protected change in every protect mode: the call files it\n and returns its change request, and it applies when a different person\n holding identity_provider.manage confirms it with a security key. Every\n org admin is notified. Only a person may file one.\n\n A provider's issuer is HTTPS on a public host, and it can't change once\n the provider has been ACTIVE. Its client secret is sealed and never\n returned. Disabling a provider, or turning own_providers_only on, is\n refused when no active org admin would have a provider left to sign in\n with; the change request lists the admins who would lose theirs.\n\n Creating, activating and changing a provider need the Enterprise\n edition; disabling one and reading work in every edition, and ACTIVE\n providers keep signing people in after a downgrade."
+    },
+    {
+      "name": "pantherclaw.v1.IdpAccessService",
+      "description": "IdpAccessService manages how an organization's identity provider and\n standard MCP clients reach its agents (G0 M26 D400-D402, D408; H8):\n assertion issuers, the client ids they may name, and the allow-list of\n MCP clients. Nothing here creates authority: an assertion or a sign-in\n uses or narrows an existing grant, and a person with no grant gets none.\n\n Adding or changing anything is a two-person protected change in every\n protect mode: the call files it and returns its change request, and it\n applies when a different person holding identity_provider.manage confirms\n it with a security key. Turning something off applies at once, so a\n compromised provider can be cut off without waiting (HR-141). Only a\n person may call a write.\n\n Writes that add or change need the Team edition; turning off and reading\n work in every edition, and what is ACTIVE keeps working after a downgrade."
     },
     {
       "name": "pantherclaw.v1.IncidentService",
