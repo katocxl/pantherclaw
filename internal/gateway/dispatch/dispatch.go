@@ -1172,13 +1172,23 @@ func withCredentialUse(ctx context.Context, conn *control.Connection) context.Co
 // usedCredential notes that the dispatch in ctx opened conn's sealed
 // credential; outside a dispatch it does nothing.
 func usedCredential(ctx context.Context, conn *control.Connection) {
+	if conn.Credential == nil {
+		return
+	}
+	usedCredentialVersion(ctx, conn.GetId(), conn.Credential.GetId(), conn.Credential.GetVersion())
+}
+
+// usedCredentialVersion notes that the dispatch in ctx used version of
+// credential id of connection conn, such as the credential a pool it
+// reuses was opened with; outside a dispatch on conn it does nothing.
+func usedCredentialVersion(ctx context.Context, conn, id string, version int32) {
 	u, ok := ctx.Value(credentialUseKey{}).(*credentialUse)
-	if !ok || u.conn != conn.GetId() || conn.Credential == nil {
+	if !ok || u.conn != conn || id == "" {
 		return
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.id, u.version = conn.Credential.GetId(), conn.Credential.GetVersion()
+	u.id, u.version = id, version
 }
 
 // credentialUsed is what the dispatch in ctx opened, for its record; nil
