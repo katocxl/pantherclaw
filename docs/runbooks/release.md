@@ -27,4 +27,6 @@ Users pin the image digests in `sandbox.images` ([sandbox.md](sandbox.md), "Use 
 
 **Upgrade order from M25:** upgrade the server before the gateways. A gateway of this release reports a model relay's serving state as LOCAL_RELAY, a value an older server does not know, and that server refuses the gateway's whole status report, not just that connection ([pclaw-redteam-campaign.md](pclaw-redteam-campaign.md)).
 
+**M27 release notes:** automation validation now warns `CONTAIN_NEEDS_CONFIRMED_ALERT` on a contain step under a trigger that is not one alert or incident; such a step always skips (`UNCONFIRMED_SIGNAL`). Custom detection rules can no longer declare basis OBSERVED or RULE_MATCH; existing ones raise INFERRED alerts and are no longer contained automatically, so republish them with basis INFERRED. Inferred built-in detections are contained by a person ([behavior-profiles.md](behavior-profiles.md)). Upgrade every gateway before an organization moves content signals to ACTIVE: a gateway from before M27 fails closed there ([content-signals.md](content-signals.md)).
+
 **If the release job fails under harden-runner block mode:** read the blocked endpoint in the job summary, add it to `allowed-endpoints` in a PR (G1), and re-run by deleting and re-pushing the tag only if no release was published.

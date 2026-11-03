@@ -835,8 +835,30 @@ Reports show evidence and gaps and are not a certification or statement of compl
 
 ### M27 rows: Agent Detection & Response
 
+Analytics use PantherClaw's own transactions and never contain automatically (F787, F800). Content signals are opt-in and restrict-only, with no safety claim (F789, [ADR-0050](adr/0050-content-signals-boundary-amendment.md)) ([G0 M27](g0/M27.md)).
+
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
+| F930 | Behaviour profiles | Per agent: tools, volumes, destinations, hours, sequences and spend, from the agent's own `pc.transactions`, never the ledger. `GetAgentProfile` under `behavior.read`, labelled INFERRED and UNVALIDATED. | Next | Business | M27 | F399, F787 |
+| F931 | Simulated history | A labelled generator, a package used by tests and the exit run. Its rows sit in `pc.behavior_simulated_actions`, range agents only, apart from real data. | Next | Business | M27 | F630 |
+| F932 | Inferred behaviour alerts | Deviations raise alerts through Reflex: source `behavior`, rule `pc.drift.behavior.<kind>`, basis INFERRED, attention at most ALERT. The thresholds are unvalidated. | Next | Business | M27 | F399, F801 |
+| F933 | Alert basis | `basis` on `reflex.alert` and the `alert.inferred` event. A contain step runs only on CONFIRMED alerts, in every automation; an inference never contains automatically. | Next | Team | M27 | F800 |
+| F934 | Approval context | `GetBehaviorContext(approval_id)` shows what is new about a held action against the agent's allowed actions before it, outside the approval binding. No decision reads it. | Next | Business | M27 | new |
+| F935 | M27 exit | A simulated incident detected, explained and contained by a person. Under `scoped_incident_containment` an inferred alert on a real agent skips contain (`UNCONFIRMED_SIGNAL`). | Next | Business | M27 | new |
+| F936 | Content signal settings | `ContentSignalService` `GetSettings` and `SetMode`: OFF, WATCHING, then ACTIVE by a person's security-key step-up. Opt-in and restrict-only, a written amendment to F789 (ADR-0050). | Next | Business | M27 | F789 |
+| F937 | Built-in classifier | Pure Go regex and entropy: injection phrases, secret formats, high entropy, email addresses, card and national id numbers. Listed phrases and formats only. | Next | Business | M27 | new |
+| F938 | Gateway content scan | Tool results and outbound bodies, after secret-echo redaction, bounded at 64 KiB and stored nowhere. A finding is a kind and a location, never a value. | Next | Business | M27 | new |
+| F939 | Restrict-only run fact | A result flag holds later writes on the run tree; reads pass. `run.content_flags` lets an org's own rule deny. Nothing allows or lifts on a flag. | Next | Business | M27 | F793 |
+| F940 | Out-of-process classifier | An adapter to a customer-run service on a loopback or private address, set in the gateway's own config. No third-party API adapter and no in-process model. | Next | Business | M27 | new |
+| F941 | Inference wording | Content alerts have basis INFERRED. Results read "no known flags", never "clean"; hook, SDK, AuthZEN and local faces and delegated outcomes show as not inspected. | Next | Business | M27 | F801 |
+| F942 | Response playbook library | Six Hub playbooks: leaked key, poisoned MCP server, rogue sub-agent, compromised laptop, data-flow hold escalation, offboarded owner. Install makes a draft. All six run on Team. | Next | Team | M27 | new |
+| F943 | No library playbook contains | Each playbook opens a case for a person, who suspends, revokes or rotates. Every automation, library or custom, contains only on CONFIRMED alerts. | Next | Team | M27 | F800 |
+| F944 | SIEM content packs | Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma, with the same eight single-event rules on OCSF 1.9 export. Sentinel and Wazuh need a batch-splitting forwarder, not built yet. | Next | Business | M27 | new |
+| F945 | Golden OCSF samples | Byte for byte the mapper's output. Each rule, read from the vendor's own file, fires on exactly its listed samples. No vendor engine ran; each README says so. | Next | Business | M27 | F801 |
+| F946 | Investigator role | A service-account role with eight read permissions. The server admits it only on WhatHappened, GetRunTimeline, Search and GetGraph; elsewhere it does not count. | Next | Team | M27 | new |
+| F947 | `pclaw mcp self` | A stdio MCP server with four read tools: `search`, `explain_decision`, `run_timeline`, `breach_radius`. Bounded inputs, agent-safe refusals, no model. | Next | Team | M27 | new |
+| F948 | Server-side read audit | The server records `audit.self_mcp.read` for each read and gate refusal by the Investigator role, before the first response byte, so a client can't skip it. | Next | Team | M27 | new |
+| F949 | Untrusted record labels | Every record a tool returns sits under `UNTRUSTED_RECORD_DATA`, cleaned, cut to 2000 runes and JSON-escaped. Record text is data, never an instruction. | Next | Team | M27 | new |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
@@ -846,7 +868,7 @@ These boundaries constrain every pillar above. A feature request that conflicts 
 | --- | --- | --- | --- |
 | F786 | Connected boundary only | Governs only connected, supported enforcement points, and discloses uncontrolled tools, credentials, routes and exclusions. | F786 |
 | F787 | Not an identity provider or log warehouse | Uses existing human identity sources. Stores attributable actions and their consequences, not unrestricted log collection. | F787, F788 |
-| F789 | No prompt-safety guarantee, no surveillance | Makes no claim that instructions, plans or model outputs are safe. Never requires raw conversations or hidden reasoning for core protection. | F789, F792 |
+| F789 | No prompt-safety guarantee, no surveillance | Makes no claim that instructions, plans or model outputs are safe. Never requires raw conversations or hidden reasoning for core protection. Opt-in, restrict-only content signals (F936, ADR-0050) add no safety claim. | F789, F792 |
 | F790 | Not an agent builder | Customers bring their own agents. Governed automations coordinate them; they are not an unrestricted builder or orchestration platform. | F790 |
 | F791 | No universal rollback | Completed transfers, deletions and disclosures may be irreversible. Compensation is a new, separately authorized action. | F791 |
 | F793 | No self-widening authority | Suggestions and automations cannot widen their own response authority. Production permission changes go through governed publication, and a denial never leads to more privilege. | F793, F794, F795 |
