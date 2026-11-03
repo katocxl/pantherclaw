@@ -26,7 +26,7 @@ PantherClaw posts each batch as one JSON body: `{"type":"pantherclaw.ocsf.batch"
 - It moves every top-level OCSF field to the root and removes the envelope and Logstash's own request fields.
 - It indexes each event into `logs-pantherclaw.ocsf-default`, where the template's pipeline sets `@timestamp`. Set your `hosts` and credentials in the output.
 
-**The webhook signature is not verified.** Logstash doesn't read the Standard Webhooks headers, so anyone who can reach the input can write events that the rules will trust. A verifying forwarder that ships with PantherClaw is a later piece. Until then, keep the input reachable only from PantherClaw, for example behind a proxy you run that checks the source.
+**The webhook signature is not verified.** Logstash doesn't read the Standard Webhooks headers, so anyone who can reach the input can write events that the rules will trust. `pclaw siem forward` verifies it, but it writes the events to a file ([runbook](../../../docs/runbooks/siem-forwarder.md)), which this pack's Logstash pipeline doesn't read. Without it, keep the input reachable only from PantherClaw, for example behind a proxy you run that checks the source.
 
 ## What was not checked
 
