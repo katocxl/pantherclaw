@@ -185,12 +185,18 @@ func (e *Evaluation) Would() (string, bool) {
 	if would, _, ok := e.WouldUnknown(); ok {
 		return would, true
 	}
-	if !e.MonitorPermit() || !slices.ContainsFunc(e.Checklist, func(it Item) bool { return it.Code == ReasonDataFlowHold }) {
+	reason := ""
+	for _, code := range []string{ReasonDataFlowHold, ReasonContentFlagHold} { // G0 M27 D507
+		if reason == "" && slices.ContainsFunc(e.Checklist, func(it Item) bool { return it.Code == code }) {
+			reason = code
+		}
+	}
+	if !e.MonitorPermit() || reason == "" {
 		return "", false
 	}
 	would := "HOLD"
 	if e.Decision == adomain.Deny || e.Decision == adomain.CannotAuthorize {
 		would = string(e.Decision)
 	}
-	return would + ": " + ReasonDataFlowHold, true
+	return would + ": " + reason, true
 }

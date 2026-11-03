@@ -68,6 +68,9 @@ func (s *revokeGrant) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepCont
 	if reason != "" {
 		return failed(reason)
 	}
+	if sc.Execution.Trigger.Inferred && in.Scope != autodomain.RevokeExecution {
+		return autodomain.InferredSkip(), nil
+	}
 	revoked, err := s.d.Grants.RevokeForAutomation(ctx, tx, in)
 	if err != nil {
 		if r, ok := refusal(err); ok {
@@ -100,6 +103,9 @@ func (s *revokeGrant) Preview(_ context.Context, _ pgx.Tx, sc autodomain.StepCon
 			State: autodomain.StepFailed, Reason: reason,
 			Output: map[string]string{"shadow": "true", "decision": "REFUSED"},
 		}, nil
+	}
+	if sc.Execution.Trigger.Inferred && in.Scope != autodomain.RevokeExecution {
+		return autodomain.InferredSkip(), nil
 	}
 	return shadowed(map[string]string{"shadow": "true", "scope": in.Scope})
 }

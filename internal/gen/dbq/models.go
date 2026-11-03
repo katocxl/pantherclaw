@@ -811,6 +811,46 @@ type PcAutomationVersion struct {
 	ChangeRequestID *ids.UUID
 }
 
+type PcBehaviorCursor struct {
+	OrgID     ids.OrgID
+	Origin    string
+	ScannedTo time.Time
+	ScannedID ids.UUID
+	StartedAt time.Time
+}
+
+type PcBehaviorProfile struct {
+	OrgID       ids.OrgID
+	AgentID     ids.UUID
+	Origin      string
+	State       string
+	WindowStart time.Time
+	WindowEnd   time.Time
+	Actions     int64
+	ActiveDays  int32
+	Method      string
+	Truncated   bool
+	Body        []byte
+	ComputedAt  time.Time
+}
+
+type PcBehaviorSimulatedAction struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	AgentID          ids.UUID
+	RunRef           ids.UUID
+	Operation        string
+	ConnectionID     *ids.UUID
+	DestinationClass string
+	Amount           *money.Decimal
+	Currency         *string
+	OccurredAt       time.Time
+	Generator        string
+	Seed             int64
+	Simulated        bool
+	CreatedAt        time.Time
+}
+
 type PcBillingLink struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -1350,6 +1390,21 @@ type PcContainmentControl struct {
 	LiftedAt      *time.Time
 	LiftedBy      *string
 	RestorationID *ids.UUID
+}
+
+type PcContentSignalSetting struct {
+	OrgID     ids.OrgID
+	Mode      string
+	UpdatedBy *string
+	UpdatedAt time.Time
+}
+
+type PcContentSignalWouldHold struct {
+	OrgID   ids.OrgID
+	Reason  string
+	Count   int64
+	FirstAt time.Time
+	LastAt  time.Time
 }
 
 type PcCounter struct {

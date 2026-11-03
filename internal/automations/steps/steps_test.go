@@ -65,6 +65,19 @@ func TestHR279_StepsActOnlyWithinTheDeclaredPlatformScope(t *testing.T) {
 	if err != nil || res.State != autodomain.StepFailed || res.Reason != ReasonOutsideScope {
 		t.Fatalf("revoke outside its scope: %+v %v", res, err)
 	}
+	// An inferred signal revokes nothing but the execution's own (HR-640).
+	// Covers: F933
+	def.Authority.Platform[0].Scopes = []string{autodomain.ScopeCeilingAgents, autodomain.ScopeExecution}
+	sc.Execution.Trigger.Inferred = true
+	for _, step := range []func(context.Context, pgx.Tx, autodomain.StepContext) (autodomain.StepResult, error){
+		reg[autodomain.KindRevokeGrant].Run, reg[autodomain.KindRevokeGrant].Preview,
+	} {
+		res, err = step(context.Background(), nil, sc)
+		if err != nil || res.State != autodomain.StepSkipped || res.Reason != autodomain.ReasonInferredSignal {
+			t.Fatalf("revoke on an inference: %+v %v", res, err)
+		}
+	}
+	sc.Execution.Trigger.Inferred = false
 	sc.With = &autodomain.NotifyWith{To: []string{autodomain.ScopeConfirmers}, Message: autodomain.NotifyMessage{Title: "x"}}
 	sc.Spec.Step = autodomain.KindNotify
 	res, err = reg[autodomain.KindNotify].Run(context.Background(), nil, sc)

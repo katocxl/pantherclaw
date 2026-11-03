@@ -59,8 +59,10 @@ type Service struct {
 	runs      Runs
 	// captures keeps payload captures (captures.go); nil drops them.
 	// observations records tool observations (observations.go).
-	captures     CaptureRecorder
-	observations ToolObservations
+	captures CaptureRecorder
+	// contentOutbound records an outbound payload's content flags (G0 M27 D507).
+	contentOutbound func(ctx context.Context, org ids.OrgID, txn ids.UUID, found []pipeline.PayloadFinding)
+	observations    ToolObservations
 	// held is the operator's maintenance hold (hold.go): no decision.
 	held bool
 	// consoleURL is the console base URL for recovery links (explain.go).
@@ -118,14 +120,33 @@ type Result struct {
 // Every decision is counted by its outcome (pc_decisions_total, G0 M13
 // D30).
 func (s *Service) Authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, findings ...pipeline.PayloadFinding) (Result, error) {
-	res, err := s.authorize(ctx, gw, raw, creds, findings...)
+	return s.authorizeContent(ctx, gw, raw, creds, nil, "", findings...)
+}
+
+// authorizeContent is Authorize with the outbound payload's content flags (G0
+// M27 D507).
+func (s *Service) authorizeContent(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, content []pipeline.PayloadFinding, scan string,
+	findings ...pipeline.PayloadFinding,
+) (Result, error) {
+	res, err := s.authorize(ctx, gw, raw, creds, content, scan, findings...)
 	if err == nil {
 		telemetry.Decision(ctx, string(res.Decision))
+		if s.contentOutbound != nil && !res.Repeat && !res.TransactionID.IsZero() {
+			s.contentOutbound(ctx, gw.Org, res.TransactionID, content) // counts and alerts, after the decision
+		}
 	}
 	return res, err
 }
 
-func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, findings ...pipeline.PayloadFinding) (Result, error) {
+// WithContentOutbound sets what records an outbound payload's content flags
+// after its decision (G0 M27 D507); nil records nothing.
+func (s *Service) WithContentOutbound(fn func(ctx context.Context, org ids.OrgID, txn ids.UUID, found []pipeline.PayloadFinding)) {
+	s.contentOutbound = fn
+}
+
+func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, content []pipeline.PayloadFinding, scan string,
+	findings ...pipeline.PayloadFinding,
+) (Result, error) {
 	if s.held {
 		return Result{}, ErrMaintenanceHold
 	}
@@ -157,7 +178,7 @@ func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *
 		return Result{}, errors.New("authority: the decision pipeline is not configured")
 	}
 	res, err := s.decider.Authorize(ctx, gw.final(), pipeline.Request{
-		Org: gw.Org, Action: p, PayloadFindings: findings,
+		Org: gw.Org, Action: p, PayloadFindings: findings, ContentFindings: content, ContentScan: scan,
 		Identity: pipeline.Identity{InstanceID: id.Instance.Instance, AgentID: id.Instance.Agent, AttestationLevel: id.Level, JKT: id.JKT, Proof: id.Proof},
 	})
 	if err != nil {

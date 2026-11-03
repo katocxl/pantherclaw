@@ -309,6 +309,9 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	if d.Broker != nil {
 		o.Broker = d.Broker
 	}
+	if o.Content, err = contentScanner(cfg, log); err != nil {
+		return nil, err
+	}
 	var g *Gateway
 	// A call's own check reports drift at once, as the loop's does. Calls
 	// start only once g is set.

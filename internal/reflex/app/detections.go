@@ -182,6 +182,14 @@ func (s *Detections) GetStatus(ctx context.Context) (Status, error) {
 	return out, err
 }
 
+// CheckCustomRule runs content through the compile CreateCustomRule,
+// TestCustomRule and PublishCustomRule use, without storing anything: the
+// Hub seed checks every detection_rule item with it (D548).
+func (s *Detections) CheckCustomRule(content string) error {
+	_, err := s.compile(content)
+	return err
+}
+
 // compile parses, validates and compiles custom rule content.
 func (s *Detections) compile(content string) (*engine.Compiled, error) {
 	if s.Env == nil {
@@ -194,6 +202,12 @@ func (s *Detections) compile(content string) (*engine.Compiled, error) {
 	}
 	if r.Builtin() {
 		return nil, invalidRule("a custom rule id starts with org.")
+	}
+	if r.Basis.Confirmed() {
+		// M10's alert-only rule, made exact in M27 (D526 P6): a custom rule's
+		// alerts are inference, so no automation contains on them. A person
+		// still can.
+		return nil, invalidRule("a custom rule's basis is at most INFERRED: its alerts never drive automated containment, a person contains")
 	}
 	c, err := engine.Compile(s.Env, r, hex.EncodeToString(sum[:]), "")
 	if err != nil {

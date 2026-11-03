@@ -234,7 +234,7 @@ func (h *Hooks) group(ctx context.Context, tx db.TenantTx, q *dbq.Queries, s ref
 	}); err != nil {
 		return ids.UUID{}, false, err
 	}
-	if err := IncidentEntry(ctx, tx, inc, s.Subjects); err != nil {
+	if err := incidentEntry(ctx, tx, inc, s.Subjects, s.Basis); err != nil {
 		return ids.UUID{}, false, err
 	}
 	return inc.ID, true, attach(ctx, q, org, inc.ID, r.Alert, string(s.Severity), "system", "reflex")
@@ -271,16 +271,14 @@ func attach(ctx context.Context, q *dbq.Queries, org ids.OrgID, incident, alert 
 // IncidentEntry writes the reflex.incident ledger entry of an incident
 // change (D6): ids, state, severity and subjects only.
 func IncidentEntry(ctx context.Context, tx db.TenantTx, inc dbq.PcIncident, subjects []reflexdomain.Subject) error {
-	if subjects == nil {
-		subjects = []reflexdomain.Subject{}
-	}
-	if len(subjects) > 16 {
-		subjects = subjects[:16]
-	}
-	body, err := canonical(map[string]any{
-		"id": inc.ID.String(), "state": inc.State, "severity": inc.Severity, "attention": string(reflexdomain.AttentionIncident),
-		"subjects": subjects, "group": inc.GroupKey,
-	})
+	return incidentEntry(ctx, tx, inc, subjects, "")
+}
+
+// incidentEntry also names the basis of the signal that opened the incident
+// (G0 M27 D500): an incident opened by an inference is still an inference
+// to an automation. A person's change carries none.
+func incidentEntry(ctx context.Context, tx db.TenantTx, inc dbq.PcIncident, subjects []reflexdomain.Subject, basis reflexdomain.Basis) error {
+	body, err := IncidentEntryBody(inc, subjects, basis)
 	if err != nil {
 		return err
 	}
@@ -288,4 +286,24 @@ func IncidentEntry(ctx context.Context, tx db.TenantTx, inc dbq.PcIncident, subj
 		return fmt.Errorf("reflex: incident entry: %w", err)
 	}
 	return nil
+}
+
+// IncidentEntryBody is the body of an incident's reflex.incident ledger
+// entry, as incidentEntry writes it; at most 16 subjects, and the basis only
+// when one is set.
+func IncidentEntryBody(inc dbq.PcIncident, subjects []reflexdomain.Subject, basis reflexdomain.Basis) ([]byte, error) {
+	if subjects == nil {
+		subjects = []reflexdomain.Subject{}
+	}
+	if len(subjects) > 16 {
+		subjects = subjects[:16]
+	}
+	fields := map[string]any{
+		"id": inc.ID.String(), "state": inc.State, "severity": inc.Severity, "attention": string(reflexdomain.AttentionIncident),
+		"subjects": subjects, "group": inc.GroupKey,
+	}
+	if basis != "" {
+		fields["basis"] = string(basis)
+	}
+	return canonical(fields)
 }

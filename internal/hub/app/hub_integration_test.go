@@ -92,7 +92,7 @@ title: Kill switch watch
 description: Tells the team when the kill switch is engaged.
 severity: HIGH
 attention: INCIDENT
-basis: OBSERVED
+basis: INFERRED
 edition: business
 on: [audit.security.kill_switch_engaged]
 tests:

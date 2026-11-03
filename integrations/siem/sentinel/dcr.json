@@ -1,0 +1,50 @@
+{
+  "location": "<region>",
+  "kind": "Direct",
+  "properties": {
+    "description": "PantherClaw OCSF events, one per record, into PantherClawOCSF_CL. A record is one entry of an export batch's data.events: no transformation splits a batch.",
+    "streamDeclarations": {
+      "Custom-PantherClawOCSF": {
+        "columns": [
+          {"name": "class_uid", "type": "int"},
+          {"name": "class_name", "type": "string"},
+          {"name": "category_uid", "type": "int"},
+          {"name": "category_name", "type": "string"},
+          {"name": "activity_id", "type": "int"},
+          {"name": "activity_name", "type": "string"},
+          {"name": "type_uid", "type": "long"},
+          {"name": "time", "type": "long"},
+          {"name": "severity_id", "type": "int"},
+          {"name": "severity", "type": "string"},
+          {"name": "status_id", "type": "int"},
+          {"name": "status", "type": "string"},
+          {"name": "status_detail", "type": "string"},
+          {"name": "message", "type": "string"},
+          {"name": "metadata", "type": "dynamic"},
+          {"name": "actor", "type": "dynamic"},
+          {"name": "api", "type": "dynamic"},
+          {"name": "src_endpoint", "type": "dynamic"},
+          {"name": "authorizations", "type": "dynamic"},
+          {"name": "user", "type": "dynamic"},
+          {"name": "finding_info", "type": "dynamic"},
+          {"name": "finding_info_list", "type": "dynamic"},
+          {"name": "resources", "type": "dynamic"},
+          {"name": "unmapped", "type": "dynamic"}
+        ]
+      }
+    },
+    "destinations": {
+      "logAnalytics": [
+        {"name": "workspace", "workspaceResourceId": "<workspace resource id>"}
+      ]
+    },
+    "dataFlows": [
+      {
+        "streams": ["Custom-PantherClawOCSF"],
+        "destinations": ["workspace"],
+        "outputStream": "Custom-PantherClawOCSF_CL",
+        "transformKql": "source\n| extend TimeGenerated = datetime(1970-01-01) + tolong(time) * 1ms\n| project TimeGenerated, Ocsf = pack(\"class_uid\", class_uid, \"class_name\", class_name, \"category_uid\", category_uid, \"category_name\", category_name, \"activity_id\", activity_id, \"activity_name\", activity_name, \"type_uid\", type_uid, \"time\", time, \"severity_id\", severity_id, \"severity\", severity, \"status_id\", status_id, \"status\", status, \"status_detail\", status_detail, \"message\", message, \"metadata\", metadata, \"actor\", actor, \"api\", api, \"src_endpoint\", src_endpoint, \"authorizations\", authorizations, \"user\", user, \"finding_info\", finding_info, \"finding_info_list\", finding_info_list, \"resources\", resources, \"unmapped\", unmapped)"
+      }
+    ]
+  }
+}

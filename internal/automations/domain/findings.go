@@ -52,6 +52,10 @@ const (
 	CodePrefixIrreversible       = "CEILING_PREFIX_IRREVERSIBLE"
 	CodeLimitInvalid             = "LIMIT_INVALID"
 	CodeInputNotJSON             = "INPUT_NOT_JSON"
+	CodeContainOnInferred        = "CONTAIN_ON_INFERRED"
+	// CodeContainNeedsConfirmedAlert warns of a contain step under a trigger
+	// that is never one CONFIRMED alert: the step will always skip (D514).
+	CodeContainNeedsConfirmedAlert = "CONTAIN_NEEDS_CONFIRMED_ALERT"
 	// Graph findings of a v2 definition (D301, D307).
 	CodeUnreachableNode            = "UNREACHABLE_NODE"
 	CodePathNotTerminated          = "PATH_NOT_TERMINATED"

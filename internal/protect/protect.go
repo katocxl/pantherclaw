@@ -102,6 +102,10 @@ const (
 	// M24 D223, HR-586): always held for a second person, whatever the
 	// TOOL_MEANING mode (AlwaysProtected).
 	SurfaceCatalogMode Surface = "mcp.catalog.mode"
+	// SurfaceContentSignalMode takes content signals out of ACTIVE (G0 M27
+	// D512, HR-652): always held for a second person, whatever the
+	// TOOL_MEANING mode (AlwaysProtected).
+	SurfaceContentSignalMode Surface = "content.signals.mode"
 	// The IdP-native access surfaces (G0 M26 D400-D402, D408; HR-623):
 	// always held for a second person, whatever the CUSTODY mode
 	// (AlwaysProtected). Each only adds or turns something on; taking it
@@ -151,6 +155,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermConnectionManage
 	case SurfaceCatalogMode:
 		return td.PermCatalogManage
+	case SurfaceContentSignalMode:
+		return td.PermContentManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}
@@ -164,7 +170,7 @@ func (s Surface) Permission() td.Permission {
 func (s Surface) AlwaysProtected() bool {
 	return s == SurfaceConsequenceRule ||
 		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly ||
-		s == SurfaceCatalogMode ||
+		s == SurfaceCatalogMode || s == SurfaceContentSignalMode ||
 		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient ||
 		s == SurfaceSCIMTokenActivate || s == SurfaceSAMLConnectionPut || s == SurfaceSAMLDisable ||
 		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove

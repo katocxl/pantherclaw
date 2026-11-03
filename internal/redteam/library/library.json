@@ -572,5 +572,29 @@
   "RT-154": {
     "digest": "33e6d7978aadc61232efb643bd8e667cbbc0226926d6110d4849ac1ce75659cf",
     "tier": "business"
+  },
+  "RT-158": {
+    "digest": "595c103ef147e31a365a82d5bf0473db07a419062167a97fb69d8ea6f91a0df9",
+    "tier": "business"
+  },
+  "RT-159": {
+    "digest": "3409d0a1738be0b6ed0746682b7e0f8ac812f4bfbe014b48cbd28dddb4b2f125",
+    "tier": "business"
+  },
+  "RT-160": {
+    "digest": "2e7312983019a74e8df004e3e3f37eb114163e51bdbb67dbe3d7cf42532f371f",
+    "tier": "business"
+  },
+  "RT-161": {
+    "digest": "fab8930014279e3dd0c27479c7f7205c9cce30854091f4be0e71ea5fde60cf77",
+    "tier": "business"
+  },
+  "RT-163": {
+    "digest": "8e31542a3ab9d5051abd26a12d380dca343b32ccaf57f0f173464243581a4586",
+    "tier": "business"
+  },
+  "RT-164": {
+    "digest": "67d92aaa712b4ca427424223e2ef2edb3cceaa6e0eec3d8bf22ada2f35210c24",
+    "tier": "business"
   }
 }

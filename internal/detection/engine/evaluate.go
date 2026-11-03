@@ -225,6 +225,11 @@ func Signal(c *Compiled, e feed.Event, f Firing) reflexdomain.Signal {
 		GroupKey: GroupKey(r.Group, e), ATLAS: r.ATLAS, OWASP: r.OWASP, OccurredAt: e.OccurredAt, Test: e.Test,
 		Facts: map[string]string{"event_kind": truncate(e.Kind, 512), "count": strconv.Itoa(f.Count)},
 	}
+	if !r.Builtin() && s.Basis.Confirmed() {
+		// A custom rule raises inference at most (D526 P6), whatever an older
+		// publication declared: no automation contains on it.
+		s.Basis = reflexdomain.BasisInferred
+	}
 	if e.Operation != "" {
 		s.Facts["operation"] = truncate(e.Operation, 512)
 	}

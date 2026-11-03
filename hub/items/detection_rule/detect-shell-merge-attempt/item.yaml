@@ -15,7 +15,7 @@ body:
       quieter route to the same effect as the governed merge.
     severity: MEDIUM
     attention: ALERT
-    basis: OBSERVED
+    basis: INFERRED
     owasp: [ASI02]
     edition: business
     on: [receipt.decision]

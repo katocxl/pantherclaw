@@ -30,6 +30,7 @@ their own agents and target systems:
   integrations/vercel-ai/  Vercel AI SDK integration (TypeScript)
   integrations/github-action/ GitHub Action for offline policy checks
   integrations/gitlab/     GitLab CI component for offline policy checks
+  integrations/siem/       SIEM content packs (data, no code)
   docs/protocol/           PantherClaw Authority Protocol (PAP/1) specification
   hub/                     PantherClaw Hub content (data, no code)
 

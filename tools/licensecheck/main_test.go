@@ -202,7 +202,7 @@ func TestRepositoryNoticeIsChecked(t *testing.T) {
 	dirs := ListedDirs(notice)
 	for _, want := range []string{
 		"hub/", "integrations/crewai/", "integrations/langchain/", "integrations/mcp/", "integrations/openai-agents/", "integrations/vercel-ai/",
-		"integrations/github-action/", "integrations/gitlab/",
+		"integrations/github-action/", "integrations/gitlab/", "integrations/siem/",
 	} {
 		if !slices.Contains(dirs, want) {
 			t.Errorf("NOTICE does not list %s: %v", want, dirs)

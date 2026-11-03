@@ -10,9 +10,11 @@ import (
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 )
 
@@ -187,8 +189,19 @@ func (s *Service) networkChanged(ctx context.Context, q *dbq.Queries, tx db.Tena
 	}); err != nil {
 		return err
 	}
-	return recordAs(ctx, tx, evdomainSystem(), "security.instance_network_changed", "instance", r.ID,
-		map[string]string{"agent_id": a.ID.String(), "from_network": from, "to_network": to})
+	_, err := audit.Record(ctx, tx, NetworkChangedEvent(r.ID, a.ID, from, to))
+	return err
+}
+
+// NetworkChangedEvent is the security.instance_network_changed audit event
+// (HR-092): the agent's instance key was presented from a network it had
+// not used before.
+func NetworkChangedEvent(instance, agent ids.UUID, from, to string) audit.Event {
+	return audit.Event{
+		Name: "security.instance_network_changed", Actor: evdomainSystem(), Outcome: audit.Success,
+		Object:  &audit.Object{Type: "instance", ID: instance.String()},
+		Details: map[string]string{"agent_id": agent.String(), "from_network": from, "to_network": to},
+	}
 }
 
 func deref(s *string) string {

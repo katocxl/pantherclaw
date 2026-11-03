@@ -7,6 +7,7 @@ package app_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"strings"
 	"testing"
@@ -14,10 +15,12 @@ import (
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/detection/engine"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
 	reflexapp "github.com/katocxl/pantherclaw/internal/reflex/app"
@@ -351,7 +354,7 @@ title: Kill switch watch
 description: Tells the team when the kill switch is engaged.
 severity: HIGH
 attention: INCIDENT
-basis: OBSERVED
+basis: INFERRED
 edition: business
 on: [audit.security.kill_switch_engaged]
 tests:
@@ -382,6 +385,28 @@ func TestHR241_CustomRulesPublishOnlyWithPassingTests(t *testing.T) {
 	}
 	if _, err := det.CreateCustomRule(ctx, strings.Replace(customRule, "attention: INCIDENT", "attention: PAGE", 1)); err == nil {
 		t.Error("a PAGE custom rule was accepted")
+	}
+	// A custom rule is capped at INFERRED (D526 P6): a confirmed basis is
+	// refused when a rule is created, and when an older draft is published.
+	for _, basis := range []string{"OBSERVED", "RULE_MATCH"} {
+		confirmed := strings.Replace(customRule, "basis: INFERRED", "basis: "+basis, 1)
+		if _, err := det.CreateCustomRule(ctx, confirmed); pcerr.CodeOf(err) != pcerr.InvalidArgument {
+			t.Errorf("a %s custom rule was created: %v", basis, err)
+		}
+		ruleID := "org.kill_watch_" + strings.ToLower(basis)
+		content := strings.Replace(confirmed, "id: org.kill_watch", "id: "+ruleID, 1)
+		old, sum := ids.NewV7(), sha256.Sum256([]byte(content))
+		if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := dbq.New(tx).InsertCustomRule(ctx, dbq.InsertCustomRuleParams{
+				OrgID: f.org, ID: old, RuleID: ruleID, Content: content, ContentDigest: sum[:], CreatedBy: f.alice,
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := det.PublishCustomRule(ctx, old); pcerr.CodeOf(err) != pcerr.InvalidArgument {
+			t.Errorf("an older %s draft was published: %v", basis, err)
+		}
 	}
 	quiet := strings.Replace(customRule, "    fires: true", "    fires: false", 1)
 	r, err := det.CreateCustomRule(ctx, quiet)

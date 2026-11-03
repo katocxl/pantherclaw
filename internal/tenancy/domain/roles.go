@@ -46,6 +46,8 @@ const (
 	RoleScopeAdmin RoleName = "scope_admin"
 	// G0 M24 device scans (D236, HR-589).
 	RoleScanner RoleName = "scanner"
+	// G0 M27 PantherClaw's own MCP server (D510, HR-655).
+	RoleInvestigator RoleName = "investigator"
 )
 
 // Role is a named set of permissions and the scope types it may be bound at.
@@ -118,8 +120,9 @@ var roles = []Role{
 			PermPolicyExceptionRequest,
 			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun, PermPolicySimulate, PermAutomationRead,
 			PermEnforcementPointManage, PermA2APeerRunRead, PermIdentityProviderRead, PermIdentityProviderManage,
-			PermCatalogRead, PermComplianceRead,
+			PermCatalogRead, PermContentRead, PermComplianceRead,
 			PermHubRead, PermHubInstall,
+			PermBehaviorRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
@@ -136,16 +139,18 @@ var roles = []Role{
 			PermExternalCheckManage,
 			PermConsequenceRuleManage,
 			PermIdentityProviderRead,
-			PermCatalogRead, PermCatalogManage, PermComplianceRead,
+			PermCatalogRead, PermCatalogManage, PermContentRead, PermContentManage, PermComplianceRead,
 			PermHubRead, PermHubInstall,
+			PermBehaviorRead,
 		}),
 	},
 	{
 		Name: RoleAgentOwner, Title: "Agent Owner", Scopes: anyScope,
-		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them; reads and reassesses their coverage, and runs them in the containment sandbox.",
+		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them; reads and reassesses their coverage and their behavior profiles, and runs them in the containment sandbox.",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermAgentManage, PermRunRead, PermRunStart, PermRunManage, PermWaitlistRead, PermAgentEnroll,
 			PermGrantRevoke, PermApprovalRead, PermEvidenceRead, PermCoverageRead, PermCoverageReassess, PermSandboxRun, PermRedteamRun, PermRedteamRead,
+			PermBehaviorRead,
 		}, authorityReads),
 	},
 	{
@@ -163,25 +168,25 @@ var roles = []Role{
 	},
 	{
 		Name: RoleApprover, Title: "Approver", Scopes: anyScope,
-		Description: "Approves held actions in scope with a security key, or declines them (human only); sees the approval requests and waitlist entries routed to them.",
-		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
+		Description: "Approves held actions in scope with a security key, or declines them (human only); sees the approval requests and waitlist entries routed to them, with the agent's behavior context beside each request.",
+		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve, PermBehaviorRead}),
 	},
 	{
 		Name: RoleResponder, Title: "Responder", Scopes: anyScope,
-		Description: "Investigates and contains incidents in scope, manages incidents, cases and posture findings, and restores suspended agents with a security key (human only).",
+		Description: "Investigates and contains incidents in scope, manages incidents, cases and posture findings, reads agents' behavior profiles, and restores suspended agents with a security key (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage, PermGrantRead, PermGrantRevoke,
 			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
-		}, reflexReads, []Permission{PermIncidentManage, PermCaseManage, PermPostureManage, PermAutomationRead}),
+		}, reflexReads, []Permission{PermIncidentManage, PermCaseManage, PermPostureManage, PermAutomationRead, PermBehaviorRead}),
 	},
 	{
 		Name: RoleAuditor, Title: "Auditor", Scopes: orgScope,
-		Description: "Reads configuration, audit and evidence, restricted evidence included, compliance coverage, the runs peer agents made for requesters, the org's identity providers, the MCP server catalog and its PantherClaw Hub installs, and exports evidence packs (human only); changes nothing.",
+		Description: "Reads configuration, audit and evidence, restricted evidence included, compliance coverage, the runs peer agents made for requesters, the org's identity providers, the MCP server catalog and its PantherClaw Hub installs, agents' behavior profiles, and exports evidence packs (human only); changes nothing.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
 			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead, PermAutomationRead,
-			PermA2APeerRunRead, PermIdentityProviderRead, PermCatalogRead, PermHubRead, PermComplianceRead,
+			PermA2APeerRunRead, PermIdentityProviderRead, PermCatalogRead, PermContentRead, PermHubRead, PermBehaviorRead, PermComplianceRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
@@ -297,6 +302,14 @@ var roles = []Role{
 		Name: RoleScanner, Title: "Scanner", Scopes: anyScope, ServiceOnly: true,
 		Description: "For the service account of a device scan: submits scan findings for its scope and nothing else (HR-589). Beyond its own org, a key taken from a laptop reads nothing: not business units, teams or environments. Bound only to service accounts.",
 		Permissions: []Permission{PermOrgRead, PermAgentScanSubmit},
+	},
+	{
+		Name: RoleInvestigator, Title: "Investigator", Scopes: anyScope, ServiceOnly: true,
+		Description: "For the service account of a customer's SOC agent behind pclaw mcp self: reads what happened, a run's timeline, search results and breach radius in its scope, and nothing else (HR-655). Holds no write. The server admits this role on those four reads only, audits each one and ignores it on every other procedure, so its search.read and evidence.read never reach saved queries, model drafting or bundle export. Restricted evidence stays out. Bound only to service accounts.",
+		Permissions: []Permission{
+			PermOrgRead, PermSearchRead, PermEvidenceRead, PermExposureRead,
+			PermAgentRead, PermRunRead, PermGrantRead, PermIncidentRead,
+		},
 	},
 }
 

@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+rule pc_siem_006_kill_switch_engaged {
+  meta:
+    author = "PantherClaw"
+    description = "PantherClaw kill switch engaged"
+    severity = "Critical"
+    rule_id = "pc-siem-006"
+
+  events:
+    $e.metadata.vendor_name = "PantherClaw"
+    $e.metadata.product_event_type = "audit.security.kill_switch_engaged"
+    $e.additional.fields["ocsf_test"] != "true"
+
+  condition:
+    $e
+}

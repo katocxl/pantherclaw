@@ -316,13 +316,14 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 
-	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D()}
+	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: contentSink(pool)}
 	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, consoleBaseURL(cfg.Auth.PublicURL, ext), log)
 	if err != nil {
 		return err
 	}
 	// The operator's maintenance hold: no decision from any path (HR-379).
 	svc.WithMaintenanceHold(cfg.Maintenance.Hold)
+	svc.WithContentOutbound(authorityStore.ContentOutbound) // G0 M27 D507
 	if err := auditMaintenanceHold(ctx, pool, cfg.Maintenance.Hold, log); err != nil {
 		return err
 	}
@@ -626,6 +627,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerPostureQueueJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM27BehaviorJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerM11GovernJobs(evidenceJobs, jreg, pool, log); err != nil {
 			return err
 		}
@@ -862,6 +866,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		Logger:       log,
 		Public:       publicProcedures(),
 		Authenticate: holdAuthenticator(d.hold, heldOnAPI, d.auth),
+		Interceptors: selfMCPInterceptors(d),
 	})
 	if err != nil {
 		return nil, err
@@ -944,6 +949,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerSuggestions(rs, d)
 	registerRecommendations(rs, d)
 	registerPostureQueue(rs, d)
+	registerM27Behavior(rs, d)
 	registerCompliance(rs, d)
 	edges, err := registerM10Edges(rs, d)
 	if err != nil {
@@ -981,6 +987,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM18IdPs(rs, d)
 	registerM26IdAccess(rs, d)
 	registerM24Catalog(rs, d)
+	registerM27Content(rs, d)
 	d.extDeps = registerM26Provisioning(rs, d)
 	registerM26SaaS(rs, d)
 	authzen := registerAuthZEN(rs, d)

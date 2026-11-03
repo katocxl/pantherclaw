@@ -1,0 +1,63 @@
+name: pc.playbook.offboarded-owner
+version: 1.0.0
+kind: automation
+title: "Playbook: offboarded owner"
+summary: >-
+  When a person who owns agents leaves, start this by hand with the agent: it
+  asks you to name a new owner, drafts and simulates a restriction of unused
+  authority, and opens a case. Nothing is revoked or published. Runs on Team.
+body:
+  automation_name: hub-playbook-offboarded-owner
+  purpose: Find a new owner for an agent whose owner left, and propose a restriction of the authority nobody uses.
+  work_kind: SECURITY_WORK
+  definition: |
+    apiVersion: automations.pantherclaw.dev/v1
+    kind: Automation
+    purpose: "Find a new owner for an agent whose owner left, and propose a restriction of the authority nobody uses."
+    work_kind: SECURITY_WORK
+    when:
+      manual:
+        params:
+          agent: {type: uuid}
+    authority:
+      principal: self
+      platform:
+        - step: assign_owner
+          scopes: [OWNER]
+        - step: draft_restriction
+          scopes: [ORG]
+        - step: simulate_restriction
+          scopes: [ORG]
+        - step: open_case
+          scopes: [TRIGGER_SUBJECTS]
+    do:
+      - id: assign
+        step: assign_owner
+        with:
+          to: OWNER
+          summary: "The owner of agent {{params.agent}} left the organization."
+          next_step: Name a new owner for the agent, or retire it.
+          deadline: 3d
+      - id: draft
+        step: draft_restriction
+        with:
+          from: UNUSED_GRANTS
+          days: 30
+      - id: simulate
+        step: simulate_restriction
+        with:
+          step: draft
+          days: 14
+        timeout: 4h
+      - id: case
+        step: open_case
+        with:
+          title: "Agent {{params.agent}} lost its owner"
+          questions:
+            - Who owns the agent now?
+            - Should the drafted restriction be published?
+    finish_when:
+      - step: case
+        condition: CASE_OPENED
+    limits:
+      deadline: 1d

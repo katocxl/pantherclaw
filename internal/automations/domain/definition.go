@@ -436,6 +436,29 @@ func (l Limits) PerHourOrDefault() int {
 }
 
 // Step returns the step with id, or nil.
+// Contains reports a definition with a step that would contain: contain,
+// or revoke_grant beyond the execution's own grants, in any form (G0 M27
+// D500).
+func (d *Definition) Contains() bool {
+	if slices.ContainsFunc(d.Do, StepSpec.containing) {
+		return true
+	}
+	return d.IfFails != nil && slices.ContainsFunc(d.IfFails.Compensate, StepSpec.containing)
+}
+
+// containing reports a step that acts on a run or grant it didn't start.
+// A revoke_grant whose scope can't be read counts as one.
+func (s StepSpec) containing() bool {
+	switch s.Step {
+	case KindContain:
+		return true
+	case KindRevokeGrant:
+		var w RevokeGrantWith
+		return json.Unmarshal(s.With, &w) != nil || w.Scope != RevokeExecution
+	}
+	return false
+}
+
 func (d *Definition) Step(id string) *StepSpec {
 	for i := range d.Do {
 		if d.Do[i].ID == id {

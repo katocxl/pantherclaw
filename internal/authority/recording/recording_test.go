@@ -121,6 +121,25 @@ var scenarios = []replayable{
 		g := s.Grant(pipelinetest.RootBounds, s.Alice)
 		return refund(s, s.Run(g.ID, s.Alice), "ch_1", "10.00")
 	}, adomain.Deny, gdomain.ReasonOutsideGuardrail},
+	{"a content flag on the run", func(_ *testing.T, s *pipelinetest.Scenario, run ids.UUID) pipeline.Request {
+		s.W.SetContentSignals("ACTIVE", "injection_phrase")
+		req := refund(s, run, "ch_1", "10.00")
+		req.ContentScan = "SCANNED"
+		return req
+	}, adomain.RequireApproval, pipeline.ReasonContentFlagHold},
+	{"an outbound content flag", func(_ *testing.T, s *pipelinetest.Scenario, run ids.UUID) pipeline.Request {
+		s.W.SetContentSignals("ACTIVE")
+		req := refund(s, run, "ch_1", "10.00")
+		req.ContentFindings = []pipeline.PayloadFinding{{Kind: "scan_incomplete", Location: "over_bound"}}
+		req.ContentScan = "SCANNED"
+		return req
+	}, adomain.RequireApproval, pipeline.ReasonContentFlagHold},
+	{"a call the gateway did not mark scanned", func(_ *testing.T, s *pipelinetest.Scenario, run ids.UUID) pipeline.Request {
+		s.W.SetContentSignals("ACTIVE")
+		req := refund(s, run, "ch_1", "10.00")
+		req.ContentScan = "OFF"
+		return req
+	}, adomain.RequireApproval, pipeline.ReasonContentFlagHold},
 	{"an unknown run", func(_ *testing.T, s *pipelinetest.Scenario, _ ids.UUID) pipeline.Request {
 		return refund(s, ids.NewV7(), "ch_1", "10.00")
 	}, adomain.Deny, pipeline.ReasonRunMismatch},
