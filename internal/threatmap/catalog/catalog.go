@@ -16,6 +16,7 @@ import (
 	"encoding/hex"
 	"encoding/json/v2"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -96,9 +97,13 @@ var (
 	loadATTACK = sync.OnceValue(func() *Catalog { return mustParse(FrameworkATTACK) })
 )
 
-// Load returns a framework's embedded catalog, parsed once. It panics on
-// an unknown framework or a bad embed; a test proves both files load.
-func Load(f Framework) *Catalog {
+// Load returns a copy of a framework's embedded catalog, parsed once (G0 M28
+// D714c L5: no caller can change the shared one). It panics on an unknown
+// framework or a bad embed; a test proves both files load.
+func Load(f Framework) *Catalog { return shared(f).clone() }
+
+// shared returns the one parsed catalog; only this package reads it.
+func shared(f Framework) *Catalog {
 	switch f {
 	case FrameworkATLAS:
 		return loadATLAS()
@@ -129,6 +134,24 @@ func mustParse(f Framework) *Catalog {
 	return &c
 }
 
+// clone copies a technique's slices.
+func (t Technique) clone() Technique {
+	t.Tactics = slices.Clone(t.Tactics)
+	t.Platforms = slices.Clone(t.Platforms)
+	return t
+}
+
+// clone deep-copies the catalog; the private indexes are read-only and shared.
+func (c *Catalog) clone() *Catalog {
+	d := *c
+	d.Tactics = slices.Clone(c.Tactics)
+	d.Techniques = make([]Technique, len(c.Techniques))
+	for i, t := range c.Techniques {
+		d.Techniques[i] = t.clone()
+	}
+	return &d
+}
+
 // Digest is the hex SHA-256 of a framework's embedded catalog file.
 func Digest(f Framework) string {
 	sum := sha256.Sum256(raw(f))
@@ -142,7 +165,13 @@ func (c *Catalog) Technique(id string) (Technique, bool) {
 	if !ok {
 		return Technique{}, false
 	}
-	return c.Techniques[i], true
+	return c.Techniques[i].clone(), true
+}
+
+// has reports whether id is in the catalog without copying it.
+func (c *Catalog) has(id string) bool {
+	_, ok := c.byID[id]
+	return ok
 }
 
 // Tactic returns a tactic by its short name.
@@ -160,7 +189,7 @@ func (c *Catalog) Subtechniques(id string) []Technique {
 	var out []Technique
 	for _, t := range c.Techniques {
 		if t.Parent == id {
-			out = append(out, t)
+			out = append(out, t.clone())
 		}
 	}
 	return out
@@ -172,7 +201,7 @@ func (c *Catalog) Matrix() []Technique {
 	var out []Technique
 	for _, t := range c.Techniques {
 		if t.Parent == "" && !t.Deprecated && !t.Revoked {
-			out = append(out, t)
+			out = append(out, t.clone())
 		}
 	}
 	return out
@@ -189,14 +218,12 @@ func (c *Catalog) Active(id string) bool {
 // catalog. Deprecated and revoked ids count, so stored custom rules keep
 // parsing (D710).
 func KnownATTACK(id string) bool {
-	_, ok := Load(FrameworkATTACK).Technique(id)
-	return ok
+	return shared(FrameworkATTACK).has(id)
 }
 
 // KnownATLAS reports whether id is in the pinned ATLAS catalog.
 func KnownATLAS(id string) bool {
-	_, ok := Load(FrameworkATLAS).Technique(id)
-	return ok
+	return shared(FrameworkATLAS).has(id)
 }
 
 // FrameworkOf names the catalog an id belongs to by its form: "AML." is
@@ -217,6 +244,5 @@ func Known(id string) bool {
 	if !ok {
 		return false
 	}
-	_, ok = Load(f).Technique(id)
-	return ok
+	return shared(f).has(id)
 }
