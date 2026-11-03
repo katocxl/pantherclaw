@@ -16,6 +16,27 @@ import (
 	"github.com/katocxl/pantherclaw/migrations"
 )
 
+const noTransaction = "-- +goose NO TRANSACTION"
+
+// noTransactionStatements splits a NO TRANSACTION section into its
+// statements, comment lines dropped. Such sections hold plain statements
+// only, never a function body.
+func noTransactionStatements(sql string) []string {
+	var b strings.Builder
+	for line := range strings.Lines(sql) {
+		if !strings.HasPrefix(strings.TrimSpace(line), "--") {
+			b.WriteString(line)
+		}
+	}
+	var out []string
+	for s := range strings.SplitSeq(b.String(), ";") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // TestHR160_00081DownRemovesWhatOnlyItAllowsAndUpAppliesAgain (#297 review
 // follow-up): with the later migrations stepped back, 00081's Down section,
 // run as pc_migrator over rows only 00081 allows (a gateway fact provider
@@ -38,12 +59,24 @@ func TestHR160_00081DownRemovesWhatOnlyItAllowsAndUpAppliesAgain(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s has no Down section", name)
 		}
+		if strings.Contains(up, noTransaction) {
+			down = noTransaction + "\n" + down
+		}
 		return up, down
 	}
 	exec := func(what, sql string) {
 		t.Helper()
-		if _, err := m.Pgx().Exec(ctx, sql); err != nil {
-			t.Fatalf("%s: %v", what, err)
+		// Goose runs a NO TRANSACTION migration one statement at a time; one
+		// multi-statement Exec would put them in an implicit transaction,
+		// where CONCURRENTLY can't run (00303).
+		stmts := []string{sql}
+		if strings.Contains(sql, noTransaction) {
+			stmts = noTransactionStatements(sql)
+		}
+		for _, s := range stmts {
+			if _, err := m.Pgx().Exec(ctx, s); err != nil {
+				t.Fatalf("%s: %v", what, err)
+			}
 		}
 	}
 	exists := func(table string) bool {
