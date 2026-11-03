@@ -231,6 +231,9 @@ func reflexEntry(e *Event, body []byte) error {
 		Basis     string                 `json:"basis"`
 		State     string                 `json:"state"`
 		Subjects  []reflexdomain.Subject `json:"subjects"`
+		ATLAS     []string               `json:"atlas"`
+		ATTACK    []string               `json:"attack"`
+		OWASP     []string               `json:"owasp"`
 		Test      bool                   `json:"test"`
 	}
 	if err := json.Unmarshal(body, &b); err != nil {
@@ -242,8 +245,40 @@ func reflexEntry(e *Event, body []byte) error {
 		}
 	}
 	e.Outcome, e.Test = b.State, b.Test
-	e.Attrs = attrs("id", b.ID, "rule", b.Rule, "severity", b.Severity, "attention", b.Attention, "basis", b.Basis)
+	// The techniques and risks the entry carries reach the live stream and
+	// the SIEM export, comma-joined and sorted (G0 M28 D718, HR-684).
+	e.Attrs = attrs("id", b.ID, "rule", b.Rule, "severity", b.Severity, "attention", b.Attention, "basis", b.Basis,
+		"atlas", joinSorted(b.ATLAS), "attack", joinSorted(b.ATTACK), "owasp", joinSorted(b.OWASP))
 	return nil
+}
+
+// joinSorted joins a list's distinct, non-empty values in sorted order. It
+// keeps the leading values that fit in MaxAttrValue bytes, so a long list
+// (an incident's union holds up to 64 ids) is cut at a value boundary
+// rather than dropped by clamp.
+func joinSorted(vs []string) string {
+	out := make([]string, 0, len(vs))
+	for _, v := range vs {
+		if v = strings.TrimSpace(v); v != "" && !strings.Contains(v, ",") {
+			out = append(out, v)
+		}
+	}
+	slices.Sort(out)
+	var b strings.Builder
+	for _, v := range slices.Compact(out) {
+		n := len(v)
+		if b.Len() > 0 {
+			n++
+		}
+		if b.Len()+n > MaxAttrValue {
+			break
+		}
+		if b.Len() > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(v)
+	}
+	return b.String()
 }
 
 // objectTypes maps audit object types to subject types.

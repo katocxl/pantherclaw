@@ -69,6 +69,7 @@ func CaseProto(k domain.Case) *pantherclawv1.Case {
 		FollowUpOwnerId: str(k.FollowUpOwner), Disposition: string(k.Disposition), Impact: string(k.Impact),
 		HeadSeq: k.HeadSeq, HeadHash: hex.EncodeToString(k.HeadHash), CreateTime: timestamppb.New(k.Created),
 		UpdateTime: timestamppb.New(k.Updated), ContainTime: ts(k.OperationalClosed), CloseTime: ts(k.Closed),
+		Atlas: k.ATLAS, Attack: k.ATTACK,
 	}
 }
 

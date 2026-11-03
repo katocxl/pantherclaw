@@ -233,13 +233,17 @@ func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 		Basis       string                 `json:"basis"`
 		State       string                 `json:"state,omitzero"`
 		Subjects    []reflexdomain.Subject `json:"subjects"`
-		Evidence    []string               `json:"evidence,omitzero"`
-		Test        bool                   `json:"test,omitzero"`
+		// The rule's ATLAS techniques and OWASP risks travel to the feed and
+		// the SIEM export (G0 M28 D718, HR-684).
+		ATLAS    []string `json:"atlas,omitzero"`
+		OWASP    []string `json:"owasp,omitzero"`
+		Evidence []string `json:"evidence,omitzero"`
+		Test     bool     `json:"test,omitzero"`
 	}
 	b := body{
 		Source: s.Source, Rule: s.RuleID, RuleVersion: s.RuleVersion, RuleDigest: s.RuleDigest, PackVersion: s.PackVersion,
 		Severity: string(s.Severity), Attention: string(s.Attention), Basis: string(s.Basis), State: state,
-		Subjects: nonNil(s.Subjects), Test: s.Test,
+		Subjects: nonNil(s.Subjects), ATLAS: s.ATLAS, OWASP: s.OWASP, Test: s.Test,
 	}
 	if !id.IsZero() {
 		b.ID = id.String()
@@ -260,7 +264,8 @@ func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 		default:
 			out, _ := evdomain.CanonicalBody(body{
 				ID: b.ID, Source: b.Source, Rule: b.Rule, Severity: b.Severity,
-				Attention: b.Attention, Basis: b.Basis, State: b.State, Subjects: []reflexdomain.Subject{}, Test: b.Test,
+				Attention: b.Attention, Basis: b.Basis, State: b.State, Subjects: []reflexdomain.Subject{}, ATLAS: b.ATLAS,
+				OWASP: b.OWASP, Test: b.Test,
 			})
 			return out
 		}

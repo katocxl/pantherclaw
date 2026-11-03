@@ -209,7 +209,7 @@ func FromRow(r dbq.PcCase) domain.Case {
 		State: domain.State(r.State), Owner: r.OwnerID, FollowUpOwner: r.FollowUpOwnerID,
 		Disposition: deref[domain.Disposition](r.Disposition), Impact: deref[domain.Impact](r.Impact),
 		HeadSeq: r.HeadSeq, HeadHash: r.HeadHash, Created: r.CreatedAt, Updated: r.UpdatedAt,
-		OperationalClosed: r.OperationalClosedAt, Closed: r.ClosedAt,
+		OperationalClosed: r.OperationalClosedAt, Closed: r.ClosedAt, ATLAS: r.Atlas, ATTACK: r.Attack,
 	}
 }
 
