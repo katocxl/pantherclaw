@@ -869,6 +869,7 @@ Analytics use PantherClaw's own transactions and never contain automatically (F7
 | F948 | Server-side read audit | The server records `audit.self_mcp.read` for each read and gate refusal by the Investigator role, before the first response byte, so a client can't skip it. | Next | Team | M27 | new |
 | F949 | Untrusted record labels | Every record a tool returns sits under `UNTRUSTED_RECORD_DATA`, cleaned, cut to 2000 runes and JSON-escaped. Record text is data, never an instruction. | Next | Team | M27 | new |
 | F950 | `pclaw siem forward` | A local forwarder for SIEMs that can't check Standard Webhooks signatures. It verifies HMAC and Ed25519 (`v1a`) signatures, the time window and replays, then appends each OCSF event of a verified batch as one JSON line to a file or stdout. Setup for Sentinel (Azure Monitor Agent custom text log) and Wazuh (`localfile` json). | Next | Business | M27 | PN-018, F944 |
+| F951 | Confirmed custom rules | A person asks to confirm one published version of a custom detection rule, and a second person with `detection.manage` confirms it with a security key. That version's alerts are then RULE_MATCH, so automations may contain on them. Publishing another version, a disable or a withdrawal ends the confirmation at once, and the alerts are INFERRED again. People only, no API keys. | Next | Business | M27 | PN-006.1, F800 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
