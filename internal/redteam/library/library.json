@@ -1026,16 +1026,18 @@
     "techniques_none": "Tests PantherClaw's own content signal modes: WATCHING and OFF change no decision."
   },
   "RT-163": {
-    "digest": "9333e84dd1b7c5bf0411a5778f797e2149c23684a6adcec4ae76b7ddd7d1b101",
+    "digest": "2e53c7e8653f760470c5c603eeb09e84bf3a4caa3f2ee4079a98b2873975b062",
     "tier": "business",
     "atlas": [
-      "AML.T0051.001"
+      "AML.T0051.001",
+      "AML.T0099"
     ],
     "attack": [
       "T1698"
     ],
     "technique_why": {
       "AML.T0051.001": "Indirect prompt injection (AML.T0051.001): a poisoned record read through pclaw mcp self carries instructions.",
+      "AML.T0099": "AI agent tool data poisoning (AML.T0099): the record the tool returns was poisoned in its data source.",
       "T1698": "Indirect prompt injection (T1698): the poisoned record reaches the agent as a tool result."
     }
   },
