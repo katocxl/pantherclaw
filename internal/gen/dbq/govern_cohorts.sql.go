@@ -260,7 +260,7 @@ func (q *Queries) FleetAgentIDs(ctx context.Context, orgID ids.OrgID, after *ids
 }
 
 const fleetCohortAgents = `-- name: FleetCohortAgents :many
-SELECT a.org_id, a.id, a.name, a.purpose, a.team_id, a.environment_id, a.owner_user_id, a.backup_owner_user_id, a.execution_context, a.state, a.suspended_from, a.created_by, a.created_at, a.updated_at, a.claimed_at, a.retired_at, a.range_agent, a.task_type, a.risk_tier, a.data_classes, a.ai_act_role, a.ai_act_risk,
+SELECT a.org_id, a.id, a.name, a.purpose, a.team_id, a.environment_id, a.owner_user_id, a.backup_owner_user_id, a.execution_context, a.state, a.suspended_from, a.created_by, a.created_at, a.updated_at, a.claimed_at, a.retired_at, a.range_agent, a.task_type, a.risk_tier, a.data_classes, a.ai_act_role, a.ai_act_risk, a.external,
        EXISTS (SELECT 1 FROM pc.fleet_cohort_members m
                WHERE m.org_id = a.org_id AND m.cohort_id = $1 AND m.agent_id = a.id)::boolean AS static_member
 FROM pc.agents a
@@ -310,6 +310,7 @@ type FleetCohortAgentsRow struct {
 	DataClasses       []string
 	AiActRole         string
 	AiActRisk         string
+	External          bool
 	StaticMember      bool
 }
 
@@ -356,6 +357,7 @@ func (q *Queries) FleetCohortAgents(ctx context.Context, arg FleetCohortAgentsPa
 			&i.DataClasses,
 			&i.AiActRole,
 			&i.AiActRisk,
+			&i.External,
 			&i.StaticMember,
 		); err != nil {
 			return nil, err
@@ -369,7 +371,7 @@ func (q *Queries) FleetCohortAgents(ctx context.Context, arg FleetCohortAgentsPa
 }
 
 const fleetCohortStaticAgents = `-- name: FleetCohortStaticAgents :many
-SELECT a.org_id, a.id, a.name, a.purpose, a.team_id, a.environment_id, a.owner_user_id, a.backup_owner_user_id, a.execution_context, a.state, a.suspended_from, a.created_by, a.created_at, a.updated_at, a.claimed_at, a.retired_at, a.range_agent, a.task_type, a.risk_tier, a.data_classes, a.ai_act_role, a.ai_act_risk FROM pc.agents a
+SELECT a.org_id, a.id, a.name, a.purpose, a.team_id, a.environment_id, a.owner_user_id, a.backup_owner_user_id, a.execution_context, a.state, a.suspended_from, a.created_by, a.created_at, a.updated_at, a.claimed_at, a.retired_at, a.range_agent, a.task_type, a.risk_tier, a.data_classes, a.ai_act_role, a.ai_act_risk, a.external FROM pc.agents a
 JOIN pc.fleet_cohort_members m ON m.org_id = a.org_id AND m.agent_id = a.id
 WHERE m.org_id = $1 AND m.cohort_id = $2
 ORDER BY a.id
@@ -408,6 +410,7 @@ func (q *Queries) FleetCohortStaticAgents(ctx context.Context, orgID ids.OrgID, 
 			&i.DataClasses,
 			&i.AiActRole,
 			&i.AiActRisk,
+			&i.External,
 		); err != nil {
 			return nil, err
 		}

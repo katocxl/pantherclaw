@@ -17,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	saas "github.com/katocxl/pantherclaw/internal/saasdiscovery/domain"
 )
 
 // ErrNoScanLease refuses findings from a gateway that does not hold the
@@ -151,6 +152,9 @@ var materialKeys = map[string][]string{
 	// A person's local scan (#336 review).
 	"mcp_server":    {"transport", "command", "url_host", "env_names", "header_names", "package_ref"},
 	"agent_project": {"frameworks", "manifest"},
+	// What a SaaS agent may reach, and who may reach it (G0 M26 D407).
+	saas.KindCopilotAgent: saas.MaterialKeys(saas.KindCopilotAgent),
+	saas.KindCustomGPT:    saas.MaterialKeys(saas.KindCustomGPT),
 }
 
 // riskChanged reports whether a finding's material attributes differ from

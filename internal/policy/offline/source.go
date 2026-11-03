@@ -28,6 +28,8 @@ import (
 	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
+	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
+	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
@@ -92,7 +94,8 @@ func (w *world) add(p *defs.Package) {
 func builtin() [][]byte {
 	return [][]byte{
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
-		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package,
+		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
+		pcchatgptenterprise.Package,
 	}
 }
 

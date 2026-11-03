@@ -45,7 +45,30 @@ func (s *Store) guardLockOut(ctx context.Context, tx db.TenantTx, without ids.UU
 		before[p.Issuer] = true
 		after[p.Issuer] = after[p.Issuer] || p.ID != without
 	}
+	// A SAML connection is one of the org's own providers (G0 M26 D409).
+	saml, err := q.ActiveSAMLIssuers(ctx, tx.OrgID())
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range saml {
+		if c.Issuer == nil {
+			continue
+		}
+		before[*c.Issuer] = true
+		after[*c.Issuer] = after[*c.Issuer] || c.ID != without
+	}
 	return lockOut(admins, before, after)
+}
+
+// CheckSignInPath is ErrLockOut when no active org admin has a way to sign
+// in. A change that takes an admin away calls it after the change (HR-484).
+func (s *Store) CheckSignInPath(ctx context.Context, tx db.TenantTx) error {
+	own, err := s.OwnOnly(ctx, tx)
+	if err != nil {
+		return err
+	}
+	_, err = s.guardLockOut(ctx, tx, ids.UUID{}, own)
+	return err
 }
 
 // lockOut is ErrLockOut when no admin's issuer is available after the

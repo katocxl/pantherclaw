@@ -106,6 +106,24 @@ const (
 	// D512, HR-652): always held for a second person, whatever the
 	// TOOL_MEANING mode (AlwaysProtected).
 	SurfaceContentSignalMode Surface = "content.signals.mode"
+	// The IdP-native access surfaces (G0 M26 D400-D402, D408; HR-623):
+	// always held for a second person, whatever the CUSTODY mode
+	// (AlwaysProtected). Each only adds or turns something on; taking it
+	// away applies directly (HR-141).
+	SurfaceAssertionIssuer Surface = "idaccess.issuer.activate"
+	SurfaceAssertionClient Surface = "idaccess.client.bind"
+	SurfaceMcpAccess       Surface = "idaccess.mcp_access.enable"
+	SurfaceMcpClient       Surface = "idaccess.mcp_client.allow"
+	// The provisioning surfaces (G0 M26 D406, D409): always held for a second
+	// person, whatever the CUSTODY mode (AlwaysProtected). A SCIM token does
+	// nothing until its activation applies; a SAML connection is an
+	// organization identity provider (HR-481); a mapping gives a group's
+	// members a role, or takes it away.
+	SurfaceSCIMTokenActivate  Surface = "scim.token.activate" //nolint:gosec // G101: a surface name, not a credential
+	SurfaceSAMLConnectionPut  Surface = "saml.connection.put"
+	SurfaceSAMLDisable        Surface = "saml.connection.disable"
+	SurfaceGroupMappingAdd    Surface = "group.role_mapping.add"
+	SurfaceGroupMappingRemove Surface = "group.role_mapping.remove"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -129,7 +147,9 @@ func (s Surface) Permission() td.Permission {
 		return td.PermCoverageManage
 	case SurfaceConsequenceRule:
 		return td.PermConsequenceRuleManage
-	case SurfaceIdentityProviderPut, SurfaceIdentityProviderDisable, SurfaceIdentityProviderOwnOnly:
+	case SurfaceIdentityProviderPut, SurfaceIdentityProviderDisable, SurfaceIdentityProviderOwnOnly,
+		SurfaceAssertionIssuer, SurfaceAssertionClient, SurfaceMcpAccess, SurfaceMcpClient,
+		SurfaceSCIMTokenActivate, SurfaceSAMLConnectionPut, SurfaceSAMLDisable, SurfaceGroupMappingAdd, SurfaceGroupMappingRemove:
 		return td.PermIdentityProviderManage
 	case SurfaceTicketFieldOwner:
 		return td.PermConnectionManage
@@ -146,11 +166,14 @@ func (s Surface) Permission() td.Permission {
 // AlwaysProtected reports whether every change of the surface waits for a
 // second person, in every mode of its category, and can never be applied
 // as an emergency (G0 M17 D107, HR-453; G0 M18 D155, HR-481; G0 M24 D223,
-// HR-586).
+// HR-586; G0 M26 D408, HR-623).
 func (s Surface) AlwaysProtected() bool {
 	return s == SurfaceConsequenceRule ||
 		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly ||
-		s == SurfaceCatalogMode || s == SurfaceContentSignalMode
+		s == SurfaceCatalogMode || s == SurfaceContentSignalMode ||
+		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient ||
+		s == SurfaceSCIMTokenActivate || s == SurfaceSAMLConnectionPut || s == SurfaceSAMLDisable ||
+		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove
 }
 
 // Change domains and kinds of internal/changes (D6).
