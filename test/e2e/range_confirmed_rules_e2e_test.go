@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/protect"
 	reflexapp "github.com/katocxl/pantherclaw/internal/reflex/app"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -95,7 +96,7 @@ func TestRange_ScenariosConfirmedCustomRules(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newPBRange(t, hubdomain.AutomationBody{AutomationName: "range-confirmed-contain", Definition: crContain})
 			det, gate, second := crConfirmable(t, r)
-			author := r.f.As(td.KindUser, td.RoleSecurityAdmin)
+			author := crPerson(r.f.As(td.KindUser, td.RoleSecurityAdmin), t)
 			c, err := det.CreateCustomRule(author, pbIncidentRule)
 			if err != nil {
 				t.Fatal(err)
@@ -131,6 +132,19 @@ func TestRange_ScenariosConfirmedCustomRules(t *testing.T) {
 			}
 		})
 	}
+}
+
+// crPerson marks ctx's caller as a person on a browser session, as the
+// server does for a signed-in person: a protected change records the
+// author's credential.
+func crPerson(ctx context.Context, t *testing.T) context.Context {
+	t.Helper()
+	c, err := tapp.CallerFrom(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Credential = tapp.CredBrowserSession
+	return tapp.WithCaller(ctx, c)
 }
 
 // crConfirmable gives the fixture's person detection.manage, adds a second
