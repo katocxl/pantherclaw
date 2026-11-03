@@ -2638,6 +2638,7 @@ type PcMcpAuthorizationCode struct {
 	CreatedAt       time.Time
 	ExpiresAt       time.Time
 	UsedAt          *time.Time
+	RunID           *ids.UUID
 }
 
 type PcMcpCatalogSetting struct {
@@ -2648,17 +2649,20 @@ type PcMcpCatalogSetting struct {
 }
 
 type PcMcpClient struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	ClientUrl   string
-	AgentID     ids.UUID
-	InstanceID  ids.UUID
-	State       string
-	CreatedBy   ids.UUID
-	CreatedAt   time.Time
-	ActivatedAt *time.Time
-	RemovedBy   *ids.UUID
-	RemovedAt   *time.Time
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ClientUrl      string
+	AgentID        ids.UUID
+	InstanceID     ids.UUID
+	ClientName     string
+	RedirectUris   []string
+	DocumentDigest []byte
+	State          string
+	CreatedBy      ids.UUID
+	CreatedAt      time.Time
+	ActivatedAt    *time.Time
+	RemovedBy      *ids.UUID
+	RemovedAt      *time.Time
 }
 
 type PcMcpRefreshToken struct {

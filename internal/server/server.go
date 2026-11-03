@@ -388,6 +388,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	// protect sets its ports on it in every role (D110 P1).
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
 	closeM18IdPs(m11protect.gate, log)
+	closeM26IdAccess(m11protect.gate)
 	wireM11Process(autos, m11protect, pool)
 	wireM14Process(autos, bill)
 	wireM14A2APeer(svc, authorityStore, autos, pool)

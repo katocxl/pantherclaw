@@ -67,6 +67,11 @@ service IdpAccessService {
   // use and its instance is revoked.
   // permission: identity_provider.manage
   rpc RemoveMcpClient(RemoveMcpClientRequest) returns (RemoveMcpClientResponse);
+  // RefreshMcpClientDocument files taking an active client's changed
+  // metadata document: until a second person confirms it, the client keeps
+  // the document confirmed before.
+  // permission: identity_provider.manage
+  rpc RefreshMcpClientDocument(RefreshMcpClientDocumentRequest) returns (RefreshMcpClientDocumentResponse);
   // ListMcpClients lists the allow-list (at most 100).
   // permission: identity_provider.read
   rpc ListMcpClients(ListMcpClientsRequest) returns (ListMcpClientsResponse) {
@@ -126,6 +131,12 @@ message McpClient {
   string state = 5;
   // When it was created.
   google.protobuf.Timestamp create_time = 6;
+  // The client's own name in the confirmed document: untrusted text.
+  string client_name = 7;
+  // The redirect URIs of the confirmed document.
+  repeated string redirect_uris = 8;
+  // SHA-256 of the confirmed document, hex.
+  string document_digest = 9;
 }
 
 // McpAccess is the org's MCP authorization setting.
@@ -307,6 +318,24 @@ message RemoveMcpClientRequest {
 message RemoveMcpClientResponse {
   // The REMOVED client.
   McpClient client = 1;
+}
+
+// RefreshMcpClientDocumentRequest names an active client.
+message RefreshMcpClientDocumentRequest {
+  // Client entry id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RefreshMcpClientDocumentResponse is the change a second person confirms.
+message RefreshMcpClientDocumentResponse {
+  // The client as confirmed so far.
+  McpClient client = 1;
+  // The live document's name: untrusted text.
+  string client_name = 2;
+  // The live document's redirect URIs.
+  repeated string redirect_uris = 3;
+  // The change request a second person confirms.
+  string request_id = 4;
 }
 
 // ListMcpClientsRequest lists the allow-list.

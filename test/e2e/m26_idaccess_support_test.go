@@ -158,8 +158,10 @@ func (s *stack) idpAccessOn(t *testing.T) *idpAccess {
 	mcpInstance := ids.NewV7()
 	s.exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
 		VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'mcp_client')`, s.org, mcpInstance, a.agent, "unheld-"+mcpInstance.String())
-	s.exec(t, `INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, state, created_by, activated_at)
-		VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, now())`, s.org, a.client, idpMcpClient, a.agent, mcpInstance, owner)
+	doc := ports.ClientMetadata{ClientID: idpMcpClient, Name: "Editor", RedirectURIs: []string{idpRedirect}}
+	s.exec(t, `INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, state, created_by, activated_at, client_name,
+		redirect_uris, document_digest) VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, now(), $7, $8, $9)`,
+		s.org, a.client, idpMcpClient, a.agent, mcpInstance, owner, doc.Name, doc.RedirectURIs, idapp.DocumentDigest(doc))
 	s.exec(t, `INSERT INTO pc.org_mcp_access (org_id, enabled, gateway_url, updated_by) VALUES ($1, true, $2, $3)`, s.org, s.gateway, owner)
 	gw := s.gatewayID(t)
 	s.exec(t, "UPDATE pc.gateways SET config_version = config_version + 1 WHERE id = $1", gw)
@@ -182,7 +184,7 @@ func (s *stack) idpAccessOn(t *testing.T) *idpAccess {
 	}
 	a.flow = &idapp.CodeFlow{
 		Pool: s.pool, PublicURL: s.apiURL, Clock: clock.System{}, Runs: runs, Tokens: minter,
-		Documents: idpDocs{idpMcpClient: {ClientID: idpMcpClient, Name: "Editor", RedirectURIs: []string{idpRedirect}}},
+		Documents: idpDocs{idpMcpClient: doc},
 	}
 	return a
 }

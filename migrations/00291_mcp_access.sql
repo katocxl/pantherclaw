@@ -11,6 +11,10 @@
 -- Document) is one enrolled agent, acting through its own instance whose
 -- private key no one holds (enrolled_via 'mcp_client', D408.1). That
 -- instance is outside every PAP/1 proof path and always reports level 0.
+-- The entry keeps the document as the second person confirmed it: its
+-- digest, its redirect URIs and its (untrusted) name. A redirect is usable
+-- only while both this copy and the live document list it; taking a changed
+-- document is a new protected change.
 --
 -- pc.mcp_authorization_codes and pc.mcp_refresh_tokens hold hashes only. A
 -- code is single use and PKCE S256 bound. A refresh token is rotated on
@@ -38,6 +42,9 @@ CREATE TABLE pc.mcp_clients (
     client_url  text        NOT NULL CHECK (client_url ~ '^https://[^/?#@[:space:]]+/[^#[:space:]]*$' AND char_length(client_url) <= 1024),
     agent_id    uuid        NOT NULL,
     instance_id uuid        NOT NULL,
+    client_name text        NOT NULL DEFAULT '' CHECK (char_length(client_name) <= 256),
+    redirect_uris text[]    NOT NULL CHECK (cardinality(redirect_uris) BETWEEN 1 AND 16),
+    document_digest bytea   NOT NULL CHECK (octet_length(document_digest) = 32),
     state       text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'ACTIVE', 'REMOVED')),
     created_by  uuid        NOT NULL,
     created_at  timestamptz NOT NULL DEFAULT now(),
@@ -66,8 +73,12 @@ CREATE TABLE pc.mcp_authorization_codes (
     created_at     timestamptz NOT NULL DEFAULT now(),
     expires_at     timestamptz NOT NULL,
     used_at        timestamptz,
+    -- The run the code started: a second use ends it (RFC 6749 §4.1.2).
+    run_id         uuid,
     PRIMARY KEY (org_id, code_hash),
     FOREIGN KEY (org_id, client_id) REFERENCES pc.mcp_clients (org_id, id),
+    FOREIGN KEY (org_id, run_id) REFERENCES pc.runs (org_id, id),
+    CHECK (run_id IS NULL OR used_at IS NOT NULL),
     CONSTRAINT mcp_authorization_codes_short CHECK (expires_at <= created_at + interval '60 seconds')
 );
 CREATE INDEX mcp_authorization_codes_expiry ON pc.mcp_authorization_codes (expires_at);
@@ -117,13 +128,13 @@ $$;
 
 GRANT SELECT, INSERT ON pc.org_mcp_access, pc.mcp_clients, pc.mcp_authorization_codes, pc.mcp_refresh_tokens TO pc_app;
 GRANT UPDATE (enabled, gateway_url, updated_by, updated_at) ON pc.org_mcp_access TO pc_app;
-GRANT UPDATE (state, activated_at, removed_by, removed_at) ON pc.mcp_clients TO pc_app;
-GRANT UPDATE (used_at) ON pc.mcp_authorization_codes TO pc_app;
+GRANT UPDATE (state, activated_at, removed_by, removed_at, client_name, redirect_uris, document_digest) ON pc.mcp_clients TO pc_app;
+GRANT UPDATE (used_at, run_id) ON pc.mcp_authorization_codes TO pc_app;
 GRANT UPDATE (state) ON pc.mcp_refresh_tokens TO pc_app;
 GRANT DELETE ON pc.mcp_authorization_codes, pc.mcp_refresh_tokens TO pc_app;
 -- The audit reader sees neither code nor token hashes.
 GRANT SELECT ON pc.org_mcp_access, pc.mcp_clients TO pc_audit_ro;
-GRANT SELECT (org_id, client_id, user_id, redirect_uri, resource, scope_operations, created_at, expires_at, used_at)
+GRANT SELECT (org_id, client_id, user_id, redirect_uri, resource, scope_operations, created_at, expires_at, used_at, run_id)
     ON pc.mcp_authorization_codes TO pc_audit_ro;
 GRANT SELECT (org_id, id, family_id, client_id, run_id, resource, state, created_at, expires_at)
     ON pc.mcp_refresh_tokens TO pc_audit_ro;
@@ -173,6 +184,71 @@ ALTER TABLE pc.keys ADD CONSTRAINT keys_purpose_check
 ALTER TABLE pc.keys VALIDATE CONSTRAINT keys_purpose_check;
 
 -- +goose Down
+-- The tables of this migration go first; then the runs and instances only
+-- it allows (id_jag runs, runs through an mcp_client instance, their child
+-- runs, and mcp_client instances), so the old checks hold. A row of another
+-- table that still refers to one of them stops the Down, deleting nothing.
+-- Row security is lifted for these reads and deletes only, inside this
+-- migration's transaction.
+DROP TABLE pc.mcp_refresh_tokens;
+DROP TABLE pc.mcp_authorization_codes;
+DROP TABLE pc.mcp_clients;
+DROP TABLE pc.org_mcp_access;
+-- +goose StatementBegin
+DO $$
+DECLARE
+    forced   boolean;
+    forced_i boolean;
+    doomed   uuid[];
+    insts    uuid[];
+    c        record;
+    col      text;
+    f        boolean;
+    hit      boolean;
+BEGIN
+    SELECT relforcerowsecurity INTO forced FROM pg_class WHERE oid = 'pc.runs'::regclass;
+    SELECT relforcerowsecurity INTO forced_i FROM pg_class WHERE oid = 'pc.agent_instances'::regclass;
+    ALTER TABLE pc.runs NO FORCE ROW LEVEL SECURITY;
+    ALTER TABLE pc.agent_instances NO FORCE ROW LEVEL SECURITY;
+    SELECT coalesce(array_agg(id), '{}') INTO insts FROM pc.agent_instances WHERE enrolled_via = 'mcp_client';
+    WITH RECURSIVE tree AS (
+        SELECT r.org_id, r.id FROM pc.runs r
+        WHERE r.principal_source = 'id_jag' OR r.instance_id = ANY (insts) OR r.launcher_instance_id = ANY (insts)
+        UNION
+        SELECT ch.org_id, ch.id FROM pc.runs ch JOIN tree t ON ch.org_id = t.org_id AND ch.parent_run_id = t.id)
+    SELECT coalesce(array_agg(id), '{}') INTO doomed FROM tree;
+    -- Anything else that refers to them is kept: the Down refuses instead.
+    FOR c IN SELECT conrelid, conkey, confkey, confrelid FROM pg_constraint
+             WHERE contype = 'f' AND confrelid IN ('pc.runs'::regclass, 'pc.agent_instances'::regclass)
+               AND conrelid <> 'pc.runs'::regclass LOOP
+        SELECT quote_ident(a.attname) INTO col
+          FROM unnest(c.conkey, c.confkey) AS k (n, rn)
+          JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n
+          JOIN pg_attribute r ON r.attrelid = c.confrelid AND r.attnum = k.rn
+         WHERE r.attname = 'id';
+        SELECT relforcerowsecurity INTO f FROM pg_class WHERE oid = c.conrelid;
+        EXECUTE format('ALTER TABLE %s NO FORCE ROW LEVEL SECURITY', c.conrelid::regclass);
+        EXECUTE format('SELECT EXISTS (SELECT 1 FROM %s WHERE %s = ANY ($1))', c.conrelid::regclass, col)
+            INTO hit USING CASE WHEN c.confrelid = 'pc.runs'::regclass THEN doomed ELSE insts END;
+        IF f THEN
+            EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', c.conrelid::regclass);
+        END IF;
+        IF hit THEN
+            RAISE EXCEPTION '00291 Down: % refers to an id_jag run or an mcp_client instance; remove those rows first',
+                c.conrelid::regclass;
+        END IF;
+    END LOOP;
+    DELETE FROM pc.runs WHERE id = ANY (doomed);
+    DELETE FROM pc.agent_instances WHERE id = ANY (insts);
+    IF forced THEN
+        ALTER TABLE pc.runs FORCE ROW LEVEL SECURITY;
+    END IF;
+    IF forced_i THEN
+        ALTER TABLE pc.agent_instances FORCE ROW LEVEL SECURITY;
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 DELETE FROM pc.keys WHERE purpose = 'mcp_tokens';
 ALTER TABLE pc.keys DROP CONSTRAINT keys_purpose_check;
 ALTER TABLE pc.keys ADD CONSTRAINT keys_purpose_check
@@ -197,7 +273,3 @@ ALTER TABLE pc.agent_instances
     DROP CONSTRAINT agent_instances_mcp_client,
     DROP CONSTRAINT agent_instances_enrolled_via_check,
     ADD CONSTRAINT agent_instances_enrolled_via_check CHECK (enrolled_via IN ('enrollment_token', 'attestation', 'discovery'));
-DROP TABLE pc.mcp_refresh_tokens;
-DROP TABLE pc.mcp_authorization_codes;
-DROP TABLE pc.mcp_clients;
-DROP TABLE pc.org_mcp_access;

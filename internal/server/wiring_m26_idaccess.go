@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
+	"github.com/katocxl/pantherclaw/internal/protect"
 )
 
 // IdP-native agent access (G0 M26 D400-D403, D408; H8): IdpAccessService
@@ -40,7 +41,8 @@ type m26IdAccess struct {
 // newM26IdAccess builds the use cases over the API's dependencies.
 func newM26IdAccess(d apiDeps) m26IdAccess {
 	verifier := &idjag.Verifier{}
-	admin := &idapp.Admin{Pool: d.pool, Gate: d.m11protect.gate, Discovery: verifier, PublicURL: d.publicURL}
+	documents := &cimd.Reader{}
+	admin := &idapp.Admin{Pool: d.pool, Gate: d.m11protect.gate, Discovery: verifier, Documents: documents, PublicURL: d.publicURL}
 	if d.billing != nil {
 		admin.Editions = d.billing
 	}
@@ -53,7 +55,7 @@ func newM26IdAccess(d apiDeps) m26IdAccess {
 		Pool: d.pool, Verifier: verifier, Runs: runs, PublicURL: d.publicURL, Clock: clock.System{}, Log: d.log, Tokens: minter,
 	}
 	flow := &idapp.CodeFlow{
-		Pool: d.pool, Documents: &cimd.Reader{}, Runs: runs, Tokens: minter, Notify: admin.Notify,
+		Pool: d.pool, Documents: documents, Runs: runs, Tokens: minter, Notify: admin.Notify,
 		PublicURL: d.publicURL, Clock: clock.System{}, Log: d.log,
 	}
 	return m26IdAccess{admin: admin, exchange: exchange, flow: flow}
@@ -104,5 +106,14 @@ func orgMetadata(flow *idapp.CodeFlow) http.HandlerFunc {
 		default:
 			oauthhttp.WriteJSON(w, http.StatusOK, md)
 		}
+	}
+}
+
+// closeM26IdAccess lets the Gate lapse an assertion issuer, a client binding
+// or an allow-listed MCP client whose addition was declined or expired, in
+// every role: the jobs role expires requests.
+func closeM26IdAccess(g *protect.Gate) {
+	if g != nil {
+		idapp.RegisterClosers(g)
 	}
 }

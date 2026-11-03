@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/authn/assertion"
@@ -123,12 +124,19 @@ func peek(raw string) (peeked, string, bool) {
 }
 
 // pickIssuer chooses the entry an assertion names: the one pinning its
-// tenant, else the one with no tenant.
+// tenant, else the one with no tenant, but only while no entry pins a
+// tenant of that issuer. Once one does, an assertion of any other tenant
+// matches nothing.
 func pickIssuer(rows []dbq.PcOrgAssertionIssuer, tenant string) (dbq.PcOrgAssertionIssuer, bool) {
+	pinned := false
 	for _, r := range rows {
 		if r.Tenant != nil && *r.Tenant == tenant {
 			return r, true
 		}
+		pinned = pinned || r.Tenant != nil
+	}
+	if pinned {
+		return dbq.PcOrgAssertionIssuer{}, false
 	}
 	for _, r := range rows {
 		if r.Tenant == nil {
@@ -179,6 +187,50 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 	if err != nil {
 		return authnapp.TokenResponse{}, e.fail(ctx, authnapp.ErrInvalidGrant, "assertion_invalid", slog.String("detail", err.Error()))
 	}
+	// The replay records commit on their own, before anything else can
+	// refuse: an assertion or client assertion refused once is never
+	// accepted later, whatever changed in between.
+	var refused error
+	err = e.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		refused = nil
+		q := dbq.New(tx)
+		n, err := q.InsertAuthReplay(ctx, dbq.InsertAuthReplayParams{
+			OrgID: org, Issuer: "idjag:" + hash(a.Issuer), Jti: hash(a.JTI), ExpiresAt: a.ExpiresAt,
+		})
+		if err != nil {
+			return err
+		}
+		grantReplayed := n == 0
+		inst, v, cerr := e.clientAuth(ctx, q, org, row.ID, a.ClientID, form, clientAssertion, kid, now)
+		switch {
+		case cerr != nil && !errors.As(cerr, new(refusal)):
+			return cerr
+		case cerr != nil:
+			refused = cerr
+			return nil
+		}
+		n, err = q.InsertAuthReplay(ctx, dbq.InsertAuthReplayParams{
+			OrgID: org, Issuer: "instance:" + inst.ID.String(), Jti: v.JTI, ExpiresAt: v.ExpiresAt,
+		})
+		switch {
+		case err != nil:
+			return err
+		case n == 0:
+			refused = refuse(authnapp.ErrInvalidClient, "client_assertion_replayed")
+		case grantReplayed:
+			refused = refuse(authnapp.ErrInvalidGrant, "assertion_replayed")
+		}
+		return nil
+	})
+	if err == nil {
+		err = refused
+	}
+	var r refusal
+	if errors.As(err, &r) {
+		return authnapp.TokenResponse{}, e.fail(ctx, r.oe, r.reason, slog.String("org", org.String()))
+	} else if err != nil {
+		return authnapp.TokenResponse{}, err
+	}
 	resource, err := chooseResource(a.Resources, form)
 	if err != nil {
 		return authnapp.TokenResponse{}, e.fail(ctx, authnapp.ErrInvalidGrant, "resource")
@@ -190,45 +242,19 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 	var out authnapp.TokenResponse
 	err = e.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		// The binding and the instance are read again: either may have
+		// gone since the client assertion was checked.
 		binding, err := q.ActiveAssertionClient(ctx, org, row.ID, a.ClientID)
 		if db.IsNoRows(err) {
 			return refuse(authnapp.ErrInvalidClient, "client_unbound")
 		} else if err != nil {
 			return err
 		}
-		if c := form.Get("client_id"); c != "" && c != a.ClientID {
-			return refuse(authnapp.ErrInvalidClient, "client_id_mismatch")
-		}
 		inst, err := q.AdmittedInstanceByKey(ctx, org, binding.AgentID, kid)
 		if db.IsNoRows(err) {
 			return refuse(authnapp.ErrInvalidClient, "client_key_unknown")
 		} else if err != nil {
 			return err
-		}
-		pk, err := assertion.ParsePublicJWK(assertion.EdDSA, inst.PublicJwk)
-		if err != nil {
-			return refuse(authnapp.ErrInvalidClient, "client_key_unusable")
-		}
-		issuerID := domain.IssuerID(e.PublicURL, org)
-		v, err := assertion.Verify(clientAssertion, pk, assertion.Expect{
-			ClientID: a.ClientID, Audiences: []string{issuerID, strings.TrimSuffix(e.PublicURL, "/") + authnapp.TokenPath}, Now: now,
-		})
-		if err != nil {
-			return refuse(authnapp.ErrInvalidClient, "client_assertion_invalid")
-		}
-		if n, err := q.InsertAuthReplay(ctx, dbq.InsertAuthReplayParams{
-			OrgID: org, Issuer: "instance:" + inst.ID.String(), Jti: v.JTI, ExpiresAt: v.ExpiresAt,
-		}); err != nil {
-			return err
-		} else if n == 0 {
-			return refuse(authnapp.ErrInvalidClient, "client_assertion_replayed")
-		}
-		if n, err := q.InsertAuthReplay(ctx, dbq.InsertAuthReplayParams{
-			OrgID: org, Issuer: "idjag:" + hash(a.Issuer), Jti: hash(a.JTI), ExpiresAt: a.ExpiresAt,
-		}); err != nil {
-			return err
-		} else if n == 0 {
-			return refuse(authnapp.ErrInvalidGrant, "assertion_replayed")
 		}
 		user, err := q.ActiveUserBySubject(ctx, org, a.Issuer, a.Subject)
 		if db.IsNoRows(err) {
@@ -282,11 +308,46 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 		})
 		return err
 	})
-	var r refusal
+	r = refusal{}
 	if errors.As(err, &r) {
 		return authnapp.TokenResponse{}, e.fail(ctx, r.oe, r.reason, slog.String("org", org.String()))
 	}
 	return out, err
+}
+
+// clientAuth authenticates the client presenting an assertion: a binding
+// of the issuer entry for the assertion's client_id, and a client assertion
+// signed by an admitted instance of the bound agent.
+func (e *Exchange) clientAuth(ctx context.Context, q *dbq.Queries, org ids.OrgID, issuer ids.UUID, clientID string, form url.Values,
+	clientAssertion, kid string, now time.Time,
+) (dbq.PcAgentInstance, assertion.Verified, error) {
+	binding, err := q.ActiveAssertionClient(ctx, org, issuer, clientID)
+	if db.IsNoRows(err) {
+		return dbq.PcAgentInstance{}, assertion.Verified{}, refuse(authnapp.ErrInvalidClient, "client_unbound")
+	} else if err != nil {
+		return dbq.PcAgentInstance{}, assertion.Verified{}, err
+	}
+	if c := form.Get("client_id"); c != "" && c != clientID {
+		return dbq.PcAgentInstance{}, assertion.Verified{}, refuse(authnapp.ErrInvalidClient, "client_id_mismatch")
+	}
+	inst, err := q.AdmittedInstanceByKey(ctx, org, binding.AgentID, kid)
+	if db.IsNoRows(err) {
+		return dbq.PcAgentInstance{}, assertion.Verified{}, refuse(authnapp.ErrInvalidClient, "client_key_unknown")
+	} else if err != nil {
+		return dbq.PcAgentInstance{}, assertion.Verified{}, err
+	}
+	pk, err := assertion.ParsePublicJWK(assertion.EdDSA, inst.PublicJwk)
+	if err != nil {
+		return dbq.PcAgentInstance{}, assertion.Verified{}, refuse(authnapp.ErrInvalidClient, "client_key_unusable")
+	}
+	v, err := assertion.Verify(clientAssertion, pk, assertion.Expect{
+		ClientID: clientID, Audiences: []string{domain.IssuerID(e.PublicURL, org), strings.TrimSuffix(e.PublicURL, "/") + authnapp.TokenPath},
+		Now: now,
+	})
+	if err != nil {
+		return dbq.PcAgentInstance{}, assertion.Verified{}, refuse(authnapp.ErrInvalidClient, "client_assertion_invalid")
+	}
+	return inst, v, nil
 }
 
 func hash(s string) string {

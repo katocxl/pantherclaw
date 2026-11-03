@@ -60,6 +60,9 @@ const (
 	// IdpAccessServiceRemoveMcpClientProcedure is the procedure name of the IdpAccessService's
 	// RemoveMcpClient RPC.
 	IdpAccessServiceRemoveMcpClientProcedure = "/pantherclaw.v1.IdpAccessService/RemoveMcpClient"
+	// IdpAccessServiceRefreshMcpClientDocumentProcedure is the procedure name of the IdpAccessService's
+	// RefreshMcpClientDocument RPC.
+	IdpAccessServiceRefreshMcpClientDocumentProcedure = "/pantherclaw.v1.IdpAccessService/RefreshMcpClientDocument"
 	// IdpAccessServiceListMcpClientsProcedure is the procedure name of the IdpAccessService's
 	// ListMcpClients RPC.
 	IdpAccessServiceListMcpClientsProcedure = "/pantherclaw.v1.IdpAccessService/ListMcpClients"
@@ -146,6 +149,13 @@ var (
 			Procedure:  IdpAccessServiceRemoveMcpClientProcedure,
 		}
 	})
+	idpAccessServiceRefreshMcpClientDocumentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_idp_access_proto.Services().ByName("IdpAccessService").Methods().ByName("RefreshMcpClientDocument"),
+			Procedure:  IdpAccessServiceRefreshMcpClientDocumentProcedure,
+		}
+	})
 	idpAccessServiceListMcpClientsSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType:       connect.StreamTypeUnary,
@@ -195,6 +205,11 @@ type IdpAccessServiceClient interface {
 	// use and its instance is revoked.
 	// permission: identity_provider.manage
 	RemoveMcpClient(context.Context, *v1.RemoveMcpClientRequest) (*v1.RemoveMcpClientResponse, error)
+	// RefreshMcpClientDocument files taking an active client's changed
+	// metadata document: until a second person confirms it, the client keeps
+	// the document confirmed before.
+	// permission: identity_provider.manage
+	RefreshMcpClientDocument(context.Context, *v1.RefreshMcpClientDocumentRequest) (*v1.RefreshMcpClientDocumentResponse, error)
 	// ListMcpClients lists the allow-list (at most 100).
 	// permission: identity_provider.read
 	ListMcpClients(context.Context, *v1.ListMcpClientsRequest) (*v1.ListMcpClientsResponse, error)
@@ -245,6 +260,11 @@ type IdpAccessServiceHandler interface {
 	// use and its instance is revoked.
 	// permission: identity_provider.manage
 	RemoveMcpClient(context.Context, *v1.RemoveMcpClientRequest) (*v1.RemoveMcpClientResponse, error)
+	// RefreshMcpClientDocument files taking an active client's changed
+	// metadata document: until a second person confirms it, the client keeps
+	// the document confirmed before.
+	// permission: identity_provider.manage
+	RefreshMcpClientDocument(context.Context, *v1.RefreshMcpClientDocumentRequest) (*v1.RefreshMcpClientDocumentResponse, error)
 	// ListMcpClients lists the allow-list (at most 100).
 	// permission: identity_provider.read
 	ListMcpClients(context.Context, *v1.ListMcpClientsRequest) (*v1.ListMcpClientsResponse, error)
@@ -266,6 +286,7 @@ func RegisterIdpAccessServiceHandler(server *connect.Server, svc IdpAccessServic
 		connect.Method{Spec: idpAccessServiceDisableMcpAccessSpec(), Handler: adapter.disableMcpAccess},
 		connect.Method{Spec: idpAccessServiceAllowMcpClientSpec(), Handler: adapter.allowMcpClient},
 		connect.Method{Spec: idpAccessServiceRemoveMcpClientSpec(), Handler: adapter.removeMcpClient},
+		connect.Method{Spec: idpAccessServiceRefreshMcpClientDocumentSpec(), Handler: adapter.refreshMcpClientDocument},
 		connect.Method{Spec: idpAccessServiceListMcpClientsSpec(), Handler: adapter.listMcpClients},
 	)
 }
@@ -315,6 +336,10 @@ func (UnimplementedIdpAccessServiceHandler) AllowMcpClient(context.Context, *v1.
 
 func (UnimplementedIdpAccessServiceHandler) RemoveMcpClient(context.Context, *v1.RemoveMcpClientRequest) (*v1.RemoveMcpClientResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.IdpAccessService.RemoveMcpClient is not implemented")
+}
+
+func (UnimplementedIdpAccessServiceHandler) RefreshMcpClientDocument(context.Context, *v1.RefreshMcpClientDocumentRequest) (*v1.RefreshMcpClientDocumentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.IdpAccessService.RefreshMcpClientDocument is not implemented")
 }
 
 func (UnimplementedIdpAccessServiceHandler) ListMcpClients(context.Context, *v1.ListMcpClientsRequest) (*v1.ListMcpClientsResponse, error) {
@@ -408,6 +433,14 @@ func (c *idpAccessServiceClient) AllowMcpClient(ctx context.Context, req *v1.All
 func (c *idpAccessServiceClient) RemoveMcpClient(ctx context.Context, req *v1.RemoveMcpClientRequest) (*v1.RemoveMcpClientResponse, error) {
 	var res v1.RemoveMcpClientResponse
 	if err := c.client.CallUnary(ctx, idpAccessServiceRemoveMcpClientSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *idpAccessServiceClient) RefreshMcpClientDocument(ctx context.Context, req *v1.RefreshMcpClientDocumentRequest) (*v1.RefreshMcpClientDocumentResponse, error) {
+	var res v1.RefreshMcpClientDocumentResponse
+	if err := c.client.CallUnary(ctx, idpAccessServiceRefreshMcpClientDocumentSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -549,6 +582,18 @@ func (h idpAccessServiceHandler) removeMcpClient(ctx context.Context, _ connect.
 		return err
 	}
 	res, err := h.svc.RemoveMcpClient(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h idpAccessServiceHandler) refreshMcpClientDocument(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RefreshMcpClientDocumentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RefreshMcpClientDocument(ctx, &req)
 	if err != nil {
 		return err
 	}

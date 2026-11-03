@@ -106,9 +106,17 @@ WHERE org_id = sqlc.arg(org_id) AND enabled
 RETURNING *;
 
 -- name: InsertMcpClient :one
-INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, created_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(client_url), sqlc.arg(agent_id), sqlc.arg(instance_id), sqlc.arg(created_by))
+INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(client_url), sqlc.arg(agent_id), sqlc.arg(instance_id), sqlc.arg(client_name),
+    sqlc.arg(redirect_uris), sqlc.arg(document_digest), sqlc.arg(created_by))
 RETURNING *;
+
+-- A confirmed change takes a new document, only over the one it was asked
+-- against.
+-- name: UpdateMcpClientDocument :execrows
+UPDATE pc.mcp_clients SET client_name = sqlc.arg(client_name), redirect_uris = sqlc.arg(redirect_uris),
+    document_digest = sqlc.arg(document_digest)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE' AND document_digest = sqlc.arg(previous_digest);
 
 -- name: GetMcpClient :one
 SELECT * FROM pc.mcp_clients WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
@@ -188,6 +196,17 @@ VALUES (sqlc.arg(org_id), sqlc.arg(code_hash), sqlc.arg(client_id), sqlc.arg(use
 UPDATE pc.mcp_authorization_codes SET used_at = now()
 WHERE org_id = sqlc.arg(org_id) AND code_hash = sqlc.arg(code_hash) AND used_at IS NULL AND expires_at > now()
 RETURNING *;
+
+-- name: SetMcpAuthorizationCodeRun :exec
+UPDATE pc.mcp_authorization_codes SET run_id = sqlc.arg(run_id)
+WHERE org_id = sqlc.arg(org_id) AND code_hash = sqlc.arg(code_hash) AND used_at IS NOT NULL;
+
+-- A spent code presented again: the run it started, if any. The lock waits
+-- for a redemption still in flight.
+-- name: SpentMcpAuthorizationCodeRun :one
+SELECT run_id FROM pc.mcp_authorization_codes
+WHERE org_id = sqlc.arg(org_id) AND code_hash = sqlc.arg(code_hash) AND used_at IS NOT NULL
+FOR UPDATE;
 
 -- name: InsertMcpRefreshToken :exec
 INSERT INTO pc.mcp_refresh_tokens (org_id, id, family_id, token_hash, client_id, run_id, resource, expires_at)

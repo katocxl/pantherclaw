@@ -32,7 +32,14 @@ var idaccessTemplates = []Template{
 		Type: "idaccess.refresh_reuse", Severity: Critical, Params: []string{"client", "run"},
 		Title: "A reused MCP refresh token was refused",
 		Body: "A refresh token of MCP client {client} was used after it had been rotated. Every token of that sign-in " +
-			"was revoked and run {run} must be started again. A reused token can mean it was stolen.",
+			"was revoked and run {run} was ended. A reused token can mean it was stolen.",
+	},
+	{
+		Type: "idaccess.client_document_changed", Severity: Warning, Params: []string{"client"},
+		Title: "An allowed MCP client's metadata document changed",
+		Body: "MCP client {client} asked to return to an address its metadata document lists now but did not list " +
+			"when your organization allowed it. The request was refused. The client keeps only the addresses that were " +
+			"confirmed; taking its new document is a new change a second admin must confirm.",
 	},
 }
 

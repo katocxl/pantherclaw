@@ -4,6 +4,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,8 +12,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"log/slog"
+	"net"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,12 +84,16 @@ type Consent struct {
 	Request    AuthorizeRequest
 	ClientURL  string
 	ClientHost string
-	// ClientName is the document's UNTRUSTED name; it is shown as such.
+	// ClientName is the UNTRUSTED name of the document the org confirmed;
+	// it is shown as such.
 	ClientName string
-	Agent      ids.UUID
-	AgentName  string
-	Connection string
-	Resource   string
+	// LoopbackRedirect is a plain HTTP redirect to this device, which any
+	// program on it could receive (T-269); the page warns about it.
+	LoopbackRedirect bool
+	Agent            ids.UUID
+	AgentName        string
+	Connection       string
+	Resource         string
 }
 
 // CodeFlow is the authorization code flow for allow-listed MCP clients (G0
@@ -204,7 +211,17 @@ func (f *CodeFlow) Prepare(ctx context.Context, org ids.OrgID, q url.Values) (Co
 		f.log().WarnContext(ctx, "idaccess.client_document_refused", slog.String("org", org.String()), slog.String("detail", err.Error()))
 		return Consent{}, pageError("the client's metadata document could not be read or is not acceptable")
 	}
-	if !slices.Contains(md.RedirectURIs, r.RedirectURI) {
+	// A redirect URI is usable only while both the confirmed document and
+	// the live one list it (HR-625). One the live document added since is
+	// refused, and the admins are told.
+	stored, live := slices.Contains(client.RedirectUris, r.RedirectURI), slices.Contains(md.RedirectURIs, r.RedirectURI)
+	if !stored && !bytes.Equal(DocumentDigest(md), client.DocumentDigest) {
+		f.documentChanged(ctx, org, client, r.RedirectURI)
+		return Consent{}, &AuthorizeError{
+			Code: "CLIENT_DOCUMENT_CHANGED", Description: "the client's metadata document changed since this organization allowed it",
+		}
+	}
+	if !stored || !live {
 		return Consent{}, pageError("the redirect URI is not one the client's metadata document registers")
 	}
 	if aerr := checkRest(q, r); aerr != nil {
@@ -218,9 +235,46 @@ func (f *CodeFlow) Prepare(ctx context.Context, org ids.OrgID, q url.Values) (Co
 		return Consent{}, redirectError("invalid_target", "the resource is not a server of this organization's gateway")
 	}
 	u, _ := url.Parse(r.ClientID)
-	c.Request, c.ClientURL, c.ClientHost, c.ClientName = r, r.ClientID, u.Host, md.Name
+	c.Request, c.ClientURL, c.ClientHost, c.ClientName = r, r.ClientID, u.Host, client.ClientName
 	c.Connection, c.Resource = conn, r.Resource
+	c.LoopbackRedirect = loopback(r.RedirectURI)
 	return c, nil
+}
+
+// loopback reports whether a redirect URI is plain HTTP to this device:
+// any program on it can listen there (T-269).
+func loopback(redirect string) bool {
+	u, err := url.Parse(redirect)
+	if err != nil || u.Scheme != "http" {
+		return false
+	}
+	h := u.Hostname()
+	if h == "localhost" || strings.HasSuffix(h, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// documentChanged records and tells the admins that a client asked for a
+// redirect URI its live document added after the org allowed it. A failure
+// to record it does not change the refusal.
+func (f *CodeFlow) documentChanged(ctx context.Context, org ids.OrgID, client dbq.PcMcpClient, redirect string) {
+	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "idaccess.client_document_changed", Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Denied,
+			Object:  &audit.Object{Type: "mcp_client", ID: client.ID.String()},
+			Details: map[string]string{"client_url": client.ClientUrl, "redirect_uri": redirect},
+		}); err != nil {
+			return err
+		}
+		return (&Admin{Notify: f.Notify}).tellAdmins(ctx, tx, "idaccess.client_document_changed", map[string]string{
+			"client": client.ID.String(),
+		})
+	})
+	if err != nil {
+		f.log().WarnContext(ctx, "idaccess.client_document_changed", slog.String("org", org.String()), slog.String("error", err.Error()))
+	}
 }
 
 // Issuer is the org's authorization server identifier, the iss parameter
@@ -371,15 +425,29 @@ func (f *CodeFlow) AuthorizationCode(ctx context.Context, form url.Values) (auth
 	now := f.Clock.Now()
 	// The code is spent by the first request naming it, right or wrong: the
 	// spend commits on its own, before anything about the request is checked.
+	// A spent code presented again ends the run it started, and with it
+	// every token issued from it (RFC 6749 §4.1.2); that commits too.
 	var row dbq.PcMcpAuthorizationCode
+	var reused bool
 	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
 		var err error
-		row, err = dbq.New(tx).SpendMcpAuthorizationCode(ctx, org, digest(code))
-		if db.IsNoRows(err) {
-			return refuse(authnapp.ErrInvalidGrant, "code_unknown_used_or_expired")
+		row, err = q.SpendMcpAuthorizationCode(ctx, org, digest(code))
+		if !db.IsNoRows(err) {
+			return err
 		}
-		return err
+		reused = true
+		run, err := q.SpentMcpAuthorizationCodeRun(ctx, org, digest(code))
+		if db.IsNoRows(err) || (err == nil && run == nil) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		return endRun(ctx, tx, org, *run, "authorization_code_reused")
 	})
+	if err == nil && reused {
+		err = refuse(authnapp.ErrInvalidGrant, "code_unknown_used_or_expired")
+	}
 	var out authnapp.TokenResponse
 	if err == nil {
 		err = f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -398,6 +466,11 @@ func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	form url.Values, now time.Time, out *authnapp.TokenResponse,
 ) error {
 	q := dbq.New(tx)
+	// The lock makes a second use of the code wait for this redemption, so
+	// it finds the run to end.
+	if _, err := q.SpentMcpAuthorizationCodeRun(ctx, org, row.CodeHash); err != nil {
+		return err
+	}
 	client, err := q.GetMcpClient(ctx, org, row.ClientID)
 	if err != nil {
 		return err
@@ -436,6 +509,9 @@ func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	})
 	if err != nil {
 		return refuse(accessDenied(ReasonNoGrant, "the grant can't be used"), "run_refused: "+err.Error())
+	}
+	if err := q.SetMcpAuthorizationCodeRun(ctx, &run.ID, org, row.CodeHash); err != nil {
+		return err
 	}
 	*out, err = f.issue(ctx, q, org, client, run.ID, run.EnvironmentID, run.ExpiresAt, conn, row.Resource, choice.Operations, ids.NewV7(), now)
 	if err != nil {
@@ -540,6 +616,11 @@ func (f *CodeFlow) Refresh(ctx context.Context, form url.Values) (authnapp.Token
 			if _, err := q.KillMcpRefreshFamily(ctx, org, row.FamilyID); err != nil {
 				return err
 			}
+			// The run behind the family ends too, so its access tokens
+			// stop at once.
+			if err := endRun(ctx, tx, org, row.RunID, "refresh_token_reused"); err != nil {
+				return err
+			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
 				Name: "idaccess.refresh_reuse", Actor: evdomain.Actor{Type: "system", ID: "pantherclaw"}, Outcome: audit.Failure,
 				ReasonCode: "REFRESH_TOKEN_REUSED", Object: &audit.Object{Type: "run", ID: row.RunID.String()},
@@ -597,6 +678,21 @@ func (f *CodeFlow) Refresh(ctx context.Context, form url.Values) (authnapp.Token
 		return authnapp.TokenResponse{}, f.fail(ctx, authnapp.ErrInvalidGrant, "refresh_reused")
 	}
 	return out, nil
+}
+
+// endRun revokes a run and its descendants when a code or refresh token of
+// it is reused; a run already ended stays as it is.
+func endRun(ctx context.Context, tx db.TenantTx, org ids.OrgID, run ids.UUID, reason string) error {
+	rows, err := dbq.New(tx).EndRunTree(ctx, dbq.EndRunTreeParams{OrgID: org, ID: run, State: "REVOKED", Reason: reason})
+	if err != nil || len(rows) == 0 {
+		return err
+	}
+	_, err = audit.Record(ctx, tx, audit.Event{
+		Name: "run.ended", Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Success,
+		Object:  &audit.Object{Type: "run", ID: run.String()},
+		Details: map[string]string{"reason": reason, "children_revoked": strconv.Itoa(len(rows) - 1)},
+	})
+	return err
 }
 
 // AuthorizePath is the org's authorization endpoint, under its issuer: the

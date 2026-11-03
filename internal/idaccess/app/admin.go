@@ -8,8 +8,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/v2"
 	"fmt"
@@ -71,6 +73,9 @@ type Admin struct {
 	Notify Notifier
 	// Discovery checks an issuer before it is filed; nil checks nothing.
 	Discovery ports.Discovery
+	// Documents reads a client's metadata document when it is allow-listed
+	// or its document is taken again.
+	Documents ports.ClientDocuments
 	// PublicURL is the server's public URL: the org's issuer identifier, and
 	// so every assertion's audience, is under it.
 	PublicURL string
@@ -412,10 +417,54 @@ func (s *Admin) DisableMcpAccess(ctx context.Context) (McpAccess, error) {
 	return out, err
 }
 
+// ErrDocument says only that the client's metadata document could not be
+// used, so it is no probe of what the server can reach (HR-483).
+var ErrDocument = pcerr.New(pcerr.InvalidArgument, "CLIENT_DOCUMENT",
+	"the client's metadata document could not be read over HTTPS or is not acceptable")
+
+// ErrDocumentSame says the live document is the one already confirmed.
+var ErrDocumentSame = pcerr.New(pcerr.FailedPrecondition, "CLIENT_DOCUMENT_UNCHANGED",
+	"the client's metadata document is the one already confirmed")
+
+// DocumentDigest is the SHA-256 of a metadata document's fields that the
+// flow uses, over a fixed encoding: two documents with the same digest name
+// the same client, name and redirect URIs.
+func DocumentDigest(md ports.ClientMetadata) []byte {
+	b, _ := json.Marshal(struct {
+		ClientID     string   `json:"client_id"`
+		Name         string   `json:"client_name"`
+		RedirectURIs []string `json:"redirect_uris"`
+	}{md.ClientID, md.Name, md.RedirectURIs})
+	h := sha256.Sum256(b)
+	return h[:]
+}
+
+func (s *Admin) document(ctx context.Context, clientURL string) (ports.ClientMetadata, error) {
+	if s.Documents == nil {
+		return ports.ClientMetadata{}, ErrDocument
+	}
+	md, err := s.Documents.Fetch(ctx, clientURL)
+	if err != nil || md.ClientID != clientURL || len(md.RedirectURIs) == 0 || len(md.RedirectURIs) > 16 {
+		return ports.ClientMetadata{}, ErrDocument
+	}
+	return md, nil
+}
+
+// documentSummary is what the confirming person sees of a document.
+func documentSummary(md ports.ClientMetadata) map[string]string {
+	return map[string]string{
+		"client_name": md.Name, "redirect_uris": strings.Join(md.RedirectURIs, " "),
+		"document_digest": fmt.Sprintf("%x", DocumentDigest(md)),
+	}
+}
+
 // AllowMcpClient files that a client, named by the URL of its Client ID
 // Metadata Document, acts as one enrolled agent through its own mcp_client
 // instance. That instance holds no key anyone has, so no PAP/1 proof can
-// use it, and only the confirmation admits it (HR-625).
+// use it, and only the confirmation admits it (HR-625). The entry keeps the
+// document as it was read now, and the confirming person sees its name and
+// redirect URIs: only those redirect URIs are ever used, and a changed
+// document is a new change (RefreshMcpClientDocument).
 func (s *Admin) AllowMcpClient(ctx context.Context, clientURL string, agent ids.UUID) (dbq.PcMcpClient, Filed, error) {
 	c, err := manager(ctx)
 	if err != nil {
@@ -426,6 +475,10 @@ func (s *Admin) AllowMcpClient(ctx context.Context, clientURL string, agent ids.
 	}
 	if !ValidClientURL(clientURL) || s.checkURL(clientURL) != nil {
 		return dbq.PcMcpClient{}, Filed{}, ErrURL
+	}
+	md, err := s.document(ctx, clientURL)
+	if err != nil {
+		return dbq.PcMcpClient{}, Filed{}, err
 	}
 	var (
 		row dbq.PcMcpClient
@@ -444,18 +497,75 @@ func (s *Admin) AllowMcpClient(ctx context.Context, clientURL string, agent ids.
 		}
 		row, err = q.InsertMcpClient(ctx, dbq.InsertMcpClientParams{
 			OrgID: c.Org, ID: ids.NewV7(), ClientUrl: clientURL, AgentID: agent, InstanceID: inst.ID, CreatedBy: c.Principal.ID,
+			ClientName: md.Name, RedirectUris: md.RedirectURIs, DocumentDigest: DocumentDigest(md),
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrState
 		} else if err != nil {
 			return err
 		}
-		f, err = s.file(ctx, tx, c, protect.SurfaceMcpClient, row.ID, idPayload{ID: row.ID}, map[string]string{
-			"client_url": clientURL, "agent": agent.String(), "instance": inst.ID.String(),
-		})
+		summary := documentSummary(md)
+		summary["client_url"], summary["agent"], summary["instance"] = clientURL, agent.String(), inst.ID.String()
+		f, err = s.file(ctx, tx, c, protect.SurfaceMcpClient, row.ID, idPayload{ID: row.ID}, summary)
 		return err
 	})
 	return row, f, err
+}
+
+// mcpDocumentPayload is a change taking a client's new document over the
+// one confirmed before.
+type mcpDocumentPayload struct {
+	ID       ids.UUID `json:"id"`
+	Name     string   `json:"client_name"`
+	Redirect []string `json:"redirect_uris"`
+	Previous []byte   `json:"previous_digest"`
+	Digest   []byte   `json:"document_digest"`
+}
+
+// RefreshMcpClientDocument files taking an active client's live document,
+// which differs from the one confirmed before: a new two-person change
+// (HR-625). Until it applies the client keeps its confirmed redirect URIs
+// and name.
+func (s *Admin) RefreshMcpClientDocument(ctx context.Context, id ids.UUID) (dbq.PcMcpClient, ports.ClientMetadata, Filed, error) {
+	c, err := manager(ctx)
+	if err != nil {
+		return dbq.PcMcpClient{}, ports.ClientMetadata{}, Filed{}, err
+	}
+	if err := s.entitled(ctx); err != nil {
+		return dbq.PcMcpClient{}, ports.ClientMetadata{}, Filed{}, err
+	}
+	var row dbq.PcMcpClient
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		row, err = dbq.New(tx).GetMcpClient(ctx, c.Org, id)
+		return notFound(err)
+	}, db.ReadOnly())
+	if err != nil {
+		return dbq.PcMcpClient{}, ports.ClientMetadata{}, Filed{}, err
+	}
+	if row.State != "ACTIVE" {
+		return dbq.PcMcpClient{}, ports.ClientMetadata{}, Filed{}, ErrState
+	}
+	md, err := s.document(ctx, row.ClientUrl)
+	if err != nil {
+		return dbq.PcMcpClient{}, ports.ClientMetadata{}, Filed{}, err
+	}
+	d := DocumentDigest(md)
+	if bytes.Equal(d, row.DocumentDigest) {
+		return dbq.PcMcpClient{}, ports.ClientMetadata{}, Filed{}, ErrDocumentSame
+	}
+	var f Filed
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		summary := documentSummary(md)
+		summary["client_url"], summary["agent"] = row.ClientUrl, row.AgentID.String()
+		summary["previous_digest"] = fmt.Sprintf("%x", row.DocumentDigest)
+		var err error
+		f, err = s.file(ctx, tx, c, protect.SurfaceMcpClient, row.ID, mcpDocumentPayload{
+			ID: row.ID, Name: md.Name, Redirect: md.RedirectURIs, Previous: row.DocumentDigest, Digest: d,
+		}, summary)
+		return err
+	})
+	return row, md, f, err
 }
 
 // ValidClientURL reports whether raw can name a client by its metadata
@@ -648,6 +758,15 @@ func (s *Admin) applyMcpClient(ctx context.Context, tx db.TenantTx, author tenan
 		return err
 	}
 	q := dbq.New(tx)
+	if doc, ok := documentPayload(payload); ok {
+		if err := one(q.UpdateMcpClientDocument(ctx, dbq.UpdateMcpClientDocumentParams{
+			OrgID: tx.OrgID(), ID: id, ClientName: doc.Name, RedirectUris: doc.Redirect, DocumentDigest: doc.Digest,
+			PreviousDigest: doc.Previous,
+		})); err != nil {
+			return err
+		}
+		return s.applied(ctx, tx, author, protect.SurfaceMcpClient)
+	}
 	row, err := q.GetMcpClient(ctx, tx.OrgID(), id)
 	if err != nil {
 		return notFound(err)
@@ -713,7 +832,17 @@ func mcpClientState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte
 	if err != nil {
 		return nil, notFound(err)
 	}
-	return fmt.Appendf(nil, "%s|%s|%s|%s", r.State, r.ClientUrl, r.AgentID, r.InstanceID), nil
+	return fmt.Appendf(nil, "%s|%s|%s|%s|%x", r.State, r.ClientUrl, r.AgentID, r.InstanceID, r.DocumentDigest), nil
+}
+
+// documentPayload reads a document change; an allow-list addition carries
+// no digest.
+func documentPayload(payload []byte) (mcpDocumentPayload, bool) {
+	var p mcpDocumentPayload
+	if err := json.Unmarshal(payload, &p); err != nil || len(p.Digest) != sha256.Size || len(p.Previous) != sha256.Size {
+		return mcpDocumentPayload{}, false
+	}
+	return p, true
 }
 
 func deref(s *string) string {
@@ -755,6 +884,9 @@ func closeMcpClient(ctx context.Context, tx db.TenantTx, author ids.UUID, payloa
 	id, err := payloadID(payload)
 	if err != nil {
 		return nil //nolint:nilerr // nothing of ours to lapse
+	}
+	if _, ok := documentPayload(payload); ok {
+		return nil // a declined document change leaves the confirmed document
 	}
 	q := dbq.New(tx)
 	row, err := q.LapseMcpClient(ctx, &author, tx.OrgID(), id)

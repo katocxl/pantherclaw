@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -28,8 +29,8 @@ const (
 	m26idaAgent    = "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, $3, 'DISCOVERED', 'system')"
 	m26idaInstance = `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
 	VALUES ($1, $2, $3, $4, '{}', 'PENDING_ADMISSION', 'mcp_client')`
-	m26idaMcpClient = `INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, created_by)
-	VALUES ($1, $2, $3, $4, $5, $6)`
+	m26idaMcpClient = `INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, created_by, redirect_uris,
+	document_digest) VALUES ($1, $2, $3, $4, $5, $6, ARRAY['http://127.0.0.1/cb'], sha256('doc'::bytea))`
 )
 
 func m26idaJKT(n int) string { return fmt.Sprintf("%043d", n) }
@@ -160,4 +161,66 @@ func TestHR620_RootRunLauncherInstanceOnlyForIDJAG(t *testing.T) {
 		f.org, newID(), f.agent, f.env, none, f.owner, f.owner, "id_jag", iss, sub)
 	f.wantState(t, checkViolation, "id_jag without its subject", insert,
 		f.org, newID(), f.agent, f.env, inst, none, f.owner, "id_jag", none, none)
+}
+
+// TestM26_McpAccessDownDeletesItsRowsAndApplyAgain: with id_jag runs, runs
+// through an mcp_client instance, their child runs and the MCP tables'
+// rows present, 00291's Down deletes them, restores the old checks, keeps
+// every other run and instance, and the Up applies again. A row of another
+// table referring to one of them stops the Down, which then deletes nothing.
+//
+// Covers: F910
+func TestM26_McpAccessDownDeletesItsRowsAndApplyAgain(t *testing.T) {
+	ctx := context.Background()
+	up, down := downOf(t, "00291_mcp_access.sql")
+	d := dbtest.New(t)
+	f := newFixture(t, d.AppPool(t))
+	keep, mcpInst := newID(), newID()
+	f.mustExec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
+		VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'discovery')`, f.org, keep, f.agent, testJKT)
+	f.mustExec(t, m26idaInstance, f.org, mcpInst, f.agent, m26idaJKT(7))
+	const run = `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, instance_id, launcher_instance_id, launcher_user_id,
+		principal_user_id, principal_source, subject_issuer, subject_subject, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + interval '8 hours')`
+	none := (*string)(nil)
+	idjag, viaClient, plain, child := newID(), newID(), newID(), newID()
+	f.mustExec(t, run, f.org, idjag, f.agent, f.env, keep, keep, none, f.owner, "id_jag", "https://acme.okta.com", "00u1")
+	f.mustExec(t, run, f.org, viaClient, f.agent, f.env, mcpInst, none, f.owner, f.owner, "launcher", none, none)
+	f.mustExec(t, run, f.org, plain, f.agent, f.env, keep, none, f.owner, f.owner, "launcher", none, none)
+	f.mustExec(t, `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_instance_id, principal_user_id,
+		principal_source, parent_run_id, depth, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'parent_run', $7, 1, now() + interval '8 hours')`,
+		f.org, child, f.agent, f.env, keep, f.owner, idjag)
+	client := newID()
+	f.mustExec(t, m26idaMcpClient, f.org, client, "https://client.example.com/c.json", f.agent, mcpInst, f.owner)
+	f.mustExec(t, `INSERT INTO pc.mcp_refresh_tokens (org_id, id, family_id, token_hash, client_id, run_id, resource, expires_at)
+		VALUES ($1, $2, $2, $3, $4, $5, 'https://gw.example.com/mcp-oauth/x', now() + interval '1 hour')`,
+		f.org, newID(), m5Secret(3), client, viaClient)
+
+	m := d.Pool(t, d.Migrator)
+	entry := newID()
+	f.mustExec(t, `INSERT INTO pc.waitlist_entries (org_id, id, kind, subject_type, subject_id, agent_id, run_id, requested_by,
+		deadline_at) VALUES ($1, $2, 'ACCESS_REQUEST', 'grant', $3, $4, $5, $6, now() + interval '7 days')`, f.org, entry, newID(), f.agent, idjag, f.owner)
+	if _, err := m.Pgx().Exec(ctx, down); err == nil || !strings.Contains(err.Error(), "remove those rows first") {
+		t.Fatalf("Down with a waitlist entry of an id_jag run: %v", err)
+	}
+	d.AdminDo(t, func(c *pgx.Conn) error {
+		_, err := c.Exec(ctx, "DELETE FROM pc.waitlist_entries WHERE id = $1", entry)
+		return err
+	})
+	if _, err := m.Pgx().Exec(ctx, down); err != nil {
+		t.Fatalf("Down with rows present: %v", err)
+	}
+	var runs, instances int
+	var forced bool
+	d.AdminQueryRow(t, `SELECT (SELECT count(*) FROM pc.runs WHERE org_id = $1), (SELECT count(*) FROM pc.agent_instances WHERE org_id = $1),
+		(SELECT relforcerowsecurity FROM pg_class WHERE oid = 'pc.runs'::regclass)
+		AND (SELECT relforcerowsecurity FROM pg_class WHERE oid = 'pc.agent_instances'::regclass)`,
+		[]any{f.org}, &runs, &instances, &forced)
+	if runs != 1 || instances != 1 || !forced {
+		t.Fatalf("after Down: runs=%d instances=%d (want 1, 1) row security forced=%v", runs, instances, forced)
+	}
+	if _, err := m.Pgx().Exec(ctx, up); err != nil {
+		t.Fatalf("Up again: %v", err)
+	}
 }

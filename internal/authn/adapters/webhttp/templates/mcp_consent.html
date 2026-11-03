@@ -6,6 +6,7 @@
 <dt>Agent</dt><dd>{{.AgentName}} (<code>{{.Agent}}</code>)</dd>
 <dt>Server</dt><dd><code>{{.Connection}}</code> at <code>{{.Resource}}</code></dd>
 <dt>Returns to</dt><dd><code>{{.Request.RedirectURI}}</code></dd>
+{{if .LoopbackRedirect}}<dd class="alert" id="mcp-loopback">This returns to a plain HTTP address on this device. Any program running here could receive the answer. Allow only if you started this client yourself just now.</dd>{{end}}
 {{if .Request.HasScope}}<dt>Asks for</dt><dd><code>{{.Request.Scope}}</code></dd>{{end}}
 </dl>
 <p>

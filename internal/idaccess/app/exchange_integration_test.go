@@ -23,6 +23,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/idaccess/adapters/idjag"
 	"github.com/katocxl/pantherclaw/internal/idaccess/adapters/mcptoken"
@@ -33,8 +34,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 	"github.com/katocxl/pantherclaw/internal/sim/okta"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 const (
@@ -46,6 +50,7 @@ const (
 var resource = domain.ResourceURL(gateway, "github")
 
 type env struct {
+	db       *dbtest.DB
 	pool     *db.Pool
 	org      ids.OrgID
 	user     ids.UUID
@@ -104,8 +109,9 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	d := dbtest.New(t)
 	e := &env{
-		pool: dbtest.New(t).AppPool(t), org: ids.New[ids.Org](), user: ids.NewV7(), other: ids.NewV7(), agent: ids.NewV7(),
+		db: d, pool: d.AppPool(t), org: ids.New[ids.Org](), user: ids.NewV7(), other: ids.NewV7(), agent: ids.NewV7(),
 		envID: ids.NewV7(), instance: ids.NewV7(), key: priv, kid: base64.RawURLEncoding.EncodeToString(tp),
 		issuer: ids.NewV7(), binding: ids.NewV7(), sim: sim,
 	}
@@ -370,5 +376,157 @@ func TestHR622_TokenEndpointRefusals(t *testing.T) {
 	e.exec(t, "UPDATE pc.org_assertion_issuers SET state = 'DISABLED', disabled_by = $2, disabled_at = now() WHERE id = $1", e.issuer, e.user)
 	if _, err := e.exchange(t, e.assert(t, "00u-alice", clientID, "tickets.read"), nil); !strings.HasPrefix(oauthCode(err), "invalid_grant") {
 		t.Errorf("a disabled issuer: %v", oauthCode(err))
+	}
+}
+
+// TestHR622_ARefusedAssertionIsSpent: the replay records of an ID-JAG and
+// of its client assertion commit before anything can refuse, so a request
+// refused once is never accepted after the state changes.
+//
+// Covers: F910
+func TestHR622_ARefusedAssertionIsSpent(t *testing.T) {
+	e := newEnv(t)
+	form := func(jag, ca string) url.Values {
+		return url.Values{
+			"grant_type": {app.GrantJWTBearer}, "assertion": {jag},
+			"client_assertion_type": {authnapp.AssertionType}, "client_assertion": {ca},
+		}
+	}
+	jag, ca := e.assert(t, "00u-alice", clientID, "tickets.read"), e.clientAssertion(t, e.key, e.kid)
+	e.exec(t, "UPDATE pc.org_mcp_access SET enabled = false WHERE org_id = $1", e.org)
+	if _, err := e.ex.JWTBearer(context.Background(), form(jag, ca)); !strings.HasPrefix(oauthCode(err), "access_denied "+app.ReasonMcpAccessOff) {
+		t.Fatalf("MCP authorization off: %s", oauthCode(err))
+	}
+	e.exec(t, "UPDATE pc.org_mcp_access SET enabled = true WHERE org_id = $1", e.org)
+	if _, err := e.ex.JWTBearer(context.Background(), form(jag, e.clientAssertion(t, e.key, e.kid))); !strings.HasPrefix(oauthCode(err),
+		"invalid_grant") {
+		t.Errorf("the refused assertion again: %s", oauthCode(err))
+	}
+	if _, err := e.ex.JWTBearer(context.Background(), form(e.assert(t, "00u-alice", clientID, "tickets.read"), ca)); !strings.HasPrefix(
+		oauthCode(err), "invalid_client") {
+		t.Errorf("the refused client assertion again: %s", oauthCode(err))
+	}
+	if _, err := e.exchange(t, e.assert(t, "00u-alice", clientID, "tickets.read"), nil); err != nil {
+		t.Fatalf("a fresh pair: %s", oauthCode(err))
+	}
+}
+
+// clientAssertionAs is private_key_jwt for client signed with key.
+func clientAssertionAs(t *testing.T, client string, key ed25519.PrivateKey, kid string) string {
+	t.Helper()
+	s, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: jose.JSONWebKey{Key: key, KeyID: kid}},
+		(&jose.SignerOptions{}).WithType("JWT"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	b, err := json.Marshal(map[string]any{
+		"iss": client, "sub": client, "aud": publicURL + authnapp.TokenPath, "jti": ids.NewV7().String(),
+		"iat": now.Unix(), "exp": now.Add(time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj, err := s.Sign(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := obj.CompactSerialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// instanceKey adds an instance of agent in state with a fresh key.
+func (e *env) instanceKey(t *testing.T, agent ids.UUID, state string) (ed25519.PrivateKey, string) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tp, err := (&jose.JSONWebKey{Key: pub}).Thumbprint(crypto.SHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwk, err := json.Marshal(map[string]string{"kty": "OKP", "crv": "Ed25519", "x": base64.RawURLEncoding.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kid := base64.RawURLEncoding.EncodeToString(tp)
+	e.exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6::text, 'discovery', CASE WHEN $6::text = 'PENDING_ADMISSION' THEN now() + interval '1 day' END)`, e.org, ids.NewV7(), agent, kid, jwk, state)
+	return priv, kid
+}
+
+// TestHR624_TheClientIsAnAdmittedInstanceOfTheBoundAgent: a client id
+// bound through the two-person change authenticates only with
+// private_key_jwt by the key of an admitted instance of the agent it is
+// bound to, with the client_id it asserts; nothing before the second
+// person's confirmation.
+//
+// Covers: F911
+func TestHR624_TheClientIsAnAdmittedInstanceOfTheBoundAgent(t *testing.T) {
+	e := newEnv(t)
+	for _, u := range []ids.UUID{e.user, e.other} {
+		e.exec(t, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by) VALUES ($1, $2, 'org_admin', $3, 'ORG', 'test')`,
+			e.org, ids.NewV7(), u)
+	}
+	gate := &protect.Gate{Requests: &adminRequests{opened: map[ids.UUID]protect.Request{}}}
+	svc := &app.Admin{Pool: e.pool, Gate: gate, Editions: &adminEdition{e: billing.Enterprise}, PublicURL: publicURL}
+	svc.Register(gate)
+	person := func(u ids.UUID) context.Context {
+		return tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
+			Org: e.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: u},
+			Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}},
+		}, Credential: tapp.CredBrowserSession})
+	}
+	const second = "0oa-second-client"
+	try := func(client string, key ed25519.PrivateKey, kid string, extra url.Values) string {
+		f := url.Values{
+			"grant_type": {app.GrantJWTBearer}, "assertion": {e.assert(t, "00u-alice", second, "tickets.read")},
+			"client_assertion_type": {authnapp.AssertionType}, "client_assertion": {clientAssertionAs(t, client, key, kid)},
+		}
+		for k, v := range extra {
+			f[k] = v
+		}
+		_, err := e.ex.JWTBearer(context.Background(), f)
+		return oauthCode(err)
+	}
+
+	_, filed, err := svc.BindClient(person(e.user), e.issuer, second, e.agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := try(second, e.key, e.kid, nil); !strings.HasPrefix(got, "invalid_client") {
+		t.Fatalf("a binding waiting for its second person: %s", got)
+	}
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return gate.Apply(ctx, tx, filed.Request, []ids.UUID{e.user})
+	}); err == nil {
+		t.Fatal("the author confirmed their own binding")
+	}
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return gate.Apply(ctx, tx, filed.Request, []ids.UUID{e.other})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := try(second, e.key, e.kid, nil); got != "ok" {
+		t.Fatalf("the confirmed binding with an admitted instance's key: %s", got)
+	}
+
+	otherAgent := ids.NewV7()
+	e.exec(t, `INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'other', 'DISCOVERED', 'system')`, e.org, otherAgent)
+	foreignKey, foreignKid := e.instanceKey(t, otherAgent, "ADMITTED")
+	pendingKey, pendingKid := e.instanceKey(t, e.agent, "PENDING_ADMISSION")
+	for name, got := range map[string]string{
+		"a client assertion naming another client": try(clientID, e.key, e.kid, nil),
+		"a client_id parameter naming another":     try(second, e.key, e.kid, url.Values{"client_id": {clientID}}),
+		"another agent's admitted instance":        try(second, foreignKey, foreignKid, nil),
+		"a pending instance of the agent":          try(second, pendingKey, pendingKid, nil),
+	} {
+		if !strings.HasPrefix(got, "invalid_client") {
+			t.Errorf("%s: %s", name, got)
+		}
 	}
 }

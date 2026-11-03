@@ -8,6 +8,7 @@ package idaccessrpc
 
 import (
 	"context"
+	"encoding/hex"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -67,7 +68,8 @@ func client(r dbq.PcOrgAssertionClient) *pantherclawv1.AssertionClient {
 func mcpClient(r dbq.PcMcpClient) *pantherclawv1.McpClient {
 	return &pantherclawv1.McpClient{
 		Id: r.ID.String(), ClientUrl: r.ClientUrl, AgentId: r.AgentID.String(), InstanceId: r.InstanceID.String(), State: r.State,
-		CreateTime: timestamppb.New(r.CreatedAt),
+		CreateTime: timestamppb.New(r.CreatedAt), ClientName: r.ClientName, RedirectUris: r.RedirectUris,
+		DocumentDigest: hex.EncodeToString(r.DocumentDigest),
 	}
 }
 
@@ -228,6 +230,23 @@ func (h *Handler) RemoveMcpClient(ctx context.Context, req *pantherclawv1.Remove
 		return nil, err
 	}
 	return &pantherclawv1.RemoveMcpClientResponse{Client: mcpClient(r)}, nil
+}
+
+// RefreshMcpClientDocument implements IdpAccessServiceHandler.
+func (h *Handler) RefreshMcpClientDocument(ctx context.Context, req *pantherclawv1.RefreshMcpClientDocumentRequest) (
+	*pantherclawv1.RefreshMcpClientDocumentResponse, error,
+) {
+	id, err := idOf(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	r, doc, f, err := h.s.RefreshMcpClientDocument(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.RefreshMcpClientDocumentResponse{
+		Client: mcpClient(r), ClientName: doc.Name, RedirectUris: doc.RedirectURIs, RequestId: f.Request.String(),
+	}, nil
 }
 
 // ListMcpClients implements IdpAccessServiceHandler.

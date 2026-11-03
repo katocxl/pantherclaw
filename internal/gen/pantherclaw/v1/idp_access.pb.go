@@ -249,9 +249,15 @@ type McpClient struct {
 	// PENDING, ACTIVE or REMOVED.
 	State string `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
 	// When it was created.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// The client's own name in the confirmed document: untrusted text.
+	ClientName string `protobuf:"bytes,7,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	// The redirect URIs of the confirmed document.
+	RedirectUris []string `protobuf:"bytes,8,rep,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	// SHA-256 of the confirmed document, hex.
+	DocumentDigest string `protobuf:"bytes,9,opt,name=document_digest,json=documentDigest,proto3" json:"document_digest,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *McpClient) Reset() {
@@ -324,6 +330,27 @@ func (x *McpClient) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *McpClient) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *McpClient) GetRedirectUris() []string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return nil
+}
+
+func (x *McpClient) GetDocumentDigest() string {
+	if x != nil {
+		return x.DocumentDigest
+	}
+	return ""
 }
 
 // McpAccess is the org's MCP authorization setting.
@@ -1456,6 +1483,125 @@ func (x *RemoveMcpClientResponse) GetClient() *McpClient {
 	return nil
 }
 
+// RefreshMcpClientDocumentRequest names an active client.
+type RefreshMcpClientDocumentRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Client entry id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshMcpClientDocumentRequest) Reset() {
+	*x = RefreshMcpClientDocumentRequest{}
+	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshMcpClientDocumentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshMcpClientDocumentRequest) ProtoMessage() {}
+
+func (x *RefreshMcpClientDocumentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshMcpClientDocumentRequest.ProtoReflect.Descriptor instead.
+func (*RefreshMcpClientDocumentRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_idp_access_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *RefreshMcpClientDocumentRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// RefreshMcpClientDocumentResponse is the change a second person confirms.
+type RefreshMcpClientDocumentResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The client as confirmed so far.
+	Client *McpClient `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
+	// The live document's name: untrusted text.
+	ClientName string `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	// The live document's redirect URIs.
+	RedirectUris []string `protobuf:"bytes,3,rep,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	// The change request a second person confirms.
+	RequestId     string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshMcpClientDocumentResponse) Reset() {
+	*x = RefreshMcpClientDocumentResponse{}
+	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshMcpClientDocumentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshMcpClientDocumentResponse) ProtoMessage() {}
+
+func (x *RefreshMcpClientDocumentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshMcpClientDocumentResponse.ProtoReflect.Descriptor instead.
+func (*RefreshMcpClientDocumentResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_idp_access_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RefreshMcpClientDocumentResponse) GetClient() *McpClient {
+	if x != nil {
+		return x.Client
+	}
+	return nil
+}
+
+func (x *RefreshMcpClientDocumentResponse) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *RefreshMcpClientDocumentResponse) GetRedirectUris() []string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return nil
+}
+
+func (x *RefreshMcpClientDocumentResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
 // ListMcpClientsRequest lists the allow-list.
 type ListMcpClientsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1465,7 +1611,7 @@ type ListMcpClientsRequest struct {
 
 func (x *ListMcpClientsRequest) Reset() {
 	*x = ListMcpClientsRequest{}
-	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1477,7 +1623,7 @@ func (x *ListMcpClientsRequest) String() string {
 func (*ListMcpClientsRequest) ProtoMessage() {}
 
 func (x *ListMcpClientsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1490,7 +1636,7 @@ func (x *ListMcpClientsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMcpClientsRequest.ProtoReflect.Descriptor instead.
 func (*ListMcpClientsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_idp_access_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_idp_access_proto_rawDescGZIP(), []int{28}
 }
 
 // ListMcpClientsResponse is the allow-list.
@@ -1504,7 +1650,7 @@ type ListMcpClientsResponse struct {
 
 func (x *ListMcpClientsResponse) Reset() {
 	*x = ListMcpClientsResponse{}
-	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1516,7 +1662,7 @@ func (x *ListMcpClientsResponse) String() string {
 func (*ListMcpClientsResponse) ProtoMessage() {}
 
 func (x *ListMcpClientsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[27]
+	mi := &file_pantherclaw_v1_idp_access_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1529,7 +1675,7 @@ func (x *ListMcpClientsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMcpClientsResponse.ProtoReflect.Descriptor instead.
 func (*ListMcpClientsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_idp_access_proto_rawDescGZIP(), []int{27}
+	return file_pantherclaw_v1_idp_access_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListMcpClientsResponse) GetClients() []*McpClient {
@@ -1564,7 +1710,7 @@ const file_pantherclaw_v1_idp_access_proto_rawDesc = "" +
 	"\bagent_id\x18\x04 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\x12;\n" +
 	"\vcreate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xc9\x01\n" +
+	"createTime\"\xb8\x02\n" +
 	"\tMcpClient\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1574,7 +1720,11 @@ const file_pantherclaw_v1_idp_access_proto_rawDesc = "" +
 	"instanceId\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\x12;\n" +
 	"\vcreate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"^\n" +
+	"createTime\x12\x1f\n" +
+	"\vclient_name\x18\a \x01(\tR\n" +
+	"clientName\x12#\n" +
+	"\rredirect_uris\x18\b \x03(\tR\fredirectUris\x12'\n" +
+	"\x0fdocument_digest\x18\t \x01(\tR\x0edocumentDigest\"^\n" +
 	"\tMcpAccess\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1f\n" +
 	"\vgateway_url\x18\x02 \x01(\tR\n" +
@@ -1640,11 +1790,19 @@ const file_pantherclaw_v1_idp_access_proto_rawDesc = "" +
 	"\x16RemoveMcpClientRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"L\n" +
 	"\x17RemoveMcpClientResponse\x121\n" +
-	"\x06client\x18\x01 \x01(\v2\x19.pantherclaw.v1.McpClientR\x06client\"\x17\n" +
+	"\x06client\x18\x01 \x01(\v2\x19.pantherclaw.v1.McpClientR\x06client\";\n" +
+	"\x1fRefreshMcpClientDocumentRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xba\x01\n" +
+	" RefreshMcpClientDocumentResponse\x121\n" +
+	"\x06client\x18\x01 \x01(\v2\x19.pantherclaw.v1.McpClientR\x06client\x12\x1f\n" +
+	"\vclient_name\x18\x02 \x01(\tR\n" +
+	"clientName\x12#\n" +
+	"\rredirect_uris\x18\x03 \x03(\tR\fredirectUris\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\"\x17\n" +
 	"\x15ListMcpClientsRequest\"M\n" +
 	"\x16ListMcpClientsResponse\x123\n" +
-	"\aclients\x18\x01 \x03(\v2\x19.pantherclaw.v1.McpClientR\aclients2\xad\n" +
-	"\n" +
+	"\aclients\x18\x01 \x03(\v2\x19.pantherclaw.v1.McpClientR\aclients2\xac\v\n" +
 	"\x10IdpAccessService\x12t\n" +
 	"\x15CreateAssertionIssuer\x12,.pantherclaw.v1.CreateAssertionIssuerRequest\x1a-.pantherclaw.v1.CreateAssertionIssuerResponse\x12w\n" +
 	"\x16DisableAssertionIssuer\x12-.pantherclaw.v1.DisableAssertionIssuerRequest\x1a..pantherclaw.v1.DisableAssertionIssuerResponse\x12v\n" +
@@ -1656,7 +1814,8 @@ const file_pantherclaw_v1_idp_access_proto_rawDesc = "" +
 	"\x0fEnableMcpAccess\x12&.pantherclaw.v1.EnableMcpAccessRequest\x1a'.pantherclaw.v1.EnableMcpAccessResponse\x12e\n" +
 	"\x10DisableMcpAccess\x12'.pantherclaw.v1.DisableMcpAccessRequest\x1a(.pantherclaw.v1.DisableMcpAccessResponse\x12_\n" +
 	"\x0eAllowMcpClient\x12%.pantherclaw.v1.AllowMcpClientRequest\x1a&.pantherclaw.v1.AllowMcpClientResponse\x12b\n" +
-	"\x0fRemoveMcpClient\x12&.pantherclaw.v1.RemoveMcpClientRequest\x1a'.pantherclaw.v1.RemoveMcpClientResponse\x12d\n" +
+	"\x0fRemoveMcpClient\x12&.pantherclaw.v1.RemoveMcpClientRequest\x1a'.pantherclaw.v1.RemoveMcpClientResponse\x12}\n" +
+	"\x18RefreshMcpClientDocument\x12/.pantherclaw.v1.RefreshMcpClientDocumentRequest\x1a0.pantherclaw.v1.RefreshMcpClientDocumentResponse\x12d\n" +
 	"\x0eListMcpClients\x12%.pantherclaw.v1.ListMcpClientsRequest\x1a&.pantherclaw.v1.ListMcpClientsResponse\"\x03\x90\x02\x01B\xc7\x01\n" +
 	"\x12com.pantherclaw.v1B\x0eIdpAccessProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
@@ -1672,43 +1831,45 @@ func file_pantherclaw_v1_idp_access_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_idp_access_proto_rawDescData
 }
 
-var file_pantherclaw_v1_idp_access_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_pantherclaw_v1_idp_access_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_pantherclaw_v1_idp_access_proto_goTypes = []any{
-	(*AssertionIssuer)(nil),                // 0: pantherclaw.v1.AssertionIssuer
-	(*AssertionClient)(nil),                // 1: pantherclaw.v1.AssertionClient
-	(*McpClient)(nil),                      // 2: pantherclaw.v1.McpClient
-	(*McpAccess)(nil),                      // 3: pantherclaw.v1.McpAccess
-	(*CreateAssertionIssuerRequest)(nil),   // 4: pantherclaw.v1.CreateAssertionIssuerRequest
-	(*CreateAssertionIssuerResponse)(nil),  // 5: pantherclaw.v1.CreateAssertionIssuerResponse
-	(*DisableAssertionIssuerRequest)(nil),  // 6: pantherclaw.v1.DisableAssertionIssuerRequest
-	(*DisableAssertionIssuerResponse)(nil), // 7: pantherclaw.v1.DisableAssertionIssuerResponse
-	(*ListAssertionIssuersRequest)(nil),    // 8: pantherclaw.v1.ListAssertionIssuersRequest
-	(*ListAssertionIssuersResponse)(nil),   // 9: pantherclaw.v1.ListAssertionIssuersResponse
-	(*BindAssertionClientRequest)(nil),     // 10: pantherclaw.v1.BindAssertionClientRequest
-	(*BindAssertionClientResponse)(nil),    // 11: pantherclaw.v1.BindAssertionClientResponse
-	(*RemoveAssertionClientRequest)(nil),   // 12: pantherclaw.v1.RemoveAssertionClientRequest
-	(*RemoveAssertionClientResponse)(nil),  // 13: pantherclaw.v1.RemoveAssertionClientResponse
-	(*ListAssertionClientsRequest)(nil),    // 14: pantherclaw.v1.ListAssertionClientsRequest
-	(*ListAssertionClientsResponse)(nil),   // 15: pantherclaw.v1.ListAssertionClientsResponse
-	(*GetMcpAccessRequest)(nil),            // 16: pantherclaw.v1.GetMcpAccessRequest
-	(*GetMcpAccessResponse)(nil),           // 17: pantherclaw.v1.GetMcpAccessResponse
-	(*EnableMcpAccessRequest)(nil),         // 18: pantherclaw.v1.EnableMcpAccessRequest
-	(*EnableMcpAccessResponse)(nil),        // 19: pantherclaw.v1.EnableMcpAccessResponse
-	(*DisableMcpAccessRequest)(nil),        // 20: pantherclaw.v1.DisableMcpAccessRequest
-	(*DisableMcpAccessResponse)(nil),       // 21: pantherclaw.v1.DisableMcpAccessResponse
-	(*AllowMcpClientRequest)(nil),          // 22: pantherclaw.v1.AllowMcpClientRequest
-	(*AllowMcpClientResponse)(nil),         // 23: pantherclaw.v1.AllowMcpClientResponse
-	(*RemoveMcpClientRequest)(nil),         // 24: pantherclaw.v1.RemoveMcpClientRequest
-	(*RemoveMcpClientResponse)(nil),        // 25: pantherclaw.v1.RemoveMcpClientResponse
-	(*ListMcpClientsRequest)(nil),          // 26: pantherclaw.v1.ListMcpClientsRequest
-	(*ListMcpClientsResponse)(nil),         // 27: pantherclaw.v1.ListMcpClientsResponse
-	(*timestamppb.Timestamp)(nil),          // 28: google.protobuf.Timestamp
+	(*AssertionIssuer)(nil),                  // 0: pantherclaw.v1.AssertionIssuer
+	(*AssertionClient)(nil),                  // 1: pantherclaw.v1.AssertionClient
+	(*McpClient)(nil),                        // 2: pantherclaw.v1.McpClient
+	(*McpAccess)(nil),                        // 3: pantherclaw.v1.McpAccess
+	(*CreateAssertionIssuerRequest)(nil),     // 4: pantherclaw.v1.CreateAssertionIssuerRequest
+	(*CreateAssertionIssuerResponse)(nil),    // 5: pantherclaw.v1.CreateAssertionIssuerResponse
+	(*DisableAssertionIssuerRequest)(nil),    // 6: pantherclaw.v1.DisableAssertionIssuerRequest
+	(*DisableAssertionIssuerResponse)(nil),   // 7: pantherclaw.v1.DisableAssertionIssuerResponse
+	(*ListAssertionIssuersRequest)(nil),      // 8: pantherclaw.v1.ListAssertionIssuersRequest
+	(*ListAssertionIssuersResponse)(nil),     // 9: pantherclaw.v1.ListAssertionIssuersResponse
+	(*BindAssertionClientRequest)(nil),       // 10: pantherclaw.v1.BindAssertionClientRequest
+	(*BindAssertionClientResponse)(nil),      // 11: pantherclaw.v1.BindAssertionClientResponse
+	(*RemoveAssertionClientRequest)(nil),     // 12: pantherclaw.v1.RemoveAssertionClientRequest
+	(*RemoveAssertionClientResponse)(nil),    // 13: pantherclaw.v1.RemoveAssertionClientResponse
+	(*ListAssertionClientsRequest)(nil),      // 14: pantherclaw.v1.ListAssertionClientsRequest
+	(*ListAssertionClientsResponse)(nil),     // 15: pantherclaw.v1.ListAssertionClientsResponse
+	(*GetMcpAccessRequest)(nil),              // 16: pantherclaw.v1.GetMcpAccessRequest
+	(*GetMcpAccessResponse)(nil),             // 17: pantherclaw.v1.GetMcpAccessResponse
+	(*EnableMcpAccessRequest)(nil),           // 18: pantherclaw.v1.EnableMcpAccessRequest
+	(*EnableMcpAccessResponse)(nil),          // 19: pantherclaw.v1.EnableMcpAccessResponse
+	(*DisableMcpAccessRequest)(nil),          // 20: pantherclaw.v1.DisableMcpAccessRequest
+	(*DisableMcpAccessResponse)(nil),         // 21: pantherclaw.v1.DisableMcpAccessResponse
+	(*AllowMcpClientRequest)(nil),            // 22: pantherclaw.v1.AllowMcpClientRequest
+	(*AllowMcpClientResponse)(nil),           // 23: pantherclaw.v1.AllowMcpClientResponse
+	(*RemoveMcpClientRequest)(nil),           // 24: pantherclaw.v1.RemoveMcpClientRequest
+	(*RemoveMcpClientResponse)(nil),          // 25: pantherclaw.v1.RemoveMcpClientResponse
+	(*RefreshMcpClientDocumentRequest)(nil),  // 26: pantherclaw.v1.RefreshMcpClientDocumentRequest
+	(*RefreshMcpClientDocumentResponse)(nil), // 27: pantherclaw.v1.RefreshMcpClientDocumentResponse
+	(*ListMcpClientsRequest)(nil),            // 28: pantherclaw.v1.ListMcpClientsRequest
+	(*ListMcpClientsResponse)(nil),           // 29: pantherclaw.v1.ListMcpClientsResponse
+	(*timestamppb.Timestamp)(nil),            // 30: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_idp_access_proto_depIdxs = []int32{
-	28, // 0: pantherclaw.v1.AssertionIssuer.create_time:type_name -> google.protobuf.Timestamp
-	28, // 1: pantherclaw.v1.AssertionIssuer.activate_time:type_name -> google.protobuf.Timestamp
-	28, // 2: pantherclaw.v1.AssertionClient.create_time:type_name -> google.protobuf.Timestamp
-	28, // 3: pantherclaw.v1.McpClient.create_time:type_name -> google.protobuf.Timestamp
+	30, // 0: pantherclaw.v1.AssertionIssuer.create_time:type_name -> google.protobuf.Timestamp
+	30, // 1: pantherclaw.v1.AssertionIssuer.activate_time:type_name -> google.protobuf.Timestamp
+	30, // 2: pantherclaw.v1.AssertionClient.create_time:type_name -> google.protobuf.Timestamp
+	30, // 3: pantherclaw.v1.McpClient.create_time:type_name -> google.protobuf.Timestamp
 	0,  // 4: pantherclaw.v1.CreateAssertionIssuerResponse.issuer:type_name -> pantherclaw.v1.AssertionIssuer
 	0,  // 5: pantherclaw.v1.DisableAssertionIssuerResponse.issuer:type_name -> pantherclaw.v1.AssertionIssuer
 	0,  // 6: pantherclaw.v1.ListAssertionIssuersResponse.issuers:type_name -> pantherclaw.v1.AssertionIssuer
@@ -1719,36 +1880,39 @@ var file_pantherclaw_v1_idp_access_proto_depIdxs = []int32{
 	3,  // 11: pantherclaw.v1.DisableMcpAccessResponse.access:type_name -> pantherclaw.v1.McpAccess
 	2,  // 12: pantherclaw.v1.AllowMcpClientResponse.client:type_name -> pantherclaw.v1.McpClient
 	2,  // 13: pantherclaw.v1.RemoveMcpClientResponse.client:type_name -> pantherclaw.v1.McpClient
-	2,  // 14: pantherclaw.v1.ListMcpClientsResponse.clients:type_name -> pantherclaw.v1.McpClient
-	4,  // 15: pantherclaw.v1.IdpAccessService.CreateAssertionIssuer:input_type -> pantherclaw.v1.CreateAssertionIssuerRequest
-	6,  // 16: pantherclaw.v1.IdpAccessService.DisableAssertionIssuer:input_type -> pantherclaw.v1.DisableAssertionIssuerRequest
-	8,  // 17: pantherclaw.v1.IdpAccessService.ListAssertionIssuers:input_type -> pantherclaw.v1.ListAssertionIssuersRequest
-	10, // 18: pantherclaw.v1.IdpAccessService.BindAssertionClient:input_type -> pantherclaw.v1.BindAssertionClientRequest
-	12, // 19: pantherclaw.v1.IdpAccessService.RemoveAssertionClient:input_type -> pantherclaw.v1.RemoveAssertionClientRequest
-	14, // 20: pantherclaw.v1.IdpAccessService.ListAssertionClients:input_type -> pantherclaw.v1.ListAssertionClientsRequest
-	16, // 21: pantherclaw.v1.IdpAccessService.GetMcpAccess:input_type -> pantherclaw.v1.GetMcpAccessRequest
-	18, // 22: pantherclaw.v1.IdpAccessService.EnableMcpAccess:input_type -> pantherclaw.v1.EnableMcpAccessRequest
-	20, // 23: pantherclaw.v1.IdpAccessService.DisableMcpAccess:input_type -> pantherclaw.v1.DisableMcpAccessRequest
-	22, // 24: pantherclaw.v1.IdpAccessService.AllowMcpClient:input_type -> pantherclaw.v1.AllowMcpClientRequest
-	24, // 25: pantherclaw.v1.IdpAccessService.RemoveMcpClient:input_type -> pantherclaw.v1.RemoveMcpClientRequest
-	26, // 26: pantherclaw.v1.IdpAccessService.ListMcpClients:input_type -> pantherclaw.v1.ListMcpClientsRequest
-	5,  // 27: pantherclaw.v1.IdpAccessService.CreateAssertionIssuer:output_type -> pantherclaw.v1.CreateAssertionIssuerResponse
-	7,  // 28: pantherclaw.v1.IdpAccessService.DisableAssertionIssuer:output_type -> pantherclaw.v1.DisableAssertionIssuerResponse
-	9,  // 29: pantherclaw.v1.IdpAccessService.ListAssertionIssuers:output_type -> pantherclaw.v1.ListAssertionIssuersResponse
-	11, // 30: pantherclaw.v1.IdpAccessService.BindAssertionClient:output_type -> pantherclaw.v1.BindAssertionClientResponse
-	13, // 31: pantherclaw.v1.IdpAccessService.RemoveAssertionClient:output_type -> pantherclaw.v1.RemoveAssertionClientResponse
-	15, // 32: pantherclaw.v1.IdpAccessService.ListAssertionClients:output_type -> pantherclaw.v1.ListAssertionClientsResponse
-	17, // 33: pantherclaw.v1.IdpAccessService.GetMcpAccess:output_type -> pantherclaw.v1.GetMcpAccessResponse
-	19, // 34: pantherclaw.v1.IdpAccessService.EnableMcpAccess:output_type -> pantherclaw.v1.EnableMcpAccessResponse
-	21, // 35: pantherclaw.v1.IdpAccessService.DisableMcpAccess:output_type -> pantherclaw.v1.DisableMcpAccessResponse
-	23, // 36: pantherclaw.v1.IdpAccessService.AllowMcpClient:output_type -> pantherclaw.v1.AllowMcpClientResponse
-	25, // 37: pantherclaw.v1.IdpAccessService.RemoveMcpClient:output_type -> pantherclaw.v1.RemoveMcpClientResponse
-	27, // 38: pantherclaw.v1.IdpAccessService.ListMcpClients:output_type -> pantherclaw.v1.ListMcpClientsResponse
-	27, // [27:39] is the sub-list for method output_type
-	15, // [15:27] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	2,  // 14: pantherclaw.v1.RefreshMcpClientDocumentResponse.client:type_name -> pantherclaw.v1.McpClient
+	2,  // 15: pantherclaw.v1.ListMcpClientsResponse.clients:type_name -> pantherclaw.v1.McpClient
+	4,  // 16: pantherclaw.v1.IdpAccessService.CreateAssertionIssuer:input_type -> pantherclaw.v1.CreateAssertionIssuerRequest
+	6,  // 17: pantherclaw.v1.IdpAccessService.DisableAssertionIssuer:input_type -> pantherclaw.v1.DisableAssertionIssuerRequest
+	8,  // 18: pantherclaw.v1.IdpAccessService.ListAssertionIssuers:input_type -> pantherclaw.v1.ListAssertionIssuersRequest
+	10, // 19: pantherclaw.v1.IdpAccessService.BindAssertionClient:input_type -> pantherclaw.v1.BindAssertionClientRequest
+	12, // 20: pantherclaw.v1.IdpAccessService.RemoveAssertionClient:input_type -> pantherclaw.v1.RemoveAssertionClientRequest
+	14, // 21: pantherclaw.v1.IdpAccessService.ListAssertionClients:input_type -> pantherclaw.v1.ListAssertionClientsRequest
+	16, // 22: pantherclaw.v1.IdpAccessService.GetMcpAccess:input_type -> pantherclaw.v1.GetMcpAccessRequest
+	18, // 23: pantherclaw.v1.IdpAccessService.EnableMcpAccess:input_type -> pantherclaw.v1.EnableMcpAccessRequest
+	20, // 24: pantherclaw.v1.IdpAccessService.DisableMcpAccess:input_type -> pantherclaw.v1.DisableMcpAccessRequest
+	22, // 25: pantherclaw.v1.IdpAccessService.AllowMcpClient:input_type -> pantherclaw.v1.AllowMcpClientRequest
+	24, // 26: pantherclaw.v1.IdpAccessService.RemoveMcpClient:input_type -> pantherclaw.v1.RemoveMcpClientRequest
+	26, // 27: pantherclaw.v1.IdpAccessService.RefreshMcpClientDocument:input_type -> pantherclaw.v1.RefreshMcpClientDocumentRequest
+	28, // 28: pantherclaw.v1.IdpAccessService.ListMcpClients:input_type -> pantherclaw.v1.ListMcpClientsRequest
+	5,  // 29: pantherclaw.v1.IdpAccessService.CreateAssertionIssuer:output_type -> pantherclaw.v1.CreateAssertionIssuerResponse
+	7,  // 30: pantherclaw.v1.IdpAccessService.DisableAssertionIssuer:output_type -> pantherclaw.v1.DisableAssertionIssuerResponse
+	9,  // 31: pantherclaw.v1.IdpAccessService.ListAssertionIssuers:output_type -> pantherclaw.v1.ListAssertionIssuersResponse
+	11, // 32: pantherclaw.v1.IdpAccessService.BindAssertionClient:output_type -> pantherclaw.v1.BindAssertionClientResponse
+	13, // 33: pantherclaw.v1.IdpAccessService.RemoveAssertionClient:output_type -> pantherclaw.v1.RemoveAssertionClientResponse
+	15, // 34: pantherclaw.v1.IdpAccessService.ListAssertionClients:output_type -> pantherclaw.v1.ListAssertionClientsResponse
+	17, // 35: pantherclaw.v1.IdpAccessService.GetMcpAccess:output_type -> pantherclaw.v1.GetMcpAccessResponse
+	19, // 36: pantherclaw.v1.IdpAccessService.EnableMcpAccess:output_type -> pantherclaw.v1.EnableMcpAccessResponse
+	21, // 37: pantherclaw.v1.IdpAccessService.DisableMcpAccess:output_type -> pantherclaw.v1.DisableMcpAccessResponse
+	23, // 38: pantherclaw.v1.IdpAccessService.AllowMcpClient:output_type -> pantherclaw.v1.AllowMcpClientResponse
+	25, // 39: pantherclaw.v1.IdpAccessService.RemoveMcpClient:output_type -> pantherclaw.v1.RemoveMcpClientResponse
+	27, // 40: pantherclaw.v1.IdpAccessService.RefreshMcpClientDocument:output_type -> pantherclaw.v1.RefreshMcpClientDocumentResponse
+	29, // 41: pantherclaw.v1.IdpAccessService.ListMcpClients:output_type -> pantherclaw.v1.ListMcpClientsResponse
+	29, // [29:42] is the sub-list for method output_type
+	16, // [16:29] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_idp_access_proto_init() }
@@ -1762,7 +1926,7 @@ func file_pantherclaw_v1_idp_access_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_idp_access_proto_rawDesc), len(file_pantherclaw_v1_idp_access_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -11,8 +11,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/idaccess/app"
@@ -49,11 +52,13 @@ func codeEnv(t *testing.T) (*env, *app.CodeFlow, ids.UUID) {
 	inst, client := ids.NewV7(), ids.NewV7()
 	e.exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
 		VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'mcp_client')`, e.org, inst, e.agent, "unheld-"+inst.String())
-	e.exec(t, `INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, state, created_by, activated_at)
-		VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, now())`, e.org, client, mcpClient, e.agent, inst, e.user)
+	doc := ports.ClientMetadata{ClientID: mcpClient, Name: "Editor", RedirectURIs: []string{mcpRedirect}}
+	e.exec(t, `INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, state, created_by, activated_at, client_name,
+		redirect_uris, document_digest) VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, now(), $7, $8, $9)`,
+		e.org, client, mcpClient, e.agent, inst, e.user, doc.Name, doc.RedirectURIs, app.DocumentDigest(doc))
 	flow := &app.CodeFlow{
 		Pool: e.pool, Runs: e.ex.Runs, Tokens: e.ex.Tokens, PublicURL: publicURL, Clock: clock.System{},
-		Documents: docs{mcpClient: {ClientID: mcpClient, Name: "Editor", RedirectURIs: []string{mcpRedirect}}},
+		Documents: docs{mcpClient: doc},
 	}
 	return e, flow, client
 }
@@ -100,7 +105,8 @@ func TestHR628_TheCodeFlowChecksClientRedirectAndPKCE(t *testing.T) {
 	e, flow, _ := codeEnv(t)
 	ctx := context.Background()
 	c, err := flow.Prepare(ctx, e.org, authorizeQuery(nil))
-	if err != nil || c.Agent != e.agent || c.Connection != "github" || c.ClientHost != "editor.example" || c.ClientName != "Editor" {
+	if err != nil || c.Agent != e.agent || c.Connection != "github" || c.ClientHost != "editor.example" || c.ClientName != "Editor" ||
+		!c.LoopbackRedirect {
 		t.Fatalf("consent %+v %v", c, err)
 	}
 	for name, tc := range map[string]struct {
@@ -190,6 +196,10 @@ func TestHR628_RefreshTokensRotateAndReuseKillsTheFamily(t *testing.T) {
 	if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.idaccess.refresh_reuse'", e.org); n != 1 {
 		t.Fatalf("reuse audit events: %d", n)
 	}
+	// The run behind the family ended with it, so its access tokens stop at once.
+	if n := e.count(t, "SELECT count(*) FROM pc.runs WHERE id = $1 AND state = 'REVOKED' AND end_reason = 'refresh_token_reused'", first.RunID); n != 1 {
+		t.Fatal("the run outlived its killed refresh family")
+	}
 
 	// A new family; the run ending stops it, as does removing the client.
 	third, err := redeem(flow, codeOf(t, mustApprove(t, flow, e)), verifier)
@@ -210,5 +220,130 @@ func TestHR628_RefreshTokensRotateAndReuseKillsTheFamily(t *testing.T) {
 	}
 	if _, err := flow.Prepare(context.Background(), e.org, authorizeQuery(nil)); err == nil {
 		t.Fatal("a removed client was shown for consent")
+	}
+}
+
+// TestHR628_ASpentCodeUsedAgainEndsItsRun (RFC 6749 §4.1.2, T-269): a code
+// presented after it was redeemed is refused and ends the run it started,
+// so every token issued from it stops at once.
+// Covers: F913
+func TestHR628_ASpentCodeUsedAgainEndsItsRun(t *testing.T) {
+	e, flow, _ := codeEnv(t)
+	code := codeOf(t, mustApprove(t, flow, e))
+	res, err := redeem(flow, code, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := redeem(flow, code, verifier); oauthCode(err) == "ok" {
+		t.Fatal("a spent code redeemed twice")
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.runs WHERE id = $1 AND state = 'REVOKED' AND end_reason = 'authorization_code_reused'",
+		res.RunID); n != 1 {
+		t.Fatal("the run outlived a second use of its code")
+	}
+	if _, err := refresh(flow, res.RefreshToken); oauthCode(err) == "ok" {
+		t.Fatal("a refresh token outlived its reused code")
+	}
+}
+
+// TestHR628_TheTokenEndpointChecksTheCodesRequest (HR-628): an expired
+// code, a redirect_uri or client_id other than the authorization request's,
+// or a client removed since the consent gets no token, and each spends the
+// code.
+// Covers: F913
+func TestHR628_TheTokenEndpointChecksTheCodesRequest(t *testing.T) {
+	e, flow, client := codeEnv(t)
+	form := func(code string, edit func(url.Values)) url.Values {
+		f := url.Values{
+			"grant_type": {app.GrantAuthorizationCode}, "code": {code}, "client_id": {mcpClient}, "redirect_uri": {mcpRedirect},
+			"code_verifier": {verifier}, "resource": {resource},
+		}
+		edit(f)
+		return f
+	}
+	for name, edit := range map[string]func(url.Values){
+		"a redirect_uri mismatch": func(f url.Values) { f.Set("redirect_uri", "http://127.0.0.1:4567/other") },
+		"a client_id mismatch":    func(f url.Values) { f.Set("client_id", "https://other.example/c.json") },
+	} {
+		code := codeOf(t, mustApprove(t, flow, e))
+		if _, err := flow.AuthorizationCode(context.Background(), form(code, edit)); !strings.HasPrefix(oauthCode(err), "invalid_grant") {
+			t.Errorf("%s: %s", name, oauthCode(err))
+		}
+		if _, err := redeem(flow, code, verifier); oauthCode(err) == "ok" {
+			t.Errorf("%s: the code was not spent", name)
+		}
+	}
+
+	expired := codeOf(t, mustApprove(t, flow, e))
+	sum := sha256.Sum256([]byte(expired))
+	e.db.AdminDo(t, func(c *pgx.Conn) error {
+		_, err := c.Exec(context.Background(), `UPDATE pc.mcp_authorization_codes
+			SET created_at = now() - interval '2 minutes', expires_at = now() - interval '1 minute' WHERE code_hash = $1`, sum[:])
+		return err
+	})
+	if _, err := redeem(flow, expired, verifier); !strings.HasPrefix(oauthCode(err), "invalid_grant") {
+		t.Errorf("an expired code: %s", oauthCode(err))
+	}
+
+	removed := codeOf(t, mustApprove(t, flow, e))
+	e.exec(t, "UPDATE pc.mcp_clients SET state = 'REMOVED', removed_by = $2, removed_at = now() WHERE id = $1", client, e.user)
+	if _, err := redeem(flow, removed, verifier); !strings.HasPrefix(oauthCode(err), "invalid_grant") {
+		t.Errorf("a removed client: %s", oauthCode(err))
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.runs"); n != 0 {
+		t.Fatalf("%d runs started", n)
+	}
+}
+
+// TestHR625_AnEditedDocumentGetsNoCodeAtANewRedirect (HR-625, HR-628): a
+// redirect URI is usable only while both the confirmed document and the
+// live one list it. A document edited on its host to add a URI gets no
+// code there: the request is refused CLIENT_DOCUMENT_CHANGED on the page,
+// audited and told to the admins. The consent page shows the confirmed
+// name, not the live one.
+// Covers: F913
+func TestHR625_AnEditedDocumentGetsNoCodeAtANewRedirect(t *testing.T) {
+	e, flow, _ := codeEnv(t)
+	ctx := context.Background()
+	notes := &adminNotes{t: t}
+	e.exec(t, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by) VALUES ($1, $2, 'org_admin', $3, 'ORG', 'test')`,
+		e.org, ids.NewV7(), e.user)
+	flow.Notify = notes
+	d := flow.Documents.(docs)
+	const added = "http://127.0.0.1:9999/steal"
+	d[mcpClient] = ports.ClientMetadata{ClientID: mcpClient, Name: "Totally Trusted", RedirectURIs: []string{mcpRedirect, added}}
+
+	at := func(redirect string) url.Values {
+		return authorizeQuery(func(q url.Values) { q.Set("redirect_uri", redirect) })
+	}
+	for _, call := range []func() error{
+		func() error { _, err := flow.Prepare(ctx, e.org, at(added)); return err },
+		func() error { _, err := flow.Approve(ctx, e.org, e.user, at(added)); return err },
+	} {
+		var ae *app.AuthorizeError
+		if err := call(); !errors.As(err, &ae) || ae.Code != "CLIENT_DOCUMENT_CHANGED" || ae.Redirect {
+			t.Fatalf("a redirect the live document added: %v", err)
+		}
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.mcp_authorization_codes"); n != 0 {
+		t.Fatalf("%d codes issued", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.idaccess.client_document_changed'",
+		e.org); n != 2 {
+		t.Fatalf("document change audit events: %d", n)
+	}
+	if m := notes.last(); m.Type != "idaccess.client_document_changed" || m.Org != e.org || !slices.Contains(m.Personal, e.user) {
+		t.Fatalf("admins not told: %+v", m)
+	}
+
+	// The confirmed redirect still works, under the confirmed name.
+	c, err := flow.Prepare(ctx, e.org, authorizeQuery(nil))
+	if err != nil || c.ClientName != "Editor" {
+		t.Fatalf("the confirmed redirect: %+v %v", c, err)
+	}
+	// A confirmed redirect the live document dropped is refused too.
+	d[mcpClient] = ports.ClientMetadata{ClientID: mcpClient, Name: "Editor", RedirectURIs: []string{added}}
+	if _, err := flow.Prepare(ctx, e.org, authorizeQuery(nil)); err == nil {
+		t.Fatal("a redirect the live document no longer lists was used")
 	}
 }
