@@ -333,7 +333,7 @@ func (s *Service) StartRun(ctx context.Context, in StartInput) (Run, error) {
 		if out, err = view(r, r.State); err != nil {
 			return err
 		}
-		return record(ctx, tx, c.Actor(), "run.started", out)
+		return recordStart(ctx, tx, c.Actor(), out)
 	})
 	return out, err
 }
@@ -461,7 +461,7 @@ func startChildRunTx(ctx context.Context, tx db.TenantTx, in ChildInput, minutes
 		if out, err = view(r, r.State); err != nil {
 			return err
 		}
-		return record(ctx, tx, evdomain.Actor{Type: "instance", ID: inst.ID.String()}, "run.started", out)
+		return recordStart(ctx, tx, evdomain.Actor{Type: "instance", ID: inst.ID.String()}, out)
 	}()
 	return out, err
 }
@@ -628,7 +628,7 @@ func admittedInstance(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent,
 	return err
 }
 
-func record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name string, r Run) error {
+func recordStart(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r Run) error {
 	details := map[string]string{
 		"agent_id": r.AgentID.String(), "principal_source": r.PrincipalSource,
 		"principal": r.Principal.Kind + ":" + r.Principal.ID, "depth": strconv.Itoa(r.Depth),
@@ -643,7 +643,7 @@ func record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name stri
 		details["parent_run_id"] = r.ParentRunID.String()
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: name, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()}, Details: details,
+		Name: "run.started", Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()}, Details: details,
 	})
 	return err
 }

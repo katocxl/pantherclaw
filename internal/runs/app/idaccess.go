@@ -93,5 +93,5 @@ func (s *Service) StartForIdentityTx(ctx context.Context, tx db.TenantTx, in Ide
 	if err != nil {
 		return Run{}, err
 	}
-	return out, record(ctx, tx, actor, "run.started", out)
+	return out, recordStart(ctx, tx, actor, out)
 }
