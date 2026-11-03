@@ -1,0 +1,3461 @@
+{
+  "format": "pantherclaw.mitre-catalog/v1",
+  "framework": "atlas",
+  "version": "2026.10",
+  "source_url": "https://raw.githubusercontent.com/mitre-atlas/atlas-data/v2026.10/dist/v6/ATLAS-2026.10.yaml",
+  "source_sha256": "ac41ee9f99a47084ba5fdfc77ae83a28687e12390240fffeb37df7914ffe142d",
+  "notice": "Copyright 2021-2026 MITRE. Licence: Apache License, Version 2.0 (see NOTICE).",
+  "tactics": [
+    {
+      "id": "AML.TA0000",
+      "short_name": "ai-model-access",
+      "name": "AI Model Access",
+      "order": 5,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0000"
+    },
+    {
+      "id": "AML.TA0001",
+      "short_name": "ai-attack-adaptation",
+      "name": "AI Attack Adaptation",
+      "order": 3,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0001"
+    },
+    {
+      "id": "AML.TA0002",
+      "short_name": "reconnaissance",
+      "name": "Reconnaissance",
+      "order": 1,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0002"
+    },
+    {
+      "id": "AML.TA0003",
+      "short_name": "resource-development",
+      "name": "Resource Development",
+      "order": 2,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0003"
+    },
+    {
+      "id": "AML.TA0004",
+      "short_name": "initial-access",
+      "name": "Initial Access",
+      "order": 4,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0004"
+    },
+    {
+      "id": "AML.TA0005",
+      "short_name": "execution",
+      "name": "Execution",
+      "order": 6,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0005"
+    },
+    {
+      "id": "AML.TA0006",
+      "short_name": "persistence",
+      "name": "Persistence",
+      "order": 7,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0006"
+    },
+    {
+      "id": "AML.TA0007",
+      "short_name": "defense-evasion",
+      "name": "Defense Evasion",
+      "order": 9,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0007"
+    },
+    {
+      "id": "AML.TA0008",
+      "short_name": "discovery",
+      "name": "Discovery",
+      "order": 11,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0008"
+    },
+    {
+      "id": "AML.TA0009",
+      "short_name": "collection",
+      "name": "Collection",
+      "order": 13,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0009"
+    },
+    {
+      "id": "AML.TA0010",
+      "short_name": "exfiltration",
+      "name": "Exfiltration",
+      "order": 15,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0010"
+    },
+    {
+      "id": "AML.TA0011",
+      "short_name": "impact",
+      "name": "Impact",
+      "order": 16,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0011"
+    },
+    {
+      "id": "AML.TA0012",
+      "short_name": "privilege-escalation",
+      "name": "Privilege Escalation",
+      "order": 8,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0012"
+    },
+    {
+      "id": "AML.TA0013",
+      "short_name": "credential-access",
+      "name": "Credential Access",
+      "order": 10,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0013"
+    },
+    {
+      "id": "AML.TA0014",
+      "short_name": "command-and-control",
+      "name": "Command and Control",
+      "order": 14,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0014"
+    },
+    {
+      "id": "AML.TA0015",
+      "short_name": "lateral-movement",
+      "name": "Lateral Movement",
+      "order": 12,
+      "url": "https://atlas.mitre.org/tactics/AML.TA0015"
+    }
+  ],
+  "techniques": [
+    {
+      "id": "AML.T0000",
+      "name": "Search Open Technical Databases",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0000"
+    },
+    {
+      "id": "AML.T0000.000",
+      "name": "Journals and Conference Proceedings",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0000",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0000.000"
+    },
+    {
+      "id": "AML.T0000.001",
+      "name": "Pre-Print Repositories",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0000",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0000.001"
+    },
+    {
+      "id": "AML.T0000.002",
+      "name": "Technical Blogs",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0000",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0000.002"
+    },
+    {
+      "id": "AML.T0000.003",
+      "name": "Scan Databases",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0000",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0000.003"
+    },
+    {
+      "id": "AML.T0001",
+      "name": "Search Open AI Vulnerability Analysis",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0001"
+    },
+    {
+      "id": "AML.T0002",
+      "name": "Acquire Public AI Artifacts",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0002"
+    },
+    {
+      "id": "AML.T0002.000",
+      "name": "Datasets",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0002",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0002.000"
+    },
+    {
+      "id": "AML.T0002.001",
+      "name": "Models",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0002",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0002.001"
+    },
+    {
+      "id": "AML.T0002.002",
+      "name": "AI Agent Configuration",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0002",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0002.002"
+    },
+    {
+      "id": "AML.T0003",
+      "name": "Search Victim-Owned Websites",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0003"
+    },
+    {
+      "id": "AML.T0004",
+      "name": "Search Application Repositories",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0004"
+    },
+    {
+      "id": "AML.T0005",
+      "name": "Replicate AI Model Behavior",
+      "tactics": [
+        "resource-development",
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0005"
+    },
+    {
+      "id": "AML.T0005.000",
+      "name": "Replicate Behavior from Gathered AI Artifacts",
+      "tactics": [
+        "resource-development",
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0005",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0005.000"
+    },
+    {
+      "id": "AML.T0005.001",
+      "name": "Replicate Behavior from Model Outputs",
+      "tactics": [
+        "resource-development",
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0005",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0005.001"
+    },
+    {
+      "id": "AML.T0005.002",
+      "name": "Adapt Existing Model to Replicate Behavior",
+      "tactics": [
+        "resource-development",
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0005",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0005.002"
+    },
+    {
+      "id": "AML.T0006",
+      "name": "Active Scanning",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0006"
+    },
+    {
+      "id": "AML.T0006.000",
+      "name": "Enumerate Hosted AI Resources",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0006",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0006.000"
+    },
+    {
+      "id": "AML.T0006.001",
+      "name": "Query Platform Metadata APIs",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0006",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0006.001"
+    },
+    {
+      "id": "AML.T0006.002",
+      "name": "Scan for Exposed AI Infrastructure",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0006",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0006.002"
+    },
+    {
+      "id": "AML.T0006.003",
+      "name": "Probe AI Agent Trigger Channels",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0006",
+      "platforms": [
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0006.003"
+    },
+    {
+      "id": "AML.T0007",
+      "name": "Discover AI Artifacts",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0007"
+    },
+    {
+      "id": "AML.T0008",
+      "name": "Acquire Infrastructure",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0008"
+    },
+    {
+      "id": "AML.T0008.000",
+      "name": "AI Development Workspaces",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0008",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0008.000"
+    },
+    {
+      "id": "AML.T0008.001",
+      "name": "Consumer Hardware",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0008",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0008.001"
+    },
+    {
+      "id": "AML.T0008.002",
+      "name": "Domains",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0008",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0008.002"
+    },
+    {
+      "id": "AML.T0008.003",
+      "name": "Physical Countermeasures",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0008",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0008.003"
+    },
+    {
+      "id": "AML.T0008.004",
+      "name": "Serverless",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0008",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0008.004"
+    },
+    {
+      "id": "AML.T0008.005",
+      "name": "AI Service Proxies",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0008",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0008.005"
+    },
+    {
+      "id": "AML.T0010",
+      "name": "Supply Chain Compromise",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0010"
+    },
+    {
+      "id": "AML.T0010.000",
+      "name": "Hardware",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "AML.T0010",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0010.000"
+    },
+    {
+      "id": "AML.T0010.001",
+      "name": "Software",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "AML.T0010",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0010.001"
+    },
+    {
+      "id": "AML.T0010.002",
+      "name": "Data Repository",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "AML.T0010",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0010.002"
+    },
+    {
+      "id": "AML.T0010.003",
+      "name": "Model Repository",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "AML.T0010",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0010.003"
+    },
+    {
+      "id": "AML.T0010.004",
+      "name": "Container Registry",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "AML.T0010",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0010.004"
+    },
+    {
+      "id": "AML.T0010.005",
+      "name": "AI Agent Tool",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "AML.T0010",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0010.005"
+    },
+    {
+      "id": "AML.T0011",
+      "name": "User Execution",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0011"
+    },
+    {
+      "id": "AML.T0011.000",
+      "name": "Unsafe AI Artifacts",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "AML.T0011",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0011.000"
+    },
+    {
+      "id": "AML.T0011.001",
+      "name": "Malicious Package",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "AML.T0011",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0011.001"
+    },
+    {
+      "id": "AML.T0011.002",
+      "name": "Poisoned AI Agent Tool",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "AML.T0011",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0011.002"
+    },
+    {
+      "id": "AML.T0011.003",
+      "name": "Malicious Link",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "AML.T0011",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0011.003"
+    },
+    {
+      "id": "AML.T0012",
+      "name": "Valid Accounts",
+      "tactics": [
+        "initial-access",
+        "privilege-escalation",
+        "lateral-movement"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0012"
+    },
+    {
+      "id": "AML.T0013",
+      "name": "Discover AI Model Ontology",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0013"
+    },
+    {
+      "id": "AML.T0014",
+      "name": "Discover AI Model Family",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0014"
+    },
+    {
+      "id": "AML.T0015",
+      "name": "Evade AI Model",
+      "tactics": [
+        "initial-access",
+        "defense-evasion",
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0015"
+    },
+    {
+      "id": "AML.T0016",
+      "name": "Obtain Capabilities",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0016"
+    },
+    {
+      "id": "AML.T0016.000",
+      "name": "Adversarial AI Attack Implementations",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0016",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0016.000"
+    },
+    {
+      "id": "AML.T0016.001",
+      "name": "Software Tools",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0016",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0016.001"
+    },
+    {
+      "id": "AML.T0016.002",
+      "name": "Generative AI",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0016",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0016.002"
+    },
+    {
+      "id": "AML.T0016.003",
+      "name": "Exploits",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0016",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0016.003"
+    },
+    {
+      "id": "AML.T0016.004",
+      "name": "AI Agent Tools",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0016",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0016.004"
+    },
+    {
+      "id": "AML.T0017",
+      "name": "Develop Capabilities",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0017"
+    },
+    {
+      "id": "AML.T0017.000",
+      "name": "Adversarial AI Attacks",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0017",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0017.000"
+    },
+    {
+      "id": "AML.T0017.001",
+      "name": "Autonomous Exploit Development",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0017",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0017.001"
+    },
+    {
+      "id": "AML.T0017.002",
+      "name": "AI Agent Tools",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0017",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0017.002"
+    },
+    {
+      "id": "AML.T0017.003",
+      "name": "Malware",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0017",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0017.003"
+    },
+    {
+      "id": "AML.T0018",
+      "name": "Manipulate AI Model",
+      "tactics": [
+        "ai-attack-adaptation",
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0018"
+    },
+    {
+      "id": "AML.T0018.000",
+      "name": "Poison AI Model",
+      "tactics": [
+        "ai-attack-adaptation",
+        "persistence"
+      ],
+      "parent": "AML.T0018",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0018.000"
+    },
+    {
+      "id": "AML.T0018.001",
+      "name": "Modify AI Model Architecture",
+      "tactics": [
+        "ai-attack-adaptation",
+        "persistence"
+      ],
+      "parent": "AML.T0018",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0018.001"
+    },
+    {
+      "id": "AML.T0018.002",
+      "name": "Embed Malware",
+      "tactics": [
+        "ai-attack-adaptation",
+        "persistence"
+      ],
+      "parent": "AML.T0018",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0018.002"
+    },
+    {
+      "id": "AML.T0018.003",
+      "name": "Modify Prompt Construction Logic",
+      "tactics": [
+        "ai-attack-adaptation",
+        "persistence"
+      ],
+      "parent": "AML.T0018",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0018.003"
+    },
+    {
+      "id": "AML.T0020",
+      "name": "Training Data Poisoning",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0020"
+    },
+    {
+      "id": "AML.T0021",
+      "name": "Establish Accounts",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0021"
+    },
+    {
+      "id": "AML.T0024",
+      "name": "Exfiltration via AI Inference API",
+      "tactics": [
+        "exfiltration"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0024"
+    },
+    {
+      "id": "AML.T0025",
+      "name": "Exfiltration via Cyber Means",
+      "tactics": [
+        "exfiltration"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0025"
+    },
+    {
+      "id": "AML.T0029",
+      "name": "Denial of AI Service",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0029"
+    },
+    {
+      "id": "AML.T0031",
+      "name": "Erode AI Model Integrity",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0031"
+    },
+    {
+      "id": "AML.T0034",
+      "name": "Cost Harvesting",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0034"
+    },
+    {
+      "id": "AML.T0034.000",
+      "name": "Excessive Queries",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0034",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0034.000"
+    },
+    {
+      "id": "AML.T0034.001",
+      "name": "Resource-Intensive Queries",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0034",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0034.001"
+    },
+    {
+      "id": "AML.T0034.002",
+      "name": "Agentic Resource Consumption",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0034",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0034.002"
+    },
+    {
+      "id": "AML.T0035",
+      "name": "AI Artifact Collection",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0035"
+    },
+    {
+      "id": "AML.T0036",
+      "name": "Data from Information Repositories",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0036"
+    },
+    {
+      "id": "AML.T0037",
+      "name": "Data from Local System",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0037"
+    },
+    {
+      "id": "AML.T0040",
+      "name": "AI Model Inference API Access",
+      "tactics": [
+        "ai-model-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0040"
+    },
+    {
+      "id": "AML.T0041",
+      "name": "Physical Environment Access",
+      "tactics": [
+        "ai-model-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0041"
+    },
+    {
+      "id": "AML.T0042",
+      "name": "Verify Attack",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0042"
+    },
+    {
+      "id": "AML.T0043",
+      "name": "Craft Adversarial Data",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0043"
+    },
+    {
+      "id": "AML.T0043.000",
+      "name": "White-Box Optimization",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0043",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0043.000"
+    },
+    {
+      "id": "AML.T0043.001",
+      "name": "Black-Box Optimization",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0043",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0043.001"
+    },
+    {
+      "id": "AML.T0043.002",
+      "name": "Black-Box Transfer",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0043",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0043.002"
+    },
+    {
+      "id": "AML.T0043.003",
+      "name": "Manual Modification",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0043",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0043.003"
+    },
+    {
+      "id": "AML.T0043.004",
+      "name": "Insert Backdoor Trigger",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0043",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0043.004"
+    },
+    {
+      "id": "AML.T0044",
+      "name": "Full AI Model Access",
+      "tactics": [
+        "ai-model-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0044"
+    },
+    {
+      "id": "AML.T0046",
+      "name": "Spamming AI System with Chaff Data",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0046"
+    },
+    {
+      "id": "AML.T0047",
+      "name": "AI-Enabled Product or Service",
+      "tactics": [
+        "ai-model-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0047"
+    },
+    {
+      "id": "AML.T0048",
+      "name": "External Harms",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0048"
+    },
+    {
+      "id": "AML.T0048.000",
+      "name": "Financial Harm",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0048",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0048.000"
+    },
+    {
+      "id": "AML.T0048.001",
+      "name": "Reputational Harm",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0048",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0048.001"
+    },
+    {
+      "id": "AML.T0048.002",
+      "name": "Societal Harm",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0048",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0048.002"
+    },
+    {
+      "id": "AML.T0048.003",
+      "name": "User Harm",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0048",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0048.003"
+    },
+    {
+      "id": "AML.T0048.004",
+      "name": "AI Intellectual Property Theft",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0048",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0048.004"
+    },
+    {
+      "id": "AML.T0049",
+      "name": "Exploit Public-Facing Application",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0049"
+    },
+    {
+      "id": "AML.T0050",
+      "name": "Command and Scripting Interpreter",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0050"
+    },
+    {
+      "id": "AML.T0051",
+      "name": "LLM Prompt Injection",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0051"
+    },
+    {
+      "id": "AML.T0051.000",
+      "name": "Direct",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "AML.T0051",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0051.000"
+    },
+    {
+      "id": "AML.T0051.001",
+      "name": "Indirect",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "AML.T0051",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0051.001"
+    },
+    {
+      "id": "AML.T0051.002",
+      "name": "Triggered",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "AML.T0051",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0051.002"
+    },
+    {
+      "id": "AML.T0052",
+      "name": "Phishing",
+      "tactics": [
+        "initial-access",
+        "lateral-movement"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0052"
+    },
+    {
+      "id": "AML.T0052.000",
+      "name": "Spearphishing via Social Engineering LLM",
+      "tactics": [
+        "initial-access",
+        "lateral-movement"
+      ],
+      "parent": "AML.T0052",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0052.000"
+    },
+    {
+      "id": "AML.T0052.001",
+      "name": "Deepfake-Assisted Phishing",
+      "tactics": [
+        "initial-access",
+        "lateral-movement"
+      ],
+      "parent": "AML.T0052",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0052.001"
+    },
+    {
+      "id": "AML.T0053",
+      "name": "AI Agent Tool Invocation",
+      "tactics": [
+        "execution",
+        "privilege-escalation",
+        "lateral-movement"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0053"
+    },
+    {
+      "id": "AML.T0054",
+      "name": "LLM Jailbreak",
+      "tactics": [
+        "privilege-escalation",
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0054"
+    },
+    {
+      "id": "AML.T0055",
+      "name": "Unsecured Credentials",
+      "tactics": [
+        "credential-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0055"
+    },
+    {
+      "id": "AML.T0059",
+      "name": "Erode Dataset Integrity",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0059"
+    },
+    {
+      "id": "AML.T0060",
+      "name": "Publish Hallucinated Entities",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0060"
+    },
+    {
+      "id": "AML.T0061",
+      "name": "LLM Prompt Self-Replication",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0061"
+    },
+    {
+      "id": "AML.T0062",
+      "name": "Discover LLM Hallucinations",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0062"
+    },
+    {
+      "id": "AML.T0063",
+      "name": "Discover AI Model Outputs",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0063"
+    },
+    {
+      "id": "AML.T0064",
+      "name": "Gather RAG-Indexed Targets",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0064"
+    },
+    {
+      "id": "AML.T0065",
+      "name": "LLM Prompt Crafting",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0065"
+    },
+    {
+      "id": "AML.T0066",
+      "name": "Retrieval Content Crafting",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0066"
+    },
+    {
+      "id": "AML.T0067",
+      "name": "LLM Trusted Output Components Manipulation",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0067"
+    },
+    {
+      "id": "AML.T0067.000",
+      "name": "Citations",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "AML.T0067",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0067.000"
+    },
+    {
+      "id": "AML.T0068",
+      "name": "LLM Prompt Obfuscation",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0068"
+    },
+    {
+      "id": "AML.T0069",
+      "name": "Discover LLM System Information",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0069"
+    },
+    {
+      "id": "AML.T0069.000",
+      "name": "Special Character Sets",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "AML.T0069",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0069.000"
+    },
+    {
+      "id": "AML.T0069.001",
+      "name": "System Instruction Keywords",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "AML.T0069",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0069.001"
+    },
+    {
+      "id": "AML.T0069.002",
+      "name": "System Prompt",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "AML.T0069",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0069.002"
+    },
+    {
+      "id": "AML.T0070",
+      "name": "RAG Poisoning",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0070"
+    },
+    {
+      "id": "AML.T0071",
+      "name": "False RAG Entry Injection",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0071"
+    },
+    {
+      "id": "AML.T0072",
+      "name": "Cyber Communication Channel",
+      "tactics": [
+        "command-and-control"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0072"
+    },
+    {
+      "id": "AML.T0073",
+      "name": "Impersonation",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0073"
+    },
+    {
+      "id": "AML.T0074",
+      "name": "Masquerading",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0074"
+    },
+    {
+      "id": "AML.T0075",
+      "name": "Enterprise Resource Discovery",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0075"
+    },
+    {
+      "id": "AML.T0076",
+      "name": "Corrupt AI Model",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0076"
+    },
+    {
+      "id": "AML.T0077",
+      "name": "LLM Response Rendering",
+      "tactics": [
+        "exfiltration"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0077"
+    },
+    {
+      "id": "AML.T0078",
+      "name": "Drive-by Compromise",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0078"
+    },
+    {
+      "id": "AML.T0079",
+      "name": "Stage Capabilities",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0079"
+    },
+    {
+      "id": "AML.T0080",
+      "name": "AI Agent Context Poisoning",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0080"
+    },
+    {
+      "id": "AML.T0080.000",
+      "name": "Memory",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "AML.T0080",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0080.000"
+    },
+    {
+      "id": "AML.T0080.001",
+      "name": "Thread",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "AML.T0080",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0080.001"
+    },
+    {
+      "id": "AML.T0081",
+      "name": "Modify AI Agent Configuration",
+      "tactics": [
+        "persistence",
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0081"
+    },
+    {
+      "id": "AML.T0082",
+      "name": "RAG Credential Harvesting",
+      "tactics": [
+        "credential-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0082"
+    },
+    {
+      "id": "AML.T0083",
+      "name": "Credentials from AI Agent Configuration",
+      "tactics": [
+        "credential-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0083"
+    },
+    {
+      "id": "AML.T0084",
+      "name": "Discover AI Agent Configuration",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0084"
+    },
+    {
+      "id": "AML.T0084.000",
+      "name": "Embedded Knowledge",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "AML.T0084",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0084.000"
+    },
+    {
+      "id": "AML.T0084.001",
+      "name": "Tool Definitions",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "AML.T0084",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0084.001"
+    },
+    {
+      "id": "AML.T0084.002",
+      "name": "Activation Triggers",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "AML.T0084",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0084.002"
+    },
+    {
+      "id": "AML.T0084.003",
+      "name": "Call Chains",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "AML.T0084",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0084.003"
+    },
+    {
+      "id": "AML.T0085",
+      "name": "Data from AI Services",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0085"
+    },
+    {
+      "id": "AML.T0085.000",
+      "name": "RAG Databases",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "AML.T0085",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0085.000"
+    },
+    {
+      "id": "AML.T0085.001",
+      "name": "AI Agent Tools",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "AML.T0085",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0085.001"
+    },
+    {
+      "id": "AML.T0085.002",
+      "name": "Conversation Context and Memory",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "AML.T0085",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0085.002"
+    },
+    {
+      "id": "AML.T0085.003",
+      "name": "System Instructions",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "AML.T0085",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0085.003"
+    },
+    {
+      "id": "AML.T0086",
+      "name": "Exfiltration via AI Agent Tool Invocation",
+      "tactics": [
+        "exfiltration"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0086"
+    },
+    {
+      "id": "AML.T0087",
+      "name": "Gather Victim Identity Information",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0087"
+    },
+    {
+      "id": "AML.T0088",
+      "name": "Generate Deepfakes",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0088"
+    },
+    {
+      "id": "AML.T0089",
+      "name": "Enterprise Environment Discovery",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0089"
+    },
+    {
+      "id": "AML.T0090",
+      "name": "OS Credential Dumping",
+      "tactics": [
+        "credential-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0090"
+    },
+    {
+      "id": "AML.T0091",
+      "name": "Use Alternate Authentication Material",
+      "tactics": [
+        "lateral-movement"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0091"
+    },
+    {
+      "id": "AML.T0091.000",
+      "name": "Application Access Token",
+      "tactics": [
+        "lateral-movement"
+      ],
+      "parent": "AML.T0091",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0091.000"
+    },
+    {
+      "id": "AML.T0091.001",
+      "name": "Web Session Cookie",
+      "tactics": [
+        "lateral-movement"
+      ],
+      "parent": "AML.T0091",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0091.001"
+    },
+    {
+      "id": "AML.T0092",
+      "name": "Manipulate User LLM Chat History",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0092"
+    },
+    {
+      "id": "AML.T0093",
+      "name": "Prompt Infiltration via Public-Facing Application",
+      "tactics": [
+        "initial-access",
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0093"
+    },
+    {
+      "id": "AML.T0094",
+      "name": "Delay Execution of LLM Instructions",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0094"
+    },
+    {
+      "id": "AML.T0095",
+      "name": "Search Open Websites/Domains",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0095"
+    },
+    {
+      "id": "AML.T0095.000",
+      "name": "Code Repositories",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "AML.T0095",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0095.000"
+    },
+    {
+      "id": "AML.T0096",
+      "name": "AI Service API",
+      "tactics": [
+        "command-and-control"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0096"
+    },
+    {
+      "id": "AML.T0097",
+      "name": "Virtualization/Sandbox Evasion",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0097"
+    },
+    {
+      "id": "AML.T0098",
+      "name": "AI Agent Tool Credential Harvesting",
+      "tactics": [
+        "credential-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0098"
+    },
+    {
+      "id": "AML.T0099",
+      "name": "AI Agent Tool Data Poisoning",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0099"
+    },
+    {
+      "id": "AML.T0100",
+      "name": "AI Agent Clickbait",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0100"
+    },
+    {
+      "id": "AML.T0101",
+      "name": "Data Destruction via AI Agent Tool Invocation",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0101"
+    },
+    {
+      "id": "AML.T0102",
+      "name": "Generate Malicious Commands",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0102"
+    },
+    {
+      "id": "AML.T0103",
+      "name": "Deploy AI Agent",
+      "tactics": [
+        "execution"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0103"
+    },
+    {
+      "id": "AML.T0105",
+      "name": "Escape to Host",
+      "tactics": [
+        "privilege-escalation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0105"
+    },
+    {
+      "id": "AML.T0106",
+      "name": "Exploitation for Credential Access",
+      "tactics": [
+        "credential-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0106"
+    },
+    {
+      "id": "AML.T0107",
+      "name": "Exploitation for Defense Evasion",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0107"
+    },
+    {
+      "id": "AML.T0108",
+      "name": "AI Agent",
+      "tactics": [
+        "command-and-control"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0108"
+    },
+    {
+      "id": "AML.T0109",
+      "name": "AI Supply Chain Rug Pull",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0109"
+    },
+    {
+      "id": "AML.T0110",
+      "name": "AI Agent Tool Poisoning",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0110"
+    },
+    {
+      "id": "AML.T0110.000",
+      "name": "Definition and Instructions",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "AML.T0110",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0110.000"
+    },
+    {
+      "id": "AML.T0110.001",
+      "name": "Implementation",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "AML.T0110",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0110.001"
+    },
+    {
+      "id": "AML.T0110.002",
+      "name": "Runtime Response",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "AML.T0110",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0110.002"
+    },
+    {
+      "id": "AML.T0111",
+      "name": "AI Supply Chain Reputation Inflation",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0111"
+    },
+    {
+      "id": "AML.T0112",
+      "name": "Machine Compromise",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0112"
+    },
+    {
+      "id": "AML.T0112.000",
+      "name": "Local AI Agent",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0112",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0112.000"
+    },
+    {
+      "id": "AML.T0112.001",
+      "name": "AI Artifacts",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "AML.T0112",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0112.001"
+    },
+    {
+      "id": "AML.T0113",
+      "name": "Steal Web Session Cookie",
+      "tactics": [
+        "credential-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0113"
+    },
+    {
+      "id": "AML.T0114",
+      "name": "AI Service Web Interface",
+      "tactics": [
+        "command-and-control"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0114"
+    },
+    {
+      "id": "AML.T0115",
+      "name": "Publish Poisoned AI Artifacts",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0115"
+    },
+    {
+      "id": "AML.T0115.000",
+      "name": "Datasets",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0115",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0115.000"
+    },
+    {
+      "id": "AML.T0115.001",
+      "name": "Models",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0115",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0115.001"
+    },
+    {
+      "id": "AML.T0115.002",
+      "name": "AI Agent Tools",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "AML.T0115",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0115.002"
+    },
+    {
+      "id": "AML.T0116",
+      "name": "Autonomous Reconnaissance",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0116"
+    },
+    {
+      "id": "AML.T0117",
+      "name": "Autonomous Attack-Path Adaptation",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0117"
+    },
+    {
+      "id": "AML.T0118",
+      "name": "Autonomous AI Agent Communication",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0118"
+    },
+    {
+      "id": "AML.T0118.000",
+      "name": "Communication via Shared Artifacts",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0118",
+      "platforms": [
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0118.000"
+    },
+    {
+      "id": "AML.T0118.001",
+      "name": "Direct Agent Communication",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "AML.T0118",
+      "platforms": [
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0118.001"
+    },
+    {
+      "id": "AML.T0119",
+      "name": "Exploit Automated Artifact Processing Pipeline",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0119"
+    },
+    {
+      "id": "AML.T0120",
+      "name": "AI Artifact Repository",
+      "tactics": [
+        "command-and-control"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0120"
+    },
+    {
+      "id": "AML.T0121",
+      "name": "AI Agent Environment Reconstruction",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0121"
+    },
+    {
+      "id": "AML.T0122",
+      "name": "Exploitation of Remote Services",
+      "tactics": [
+        "lateral-movement"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0122"
+    },
+    {
+      "id": "AML.T0123",
+      "name": "Obfuscated Files or Information",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0123"
+    },
+    {
+      "id": "AML.T0124",
+      "name": "Autonomous Attack Orchestration",
+      "tactics": [
+        "ai-attack-adaptation"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0124"
+    },
+    {
+      "id": "AML.T0125",
+      "name": "Create Account",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0125"
+    },
+    {
+      "id": "AML.T0126",
+      "name": "Automated Collection",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0126"
+    },
+    {
+      "id": "AML.T0127",
+      "name": "Data Staged",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0127"
+    },
+    {
+      "id": "AML.T0128",
+      "name": "Compromise Infrastructure",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0128"
+    },
+    {
+      "id": "AML.T0129",
+      "name": "Triggers in Multimodal Inputs",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0129"
+    },
+    {
+      "id": "AML.T0130",
+      "name": "AI Agent Response Biasing",
+      "tactics": [
+        "impact"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0130"
+    },
+    {
+      "id": "AML.T0131",
+      "name": "Crafted AI Assistant Links",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0131"
+    },
+    {
+      "id": "AML.T0132",
+      "name": "Misconfigured or Publicly Exposed AI Services",
+      "tactics": [
+        "initial-access"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0132"
+    },
+    {
+      "id": "AML.T0133",
+      "name": "Discover AI Agent Runtime Capabilities",
+      "tactics": [
+        "discovery"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0133"
+    },
+    {
+      "id": "AML.T0134",
+      "name": "AI Targeted Cloaking",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0134"
+    },
+    {
+      "id": "AML.T0135",
+      "name": "Outputs from AI Models",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0135"
+    },
+    {
+      "id": "AML.T0136",
+      "name": "Exfiltration via AI User Interface",
+      "tactics": [
+        "exfiltration"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0136"
+    },
+    {
+      "id": "AML.T0137",
+      "name": "Training Data Information from AI Models",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0137"
+    },
+    {
+      "id": "AML.T0137.000",
+      "name": "Infer Membership",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "AML.T0137",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0137.000"
+    },
+    {
+      "id": "AML.T0137.001",
+      "name": "Infer Properties",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "AML.T0137",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0137.001"
+    },
+    {
+      "id": "AML.T0137.002",
+      "name": "Invert AI Model",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "AML.T0137",
+      "platforms": [
+        "Predictive AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0137.002"
+    },
+    {
+      "id": "AML.T0137.003",
+      "name": "Extract Memorized Data",
+      "tactics": [
+        "collection"
+      ],
+      "parent": "AML.T0137",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0137.003"
+    },
+    {
+      "id": "AML.T0138",
+      "name": "Indicator Removal",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0138"
+    },
+    {
+      "id": "AML.T0139",
+      "name": "Compromise Accounts",
+      "tactics": [
+        "resource-development"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0139"
+    },
+    {
+      "id": "AML.T0140",
+      "name": "Centralized AI Service Request Routing",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI",
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0140"
+    },
+    {
+      "id": "AML.T0141",
+      "name": "AI Service Request Metadata Sanitization",
+      "tactics": [
+        "defense-evasion"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0141"
+    },
+    {
+      "id": "AML.T0142",
+      "name": "Event Triggered Execution",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0142"
+    },
+    {
+      "id": "AML.T0143",
+      "name": "LLM Prompt Propagation",
+      "tactics": [
+        "lateral-movement"
+      ],
+      "parent": "",
+      "platforms": [
+        "Generative AI",
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0143"
+    },
+    {
+      "id": "AML.T0144",
+      "name": "Recover AI Model Internals",
+      "tactics": [
+        "discovery",
+        "collection"
+      ],
+      "parent": "",
+      "platforms": [
+        "Predictive AI",
+        "Generative AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0144"
+    },
+    {
+      "id": "AML.T0145",
+      "name": "Poison AI Agent Learning Environment",
+      "tactics": [
+        "persistence"
+      ],
+      "parent": "",
+      "platforms": [
+        "Agentic AI"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "url": "https://atlas.mitre.org/techniques/AML.T0145"
+    }
+  ]
+}
