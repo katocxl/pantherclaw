@@ -8,6 +8,7 @@ package pantherclaw.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "pantherclaw/v1/authority.proto";
+import "pantherclaw/v1/compliance.proto";
 
 // EvidenceService reads the proof of the caller's org's evidence ledger (G0
 // M7 track B, design decisions 8 and 13; HR-194, HR-196; PAP-1 §9.4): its
@@ -505,6 +506,19 @@ message PackTimeRange {
   };
 }
 
+// PackCompliance names a report: a framework and a period. The pack holds
+// compliance.json and the receipts it cites, and its statement is its own: it
+// shows evidence and gaps, and is not a certification or statement of
+// compliance. The framework's edition applies.
+message PackCompliance {
+  ComplianceFramework framework = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // The period.
+  PackTimeRange period = 2 [(buf.validate.field).required = true];
+}
+
 // PackContents is what a pack holds besides each transaction's states.
 message PackContents {
   // Receipts (decision, execution, effect) and their verify bundles.
@@ -536,6 +550,8 @@ message CreateEvidencePackRequest {
     // One automation execution: its trigger, version, authority, steps and
     // result, and every transaction of its runs (G0 M11 part 2 D30).
     string automation_execution_id = 7 [(buf.validate.field).string.uuid = true];
+    // One framework's coverage for a period, as a signed report (G0 M25 D301).
+    PackCompliance compliance = 8;
   }
   // For a run or an agent: only the transactions created in this range.
   PackTimeRange within = 5;

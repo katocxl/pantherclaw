@@ -13,12 +13,19 @@ import (
 	_ "embed"
 	"encoding/json/v2"
 	"fmt"
+	"slices"
+
+	"github.com/katocxl/pantherclaw/internal/campaigns/domain"
 )
 
 // Entry is one library scenario.
 type Entry struct {
 	Digest string `json:"digest"`
 	Tier   string `json:"tier"`
+	// ASI are the OWASP agentic risks the scenario exercises (G0 M25 D304).
+	ASI []string `json:"asi,omitzero"`
+	// ASIWhy says, per tag, how the scenario exercises that risk (D531).
+	ASIWhy map[string]string `json:"asi_why,omitzero"`
 }
 
 //go:embed library.json
@@ -31,6 +38,40 @@ var entries = func() map[string]Entry {
 	}
 	return m
 }()
+
+// CampaignEntry is one library campaign (G0 M25 D310): its digest, and the
+// attempts the server derives outcomes for, never the runner's.
+type CampaignEntry struct {
+	Digest   string           `json:"digest"`
+	Tier     string           `json:"tier"`
+	Attempts []domain.Attempt `json:"attempts"`
+	// ASI are the OWASP agentic risks the campaign file tags (D529).
+	ASI []string `json:"asi,omitzero"`
+}
+
+//go:embed campaigns.json
+var campaignsRaw []byte
+
+var campaigns = func() map[string]CampaignEntry {
+	var m map[string]CampaignEntry
+	if err := json.Unmarshal(campaignsRaw, &m, json.RejectUnknownMembers(true)); err != nil {
+		panic(fmt.Sprintf("campaigns.json: %v", err))
+	}
+	return m
+}()
+
+// Campaign returns the library's campaign for an RT id.
+func Campaign(id string) (CampaignEntry, bool) {
+	e, ok := campaigns[id]
+	return e, ok
+}
+
+// CampaignASI returns the OWASP agentic risks (ASI01..ASI10) a library
+// campaign exercises, as its file tags them, ascending; nil for an id that
+// is no library campaign or carries no tag (D529).
+func CampaignASI(id string) []string {
+	return slices.Clone(campaigns[id].ASI)
+}
 
 // Lookup returns the library's entry for an RT id.
 func Lookup(id string) (Entry, bool) {

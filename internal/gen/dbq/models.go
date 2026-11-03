@@ -912,6 +912,60 @@ type PcBusinessUnit struct {
 	UpdatedAt   time.Time
 }
 
+type PcCampaign struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	RangeAgentID      ids.UUID
+	StartedBy         string
+	RunnerVersion     string
+	SetDigest         string
+	ScenarioIds       []string
+	ImageDigest       string
+	ModelHost         string
+	RelayConnectionID ids.UUID
+	Scripted          bool
+	State             string
+	StartedAt         time.Time
+	FinishedAt        *time.Time
+	OpenStep          *string
+}
+
+type PcCampaignRoute struct {
+	OrgID      ids.OrgID
+	CampaignID ids.UUID
+	ScenarioID string
+	Kind       string
+	Locator    string
+	RecordedAt time.Time
+}
+
+type PcCampaignRun struct {
+	OrgID          ids.OrgID
+	CampaignID     ids.UUID
+	RunID          ids.UUID
+	ScenarioID     string
+	ModelHost      string
+	Requests       int64
+	BytesToModel   int64
+	BytesFromModel int64
+	BytesReserved  int64
+}
+
+type PcCampaignStep struct {
+	OrgID         ids.OrgID
+	CampaignID    ids.UUID
+	ScenarioID    string
+	StepID        string
+	Boundary      string
+	Expected      string
+	Outcome       string
+	Basis         string
+	TransactionID *ids.UUID
+	Reason        string
+	RouteLocator  string
+	RecordedAt    time.Time
+}
+
 type PcCaptureProfile struct {
 	OrgID           ids.OrgID
 	ID              ids.UUID
@@ -1086,6 +1140,18 @@ type PcCliSession struct {
 	RevokedAt       *time.Time
 }
 
+type PcComplianceReport struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	PackID       ids.UUID
+	Framework    string
+	PeriodStart  time.Time
+	PeriodEnd    time.Time
+	CreatedBy    ids.UUID
+	CreatedAt    time.Time
+	ReportSha256 []byte
+}
+
 type PcCompromiseReview struct {
 	OrgID        ids.OrgID
 	CompromiseID ids.UUID
@@ -1136,6 +1202,7 @@ type PcConnection struct {
 	UpdatedAt        time.Time
 	AgentHosts       []string
 	Simulated        bool
+	ModelRelay       bool
 }
 
 type PcConnectionCapability struct {

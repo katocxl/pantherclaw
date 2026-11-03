@@ -226,7 +226,9 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 	}
 	for _, gc := range res.GetConnections() {
 		pkg, ok := pkgs[gc.GetPackage()+"@"+gc.GetPackageVersion()]
-		if !ok {
+		// A model relay has no package, so no face that maps calls serves it
+		// (G0 M25 D313): its Mapper stays nil.
+		if !ok && (!gc.GetModelRelay() || !gc.GetSimulated()) {
 			return nil, fmt.Errorf("%w: connection %s uses a package that was not sent", ErrConfig, gc.GetName())
 		}
 		c := &Connection{GatewayConnection: gc, Package: pkg.pkg, Mapper: pkg.mapper, Modes: map[string]string{}, Credential: creds[gc.GetId()]}

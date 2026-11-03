@@ -594,6 +594,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, rangeJobs...)
+		if evidenceJobs, err = appendCampaignJobs(evidenceJobs, jreg, pool, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerPolicyRolloutJobs(evidenceJobs, jreg, pool, bill, m5, kp, log); err != nil {
 			return err
 		}
@@ -940,6 +943,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerSuggestions(rs, d)
 	registerRecommendations(rs, d)
 	registerPostureQueue(rs, d)
+	registerCompliance(rs, d)
 	edges, err := registerM10Edges(rs, d)
 	if err != nil {
 		return nil, err

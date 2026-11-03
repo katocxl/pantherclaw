@@ -43,7 +43,7 @@ In scope: `pantherclaw-server` (api + worker), `pantherclaw-gateway`, `pclaw`, `
 | TB9 | Third-party MCP code ↔ Connector runtime | Connector process → gateway | Isolation, customer-hosted only (HR-084..086) |
 | TB10 | CI/CD ↔ Repo/Registries | Workflows, deps → artifacts | Pinned actions, OIDC publishing, attestations (HR-130..132) |
 | TB11 | Tool output/content ↔ Agent | External text → agent reasoning | Outside our enforcement; constrained by grants, sequences, detections |
-| TB12 | Public repo ↔ Private enterprise repo | Public → private | No private code/secrets in public repo; extension interfaces |
+| TB12 | Public repo ↔ Private repo | Public → private | No private code/secrets in public repo; extension interfaces |
 | TB13 | Server ↔ Model provider (external processor) | Server → the customer's own model vendor (M21 drafting) | Off by default, customer's key, names-only requests, fixed host through the egress guards, strict output parsing, drafts only (HR-541..545, ADR-0043) |
 
 ## 4. Attack surfaces
@@ -314,6 +314,14 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 
 | ID | Abuse case | Adv. | Entry | Consequence | Mitigations | MS |
 |---|---|---|---|---|---|---|
+| T-258 | A report edited after signing, or a server that writes a state its counts do not support, shows a control as EVIDENCED | A7, A5 | TB4 | False assurance to an auditor or regulator | HR-600, HR-604; the fixed statement, the manifest digest and offline re-derivation | M25 |
+| T-259 | A reader infers evidence they may not read from a report: a narrow exporter's report reads "no records" where records exist | A5 | TB4 | False assurance, or disclosure across scopes | HR-603; `outside_permission` gaps, cited transactions read as the creator | M25 |
+| T-260 | A runner, a customer scenario or a tag in a file makes a test count: a claimed PASS, a customer scenario tagged ASI01, or a scenario whose digest is not the library's | A5, A1 | TB4 | Controls shown as tested when they were not | HR-602; tags only from the server's library for its own digest, customer ranges not read, reported results a `reported_only` gap | M25 |
+| T-261 | The customer's model key leaks to the agent, a log, the server or another host | A1 | TB1 | The customer's model account is misused | HR-607; a relay outside the container, read once, held in memory, a placeholder for the agent | M25 |
+| T-262 | A campaign reports the boundary held when it did not, or was not tested: a run left out or replaced, a child run doing the work, a step pushed past its bounds, or an edge report read as proof | A1, A5 | TB4 | False assurance about the boundary | HR-608, HR-609, HR-610; runs bound by the database, worst outcome wins | M25 |
+| T-263 | A campaign runs against a real agent, or a result is taken for a claim about production | A5, A1 | TB4 | Attack traffic against real systems, or false assurance | HR-611, HR-612; range agents only, the twin statement | M25 |
+| T-264 | The model route carries traffic outside an open campaign, or to anything but the run's model host | A1, A4 | TB1 | Raw agent bytes reach a host with no decision behind them | HR-613, HR-614; asked on every request, off unless a campaign is open | M25 |
+| T-265 | The edge's model path becomes a second way out of the sandbox | A1 | TB1 | An egress route around the sandbox | HR-615; the gateway only, one model host | M25 |
 
 **G0 M26: IdP access, SCIM, SAML and SaaS discovery**
 
@@ -340,7 +348,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | R-09 | Go cannot reliably zeroize secrets | Runtime limitation | Short-lived plaintext, no swap/core dumps in images |
 | R-10 | Ledger proves integrity, not completeness | Inherent | Target-log reconciliation, external anchoring |
 | R-11 | Solo founder: no independent human reviewer | Team size | EX-001 compensating controls ([GATES_AND_REVIEW.md](GATES_AND_REVIEW.md)) |
-| R-12 | Public source can be copied | Business choice | BSL, private enterprise repo, signed roots, detection |
+| R-12 | Public source can be copied | Business choice | BSL, private repo, signed roots, detection |
 | R-13 | Device-code phishing: a person can be talked into confirming a code someone else started, giving that CLI their session | Device flow is the only browserless CLI login (ADR-0016) | Confirmation page shows device name, address and time with an explicit warning; same-origin POST; 10-minute codes, 5 attempts; each session is tied to the requesting device key, audited (`authn.login`) and revocable (logout, user disable) |
 | R-14 | A local attacker who copies `credentials.json` gets the CLI session (the device key is in the same file) | Founder decision 4 (ADR-0016): private file now, OS keychain later | Mode 0600 in the user profile; 15-minute access tokens; 8-hour absolute sessions; refresh rotation with reuse detection; immediate server-side revocation |
 | R-15 | The Kubernetes reviewer credential (TokenReview and pod reads) is a bearer token in a file; the server reads the file again every minute, so a replaced token is used up to a minute later (until 2026-10-09 a rotated token needed a restart) | M3 keeps cluster access in operator configuration (founder decision 3) | Least-privilege RBAC from the workload-identity runbook (TokenReview plus `get` on pods in pinned namespaces); short-lived reviewer tokens, rotated without a restart; any failed cluster call refuses the attestation (fail closed) |

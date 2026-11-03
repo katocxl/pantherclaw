@@ -6,6 +6,7 @@ package evidencerpc
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/compliance/adapters/compliancerpc"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -86,6 +87,10 @@ func (e *Evidence) CreateEvidencePack(ctx context.Context, req *pantherclawv1.Cr
 		if r.Execution, err = parseID(s.AutomationExecutionId); err != nil {
 			return nil, err
 		}
+	case *pantherclawv1.CreateEvidencePackRequest_Compliance:
+		r.Kind = pack.ScopeCompliance
+		r.Framework = string(compliancerpc.FrameworkOf(s.Compliance.GetFramework()))
+		rangeOf(s.Compliance.GetPeriod())
 	}
 	if req.GetWithin() != nil && r.Kind != pack.ScopeRun && r.Kind != pack.ScopeAgent {
 		return nil, evapp.ErrBadPackScope

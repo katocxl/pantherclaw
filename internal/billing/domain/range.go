@@ -18,3 +18,7 @@ func (e Entitlements) RangeFullLibrary() bool {
 // RangeCustomScenarios reports whether the edition runs customer-authored
 // CX-### scenarios (G0 M17 D126, PN-009.6: Business and above).
 func (e Entitlements) RangeCustomScenarios() bool { return e.businessPlus() }
+
+// AgentCampaigns reports whether the edition runs attack campaigns against a
+// range twin of the customer's agent (G0 M25 D309: Business and above).
+func (e Entitlements) AgentCampaigns() bool { return e.businessPlus() }

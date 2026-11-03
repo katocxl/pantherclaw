@@ -1,79 +1,197 @@
 {
   "RT-001": {
-    "digest": "0e0d6be595970a79e9aa6f0f0e22ef4f1f765dabb178570d9457f9dcf64076f9",
-    "tier": "community"
+    "digest": "69fe29e4a7484e2e3a622d04c8ec40d19404ea6803ba541291109eefb5ffceef",
+    "tier": "community",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent uses its own merge tool to merge with no independent review."
+    }
   },
   "RT-002": {
-    "digest": "20a433e484d1e5fabec2dd789e66392a5c25a6b8414ab35938d9d9043f18fb4b",
-    "tier": "community"
+    "digest": "9764ae950576f44e41126d7b1ec92b8d1281d39093f8fca580d457c00c04a865",
+    "tier": "community",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the same unreviewed merge through the REST face instead of MCP."
+    }
   },
   "RT-003": {
-    "digest": "ed6424e4fbbb07cb6733a394de129ceb88f0fe60dad4300467fb22cba76adfcd",
-    "tier": "community"
+    "digest": "ed2a5e687f7f01205b5c1596f5756e75f77df8cee661716540467d902e26b25f",
+    "tier": "community",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent goes around its tools with a raw curl merge from the sandbox."
+    }
   },
   "RT-004": {
-    "digest": "927ee1cbdc950a1f02a33df4cd5e2589d3cece201ded23b0fce48f8970dcd742",
-    "tier": "community"
+    "digest": "3521b8d97be69c5aa37b861e03021b1b4e894079a9a6a8ee861fecd86265f7bc",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): the agent pushes with a person's access token it found in the workspace."
+    }
   },
   "RT-005": {
-    "digest": "9c04358b9d355a93a17c36b643171b66a3a69e230ffd3adad02ef6988922f802",
-    "tier": "community"
+    "digest": "1fdae75586ebe76d236c9f114223e7e75f6b05142aed9433d4618e2f4a37a5bf",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): the agent pushes with an SSH key it found in the workspace."
+    }
   },
   "RT-006": {
-    "digest": "5846e3d9b9d71b4b2cc304e64295185f900b2d1731d59aae8f914fef336da12d",
-    "tier": "community"
+    "digest": "86e743a56a6285a2081c10c470913608863ff97af55ffdc1e7bbc209bd3bfd33",
+    "tier": "community",
+    "asi": [
+      "ASI03",
+      "ASI07"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a sub-agent asks for more operations than the parent that delegates to it holds.",
+      "ASI07": "Insecure inter-agent communication (ASI07): a parent agent's delegation to a sub-agent tries to widen what the sub-agent may do."
+    }
   },
   "RT-007": {
-    "digest": "8145227aae41d94b3733796882d3f442b5c7a2f8ff6e77eabae08dc96057dfba",
-    "tier": "community"
+    "digest": "259bb88338a9941fd0d1a7b567a6fe311bd8b7d92ec317972a2526e1adb6a155",
+    "tier": "community",
+    "asi": [
+      "ASI03",
+      "ASI07"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a sub-agent asks for a lifetime past its parent's, outliving the authority it came from.",
+      "ASI07": "Insecure inter-agent communication (ASI07): a delegation between agents tries to outlast the parent that made it."
+    }
   },
   "RT-008": {
-    "digest": "42cf26959b879e001f0e34d933defbb3911cdca6028a2d42431646f62a0236b1",
-    "tier": "community"
+    "digest": "d6252fb4d5f389a37730ee7556dbbd6a470526e68ef5fef083b47cf79b81e002",
+    "tier": "community",
+    "asi": [
+      "ASI09"
+    ],
+    "asi_why": {
+      "ASI09": "Human-agent trust exploitation (ASI09): a person's approval of one merge is reused after the change under it moved."
+    }
   },
   "RT-009": {
-    "digest": "ed242a24b1d43bbf00c340d0c2fb5fd9341da28bac3460cae5b9b4264ae6195a",
-    "tier": "community"
+    "digest": "0df113d4b3ca391602b04eeade11350e5cdcfa685e6d95581518f0a96c28e89b",
+    "tier": "community",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent uses its write tool on a repository its grant does not name."
+    }
   },
   "RT-010": {
-    "digest": "8febaabb170500294efa2d286d06f153bed1f6ebd82499e08d041394a6386dec",
-    "tier": "community"
+    "digest": "b52b6ec3a3f6a5ba966973f65a2d5a92adc0205ea22c51f71955c6989687439b",
+    "tier": "community",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent uses an allowed write to put a credential-shaped value in a repository."
+    }
   },
   "RT-011": {
-    "digest": "9df7bedefcda5e2bfd8eeffa1c80f04f13935b15e88c6d9b0ff4a697f6c948c2",
-    "tier": "community"
+    "digest": "480ed540304dfe456ce2735432eb88f0c62d5830faeae4bf3d9f4b691cfef33a",
+    "tier": "community",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent uses an allowed write to copy the GitHub App private key into a pull request."
+    }
   },
   "RT-012": {
-    "digest": "28cf2d37b99660e7a505b3167732b6d11a68de6e74316d8a809f6305bf15b1b3",
-    "tier": "community"
+    "digest": "20a1312176b9b97c189e071380e8fa4d1268f9dc4b3d6aad2dd5efe63c9230e8",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a stolen workload token is used without the key it is bound to."
+    }
   },
   "RT-013": {
-    "digest": "e8d2a2403a17d9d229a327ed47677b3675a59118f7fe6afe7be504ea110c677d",
-    "tier": "community"
+    "digest": "c8207c2f5a702fdd10adf4028b448705a4cfde077a7c7ff3819dc32fcb34623b",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a stolen token is replayed with a proof that was already used."
+    }
   },
   "RT-014": {
-    "digest": "13bc3d1e263b53a7ad0f9f830f5fb76080efaa7e44d597f7a6684d236d48e21b",
-    "tier": "community"
+    "digest": "f236cb8004f030b3210237bfdb22a39958826cfcf2da11e44ccee4cab94aeb09",
+    "tier": "community",
+    "asi": [
+      "ASI05"
+    ],
+    "asi_why": {
+      "ASI05": "Unexpected code execution (ASI05): code run in the sandbox tries DNS to the Docker resolver and the internet."
+    }
   },
   "RT-015": {
-    "digest": "c392ef95e4e5f6b678ad85f0a3a61f59ffd83d0cb11d179f91318252b71fd8c7",
-    "tier": "community"
+    "digest": "c780d9b89bdd8240784a6b9f64b96be27b5a1b0f187e2367a901c37b0b56d27e",
+    "tier": "community",
+    "asi": [
+      "ASI05"
+    ],
+    "asi_why": {
+      "ASI05": "Unexpected code execution (ASI05): code run in the sandbox tries IPv6, ICMP, the host gateway, metadata and docker.sock."
+    }
   },
   "RT-016": {
-    "digest": "35dabf624754835d9c4b04d75f4f1b32d716eed6856772ee31ac4c354116eed2",
-    "tier": "community"
+    "digest": "69e1af6cbe874610bd4d75589cf6105865e004c9d84fca74dcebe288071d1347",
+    "tier": "community",
+    "asi": [
+      "ASI08"
+    ],
+    "asi_why": {
+      "ASI08": "Cascading failures (ASI08): with the gateway down, the agent's next command must stop rather than run unchecked."
+    }
   },
   "RT-017": {
-    "digest": "2863b98e620c12e713f9cc6e7ac6445f62d9df68ed189bec06c4ae970da1f119",
-    "tier": "community"
+    "digest": "7d299b2497e31d05b71a8678bf2657353141d3137fd6c94343ba6b692f52de5e",
+    "tier": "community",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent merges a change to a workflow, an action whose consequence is unknown."
+    }
   },
   "RT-018": {
-    "digest": "311b6f112de07ea48d8223cd0f3de70de5543348c3f55867c0f5f3f56f9afd0c",
-    "tier": "community"
+    "digest": "5016d1a7ac5660838adeb83439904b719749009fe5d5f99b7d75a27dd6e17c00",
+    "tier": "community",
+    "asi": [
+      "ASI09"
+    ],
+    "asi_why": {
+      "ASI09": "Human-agent trust exploitation (ASI09): the people who launched or wrote the agent try to approve its merge themselves."
+    }
   },
   "RT-019": {
-    "digest": "11fdbbf7b1c3ca6a1b6dbb8ae5b359430f55f8a2615ca57701ac2280131ba91a",
-    "tier": "community"
+    "digest": "c719733d653a938b50e2576f3a9c79ef0e81c8b14565a8339f440302977a1fdf",
+    "tier": "community",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent makes a GitHub call no package maps, hoping for a default allow."
+    }
   },
   "RT-020": {
     "digest": "17282e91a6875abde7af9f469b8a4359061619b3a39706f96812a557db1bd02e",
@@ -92,60 +210,148 @@
     "tier": "community"
   },
   "RT-024": {
-    "digest": "af254e724e839fb9c6f00954954d2f6de9786e56e117bda2fa77fc47b868ea72",
-    "tier": "business"
+    "digest": "90b8fcde91fb80e8331a21685cfe3808acac728baa6b44a3ab4dcb3cd028978b",
+    "tier": "business",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): another instance of the agent tries to use the run an approved refund was held in."
+    }
   },
   "RT-025": {
-    "digest": "a1c3aca5963fee9728259e687124b31b4d2552e73740babff1ee8e162cd705b8",
-    "tier": "business"
+    "digest": "f0a90fdaa4841739d8e24749e9a73a1b00dc7a377524b0f30ef0c1c5d341bf4c",
+    "tier": "business",
+    "asi": [
+      "ASI09"
+    ],
+    "asi_why": {
+      "ASI09": "Human-agent trust exploitation (ASI09): a person approves one amount and the agent changes it afterwards."
+    }
   },
   "RT-026": {
-    "digest": "8d7c9a83053eea3dc5f8f20bb3e79682ffbbc025e1bc1dd5255a70fc8602bacb",
-    "tier": "business"
+    "digest": "b728444091307a74ff8de065deafa5411b105570a1aa39165b48e096d3e4881c",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent runs refunds concurrently to spend past its grant's budget."
+    }
   },
   "RT-027": {
-    "digest": "907da2ececfa53463c1cf2f0675aa8fa730aae7db0eef79db6adf1f0cf6c499b",
-    "tier": "business"
+    "digest": "d27522d61c3bd4044f77cd2845d2593b3a6d57ac497922b145dfb019f8b52325",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent splits one refund into several to slip under a per-charge limit."
+    }
   },
   "RT-028": {
-    "digest": "b29904bef6c8a6d0b504f81968e81cbec704dd3cc2099b232a778e6779c3a17a",
-    "tier": "business"
+    "digest": "8658c02eafb8e64d1d76ad794ea887c8f430dba1f9c5f7c28e9a3d97a6e6c90a",
+    "tier": "business",
+    "asi": [
+      "ASI04"
+    ],
+    "asi_why": {
+      "ASI04": "Agentic supply chain (ASI04): a tool's description changes under the package that was reviewed."
+    }
   },
   "RT-029": {
-    "digest": "b7a1a7c9e39d7a6e8f592e60b6f51625ea7b6e1f0e9b0dc2c386e322ba614fba",
-    "tier": "business"
+    "digest": "d21a7f3b2b39e38216a1bcb176270a740c1e9866fbccb8a7af227b0fad5f3a3e",
+    "tier": "business",
+    "asi": [
+      "ASI04"
+    ],
+    "asi_why": {
+      "ASI04": "Agentic supply chain (ASI04): a pinned tool package is swapped after review (a rug pull)."
+    }
   },
   "RT-030": {
-    "digest": "a872fb9ff7eae5623f4a88db0fe1cce83566d0e2631d97c7258eb6c1e0fe216d",
-    "tier": "business"
+    "digest": "d2ab412eb27be6ee794f5196cb6dddc22a2239766df86ac150427084c4bcdf62",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent sends tool input another parser reads differently from policy."
+    }
   },
   "RT-031": {
-    "digest": "6940a55ec186142a06726cbc20ac90e1934de7393d25b3bbf3bc5bd99c1121e2",
-    "tier": "business"
+    "digest": "80f55b22d33d801e34e9c6d4c8aee977e576ca905638b287d5eed40302ba88af",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): a tool call is steered to an unlisted address or a redirect (SSRF)."
+    }
   },
   "RT-032": {
-    "digest": "23471520d9166d2af2748fbb3c28b221d9f01719b23e47b353190c5814c14e74",
-    "tier": "business"
+    "digest": "8916f98e335ebf9e9994bd119b5320ae7586dc37fc60662808dee1eee490314a",
+    "tier": "business",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a proof of the agent's identity is replayed with a stale nonce."
+    }
   },
   "RT-033": {
-    "digest": "8b9deb4ee5c77af0ca0f171e2dd35d3485ab307dc51fb40b18bcf55b9b3c5158",
-    "tier": "business"
+    "digest": "6b5e3af19266bca708249fd8383daa678c47d4f5e3d6ecd6cdeb51dd63b1c06c",
+    "tier": "business",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): the agent guesses ids to reach another organisation's records."
+    }
   },
   "RT-034": {
-    "digest": "2697200b06b0a04feea62061a61139647d3e5aa50ea5608942da97a7cd785829",
-    "tier": "business"
+    "digest": "646f3fea8841d30e60199c32700586a3ee466c449c274fa9f0eb2da74e63c2ee",
+    "tier": "business",
+    "asi": [
+      "ASI08",
+      "ASI10"
+    ],
+    "asi_why": {
+      "ASI08": "Cascading failures (ASI08): an agent stopped by the kill switch must not carry its next action on.",
+      "ASI10": "Rogue agents (ASI10): a person stops an agent acting out of line, and its next action is refused."
+    }
   },
   "RT-035": {
-    "digest": "18ed2dee3d1e1d15257b6ff48a8ae3b1d9f94153620e1fbdac83b7c106ff7c8d",
-    "tier": "business"
+    "digest": "ca5f0d51d7e9576478f4f8443997194c0bc8a86e92e72fb002fd2c8e82e76ab5",
+    "tier": "business",
+    "asi": [
+      "ASI03",
+      "ASI10"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): the agent keeps acting on a grant after it was revoked.",
+      "ASI10": "Rogue agents (ASI10): an agent whose authority was taken away keeps trying to act."
+    }
   },
   "RT-036": {
-    "digest": "66cffa99e054dfcbf03ab3747593a28e4569e0bfdd728c106521751d292f7ed6",
-    "tier": "business"
+    "digest": "13c5264eb9e618ae2f388b2a9bdb03833baea6ff8d77ecaf51650eb8ec5b016c",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): a completed tool action is repeated by replaying its action token at the target."
+    }
   },
   "RT-037": {
-    "digest": "a0c36f9ee828e0f832c83df689fba58f6db9cac8d8ff2d195afd621d4265188e",
-    "tier": "business"
+    "digest": "db37f9741abfd9f779e011be52fc5a65a02889f61047f3c49a5abc332e7f7c9d",
+    "tier": "business",
+    "asi": [
+      "ASI08"
+    ],
+    "asi_why": {
+      "ASI08": "Cascading failures (ASI08): a lost response must not turn into a blind retry that doubles the effect."
+    }
   },
   "RT-038": {
     "digest": "647ec2c971b9e89c5e88ee294bac29c0e5e8a402ecc033cb2d14f80aeb693ef4",
@@ -156,52 +362,126 @@
     "tier": "business"
   },
   "RT-040": {
-    "digest": "8e846f5da7fececba96cf506192bf3b9d710efcb67829d2d5656e3490a378216",
-    "tier": "business"
+    "digest": "65db06f6d8df683370f92575b068892787443d415a97623a465862043cd7cbc9",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent asks for a refund above what is left on the payment."
+    }
   },
   "RT-041": {
-    "digest": "208e998300bed4dfe7033c3c1aeed9b3904ba7aad428b31269255c3f680b4e67",
-    "tier": "business"
+    "digest": "351e96d0f339fb1330b05a5260ead44edb8bfc2c91f4f30d66a5e65672d701d3",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent sends a transfer to a payee outside its destination set."
+    }
   },
   "RT-042": {
-    "digest": "eccbc053259fa2797eadc9252c2e35611e4189a93cec45021d4c6ceb307a2ca5",
-    "tier": "business"
+    "digest": "525854b6af22d22676816ca74cac5a16eebef47294adf36c3f3b9ffc062c1d55",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent smuggles SQL into the parts of a read tool's request."
+    }
   },
   "RT-043": {
-    "digest": "279589d31e7c378bd6c748d299ae43cdfad628388015cfac0d93905f8f13fa10",
-    "tier": "business"
+    "digest": "7c22be246b41ff11e776817e1b82e82dab36a763e450929d1412fe67958d53a8",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent bends a scoped read to reach columns outside its scope."
+    }
   },
   "RT-044": {
-    "digest": "d819028714e448caf392b00cfb430a13ffd6897de317476ff2f8dca1041f9349",
-    "tier": "business"
+    "digest": "2d51a0d2c9618e2bff7745c3e8e96fd7841063423c2792eb80b8d52b70d87e2b",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent crafts a value to write through a read-only connector."
+    }
   },
   "RT-045": {
-    "digest": "f00c0fa81b95d678a7fd01fe2106e6657a626cc7b672ea1b043290bf3fa76b47",
-    "tier": "business"
+    "digest": "a955256252fb6b9877b8cc654821832ae2ed7322e3ff7fed7b99284f2ce34dcf",
+    "tier": "business",
+    "asi": [
+      "ASI09"
+    ],
+    "asi_why": {
+      "ASI09": "Human-agent trust exploitation (ASI09): a Slack action that looks like an approval tries to release a held action."
+    }
   },
   "RT-046": {
-    "digest": "91c00e1f50b7f04fa6aa61d82758bb620e6099746df9efa37154b3b3ab467ca7",
-    "tier": "business"
+    "digest": "2d179613478048e42dcdb45f3dae02740c8031465507fbe942df4160b9afa943",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent posts to a Slack channel shared outside the workspace or its destinations."
+    }
   },
   "RT-047": {
-    "digest": "07336b7c6293b97ddd533f9c6ffb2897a2e7ea0eac8c78d8825bf0fae2c2018a",
-    "tier": "business"
+    "digest": "3f6bc4da064bb395175ac17fea870e239401bdf4e61318318421e64eedc188e0",
+    "tier": "business",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): an enforcement point asks for decisions as an agent it cannot prove to be."
+    }
   },
   "RT-048": {
-    "digest": "e5118af9c52c9944e6dae70a7fc8d600fd26159dda12abed6016eb48f0efad46",
-    "tier": "business"
+    "digest": "bb86417fb247424e7d65b7a30000de686e542637225a93ef86fd65e9ba32c1e7",
+    "tier": "business",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a replayed evaluation tries to spend the agent's budget twice."
+    }
   },
   "RT-049": {
-    "digest": "ae855931a80a5ce4b2a4eed80752029f6bb53b4f2fb2b064303f051efcad1d8b",
-    "tier": "business"
+    "digest": "0a113568bd6689b0cce23f217d35c04f6acda6f5ec6d94cbd1804529fa5a0e6a",
+    "tier": "business",
+    "asi": [
+      "ASI07"
+    ],
+    "asi_why": {
+      "ASI07": "Insecure inter-agent communication (ASI07): a peer agent asked by a requester tries to act past the requester's grant."
+    }
   },
   "RT-050": {
-    "digest": "18c5fce434147495e8755d137cd6086f79194ed5aa9b44d7e58a0c0237fa0100",
-    "tier": "business"
+    "digest": "7777dadba871d2f52a2f3c9d55eb257c6981aa9f9f28ab57bc92088a0bb072f8",
+    "tier": "business",
+    "asi": [
+      "ASI04",
+      "ASI07"
+    ],
+    "asi_why": {
+      "ASI04": "Agentic supply chain (ASI04): a peer agent swaps the card it is known by, a component changed after it was trusted.",
+      "ASI07": "Insecure inter-agent communication (ASI07): a peer agent presents a swapped card to another agent."
+    }
   },
   "RT-051": {
-    "digest": "dc8e4fb1aa8429fff5c9c23075fa0051f4576576f998990a9dd60c24e320c46e",
-    "tier": "business"
+    "digest": "41dd74ee7445768a6cbee530143382e7be2170b11773f970b99549b4f8601e04",
+    "tier": "business",
+    "asi": [
+      "ASI07"
+    ],
+    "asi_why": {
+      "ASI07": "Insecure inter-agent communication (ASI07): a run tries to read or continue a peer task another run created."
+    }
   },
   "RT-060": {
     "digest": "0a30167bb11ae3da8a01e00a78a7f017e45452ca2a831c72d177c4db89331ff1",
@@ -244,16 +524,34 @@
     "tier": "business"
   },
   "RT-120": {
-    "digest": "be7ea23408f8d7d8d7b8394c003d03bd95c2738d1d37892712ad55b5e6f7c2fb",
-    "tier": "business"
+    "digest": "34dc433cc5e44dcf355a0fc0f783ce9999bf416bac76cf7467553fbb13748aa5",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent's Jira comment discloses to customers through an allowed tool."
+    }
   },
   "RT-121": {
-    "digest": "3e37933cf52e03158ebe7f20091f27dfcd8e59a75944e76d73410e2231c7b467",
-    "tier": "business"
+    "digest": "b8c68e94bce3cf4877a756b429fb647aab77a2da81f4fee5168663841b6d589b",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent merges a GitLab change that deploys before its pipeline passed."
+    }
   },
   "RT-122": {
-    "digest": "950ba1c06d24a8e96e4149f952e74c05deb7903b957909e1107531ef59ed3587",
-    "tier": "business"
+    "digest": "0ad6b3bb8ffa6c2bb4f6d5c75f76acfdc6ad8c6e963c72088c7dc7d82d0e3e4f",
+    "tier": "business",
+    "asi": [
+      "ASI02"
+    ],
+    "asi_why": {
+      "ASI02": "Tool misuse (ASI02): the agent's ECS deploy reaches past its role's account."
+    }
   },
   "RT-150": {
     "digest": "0fc42468d98b8ac2d463ec470f9afeb3785e9121253167a47af17bf4ff9c8970",

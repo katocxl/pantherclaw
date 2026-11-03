@@ -20,6 +20,7 @@ var servingStates = map[pb.ConnectionServingState]string{
 	pb.ConnectionServingState_CONNECTION_SERVING_STATE_CIRCUIT_OPEN:      "CIRCUIT_OPEN",
 	pb.ConnectionServingState_CONNECTION_SERVING_STATE_DRIFT_QUARANTINED: "DRIFT_QUARANTINED",
 	pb.ConnectionServingState_CONNECTION_SERVING_STATE_NOT_LOADED:        "NOT_LOADED",
+	pb.ConnectionServingState_CONNECTION_SERVING_STATE_LOCAL_RELAY:       "LOCAL_RELAY",
 }
 
 func optTime(t *timestamppb.Timestamp) *time.Time {

@@ -45,6 +45,9 @@ const (
 	// RangeStatement is the sentence a pack of scope range carries instead
 	// (G0 M12, D13, HR-224): its findings are about simulated targets.
 	RangeStatement = "Tested-control evidence against simulated targets. Not a compliance certification."
+	// ComplianceStatement is the sentence a pack of scope compliance carries
+	// instead (G0 M25 D301, D312, HR-600).
+	ComplianceStatement = "This report shows evidence and gaps. It is not a certification or statement of compliance."
 	// ManifestPath and CosignPath are the files outside the item list.
 	ManifestPath = "manifest.jws"
 	CosignPath   = "manifest.mldsa65.json"
@@ -97,6 +100,9 @@ const (
 	// KindAssurance is the assurance report of an adversarial range (G0
 	// M12, HR-224): assurance.json, in a pack of scope range.
 	KindAssurance = "assurance"
+	// KindCompliance is a framework's coverage report (G0 M25 D301):
+	// compliance.json, in a pack of scope compliance.
+	KindCompliance = "compliance"
 	// KindBundle is a pantherclaw.bundle/v1 verify bundle: the receipts'
 	// ledger entries with their inclusion proofs, the checkpoints and the
 	// anchor.
@@ -123,7 +129,15 @@ const (
 	// to do and under which authority, its steps, and the transactions of its
 	// runs (G0 M11 part 2 D30, F533).
 	ScopeAutomationExecution = "automation_execution"
+	// ScopeCompliance is one framework's coverage for a period, and the
+	// transactions the report cites (G0 M25 D301). The framework is in the
+	// report: a manifest gains no member, so an older `pclaw verify` still
+	// decodes it.
+	ScopeCompliance = "compliance"
 )
+
+// CompliancePath is where a compliance pack holds its report.
+const CompliancePath = "compliance.json"
 
 // ErrInvalid reports a pack or manifest that is malformed or does not
 // verify.
