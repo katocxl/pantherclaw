@@ -52,3 +52,6 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [pclaw-mcp-catalog.md](pclaw-mcp-catalog.md) | M24 | `pclaw mcp catalog`: the organization's approved MCP servers, modes, revoke and export |
 | [pclaw-mcp-inspect.md](pclaw-mcp-inspect.md) | M24 | `pclaw mcp inspect`: run an MCP server in the sandbox on your own machine and check it |
 | [device-scan.md](device-scan.md) | M24 | Scheduled metadata scans on managed devices with Intune or Jamf |
+| [idp-access.md](idp-access.md) | M26 | IdP agent access with ID-JAG assertions and MCP client authorization (Team): issuers, bindings, allow-listed clients, changed client documents, reused tokens, rolling back 00291 |
+| [scim-saml.md](scim-saml.md) | M26 | SCIM provisioning and SAML sign-in (Enterprise to add): tokens, deprovisioning, group roles, connections and refused sign-ins |
+| [saas-discovery.md](saas-discovery.md) | M26 | List agents from Copilot Studio and ChatGPT Enterprise (Business): import, gateway scan, not scanned, owners |
