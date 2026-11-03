@@ -38,9 +38,9 @@ It refuses to start without an HMAC secret or a JWKS. Run it under your service 
 
 In this order, before anything is written:
 
-1. At most 16 requests are handled at once. One more is answered 503 `busy` before its body is read. The exporter sends one batch at a time per destination and retries a 503.
-2. The Standard Webhooks headers `webhook-id`, `webhook-timestamp` and `webhook-signature` are present and well formed.
-3. The body is at most the export's largest batch, 1 MiB.
+1. The Standard Webhooks headers `webhook-id`, `webhook-timestamp` and `webhook-signature` are present and well formed.
+2. The body is at most the export's largest batch, 1 MiB, and arrives within 10 seconds.
+3. The bodies in hand, read but not yet written or refused, hold at most 32 MiB in all. Their bytes are counted as they arrive and given back when the request is answered. A read that would pass 32 MiB is answered 503 `busy` before any signature is checked. A sender that stalls holds only the bytes it sent, for at most 10 seconds, so idle connections can't keep a batch out. The exporter sends one batch at a time per destination and retries a 503.
 4. The timestamp is within the window of this host's clock, and not before the forwarder started.
 5. Every configured scheme has a valid signature over `webhook-id.webhook-timestamp.body`: an HMAC-SHA256 `v1,` by one of the secrets (constant-time compare), and with a JWKS an Ed25519 `v1a,` by one of its webhooks keys. One scheme alone is not enough when both are configured.
 6. The `webhook-id` was not already written in the window. A copy, or the exporter's re-send with a newer timestamp, is answered 200 and not written again.
@@ -50,10 +50,10 @@ In this order, before anything is written:
 |---|---|
 | 200 `ok` | Written and synced |
 | 200 `duplicate` | Already written in the window; nothing written |
-| 400 | Headers or batch malformed, or the timestamp outside the window or before the start |
+| 400 | Headers or batch malformed, the body not received within 10 seconds, or the timestamp outside the window or before the start |
 | 401 | A configured scheme has no valid signature |
 | 413 | Over 1 MiB |
-| 503 `busy` | 16 requests already in hand. The body is not read, and the exporter retries |
+| 503 `busy` | The bodies in hand already hold 32 MiB. Nothing is written, and the exporter retries |
 | 503 `write failed` | A write that failed part way is cut back to the last whole batch, and the exporter's retry is written. A sync that failed after a whole write keeps the lines, because agents tailing the file would read it again from the start if it were cut back. The forwarder then writes nothing more: every later batch gets 503 until it is restarted. With `--out -`, a write that took part of a batch stops it the same way, because a stream can't be cut back |
 
 An answer never echoes the request. Each batch that reaches the forwarder logs one JSON line on stderr with the batch id, the event count when known and the outcome, never the body. A body whose declared length is over 1 MiB never reaches it: the server answers 413 before the forwarder logs anything. A chunked body over 1 MiB is logged as `too_large`. A refused write also logs the system's error, such as a full disk.

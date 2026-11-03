@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/inbound"
@@ -51,10 +52,15 @@ const (
 	// JWKSRefetchEvery bounds how often a `v1a,` signature that no known
 	// key verifies refetches the JWKS.
 	JWKSRefetchEvery = time.Minute
-	// MaxInFlight bounds the requests handled at once, so unverified bodies
-	// can't pile up in memory; the exporter sends one batch at a time per
-	// destination, and a refused one is retried.
-	MaxInFlight = 16
+	// MaxBuffered bounds the body bytes held at once by all requests, read
+	// but not yet written or refused, so unverified bodies can't pile up in
+	// memory. It is charged as the bytes arrive, so a sender that stalls
+	// holds only what it sent; a read that would pass it answers 503 busy,
+	// which the exporter retries.
+	MaxBuffered = 32 << 20
+	// BodyReadTimeout bounds reading one body, so a stalled sender holds
+	// its bytes for at most this long.
+	BodyReadTimeout = 10 * time.Second
 	// pruneEvery is how often forgotten webhook-ids are dropped.
 	pruneEvery = time.Minute
 )
@@ -116,8 +122,8 @@ type Config struct {
 // Forwarder is the http.Handler that verifies and writes batches.
 type Forwarder struct {
 	cfg Config
-	// slots holds one token per request in flight (MaxInFlight).
-	slots chan struct{}
+	// buffered is the body bytes requests hold now (MaxBuffered).
+	buffered atomic.Int64
 	// mu serializes the replay check and the write, so two copies of one
 	// batch never both get written and lines of two batches never mix.
 	mu     sync.Mutex
@@ -154,24 +160,19 @@ func New(cfg Config) (*Forwarder, error) {
 	if cfg.Log == nil {
 		cfg.Log = pclog.Discard()
 	}
-	return &Forwarder{cfg: cfg, slots: make(chan struct{}, MaxInFlight), seen: map[string]time.Time{}}, nil
+	return &Forwarder{cfg: cfg, seen: map[string]time.Time{}}, nil
 }
 
 // ServeHTTP takes one batch: headers, size, timestamp, signatures, replay,
-// then the write. Every refusal comes before anything is written. With
-// MaxInFlight requests already in hand it answers 503 without reading.
+// then the write. Every refusal comes before anything is written. The body
+// must arrive within BodyReadTimeout, and its bytes count against
+// MaxBuffered until the request ends: a read that would pass it answers
+// 503 busy, before the signature is looked at.
 func (f *Forwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	select {
-	case f.slots <- struct{}{}:
-		defer func() { <-f.slots }()
-	default:
-		f.answer(ctx, w, "", -1, OutcomeBusy, nil)
 		return
 	}
 	h, err := inbound.ReadHeaders(r.Header)
@@ -183,12 +184,20 @@ func (f *Forwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.answer(ctx, w, h.ID, -1, OutcomeTooLarge, nil)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBody))
+	// A server that can't set the deadline (a test recorder) still has
+	// its own read timeout.
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(BodyReadTimeout))
+	charged := &budgetBody{f: f, rc: r.Body}
+	defer charged.release()
+	body, err := io.ReadAll(http.MaxBytesReader(w, charged, MaxBody))
 	if err != nil {
 		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		switch {
+		case errors.As(err, &tooLarge):
 			f.answer(ctx, w, h.ID, -1, OutcomeTooLarge, nil)
-		} else {
+		case errors.Is(err, errBusy):
+			f.answer(ctx, w, h.ID, -1, OutcomeBusy, nil)
+		default:
 			f.answer(ctx, w, h.ID, -1, OutcomeMalformed, nil)
 		}
 		return
@@ -219,6 +228,38 @@ func (f *Forwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	f.rememberLocked(h.ID, h.Timestamp)
 	f.answer(ctx, w, h.ID, n, OutcomeWritten, nil)
+}
+
+// errBusy is a body read refused because it would pass MaxBuffered.
+var errBusy = errors.New("siemforward: the bodies in hand already hold MaxBuffered bytes")
+
+// budgetBody charges the bytes read from one request's body to the
+// forwarder's shared count as they arrive, and refuses a read that would
+// take the count past MaxBuffered. release gives them back.
+type budgetBody struct {
+	f       *Forwarder
+	rc      io.ReadCloser
+	charged int64
+}
+
+func (b *budgetBody) Read(p []byte) (int, error) {
+	n, err := b.rc.Read(p)
+	if n > 0 {
+		if b.f.buffered.Add(int64(n)) > MaxBuffered {
+			b.f.buffered.Add(-int64(n))
+			return 0, errBusy
+		}
+		b.charged += int64(n)
+	}
+	return n, err
+}
+
+func (b *budgetBody) Close() error { return b.rc.Close() }
+
+// release gives the request's bytes back once it is answered.
+func (b *budgetBody) release() {
+	b.f.buffered.Add(-b.charged)
+	b.charged = 0
 }
 
 // answer writes the outcome's fixed status and text and logs the batch id

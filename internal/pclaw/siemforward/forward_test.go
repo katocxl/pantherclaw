@@ -12,6 +12,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -569,47 +570,137 @@ func TestHR662_OversizedBodyIs413(t *testing.T) {
 	}
 }
 
-// TestHR662_MoreThanMaxInFlightIs503: with MaxInFlight requests in hand, the
-// next one is answered 503 before its body is read; once one finishes, a
-// batch is taken again.
+// TestHR662_BodyBudgetSpentIs503: when the bodies in hand already hold
+// nearly MaxBuffered bytes, a read that would pass it answers 503 busy
+// before the signature is looked at, writes nothing and keeps none of its
+// bytes. Once the budget is free again the batch is taken, and every
+// request gives its bytes back when it is answered.
 // Covers: F950
-func TestHR662_MoreThanMaxInFlightIs503(t *testing.T) {
+func TestHR662_BodyBudgetSpentIs503(t *testing.T) {
 	f := newFixture(t, Config{Secrets: [][]byte{secretA}})
-	for range MaxInFlight {
-		f.fwd.slots <- struct{}{}
-	}
+	const inHand = MaxBuffered - 10 // other requests' bodies
+	f.fwd.buffered.Store(inHand)
 	body, want := batch(t, "busy-1", 1)
 	ts := f.clock.Now().Unix()
-	rd := &countingReader{r: bytes.NewReader(body)}
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", rd)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", bytes.NewReader(body))
 	req.Header.Set("webhook-id", "busy-1")
 	req.Header.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
 	req.Header.Set("webhook-signature", sig([][]byte{secretA}, nil, "busy-1", ts, body))
 	rec := httptest.NewRecorder()
 	f.fwd.ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable || rec.Body.String() != "busy\n" || rd.n != 0 {
-		t.Errorf("over the cap = %d %q, %d bytes read", rec.Code, rec.Body.String(), rd.n)
+	if rec.Code != http.StatusServiceUnavailable || rec.Body.String() != "busy\n" {
+		t.Errorf("over the budget = %d %q", rec.Code, rec.Body.String())
+	}
+	if got := f.fwd.buffered.Load(); got != inHand {
+		t.Errorf("after the refusal %d bytes are counted, want %d", got, inHand)
 	}
 	if !strings.Contains(f.logs.String(), `"outcome":"busy"`) || f.written() != "" {
 		t.Errorf("written %q, log %s", f.written(), f.logs.String())
 	}
-	<-f.fwd.slots
+	f.fwd.buffered.Add(-inHand) // the other requests were answered
 	if code, _ := f.signed("busy-1", body, [][]byte{secretA}); code != http.StatusOK || f.written() != want {
-		t.Errorf("with a slot free = %d, written %q", code, f.written())
+		t.Errorf("with the budget free = %d, written %q", code, f.written())
+	}
+	if got := f.fwd.buffered.Load(); got != 0 {
+		t.Errorf("%d bytes still counted after the answer", got)
 	}
 	f.noLeak()
 }
 
-// countingReader counts the bytes read from it.
-type countingReader struct {
-	r io.Reader
-	n int
-}
-
-func (c *countingReader) Read(p []byte) (int, error) {
-	n, err := c.r.Read(p)
-	c.n += n
-	return n, err
+// TestHR662_StalledBodiesDontBlockASignedBatch: many senders that each
+// send headers and one body byte, then stall, hold one byte of the budget
+// each, not a place in a queue: a correctly signed batch is still
+// written. After BodyReadTimeout each stalled body is given up, its
+// connection answered or closed and its byte given back.
+// Covers: F950
+func TestHR662_StalledBodiesDontBlockASignedBatch(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "ocsf.json")
+	sink, err := OpenFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sink.Close() })
+	fwd, err := New(Config{Secrets: [][]byte{secretA}, Sink: sink, Start: time.Now().Add(-time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	addrc, done := make(chan string, 1), make(chan error, 1)
+	go func() {
+		done <- Serve(ctx, fwd, ServeConfig{Listen: "127.0.0.1:0", Ready: func(a string) { addrc <- a }})
+	}()
+	t.Cleanup(func() { cancel(); <-done })
+	var addr string
+	select {
+	case addr = <-addrc:
+	case err := <-done:
+		t.Fatalf("Serve: %v", err)
+	}
+	const stalled = 40
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	var dialer net.Dialer
+	conns := make([]net.Conn, 0, stalled)
+	for i := range stalled {
+		c, err := dialer.DialContext(t.Context(), "tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+		conns = append(conns, c)
+		head := "POST / HTTP/1.1\r\nHost: forwarder\r\nwebhook-id: stall-" + strconv.Itoa(i) + "\r\nwebhook-timestamp: " + ts +
+			"\r\nwebhook-signature: v1,AAAA\r\nContent-Length: 1000\r\n\r\nx"
+		if _, err := io.WriteString(c, head); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for fwd.buffered.Load() != stalled {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d stalled bytes counted, want %d", fwd.buffered.Load(), stalled)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	body, want := batch(t, "real-1", 2)
+	now := time.Now().Unix()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+addr+"/", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("webhook-id", "real-1")
+	req.Header.Set("webhook-timestamp", strconv.FormatInt(now, 10))
+	req.Header.Set("webhook-signature", sig([][]byte{secretA}, nil, "real-1", now, body))
+	client := &http.Client{Transport: &http.Transport{}, Timeout: 10 * time.Second}
+	t.Cleanup(client.CloseIdleConnections)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("a signed batch beside %d stalled senders = %d", stalled, resp.StatusCode)
+	}
+	if got, _ := os.ReadFile(out); string(got) != want {
+		t.Errorf("written %q", got)
+	}
+	// Each stalled body is given up after BodyReadTimeout: the sender gets
+	// an answer or a closed connection, never a wait without end.
+	for i, c := range conns {
+		if err := c.SetReadDeadline(time.Now().Add(BodyReadTimeout + 10*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		_, err := io.ReadAll(c)
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			t.Fatalf("stalled sender %d still held after %s", i, BodyReadTimeout)
+		}
+	}
+	deadline = time.Now().Add(10 * time.Second)
+	for fwd.buffered.Load() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d bytes still counted after the stalled bodies were given up", fwd.buffered.Load())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // failingFile writes part of what it is given and then fails, or fails to
