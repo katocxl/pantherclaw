@@ -327,7 +327,7 @@ func TestE2E_M25_ACampaignRunsAgainstARangeTwin(t *testing.T) {
 			t.Fatalf("docker run the stand-in relay: %v\n%s", err, out)
 		}
 		t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() })
-		ip, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.NetworkSettings.IPAddress}}", name).Output()
+		ip, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.NetworkSettings.Networks.bridge.IPAddress}}", name).Output()
 		if err != nil || strings.TrimSpace(string(ip)) == "" {
 			t.Fatalf("the stand-in relay's address: %q %v", ip, err)
 		}
