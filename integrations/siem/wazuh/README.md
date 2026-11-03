@@ -31,12 +31,20 @@ The rules expect one OCSF event per line, in the layout of the files in `../samp
 </localfile>
 ```
 
-Whatever receives PantherClaw's POST must write each entry of `data.events` as one line of that file.
+`pclaw siem forward` writes that file ([runbook](../../../docs/runbooks/siem-forwarder.md)). Run it on the agent's host, with the destination's signing secret, and point the SIEM destination at it (a private address makes it an internal destination, confirmed with a security key):
 
-**The webhook signature is not verified** by Wazuh, which never sees it. A verifying forwarder that ships with PantherClaw is a later piece. Until then, whatever you run in front must check the signature itself, or Wazuh will trust whatever lands in the file.
+```
+pclaw siem forward --listen 10.0.0.5:8471 --tls-cert forwarder.crt --tls-key forwarder.key \
+  --secret-file /etc/pantherclaw/siem.secret --out /var/log/pantherclaw/ocsf.json
+```
+
+It appends each event of a verified batch as one compact line, in the layout of `../samples/`, and syncs the file before it answers.
+
+**The webhook signature is not verified** by Wazuh, which never sees it. The forwarder verifies it before it writes a line: the HMAC signature, and the Ed25519 one as well when it is given the org's JWKS, within a timestamp window, answering a re-sent batch without writing it again. Wazuh trusts whatever else lands in the file, so keep it writable only by the forwarder.
 
 ## What was not checked
 
 - The rules have not been loaded by `wazuh-analysisd` or run through `wazuh-logtest`.
 - A test reads the XML and evaluates the fields with Go's regular expressions, not PCRE2. It assumes that the first child that matches takes the event, and that the JSON decoder joins an array with commas.
 - The child that stops simulated events relies on that order. Try one in `wazuh-logtest` before you trust it.
+- No Wazuh agent has read a file the forwarder wrote. A test checks that the forwarder writes the packs' golden batch as exactly the files in `../samples/`, one per line.

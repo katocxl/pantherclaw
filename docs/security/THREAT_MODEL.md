@@ -340,6 +340,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-279 | A stolen Investigator key, or a steered SOC agent, uses the role's read permissions to reach a write: save or delete a query, draft through the model, export a bundle | A1, A4 | TB4 | An investigating agent changes what it should only read | HR-655, HR-656, HR-659; the server admits the role on four reads only | M27 |
 | T-280 | A modified client skips the audit of an investigation read, or the read succeeds while its audit write fails | A4, A1 | TB4 | Reads go unrecorded | HR-657; the server audits before the first response byte | M27 |
 | T-281 | Text in a record (a label, an operation, a target's answer) steers the SOC agent reading it, or breaks out of its block | A2, A1 | TB11 | The SOC's agent is misled | HR-658, HR-659; record text labelled untrusted, cleaned and escaped | M27 |
+| T-284 | A forged, replayed, stale or altered export batch reaches the file a SIEM agent reads, so the rules trust events PantherClaw never sent or count one twice; or the forwarder leaks what it was sent | A9, A5 | TB8 (server → SIEM) | False or duplicated alerts in the SOC; disclosed events | HR-662; every configured signature verified, a timestamp window, a replay window, write and sync before the answer | M27 |
 
 ## 8. Residual risks (accepted, owner: founder, reviewed quarterly)
 
