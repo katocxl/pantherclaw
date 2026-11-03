@@ -7,9 +7,12 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/katocxl/pantherclaw/internal/cases/domain"
 	"github.com/katocxl/pantherclaw/internal/cases/store"
@@ -86,12 +89,15 @@ func TestHR684_CaseListsTheUnionOfItsSignalsTechniques(t *testing.T) {
 		t.Errorf("linked manual case: %v", k.ATLAS)
 	}
 
-	// The case still changes only by an entry (HR-245): its techniques too.
-	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+	// The case still changes only by an entry (HR-245): its techniques too,
+	// refused by the case guard itself (G0 M28 D718b L4).
+	err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := tx.Exec(ctx, "UPDATE pc.cases SET atlas = '{AML.T0099}' WHERE id = $1", c.ID)
 		return err
-	}); err == nil {
-		t.Error("a case's techniques changed without an entry")
+	})
+	var pg *pgconn.PgError
+	if !errors.As(err, &pg) || pg.Code != "23514" || pg.Message != "a case changes only by appending an entry" {
+		t.Errorf("a case's techniques changed without an entry: %v", err)
 	}
 }
 
