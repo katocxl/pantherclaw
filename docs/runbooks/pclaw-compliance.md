@@ -69,4 +69,4 @@ A report made under another control table than your `pclaw`'s reads as not fully
 
 ## Scenario authors
 
-Library scenarios may carry `asi: [ASI02, ...]` with `asi_why:`, one line per tag naming the OWASP risk the scenario exercises, at most 200 characters. Customer (`CX-`) scenarios may not carry tags, and a customer range never counts toward coverage. Changing tags changes the scenario digest: run `task range:library`. The [range runbook](range.md) has the scenario format.
+Library scenarios may carry `asi: [ASI02, ...]` with `asi_why:`, one line per tag naming the OWASP risk the scenario exercises, at most 200 characters. Customer (`CX-`) scenarios may not carry tags, and a customer range never counts toward coverage. The scenario digest covers only what a scenario runs ([ADR-0051](../adr/0051-scenario-and-campaign-digests-cover-only-what-runs.md)), so changing tags keeps it and earlier range results keep counting; the server's library holds the tags, so run `task range:library`. The [range runbook](range.md) has the scenario format.
