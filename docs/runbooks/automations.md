@@ -70,7 +70,7 @@ Every control returns its verified effects (grants revoked, runs ended, launches
 
 ## 4. The kill switch and containment
 
-From M27 a contain step runs only on a CONFIRMED alert (OBSERVED or RULE_MATCH), in every automation, library or custom. On anything else it skips with `UNCONFIRMED_SIGNAL`, and custom detection rules are capped at INFERRED ([behavior-profiles.md](behavior-profiles.md)). The six Hub response playbooks contain nothing; separate containment playbooks (Business) suspend only the run a CONFIRMED alert names ([response-playbooks.md](response-playbooks.md)).
+From M27 a contain step runs only on a CONFIRMED alert (OBSERVED or RULE_MATCH), in every automation, library or custom. On anything else it skips with `UNCONFIRMED_SIGNAL`, and custom detection rules are capped at INFERRED unless two people confirmed the version ([behavior-profiles.md](behavior-profiles.md)). The six Hub response playbooks contain nothing; separate containment playbooks (Business) suspend only the run a CONFIRMED alert names ([response-playbooks.md](response-playbooks.md)).
 
 - Engaging the kill switch ([kill-switch.md](kill-switch.md)) pauses **every** automation (KILL_SWITCH) in the same transaction and records how many; active executions are cancelled at the next boundary.
 - Restoring the kill switch resumes **nothing**. Resume each automation yourself once you know it is safe; resume revalidates everything first.

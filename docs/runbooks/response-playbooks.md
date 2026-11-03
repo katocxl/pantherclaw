@@ -20,7 +20,7 @@ The Hub library has six response playbooks and two containment playbooks under `
 The six stay as they were in M27. Containment in the library lives only in the two containment playbooks (below).
 - Leaked key and poisoned MCP server: their alerts name a key's instance or a connection. Revoking a key or disabling a connection is a person's action.
 - Rogue sub-agent: its alert covers a refused delegation, a refused issue and a refused revision alike. A refused revision names the grant the caller chose, possibly another agent's, so revoking the named grant could let an attacker choose whose grant is revoked.
-- Compromised laptop: no built-in incident names a run, and an organization's own rule raises INFERRED at most, so it cannot suspend a run.
+- Compromised laptop: no built-in incident names a run, and an organization's own rule raises a CONFIRMED incident only for a version two people confirmed (HR-666). The playbook suspends nothing either way; a person does.
 
 ## Containment playbooks (Business)
 
