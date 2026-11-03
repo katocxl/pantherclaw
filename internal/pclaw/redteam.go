@@ -118,6 +118,9 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	case o.technique != "" && !catalog.Known(o.technique):
 		_, _ = fmt.Fprintf(a.stderr, "pclaw: --technique %q is not a technique of the pinned ATLAS or ATT&CK catalogs\n", o.technique)
 		return errUsage
+	case o.technique != "" && !catalog.KnownActive(o.technique): // G0 M28 D714e L5
+		_, _ = fmt.Fprintf(a.stderr, "pclaw: --technique %q is revoked or deprecated in the pinned catalog\n", o.technique)
+		return errUsage
 	case !slices.Contains(suites, o.suite):
 		return failExit("--suite must be one of %s", strings.Join(suites, ", "))
 	case o.baseline != "" && o.trust == "":
@@ -155,9 +158,8 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 			o.suite = "all"
 		}
 	}
-	set = slices.DeleteFunc(set, func(l rtapp.Loaded) bool { return o.suite != "all" && l.Scenario.Suite != o.suite })
-	if len(set) == 0 {
-		return failExit("no scenarios of suite %s in %s", o.suite, o.dir)
+	if set, err = ofSuite(set, o.suite, o.technique, o.dir); err != nil {
+		return err
 	}
 	origin, err := setOrigin(set)
 	if err != nil {
@@ -854,6 +856,20 @@ func byTechnique(set []rtapp.Loaded, id string) ([]rtapp.Loaded, error) {
 		return nil, failExit("no library scenario tests %s", id)
 	}
 	return out, nil
+}
+
+// ofSuite keeps the scenarios of suite ("all" keeps every one). When
+// --technique matched scenarios that the suite then removes, the message
+// still names the technique (G0 M28 D714e L5); both exit 2.
+func ofSuite(set []rtapp.Loaded, suite, technique, dir string) ([]rtapp.Loaded, error) {
+	out := slices.DeleteFunc(slices.Clone(set), func(l rtapp.Loaded) bool { return suite != "all" && l.Scenario.Suite != suite })
+	switch {
+	case len(out) > 0:
+		return out, nil
+	case technique != "":
+		return nil, failExit("no library scenario tests %s in suite %s", technique, suite)
+	}
+	return nil, failExit("no scenarios of suite %s in %s", suite, dir)
 }
 
 // flagSet reports whether the command line gave the flag.

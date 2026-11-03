@@ -59,3 +59,40 @@ func TestHR682_RunByTechniqueRefusesAnUnknownId(t *testing.T) {
 		}
 	}
 }
+
+// TestHR682_RunByTechniqueRefusesARevokedId: a revoked or deprecated id
+// is in the catalog but is a usage error, not "no scenario" (G0 M28 D714e
+// L5).
+// Covers: F974, HR-682
+func TestHR682_RunByTechniqueRefusesARevokedId(t *testing.T) {
+	var stderr bytes.Buffer
+	err := redteamRun(context.Background(), &app{stderr: &stderr},
+		[]string{"--scenarios", t.TempDir(), "--workload-file", "k.json", "--gateway", "https://gw.example", "--technique", "T1562.001"})
+	if !errors.Is(err, errUsage) || !strings.Contains(stderr.String(), "is revoked or deprecated in the pinned catalog") {
+		t.Errorf("T1562.001: %v %q", err, stderr.String())
+	}
+}
+
+// TestHR683_RunByTechniqueNamesTheTechniqueWhenTheSuiteRemovesEveryMatch:
+// --technique with a --suite that drops every match still says which
+// technique has no scenario, and exits 2 (G0 M28 D714e L5).
+// Covers: F974, HR-683
+func TestHR683_RunByTechniqueNamesTheTechniqueWhenTheSuiteRemovesEveryMatch(t *testing.T) {
+	set := loaded("RT-004", "RT-150")
+	set[0].Scenario.Suite, set[1].Scenario.Suite = "coding-agent", "platform"
+	if got, err := ofSuite(set, "platform", "T1552", "dir"); err != nil || len(got) != 1 || got[0].Scenario.ID != "RT-150" {
+		t.Errorf("platform: %v %v", got, err)
+	}
+	if got, err := ofSuite(set, "all", "", "dir"); err != nil || len(got) != 2 {
+		t.Errorf("all: %v %v", got, err)
+	}
+	var ee *exitError
+	_, err := ofSuite(set[:1], "platform", "T1552", "dir")
+	if !errors.As(err, &ee) || ee.code != 2 || ee.msg != "pclaw: no library scenario tests T1552 in suite platform" {
+		t.Errorf("technique: %v", err)
+	}
+	_, err = ofSuite(set[:1], "platform", "", "dir")
+	if !errors.As(err, &ee) || ee.code != 2 || ee.msg != "pclaw: no scenarios of suite platform in dir" {
+		t.Errorf("no technique: %v", err)
+	}
+}

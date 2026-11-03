@@ -144,6 +144,13 @@ func TestHR682_Lookups(t *testing.T) {
 		if (te.Deprecated || te.Revoked) && (!catalog.KnownATTACK(te.ID) || attack.Active(te.ID)) {
 			t.Errorf("%s: deprecated or revoked ids are known and not active", te.ID)
 		}
+		if catalog.KnownActive(te.ID) != attack.Active(te.ID) {
+			t.Errorf("%s: KnownActive disagrees with Active", te.ID)
+		}
+	}
+	// G0 M28 D714e L5: KnownActive is what --technique accepts.
+	if !catalog.KnownActive("T1685") || !catalog.KnownActive("AML.T0051") || catalog.KnownActive("T1562.001") || catalog.KnownActive("X1") || catalog.KnownActive("T9999") {
+		t.Error("KnownActive")
 	}
 }
 

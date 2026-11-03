@@ -246,3 +246,16 @@ func Known(id string) bool {
 	}
 	return shared(f).has(id)
 }
+
+// KnownActive reports whether id is in the catalog its form names and is
+// neither deprecated nor revoked: an id a person may ask for (G0 M28 D714e
+// L5).
+func KnownActive(id string) bool {
+	f, ok := FrameworkOf(id)
+	if !ok {
+		return false
+	}
+	c := shared(f)
+	i, ok := c.byID[id]
+	return ok && !c.Techniques[i].Deprecated && !c.Techniques[i].Revoked
+}
