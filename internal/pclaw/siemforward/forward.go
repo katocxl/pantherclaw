@@ -51,6 +51,10 @@ const (
 	// JWKSRefetchEvery bounds how often a `v1a,` signature that no known
 	// key verifies refetches the JWKS.
 	JWKSRefetchEvery = time.Minute
+	// MaxInFlight bounds the requests handled at once, so unverified bodies
+	// can't pile up in memory; the exporter sends one batch at a time per
+	// destination, and a refused one is retried.
+	MaxInFlight = 16
 	// pruneEvery is how often forgotten webhook-ids are dropped.
 	pruneEvery = time.Minute
 )
@@ -64,6 +68,7 @@ const (
 	OutcomeBadSignature  = "bad_signature"
 	OutcomeTooLarge      = "too_large"
 	OutcomeWriteFailed   = "write_failed"
+	OutcomeBusy          = "busy"
 )
 
 // answers maps an outcome to its status and fixed response text. Nothing a
@@ -79,6 +84,7 @@ var answers = map[string]struct {
 	OutcomeBadSignature:  {http.StatusUnauthorized, "signature not verified"},
 	OutcomeTooLarge:      {http.StatusRequestEntityTooLarge, "batch too large"},
 	OutcomeWriteFailed:   {http.StatusServiceUnavailable, "write failed"},
+	OutcomeBusy:          {http.StatusServiceUnavailable, "busy"},
 }
 
 // ErrNoScheme refuses a forwarder that would check no signature.
@@ -110,6 +116,8 @@ type Config struct {
 // Forwarder is the http.Handler that verifies and writes batches.
 type Forwarder struct {
 	cfg Config
+	// slots holds one token per request in flight (MaxInFlight).
+	slots chan struct{}
 	// mu serializes the replay check and the write, so two copies of one
 	// batch never both get written and lines of two batches never mix.
 	mu     sync.Mutex
@@ -146,16 +154,24 @@ func New(cfg Config) (*Forwarder, error) {
 	if cfg.Log == nil {
 		cfg.Log = pclog.Discard()
 	}
-	return &Forwarder{cfg: cfg, seen: map[string]time.Time{}}, nil
+	return &Forwarder{cfg: cfg, slots: make(chan struct{}, MaxInFlight), seen: map[string]time.Time{}}, nil
 }
 
 // ServeHTTP takes one batch: headers, size, timestamp, signatures, replay,
-// then the write. Every refusal comes before anything is written.
+// then the write. Every refusal comes before anything is written. With
+// MaxInFlight requests already in hand it answers 503 without reading.
 func (f *Forwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	select {
+	case f.slots <- struct{}{}:
+		defer func() { <-f.slots }()
+	default:
+		f.answer(ctx, w, "", -1, OutcomeBusy, nil)
 		return
 	}
 	h, err := inbound.ReadHeaders(r.Header)
@@ -242,7 +258,9 @@ func (f *Forwarder) inWindow(ts int64) bool {
 // verify requires a valid signature for every configured scheme: HMAC
 // first (compared in constant time), then Ed25519. A `v1a,` signature
 // that no known key verifies refetches the JWKS when the source may (at
-// most once a minute), then is checked once more.
+// most once a minute), then is checked once more. The refetch does not
+// end with the request: a client that hangs up can't use up the minute's
+// fetch and keep a rotated key out.
 func (f *Forwarder) verify(ctx context.Context, h inbound.Headers, body []byte) bool {
 	if len(f.cfg.Secrets) > 0 && inbound.VerifySignature(f.cfg.Secrets, h, body) != nil {
 		return false
@@ -253,7 +271,7 @@ func (f *Forwarder) verify(ctx context.Context, h inbound.Headers, body []byte) 
 	if verifyV1a(f.cfg.Keys.Current(), h, body) {
 		return true
 	}
-	return f.cfg.Keys.Refresh(ctx) && verifyV1a(f.cfg.Keys.Current(), h, body)
+	return f.cfg.Keys.Refresh(context.WithoutCancel(ctx)) && verifyV1a(f.cfg.Keys.Current(), h, body)
 }
 
 // verifyV1a reports whether any `v1a,` entry of the header is a valid

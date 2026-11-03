@@ -18,8 +18,9 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
-// shutdownGrace is how long in-flight batches get to finish on exit.
-const shutdownGrace = 10 * time.Second
+// ShutdownGrace is how long batches in flight get to finish once the
+// forwarder is told to stop.
+const ShutdownGrace = 30 * time.Second
 
 // ServeConfig is how the forwarder listens.
 type ServeConfig struct {
@@ -49,21 +50,27 @@ func Loopback(addr string) bool {
 // ErrNeedsTLS refuses a plain-HTTP listener on a non-loopback address.
 var ErrNeedsTLS = errors.New("a non-loopback --listen address needs --tls-cert and --tls-key")
 
-// Serve runs h on the hardened server (SB-8 timeouts, the exporter's batch
-// size as the body limit) until ctx ends, then lets in-flight batches
-// finish.
+// newServer is the hardened server Serve runs (SB-8 timeouts, the
+// exporter's batch size as the body limit, so httpx.LimitBody refuses a
+// declared oversize body before h sees it).
+func newServer(h http.Handler, sc ServeConfig, log *slog.Logger) (*http.Server, error) {
+	if sc.TLS == nil && !Loopback(sc.Listen) {
+		return nil, ErrNeedsTLS
+	}
+	return httpx.NewServer(httpx.ServerConfig{Addr: sc.Listen, Handler: h, TLS: sc.TLS, BodyLimit: MaxBody, Logger: log})
+}
+
+// Serve runs h on the hardened server until ctx ends, then stops taking
+// connections and lets batches in flight finish, for up to ShutdownGrace.
 func Serve(ctx context.Context, h http.Handler, sc ServeConfig) error {
 	if sc.Listen == "" {
 		sc.Listen = DefaultListen
-	}
-	if sc.TLS == nil && !Loopback(sc.Listen) {
-		return ErrNeedsTLS
 	}
 	log := sc.Log
 	if log == nil {
 		log = pclog.Discard()
 	}
-	srv, err := httpx.NewServer(httpx.ServerConfig{Addr: sc.Listen, Handler: h, TLS: sc.TLS, BodyLimit: MaxBody, Logger: log})
+	srv, err := newServer(h, sc, log)
 	if err != nil {
 		return err
 	}
@@ -89,7 +96,8 @@ func Serve(ctx context.Context, h http.Handler, sc ServeConfig) error {
 		return err
 	case <-ctx.Done():
 	}
-	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
+	log.InfoContext(ctx, "siem.forward.stopping", slog.String("grace", ShutdownGrace.String()))
+	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ShutdownGrace)
 	defer cancel()
 	err = srv.Shutdown(sctx)
 	if serr := <-done; !errors.Is(serr, http.ErrServerClosed) && serr != nil {

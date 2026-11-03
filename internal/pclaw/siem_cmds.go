@@ -12,6 +12,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/katocxl/pantherclaw/internal/pclaw/siemforward"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
@@ -32,6 +34,10 @@ const envSIEMSecret = "PCLAW_SIEM_SECRET" //nolint:gosec // G101: an environment
 // maxSecretFile bounds a secret file.
 const maxSecretFile = 4 << 10
 
+// siemForwardStop are the signals that stop the forwarder gracefully: an
+// interrupt, and the SIGTERM a service manager sends.
+var siemForwardStop = []os.Signal{os.Interrupt, syscall.SIGTERM}
+
 func init() {
 	commands["siem forward"] = command{
 		usage: "siem forward --out PATH|- [--listen ADDR] [--secret-file PATH]... [--jwks-url URL | --jwks-file PATH] [--window DURATION] " +
@@ -41,10 +47,12 @@ func init() {
 }
 
 func siemForward(ctx context.Context, a *app, args []string) error {
+	ctx, stop := signal.NotifyContext(ctx, siemForwardStop...)
+	defer stop()
 	fs := flag.NewFlagSet("siem forward", flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
 	listen := fs.String("listen", siemforward.DefaultListen, "address to listen on; a non-loopback one needs --tls-cert and --tls-key")
-	out := fs.String("out", "", "file the events are appended to (created 0600), or - for stdout (required)")
+	out := fs.String("out", "", "file the events are appended to (a new one is created for this user only), or - for stdout (required)")
 	var secretFiles list
 	fs.Var(&secretFiles, "secret-file", "file holding the destination's signing secret (whsec_…); give it twice during a rotation (at most 2). "+
 		"Or set "+envSIEMSecret)

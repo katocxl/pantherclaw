@@ -27,6 +27,9 @@ import (
 // maxJWKS bounds a JWKS document, fetched or read.
 const maxJWKS = 64 << 10
 
+// jwksFetchTimeout bounds one refetch of the JWKS.
+const jwksFetchTimeout = 10 * time.Second
+
 // ParseSecret reads a destination's signing secret as PantherClaw shows it
 // (`whsec_` and base64). Its error never contains the value.
 func ParseSecret(s string) ([]byte, error) {
@@ -139,7 +142,9 @@ func (j *JWKSURL) Current() []ed25519.PublicKey {
 }
 
 // Refresh refetches the JWKS unless it was tried less than a minute ago. A
-// failed fetch keeps the keys it had.
+// failed fetch keeps the keys it had. The fetch has its own timeout and
+// does not end with ctx: a canceled caller never uses up the minute's
+// attempt with a fetch that never ran.
 func (j *JWKSURL) Refresh(ctx context.Context) bool {
 	j.fetch.Lock()
 	defer j.fetch.Unlock()
@@ -149,7 +154,9 @@ func (j *JWKSURL) Refresh(ctx context.Context) bool {
 	if recent {
 		return false
 	}
-	ks, err := j.get(ctx)
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jwksFetchTimeout)
+	defer cancel()
+	ks, err := j.get(fctx)
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.fetched = j.now()

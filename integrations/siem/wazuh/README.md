@@ -40,7 +40,7 @@ pclaw siem forward --listen 10.0.0.5:8471 --tls-cert forwarder.crt --tls-key for
 
 It appends each event of a verified batch as one compact line, in the layout of `../samples/`, and syncs the file before it answers.
 
-**The webhook signature is not verified** by Wazuh, which never sees it. The forwarder verifies it before it writes a line: the HMAC signature, and the Ed25519 one as well when it is given the org's JWKS, within a timestamp window, answering a re-sent batch without writing it again. Wazuh trusts whatever else lands in the file, so keep it writable only by the forwarder.
+**The webhook signature is not verified** by Wazuh, which never sees it. The forwarder verifies it before it writes a line. It checks every signature it is configured with: the HMAC `v1,` signature when it is given the destination's secret, the Ed25519 `v1a,` one when it is given the org's JWKS, and both when it is given both. Given only a JWKS, it checks no HMAC. It also checks a timestamp window, and answers a re-sent batch without writing it again. Wazuh trusts whatever else lands in the file, so keep it writable only by the forwarder.
 
 ## What was not checked
 

@@ -507,23 +507,45 @@ func TestHR662_ReplayIsAnsweredWithoutWriting(t *testing.T) {
 
 // TestHR662_OversizedBodyIs413: a body over the exporter's batch limit is
 // refused 413, with or without a Content-Length, and nothing is written.
+// Through the server Serve runs, a declared oversize is refused by
+// httpx.LimitBody before the forwarder sees it, so it logs no batch line;
+// a chunked one is refused by the forwarder and logged too_large.
 // Covers: F950
 func TestHR662_OversizedBodyIs413(t *testing.T) {
 	f := newFixture(t, Config{Secrets: [][]byte{secretA}})
 	big := bytes.Repeat([]byte("x"), MaxBody+1)
 	ts := f.clock.Now().Unix()
-	// With a Content-Length it is refused before the body is read (called
-	// directly: a client still sending a refused body may see the reset).
-	rec := httptest.NewRecorder()
-	creq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", bytes.NewReader(big))
-	creq.Header.Set("webhook-id", "big-1")
-	creq.Header.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
-	creq.Header.Set("webhook-signature", sig([][]byte{secretA}, nil, "big-1", ts, big))
-	f.fwd.ServeHTTP(rec, creq)
-	if rec.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("with Content-Length = %d", rec.Code)
+	srv, err := newServer(f.fwd, ServeConfig{Listen: "127.0.0.1:0"}, pclog.Discard())
+	if err != nil {
+		t.Fatal(err)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL, io.MultiReader(bytes.NewReader(big)))
+	bigReq := func(id string) *http.Request {
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", bytes.NewReader(big))
+		r.Header.Set("webhook-id", id)
+		r.Header.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
+		r.Header.Set("webhook-signature", sig([][]byte{secretA}, nil, id, ts, big))
+		return r
+	}
+	// With a Content-Length it is refused before the body is read (called
+	// in process: a client still sending a refused body may see the reset).
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, bigReq("big-0"))
+	if rec.Code != http.StatusRequestEntityTooLarge || rec.Body.String() != "request body too large\n" {
+		t.Errorf("with Content-Length, through the server = %d %q", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(f.logs.String(), "siem.forward.batch") {
+		t.Errorf("a declared oversize reached the forwarder: %s", f.logs.String())
+	}
+	// The forwarder refuses it as well, should it ever be served without
+	// the limit in front.
+	rec = httptest.NewRecorder()
+	f.fwd.ServeHTTP(rec, bigReq("big-1"))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("with Content-Length, the forwarder alone = %d", rec.Code)
+	}
+	prod := httptest.NewServer(srv.Handler)
+	t.Cleanup(prod.Close)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, prod.URL, io.MultiReader(bytes.NewReader(big)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +553,7 @@ func TestHR662_OversizedBodyIs413(t *testing.T) {
 	req.Header.Set("webhook-id", "big-2")
 	req.Header.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
 	req.Header.Set("webhook-signature", sig([][]byte{secretA}, nil, "big-2", ts, big))
-	resp, err := f.srv.Client().Do(req)
+	resp, err := prod.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,12 +561,55 @@ func TestHR662_OversizedBodyIs413(t *testing.T) {
 	if resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Errorf("chunked = %d", resp.StatusCode)
 	}
-	if f.written() != "" || !strings.Contains(f.logs.String(), `"outcome":"too_large"`) {
+	if f.written() != "" || !strings.Contains(f.logs.String(), `"batch":"big-2"`) || !strings.Contains(f.logs.String(), `"outcome":"too_large"`) {
 		t.Errorf("written %d bytes, log %s", len(f.written()), f.logs.String())
 	}
 	if MaxBody != ocsf.MaxBatchBytes {
 		t.Errorf("the limit %d is not the exporter's %d", MaxBody, ocsf.MaxBatchBytes)
 	}
+}
+
+// TestHR662_MoreThanMaxInFlightIs503: with MaxInFlight requests in hand, the
+// next one is answered 503 before its body is read; once one finishes, a
+// batch is taken again.
+// Covers: F950
+func TestHR662_MoreThanMaxInFlightIs503(t *testing.T) {
+	f := newFixture(t, Config{Secrets: [][]byte{secretA}})
+	for range MaxInFlight {
+		f.fwd.slots <- struct{}{}
+	}
+	body, want := batch(t, "busy-1", 1)
+	ts := f.clock.Now().Unix()
+	rd := &countingReader{r: bytes.NewReader(body)}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", rd)
+	req.Header.Set("webhook-id", "busy-1")
+	req.Header.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("webhook-signature", sig([][]byte{secretA}, nil, "busy-1", ts, body))
+	rec := httptest.NewRecorder()
+	f.fwd.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable || rec.Body.String() != "busy\n" || rd.n != 0 {
+		t.Errorf("over the cap = %d %q, %d bytes read", rec.Code, rec.Body.String(), rd.n)
+	}
+	if !strings.Contains(f.logs.String(), `"outcome":"busy"`) || f.written() != "" {
+		t.Errorf("written %q, log %s", f.written(), f.logs.String())
+	}
+	<-f.fwd.slots
+	if code, _ := f.signed("busy-1", body, [][]byte{secretA}); code != http.StatusOK || f.written() != want {
+		t.Errorf("with a slot free = %d, written %q", code, f.written())
+	}
+	f.noLeak()
+}
+
+// countingReader counts the bytes read from it.
+type countingReader struct {
+	r io.Reader
+	n int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += n
+	return n, err
 }
 
 // failingFile writes part of what it is given and then fails, or fails to
@@ -569,9 +634,12 @@ func (f *failingFile) Sync() error {
 	return f.File.Sync()
 }
 
-// TestHR662_WriteFailureIs503AndLeavesNoPartialLine: a failed write or sync
-// answers 503, the file is cut back to the last whole batch, and the id is
-// not remembered, so the exporter's retry is written.
+// TestHR662_WriteFailureIs503AndLeavesNoPartialLine: a write that fails
+// part way answers 503, the file is cut back to the last whole batch, and
+// the id is not remembered, so the exporter's retry is written. A sync that
+// fails after a whole write keeps the lines (agents tailing the file would
+// read it again from the start were it cut back), answers 503 and stops
+// the sink: every later batch gets 503 and nothing more is written.
 // Covers: F950
 func TestHR662_WriteFailureIs503AndLeavesNoPartialLine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ocsf.json")
@@ -588,23 +656,95 @@ func TestHR662_WriteFailureIs503AndLeavesNoPartialLine(t *testing.T) {
 		t.Fatalf("first = %d", code)
 	}
 	second, more := batch(t, "wf-2", 3)
-	for _, mode := range []string{"partial", "sync"} {
-		ff.partial, ff.noSync = mode == "partial", mode == "sync"
-		if code, answer := f.signed("wf-2", second, [][]byte{secretA}); code != http.StatusServiceUnavailable || answer != "write failed\n" {
-			t.Errorf("%s = %d %q", mode, code, answer)
-		}
-		if got := f.written(); got != want {
-			t.Errorf("%s: the file holds %q, want only the first batch %q", mode, got, want)
-		}
+	ff.partial = true
+	if code, answer := f.signed("wf-2", second, [][]byte{secretA}); code != http.StatusServiceUnavailable || answer != "write failed\n" {
+		t.Errorf("partial = %d %q", code, answer)
 	}
-	ff.partial, ff.noSync = false, false
+	if got := f.written(); got != want {
+		t.Errorf("partial: the file holds %q, want only the first batch %q", got, want)
+	}
+	ff.partial = false
 	if code, _ := f.signed("wf-2", second, [][]byte{secretA}); code != http.StatusOK {
 		t.Fatalf("retry = %d", code)
 	}
-	if got := f.written(); got != want+more {
-		t.Errorf("written %q", got)
+	want += more
+	if got := f.written(); got != want {
+		t.Errorf("after the retry the file holds %q, want %q", got, want)
 	}
-	if !strings.Contains(f.logs.String(), `"outcome":"write_failed"`) || !strings.Contains(f.logs.String(), "no space left") {
+	third, kept := batch(t, "wf-3", 2)
+	ff.noSync = true
+	if code, answer := f.signed("wf-3", third, [][]byte{secretA}); code != http.StatusServiceUnavailable || answer != "write failed\n" {
+		t.Errorf("sync = %d %q", code, answer)
+	}
+	want += kept
+	if got := f.written(); got != want {
+		t.Errorf("sync: the file holds %q, want the whole lines kept %q", got, want)
+	}
+	ff.noSync = false
+	fourth, _ := batch(t, "wf-4", 1)
+	for id, body := range map[string][]byte{"wf-3": third, "wf-4": fourth} {
+		if code, answer := f.signed(id, body, [][]byte{secretA}); code != http.StatusServiceUnavailable || answer != "write failed\n" {
+			t.Errorf("%s after the failed sync = %d %q", id, code, answer)
+		}
+	}
+	if got := f.written(); got != want {
+		t.Errorf("the stopped sink wrote: the file holds %q, want %q", got, want)
+	}
+	logs := f.logs.String()
+	if !strings.Contains(logs, `"outcome":"write_failed"`) || !strings.Contains(logs, "no space left") || !strings.Contains(logs, "could not be synced") {
+		t.Errorf("log %s", logs)
+	}
+	f.noLeak()
+}
+
+// partialWriter is a stream that takes half of a write and then fails, as
+// a full disk under a redirected stdout would; with none set it takes
+// nothing.
+type partialWriter struct {
+	bytes.Buffer
+	calls int
+	none  bool
+}
+
+func (w *partialWriter) Write(p []byte) (int, error) {
+	w.calls++
+	if w.none {
+		return 0, errors.New("broken pipe")
+	}
+	n, _ := w.Buffer.Write(p[:len(p)/2])
+	return n, errors.New("no space left on device")
+}
+
+// TestHR662_StdoutStopsAfterAPartialWrite: `--out -` can't cut a stream
+// back, so after a write that took part of a batch every later batch gets
+// 503 and nothing more is written: the next batch is never glued to the
+// fragment. A write that took nothing leaves the stream usable.
+// Covers: F950
+func TestHR662_StdoutStopsAfterAPartialWrite(t *testing.T) {
+	pw := &partialWriter{none: true}
+	f := newFixture(t, Config{Secrets: [][]byte{secretA}, Sink: NewWriterSink(pw)})
+	first, _ := batch(t, "sp-1", 3) // half of three lines ends inside one
+	if code, _ := f.signed("sp-1", first, [][]byte{secretA}); code != http.StatusServiceUnavailable || pw.Len() != 0 {
+		t.Fatalf("nothing taken = %d, %d bytes", code, pw.Len())
+	}
+	pw.none = false
+	if code, answer := f.signed("sp-1", first, [][]byte{secretA}); code != http.StatusServiceUnavailable || answer != "write failed\n" {
+		t.Fatalf("partial = %d %q", code, answer)
+	}
+	fragment, calls := pw.String(), pw.calls
+	if fragment == "" || strings.HasSuffix(fragment, "\n") {
+		t.Fatalf("the probe wrote no fragment: %q", fragment)
+	}
+	second, _ := batch(t, "sp-2", 1)
+	for id, body := range map[string][]byte{"sp-1": first, "sp-2": second} {
+		if code, answer := f.signed(id, body, [][]byte{secretA}); code != http.StatusServiceUnavailable || answer != "write failed\n" {
+			t.Errorf("%s after the partial write = %d %q", id, code, answer)
+		}
+	}
+	if pw.String() != fragment || pw.calls != calls {
+		t.Errorf("the stopped sink wrote again: %d calls, %q", pw.calls-calls, pw.String())
+	}
+	if !strings.Contains(f.logs.String(), "partial line") {
 		t.Errorf("log %s", f.logs.String())
 	}
 	f.noLeak()
@@ -728,6 +868,59 @@ func TestHR662_JWKSRefetchedAtMostOnceAMinute(t *testing.T) {
 	}
 	if _, err := NewJWKSURL(t.Context(), "http://"+strings.TrimPrefix(jwks.URL, "https://"), jwks.Client(), nil, nil); err == nil {
 		t.Error("an http JWKS URL was fetched")
+	}
+}
+
+// TestHR662_CanceledRequestStillLoadsARotatedKey: a client that hangs up
+// while its batch triggers the refetch does not use up the minute's
+// fetch: the fetch runs to the end, the rotated key is loaded, and the
+// exporter's next batch signed by it verifies without another fetch.
+// Covers: F950
+func TestHR662_CanceledRequestStillLoadsARotatedKey(t *testing.T) {
+	var mu sync.Mutex
+	doc, fetches := jwksDoc(t, keyA), 0
+	jwks := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		fetches++
+		_, _ = w.Write(doc)
+	}))
+	t.Cleanup(jwks.Close)
+	count := func() int { mu.Lock(); defer mu.Unlock(); return fetches }
+	clk := &testClock{now: time.Unix(1_793_534_400, 0)}
+	src, err := NewJWKSURL(t.Context(), jwks.URL+"/jwks.json", jwks.Client(), clk.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newFixtureAt(t, Config{Keys: src}, clk)
+	mu.Lock()
+	doc = jwksDoc(t, keyB, keyA) // the org rotated
+	mu.Unlock()
+	clk.add(JWKSRefetchEvery)
+	ts := clk.Now().Unix()
+	body, want := batch(t, "c-1", 1)
+	gone, cancel := context.WithCancel(t.Context())
+	cancel() // the client has hung up
+	req := httptest.NewRequestWithContext(gone, http.MethodPost, "/", bytes.NewReader(body))
+	req.Header.Set("webhook-id", "c-1")
+	req.Header.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("webhook-signature", sig(nil, []ed25519.PrivateKey{keyB}, "c-1", ts, body))
+	rec := httptest.NewRecorder()
+	f.fwd.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || count() != 2 || len(src.Current()) != 2 {
+		t.Fatalf("a canceled request = %d: %d fetches, %d keys", rec.Code, count(), len(src.Current()))
+	}
+	body2, want2 := batch(t, "c-2", 1)
+	if code, _ := f.post("c-2", ts, sig(nil, []ed25519.PrivateKey{keyB}, "c-2", ts, body2), body2); code != http.StatusOK || count() != 2 {
+		t.Errorf("the next batch by the rotated key = %d, %d fetches", code, count())
+	}
+	if got := f.written(); got != want+want2 {
+		t.Errorf("written %q", got)
+	}
+	// Refresh itself ignores a canceled context once the minute is up.
+	clk.add(JWKSRefetchEvery)
+	if !src.Refresh(gone) || count() != 3 {
+		t.Errorf("Refresh on a canceled context: %d fetches", count())
 	}
 }
 
@@ -866,6 +1059,160 @@ func TestHR662_ServesHTTPSAndStops(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("Serve did not stop")
 	}
+}
+
+// blockingSink holds each Append until released, as a slow disk would.
+type blockingSink struct {
+	Sink
+	entered, release chan struct{}
+}
+
+func (b *blockingSink) Append(p []byte) error {
+	b.entered <- struct{}{}
+	<-b.release
+	return b.Sink.Append(p)
+}
+
+// TestHR662_StopLetsBatchesInFlightFinish: told to stop (an interrupt or
+// SIGTERM ends the context) while a batch is being written, the forwarder
+// finishes it, answers it 200 and only then returns, so a service manager's
+// stop leaves no partial line.
+// Covers: F950
+func TestHR662_StopLetsBatchesInFlightFinish(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "ocsf.json")
+	fsink, err := OpenFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fsink.Close() })
+	bs := &blockingSink{Sink: fsink, entered: make(chan struct{}, 1), release: make(chan struct{})}
+	fwd, err := New(Config{Secrets: [][]byte{secretA}, Sink: bs, Start: time.Now().Add(-time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	addrc, done := make(chan string, 1), make(chan error, 1)
+	go func() {
+		done <- Serve(ctx, fwd, ServeConfig{Listen: "127.0.0.1:0", Ready: func(a string) { addrc <- a }})
+	}()
+	var addr string
+	select {
+	case addr = <-addrc:
+	case err := <-done:
+		t.Fatalf("Serve: %v", err)
+	}
+	body, want := batch(t, "drain-1", 3)
+	ts := time.Now().Unix()
+	client := &http.Client{Transport: &http.Transport{}}
+	t.Cleanup(client.CloseIdleConnections)
+	type result struct {
+		code int
+		err  error
+	}
+	resc := make(chan result, 1)
+	go func() {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+addr+"/", bytes.NewReader(body))
+		if err != nil {
+			resc <- result{err: err}
+			return
+		}
+		req.Header.Set("webhook-id", "drain-1")
+		req.Header.Set("webhook-timestamp", strconv.FormatInt(ts, 10))
+		req.Header.Set("webhook-signature", sig([][]byte{secretA}, nil, "drain-1", ts, body))
+		resp, err := client.Do(req)
+		if err != nil {
+			resc <- result{err: err}
+			return
+		}
+		_ = resp.Body.Close()
+		resc <- result{code: resp.StatusCode}
+	}()
+	select {
+	case <-bs.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the batch never reached the sink")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		t.Fatalf("Serve returned with a batch in flight: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(bs.release)
+	select {
+	case r := <-resc:
+		if r.err != nil || r.code != http.StatusOK {
+			t.Errorf("the batch in flight = %d, %v", r.code, r.err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the batch in flight got no answer")
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Serve after the drain: %v", err)
+		}
+	case <-time.After(ShutdownGrace):
+		t.Fatal("Serve did not stop")
+	}
+	if got, _ := os.ReadFile(out); string(got) != want {
+		t.Errorf("written %q, want %q", got, want)
+	}
+}
+
+// TestHR662_OpenEndsAPartialLastLine: a file left ending in part of a line
+// (the forwarder killed, or the power lost, mid-write) gets a newline when
+// it is opened, so the fragment stays a line of its own and the next
+// batch's first event is whole. A file ending in a newline, or empty, is
+// left as it is.
+// Covers: F950
+func TestHR662_OpenEndsAPartialLastLine(t *testing.T) {
+	_, lines := batch(t, "nl-1", 2)
+	for name, tc := range map[string]struct{ before, after string }{
+		"fragment": {`{"class_uid":2004,"mess`, "{\"class_uid\":2004,\"mess\n"},
+		"whole":    {"{}\n", "{}\n"},
+		"empty":    {"", ""},
+	} {
+		path := filepath.Join(t.TempDir(), "ocsf.json")
+		if err := os.WriteFile(path, []byte(tc.before), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		s, err := OpenFile(path)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != tc.after {
+			t.Errorf("%s: opened, the file holds %q, want %q", name, got, tc.after)
+		}
+		if err := s.Append([]byte(lines)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != tc.after+lines {
+			t.Errorf("%s: after a batch the file holds %q", name, got)
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestHR662_NewOutputFileIsOwnerOnly: the file the forwarder creates is
+// its user's alone: mode 0600, or on Windows a protected access list (no
+// entry inherited from the folder) allowing only that user, SYSTEM and
+// Administrators.
+// Covers: F950
+func TestHR662_NewOutputFileIsOwnerOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ocsf.json")
+	s, err := OpenFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if err := s.Append([]byte("{}\n")); err != nil {
+		t.Fatal(err)
+	}
+	ownerOnly(t, path)
 }
 
 // TestLines_CompactsEachEvent: an event spread over lines becomes one

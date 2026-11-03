@@ -14,9 +14,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -171,8 +173,9 @@ func TestF950_ForwardsVerifiedBatchesToStdout(t *testing.T) {
 
 // TestF950_FileModeAppendsWithBothSchemes: with two secret files (a
 // rotation) and a JWKS file, a batch carrying the HMAC and Ed25519
-// signatures is appended to the file, which is created 0600 and keeps what
-// it held.
+// signatures is appended to an existing file, which keeps what it held
+// (siemforward's TestHR662_NewOutputFileIsOwnerOnly checks how a new file
+// is created).
 // Covers: F950
 func TestF950_FileModeAppendsWithBothSchemes(t *testing.T) {
 	dir := t.TempDir()
@@ -334,5 +337,16 @@ func TestF950_JWKSURLIsFetchedThroughPclawsClient(t *testing.T) {
 	defer mu.Unlock()
 	if fetched != 1 {
 		t.Errorf("%d fetches at start", fetched)
+	}
+}
+
+// TestHR662_ForwarderStopSignals: an interrupt and SIGTERM (a service
+// manager's stop; on Windows also a console close, logoff or shutdown)
+// both end the forwarder's context, so it lets batches in flight finish
+// instead of dying mid-write.
+// Covers: F950
+func TestHR662_ForwarderStopSignals(t *testing.T) {
+	if !slices.Contains(siemForwardStop, os.Interrupt) || !slices.Contains(siemForwardStop, os.Signal(syscall.SIGTERM)) {
+		t.Errorf("stop signals %v", siemForwardStop)
 	}
 }

@@ -51,7 +51,7 @@ PantherClaw posts each batch as one JSON body: `{"type":"pantherclaw.ocsf.batch"
 az monitor data-collection rule create --resource-group <group> --name pantherclaw-ocsf --rule-file dcr.json
 ```
 
-**The webhook signature is not verified** by Sentinel, which never sees it. `pclaw siem forward` verifies it before it writes a line: the HMAC signature, and the Ed25519 one as well when it is given the org's JWKS, within a timestamp window, answering a re-sent batch without writing it again. Whatever else writes to the file or posts to the Logs Ingestion API is trusted as it is: keep the file writable only by the forwarder, and anything you run in front of the API must check the signature itself.
+**The webhook signature is not verified** by Sentinel, which never sees it. `pclaw siem forward` verifies it before it writes a line. It checks every signature it is configured with: the HMAC `v1,` signature when it is given the destination's secret, the Ed25519 `v1a,` one when it is given the org's JWKS, and both when it is given both. Given only a JWKS, it checks no HMAC. It also checks a timestamp window, and answers a re-sent batch without writing it again. Whatever else writes to the file or posts to the Logs Ingestion API is trusted as it is: keep the file writable only by the forwarder, and anything you run in front of the API must check the signature itself.
 
 ## What was not checked
 
