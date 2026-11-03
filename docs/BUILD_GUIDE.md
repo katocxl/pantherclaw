@@ -798,6 +798,13 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Migrations `00280`–`00282` (`00283`–`00289` spare); new permission `compliance.read`. Upgrade the server before gateways.
 
 ### M26 — Enterprise identity
+**HR:** HR-620..639 · **F:** F910–F913, F918–F929 · **ADR:** 0048 · **G0:** [g0/M26.md](g0/M26.md).
+- **IdP access** (Team on `IdpAccess()`, [ADR-0048](adr/0048-idp-assertions-and-mcp-client-authorization.md), founder decision H8): Okta Cross App Access assertions (ID-JAG draft-06) behind an adapter. They use or narrow an existing grant and never create one. Issuers and client bindings are two-person changes.
+- **MCP authorization:** off by default per org. Allow-listed clients act through a keyless instance at level 0, with 5-minute tokens bound to one server, a full policy check on every call, and a proof that policy can refuse. A reused code or refresh token ends its run.
+- **SCIM and SAML** (Enterprise to add, founder decision H7): tables and ports in public core, code in a clean private package with `pantherclaw-server-ee`. No group carries an admin role. Reads, removals, deprovisioning and sign-in work in every edition.
+- **SaaS discovery** (Business): Copilot Studio and ChatGPT Enterprise, metadata only, on synthetic fixtures. It says "not scanned", never "none found", and found agents stay observe-only.
+- **Console** (private stream): identity settings.
+- Migrations `00290`–`00294` (`00295`–`00299` spare).
 
 ### M27 — Agent Detection & Response
 **HR:** HR-640..659 · **F:** F930–F949 · **ADR:** 0049, 0050 · **G0:** [g0/M27.md](g0/M27.md).

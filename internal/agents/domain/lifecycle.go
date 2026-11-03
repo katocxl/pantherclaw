@@ -74,6 +74,28 @@ func (s State) Usable() bool {
 	return false
 }
 
+// ExternalStatus is how an external agent (D407, HR-639) reads, from its
+// discovery's state: its discovery says CLAIMED once an owner is set, but an
+// external agent is never claimed, so the words say what it is.
+func ExternalStatus(discoveryState string) string {
+	switch discoveryState {
+	case "CLAIMED":
+		return "owner set, external agent"
+	case "DISMISSED":
+		return "dismissed, external agent"
+	}
+	return "no owner, external agent"
+}
+
+// ExternalNextAction is what an external agent needs next: an owner, and
+// then nothing, as PantherClaw enforces nothing in a vendor's tenant.
+func ExternalNextAction(discoveryState string) string {
+	if discoveryState == "OPEN" || discoveryState == "" {
+		return "set its owner or dismiss the discovery: an external agent stays observe-only"
+	}
+	return "none: " + ExternalStatus(discoveryState) + ", observe-only"
+}
+
 // NextAction is what an agent in state s needs next (F020), in words for
 // the agent summary.
 func (s State) NextAction() string {

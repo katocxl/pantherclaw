@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	saas "github.com/katocxl/pantherclaw/internal/saasdiscovery/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -168,11 +169,16 @@ func scanName(f ScanFinding) string {
 		s = "skill " + f.Attributes["name"]
 	case domain.ScanKindEnvSecret:
 		s = "credential " + f.Attributes["secret_kind"]
+	case saas.KindCopilotAgent:
+		s = "Copilot Studio agent " + f.Attributes["name"]
+	case saas.KindCustomGPT:
+		s = "Custom GPT " + f.Attributes["name"]
 	default:
 		s = "agent project " + filepath.Base(f.Attributes["path"])
 	}
-	if len(s) > 200 {
-		s = s[:200]
+	for len(s) > 200 { // whole characters: the name is stored as text
+		_, n := utf8.DecodeLastRuneInString(s)
+		s = s[:len(s)-n]
 	}
 	return s
 }
@@ -330,6 +336,9 @@ type discoverer struct {
 	scope *string
 	// principal is who ran a CI-mode scan (D136).
 	principal *string
+	// external records a new agent as external: a SaaS discovery (G0 M26
+	// D407). It stays DISCOVERED and observe-only.
+	external bool
 	// notify announces a material change of an open or claimed discovery
 	// (D116); nil records it without a notice.
 	notify Notifier
@@ -376,9 +385,17 @@ func touch(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, w
 func insertFinding(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, w discoverer, f ScanFinding, obs []byte,
 	observed map[string]string, reopen ids.UUID,
 ) error {
-	a, err := q.InsertDiscoveredAgent(ctx, dbq.InsertDiscoveredAgentParams{
-		OrgID: org, ID: ids.NewV7(), Name: scanName(f), CreatedBy: w.by,
-	})
+	var a dbq.PcAgent
+	var err error
+	if w.external {
+		a, err = q.InsertExternalAgent(ctx, dbq.InsertExternalAgentParams{
+			OrgID: org, ID: ids.NewV7(), Name: scanName(f), CreatedBy: w.by,
+		})
+	} else {
+		a, err = q.InsertDiscoveredAgent(ctx, dbq.InsertDiscoveredAgentParams{
+			OrgID: org, ID: ids.NewV7(), Name: scanName(f), CreatedBy: w.by,
+		})
+	}
 	if err != nil {
 		return err
 	}
@@ -402,6 +419,9 @@ func insertFinding(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.
 		trusted = map[string]string{}
 	}
 	trusted["source"], trusted["discovery_id"], trusted["submitted_by"] = w.source, d.ID.String(), w.by
+	if w.external {
+		trusted["external"], trusted["coverage"] = "true", "OBSERVE_ONLY"
+	}
 	ev, err := json.Marshal(map[string]map[string]string{"trusted": trusted, "untrusted": observed})
 	if err != nil {
 		return err

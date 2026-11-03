@@ -45,6 +45,23 @@ type Handler struct {
 	issuer  string
 	limiter *httpx.Limiter
 	extra   map[string]func(context.Context, url.Values) (authnapp.TokenResponse, error)
+	// routed are grants tried first for requests they match, whatever
+	// the order handlers were added in.
+	routed []routedGrant
+	routes []route
+}
+
+type grantFunc = func(context.Context, url.Values) (authnapp.TokenResponse, error)
+
+type routedGrant struct {
+	grantType string
+	match     func(url.Values) bool
+	fn        grantFunc
+}
+
+type route struct {
+	pattern string
+	handler http.HandlerFunc
 }
 
 // New returns the handler. limiter bounds requests per client IP.
@@ -58,10 +75,34 @@ func (h *Handler) HandleGrant(grantType string, fn func(context.Context, url.Val
 	h.extra[grantType] = fn
 }
 
+// HandleGrantIf serves a grant type's requests that match with fn, before
+// the grant's HandleGrant handler (G0 M26: an MCP client's refresh tokens
+// beside a person's).
+func (h *Handler) HandleGrantIf(grantType string, match func(url.Values) bool, fn grantFunc) {
+	h.routed = append(h.routed, routedGrant{grantType: grantType, match: match, fn: fn})
+}
+
+// HandleFunc adds another OAuth endpoint, mounted with the others and
+// limited per client IP like the token endpoint (G0 M26: an org's
+// authorization server metadata).
+func (h *Handler) HandleFunc(pattern string, fn http.HandlerFunc) {
+	h.routes = append(h.routes, route{pattern: pattern, handler: fn})
+}
+
 // Mount installs the endpoints on mux.
 func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+authnapp.TokenPath, h.token)
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", h.metadata)
+	for _, rt := range h.routes {
+		mux.HandleFunc(rt.pattern, func(w http.ResponseWriter, r *http.Request) {
+			if !h.limiter.AllowRequest(r) {
+				telemetry.RateLimited(r.Context(), telemetry.ScopeSignIn)
+				WriteError(w, &authnapp.OAuthError{Code: "slow_down", Description: "too many requests", Status: http.StatusTooManyRequests})
+				return
+			}
+			rt.handler(w, r)
+		})
+	}
 }
 
 // ParseForm reads an application/x-www-form-urlencoded body strictly: no
@@ -104,7 +145,17 @@ func (h *Handler) token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var res authnapp.TokenResponse
-	switch gt := form.Get("grant_type"); gt {
+	gt := form.Get("grant_type")
+	if i := slices.IndexFunc(h.routed, func(g routedGrant) bool { return g.grantType == gt && g.match(form) }); i >= 0 {
+		res, err = h.routed[i].fn(r.Context(), form)
+		if err != nil {
+			WriteError(w, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, res)
+		return
+	}
+	switch gt {
 	case GrantClientCredentials:
 		res, err = h.grants.ClientCredentials(r.Context(), form.Get("client_id"), form.Get("client_assertion_type"), form.Get("client_assertion"))
 	default:

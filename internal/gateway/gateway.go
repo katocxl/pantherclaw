@@ -27,6 +27,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/hook"
 	"github.com/katocxl/pantherclaw/internal/gateway/httpproxy"
 	"github.com/katocxl/pantherclaw/internal/gateway/mcp"
+	"github.com/katocxl/pantherclaw/internal/gateway/mcpauth"
 	"github.com/katocxl/pantherclaw/internal/gateway/modelface"
 	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -63,11 +64,13 @@ type Gateway struct {
 	engine      *dispatch.Engine
 	http        *httpproxy.Handler
 	mcp         *mcp.Handler
-	hook        *hook.Handler
-	sdk         *sdk.Handler
-	a2a         *a2aface.Handler
-	model       *modelface.Handler
-	log         *slog.Logger
+	// mcpOAuth is the MCP face's OAuth route (G0 M26 D402).
+	mcpOAuth *mcpauth.Handler
+	hook     *hook.Handler
+	sdk      *sdk.Handler
+	a2a      *a2aface.Handler
+	model    *modelface.Handler
+	log      *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
 	reportDrift DriftReporter
@@ -86,12 +89,16 @@ type Gateway struct {
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
-// (mcp), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk), `/a2a/{connection}` (a2a) and
+// (mcp), `/mcp-oauth/{connection}` and its metadata (mcpauth), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk), `/a2a/{connection}` (a2a) and
 // `/{connection}/…` (httpproxy).
 func (g *Gateway) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := mcp.Path(r.URL.EscapedPath()); ok {
 			g.mcp.ServeHTTP(w, r)
+			return
+		}
+		if _, ok := mcpauth.Path(r.URL.EscapedPath()); ok && g.mcpOAuth != nil {
+			g.mcpOAuth.ServeHTTP(w, r)
 			return
 		}
 		if _, ok := hook.Path(r.URL.EscapedPath()); ok {
@@ -335,6 +342,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		submitScan: d.SubmitScan,
 		status:     newStatus(d.ReportStatus),
 	}
+	g.mcpOAuth = mcpauth.New(g.mcp, d.Configuration, cfg.PublicURL)
 	if d.MCPState != nil {
 		var sealer mcp.Sealer
 		if d.Broker != nil {

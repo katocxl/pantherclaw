@@ -179,7 +179,7 @@ func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *
 	}
 	res, err := s.decider.Authorize(ctx, gw.final(), pipeline.Request{
 		Org: gw.Org, Action: p, PayloadFindings: findings, ContentFindings: content, ContentScan: scan,
-		Identity: pipeline.Identity{InstanceID: id.Instance.Instance, AgentID: id.Instance.Agent, AttestationLevel: id.Level, JKT: id.JKT},
+		Identity: pipeline.Identity{InstanceID: id.Instance.Instance, AgentID: id.Instance.Agent, AttestationLevel: id.Level, JKT: id.JKT, Proof: id.Proof},
 	})
 	if err != nil {
 		return Result{}, err
@@ -344,6 +344,10 @@ func (s *Service) identify(ctx context.Context, gw Gateway, p actionir.Parsed, c
 		return id, identityOutcome(domain.Deny, domain.ReasonIdentityMismatch, "the action names another instance or environment"), false, nil
 	}
 	run, _ := ids.ParseUUID(p.Action.RunID)
+	if id.Bearer != nil && id.Bearer.Run != run {
+		// A pap-mcp+jwt is one run's (G0 M26 D402, HR-626).
+		return id, identityOutcome(domain.Deny, domain.ReasonRunMismatch, string(pap.CodeRunMismatch)), false, nil
+	}
 	if _, err := s.runs.Bind(ctx, gw.Org, run, id.Instance.Agent, id.Instance.Instance); errors.As(err, &pe) {
 		s.log.WarnContext(ctx, "security.run_mismatch", slog.String("gateway_id", gw.ID),
 			slog.String("instance_id", id.Instance.Instance.String()), slog.String("run_id", run.String()))
@@ -399,6 +403,9 @@ func (s *Service) Verify(ctx context.Context, gw Gateway, c *Credentials, run id
 		return Verified{}, ErrAgentUnusable
 	}
 	v := Verified{Instance: id.Instance.Instance, Environment: id.Environment, JKT: id.JKT}
+	if id.Bearer != nil && id.Bearer.Run != run {
+		return Verified{}, pap.Err(pap.CodeRunMismatch) // a pap-mcp+jwt is one run's (HR-626)
+	}
 	if !run.IsZero() {
 		if v.RunExpires, err = s.runs.Bind(ctx, gw.Org, run, id.Instance.Agent, id.Instance.Instance); err != nil {
 			if errors.As(err, new(*pap.Error)) {

@@ -33,6 +33,7 @@ const (
 	PurposeActionTokens   Purpose = "action_tokens"   // PAP-Action tokens for target-enforced connections (PAP-1 §10)
 	PurposeEvidencePacks  Purpose = "evidence_packs"  // evidence-pack manifests (G0 M7)
 	PurposeA2ACard        Purpose = "a2a_card"        // A2A cards a gateway serves (G0 M24 D232)
+	PurposeMcpTokens      Purpose = "mcp_tokens"      // pap-mcp+jwt bearer tokens of standard MCP clients (G0 M26 D402); never published
 	// The anchors and checkpoints_pq keys are not Ed25519 (AltKey).
 	PurposeAnchors       Purpose = "anchors"        // ECDSA P-256: the anchored global root (G0 M7, HR-195)
 	PurposeCheckpointsPQ Purpose = "checkpoints_pq" // ML-DSA-65: optional checkpoint and pack co-signatures
@@ -44,7 +45,7 @@ const (
 func Purposes() []Purpose {
 	return []Purpose{
 		PurposeReceipts, PurposePermits, PurposeWorkloadTokens, PurposeCheckpoints, PurposeAccessTokens,
-		PurposeGatewayCA, PurposeActionTokens, PurposeEvidencePacks, PurposeA2ACard,
+		PurposeGatewayCA, PurposeActionTokens, PurposeEvidencePacks, PurposeA2ACard, PurposeMcpTokens,
 	}
 }
 

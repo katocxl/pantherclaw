@@ -19,11 +19,13 @@ const admitInstance = `-- name: AdmitInstance :one
 UPDATE pc.agent_instances
 SET state = 'ADMITTED', decided_by = $1, decided_at = now(), expires_at = NULL, updated_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'PENDING_ADMISSION' AND expires_at > now()
+  AND enrolled_via <> 'mcp_client'
 RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
 
 // Admission (HR-094): only a pending instance whose admission deadline has
-// not passed.
+// not passed. An MCP client's instance is admitted only by its allow-list
+// change (HR-625), never here.
 func (q *Queries) AdmitInstance(ctx context.Context, decidedBy *string, orgID ids.OrgID, iD ids.UUID) (PcAgentInstance, error) {
 	row := q.db.QueryRow(ctx, admitInstance, decidedBy, orgID, iD)
 	var i PcAgentInstance

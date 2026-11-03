@@ -24,6 +24,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -128,6 +129,16 @@ func New(engine *dispatch.Engine, config Configuration, publicURL string, log *s
 		h.origin = u.Scheme + "://" + u.Host
 	}
 	return h
+}
+
+// oauthKey marks a request the OAuth route forwards (mcpauth): its
+// credentials are a bearer token for the URL the value names.
+type oauthKey struct{}
+
+// WithOAuth marks r's context as the OAuth route's for resource, the URL
+// the client called and its token names (G0 M26 D402).
+func WithOAuth(ctx context.Context, resource string) context.Context {
+	return context.WithValue(ctx, oauthKey{}, resource)
 }
 
 // Path returns the connection a request path names: "/mcp/{connection}".
@@ -446,8 +457,19 @@ func headerParams(s *domain.Schema) []mcpheader.Param {
 func (h *Handler) inbound(w http.ResponseWriter, r *http.Request, conn *control.Connection, body []byte, id jsontext.Value,
 	method, tool string,
 ) (dispatch.Inbound, bool) {
-	in := dispatch.ReadInbound(r, body, h.publicURL+r.URL.Path)
+	htu := h.publicURL + r.URL.Path
+	oauthURL, bearer := r.Context().Value(oauthKey{}).(string)
+	if bearer {
+		htu = oauthURL
+	}
+	in := dispatch.ReadInbound(r, body, htu)
 	switch {
+	case bearer && in.HasToken && in.SubjectOK && in.Creds.GetProof() == "":
+		// An MCP access token through the OAuth route: the Authority
+		// verifies it, and that it is one, from its type (G0 M26 D408).
+		return in, true
+	case bearer:
+		h.refusePAP(w, r, id, pap.CodeInvalidToken, "")
 	case in.Creds.GetProof() == "":
 		h.refusePAP(w, r, id, pap.CodeUseNonce, "")
 	case !in.HasToken:

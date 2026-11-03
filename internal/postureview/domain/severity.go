@@ -17,6 +17,9 @@ const (
 	KindNewResourceTmpl   = "new_resource_template"
 	KindUnusedSuggestion  = "UNUSED_AUTHORITY"
 	KindUnapprovedServer  = "UNAPPROVED_SERVER"
+	// KindDeprovisionedOwnerKey: an active API key whose maker was
+	// deprovisioned (G0 M26 D409).
+	KindDeprovisionedOwnerKey = "DEPROVISIONED_OWNER_KEY"
 )
 
 // severityByKind is the fixed table for sources that state no severity
@@ -29,6 +32,8 @@ var severityByKind = map[string]Severity{
 	KindNewResourceTmpl:   SeverityLow,
 	KindUnusedSuggestion:  SeverityLow,
 	KindUnapprovedServer:  SeverityHigh,
+	// A departed person's key still works: rotate it.
+	KindDeprovisionedOwnerKey: SeverityHigh,
 }
 
 // recommendationPrefixes are the families of recommendation ids: a

@@ -1,0 +1,34 @@
+apiVersion: pantherclaw.range/v1
+id: RT-152
+title: A client that is not bound, or not holding an admitted instance's key, gets no token, and removing a binding cuts its tokens off
+category: boundary
+suite: platform
+tier: business
+attacker: A4
+threats: [T-268]
+rules: [HR-623, HR-624]
+requires: [payments]
+harness_only: true
+steps:
+  - id: unbound-client
+    do: idp.probe
+    with: {attack: unbound_client}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_CLIENT
+      decisive_control: HR-624
+  - id: key-of-no-instance
+    do: idp.probe
+    with: {attack: key_of_no_instance}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_CLIENT
+      decisive_control: HR-624
+  # Last: the binding stays removed.
+  - id: removed-binding
+    do: idp.probe
+    with: {attack: removed_binding}
+    expect:
+      outcome: REFUSED
+      reason: INSTANCE_NOT_ADMITTED
+      decisive_control: HR-623
