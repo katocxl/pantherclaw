@@ -30,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
@@ -467,8 +468,11 @@ func TestHR631_MappingChangesHeldAndRecheckedAsAsker(t *testing.T) {
 	err = e.pool.InTenantTx(ctx, e.org, func(ctx context.Context, tx db.TenantTx) error {
 		return e.svc.ApplyMappingAdd(ctx, tx, e.caller(e.alice, td.RoleViewer), payload)
 	})
-	if err == nil || errors.Is(err, protect.ErrInvalid) {
-		t.Fatalf("applied for an asker without role.bind: %v", err)
+	// The refusal is the bind ceiling's own (tenancy CheckBindCeiling): the
+	// asker lacks role.bind at the mapping's scope.
+	if pcerr.CodeOf(err) != pcerr.PermissionDenied || pcerr.ReasonOf(err) != "PERMISSION_DENIED" ||
+		pcerr.PublicMessage(err) != "missing permission "+string(td.PermRoleBind) {
+		t.Fatalf("applied for an asker without role.bind, or refused for another reason: %v", err)
 	}
 	if mappings() != 0 || provisioned() != 0 {
 		t.Fatal("a mapping applied above the asker's ceiling")
