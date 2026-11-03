@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/changes"
@@ -127,10 +128,24 @@ func (r *confirmRange) request(t *testing.T, version int32) *protect.PendingErro
 	return held
 }
 
+// drain chains every committed entry, waiting while another transaction
+// holds the chainer's xmin back, then runs the engine until the feed is
+// empty.
 func (r *confirmRange) drain(t *testing.T) {
 	t.Helper()
-	if _, err := ledger.ChainAll(context.Background(), r.p, r.org, 1000); err != nil {
-		t.Fatal(err)
+	deadline := time.Now().Add(time.Minute)
+	for {
+		if _, err := ledger.ChainAll(context.Background(), r.p, r.org, 1000); err != nil {
+			t.Fatal(err)
+		}
+		if r.text(t, `SELECT count(*)::text FROM pc.ledger_entries e WHERE org_id = $1
+			AND NOT EXISTS (SELECT 1 FROM pc.ledger_chain c WHERE c.org_id = e.org_id AND c.entry_id = e.id)`, r.org) == "0" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("entries not chained within a minute")
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	for range 50 {
 		res, err := r.eng.Process(context.Background(), r.org)
