@@ -27,6 +27,12 @@ WHERE org_id = sqlc.arg(org_id) AND issuer = sqlc.arg(issuer) AND state = 'ACTIV
 ORDER BY id
 LIMIT 100;
 
+-- Whether any entry of an issuer URL pins a tenant, in any state: such an
+-- entry, even PENDING or DISABLED, rules out the untenanted fallback.
+-- name: AssertionIssuerPinsTenant :one
+SELECT EXISTS (SELECT 1 FROM pc.org_assertion_issuers
+    WHERE org_id = sqlc.arg(org_id) AND issuer = sqlc.arg(issuer) AND tenant IS NOT NULL)::boolean;
+
 -- name: ActivateAssertionIssuer :execrows
 UPDATE pc.org_assertion_issuers
 SET state = 'ACTIVE', activated_at = coalesce(activated_at, now()), updated_by = sqlc.arg(updated_by), updated_at = now()
@@ -201,11 +207,18 @@ RETURNING *;
 UPDATE pc.mcp_authorization_codes SET run_id = sqlc.arg(run_id)
 WHERE org_id = sqlc.arg(org_id) AND code_hash = sqlc.arg(code_hash) AND used_at IS NOT NULL;
 
--- A spent code presented again: the run it started, if any. The lock waits
--- for a redemption still in flight.
--- name: SpentMcpAuthorizationCodeRun :one
-SELECT run_id FROM pc.mcp_authorization_codes
+-- A spent code presented again: marks it reused and returns the run it
+-- started, if a redemption already recorded one. The update waits for a
+-- redemption in flight.
+-- name: MarkMcpAuthorizationCodeReused :one
+UPDATE pc.mcp_authorization_codes SET reused_at = coalesce(reused_at, now())
 WHERE org_id = sqlc.arg(org_id) AND code_hash = sqlc.arg(code_hash) AND used_at IS NOT NULL
+RETURNING run_id, client_id;
+
+-- A redemption about to issue tokens: whether a second use came meanwhile.
+-- name: McpAuthorizationCodeReused :one
+SELECT (reused_at IS NOT NULL)::boolean AS reused FROM pc.mcp_authorization_codes
+WHERE org_id = sqlc.arg(org_id) AND code_hash = sqlc.arg(code_hash)
 FOR UPDATE;
 
 -- name: InsertMcpRefreshToken :exec

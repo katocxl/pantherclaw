@@ -75,10 +75,13 @@ CREATE TABLE pc.mcp_authorization_codes (
     used_at        timestamptz,
     -- The run the code started: a second use ends it (RFC 6749 §4.1.2).
     run_id         uuid,
+    -- When a second use came: a redemption still finishing ends its run.
+    reused_at      timestamptz,
     PRIMARY KEY (org_id, code_hash),
     FOREIGN KEY (org_id, client_id) REFERENCES pc.mcp_clients (org_id, id),
     FOREIGN KEY (org_id, run_id) REFERENCES pc.runs (org_id, id),
     CHECK (run_id IS NULL OR used_at IS NOT NULL),
+    CHECK (reused_at IS NULL OR used_at IS NOT NULL),
     CONSTRAINT mcp_authorization_codes_short CHECK (expires_at <= created_at + interval '60 seconds')
 );
 CREATE INDEX mcp_authorization_codes_expiry ON pc.mcp_authorization_codes (expires_at);
@@ -129,12 +132,12 @@ $$;
 GRANT SELECT, INSERT ON pc.org_mcp_access, pc.mcp_clients, pc.mcp_authorization_codes, pc.mcp_refresh_tokens TO pc_app;
 GRANT UPDATE (enabled, gateway_url, updated_by, updated_at) ON pc.org_mcp_access TO pc_app;
 GRANT UPDATE (state, activated_at, removed_by, removed_at, client_name, redirect_uris, document_digest) ON pc.mcp_clients TO pc_app;
-GRANT UPDATE (used_at, run_id) ON pc.mcp_authorization_codes TO pc_app;
+GRANT UPDATE (used_at, run_id, reused_at) ON pc.mcp_authorization_codes TO pc_app;
 GRANT UPDATE (state) ON pc.mcp_refresh_tokens TO pc_app;
 GRANT DELETE ON pc.mcp_authorization_codes, pc.mcp_refresh_tokens TO pc_app;
 -- The audit reader sees neither code nor token hashes.
 GRANT SELECT ON pc.org_mcp_access, pc.mcp_clients TO pc_audit_ro;
-GRANT SELECT (org_id, client_id, user_id, redirect_uri, resource, scope_operations, created_at, expires_at, used_at, run_id)
+GRANT SELECT (org_id, client_id, user_id, redirect_uri, resource, scope_operations, created_at, expires_at, used_at, run_id, reused_at)
     ON pc.mcp_authorization_codes TO pc_audit_ro;
 GRANT SELECT (org_id, id, family_id, client_id, run_id, resource, state, created_at, expires_at)
     ON pc.mcp_refresh_tokens TO pc_audit_ro;

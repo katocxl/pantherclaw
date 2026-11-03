@@ -656,6 +656,12 @@ func (s *Admin) file(ctx context.Context, tx db.TenantTx, c tenancy.Caller, surf
 }
 
 func (s *Admin) tellAdmins(ctx context.Context, tx db.TenantTx, typ string, params map[string]string) error {
+	return s.tellAdminsOnce(ctx, tx, typ, params, "")
+}
+
+// tellAdminsOnce tells every org admin unless a notice with the same
+// dedupe key was already enqueued; an empty key always tells.
+func (s *Admin) tellAdminsOnce(ctx context.Context, tx db.TenantTx, typ string, params map[string]string, key string) error {
 	if s.Notify == nil {
 		return nil
 	}
@@ -663,7 +669,7 @@ func (s *Admin) tellAdmins(ctx context.Context, tx db.TenantTx, typ string, para
 	if err != nil {
 		return err
 	}
-	_, err = s.Notify.Enqueue(ctx, tx, napp.Message{Org: tx.OrgID(), Type: typ, Params: params, Personal: admins})
+	_, err = s.Notify.Enqueue(ctx, tx, napp.Message{Org: tx.OrgID(), Type: typ, Params: params, Personal: admins, DedupeKey: key})
 	return err
 }
 

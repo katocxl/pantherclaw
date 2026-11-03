@@ -530,3 +530,21 @@ func TestHR624_TheClientIsAnAdmittedInstanceOfTheBoundAgent(t *testing.T) {
 		}
 	}
 }
+
+// TestHR622_ADisabledPinnedEntryStillBlocksTheFallback (D559): an entry of
+// the issuer that pins a tenant blocks the untenanted entry in every state,
+// so a DISABLED one still leaves every assertion of that issuer unmatched.
+//
+// Covers: F910
+func TestHR622_ADisabledPinnedEntryStillBlocksTheFallback(t *testing.T) {
+	e := newEnv(t)
+	if _, err := e.exchange(t, e.assert(t, "00u-alice", clientID, "tickets.read"), nil); err != nil {
+		t.Fatalf("the untenanted entry alone: %s", oauthCode(err))
+	}
+	e.exec(t, `INSERT INTO pc.org_assertion_issuers (org_id, id, name, issuer, audience, tenant, algorithms, state, created_by,
+		updated_by, disabled_by, disabled_at) VALUES ($1, $2, 'okta-acme', $3, $4, 'acme', ARRAY['RS256'], 'DISABLED', $5, $5, $5, now())`,
+		e.org, ids.NewV7(), e.sim.Issuer(), domain.IssuerID(publicURL, e.org), e.user)
+	if _, err := e.exchange(t, e.assert(t, "00u-alice", clientID, "tickets.read"), nil); !strings.HasPrefix(oauthCode(err), "invalid_grant") {
+		t.Fatalf("beside a DISABLED pinned entry: %s", oauthCode(err))
+	}
+}

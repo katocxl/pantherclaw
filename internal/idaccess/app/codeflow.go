@@ -11,6 +11,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
@@ -216,7 +217,7 @@ func (f *CodeFlow) Prepare(ctx context.Context, org ids.OrgID, q url.Values) (Co
 	// refused, and the admins are told.
 	stored, live := slices.Contains(client.RedirectUris, r.RedirectURI), slices.Contains(md.RedirectURIs, r.RedirectURI)
 	if !stored && !bytes.Equal(DocumentDigest(md), client.DocumentDigest) {
-		f.documentChanged(ctx, org, client, r.RedirectURI)
+		f.documentChanged(ctx, org, client, md, r.RedirectURI)
 		return Consent{}, &AuthorizeError{
 			Code: "CLIENT_DOCUMENT_CHANGED", Description: "the client's metadata document changed since this organization allowed it",
 		}
@@ -256,10 +257,12 @@ func loopback(redirect string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// documentChanged records and tells the admins that a client asked for a
-// redirect URI its live document added after the org allowed it. A failure
-// to record it does not change the refusal.
-func (f *CodeFlow) documentChanged(ctx context.Context, org ids.OrgID, client dbq.PcMcpClient, redirect string) {
+// documentChanged records that a client asked for a redirect URI its live
+// document added after the org allowed it, and tells the admins once per
+// client and live document: every attempt is audited, but a crafted link
+// sent again does not notify again. A failure to record it does not change
+// the refusal.
+func (f *CodeFlow) documentChanged(ctx context.Context, org ids.OrgID, client dbq.PcMcpClient, live ports.ClientMetadata, redirect string) {
 	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		if _, err := audit.Record(ctx, tx, audit.Event{
 			Name: "idaccess.client_document_changed", Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Denied,
@@ -268,9 +271,9 @@ func (f *CodeFlow) documentChanged(ctx context.Context, org ids.OrgID, client db
 		}); err != nil {
 			return err
 		}
-		return (&Admin{Notify: f.Notify}).tellAdmins(ctx, tx, "idaccess.client_document_changed", map[string]string{
+		return (&Admin{Notify: f.Notify}).tellAdminsOnce(ctx, tx, "idaccess.client_document_changed", map[string]string{
 			"client": client.ID.String(),
-		})
+		}, fmt.Sprintf("client-document:%s:%x", client.ID, DocumentDigest(live)))
 	})
 	if err != nil {
 		f.log().WarnContext(ctx, "idaccess.client_document_changed", slog.String("org", org.String()), slog.String("error", err.Error()))
@@ -425,8 +428,27 @@ func (f *CodeFlow) AuthorizationCode(ctx context.Context, form url.Values) (auth
 	now := f.Clock.Now()
 	// The code is spent by the first request naming it, right or wrong: the
 	// spend commits on its own, before anything about the request is checked.
-	// A spent code presented again ends the run it started, and with it
-	// every token issued from it (RFC 6749 §4.1.2); that commits too.
+	row, err := f.spendCode(ctx, org, code)
+	var out authnapp.TokenResponse
+	if err == nil {
+		out, err = f.finishCode(ctx, org, row, clientURL, form, now)
+	}
+	var r refusal
+	if errors.As(err, &r) {
+		return authnapp.TokenResponse{}, f.fail(ctx, r.oe, r.reason, slog.String("org", org.String()))
+	}
+	return out, err
+}
+
+// errCodeReused is a redemption that found its code reused before it could
+// issue: the run it started was ended, and that commits.
+var errCodeReused = refuse(authnapp.ErrInvalidGrant, "code_reused_during_redemption")
+
+// spendCode spends a code in its own transaction. A spent code presented
+// again is marked reused and ends the run it started, and with it every
+// token issued from it (RFC 6749 §4.1.2); that commits with its audit, and
+// the request is refused.
+func (f *CodeFlow) spendCode(ctx context.Context, org ids.OrgID, code string) (dbq.PcMcpAuthorizationCode, error) {
 	var row dbq.PcMcpAuthorizationCode
 	var reused bool
 	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -437,26 +459,51 @@ func (f *CodeFlow) AuthorizationCode(ctx context.Context, form url.Values) (auth
 			return err
 		}
 		reused = true
-		run, err := q.SpentMcpAuthorizationCodeRun(ctx, org, digest(code))
-		if db.IsNoRows(err) || (err == nil && run == nil) {
-			return nil
+		mark, err := q.MarkMcpAuthorizationCodeReused(ctx, org, digest(code))
+		if db.IsNoRows(err) {
+			return nil // unknown or expired unspent: nothing to mark
 		} else if err != nil {
 			return err
+		}
+		run := mark.RunID
+		details := map[string]string{}
+		if run != nil {
+			details["run"] = run.String()
+		}
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "idaccess.code_reuse", Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Denied,
+			ReasonCode: "AUTHORIZATION_CODE_REUSED", Object: &audit.Object{Type: "mcp_client", ID: mark.ClientID.String()}, Details: details,
+		}); err != nil {
+			return err
+		}
+		if run == nil {
+			return nil // a redemption still finishing finds the mark
 		}
 		return endRun(ctx, tx, org, *run, "authorization_code_reused")
 	})
 	if err == nil && reused {
 		err = refuse(authnapp.ErrInvalidGrant, "code_unknown_used_or_expired")
 	}
+	return row, err
+}
+
+// finishCode redeems a spent code in a second transaction. A second use that
+// came meanwhile ends the run before any token is issued; that commits.
+func (f *CodeFlow) finishCode(ctx context.Context, org ids.OrgID, row dbq.PcMcpAuthorizationCode, clientURL string, form url.Values,
+	now time.Time,
+) (authnapp.TokenResponse, error) {
 	var out authnapp.TokenResponse
-	if err == nil {
-		err = f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			return f.redeemCode(ctx, tx, org, row, clientURL, form, now, &out)
-		})
-	}
-	var r refusal
-	if errors.As(err, &r) {
-		return authnapp.TokenResponse{}, f.fail(ctx, r.oe, r.reason, slog.String("org", org.String()))
+	var reused bool
+	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		err := f.redeemCode(ctx, tx, org, row, clientURL, form, now, &out)
+		if errors.Is(err, errCodeReused) {
+			reused = true
+			return nil
+		}
+		return err
+	})
+	if err == nil && reused {
+		return authnapp.TokenResponse{}, errCodeReused
 	}
 	return out, err
 }
@@ -466,11 +513,6 @@ func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	form url.Values, now time.Time, out *authnapp.TokenResponse,
 ) error {
 	q := dbq.New(tx)
-	// The lock makes a second use of the code wait for this redemption, so
-	// it finds the run to end.
-	if _, err := q.SpentMcpAuthorizationCodeRun(ctx, org, row.CodeHash); err != nil {
-		return err
-	}
 	client, err := q.GetMcpClient(ctx, org, row.ClientID)
 	if err != nil {
 		return err
@@ -512,6 +554,18 @@ func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	}
 	if err := q.SetMcpAuthorizationCodeRun(ctx, &run.ID, org, row.CodeHash); err != nil {
 		return err
+	}
+	// A second use that came since the spend ends the run, and nothing is
+	// issued. From here on the row is locked, so a later one waits and finds
+	// the run.
+	if reused, err := q.McpAuthorizationCodeReused(ctx, org, row.CodeHash); err != nil {
+		return err
+	} else if reused {
+		if err := endRun(ctx, tx, org, run.ID, "authorization_code_reused"); err != nil {
+			return err
+		}
+		*out = authnapp.TokenResponse{}
+		return errCodeReused
 	}
 	*out, err = f.issue(ctx, q, org, client, run.ID, run.EnvironmentID, run.ExpiresAt, conn, row.Resource, choice.Operations, ids.NewV7(), now)
 	if err != nil {

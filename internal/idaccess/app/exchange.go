@@ -123,12 +123,11 @@ func peek(raw string) (peeked, string, bool) {
 	return p, aud, true
 }
 
-// pickIssuer chooses the entry an assertion names: the one pinning its
-// tenant, else the one with no tenant, but only while no entry pins a
-// tenant of that issuer. Once one does, an assertion of any other tenant
-// matches nothing.
-func pickIssuer(rows []dbq.PcOrgAssertionIssuer, tenant string) (dbq.PcOrgAssertionIssuer, bool) {
-	pinned := false
+// pickIssuer chooses the ACTIVE entry an assertion names: the one pinning
+// its tenant, else the one with no tenant, but only while no entry of that
+// issuer pins a tenant in any state (pinned). Once one does, an assertion of
+// any other tenant matches nothing.
+func pickIssuer(rows []dbq.PcOrgAssertionIssuer, tenant string, pinned bool) (dbq.PcOrgAssertionIssuer, bool) {
 	for _, r := range rows {
 		if r.Tenant != nil && *r.Tenant == tenant {
 			return r, true
@@ -168,14 +167,19 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 		return authnapp.TokenResponse{}, e.fail(ctx, authnapp.ErrInvalidClient, "client_assertion_malformed")
 	}
 	var rows []dbq.PcOrgAssertionIssuer
+	var pinned bool
 	if err := e.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
 		var err error
-		rows, err = dbq.New(tx).ActiveAssertionIssuers(ctx, org, p.Iss)
+		if rows, err = q.ActiveAssertionIssuers(ctx, org, p.Iss); err != nil {
+			return err
+		}
+		pinned, err = q.AssertionIssuerPinsTenant(ctx, org, p.Iss)
 		return err
 	}, db.ReadOnly()); err != nil {
 		return authnapp.TokenResponse{}, err
 	}
-	row, ok := pickIssuer(rows, p.Tenant)
+	row, ok := pickIssuer(rows, p.Tenant, pinned)
 	if !ok {
 		return authnapp.TokenResponse{}, e.fail(ctx, authnapp.ErrInvalidGrant, "issuer_unknown", slog.String("org", org.String()))
 	}

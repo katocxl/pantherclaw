@@ -18,9 +18,13 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/idaccess/app"
 	"github.com/katocxl/pantherclaw/internal/idaccess/ports"
+	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -345,5 +349,102 @@ func TestHR625_AnEditedDocumentGetsNoCodeAtANewRedirect(t *testing.T) {
 	d[mcpClient] = ports.ClientMetadata{ClientID: mcpClient, Name: "Editor", RedirectURIs: []string{added}}
 	if _, err := flow.Prepare(ctx, e.org, authorizeQuery(nil)); err == nil {
 		t.Fatal("a redirect the live document no longer lists was used")
+	}
+}
+
+// outboxNotes enqueues into the notification outbox itself, so its dedupe
+// key is the real one.
+type outboxNotes struct{}
+
+func (outboxNotes) Enqueue(ctx context.Context, tx db.TenantTx, m napp.Message) (napp.Enqueued, error) {
+	r, err := ndomain.Render(m.Type, m.Params)
+	if err != nil {
+		return napp.Enqueued{}, err
+	}
+	np := dbq.InsertNotificationParams{
+		OrgID: m.Org, ID: ids.NewV7(), Type: r.Type, Severity: string(r.Severity), Title: r.Title, Body: r.Body,
+		LinkPath: r.Link, TtlSeconds: 3600,
+	}
+	if m.DedupeKey != "" {
+		np.DedupeKey = &m.DedupeKey
+	}
+	n, err := dbq.New(tx).InsertNotification(ctx, np)
+	return napp.Enqueued{Notification: np.ID, Duplicate: n == 0}, err
+}
+
+// TestHR625_AChangedDocumentNotifiesOncePerDocument (D560): every refused
+// attempt at a redirect a changed document added is audited, but the admins
+// are told once per client and live document; a further change tells them
+// again.
+// Covers: F913
+func TestHR625_AChangedDocumentNotifiesOncePerDocument(t *testing.T) {
+	e, flow, _ := codeEnv(t)
+	ctx := context.Background()
+	flow.Notify = outboxNotes{}
+	d := flow.Documents.(docs)
+	const added = "http://127.0.0.1:9999/steal"
+	at := authorizeQuery(func(q url.Values) { q.Set("redirect_uri", added) })
+	refuse := func() {
+		t.Helper()
+		var ae *app.AuthorizeError
+		if _, err := flow.Prepare(ctx, e.org, at); !errors.As(err, &ae) || ae.Code != "CLIENT_DOCUMENT_CHANGED" {
+			t.Fatalf("a redirect a changed document added: %v", err)
+		}
+	}
+	counts := func() (audits, notices int) {
+		return e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.idaccess.client_document_changed'", e.org),
+			e.count(t, "SELECT count(*) FROM pc.notifications WHERE type = 'idaccess.client_document_changed'")
+	}
+
+	d[mcpClient] = ports.ClientMetadata{ClientID: mcpClient, Name: "Editor", RedirectURIs: []string{mcpRedirect, added}}
+	refuse()
+	refuse()
+	if a, n := counts(); a != 2 || n != 1 {
+		t.Fatalf("two attempts at one changed document: %d audit entries, %d notices (want 2, 1)", a, n)
+	}
+	d[mcpClient] = ports.ClientMetadata{ClientID: mcpClient, Name: "Editor", RedirectURIs: []string{mcpRedirect, added, "http://127.0.0.1:9998/x"}}
+	refuse()
+	if a, n := counts(); a != 3 || n != 2 {
+		t.Fatalf("a further change: %d audit entries, %d notices (want 3, 2)", a, n)
+	}
+}
+
+// TestHR628_ASecondUseDuringTheRedemptionEndsItsRun (D559): a code spent,
+// then presented again before its redemption finished, gives no token:
+// the second use marks it reused, and the redemption ends the run it
+// started, audited, and issues nothing.
+// Covers: F913
+func TestHR628_ASecondUseDuringTheRedemptionEndsItsRun(t *testing.T) {
+	e, flow, _ := codeEnv(t)
+	ctx := context.Background()
+	code := codeOf(t, mustApprove(t, flow, e))
+	row, err := flow.SpendCode(ctx, e.org, code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := redeem(flow, code, verifier); !strings.HasPrefix(oauthCode(err), "invalid_grant") {
+		t.Fatalf("the second use: %s", oauthCode(err))
+	}
+	form := url.Values{
+		"grant_type": {app.GrantAuthorizationCode}, "code": {code}, "client_id": {mcpClient}, "redirect_uri": {mcpRedirect},
+		"code_verifier": {verifier}, "resource": {resource},
+	}
+	res, err := flow.FinishCode(ctx, e.org, row, form)
+	if !strings.HasPrefix(oauthCode(err), "invalid_grant") || res.AccessToken != "" || res.RefreshToken != "" {
+		t.Fatalf("the redemption after a second use: %+v %s", res, oauthCode(err))
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.runs WHERE state = 'REVOKED' AND end_reason = 'authorization_code_reused'"); n != 1 {
+		t.Fatalf("ended runs: %d", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.runs WHERE state = 'ACTIVE'"); n != 0 {
+		t.Fatalf("active runs: %d", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.mcp_refresh_tokens"); n != 0 {
+		t.Fatalf("refresh tokens issued: %d", n)
+	}
+	for kind, want := range map[string]int{"audit.idaccess.code_reuse": 1, "audit.run.ended": 1, "audit.idaccess.token_issued": 0} {
+		if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = $2", e.org, kind); n != want {
+			t.Errorf("%s: %d, want %d", kind, n, want)
+		}
 	}
 }

@@ -219,6 +219,20 @@ func (q *Queries) AssertionClientLive(ctx context.Context, orgID ids.OrgID, iD i
 	return column_1, err
 }
 
+const assertionIssuerPinsTenant = `-- name: AssertionIssuerPinsTenant :one
+SELECT EXISTS (SELECT 1 FROM pc.org_assertion_issuers
+    WHERE org_id = $1 AND issuer = $2 AND tenant IS NOT NULL)::boolean
+`
+
+// Whether any entry of an issuer URL pins a tenant, in any state: such an
+// entry, even PENDING or DISABLED, rules out the untenanted fallback.
+func (q *Queries) AssertionIssuerPinsTenant(ctx context.Context, orgID ids.OrgID, issuer string) (bool, error) {
+	row := q.db.QueryRow(ctx, assertionIssuerPinsTenant, orgID, issuer)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const bumpOrgGatewaysConfig = `-- name: BumpOrgGatewaysConfig :exec
 UPDATE pc.gateways SET config_version = config_version + 1 WHERE org_id = $1
 `
@@ -960,6 +974,41 @@ func (q *Queries) LockMcpRefreshToken(ctx context.Context, orgID ids.OrgID, toke
 	return i, err
 }
 
+const markMcpAuthorizationCodeReused = `-- name: MarkMcpAuthorizationCodeReused :one
+UPDATE pc.mcp_authorization_codes SET reused_at = coalesce(reused_at, now())
+WHERE org_id = $1 AND code_hash = $2 AND used_at IS NOT NULL
+RETURNING run_id, client_id
+`
+
+type MarkMcpAuthorizationCodeReusedRow struct {
+	RunID    *ids.UUID
+	ClientID ids.UUID
+}
+
+// A spent code presented again: marks it reused and returns the run it
+// started, if a redemption already recorded one. The update waits for a
+// redemption in flight.
+func (q *Queries) MarkMcpAuthorizationCodeReused(ctx context.Context, orgID ids.OrgID, codeHash []byte) (MarkMcpAuthorizationCodeReusedRow, error) {
+	row := q.db.QueryRow(ctx, markMcpAuthorizationCodeReused, orgID, codeHash)
+	var i MarkMcpAuthorizationCodeReusedRow
+	err := row.Scan(&i.RunID, &i.ClientID)
+	return i, err
+}
+
+const mcpAuthorizationCodeReused = `-- name: McpAuthorizationCodeReused :one
+SELECT (reused_at IS NOT NULL)::boolean AS reused FROM pc.mcp_authorization_codes
+WHERE org_id = $1 AND code_hash = $2
+FOR UPDATE
+`
+
+// A redemption about to issue tokens: whether a second use came meanwhile.
+func (q *Queries) McpAuthorizationCodeReused(ctx context.Context, orgID ids.OrgID, codeHash []byte) (bool, error) {
+	row := q.db.QueryRow(ctx, mcpAuthorizationCodeReused, orgID, codeHash)
+	var reused bool
+	err := row.Scan(&reused)
+	return reused, err
+}
+
 const mcpClientLive = `-- name: McpClientLive :one
 SELECT EXISTS (
     SELECT 1 FROM pc.mcp_clients WHERE org_id = $1 AND id = $2 AND state = 'ACTIVE')::boolean
@@ -1077,7 +1126,7 @@ func (q *Queries) SetMcpAuthorizationCodeRun(ctx context.Context, runID *ids.UUI
 const spendMcpAuthorizationCode = `-- name: SpendMcpAuthorizationCode :one
 UPDATE pc.mcp_authorization_codes SET used_at = now()
 WHERE org_id = $1 AND code_hash = $2 AND used_at IS NULL AND expires_at > now()
-RETURNING org_id, code_hash, client_id, user_id, redirect_uri, code_challenge, resource, scope_operations, created_at, expires_at, used_at, run_id
+RETURNING org_id, code_hash, client_id, user_id, redirect_uri, code_challenge, resource, scope_operations, created_at, expires_at, used_at, run_id, reused_at
 `
 
 // A code is spent by the first request that names it, right or wrong.
@@ -1097,23 +1146,9 @@ func (q *Queries) SpendMcpAuthorizationCode(ctx context.Context, orgID ids.OrgID
 		&i.ExpiresAt,
 		&i.UsedAt,
 		&i.RunID,
+		&i.ReusedAt,
 	)
 	return i, err
-}
-
-const spentMcpAuthorizationCodeRun = `-- name: SpentMcpAuthorizationCodeRun :one
-SELECT run_id FROM pc.mcp_authorization_codes
-WHERE org_id = $1 AND code_hash = $2 AND used_at IS NOT NULL
-FOR UPDATE
-`
-
-// A spent code presented again: the run it started, if any. The lock waits
-// for a redemption still in flight.
-func (q *Queries) SpentMcpAuthorizationCodeRun(ctx context.Context, orgID ids.OrgID, codeHash []byte) (*ids.UUID, error) {
-	row := q.db.QueryRow(ctx, spentMcpAuthorizationCodeRun, orgID, codeHash)
-	var run_id *ids.UUID
-	err := row.Scan(&run_id)
-	return run_id, err
 }
 
 const updateMcpClientDocument = `-- name: UpdateMcpClientDocument :execrows

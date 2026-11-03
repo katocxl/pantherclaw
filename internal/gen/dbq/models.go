@@ -2639,6 +2639,7 @@ type PcMcpAuthorizationCode struct {
 	ExpiresAt       time.Time
 	UsedAt          *time.Time
 	RunID           *ids.UUID
+	ReusedAt        *time.Time
 }
 
 type PcMcpCatalogSetting struct {
