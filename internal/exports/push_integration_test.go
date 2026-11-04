@@ -15,6 +15,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/tenantctx"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -424,14 +426,17 @@ func TestHR516_ATimeoutEndsTheStepNotTheOrg(t *testing.T) {
 	f.sim.hangBucket, f.sim.release = "bkt", release
 	f.sim.mu.Unlock()
 	f.svc.internal.Timeout = 200 * time.Millisecond
+	// The sweep's log says how each abort ended, for a failure message.
+	var logs lockedBuffer
+	f.svc.log = pclog.New(&logs, pclog.Options{})
 	if err := f.svc.Sweep(ctx, f.org); err == nil {
 		t.Fatal("a hanging destination reported success")
 	}
 	if n := f.count(t, "SELECT count(*) FROM pc.export_receipts WHERE org_id = $1 AND abort_tried_at IS NOT NULL", f.org); n != 1 {
-		t.Fatalf("%d aborts tried, want the one that timed out", n)
+		t.Fatalf("%d aborts tried, want the one that timed out; the sweep logged:\n%s", n, logs.String())
 	}
 	if n := f.count(t, "SELECT count(*) FROM pc.export_receipts WHERE org_id = $1 AND notice_attempts > 0", f.org); n != 1 {
-		t.Fatalf("%d notices tried, want the one that timed out", n)
+		t.Fatalf("%d notices tried, want the one that timed out; the sweep logged:\n%s", n, logs.String())
 	}
 	// The next hour takes the abort that was not tried, then the oldest try.
 	var turns []ids.UUID
@@ -1137,4 +1142,22 @@ func TestHR514_AWorkerReadsTheOrgsEdition(t *testing.T) {
 	if got := f.receipt(t, r.ID); got.State != ReceiptDelivered {
 		t.Fatalf("receipt %+v", got)
 	}
+}
+
+// lockedBuffer is a log sink safe for the writes of concurrent goroutines.
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }

@@ -329,6 +329,34 @@ func TestHR516_EachChunkedAttemptHasItsOwnChunks(t *testing.T) {
 	}
 }
 
+// TestHR516_AHangAfterHeadersIsATimeout: a destination that sends its
+// headers and then stops answering has timed out, so the sweep ends the
+// step instead of trying the next upload.
+// Covers: F517
+func TestHR516_AHangAfterHeadersIsATimeout(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+	c := srv.Client()
+	c.Timeout = 200 * time.Millisecond
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, srv.URL+"/bkt/k", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = do(c, req)
+	if code, status := failureOf(err); code != "timeout" || status != http.StatusOK || !timedOut(err) {
+		t.Fatalf("a hang after the headers: %v (code %q, status %d)", err, code, status)
+	}
+}
+
 func TestSweepJobsFit(t *testing.T) {
 	opts := SweepOrgArgs{}.InsertOpts()
 	if opts.Queue == "" || len(opts.UniqueOpts.ByState) == 0 || !opts.UniqueOpts.ByArgs {
