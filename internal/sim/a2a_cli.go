@@ -28,7 +28,7 @@ import (
 func runA2A(ctx context.Context, args []string, stderr io.Writer) error {
 	fl := flag.NewFlagSet("a2a", flag.ContinueOnError)
 	fl.SetOutput(stderr)
-	addr := fl.String("addr", "127.0.0.1:9093", "listen address (loopback)")
+	addr := fl.String("addr", defaultAddrs["a2a"], "listen address (loopback)")
 	base := fl.String("base-url", "", "the public base URL the card's interfaces point at (default: http://{Host} of each card request)")
 	name := fl.String("name", "", "the agent's name on its card")
 	tokenFile := fl.String("token-file", "", "file holding the bearer token every call must carry (the credential PantherClaw holds)")

@@ -16,8 +16,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
-	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // fakeClock is a settable clock.
@@ -65,16 +63,6 @@ func (f *fixture) org(t *testing.T) ids.OrgID {
 		t.Fatal(err)
 	}
 	return org
-}
-
-// admin returns ctx for an Org Admin of org.
-func admin(org ids.OrgID) context.Context {
-	return tapp.WithCaller(context.Background(), tapp.Caller{
-		Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()}, Bindings: []td.Binding{
-			{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}},
-		}},
-		Credential: tapp.CredAccessToken,
-	})
 }
 
 func (f *fixture) count(t *testing.T, org ids.OrgID, sql string, args ...any) int {

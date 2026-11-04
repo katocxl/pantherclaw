@@ -140,7 +140,7 @@ func (e *env) provisioned(t *testing.T, org ids.OrgID, ctx context.Context, slug
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n, err := e.svc.ProvisionOrg(context.Background(), org); err != nil || n != 1 {
+	if n, err := e.svc.ProvisionOrg(ctx, org); err != nil || n != 1 {
 		t.Fatalf("provision: %d %v", n, err)
 	}
 	return h.ID
@@ -383,11 +383,11 @@ func TestTenancy_hosted_gateways(t *testing.T) {
 func (e *env) enrolledGateway(t *testing.T, host app.HostIdentity, org ids.OrgID, ctx context.Context, slug string) ca.Identity {
 	t.Helper()
 	hosted := e.provisioned(t, org, ctx, slug)
-	tok, err := e.svc.PullToken(context.Background(), host, org, hosted)
+	tok, err := e.svc.PullToken(ctx, host, org, hosted)
 	if err != nil {
 		t.Fatal(err)
 	}
-	enrolled, err := e.gws.Enroll(context.Background(), tok.Secret.Reveal(), csr(t))
+	enrolled, err := e.gws.Enroll(ctx, tok.Secret.Reveal(), csr(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +645,7 @@ func TestReportSetsTheTargetFromTheFleetPolicy(t *testing.T) {
 	}
 	report := func(version, want string) {
 		t.Helper()
-		if err := svc.Report(context.Background(), host, a, hosted, true, version); err != nil {
+		if err := svc.Report(actx, host, a, hosted, true, version); err != nil {
 			t.Fatal(err)
 		}
 		h, err := svc.Get(actx, hosted)

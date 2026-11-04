@@ -66,7 +66,7 @@ func TestM13_APIConformance(t *testing.T) {
 	defer cancel()
 	// No secret is an argument or file. Python also redacts any rotated
 	// session cookie before reporting a failed property check.
-	cmd := exec.CommandContext(runCtx, "uv", "run", "--locked", "--project", filepath.Join(root, "tools", "api"), "pytest", filepath.Join(root, "tools", "api", "test_api.py")) //nolint:gosec // Fixed executable and trusted repository script; no shell.
+	cmd := exec.CommandContext(runCtx, "uv", "run", "--locked", "--project", filepath.Join(root, "tools", "api"), "pytest", filepath.Join(root, "tools", "api", "test_api.py"))
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "PC_API_TEST_URL="+base, "PC_API_TEST_COOKIE="+secret.Reveal())
 	var out strings.Builder

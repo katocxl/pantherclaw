@@ -318,7 +318,7 @@ func TestHR307_PartitionsAndInheritance(t *testing.T) {
 		t.Fatalf("findings %v %v", findings, err)
 	}
 	if !p.Partitioned("shop.events") || p.Partitioned("shop.orders") {
-		t.Fatal("partitioned tables not recognised")
+		t.Fatal("partitioned tables not recognized")
 	}
 	m := p.Manifest()
 	for i := range m.Tables {

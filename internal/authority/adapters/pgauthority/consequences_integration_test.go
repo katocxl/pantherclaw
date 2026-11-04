@@ -71,7 +71,7 @@ func TestHR206_ConsequencesAreRecordedWithTheDecision(t *testing.T) {
 		var rows []dbq.ListDecisionConsequencesRow
 		if err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
 			var err error
-			rows, err = dbq.New(tx).ListDecisionConsequences(ctx, w.org, r.TransactionID, int32(r.Evaluation)) //nolint:gosec // 1
+			rows, err = dbq.New(tx).ListDecisionConsequences(ctx, w.org, r.TransactionID, int32(r.Evaluation))
 			return err
 		}); err != nil {
 			t.Fatal(err)

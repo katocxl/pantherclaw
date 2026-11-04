@@ -343,7 +343,7 @@ func TestD252_TheServerKeepsNamedPlainAttributes(t *testing.T) {
 	w := newWorld(t)
 	r, err := w.inv.SubmitScan(w.teamOwner(), "laptop", []app.ScanFinding{
 		{Kind: "mcp_server", Key: sha256.Sum256([]byte("m")), Attributes: map[string]string{
-			"name": "tickets", "client": "cursor", "args": "--token SEKRET", "command": "py\x1b[2Jthon", "config": "/x‮/y",
+			"name": "tickets", "client": "cursor", "args": "--token SEKRET", "command": "py\x1b[2Jthon", "config": "/x\u202e/y",
 		}},
 		{Kind: "agent_project", Key: sha256.Sum256([]byte("p")), Attributes: map[string]string{
 			"path": "~/p", "manifest": "go.mod", "readme": "SEKRET",

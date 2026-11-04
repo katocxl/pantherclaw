@@ -73,6 +73,7 @@ func TestT123_ConcurrentTriggersNeverOverrunTheHourlyCap(t *testing.T) {
 		if errs[i] != nil {
 			t.Fatalf("trigger %d: %v", i, errs[i])
 		}
+		//exhaustive:ignore // any other state fails the test
 		switch states[i] {
 		case StateAccepted:
 			accepted++

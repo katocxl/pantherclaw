@@ -21,9 +21,9 @@ import (
 // [SIMULATED]; one about a real connection does not.
 func TestHR222_NoticesFromSimulatedActivityAreLabeled(t *testing.T) {
 	e := newEnv(t)
-	gw, sim, real := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	gw, sim, realConn := ids.NewV7(), ids.NewV7(), ids.NewV7()
 	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gw)
-	for id, simulated := range map[ids.UUID]bool{sim: true, real: false} {
+	for id, simulated := range map[ids.UUID]bool{sim: true, realConn: false} {
 		e.exec(t, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, default_mode,
 			created_by, updated_by, simulated) VALUES ($1, $2, $3, 'http', $4, 'pc.mock-payments', 'http://127.0.0.1:9000',
 			'none', 'enforce', 'test', 'test', $5)`, e.org, id, "c-"+id.String()[24:], gw, simulated)
@@ -45,7 +45,7 @@ func TestHR222_NoticesFromSimulatedActivityAreLabeled(t *testing.T) {
 	})
 	e.enqueue(t, napp.Message{
 		Type: "security.effect_without_receipt", Params: params, DedupeKey: "real-subject",
-		Subject: &napp.Subject{Type: "connection", ID: real},
+		Subject: &napp.Subject{Type: "connection", ID: realConn},
 	})
 	e.enqueue(t, napp.Message{Type: "security.effect_without_receipt", Params: params, DedupeKey: "plain"})
 	for key, want := range map[string]bool{"marked": true, "sim-subject": true, "real-subject": false, "plain": false} {

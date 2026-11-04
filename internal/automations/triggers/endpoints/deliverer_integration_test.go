@@ -317,7 +317,7 @@ func TestDeliverer_RotationOverlapSignsWithBoth(t *testing.T) {
 }
 
 // TestDeliverer_CancelStopsOnlyPendingDeliveries (D89): a pending
-// delivery is cancelled (FAILED, "cancelled", body dropped) and never
+// delivery is canceled (FAILED with CancelCode, body dropped) and never
 // sent; a delivered one stays as it is.
 func TestDeliverer_CancelStopsOnlyPendingDeliveries(t *testing.T) {
 	f := newFixture(t)
@@ -335,11 +335,11 @@ func TestDeliverer_CancelStopsOnlyPendingDeliveries(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := f.status(t, pending)
-	if st.State != autodomain.DeliveryFailed || st.LastError != "cancelled" {
-		t.Fatalf("cancelled: %+v", st)
+	if st.State != autodomain.DeliveryFailed || st.LastError != CancelCode {
+		t.Fatalf("canceled: %+v", st)
 	}
 	if n, _ := f.svc.SendDue(context.Background(), f.Org); n != 0 || len(f.recv.bodies) != 0 {
-		t.Fatal("a cancelled delivery was sent")
+		t.Fatal("a canceled delivery was sent")
 	}
 	if err := cancel(pending); !errors.Is(err, ErrDeliveryNotPending) {
 		t.Fatalf("second cancel: %v", err)

@@ -40509,6 +40509,31 @@
         "title": "RequestedEntry",
         "additionalProperties": false
       },
+      "pantherclaw.v1.CredentialUsed": {
+        "type": "object",
+        "properties": {
+          "credentialId": {
+            "type": "string",
+            "title": "credential_id",
+            "format": "uuid",
+            "description": "The credential's id."
+          },
+          "version": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+            "title": "version",
+            "format": "int32",
+            "description": "Its version."
+          }
+        },
+        "title": "CredentialUsed",
+        "additionalProperties": false,
+        "description": "CredentialUsed names a sealed credential by id and version, never its\n value (HR-660).",
+        "required": [
+          "credentialId",
+          "version"
+        ]
+      },
       "pantherclaw.v1.DataScopeApplied": {
         "type": "object",
         "properties": {
@@ -41192,6 +41217,18 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.ContentScan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "credentialUsed": {
+            "title": "credential_used",
+            "description": "The credential of the permit's connection, when the gateway opened it\n for this dispatch, or opened the pool this dispatch reused, an App key\n it minted with included (HR-660); unset otherwise. A connector's egress credential is not named. The Authority\n accepts it only when it is a version of the permit's connection's\n credential, and then names it on the receipt.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.CredentialUsed"
               },
               {
                 "type": "null"
@@ -67242,6 +67279,22 @@
                 "maxLength": 0
               }
             ]
+          },
+          "transactionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "transaction_id",
+            "description": "The transaction whose own call-time check found the drift; empty from\n the periodic check. The server takes the run from its own transaction\n row of this connection, never from the gateway, and processes the\n report without a run when there is no such row (HR-665).",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "ReportDriftRequest",
@@ -68217,7 +68270,9 @@
           "PRINCIPAL_SOURCE_UNSPECIFIED",
           "PRINCIPAL_SOURCE_LAUNCHER",
           "PRINCIPAL_SOURCE_SUBJECT_TOKEN",
-          "PRINCIPAL_SOURCE_PARENT_RUN"
+          "PRINCIPAL_SOURCE_PARENT_RUN",
+          "PRINCIPAL_SOURCE_ID_JAG",
+          "PRINCIPAL_SOURCE_AUTOMATION"
         ],
         "description": "PrincipalSource says how the represented principal was established."
       },
@@ -68541,6 +68596,14 @@
             "type": "string",
             "title": "grant_id",
             "description": "The grant whose authority the run uses; empty for a run without one,\n whose actions are denied (NO_GRANT)."
+          },
+          "scopeOperations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "scope_operations",
+            "description": "The operations the run is narrowed to within its grant (G0 M26 D400);\n empty for the whole grant."
           }
         },
         "title": "Run",

@@ -19,7 +19,7 @@ import (
 func runOkta(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("okta", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9101", "listen address (loopback)")
+	addr := fs.String("addr", defaultAddrs["okta"], "listen address (loopback)")
 	base := fs.String("base-url", "", "issuer identifier (default http://ADDR)")
 	expired := fs.Bool("expired", false, "issue assertions that already expired")
 	wrongAud := fs.Bool("wrong-audience", false, "address assertions to another authorization server")

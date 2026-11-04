@@ -59,7 +59,7 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [saas-discovery.md](saas-discovery.md) | M26 | List agents from Copilot Studio and ChatGPT Enterprise (Business): import, gateway scan, not scanned, owners |
 | [behavior-profiles.md](behavior-profiles.md) | M27 | Behaviour profiles and approval context (Business), alert `basis`, and why a contain step runs only on a CONFIRMED alert |
 | [content-signals.md](content-signals.md) | M27 | Opt-in, restrict-only content signals (Business): modes, what is and is not scanned, the out-of-process classifier, what a flag holds |
-| [response-playbooks.md](response-playbooks.md) | M27 | The six Hub response playbooks (Team): install as a draft, why none contains, what a person does |
+| [response-playbooks.md](response-playbooks.md) | M27 | The six Hub response playbooks (Team) and the two containment playbooks (Business): install as a draft, why the six contain nothing, what a person does |
 | [siem-packs.md](siem-packs.md) | M27 | SIEM content packs for Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma: ingest, what was not checked, acting on exported alerts |
 | [pclaw-mcp-self.md](pclaw-mcp-self.md) | M27 | `pclaw mcp self`: a read-only MCP server for a SOC agent, the Investigator role and the server's audit of each read (Team) |
 | [siem-forwarder.md](siem-forwarder.md) | M27 | `pclaw siem forward`: verify SIEM export batches and write one OCSF event per line for Sentinel's Azure Monitor Agent or Wazuh (Business) |

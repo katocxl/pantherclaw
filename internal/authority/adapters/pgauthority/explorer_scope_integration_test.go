@@ -93,7 +93,7 @@ func pages[T any](t *testing.T, size int, list func(page.Request) ([]T, string, 
 			t.Fatalf("a page of %d with a next token, want %d: the page was cut before hidden rows were filtered", len(items), size)
 		}
 		var err2 error
-		if pr, err2 = page.Parse(int32(size), next); err2 != nil { //nolint:gosec // small
+		if pr, err2 = page.Parse(int32(size), next); err2 != nil {
 			t.Fatal(err2)
 		}
 	}

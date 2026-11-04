@@ -34,9 +34,11 @@ var apbEventKeys = []string{
 	"retry_after_seconds",
 }
 
-// apbAnswer reads and closes a response: its status and body.
-func apbAnswer(t *testing.T, resp *http.Response) string {
+// apbAnswer is x's wait stream on handle, read and closed: its status and
+// body.
+func apbAnswer(t *testing.T, s *stack, x waiter, handle ids.UUID) string {
 	t.Helper()
+	resp := s.wait(t, x, handle)
 	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -88,12 +90,12 @@ func TestT060_AnotherRunsHandleAnswersNotFoundAndLeaksNothing(t *testing.T) {
 	foreignRun := apbRunOf(t, s, other.org, foreignTxn)
 	unknown := ids.NewV7()
 
-	want := apbAnswer(t, s.wait(t, sibling, unknown))
+	want := apbAnswer(t, s, sibling, unknown)
 	if !strings.HasPrefix(want, "404 ") {
 		t.Fatalf("an unknown handle: %s", want)
 	}
 	for name, x := range map[string]waiter{"another run": sibling, "another org": foreign} {
-		if got := apbAnswer(t, s.wait(t, x, txn)); got != want {
+		if got := apbAnswer(t, s, x, txn); got != want {
 			t.Errorf("%s streaming the handle: %q, want %q", name, got, want)
 		}
 	}
@@ -141,8 +143,8 @@ func TestT060_AnotherRunsHandleAnswersNotFoundAndLeaksNothing(t *testing.T) {
 	if v := next(t, r); v["state"] != "PENDING" {
 		t.Fatalf("first event %v", v)
 	}
-	busy := apbAnswer(t, s.wait(t, sibling, txn))
-	if !strings.HasPrefix(busy, "429 ") || busy != apbAnswer(t, s.wait(t, sibling, unknown)) {
+	busy := apbAnswer(t, s, sibling, txn)
+	if !strings.HasPrefix(busy, "429 ") || busy != apbAnswer(t, s, sibling, unknown) {
 		t.Fatalf("beyond the sibling's cap: %q", busy)
 	}
 

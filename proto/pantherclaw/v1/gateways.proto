@@ -768,6 +768,14 @@ message ReportDriftRequest {
   bool observed_description_truncated = 6;
   // SHA-256 of the whole observed description, "sha256:<hex>".
   string observed_description_sha256 = 7 [(buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64})?$"];
+  // The transaction whose own call-time check found the drift; empty from
+  // the periodic check. The server takes the run from its own transaction
+  // row of this connection, never from the gateway, and processes the
+  // report without a run when there is no such row (HR-665).
+  string transaction_id = 8 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
 // ReportDriftResponse says what the server did.

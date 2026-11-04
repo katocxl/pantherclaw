@@ -117,7 +117,6 @@ func TestT070_AStolenLeaseIsWorthlessToAnotherOrgsGateway(t *testing.T) {
 // (HR-191, F484, F498).
 func TestT071_ALaterConfirmationDoesNotCollapseAConflict(t *testing.T) {
 	w := newWorld(t)
-	ctx := context.Background()
 	w.auth.PermitTTL = time.Hour
 	w.refundable("ch_1")
 	s := w.verifier()
@@ -125,7 +124,7 @@ func TestT071_ALaterConfirmationDoesNotCollapseAConflict(t *testing.T) {
 	report := func(amount string) txapp.Applied {
 		t.Helper()
 		l := w.lease(s, r.TransactionID)
-		a, err := s.Report(ctx, w.org, w.gwID, txapp.Report{
+		a, err := s.Report(t.Context(), w.org, w.gwID, txapp.Report{
 			Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: refundOf("ch_1", "succeeded", amount),
 		})
 		if err != nil {

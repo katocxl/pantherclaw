@@ -61,18 +61,20 @@ func (s *busyCounting) Finalize(ctx context.Context, org ids.OrgID, w finalize.W
 // for a lock, the moment its lock timeout starts.
 func (w *world) waitBudgetLock() error {
 	w.t.Helper()
-	var err error
+	err := errors.New("no statement waited for a budget row")
 	w.db.AdminDo(w.t, func(conn *pgx.Conn) error {
 		ctx := context.Background()
 		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
 			var waiting int
-			if err = conn.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()
-				AND wait_event_type = 'Lock' AND query LIKE '%budget_accounts%'`).Scan(&waiting); err != nil || waiting > 0 {
-				return nil
+			qerr := conn.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()
+				AND wait_event_type = 'Lock' AND query LIKE '%budget_accounts%'`).Scan(&waiting)
+			if qerr != nil || waiting > 0 {
+				err = qerr
+				break
 			}
 			time.Sleep(2 * time.Millisecond)
 		}
-		err = errors.New("no statement waited for a budget row")
+		// The result goes to waitBudgetLock's caller, which reports it.
 		return nil
 	})
 	return err
@@ -107,7 +109,7 @@ func TestT219_RacingFirstOfPeriodRefundsNeverOverspend(t *testing.T) {
 	done := make(chan answer, 1)
 	go func() {
 		start := time.Now()
-		res, err := w.auth.Authorize(ctx, w.gw, w.request(held, ids.NewV7(), "ch_held2", "5.00"))
+		res, err := w.auth.Authorize(t.Context(), w.gw, w.request(held, ids.NewV7(), "ch_held2", "5.00"))
 		done <- answer{res, err, time.Since(start)}
 	}()
 	waited := w.waitBudgetLock()

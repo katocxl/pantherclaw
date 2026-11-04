@@ -62,7 +62,7 @@ func (f *fixture) audited(t *testing.T, name string) int {
 func (f *fixture) chained(t *testing.T) uint64 {
 	t.Helper()
 	f.grow(t, 0)
-	return uint64(f.count(t, "SELECT count(*) FROM pc.ledger_chain")) //nolint:gosec // G115: a count
+	return uint64(f.count(t, "SELECT count(*) FROM pc.ledger_chain"))
 }
 
 // failAt edits the chained entry at seq and lets the checkpoint job find
@@ -154,7 +154,6 @@ func TestHR194_AResetOrgIsCheckpointedAgain(t *testing.T) {
 // altered under a checkpoint, which the checkpoint job does not read, fails
 // the daily verification, which the reset made due again at once.
 func TestHR194_AResetOrgWithBrokenEvidenceFailsAgain(t *testing.T) {
-	ctx := context.Background()
 	failedAgain := func(t *testing.T, f *fixture, err error, code string) {
 		t.Helper()
 		var ie *checkpoints.IntegrityError
@@ -183,6 +182,7 @@ func TestHR194_AResetOrgWithBrokenEvidenceFailsAgain(t *testing.T) {
 	}
 
 	t.Run("edited entry", func(t *testing.T) {
+		ctx := t.Context()
 		f := newFixture(t)
 		f.grow(t, 10)
 		f.checkpoint(t)
@@ -202,6 +202,7 @@ func TestHR194_AResetOrgWithBrokenEvidenceFailsAgain(t *testing.T) {
 		}
 	})
 	t.Run("altered tile", func(t *testing.T) {
+		ctx := t.Context()
 		f := newFixture(t)
 		f.grow(t, 300)
 		f.checkpoint(t)
@@ -233,12 +234,12 @@ func TestHR194_AResetOrgWithBrokenEvidenceFailsAgain(t *testing.T) {
 // status row, or with an OK one, is left as it is; nothing is audited or
 // notified. Unknown orgs and bad reasons are refused.
 func TestHR194_AResetOfAnOrgThatDidNotFailChangesNothing(t *testing.T) {
-	ctx := context.Background()
 	f := newFixture(t)
 	f.grow(t, 5)
 	f.checkpoint(t)
 	unchanged := func(t *testing.T, want integrityRow, wantRow bool) {
 		t.Helper()
+		ctx := t.Context()
 		cleared, done, err := f.svc.Reset(ctx, f.org, operator, "nothing to see")
 		if err != nil || done || cleared != (checkpoints.Cleared{}) {
 			t.Fatalf("reset = %+v, %t, %v", cleared, done, err)
@@ -252,6 +253,7 @@ func TestHR194_AResetOfAnOrgThatDidNotFailChangesNothing(t *testing.T) {
 		}
 	}
 	t.Run("no status", func(t *testing.T) {
+		ctx := t.Context()
 		if _, done, err := f.svc.Reset(ctx, f.org, operator, "nothing to see"); err != nil || done {
 			t.Fatalf("reset = %t, %v", done, err)
 		}
@@ -263,6 +265,7 @@ func TestHR194_AResetOfAnOrgThatDidNotFailChangesNothing(t *testing.T) {
 		}
 	})
 	t.Run("OK", func(t *testing.T) {
+		ctx := t.Context()
 		if _, err := f.svc.Verify(ctx, f.org); err != nil {
 			t.Fatal(err)
 		}
@@ -273,6 +276,7 @@ func TestHR194_AResetOfAnOrgThatDidNotFailChangesNothing(t *testing.T) {
 		unchanged(t, before, true)
 	})
 	t.Run("refused", func(t *testing.T) {
+		ctx := t.Context()
 		before, _ := f.integrityOf(t)
 		for _, r := range []string{
 			"", "   ", "line\nbreak", "bidi " + string(rune(0x202e)), strings.Repeat("a", checkpoints.MaxResetReason+1), "\xff",
