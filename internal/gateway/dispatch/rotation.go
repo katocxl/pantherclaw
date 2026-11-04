@@ -84,7 +84,7 @@ func (e *Engine) ProbeRotation(ctx context.Context, conn *control.Connection, l 
 		if cur := conn.Credential; cur == nil || req.Active == "" || cur.GetId() != req.Active || cur.GetKind() != credentials.KindGitHubApp {
 			return Observation{}, fmt.Errorf("%w: the active credential is not the rotation's new key", ErrRotationLease)
 		}
-		active, err := e.openApp(conn)
+		active, err := e.openApp(ctx, conn)
 		if err != nil {
 			return Observation{}, err
 		}

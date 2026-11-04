@@ -538,6 +538,8 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if scopeCode != "" {
 		return r.fail(EnforcementFailed, scopeCode)
 	}
+	// From here on, what the dispatch opens is named on its receipt (HR-660).
+	ctx = withCredentialUse(ctx, conn)
 	if cooperative(c) {
 		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
@@ -1095,17 +1097,20 @@ func (e *Engine) openStatic(ctx context.Context, conn *control.Connection) ([]by
 	if cs, ok := ctx.Value(callSecretKey{}).(*callSecret); ok && cs.conn == conn.GetId() {
 		// The call has opened it already (the outbound check): decrypt once,
 		// hand each caller its own copy to clear.
-		cs.once.Do(func() { cs.b, cs.err = e.openStaticUncached(conn) })
+		cs.once.Do(func() { cs.b, cs.err = e.openStaticUncached(ctx, conn) })
+		if cs.err == nil {
+			usedCredential(ctx, conn) // opened before the dispatch, used by it
+		}
 		return slices.Clone(cs.b), cs.err
 	}
-	return e.openStaticUncached(conn)
+	return e.openStaticUncached(ctx, conn)
 }
 
-func (e *Engine) openStaticUncached(conn *control.Connection) ([]byte, error) {
+func (e *Engine) openStaticUncached(ctx context.Context, conn *control.Connection) ([]byte, error) {
 	if k := conn.Credential.GetKind(); k != "" && k != credentials.KindStatic {
 		return nil, errKind
 	}
-	return e.openCredential(conn)
+	return e.openCredential(ctx, conn)
 }
 
 // callSecretKey carries a call's callSecret in its context.
@@ -1125,8 +1130,9 @@ type callSecret struct {
 func (cs *callSecret) clear() { clear(cs.b) }
 
 // openCredential opens the connection's sealed credential; the caller
-// clears it.
-func (e *Engine) openCredential(conn *control.Connection) ([]byte, error) {
+// clears it. Inside a dispatch, the dispatch's receipt will name it
+// (HR-660).
+func (e *Engine) openCredential(ctx context.Context, conn *control.Connection) ([]byte, error) {
 	cred := conn.Credential
 	if cred == nil {
 		return nil, errors.New("the connection has no active credential")
@@ -1134,10 +1140,71 @@ func (e *Engine) openCredential(conn *control.Connection) ([]byte, error) {
 	if e.broker == nil {
 		return nil, broker.ErrNoBroker
 	}
-	return e.broker.Open(e.org, conn.GetId(), cred.GetAllowedHosts(), broker.Sealed{
+	plain, err := e.broker.Open(e.org, conn.GetId(), cred.GetAllowedHosts(), broker.Sealed{
 		Version: cred.GetVersion(), BrokerKey: cred.GetBrokerKeyId(), Blob: cred.GetSealed(), Header: cred.GetHeader(), Scheme: cred.GetScheme(),
 		Kind: cred.GetKind(),
 	})
+	if err == nil {
+		usedCredential(ctx, conn)
+	}
+	return plain, err
+}
+
+// credentialUseKey carries a dispatch's credentialUse in its context.
+type credentialUseKey struct{}
+
+// credentialUse is the sealed credential of the dispatch's own connection,
+// when the gateway opened it for this dispatch, or opened the pool this
+// dispatch reused (HR-660): by id and version, never its value. Opens of
+// another connection's credential are not its own and are not kept.
+type credentialUse struct {
+	conn    string
+	mu      sync.Mutex
+	id      string
+	version int32
+}
+
+// withCredentialUse starts noting what the dispatch on conn opens.
+func withCredentialUse(ctx context.Context, conn *control.Connection) context.Context {
+	return context.WithValue(ctx, credentialUseKey{}, &credentialUse{conn: conn.GetId()})
+}
+
+// usedCredential notes that the dispatch in ctx opened conn's sealed
+// credential; outside a dispatch it does nothing.
+func usedCredential(ctx context.Context, conn *control.Connection) {
+	if conn.Credential == nil {
+		return
+	}
+	usedCredentialVersion(ctx, conn.GetId(), conn.Credential.GetId(), conn.Credential.GetVersion())
+}
+
+// usedCredentialVersion notes that the dispatch in ctx used version of
+// credential id of connection conn, such as the credential a pool it
+// reuses was opened with; outside a dispatch on conn it does nothing.
+func usedCredentialVersion(ctx context.Context, conn, id string, version int32) {
+	u, ok := ctx.Value(credentialUseKey{}).(*credentialUse)
+	if !ok || u.conn != conn || id == "" {
+		return
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.id, u.version = id, version
+}
+
+// credentialUsed is the credential the gateway opened for the dispatch in
+// ctx, or opened the pool this dispatch reused, for its record; nil when
+// there is none.
+func credentialUsed(ctx context.Context) *pb.CredentialUsed {
+	u, ok := ctx.Value(credentialUseKey{}).(*credentialUse)
+	if !ok {
+		return nil
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.id == "" {
+		return nil
+	}
+	return &pb.CredentialUsed{CredentialId: u.id, Version: u.version}
 }
 
 // placeCredential places an opened static credential on req, for the
@@ -1189,6 +1256,7 @@ func (e *Engine) record(ctx context.Context, r Result, want permitWant, outcome 
 		DispatchMs: int32(min(elapsed.Milliseconds(), 600000)), //nolint:gosec // G115: clamped
 	}
 	req.ContentFindings, req.ContentScan = e.resultContent(ctx, r) // G0 M27 D507, D533
+	req.CredentialUsed = credentialUsed(ctx)                       // HR-660
 	for _, f := range extra {
 		f(req)
 	}

@@ -604,6 +604,11 @@ var (
 	// dispatches (HR-186).
 	ErrNotCooperative = pcerr.New(pcerr.FailedPrecondition, "OUTCOME_NOT_DELEGABLE",
 		"only a cooperative channel (hook, sdk, authzen) reports delegated")
+	// ErrCredentialNotOfConnection refuses a reported credential that is no
+	// version of the permit's connection's credential, or one reported for
+	// a permit without a connection (HR-660).
+	ErrCredentialNotOfConnection = pcerr.New(pcerr.InvalidArgument, "CREDENTIAL_NOT_OF_CONNECTION",
+		"the credential is not a version of the permit's connection's credential")
 )
 
 // Delegable reports whether a transaction on channel, through a connection
