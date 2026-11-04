@@ -108,7 +108,9 @@ func (p ParamSpec) validate(name string) error {
 		return invalid("%s: max_bytes must be 0..%d", name, MaxDisclosureBytes)
 	case p.MaxEntropy != "" && !validEntropy(p.MaxEntropy):
 		return invalid("%s: max_entropy must be a decimal above 0 and at most 8 bits per byte", name)
-	case (p.MaxItems != 0) != (p.Type == TypeIdentifierList) || p.MaxItems < 0 || p.MaxItems > maxListItems:
+	case p.Type == TypeFloatArray && (p.MaxItems < 1 || p.MaxItems > MaxFloatItems):
+		return invalid("%s: float_array params need max_items 1..%d (G0 M30 D927)", name, MaxFloatItems)
+	case p.Type != TypeFloatArray && ((p.MaxItems != 0) != (p.Type == TypeIdentifierList) || p.MaxItems < 0 || p.MaxItems > maxListItems):
 		return invalid("%s: identifier_list params need max_items 1..%d; other types take none", name, maxListItems)
 	}
 	switch p.Type {
@@ -132,7 +134,7 @@ func (p ParamSpec) validate(name string) error {
 		if p.MaxLength > actionir.MaxPath {
 			return invalid("%s: max_length of a path is at most %d", name, actionir.MaxPath)
 		}
-	case TypeDecimal, TypeInteger, TypeBoolean, TypeText, TypeCommand, TypeContent:
+	case TypeDecimal, TypeInteger, TypeBoolean, TypeText, TypeCommand, TypeContent, TypeFloatArray:
 	case TypeQueryFilter:
 		if p.MaxLength != 0 {
 			return invalid("%s: a query filter's limits are fixed (G0 M14 D9)", name)

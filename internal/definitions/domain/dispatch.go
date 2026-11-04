@@ -208,6 +208,8 @@ func (d *Definition) reference(at, ref string, where place) error {
 		return invalid("%s: untrusted text %q is never sent from a template", at, name)
 	case p.Type == TypeQueryFilter:
 		return invalid("%s: query filter %q is applied by the gateway, never sent from a template", at, name)
+	case p.Type == TypeFloatArray:
+		return invalid("%s: float array %q is bound by the gateway, never sent from a template", at, name)
 	case p.Type == TypeMoney && part != "value" && part != "currency" && part != "minor":
 		return invalid("%s: money %q is sent as params.%s.value, .currency or .minor", at, name, name)
 	case p.Type != TypeMoney && part != "":
@@ -323,7 +325,11 @@ func (d *Definition) validateDispatch() error {
 			return err
 		}
 	}
-	if s := x.SQL; s != nil {
+	if s := x.SQL; s != nil && slices.Contains(VectorOperations, s.Operation) {
+		if err := d.validateVectorDispatch(at, s.Operation); err != nil {
+			return err
+		}
+	} else if s != nil {
 		if !slices.Contains(SQLOperations, s.Operation) || d.Access != AccessRead {
 			return invalid("%s.sql: a read with operation one of %v", at, SQLOperations)
 		}

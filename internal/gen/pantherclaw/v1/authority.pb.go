@@ -1038,8 +1038,12 @@ type ContentFinding struct {
 	// pii_national_id, classifier_flag or scan_incomplete.
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Where, such as result/content/0/text; for scan_incomplete, over_bound,
-	// classifier_unavailable or builtin_failed.
-	Location      string `protobuf:"bytes,2,opt,name=location,proto3" json:"location,omitempty"`
+	// classifier_unavailable, builtin_failed or decode_bound.
+	Location string `protobuf:"bytes,2,opt,name=location,proto3" json:"location,omitempty"`
+	// The decoding layers a hit was found through, joined by "+" in
+	// application order (base64, hex, url, escape, entity, confusable,
+	// zero_width); empty for a plain hit (G0 M30 D921).
+	Encoding      string `protobuf:"bytes,3,opt,name=encoding,proto3" json:"encoding,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1084,6 +1088,13 @@ func (x *ContentFinding) GetKind() string {
 func (x *ContentFinding) GetLocation() string {
 	if x != nil {
 		return x.Location
+	}
+	return ""
+}
+
+func (x *ContentFinding) GetEncoding() string {
+	if x != nil {
+		return x.Encoding
 	}
 	return ""
 }
@@ -3774,10 +3785,11 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\bworkload\x18\x02 \x01(\v2#.pantherclaw.v1.WorkloadCredentialsR\bworkload\x12S\n" +
 	"\x10payload_findings\x18\x03 \x03(\v2\x1e.pantherclaw.v1.PayloadFindingB\b\xbaH\x05\x92\x01\x02\x10\x10R\x0fpayloadFindings\x12S\n" +
 	"\x10content_findings\x18\x04 \x03(\v2\x1e.pantherclaw.v1.ContentFindingB\b\xbaH\x05\x92\x01\x02\x10\x10R\x0fcontentFindings\x12>\n" +
-	"\fcontent_scan\x18\x05 \x01(\x0e2\x1b.pantherclaw.v1.ContentScanR\vcontentScan\"n\n" +
+	"\fcontent_scan\x18\x05 \x01(\x0e2\x1b.pantherclaw.v1.ContentScanR\vcontentScan\"\xa2\x01\n" +
 	"\x0eContentFinding\x12)\n" +
 	"\x04kind\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^[a-z_]{1,32}$R\x04kind\x121\n" +
-	"\blocation\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[!-~]{1,128}$R\blocation\"U\n" +
+	"\blocation\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[!-~]{1,128}$R\blocation\x122\n" +
+	"\bencoding\x18\x03 \x01(\tB\x16\xbaH\x13r\x112\x0f^[a-z_+]{0,64}$R\bencoding\"U\n" +
 	"\x0ePayloadFinding\x12\x1d\n" +
 	"\x04kind\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18 R\x04kind\x12$\n" +
 	"\blocation\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\blocation\"\xea\x06\n" +

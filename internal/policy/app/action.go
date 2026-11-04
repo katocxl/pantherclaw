@@ -42,9 +42,10 @@ func celType(t defs.ParamType) *types.Type {
 		return cel.ListType(cel.StringType)
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return cel.StringType
-	case defs.TypeText, defs.TypeQueryFilter:
-		// Never visible to policy: untrusted prose, and a query filter
-		// (its columns are bounded by identifier_list params, G0 M14 D9).
+	case defs.TypeText, defs.TypeQueryFilter, defs.TypeFloatArray:
+		// Never visible to policy: untrusted prose, a query filter (its
+		// columns are bounded by identifier_list params, G0 M14 D9) and a
+		// float array (G0 M30 D927).
 	}
 	return nil
 }
@@ -156,7 +157,7 @@ func value(v defs.Value) ref.Val {
 		return types.NewStringList(types.DefaultTypeAdapter, v.List)
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return types.String(v.Str)
-	case defs.TypeText, defs.TypeQueryFilter:
+	case defs.TypeText, defs.TypeQueryFilter, defs.TypeFloatArray:
 	}
 	return nil
 }

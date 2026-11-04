@@ -829,7 +829,7 @@ func elicitValue(v defs.Value) any {
 	case defs.TypeBoolean:
 		return v.Bool
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeContent, defs.TypeMoney, defs.TypeIdentifierList, defs.TypeText, defs.TypeCommand,
-		defs.TypePath, defs.TypeQueryFilter:
+		defs.TypePath, defs.TypeQueryFilter, defs.TypeFloatArray:
 	}
 	return v.Str
 }

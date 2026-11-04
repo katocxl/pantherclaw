@@ -40694,7 +40694,23 @@
             "type": "string",
             "title": "location",
             "pattern": "^[!-~]{1,128}$",
-            "description": "Where, such as result/content/0/text; for scan_incomplete, over_bound,\n classifier_unavailable or builtin_failed."
+            "description": "Where, such as result/content/0/text; for scan_incomplete, over_bound,\n classifier_unavailable, builtin_failed or decode_bound."
+          },
+          "encoding": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "encoding",
+            "description": "The decoding layers a hit was found through, joined by \"+\" in\n application order (base64, hex, url, escape, entity, confusable,\n zero_width); empty for a plain hit (G0 M30 D921).",
+            "anyOf": [
+              {
+                "pattern": "^[a-z_+]{0,64}$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "ContentFinding",
