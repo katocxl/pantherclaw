@@ -60,6 +60,9 @@ func Decode(raw []byte) (*domain.Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := draftNotReviewed(doc); err != nil {
+		return nil, err
+	}
 	var p domain.Package
 	if err := json.Unmarshal(doc, &p, json.RejectUnknownMembers(true)); err != nil {
 		return nil, invalid("%v", err)
@@ -78,6 +81,29 @@ func Decode(raw []byte) (*domain.Package, error) {
 	// Each declared elicitation field becomes a material param (G0 M15 D32).
 	p.ExpandElicitation()
 	return &p, nil
+}
+
+// ReviewRequiredKey is the first key of a drafted package (G0 M31 D953,
+// HR-720): the reasons a person must review it. A person removes it once
+// the draft is reviewed, then signs the package with an org key.
+const ReviewRequiredKey = "review_required"
+
+// ErrDraftNotReviewed reports a drafted package that still carries
+// review_required: it is never decoded, so it can neither be signed into
+// use nor imported (DRAFT_NOT_REVIEWED).
+var ErrDraftNotReviewed = fmt.Errorf("%w: DRAFT_NOT_REVIEWED: the package is a draft that still lists %s; "+
+	"review every item, remove the key, then sign it with an org package key", ErrInvalid, ReviewRequiredKey)
+
+// draftNotReviewed refuses a package whose top level has review_required.
+func draftNotReviewed(doc []byte) error {
+	var top map[string]jsontext.Value
+	if err := json.Unmarshal(doc, &top); err != nil {
+		return invalid("%v", err)
+	}
+	if _, ok := top[ReviewRequiredKey]; ok {
+		return ErrDraftNotReviewed
+	}
+	return nil
 }
 
 // Canonical returns the RFC 8785 canonical JSON form of a package file.

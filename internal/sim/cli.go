@@ -55,6 +55,7 @@ Usage:
   pantherclaw-sim a2a [--addr 127.0.0.1:9093] [--base-url URL] [--name NAME] [--token-file FILE] [--sign-key FILE [--jwks-out FILE]]
                       [--latency 0s] [--complete-after 0s] [--stream-delay 0s] [--oversize 0] [--auth-required] [--fail] [--description TEXT]
                       [--require-peer-tokens --jwks-url URL --audience URL]
+  pantherclaw-sim openapi --spec FILE [--addr 127.0.0.1:9112]
   pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
   pantherclaw-sim version
 `
@@ -77,6 +78,7 @@ var defaultAddrs = map[string]string{
 	"okta":               "127.0.0.1:9101",
 	"chatgpt-enterprise": "127.0.0.1:9102",
 	"model":              "127.0.0.1:9103",
+	"openapi":            "127.0.0.1:9112", // G0 M31 D954
 	"canary":             "127.0.0.1:18433",
 }
 
@@ -121,6 +123,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	case "a2a":
 		err = runA2A(ctx, args[1:], stderr)
+	case "openapi":
+		err = runOpenAPI(ctx, args[1:], stderr)
 	case "canary":
 		err = runCanary(ctx, args[1:], stderr)
 	default:
