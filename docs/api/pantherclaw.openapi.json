@@ -23337,6 +23337,168 @@
         }
       }
     },
+    "/pantherclaw.v1.OwnedAccountService/ListOwnedAccounts": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "ListOwnedAccounts",
+        "description": "ListOwnedAccounts lists the org's owned accounts.\n permission: org.owned_accounts.read",
+        "operationId": "pantherclaw.v1.OwnedAccountService.ListOwnedAccounts",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListOwnedAccountsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListOwnedAccountsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.OwnedAccountService/AddOwnedAccount": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "AddOwnedAccount",
+        "description": "AddOwnedAccount files the protected change that adds an account (a\n person). Nothing changes until a second person confirms it.\n permission: org.owned_accounts.manage",
+        "operationId": "pantherclaw.v1.OwnedAccountService.AddOwnedAccount",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AddOwnedAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AddOwnedAccountResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.OwnedAccountService/RemoveOwnedAccount": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "RemoveOwnedAccount",
+        "description": "RemoveOwnedAccount removes an account at once (a person): shares to it\n hold again.\n permission: org.owned_accounts.manage",
+        "operationId": "pantherclaw.v1.OwnedAccountService.RemoveOwnedAccount",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveOwnedAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveOwnedAccountResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.PackageService/ImportPackage": {
       "post": {
         "tags": [
@@ -83007,6 +83169,133 @@
         "additionalProperties": false,
         "description": "OutcomeUnmeasured is why some cases were not measured."
       },
+      "pantherclaw.v1.AddOwnedAccountRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "aws_account",
+              "github_org",
+              "email_domain",
+              "gcp_project",
+              "azure_tenant"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "title": "value",
+            "maxLength": 253,
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "AddOwnedAccountRequest",
+        "additionalProperties": false,
+        "description": "AddOwnedAccountRequest names an account to add.",
+        "required": [
+          "kind",
+          "value",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.AddOwnedAccountResponse": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id"
+          }
+        },
+        "title": "AddOwnedAccountResponse",
+        "additionalProperties": false,
+        "description": "AddOwnedAccountResponse names the protected change filed."
+      },
+      "pantherclaw.v1.ListOwnedAccountsRequest": {
+        "type": "object",
+        "title": "ListOwnedAccountsRequest",
+        "additionalProperties": false,
+        "description": "ListOwnedAccountsRequest asks for the list."
+      },
+      "pantherclaw.v1.ListOwnedAccountsResponse": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.OwnedAccount"
+            },
+            "title": "accounts"
+          }
+        },
+        "title": "ListOwnedAccountsResponse",
+        "additionalProperties": false,
+        "description": "ListOwnedAccountsResponse is the list, by kind and value."
+      },
+      "pantherclaw.v1.OwnedAccount": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "aws_account, github_org, email_domain, gcp_project or azure_tenant."
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          },
+          "addedBy": {
+            "type": "string",
+            "title": "added_by"
+          },
+          "addTime": {
+            "title": "add_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "OwnedAccount",
+        "additionalProperties": false,
+        "description": "OwnedAccount is one account the org named as its own."
+      },
+      "pantherclaw.v1.RemoveOwnedAccountRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "RemoveOwnedAccountRequest",
+        "additionalProperties": false,
+        "description": "RemoveOwnedAccountRequest names an account to remove.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RemoveOwnedAccountResponse": {
+        "type": "object",
+        "title": "RemoveOwnedAccountResponse",
+        "additionalProperties": false,
+        "description": "RemoveOwnedAccountResponse is empty."
+      },
       "pantherclaw.v1.PackageState": {
         "type": "string",
         "title": "PackageState",
@@ -103127,6 +103416,10 @@
     {
       "name": "pantherclaw.v1.OutcomeService",
       "description": "OutcomeService reads the outcome metrics (G0 M21 D303, F774; HR-537..540;\n Business). Each metric is a distribution of durations or a share, with the\n cases it measured and the cases it could not, never a raw volume presented\n as value. A window without a measured case is NOT_COLLECTED, never 0.\n Every metric states its scope and as-of time, and its definition stays a\n draft until the founder signs it off."
+    },
+    {
+      "name": "pantherclaw.v1.OwnedAccountService",
+      "description": "OwnedAccountService is the org's list of its own cloud accounts, GitHub\n organizations, email domains, GCP projects and Azure tenants (G0 M30 D933,\n D935; HR-707, HR-708).\n\n An action that shares to an account not on the list holds for a person\n (SHARE_ACCOUNT_NOT_OWNED), and an empty list holds every cross-account\n share. Adding an account loosens that hold, so it files a protected change\n that applies only when a second person confirms it with a security key.\n Removing one applies at once."
     },
     {
       "name": "pantherclaw.v1.PackageService",

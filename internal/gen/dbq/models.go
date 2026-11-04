@@ -3161,6 +3161,15 @@ type PcOutcomeMetricSample struct {
 	SampledAt   time.Time
 }
 
+type PcOwnedAccount struct {
+	OrgID   ids.OrgID
+	ID      ids.UUID
+	Kind    string
+	Value   string
+	AddedBy string
+	AddedAt time.Time
+}
+
 type PcPackagePin struct {
 	OrgID     ids.OrgID
 	PackageID ids.UUID
