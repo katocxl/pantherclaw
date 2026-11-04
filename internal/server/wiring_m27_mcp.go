@@ -20,6 +20,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	"github.com/katocxl/pantherclaw/internal/threatmap/adapters/threatmaprpc"
+	"github.com/katocxl/pantherclaw/internal/threatmap/catalog"
 )
 
 // Refusals of the gate.
@@ -285,7 +287,14 @@ func selfMCPEvent(c tapp.Caller, procedure string, request any, outcome audit.Ou
 		// The technique is a validated id, never free text (G0 M28 D726).
 		object("agent", r.GetAgentId())
 		ev.Details["technique_id"] = r.GetTechniqueId()
-		ev.Details["framework"] = strings.ToLower(strings.TrimPrefix(r.GetFramework().String(), "THREAT_FRAMEWORK_"))
+		// The framework is the catalogue's canonical id ("atlas",
+		// "attack-enterprise"), from the request or else the id's form
+		// (G0 M28 D726a).
+		f := threatmaprpc.FrameworkOf(r.GetFramework())
+		if f == "" {
+			f, _ = catalog.FrameworkOf(r.GetTechniqueId())
+		}
+		ev.Details["framework"] = string(f)
 	}
 	return ev
 }
