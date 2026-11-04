@@ -146,8 +146,10 @@ func (h *Handler) token(w http.ResponseWriter, r *http.Request) {
 	}
 	var res authnapp.TokenResponse
 	gt := form.Get("grant_type")
+	// The MCP grants read a DPoP proof (G0 M30 D912); the others ignore it.
+	ctx := authnapp.WithDPoP(r.Context(), r.Header.Values(authnapp.DPoPHeader))
 	if i := slices.IndexFunc(h.routed, func(g routedGrant) bool { return g.grantType == gt && g.match(form) }); i >= 0 {
-		res, err = h.routed[i].fn(r.Context(), form)
+		res, err = h.routed[i].fn(ctx, form)
 		if err != nil {
 			WriteError(w, err)
 			return
@@ -164,7 +166,7 @@ func (h *Handler) token(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, authnapp.ErrUnsupportedGrantType)
 			return
 		}
-		res, err = fn(r.Context(), form)
+		res, err = fn(ctx, form)
 	}
 	if err != nil {
 		WriteError(w, err)

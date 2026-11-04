@@ -41,7 +41,8 @@ type Identity struct {
 	// bind it (HR-030).
 	JKT string
 	// Proof is how the request was proven: "" for a PAP/1 proof, "bearer"
-	// for an MCP access token (G0 M26 D402, HR-627). Policy sees it as
+	// for an MCP access token (G0 M26 D402, HR-627), "dpop" for a DPoP-bound
+	// one (G0 M30 D913). Policy sees it as
 	// `workload.proof`.
 	Proof string
 }
