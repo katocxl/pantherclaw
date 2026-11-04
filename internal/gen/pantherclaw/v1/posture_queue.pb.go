@@ -195,7 +195,8 @@ type PostureFix struct {
 	// kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,
 	// ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,
 	// REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL,
-	// REVIEW_SERVER or NONE. NONE: this edition has nowhere to act on it.
+	// REVIEW_SERVER, ENABLE_RULE, INSTALL_HUB_ITEM, ENABLE_AUTOMATION, RUN_RANGE
+	// or NONE. NONE: this edition has nowhere to act on it.
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// target_id is the record the fix acts on, as "<type>:<id>"; empty for NONE.
 	TargetId string `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
@@ -1008,9 +1009,9 @@ const file_pantherclaw_v1_posture_queue_proto_rawDesc = "" +
 	"\x13PostureSourceStatus\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x128\n" +
 	"\x05state\x18\x02 \x01(\x0e2\".pantherclaw.v1.PostureSourceStateR\x05state\x12\x1a\n" +
-	"\bfindings\x18\x03 \x01(\x05R\bfindings\"\xba\x04\n" +
-	"\x19ListRankedFindingsRequest\x12\x91\x01\n" +
-	"\x06source\x18\x01 \x01(\tBy\xbaHvrtR\x00R\apostureR\bcoverageR\vsuggestionsR\tdiscoveryR\x0frecommendationsR\tinventoryR\fsupply_chainR\acatalogR\fprovisioningR\x04saasR\x06source\x12-\n" +
+	"\bfindings\x18\x03 \x01(\x05R\bfindings\"\xc7\x04\n" +
+	"\x19ListRankedFindingsRequest\x12\x9e\x01\n" +
+	"\x06source\x18\x01 \x01(\tB\x85\x01\xbaH\x81\x01r\x7fR\x00R\apostureR\bcoverageR\vsuggestionsR\tdiscoveryR\x0frecommendationsR\tinventoryR\fsupply_chainR\acatalogR\fprovisioningR\x04saasR\tthreatmapR\x06source\x12-\n" +
 	"\x04kind\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[a-zA-Z0-9_.]*$R\x04kind\x12F\n" +
 	"\bseverity\x18\x03 \x01(\tB*\xbaH'r%R\x00R\x04INFOR\x03LOWR\x06MEDIUMR\x04HIGHR\bCRITICALR\bseverity\x124\n" +
 	"\ateam_id\x18\x04 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\x06teamId\x126\n" +

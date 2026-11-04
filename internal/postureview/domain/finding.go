@@ -33,6 +33,8 @@ const (
 	// active until a person rotates them (G0 M26 D409).
 	SourceProvisioning Source = "provisioning"
 	SourceSaaS         Source = "saas"
+	// SourceThreatMap: the threat map's fixable gaps (G0 M28 D724).
+	SourceThreatMap Source = "threatmap"
 )
 
 // MaxPerSource is how many findings one source returns (D204). A source
@@ -82,6 +84,11 @@ const (
 	FixConnect         FixKind = "CONNECT_INTEGRATION"
 	FixReviewTool      FixKind = "REVIEW_TOOL"
 	FixReviewServer    FixKind = "REVIEW_SERVER"
+	// The threat map's fixes (G0 M28 D724).
+	FixEnableRule       FixKind = "ENABLE_RULE"
+	FixInstallHubItem   FixKind = "INSTALL_HUB_ITEM"
+	FixEnableAutomation FixKind = "ENABLE_AUTOMATION"
+	FixRunRange         FixKind = "RUN_RANGE"
 	// FixNone: the edition has nowhere to act on it (D258).
 	FixNone FixKind = "NONE"
 )

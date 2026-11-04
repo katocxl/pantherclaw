@@ -110,7 +110,7 @@ func with(ps ...[]Permission) []Permission {
 var roles = []Role{
 	{
 		Name: RoleOrgAdmin, Title: "Org Admin", Scopes: orgScope,
-		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, compliance coverage, automations, detections, incidents, cases, exposure, posture, operations, search, integrations and the MCP server catalog, and simulates policy versions over recorded decisions. Registers AuthZEN enforcement points (human only) and reads the runs peer agents made for requesters. Proposes changes to the org's own identity providers, each confirmed by a second person (human only), and reads them. Installs PantherClaw Hub items as drafts (human only). Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
+		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, compliance coverage, the threat map, automations, detections, incidents, cases, exposure, posture, operations, search, integrations and the MCP server catalog, and simulates policy versions over recorded decisions. Registers AuthZEN enforcement points (human only) and reads the runs peer agents made for requesters. Proposes changes to the org's own identity providers, each confirmed by a second person (human only), and reads them. Installs PantherClaw Hub items as drafts (human only). Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
 		Permissions: with(basicReads, []Permission{
 			PermOrgUpdate, PermBusinessUnitManage, PermTeamManage, PermTeamMembersManage, PermEnvironmentManage,
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
@@ -123,11 +123,12 @@ var roles = []Role{
 			PermCatalogRead, PermContentRead, PermComplianceRead,
 			PermHubRead, PermHubInstall,
 			PermBehaviorRead,
+			PermThreatMapRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, reads compliance coverage, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only), AuthZEN enforcement points (human only), external policy checks (human only), the org's customer consequence rules, each confirmed by a second person (human only), and the MCP server catalog; installs PantherClaw Hub items as drafts (human only); reads automations, the runs peer agents made for requesters and the org's identity providers.",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, reads compliance coverage and the threat map, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals, protected-change settings and compromised publishers (human only), AuthZEN enforcement points (human only), external policy checks (human only), the org's customer consequence rules, each confirmed by a second person (human only), and the MCP server catalog; installs PantherClaw Hub items as drafts (human only); reads automations, the runs peer agents made for requesters and the org's identity providers.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
@@ -142,6 +143,7 @@ var roles = []Role{
 			PermCatalogRead, PermCatalogManage, PermContentRead, PermContentManage, PermComplianceRead,
 			PermHubRead, PermHubInstall,
 			PermBehaviorRead,
+			PermThreatMapRead,
 		}),
 	},
 	{
@@ -173,20 +175,21 @@ var roles = []Role{
 	},
 	{
 		Name: RoleResponder, Title: "Responder", Scopes: anyScope,
-		Description: "Investigates and contains incidents in scope, manages incidents, cases and posture findings, reads agents' behavior profiles, and restores suspended agents with a security key (human only).",
+		Description: "Investigates and contains incidents in scope, manages incidents, cases and posture findings, reads agents' behavior profiles and the threat map, and restores suspended agents with a security key (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage, PermGrantRead, PermGrantRevoke,
 			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
-		}, reflexReads, []Permission{PermIncidentManage, PermCaseManage, PermPostureManage, PermAutomationRead, PermBehaviorRead}),
+		}, reflexReads, []Permission{PermIncidentManage, PermCaseManage, PermPostureManage, PermAutomationRead, PermBehaviorRead, PermThreatMapRead}),
 	},
 	{
 		Name: RoleAuditor, Title: "Auditor", Scopes: orgScope,
-		Description: "Reads configuration, audit and evidence, restricted evidence included, compliance coverage, the runs peer agents made for requesters, the org's identity providers, the MCP server catalog and its PantherClaw Hub installs, agents' behavior profiles, and exports evidence packs (human only); changes nothing.",
+		Description: "Reads configuration, audit and evidence, restricted evidence included, compliance coverage, the threat map, the runs peer agents made for requesters, the org's identity providers, the MCP server catalog and its PantherClaw Hub installs, agents' behavior profiles, and exports evidence packs (human only); changes nothing.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
 			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead, PermAutomationRead,
 			PermA2APeerRunRead, PermIdentityProviderRead, PermCatalogRead, PermContentRead, PermHubRead, PermBehaviorRead, PermComplianceRead,
+			PermThreatMapRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
@@ -305,10 +308,10 @@ var roles = []Role{
 	},
 	{
 		Name: RoleInvestigator, Title: "Investigator", Scopes: anyScope, ServiceOnly: true,
-		Description: "For the service account of a customer's SOC agent behind pclaw mcp self: reads what happened, a run's timeline, search results and breach radius in its scope, and nothing else (HR-655). Holds no write. The server admits this role on those four reads only, audits each one and ignores it on every other procedure, so its search.read and evidence.read never reach saved queries, model drafting or bundle export. Restricted evidence stays out. Bound only to service accounts.",
+		Description: "For the service account of a customer's SOC agent behind pclaw mcp self: reads what happened, a run's timeline, search results, breach radius and one technique's threat map in its scope, and nothing else (HR-655). Holds no write. The server admits this role on those five reads only, audits each one and ignores it on every other procedure, so its search.read and evidence.read never reach saved queries, model drafting or bundle export. Restricted evidence stays out. Bound only to service accounts.",
 		Permissions: []Permission{
 			PermOrgRead, PermSearchRead, PermEvidenceRead, PermExposureRead,
-			PermAgentRead, PermRunRead, PermGrantRead, PermIncidentRead,
+			PermAgentRead, PermRunRead, PermGrantRead, PermIncidentRead, PermThreatMapRead,
 		},
 	},
 }

@@ -12211,6 +12211,330 @@
         }
       }
     },
+    "/pantherclaw.v1.ThreatMapService/ListThreatFrameworks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ThreatMapService"
+        ],
+        "summary": "ListThreatFrameworks",
+        "description": "ListThreatFrameworks lists the pinned MITRE catalogues.\n permission: threatmap.read",
+        "operationId": "pantherclaw.v1.ThreatMapService.ListThreatFrameworks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListThreatFrameworksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListThreatFrameworksResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ThreatMapService/GetThreatMatrix": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ThreatMapService"
+        ],
+        "summary": "GetThreatMatrix",
+        "description": "GetThreatMatrix evaluates every technique of a framework: per tactic\n counts by status and one cell per technique.\n permission: threatmap.read",
+        "operationId": "pantherclaw.v1.ThreatMapService.GetThreatMatrix",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetThreatMatrixRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetThreatMatrixResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ThreatMapService/GetThreatTechnique": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ThreatMapService"
+        ],
+        "summary": "GetThreatTechnique",
+        "description": "GetThreatTechnique returns one technique's lanes, their evidence, what\n was seen, its gaps with fixes, and its sub-techniques.\n permission: threatmap.read",
+        "operationId": "pantherclaw.v1.ThreatMapService.GetThreatTechnique",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetThreatTechniqueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetThreatTechniqueResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ThreatMapService/ListThreatGaps": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ThreatMapService"
+        ],
+        "summary": "ListThreatGaps",
+        "description": "ListThreatGaps lists every gap with its fix, grouped by fix target, then\n technique.\n permission: threatmap.read",
+        "operationId": "pantherclaw.v1.ThreatMapService.ListThreatGaps",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListThreatGapsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListThreatGapsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ThreatMapService/ExportNavigatorLayer": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ThreatMapService"
+        ],
+        "summary": "ExportNavigatorLayer",
+        "description": "ExportNavigatorLayer returns the map as a MITRE ATT\u0026CK Navigator layer\n (Team and above).\n permission: threatmap.read",
+        "operationId": "pantherclaw.v1.ThreatMapService.ExportNavigatorLayer",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ExportNavigatorLayerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ExportNavigatorLayerResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ThreatMapService/GetThreatMapHistory": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ThreatMapService"
+        ],
+        "summary": "GetThreatMapHistory",
+        "description": "GetThreatMapHistory returns the daily status counts and every lane that\n dropped (Business and above).\n permission: threatmap.read",
+        "operationId": "pantherclaw.v1.ThreatMapService.GetThreatMapHistory",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetThreatMapHistoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetThreatMapHistoryResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.EvidenceService/ListCheckpoints": {
       "post": {
         "tags": [
@@ -59712,6 +60036,1192 @@
         "additionalProperties": false,
         "description": "PlanUsage is what the org uses now."
       },
+      "pantherclaw.v1.ThreatFixKind": {
+        "type": "string",
+        "title": "ThreatFixKind",
+        "enum": [
+          "THREAT_FIX_KIND_UNSPECIFIED",
+          "THREAT_FIX_KIND_ENABLE_RULE",
+          "THREAT_FIX_KIND_END_SUPPRESSION",
+          "THREAT_FIX_KIND_SEND_EVENTS",
+          "THREAT_FIX_KIND_UPGRADE_EDITION",
+          "THREAT_FIX_KIND_TURN_ON_SETTING",
+          "THREAT_FIX_KIND_ROUTE_THROUGH_GATEWAY",
+          "THREAT_FIX_KIND_ENABLE_PLAYBOOK",
+          "THREAT_FIX_KIND_INSTALL_HUB_ITEM",
+          "THREAT_FIX_KIND_RUN_SCENARIO",
+          "THREAT_FIX_KIND_NONE"
+        ],
+        "description": "ThreatFixKind is how to close a gap."
+      },
+      "pantherclaw.v1.ThreatFramework": {
+        "type": "string",
+        "title": "ThreatFramework",
+        "enum": [
+          "THREAT_FRAMEWORK_UNSPECIFIED",
+          "THREAT_FRAMEWORK_ATLAS",
+          "THREAT_FRAMEWORK_ATTACK_ENTERPRISE"
+        ],
+        "description": "ThreatFramework is a pinned MITRE catalogue."
+      },
+      "pantherclaw.v1.ThreatLane": {
+        "type": "string",
+        "title": "ThreatLane",
+        "enum": [
+          "THREAT_LANE_UNSPECIFIED",
+          "THREAT_LANE_PREVENT",
+          "THREAT_LANE_DETECT",
+          "THREAT_LANE_RESPOND",
+          "THREAT_LANE_TEST"
+        ],
+        "description": "ThreatLane names a lane."
+      },
+      "pantherclaw.v1.ThreatLaneState": {
+        "type": "string",
+        "title": "ThreatLaneState",
+        "enum": [
+          "THREAT_LANE_STATE_UNSPECIFIED",
+          "THREAT_LANE_STATE_EVIDENCED",
+          "THREAT_LANE_STATE_PARTIAL",
+          "THREAT_LANE_STATE_GAP",
+          "THREAT_LANE_STATE_STATED",
+          "THREAT_LANE_STATE_NONE_SHIPPED"
+        ],
+        "description": "ThreatLaneState is what the records say of a Prevent, Detect or Respond\n lane."
+      },
+      "pantherclaw.v1.ThreatRuleSource": {
+        "type": "string",
+        "title": "ThreatRuleSource",
+        "enum": [
+          "THREAT_RULE_SOURCE_UNSPECIFIED",
+          "THREAT_RULE_SOURCE_BUILTIN",
+          "THREAT_RULE_SOURCE_KIND",
+          "THREAT_RULE_SOURCE_HUB",
+          "THREAT_RULE_SOURCE_CUSTOM"
+        ],
+        "description": "ThreatRuleSource says whose rule a Detect row is."
+      },
+      "pantherclaw.v1.ThreatStatus": {
+        "type": "string",
+        "title": "ThreatStatus",
+        "enum": [
+          "THREAT_STATUS_UNSPECIFIED",
+          "THREAT_STATUS_EVIDENCED",
+          "THREAT_STATUS_PARTIAL",
+          "THREAT_STATUS_GAP",
+          "THREAT_STATUS_OUTSIDE"
+        ],
+        "description": "ThreatStatus is a technique's colour."
+      },
+      "pantherclaw.v1.ThreatTestState": {
+        "type": "string",
+        "title": "ThreatTestState",
+        "enum": [
+          "THREAT_TEST_STATE_UNSPECIFIED",
+          "THREAT_TEST_STATE_PASSED",
+          "THREAT_TEST_STATE_FAILED",
+          "THREAT_TEST_STATE_STALE",
+          "THREAT_TEST_STATE_NOT_RUN"
+        ],
+        "description": "ThreatTestState is what the org's own range results say. A test never\n raises a status; a failure lowers it."
+      },
+      "pantherclaw.v1.ExportNavigatorLayerRequest": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFramework",
+            "not": {
+              "enum": [
+                "THREAT_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "agent_id",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "environmentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environment_id",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ExportNavigatorLayerRequest",
+        "additionalProperties": false,
+        "description": "set agent_id or environment_id, not both:\n```\nthis.agent_id == '' || this.environment_id == ''\n```\n\n",
+        "required": [
+          "framework"
+        ]
+      },
+      "pantherclaw.v1.ExportNavigatorLayerResponse": {
+        "type": "object",
+        "properties": {
+          "layerJson": {
+            "type": "string",
+            "title": "layer_json",
+            "format": "byte",
+            "description": "The Navigator layer JSON."
+          },
+          "fileName": {
+            "type": "string",
+            "title": "file_name"
+          }
+        },
+        "title": "ExportNavigatorLayerResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetThreatMapHistoryRequest": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFramework",
+            "not": {
+              "enum": [
+                "THREAT_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "environmentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environment_id",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "days": {
+            "type": "integer",
+            "title": "days",
+            "maximum": 400,
+            "minimum": 1,
+            "format": "int32"
+          }
+        },
+        "title": "GetThreatMapHistoryRequest",
+        "additionalProperties": false,
+        "required": [
+          "framework",
+          "days"
+        ]
+      },
+      "pantherclaw.v1.GetThreatMapHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatHistoryDay"
+            },
+            "title": "days"
+          },
+          "drops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatDrop"
+            },
+            "title": "drops"
+          }
+        },
+        "title": "GetThreatMapHistoryResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetThreatMatrixRequest": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFramework",
+            "not": {
+              "enum": [
+                "THREAT_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "agent_id",
+            "description": "Only this agent's routes and signals (Prevent, Seen).",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "environmentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environment_id",
+            "description": "Only this environment's agents (Prevent, Seen).",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "GetThreatMatrixRequest",
+        "additionalProperties": false,
+        "description": "set agent_id or environment_id, not both:\n```\nthis.agent_id == '' || this.environment_id == ''\n```\n\n",
+        "required": [
+          "framework"
+        ]
+      },
+      "pantherclaw.v1.GetThreatMatrixResponse": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFramework"
+          },
+          "catalogVersion": {
+            "type": "string",
+            "title": "catalog_version"
+          },
+          "tactics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatTactic"
+            },
+            "title": "tactics"
+          },
+          "techniques": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatTechniqueCell"
+            },
+            "title": "techniques"
+          },
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "description": "What the map is and is not (G0 M28 D717)."
+          },
+          "evaluatedAt": {
+            "title": "evaluated_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "orgWideLanes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatLane"
+            },
+            "title": "org_wide_lanes",
+            "description": "The lanes that ignore the agent or environment filter."
+          },
+          "mappingDigest": {
+            "type": "string",
+            "title": "mapping_digest",
+            "description": "sha256 hex of the PantherClaw mappings used."
+          }
+        },
+        "title": "GetThreatMatrixResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetThreatTechniqueRequest": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFramework",
+            "not": {
+              "enum": [
+                "THREAT_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "techniqueId": {
+            "type": "string",
+            "title": "technique_id",
+            "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"
+          },
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "agent_id",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "environmentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environment_id",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "GetThreatTechniqueRequest",
+        "additionalProperties": false,
+        "description": "set agent_id or environment_id, not both:\n```\nthis.agent_id == '' || this.environment_id == ''\n```\n\n",
+        "required": [
+          "framework",
+          "techniqueId"
+        ]
+      },
+      "pantherclaw.v1.GetThreatTechniqueResponse": {
+        "type": "object",
+        "properties": {
+          "technique": {
+            "title": "technique",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatTechniqueDetail"
+          },
+          "subtechniques": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatTechniqueDetail"
+            },
+            "title": "subtechniques"
+          },
+          "statement": {
+            "type": "string",
+            "title": "statement"
+          },
+          "evaluatedAt": {
+            "title": "evaluated_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetThreatTechniqueResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListThreatFrameworksRequest": {
+        "type": "object",
+        "title": "ListThreatFrameworksRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListThreatFrameworksResponse": {
+        "type": "object",
+        "properties": {
+          "frameworks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatFrameworkInfo"
+            },
+            "title": "frameworks"
+          }
+        },
+        "title": "ListThreatFrameworksResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListThreatGapsRequest": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFramework",
+            "not": {
+              "enum": [
+                "THREAT_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "agent_id",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "environmentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environment_id",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 256
+          }
+        },
+        "title": "ListThreatGapsRequest",
+        "additionalProperties": false,
+        "description": "set agent_id or environment_id, not both:\n```\nthis.agent_id == '' || this.environment_id == ''\n```\n\n",
+        "required": [
+          "framework"
+        ]
+      },
+      "pantherclaw.v1.ListThreatGapsResponse": {
+        "type": "object",
+        "properties": {
+          "gaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatGap"
+            },
+            "title": "gaps"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListThreatGapsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ThreatAutomation": {
+        "type": "object",
+        "properties": {
+          "automationId": {
+            "type": "string",
+            "title": "automation_id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "ACTIVE, DRAFT or PAUSED; empty for a Hub item not installed."
+          },
+          "triggerRuleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "trigger_rule_ids"
+          },
+          "hasContain": {
+            "type": "boolean",
+            "title": "has_contain"
+          },
+          "hubItem": {
+            "type": "string",
+            "title": "hub_item",
+            "description": "The Hub item it came from, or that would install it."
+          }
+        },
+        "title": "ThreatAutomation",
+        "additionalProperties": false,
+        "description": "ThreatAutomation is one org automation or Hub playbook."
+      },
+      "pantherclaw.v1.ThreatControl": {
+        "type": "object",
+        "properties": {
+          "controlId": {
+            "type": "string",
+            "title": "control_id"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "surface": {
+            "type": "string",
+            "title": "surface",
+            "description": "AUTHORITY, GATEWAY, SANDBOX or CREDENTIAL."
+          },
+          "hrIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "hr_ids"
+          },
+          "reasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "reason_codes"
+          },
+          "applies": {
+            "type": "boolean",
+            "title": "applies",
+            "description": "Whether what the control requires holds in this org."
+          },
+          "why": {
+            "type": "string",
+            "title": "why"
+          }
+        },
+        "title": "ThreatControl",
+        "additionalProperties": false,
+        "description": "ThreatControl is one mapped Prevent control."
+      },
+      "pantherclaw.v1.ThreatDetectLane": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatLaneState"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "reasons"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatRule"
+            },
+            "title": "rules"
+          }
+        },
+        "title": "ThreatDetectLane",
+        "additionalProperties": false,
+        "description": "ThreatDetectLane is the rules and signal kinds that detect the technique."
+      },
+      "pantherclaw.v1.ThreatDrop": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "day",
+            "description": "YYYY-MM-DD, UTC."
+          },
+          "techniqueId": {
+            "type": "string",
+            "title": "technique_id"
+          },
+          "lane": {
+            "title": "lane",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatLane"
+          },
+          "from": {
+            "type": "string",
+            "title": "from",
+            "description": "The lane's state before and after, e.g. EVIDENCED and GAP."
+          },
+          "to": {
+            "type": "string",
+            "title": "to"
+          }
+        },
+        "title": "ThreatDrop",
+        "additionalProperties": false,
+        "description": "ThreatDrop is one lane that dropped on a day."
+      },
+      "pantherclaw.v1.ThreatFrameworkInfo": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFramework"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "catalogVersion": {
+            "type": "string",
+            "title": "catalog_version"
+          },
+          "catalogDigest": {
+            "type": "string",
+            "title": "catalog_digest",
+            "description": "sha256 hex of the embedded catalogue."
+          },
+          "techniqueCount": {
+            "type": "integer",
+            "title": "technique_count",
+            "format": "int32",
+            "description": "Matrix techniques (not sub-techniques, deprecated or revoked)."
+          },
+          "tacticCount": {
+            "type": "integer",
+            "title": "tactic_count",
+            "format": "int32"
+          }
+        },
+        "title": "ThreatFrameworkInfo",
+        "additionalProperties": false,
+        "description": "ThreatFrameworkInfo is one pinned catalogue."
+      },
+      "pantherclaw.v1.ThreatGap": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "title": "lane",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatLane"
+          },
+          "techniqueId": {
+            "type": "string",
+            "title": "technique_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "fixKind": {
+            "title": "fix_kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFixKind"
+          },
+          "targetId": {
+            "type": "string",
+            "title": "target_id"
+          },
+          "label": {
+            "type": "string",
+            "title": "label"
+          },
+          "command": {
+            "type": "string",
+            "title": "command",
+            "description": "A pclaw command that applies the fix, when one does."
+          }
+        },
+        "title": "ThreatGap",
+        "additionalProperties": false,
+        "description": "ThreatGap is one PARTIAL or GAP lane and its fix."
+      },
+      "pantherclaw.v1.ThreatHistoryDay": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "day",
+            "description": "YYYY-MM-DD, UTC."
+          },
+          "evidenced": {
+            "type": "integer",
+            "title": "evidenced",
+            "format": "int32"
+          },
+          "partial": {
+            "type": "integer",
+            "title": "partial",
+            "format": "int32"
+          },
+          "gap": {
+            "type": "integer",
+            "title": "gap",
+            "format": "int32"
+          },
+          "outside": {
+            "type": "integer",
+            "title": "outside",
+            "format": "int32"
+          }
+        },
+        "title": "ThreatHistoryDay",
+        "additionalProperties": false,
+        "description": "ThreatHistoryDay is one day's technique counts by status."
+      },
+      "pantherclaw.v1.ThreatOutsideInfo": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "coveredBy": {
+            "type": "string",
+            "title": "covered_by"
+          },
+          "note": {
+            "type": "string",
+            "title": "note"
+          }
+        },
+        "title": "ThreatOutsideInfo",
+        "additionalProperties": false,
+        "description": "ThreatOutsideInfo says which kind of tool covers a technique outside\n PantherClaw."
+      },
+      "pantherclaw.v1.ThreatPreventLane": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatLaneState"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "reasons"
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatControl"
+            },
+            "title": "controls"
+          },
+          "routes": {
+            "title": "routes",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatRouteCounts"
+          }
+        },
+        "title": "ThreatPreventLane",
+        "additionalProperties": false,
+        "description": "ThreatPreventLane is the controls that refuse or hold the technique."
+      },
+      "pantherclaw.v1.ThreatRespondLane": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatLaneState"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "reasons"
+          },
+          "automations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatAutomation"
+            },
+            "title": "automations"
+          }
+        },
+        "title": "ThreatRespondLane",
+        "additionalProperties": false,
+        "description": "ThreatRespondLane is the automations that act on the technique's alerts."
+      },
+      "pantherclaw.v1.ThreatRouteCounts": {
+        "type": "object",
+        "properties": {
+          "enforced": {
+            "type": "integer",
+            "title": "enforced",
+            "format": "int32"
+          },
+          "partial": {
+            "type": "integer",
+            "title": "partial",
+            "format": "int32"
+          },
+          "observeOnly": {
+            "type": "integer",
+            "title": "observe_only",
+            "format": "int32"
+          },
+          "unknown": {
+            "type": "integer",
+            "title": "unknown",
+            "format": "int32"
+          },
+          "stale": {
+            "type": "integer",
+            "title": "stale",
+            "format": "int32"
+          }
+        },
+        "title": "ThreatRouteCounts",
+        "additionalProperties": false,
+        "description": "ThreatRouteCounts counts the in-scope routes by coverage state."
+      },
+      "pantherclaw.v1.ThreatRule": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "source": {
+            "title": "source",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatRuleSource"
+          },
+          "licensed": {
+            "type": "boolean",
+            "title": "licensed"
+          },
+          "disabled": {
+            "type": "boolean",
+            "title": "disabled"
+          },
+          "suppressed": {
+            "type": "boolean",
+            "title": "suppressed"
+          },
+          "lastInputTime": {
+            "title": "last_input_time",
+            "description": "When matching input last arrived; unset when none has.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "inputKinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "input_kinds"
+          },
+          "inputLiveReason": {
+            "type": "string",
+            "title": "input_live_reason",
+            "description": "Why the input counts as live, or why not."
+          }
+        },
+        "title": "ThreatRule",
+        "additionalProperties": false,
+        "description": "ThreatRule is one detection rule or signal kind mapped to the technique."
+      },
+      "pantherclaw.v1.ThreatScenario": {
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string",
+            "title": "scenario_id"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "why": {
+            "type": "string",
+            "title": "why"
+          },
+          "lastRecordTime": {
+            "title": "last_record_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "verdict": {
+            "type": "string",
+            "title": "verdict",
+            "description": "PASS, FAIL, ERROR, SKIPPED or MISSING; empty when never run."
+          },
+          "observedBy": {
+            "type": "string",
+            "title": "observed_by",
+            "description": "SERVER, CLIENT, MIXED or NONE."
+          },
+          "rangeId": {
+            "type": "string",
+            "title": "range_id"
+          }
+        },
+        "title": "ThreatScenario",
+        "additionalProperties": false,
+        "description": "ThreatScenario is one library scenario mapped to the technique and its\n newest result."
+      },
+      "pantherclaw.v1.ThreatSeen": {
+        "type": "object",
+        "properties": {
+          "alertsRaised": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "alerts_raised",
+            "format": "int64",
+            "description": "Alerts raised that carry the technique."
+          },
+          "refusals": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "refusals",
+            "format": "int64",
+            "description": "Refusals by mapped controls."
+          },
+          "holds": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "holds",
+            "format": "int64",
+            "description": "Holds by mapped controls."
+          },
+          "windowDays": {
+            "type": "integer",
+            "title": "window_days",
+            "format": "int32"
+          }
+        },
+        "title": "ThreatSeen",
+        "additionalProperties": false,
+        "description": "ThreatSeen counts what happened in the window, in scope."
+      },
+      "pantherclaw.v1.ThreatTactic": {
+        "type": "object",
+        "properties": {
+          "tacticId": {
+            "type": "string",
+            "title": "tactic_id"
+          },
+          "shortName": {
+            "type": "string",
+            "title": "short_name"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "order": {
+            "type": "integer",
+            "title": "order",
+            "format": "int32"
+          },
+          "techniqueIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "technique_ids"
+          },
+          "evidenced": {
+            "type": "integer",
+            "title": "evidenced",
+            "format": "int32"
+          },
+          "partial": {
+            "type": "integer",
+            "title": "partial",
+            "format": "int32"
+          },
+          "gap": {
+            "type": "integer",
+            "title": "gap",
+            "format": "int32"
+          },
+          "outside": {
+            "type": "integer",
+            "title": "outside",
+            "format": "int32"
+          }
+        },
+        "title": "ThreatTactic",
+        "additionalProperties": false,
+        "description": "ThreatTactic is one tactic column and its technique counts by status. A\n technique under two tactics counts in both; there is no total."
+      },
+      "pantherclaw.v1.ThreatTechniqueCell": {
+        "type": "object",
+        "properties": {
+          "techniqueId": {
+            "type": "string",
+            "title": "technique_id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "tacticIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "tactic_ids"
+          },
+          "status": {
+            "title": "status",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatStatus"
+          },
+          "prevent": {
+            "title": "prevent",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatLaneState"
+          },
+          "detect": {
+            "title": "detect",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatLaneState"
+          },
+          "respond": {
+            "title": "respond",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatLaneState"
+          },
+          "test": {
+            "title": "test",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatTestState"
+          },
+          "subtechniqueCount": {
+            "type": "integer",
+            "title": "subtechnique_count",
+            "format": "int32"
+          },
+          "gapCount": {
+            "type": "integer",
+            "title": "gap_count",
+            "format": "int32"
+          }
+        },
+        "title": "ThreatTechniqueCell",
+        "additionalProperties": false,
+        "description": "ThreatTechniqueCell is one technique in the matrix."
+      },
+      "pantherclaw.v1.ThreatTechniqueDetail": {
+        "type": "object",
+        "properties": {
+          "cell": {
+            "title": "cell",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatTechniqueCell"
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "description": "The technique on MITRE's site."
+          },
+          "prevent": {
+            "title": "prevent",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatPreventLane"
+          },
+          "detect": {
+            "title": "detect",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatDetectLane"
+          },
+          "respond": {
+            "title": "respond",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatRespondLane"
+          },
+          "test": {
+            "title": "test",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatTestLane"
+          },
+          "seen": {
+            "title": "seen",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatSeen"
+          },
+          "outside": {
+            "title": "outside",
+            "description": "Set when the technique is outside PantherClaw.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatOutsideInfo"
+          },
+          "unaddressedWhy": {
+            "type": "string",
+            "title": "unaddressed_why",
+            "description": "Set when PantherClaw ships no control for it yet."
+          },
+          "gaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatGap"
+            },
+            "title": "gaps"
+          },
+          "campaigns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "campaigns",
+            "description": "Range campaigns labelled with the technique. Labels only: they never\n feed the Test lane."
+          },
+          "parentId": {
+            "type": "string",
+            "title": "parent_id",
+            "description": "For a sub-technique, its parent."
+          }
+        },
+        "title": "ThreatTechniqueDetail",
+        "additionalProperties": false,
+        "description": "ThreatTechniqueDetail is a technique page."
+      },
+      "pantherclaw.v1.ThreatTestLane": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatTestState"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "reasons"
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ThreatScenario"
+            },
+            "title": "scenarios"
+          }
+        },
+        "title": "ThreatTestLane",
+        "additionalProperties": false,
+        "description": "ThreatTestLane is the org's own range results for the technique."
+      },
       "pantherclaw.v1.AnchorState": {
         "type": "string",
         "title": "AnchorState",
@@ -60003,6 +61513,19 @@
             "title": "run_id",
             "required": [
               "runId"
+            ]
+          },
+          {
+            "properties": {
+              "threatMap": {
+                "title": "threat_map",
+                "description": "One framework's threat map, as a signed report (G0 M28 D720).",
+                "$ref": "#/components/schemas/pantherclaw.v1.PackThreatMap"
+              }
+            },
+            "title": "threat_map",
+            "required": [
+              "threatMap"
             ]
           },
           {
@@ -60855,6 +62378,42 @@
         "additionalProperties": false,
         "description": "PackContents is what a pack holds besides each transaction's states.",
         "x-pantherclaw-input-of": "pantherclaw.v1.PackContents"
+      },
+      "pantherclaw.v1.PackThreatMap": {
+        "type": "object",
+        "properties": {
+          "framework": {
+            "title": "framework",
+            "$ref": "#/components/schemas/pantherclaw.v1.ThreatFramework",
+            "not": {
+              "enum": [
+                "THREAT_FRAMEWORK_UNSPECIFIED"
+              ]
+            }
+          },
+          "environmentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "environment_id",
+            "description": "Only this environment's agents (Prevent, Seen); empty for the org.",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "PackThreatMap",
+        "additionalProperties": false,
+        "description": "PackThreatMap names a threat map report: a framework and an optional\n environment (G0 M28 D720). The pack holds threat_map.json, evaluated when\n the pack is built, and its statement is the threat map's own: it shows the\n mapped controls and their evidence, and what they do not cover.\n Team and above.",
+        "required": [
+          "framework"
+        ]
       },
       "pantherclaw.v1.PackTimeRange": {
         "type": "object",
@@ -85820,6 +87379,7 @@
               "catalog",
               "provisioning",
               "saas",
+              "threatmap",
               null
             ]
           },
@@ -85980,7 +87540,7 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "description": "kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,\n ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,\n REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL,\n REVIEW_SERVER or NONE. NONE: this edition has nowhere to act on it."
+            "description": "kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,\n ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,\n REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL,\n REVIEW_SERVER, ENABLE_RULE, INSTALL_HUB_ITEM, ENABLE_AUTOMATION, RUN_RANGE\n or NONE. NONE: this edition has nowhere to act on it."
           },
           "targetId": {
             "type": "string",
@@ -101392,6 +102952,10 @@
     {
       "name": "pantherclaw.v1.EntitlementService",
       "description": "EntitlementService reports the caller's organization's plan: what it may\n use, what it uses, and until when (G0 UI D9). Self-hosted servers derive\n it from the installed licence; hosted servers from the org's plan, which\n changes only through the billing extension, the operator's comp command\n or development mode — never through this API (HR-354). The plan catalog\n itself is not part of the core."
+    },
+    {
+      "name": "pantherclaw.v1.ThreatMapService",
+      "description": "ThreatMapService reads the org's MITRE ATT\u0026CK Enterprise and MITRE ATLAS\n threat map (G0 M28 D710-D724; F960-F973; HR-680..689).\n\n Each technique shows the PantherClaw controls mapped to it in four lanes,\n Prevent, Detect, Respond and Test, and the evidence for each from the org's\n own records. A mapped control covers the technique, not every way of\n carrying it out; techniques outside PantherClaw need other tools. Every\n response carries the fixed statement that says so. Prevent and Seen follow\n the agent or environment filter; Detect, Respond and Test are org-wide and\n every response says so.\n\n A person signed in to the console reads the matrix, technique pages and\n gaps on every edition; an API key or access token needs Team or higher\n (founder FQ1 A). The Navigator export needs Team, the history Business."
     },
     {
       "name": "pantherclaw.v1.EvidenceService",

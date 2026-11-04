@@ -1792,6 +1792,7 @@ type PcDetectionRuleState struct {
 	WindowGroups       int32
 	SeenKeys           int32
 	UpdatedAt          time.Time
+	LastInputAt        *time.Time
 }
 
 type PcDetectionRuleVersion struct {
@@ -4383,6 +4384,19 @@ type PcTeamsCard struct {
 	State           string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+type PcThreatMapSnapshot struct {
+	OrgID          ids.OrgID
+	ScopeKey       string
+	Framework      string
+	Day            pgtype.Date
+	EvaluatedAt    time.Time
+	CatalogVersion string
+	CatalogDigest  string
+	MappingDigest  string
+	States         []byte
+	Counts         []byte
 }
 
 type PcTicketFieldOwner struct {
