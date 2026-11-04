@@ -81,7 +81,7 @@ func doRecorded(s *stack, rec *rangeRecorder, req *http.Request) error {
 	return nil
 }
 
-// objectID is the id of an object of this stack's organisation.
+// objectID is the id of an object of this stack's organization.
 func (s *stack) objectID(t *testing.T, object string) ids.UUID {
 	t.Helper()
 	var id string
@@ -89,13 +89,13 @@ func (s *stack) objectID(t *testing.T, object string) ids.UUID {
 	case "transaction":
 		code, r := s.refund(t, ids.NewV7(), "30.00")
 		if code != http.StatusOK {
-			t.Fatalf("a refund in the second organisation: %d %+v", code, r)
+			t.Fatalf("a refund in the second organization: %d %+v", code, r)
 		}
 		id = r.TransactionID
 	case "approval":
 		code, r := s.refund(t, ids.NewV7(), "85.00")
 		if code != http.StatusForbidden {
-			t.Fatalf("a held refund in the second organisation: %d %+v", code, r)
+			t.Fatalf("a held refund in the second organization: %d %+v", code, r)
 		}
 		s.query(t, "SELECT id::text FROM pc.approval_requests WHERE transaction_id = $1 LIMIT 1", []any{r.TransactionID}, &id)
 	case "run":

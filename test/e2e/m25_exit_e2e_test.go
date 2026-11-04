@@ -122,7 +122,7 @@ func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
 	}
 
 	file, files := export("compliance.zip")
-	code, rep := p.verify(t, file)
+	code, rep := p.verify(t, t.Context(), file)
 	if code != 0 {
 		t.Fatalf("pclaw verify: exit %d, failed: %v", code, failedChecks(rep))
 	}
@@ -217,7 +217,7 @@ func TestE2E_M25_ComplianceReportOnSimulators(t *testing.T) {
 	if !bytes.Equal(files[pack.CompliancePath], more[pack.CompliancePath]) {
 		t.Errorf("a re-export changed the report:\n%s\n%s", files[pack.CompliancePath], more[pack.CompliancePath])
 	}
-	if code, rep := p.verify(t, again); code != 0 {
+	if code, rep := p.verify(t, t.Context(), again); code != 0 {
 		t.Fatalf("pclaw verify of the re-export: exit %d, failed: %v", code, failedChecks(rep))
 	}
 }

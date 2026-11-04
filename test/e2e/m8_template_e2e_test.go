@@ -221,7 +221,6 @@ func TestE2E_M8_C4_Template(t *testing.T) {
 	if code == 0 || !strings.Contains(o, "still covers "+ghRepo) || !strings.Contains(e, "nothing was changed") {
 		t.Fatalf("remove %s while its grant lives: %d %s %s", ghRepo, code, o, e)
 	}
-	before = audits()
 	code, o, e = alice.pclaw(t, "template", "remove", "coding-to-production", "--repos", other, "--yes")
 	if code != 0 || strings.Count(o, "  remove ") != 4 || !strings.Contains(o, "Waiting for confirmation") {
 		t.Fatalf("remove %s: %d %s %s", other, code, o, e)

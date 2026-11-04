@@ -246,7 +246,7 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 		}
 		var open *pantherclawv1.Alert
 		r.runEngine(t, business, func() bool {
-			res, err := incidents.ListAlerts(ctx, &pantherclawv1.ListAlertsRequest{RuleId: "pc.probing.denial_burst", States: []string{"OPEN"}})
+			res, err := incidents.ListAlerts(t.Context(), &pantherclawv1.ListAlertsRequest{RuleId: "pc.probing.denial_burst", States: []string{"OPEN"}})
 			if err != nil || len(res.GetAlerts()) == 0 {
 				return false
 			}
@@ -380,7 +380,7 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 		}
 		for _, right := range got.Rights {
 			if right.View != v || !slices.Contains(labels, right.Label) {
-				t.Fatalf("exposure %s holds a %s right labelled %q", v, right.View, right.Label)
+				t.Fatalf("exposure %s holds a %s right labeled %q", v, right.View, right.Label)
 			}
 		}
 		// The agent's uncovered route is a bypass the credential view shows
@@ -480,7 +480,6 @@ func (r *reflexStack) inProcess(role td.RoleName) context.Context {
 // job only costs another attempt (D71 M1).
 func (r *reflexStack) runEngine(t *testing.T, e ents, done func() bool) {
 	t.Helper()
-	ctx := context.Background()
 	env, err := engine.NewEnv(celenv.DefaultLimits)
 	if err != nil {
 		t.Fatal(err)
@@ -494,6 +493,7 @@ func (r *reflexStack) runEngine(t *testing.T, e ents, done func() bool) {
 		Raiser: (&reflexapp.Hooks{Ents: e}).Raiser(), Sink: &failures.Sink{}, Ents: e,
 	}
 	eventually(t, 30*time.Second, "the in-process detection", func() (bool, error) {
+		ctx := t.Context()
 		if _, err := ledger.ChainAll(ctx, r.s.pool, r.s.org, 1000); err != nil {
 			return false, err
 		}

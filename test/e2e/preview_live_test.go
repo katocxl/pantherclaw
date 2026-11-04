@@ -378,7 +378,7 @@ func TestLive_GitHub_ThreeRoutes(t *testing.T) {
 	auditor := m.person(t, "live-auditor", td.RoleAuditor).ctx
 	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
 		file, _ := p.export(t, auditor, "live-held.json", evapp.Selection{Transactions: txns}, 0)
-		code, r := p.verify(t, file)
+		code, r := p.verify(t, t.Context(), file)
 		if code == 0 {
 			break
 		}
@@ -395,7 +395,7 @@ func TestLive_GitHub_ThreeRoutes(t *testing.T) {
 	closure := mustUUID(t, mm[1])
 	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
 		file, _ := p.export(t, auditor, "live-closure.json", evapp.Selection{Closures: []ids.UUID{closure}}, 0)
-		code, r := p.verify(t, file)
+		code, r := p.verify(t, t.Context(), file)
 		problem := liveVerified(r, code)
 		if problem == "" {
 			break

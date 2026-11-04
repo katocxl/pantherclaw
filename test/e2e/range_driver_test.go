@@ -43,6 +43,10 @@ import (
 // one scenario's steps against a stack of its own, with the simulators of
 // the roles the scenario requires. The stack is a real server, gateway and
 // database; only the targets are simulators.
+//
+// The stack and every call a step makes live as long as the test (t); the
+// context the runner passes bounds only the scenario's own waits. That is why
+// the driver's entry points carry a contextcheck nolint directive.
 type rangeDriver struct {
 	t   *testing.T
 	sc  domain.Scenario
@@ -56,7 +60,7 @@ type rangeDriver struct {
 
 	recs map[string]*callRec
 
-	other *stack // the second organisation
+	other *stack // the second organization
 
 	extra rangeExtra // sandbox, per build tag
 
@@ -70,9 +74,6 @@ type rangeDriver struct {
 
 	// mcpUp is set once the payments connection dispatches to the MCP simulator.
 	mcpUp bool
-
-	// fresh counts the extra pull requests opened.
-	fresh int
 
 	// planEvents counts the plan events reported (G0 UI range steps).
 	planEvents int
@@ -99,7 +100,6 @@ type callRec struct {
 	txn      string
 	obs      domain.Observation
 	dispatch *rangeDispatch
-	signed   *recordedRequest
 }
 
 func newRangeDriver(t *testing.T) *rangeDriver {
@@ -131,6 +131,8 @@ func requires(s domain.Scenario, what string) bool { return slices.Contains(s.Re
 func (d *rangeDriver) Teardown(context.Context, domain.Scenario) error { return nil }
 
 // Setup starts the stack the scenario needs and its fixtures.
+//
+//nolint:contextcheck // the range stack and its steps live as long as the test (t); the runner's context bounds only the scenario's own waits
 func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture, error) {
 	t := d.t
 	d.sc = sc
@@ -284,12 +286,6 @@ func (d *rangeDriver) plant() {
 	d.fix["planted_private_key_file_b64"] = base64.StdEncoding.EncodeToString([]byte(pemKey))
 }
 
-// custodySecret is a secret the gateway holds for the GitHub connection: the
-// App's private key.
-func (d *rangeDriver) custodySecret() string {
-	return string(pemOfGitHubKey(d.s.gh))
-}
-
 // setupPeople makes the approvers: carol and rachel for GitHub merges (as
 // in the M8 exit), bob for payments.
 func (d *rangeDriver) setupPeople() {
@@ -325,6 +321,8 @@ func (d *rangeDriver) setupPeople() {
 }
 
 // Do runs one step.
+//
+//nolint:contextcheck // the range stack and its steps live as long as the test (t); the runner's context bounds only the scenario's own waits
 func (d *rangeDriver) Do(ctx context.Context, sc domain.Scenario, st domain.Step, vars map[string]string) (domain.Observation, error) {
 	switch st.Do {
 	case "agent.call":
@@ -380,6 +378,7 @@ type callWith struct {
 	run string
 }
 
+//nolint:contextcheck // the range stack and its steps live as long as the test (t); the runner's context bounds only the scenario's own waits
 func (d *rangeDriver) agentCall(ctx context.Context, st domain.Step, _ map[string]string) (domain.Observation, error) {
 	var w callWith
 	if err := json.Unmarshal(st.With, &w); err != nil {
@@ -396,6 +395,7 @@ func (d *rangeDriver) agentCall(ctx context.Context, st domain.Step, _ map[strin
 	return obs, nil
 }
 
+//nolint:contextcheck // the range stack and its steps live as long as the test (t); the runner's context bounds only the scenario's own waits
 func (d *rangeDriver) concurrent(ctx context.Context, st domain.Step, w callWith) (domain.Observation, error) {
 	each := make([]domain.Observation, w.Concurrent)
 	errs := make([]error, w.Concurrent)
@@ -455,8 +455,7 @@ func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation,
 
 // role is the gateway's name of a connection role.
 func (d *rangeDriver) role(r string) string {
-	switch r {
-	case "mcp":
+	if r == "mcp" {
 		if d.mcpUp {
 			return "payments"
 		}
@@ -689,6 +688,7 @@ func (d *rangeDriver) stepRec(id string) (*callRec, error) {
 	return r, nil
 }
 
+//nolint:contextcheck // the range stack and its steps live as long as the test (t); the runner's context bounds only the scenario's own waits
 func (d *rangeDriver) wait(ctx context.Context, st domain.Step) (domain.Observation, error) {
 	var w struct {
 		For, Of    string
@@ -710,20 +710,29 @@ func (d *rangeDriver) wait(ctx context.Context, st domain.Step) (domain.Observat
 		return domain.Observation{}, fmt.Errorf("step %s has no transaction to wait for", w.Of)
 	}
 	if w.For == "downstream_read" {
-		return d.waitDownstreamRead(ctx, rec.txn, w.MaxSeconds)
+		return d.waitDownstreamRead(ctx.Done(), rec.txn, w.MaxSeconds)
 	}
 	want := map[string]string{"effect_confirmed": "CONFIRMED", "effect_unknown": "UNKNOWN"}[w.For]
 	deadline := time.Now().Add(time.Duration(w.MaxSeconds) * time.Second)
 	var last string
+	// A wait that runs out, or whose context ends, observes the state it
+	// last read.
+	unknown := func() domain.Observation {
+		return domain.Observation{Outcome: domain.OutcomeUnknown, TransactionID: rec.txn, Detail: "effect state " + last}
+	}
 	for {
 		d.s.query(d.t, "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", []any{rec.txn}, &last)
 		if last == want {
 			return domain.Observation{Outcome: domain.Outcome(want), TransactionID: rec.txn}, nil
 		}
-		if time.Now().After(deadline) || ctx.Err() != nil {
-			return domain.Observation{Outcome: domain.OutcomeUnknown, TransactionID: rec.txn, Detail: "effect state " + last}, nil
+		if time.Now().After(deadline) {
+			return unknown(), nil
 		}
-		time.Sleep(200 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return unknown(), nil
+		case <-time.After(200 * time.Millisecond):
+		}
 	}
 }
 

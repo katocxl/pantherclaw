@@ -101,7 +101,7 @@ func (g *githubSim) openPull(t *testing.T, branch string, files map[string]strin
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, g.url+"/repos/"+g.repo+"/pulls",
 		strings.NewReader(`{"title":"Fix","head":"`+branch+`","base":"main"}`))
 	req.Header.Set("Authorization", "token ghp_e2e_open")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil || resp.StatusCode != http.StatusCreated {
 		t.Fatalf("open the pull request: %v %v", resp, err)
 	}

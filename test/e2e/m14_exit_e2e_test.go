@@ -124,7 +124,7 @@ func TestE2E_M14_SecondMarketDemo(t *testing.T) {
 	if x.Receipts < 3 {
 		t.Fatalf("export: %d receipts", x.Receipts)
 	}
-	code, rep := pr.verify(t, file)
+	code, rep := pr.verify(t, t.Context(), file)
 	if code != 0 {
 		t.Fatalf("pclaw verify exit %d:\n%+v", code, rep.Checks)
 	}

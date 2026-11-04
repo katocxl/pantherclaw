@@ -132,8 +132,9 @@ func (s *stack) consequenceOf(t *testing.T, txn string) string {
 // consequence of txn's verification until the gateway has read it, then
 // observes the action's downstream state: CONFIRMED only if that read
 // confirmed it, UNKNOWN otherwise. No read within the time is an error,
-// never UNKNOWN: this step proves a read that did not confirm.
-func (d *rangeDriver) waitDownstreamRead(ctx context.Context, txn string, maxSeconds int) (domain.Observation, error) {
+// never UNKNOWN: this step proves a read that did not confirm. done closing
+// (the scenario's context ending) cuts the wait short.
+func (d *rangeDriver) waitDownstreamRead(done <-chan struct{}, txn string, maxSeconds int) (domain.Observation, error) {
 	s, deadline := d.s, time.Now().Add(time.Duration(maxSeconds)*time.Second)
 	for {
 		if c := s.consequenceOf(d.t, txn); c != "" {
@@ -149,10 +150,15 @@ func (d *rangeDriver) waitDownstreamRead(ctx context.Context, txn string, maxSec
 				return domain.Observation{Outcome: domain.OutcomeUnknown, TransactionID: txn, Detail: "downstream state " + state}, nil
 			}
 		}
-		if time.Now().After(deadline) || ctx.Err() != nil {
-			return domain.Observation{}, fmt.Errorf("the consequence of %s was not read within %d s", txn, maxSeconds)
+		notRead := fmt.Errorf("the consequence of %s was not read within %d s", txn, maxSeconds)
+		if time.Now().After(deadline) {
+			return domain.Observation{}, notRead
 		}
-		time.Sleep(200 * time.Millisecond)
+		select {
+		case <-done:
+			return domain.Observation{}, notRead
+		case <-time.After(200 * time.Millisecond):
+		}
 	}
 }
 

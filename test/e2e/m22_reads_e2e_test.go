@@ -294,7 +294,7 @@ func (s *stack) m22Tickets(t *testing.T, rc *connect.Client) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(tsdomain.JiraDeliveryHeader, "m22-exit-1")
 	req.Header.Set(tsdomain.JiraSignatureHeader, tsdomain.SignJira([]byte(cfg.GetWebhookSecret()), body))
-	res, err := http.DefaultClient.Do(req) //nolint:gosec // G704: the test server's own address
+	res, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -120,7 +120,7 @@ func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore
 	t.Helper()
 	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
 		file, _ := p.export(t, ctx, name, sel, 0)
-		code, r := p.verify(t, file, "--sigstore-trusted-root", sigstore)
+		code, r := p.verify(t, ctx, file, "--sigstore-trusted-root", sigstore)
 		var notPassed []string
 		for _, c := range r.Checks {
 			if c.Status != bundle.Passed && c.Name != "checkpoint.cosignature" && c.Name != "witness.previous" {
@@ -133,7 +133,7 @@ func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore
 		if time.Now().After(deadline) || r.Failed() {
 			t.Fatalf("pclaw verify %s: exit %d, not passed: %v\n%+v", name, code, notPassed, r.Checks)
 		}
-		if _, err := p.jobs.Insert(context.Background(), checkpoints.CheckpointDispatchArgs{}, nil); err != nil {
+		if _, err := p.jobs.Insert(ctx, checkpoints.CheckpointDispatchArgs{}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -303,7 +303,7 @@ func TestE2E_Preview_ThreeRoutesThreeStops(t *testing.T) {
 	// workers, as the receipts are; the anchor then covers all three.
 	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
 		file, _ := p.export(t, auditor, "closure-wait.json", attempts["closure"], 0)
-		if code, r := p.verify(t, file); code == 0 && all(r, "entry.inclusion", bundle.Passed) {
+		if code, r := p.verify(t, t.Context(), file); code == 0 && all(r, "entry.inclusion", bundle.Passed) {
 			break
 		}
 		if time.Now().After(deadline) {
