@@ -129,6 +129,8 @@ definitions:
           message[subject]: params.subject
           message[body][contentType]: literal.Text
           message[body][content]: params.text
+          # One recipient object per address (G0 M31 D950 a).
+          message[toRecipients][*][emailAddress][address]: params.to
 
   - operation: m365.mail.list
     summary: List a Microsoft 365 user's messages
@@ -328,6 +330,10 @@ definitions:
         method: POST
         path: /v1.0/drives/{target.id.drive}/items/{target.id.item}/invite
         body:
+          # One recipient object per address and the one role as the
+          # roles array (G0 M31 D950 a, b).
+          recipients[*][email]: params.recipients
+          roles[0]: params.role
           requireSignIn: bool.true
 
   - operation: m365.drive.item.create_link
