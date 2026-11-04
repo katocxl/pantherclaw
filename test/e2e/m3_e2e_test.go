@@ -62,7 +62,7 @@ func (s *m3Stack) connect(t *testing.T) {
 		// Without credentials the gateway answers 401 for a connection it
 		// serves and 404 for one it does not know yet.
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, s.gateway+"/payments/v1/refunds", nil)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := (&http.Client{}).Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode != http.StatusNotFound {

@@ -458,7 +458,7 @@ func newM18Issuer(t *testing.T, issuer, clientID, subject string) *m18Issuer {
 	tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, network, addr)
 	}
-	tr.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec // G402: the test server stands in for the issuer's host
+	tr.TLSClientConfig.InsecureSkipVerify = true
 	m.client.Transport = tr
 	m.client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return m

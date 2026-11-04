@@ -181,7 +181,7 @@ func (g *githubSim) deploymentState(t *testing.T, id int64) string {
 	t.Helper()
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, g.url+"/repos/"+g.repo+"/deployments/"+strconv.FormatInt(id, 10)+"/statuses", nil)
 	req.Header.Set("Authorization", "token ghp_e2e_deployments")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

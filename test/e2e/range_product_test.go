@@ -52,7 +52,7 @@ func (r *rangeStack) buildRangeThroughTheProduct(realGrantBounds, realGrantRequi
 		s.query(t, "SELECT simulated, base_url FROM pc.connections WHERE name = $1", []any{twin}, &simulated, &base)
 		u, err := url.Parse(base)
 		ip := net.ParseIP(strings.Trim(hostOf(u), "[]"))
-		if err != nil || !simulated || ip == nil || !(ip.IsLoopback() || ip.IsPrivate()) {
+		if err != nil || !simulated || ip == nil || (!ip.IsLoopback() && !ip.IsPrivate()) {
 			t.Fatalf("connection %s: simulated=%v base %q (%v), want a simulated connection at a loopback or private IP literal", twin, simulated, base, err)
 		}
 	}
@@ -76,7 +76,7 @@ func hostOf(u *url.URL) string {
 	return u.Hostname()
 }
 
-// enrolThroughTheProduct enrols and admits a workload for the agent with the
+// enrolThroughTheProduct enrolls and admits a workload for the agent with the
 // CLI, as an owner does, and returns its key file and instance.
 func (d *rangeDriver) enrolThroughTheProduct(agent string) (string, string) {
 	t := d.t

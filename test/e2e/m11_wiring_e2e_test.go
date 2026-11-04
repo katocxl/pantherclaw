@@ -194,7 +194,8 @@ func fill(md protoreflect.MessageDescriptor, depth int) *dynamicpb.Message {
 			seen[o.FullName()] = true
 		}
 		var v protoreflect.Value
-		switch f.Kind() { //exhaustive:ignore // the rest keep their zero value
+		//exhaustive:ignore // the rest keep their zero value
+		switch f.Kind() {
 		case protoreflect.StringKind:
 			s := "x"
 			if name := string(f.Name()); name == "id" || strings.HasSuffix(name, "_id") {

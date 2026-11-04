@@ -109,7 +109,12 @@ func (p *azPoint) accessToken(t *testing.T) string {
 		"grant_type": {"client_credentials"}, "client_id": {p.clientID},
 		"client_assertion_type": {authnapp.AssertionType}, "client_assertion": {compact},
 	}
-	resp, err := http.Post(p.s.apiURL+authnapp.TokenPath, "application/x-www-form-urlencoded", strings.NewReader(form.Encode())) //nolint:noctx // a test
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, p.s.apiURL+authnapp.TokenPath, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +234,7 @@ func (p *azPoint) postH(t *testing.T, path string, body any, bearer string) (int
 	default:
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

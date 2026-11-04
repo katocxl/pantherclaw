@@ -527,7 +527,7 @@ func TestE2E_M9_EnforcedFromProbes(t *testing.T) {
 	// server's workers chained and checkpointed it, as they do the receipts.
 	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
 		file, _ := p.export(t, auditor, "m9.json", evapp.Selection{Transactions: []ids.UUID{txn}}, 0)
-		code, r := p.verify(t, file)
+		code, r := p.verify(t, t.Context(), file)
 		if code == 0 && all(r, "receipt.coverage", bundle.Passed) {
 			return
 		}

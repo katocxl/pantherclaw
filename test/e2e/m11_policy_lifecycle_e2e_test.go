@@ -387,7 +387,7 @@ func TestE2E_M11_PolicyLifecycle(t *testing.T) {
 	}
 	target := func(want string) {
 		t.Helper()
-		if _, err := l.rollouts.SweepOrg(ctx, s.org); err != nil {
+		if _, err := l.rollouts.SweepOrg(t.Context(), s.org); err != nil {
 			t.Fatal(err)
 		}
 		ts, err := l.rollouts.ListTargets(l.publisher, ro.ID, "", ids.UUID{}, 10) // a first page

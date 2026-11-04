@@ -62,7 +62,7 @@ func TestE2E_M11_GovernedAutomations(t *testing.T) {
 	}
 	bob := a.confirmer(t, "bob")
 	alice := signInWithKey(t, s, r.people, "alice", "alice@example.test")
-	aliceCtx := a.person(r.aliceID, td.RoleAutomationAuthor, td.RoleAutomationOperator, td.RoleSecurityAdmin)
+	aliceCtx := a.alice()
 
 	// 1. An event source, activated with a step-up of alice's key (D19).
 	created, err := a.sources.CreateEventSource(aliceCtx, endpoints.NewSource{Name: "tickets", Types: []string{"ticket.created"}})
@@ -202,10 +202,15 @@ func TestE2E_M11_GovernedAutomations(t *testing.T) {
 		t.Fatalf("the automation after FULL: %s", got)
 	}
 
-	a.widen(t, auto.ID, v.ID, source, aliceCtx, bob)
+	a.widen(t, auto.ID, v.ID, source, bob)
 	a.reciprocalLoop(t)
-	a.killSwitch(t, auto.ID, source, created.Secret, aliceCtx)
+	a.killSwitch(t, auto.ID, source, created.Secret)
 	a.ceilingVoid(t, auto.ID, source, created.Secret)
+}
+
+// alice is the automation's author and owner as an in-process caller.
+func (a *autoStack) alice() context.Context {
+	return a.person(a.r.aliceID, td.RoleAutomationAuthor, td.RoleAutomationOperator, td.RoleSecurityAdmin)
 }
 
 // person is an in-process caller: the user with roles at the org.
@@ -418,7 +423,7 @@ func (a *autoStack) userID(t *testing.T, subject string) ids.UUID {
 // execution stops (its grant revoked); bob proposes and carol
 // confirms the restore, which lifts the switch and resumes nothing; the
 // owner then resumes the automation (D14, HR-251).
-func (a *autoStack) killSwitch(t *testing.T, automation, source ids.UUID, secret string, owner context.Context) {
+func (a *autoStack) killSwitch(t *testing.T, automation, source ids.UUID, secret string) {
 	t.Helper()
 	s := a.r.s
 	if code := a.signedEvent(t, source, secret, "msg-4", `{"type":"ticket.created","ref":"T-4"}`); code != http.StatusAccepted {
@@ -440,12 +445,12 @@ func (a *autoStack) killSwitch(t *testing.T, automation, source ids.UUID, secret
 	}
 	a.advance(t, x)
 	// It stops with KILL_SWITCH: PARTIALLY_COMPLETED, since it already
-	// launched (CANCELLED when it had not acted yet).
-	if st := a.executionState(t, x); st != "PARTIALLY_COMPLETED/KILL_SWITCH" && st != "CANCELLED/KILL_SWITCH" {
+	// launched; one that had not acted yet would be canceled.
+	if st := a.executionState(t, x); st != "PARTIALLY_COMPLETED/KILL_SWITCH" && st != "CANCELLED/KILL_SWITCH" { //nolint:misspell // stored state
 		t.Fatalf("the waiting execution under the kill switch: %s", st)
 	}
 	if st := s.row(t, "SELECT state FROM pc.grants WHERE id = $1", grant); st != "REVOKED" {
-		t.Fatalf("the cancelled execution's grant: %s", st)
+		t.Fatalf("the canceled execution's grant: %s", st)
 	}
 	p, err := ks.ProposeRestore(a.person(bob, td.RoleEmergency), rapp.StepUp{Credential: a.key(t, bob), At: time.Now()}, "contained")
 	if err != nil {
@@ -457,7 +462,7 @@ func (a *autoStack) killSwitch(t *testing.T, automation, source ids.UUID, secret
 	if st := a.automationState(t, automation); st != "PAUSED/KILL_SWITCH" {
 		t.Fatalf("a restore resumed the automation: %s", st)
 	}
-	if _, _, err := a.core.ResumeAutomation(owner, automation); err != nil {
+	if _, _, err := a.core.ResumeAutomation(a.alice(), automation); err != nil {
 		t.Fatalf("ResumeAutomation: %v", err)
 	}
 	if st := a.automationState(t, automation); st != "ACTIVE/" {
@@ -524,7 +529,7 @@ func (a *autoStack) evidencePack(t *testing.T, execution ids.UUID) {
 		t.Fatal(err)
 	}
 	file := writeFile(t, p.dir, "execution.zip", d.Content)
-	if code, rep := p.verify(t, file); code != 0 {
+	if code, rep := p.verify(t, t.Context(), file); code != 0 {
 		t.Fatalf("pclaw verify of the execution pack: exit %d\n%+v", code, rep.Checks)
 	}
 }
@@ -533,8 +538,9 @@ func (a *autoStack) evidencePack(t *testing.T, execution ids.UUID) {
 // version, validated and tested like any, and enabling it is a new
 // two-person ceremony: after one confirmation it is still pending and the
 // automation still runs the published version (D5, D8, HR-271).
-func (a *autoStack) widen(t *testing.T, automation, published, source ids.UUID, author context.Context, bob keyHolder) {
+func (a *autoStack) widen(t *testing.T, automation, published, source ids.UUID, bob keyHolder) {
 	t.Helper()
+	author := a.alice()
 	s := a.r.s
 	raw, cases, err := templates.Render("bounded_task_launch", map[string]string{
 		"review_by": time.Now().AddDate(0, 0, 60).Format(time.DateOnly), "source": source.String(),

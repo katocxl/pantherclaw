@@ -183,10 +183,10 @@ func TestE2E_M12_RangeReachesOnlySimulators(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("pclaw redteam run: %d\n%s\n%s", code, out, errs)
 	}
-	var real, total int
-	s.query(t, "SELECT count(*) FILTER (WHERE NOT simulated)::int, count(*)::int FROM pc.transactions", nil, &real, &total)
-	if total == realBefore || real != realBefore {
-		t.Fatalf("%d of %d transactions are real, %d before the range", real, total, realBefore)
+	var realTxns, total int
+	s.query(t, "SELECT count(*) FILTER (WHERE NOT simulated)::int, count(*)::int FROM pc.transactions", nil, &realTxns, &total)
+	if total == realBefore || realTxns != realBefore {
+		t.Fatalf("%d of %d transactions are real, %d before the range", realTxns, total, realBefore)
 	}
 	// The real agent made no run of its own; every run in the org is the range
 	// agent's and simulated.
@@ -243,7 +243,7 @@ func TestE2E_M12_BaselineCatchesARegression(t *testing.T) {
 		t.Fatal(err)
 	}
 	file := writeFile(t, p.dir, "range.zip", d.Content)
-	if code, rep := p.verify(t, file); code != 0 {
+	if code, rep := p.verify(t, t.Context(), file); code != 0 {
 		t.Fatalf("pclaw verify of the range pack: exit %d\n%+v", code, rep.Checks)
 	}
 
