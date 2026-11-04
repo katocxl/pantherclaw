@@ -59,6 +59,9 @@ func (d *Definition) DecodeParams(raw jsontext.Value) (Values, error) {
 			return nil, ambiguous("missing required param %q", name)
 		}
 	}
+	if err := d.CheckMailHeaders(out); err != nil { // G0 M31 D950 d
+		return nil, err
+	}
 	return out, nil
 }
 
