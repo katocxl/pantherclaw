@@ -20,6 +20,7 @@ var selfMCPReads = []string{
 	pantherclawv1connect.InvestigationServiceGetRunTimelineProcedure,
 	pantherclawv1connect.SearchServiceSearchProcedure,
 	pantherclawv1connect.GraphServiceGetGraphProcedure,
+	pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, // G0 M28 D726: threatmap.read declares no writes
 }
 
 // procedureAdmits is the interceptor's question for one caller: does what it

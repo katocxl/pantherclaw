@@ -10,6 +10,11 @@ rules: [HR-090]
 asi: [ASI03]
 asi_why:
   ASI03: "Identity and privilege abuse (ASI03): a stolen workload token is used without the key it is bound to."
+atlas: [AML.T0091.000]
+attack: [T1550.001]
+technique_why:
+  AML.T0091.000: "Application access token (AML.T0091.000): a stolen workload token is used without the key it is bound to."
+  T1550.001: "Application access token (T1550.001): the stolen token stands in for the agent's own sign-in."
 requires: [github]
 harness_only: false
 steps:

@@ -8,6 +8,8 @@ author: PantherClaw
 date: 2026-11-01
 tags:
   - pc-siem-007
+  - attack.defense-impairment
+  - attack.t1685.002
 logsource:
   product: pantherclaw
   service: ocsf

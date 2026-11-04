@@ -7,6 +7,11 @@ tier: business
 attacker: A9
 threats: [T-269]
 rules: [HR-628]
+atlas: [AML.T0091.000]
+attack: [T1550.001]
+technique_why:
+  AML.T0091.000: "Application access token (AML.T0091.000): a stolen authorization code or refresh token is used."
+  T1550.001: "Application access token (T1550.001): the stolen code or refresh token stands in for the client's own sign-in."
 requires: [payments]
 harness_only: true
 steps:

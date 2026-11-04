@@ -52,7 +52,7 @@ func served(g *selfMCPGate, c tapp.Caller, procedure, client string, s *fakeStre
 	return seen, err
 }
 
-// TestHR663_AHeaderedReadIsRecordedForAnyKey: each of the four reads,
+// TestHR663_AHeaderedReadIsRecordedForAnyKey: each of the five reads,
 // called by an Org Admin key with the header of `pclaw mcp self`, is
 // recorded with basis client_header before its answer, and decided as
 // without the header: the same caller reaches the handler, and the edition

@@ -253,7 +253,7 @@ func (q *Queries) FindGroupIncident(ctx context.Context, orgID ids.OrgID, groupK
 }
 
 const getAlert = `-- name: GetAlert :one
-SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at FROM pc.alerts WHERE org_id = $1 AND id = $2
+SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at, attack FROM pc.alerts WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetAlert(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAlert, error) {
@@ -287,6 +287,7 @@ func (q *Queries) GetAlert(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (P
 		&i.Test,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attack,
 	)
 	return i, err
 }
@@ -321,7 +322,7 @@ func (q *Queries) GetFailure(ctx context.Context, orgID ids.OrgID, iD ids.UUID) 
 }
 
 const getIncident = `-- name: GetIncident :one
-SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at FROM pc.incidents WHERE org_id = $1 AND id = $2
+SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at, atlas, attack FROM pc.incidents WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcIncident, error) {
@@ -340,6 +341,8 @@ func (q *Queries) GetIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ContainedAt,
+		&i.Atlas,
+		&i.Attack,
 	)
 	return i, err
 }
@@ -369,7 +372,7 @@ func (q *Queries) GetSuppression(ctx context.Context, orgID ids.OrgID, iD ids.UU
 }
 
 const incidentAlerts = `-- name: IncidentAlerts :many
-SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at FROM pc.alerts WHERE org_id = $1 AND incident_id = $2 ORDER BY id LIMIT 500
+SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at, attack FROM pc.alerts WHERE org_id = $1 AND incident_id = $2 ORDER BY id LIMIT 500
 `
 
 func (q *Queries) IncidentAlerts(ctx context.Context, orgID ids.OrgID, incidentID *ids.UUID) ([]PcAlert, error) {
@@ -409,6 +412,7 @@ func (q *Queries) IncidentAlerts(ctx context.Context, orgID ids.OrgID, incidentI
 			&i.Test,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Attack,
 		); err != nil {
 			return nil, err
 		}
@@ -483,10 +487,11 @@ func (q *Queries) InsertDigest(ctx context.Context, orgID ids.OrgID, day pgtype.
 }
 
 const insertIncident = `-- name: InsertIncident :one
-INSERT INTO pc.incidents (org_id, id, title, severity, group_key, opened_by, test, owner_id)
+INSERT INTO pc.incidents (org_id, id, title, severity, group_key, opened_by, test, owner_id, atlas, attack)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8)
-RETURNING org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at
+        $7, $8, pc.technique_union($9::text[], '{}'),
+        pc.technique_union($10::text[], '{}'))
+RETURNING org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at, atlas, attack
 `
 
 type InsertIncidentParams struct {
@@ -498,8 +503,12 @@ type InsertIncidentParams struct {
 	OpenedBy string
 	Test     bool
 	OwnerID  *ids.UUID
+	Atlas    []string
+	Attack   []string
 }
 
+// An incident opened from an alert starts with that alert's techniques
+// (G0 M28 D718), sorted, distinct and capped like every union.
 func (q *Queries) InsertIncident(ctx context.Context, arg InsertIncidentParams) (PcIncident, error) {
 	row := q.db.QueryRow(ctx, insertIncident,
 		arg.OrgID,
@@ -510,6 +519,8 @@ func (q *Queries) InsertIncident(ctx context.Context, arg InsertIncidentParams) 
 		arg.OpenedBy,
 		arg.Test,
 		arg.OwnerID,
+		arg.Atlas,
+		arg.Attack,
 	)
 	var i PcIncident
 	err := row.Scan(
@@ -525,6 +536,8 @@ func (q *Queries) InsertIncident(ctx context.Context, arg InsertIncidentParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ContainedAt,
+		&i.Atlas,
+		&i.Attack,
 	)
 	return i, err
 }
@@ -638,7 +651,7 @@ func (q *Queries) InsertSuppressionBreak(ctx context.Context, arg InsertSuppress
 }
 
 const listAlerts = `-- name: ListAlerts :many
-SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at FROM pc.alerts
+SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at, attack FROM pc.alerts
 WHERE org_id = $1
   AND ($2::bool OR (
       EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s WHERE s ->> 'type' = 'agent')
@@ -713,6 +726,7 @@ func (q *Queries) ListAlerts(ctx context.Context, arg ListAlertsParams) ([]PcAle
 			&i.Test,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Attack,
 		); err != nil {
 			return nil, err
 		}
@@ -785,7 +799,7 @@ func (q *Queries) ListFailures(ctx context.Context, arg ListFailuresParams) ([]P
 }
 
 const listIncidents = `-- name: ListIncidents :many
-SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at FROM pc.incidents i
+SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at, atlas, attack FROM pc.incidents i
 WHERE i.org_id = $1
   AND ($2::bool OR (
       EXISTS (SELECT 1 FROM pc.alerts a WHERE a.org_id = i.org_id AND a.incident_id = i.id)
@@ -843,6 +857,8 @@ func (q *Queries) ListIncidents(ctx context.Context, arg ListIncidentsParams) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ContainedAt,
+			&i.Atlas,
+			&i.Attack,
 		); err != nil {
 			return nil, err
 		}
@@ -910,7 +926,7 @@ func (q *Queries) ListSuppressions(ctx context.Context, arg ListSuppressionsPara
 }
 
 const lockAlert = `-- name: LockAlert :one
-SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at FROM pc.alerts WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at, attack FROM pc.alerts WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockAlert(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAlert, error) {
@@ -944,12 +960,13 @@ func (q *Queries) LockAlert(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (
 		&i.Test,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attack,
 	)
 	return i, err
 }
 
 const lockIncident = `-- name: LockIncident :one
-SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at FROM pc.incidents WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at, contained_at, atlas, attack FROM pc.incidents WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcIncident, error) {
@@ -968,6 +985,8 @@ func (q *Queries) LockIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ContainedAt,
+		&i.Atlas,
+		&i.Attack,
 	)
 	return i, err
 }
@@ -984,7 +1003,7 @@ func (q *Queries) MarkDigest(ctx context.Context, state string, orgID ids.OrgID,
 }
 
 const possibleRelatedAlerts = `-- name: PossibleRelatedAlerts :many
-SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at FROM pc.alerts
+SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at, attack FROM pc.alerts
 WHERE org_id = $1 AND rule_id = $2 AND rule_id <> '' AND id <> $3
   AND ($4::bool OR (
       EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s WHERE s ->> 'type' = 'agent')
@@ -1052,6 +1071,7 @@ func (q *Queries) PossibleRelatedAlerts(ctx context.Context, arg PossibleRelated
 			&i.Test,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Attack,
 		); err != nil {
 			return nil, err
 		}
@@ -1250,4 +1270,22 @@ func (q *Queries) SuppressionBroken(ctx context.Context, orgID ids.OrgID, suppre
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const unionIncidentTechniques = `-- name: UnionIncidentTechniques :execrows
+UPDATE pc.incidents i
+SET atlas = pc.technique_union(i.atlas, a.atlas), attack = pc.technique_union(i.attack, a.attack)
+FROM pc.alerts a
+WHERE i.org_id = $1 AND i.id = $2 AND a.org_id = i.org_id AND a.id = $3
+  AND (NOT a.atlas <@ i.atlas OR NOT a.attack <@ i.attack)
+`
+
+// The incident lists the union of its alerts' techniques (G0 M28 D718): the
+// attached alert's ids join it, sorted, distinct, at most 64.
+func (q *Queries) UnionIncidentTechniques(ctx context.Context, orgID ids.OrgID, incidentID ids.UUID, alertID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, unionIncidentTechniques, orgID, incidentID, alertID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

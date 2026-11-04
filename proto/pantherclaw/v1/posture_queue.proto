@@ -49,7 +49,8 @@ message PostureFix {
   // kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,
   // ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,
   // REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL,
-  // REVIEW_SERVER or NONE. NONE: this edition has nowhere to act on it.
+  // REVIEW_SERVER, ENABLE_RULE, INSTALL_HUB_ITEM, ENABLE_AUTOMATION, RUN_RANGE
+  // or NONE. NONE: this edition has nowhere to act on it.
   string kind = 1;
   // target_id is the record the fix acts on, as "<type>:<id>"; empty for NONE.
   string target_id = 2;
@@ -110,7 +111,7 @@ message PostureSourceStatus {
 
 message ListRankedFindingsRequest {
   string source = 1 [(buf.validate.field).string = {
-    in: ["", "posture", "coverage", "suggestions", "discovery", "recommendations", "inventory", "supply_chain", "catalog", "provisioning", "saas"]
+    in: ["", "posture", "coverage", "suggestions", "discovery", "recommendations", "inventory", "supply_chain", "catalog", "provisioning", "saas", "threatmap"]
   }];
   string kind = 2 [(buf.validate.field).string = {
     max_len: 64

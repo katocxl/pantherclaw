@@ -13,7 +13,9 @@ import (
 	_ "embed"
 	"encoding/json/v2"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/campaigns/domain"
 )
@@ -26,6 +28,13 @@ type Entry struct {
 	ASI []string `json:"asi,omitzero"`
 	// ASIWhy says, per tag, how the scenario exercises that risk (D531).
 	ASIWhy map[string]string `json:"asi_why,omitzero"`
+	// ATLAS and ATTACK are the techniques the scenario tests, with one
+	// line each in TechniqueWhy (G0 M28 D714).
+	ATLAS        []string          `json:"atlas,omitzero"`
+	ATTACK       []string          `json:"attack,omitzero"`
+	TechniqueWhy map[string]string `json:"technique_why,omitzero"`
+	// TechniquesNone says why the file maps no technique (G0 M28 D714b).
+	TechniquesNone string `json:"techniques_none,omitzero"`
 }
 
 //go:embed library.json
@@ -47,6 +56,13 @@ type CampaignEntry struct {
 	Attempts []domain.Attempt `json:"attempts"`
 	// ASI are the OWASP agentic risks the campaign file tags (D529).
 	ASI []string `json:"asi,omitzero"`
+	// ATLAS and ATTACK are the techniques the campaign file tags, with
+	// one line each in TechniqueWhy (G0 M28 D714); labels, never evidence.
+	ATLAS        []string          `json:"atlas,omitzero"`
+	ATTACK       []string          `json:"attack,omitzero"`
+	TechniqueWhy map[string]string `json:"technique_why,omitzero"`
+	// TechniquesNone says why the file maps no technique (G0 M28 D714b).
+	TechniquesNone string `json:"techniques_none,omitzero"`
 }
 
 //go:embed campaigns.json
@@ -65,6 +81,9 @@ func Campaign(id string) (CampaignEntry, bool) {
 	e, ok := campaigns[id]
 	return e, ok
 }
+
+// Campaigns returns a copy of every library campaign, by id.
+func Campaigns() map[string]CampaignEntry { return maps.Clone(campaigns) }
 
 // CampaignASI returns the OWASP agentic risks (ASI01..ASI10) a library
 // campaign exercises, as its file tags them, ascending; nil for an id that
@@ -86,4 +105,23 @@ func All() map[string]Entry {
 		out[k] = v
 	}
 	return out
+}
+
+// ByTechnique returns the ids of the library scenarios that test an ATLAS or
+// ATT&CK technique (G0 M28 D714): those naming id itself, or naming a
+// sub-technique whose parent is id, in atlas or attack; sorted.
+func ByTechnique(id string) []string {
+	var out []string
+	for sid, e := range entries {
+		if slices.ContainsFunc(e.ATLAS, matches(id)) || slices.ContainsFunc(e.ATTACK, matches(id)) {
+			out = append(out, sid)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// matches reports whether a tag is id or one of id's sub-techniques.
+func matches(id string) func(string) bool {
+	return func(tag string) bool { return tag == id || strings.HasPrefix(tag, id+".") }
 }

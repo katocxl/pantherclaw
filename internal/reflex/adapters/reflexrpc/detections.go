@@ -28,6 +28,7 @@ func ruleProto(r reflexapp.Rule) *pb.DetectionRule {
 		out.RuleId, out.Version, out.Title, out.Description = x.ID, x.Version, x.Title, x.Description
 		out.Severity, out.Attention, out.Basis = string(x.Severity), string(x.Attention), string(x.Basis)
 		out.Atlas, out.Owasp, out.Edition = x.ATLAS, x.OWASP, x.Edition
+		out.Attack, out.TechniquesNone = x.ATTACK, x.TechniquesNone // G0 M28 D718
 	}
 	if c := r.Custom; c != nil {
 		out.CustomId, out.CustomState, out.Content = c.ID.String(), c.State, c.Content

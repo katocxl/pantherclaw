@@ -9,6 +9,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "pantherclaw/v1/authority.proto";
 import "pantherclaw/v1/compliance.proto";
+import "pantherclaw/v1/threatmap.proto";
 
 // EvidenceService reads the proof of the caller's org's evidence ledger (G0
 // M7 track B, design decisions 8 and 13; HR-194, HR-196; PAP-1 §9.4): its
@@ -519,6 +520,23 @@ message PackCompliance {
   PackTimeRange period = 2 [(buf.validate.field).required = true];
 }
 
+// PackThreatMap names a threat map report: a framework and an optional
+// environment (G0 M28 D720). The pack holds threat_map.json, evaluated when
+// the pack is built, and its statement is the threat map's own: it shows the
+// mapped controls and their evidence, and what they do not cover.
+// Team and above.
+message PackThreatMap {
+  ThreatFramework framework = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Only this environment's agents (Prevent, Seen); empty for the org.
+  string environment_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
 // PackContents is what a pack holds besides each transaction's states.
 message PackContents {
   // Receipts (decision, execution, effect) and their verify bundles.
@@ -552,6 +570,8 @@ message CreateEvidencePackRequest {
     string automation_execution_id = 7 [(buf.validate.field).string.uuid = true];
     // One framework's coverage for a period, as a signed report (G0 M25 D301).
     PackCompliance compliance = 8;
+    // One framework's threat map, as a signed report (G0 M28 D720).
+    PackThreatMap threat_map = 9;
   }
   // For a run or an agent: only the transactions created in this range.
   PackTimeRange within = 5;

@@ -16,7 +16,7 @@ func IsInvestigator(c Caller) bool {
 }
 
 // WithoutInvestigator is the caller as its other bindings leave it. The role
-// counts on the four reads behind pclaw mcp self and nowhere else (HR-655):
+// counts on the five reads behind pclaw mcp self and nowhere else (HR-655):
 // every route outside them, Connect or plain HTTP, sees this caller. The
 // bindings are cloned, so c is not changed.
 func WithoutInvestigator(c Caller) Caller {

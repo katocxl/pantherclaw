@@ -94,12 +94,21 @@ type File struct {
 	Threats    []string `json:"threats,omitzero"`
 	// ASI are the OWASP Top 10 for Agentic Applications risks the campaign
 	// exercises by OWASP's definition, ascending (D529).
-	ASI      []string         `json:"asi,omitzero"`
-	Rules    []string         `json:"rules,omitzero"`
-	Task     string           `json:"task"`
-	Plants   []Plant          `json:"plants,omitzero"`
-	Attempts []domain.Attempt `json:"attempts"`
-	Script   []Step           `json:"script"`
+	ASI []string `json:"asi,omitzero"`
+	// ATLAS and ATTACK are the techniques the campaign exercises, with
+	// one line each in TechniqueWhy (G0 M28 D714). Labels only: a campaign
+	// never feeds a threat-map lane.
+	ATLAS        []string          `json:"atlas,omitzero"`
+	ATTACK       []string          `json:"attack,omitzero"`
+	TechniqueWhy map[string]string `json:"technique_why,omitzero"`
+	// TechniquesNone replaces ATLAS and ATTACK on a campaign that tests
+	// PantherClaw itself: one line (G0 M28 D714b).
+	TechniquesNone string           `json:"techniques_none,omitzero"`
+	Rules          []string         `json:"rules,omitzero"`
+	Task           string           `json:"task"`
+	Plants         []Plant          `json:"plants,omitzero"`
+	Attempts       []domain.Attempt `json:"attempts"`
+	Script         []Step           `json:"script"`
 }
 
 var asiRE = regexp.MustCompile(`^ASI(0[1-9]|10)$`)
@@ -159,6 +168,9 @@ func (f *File) Validate() error {
 		return bad("1..%d attempts", maxAttempts)
 	case !validASI(f.ASI):
 		return bad("asi: OWASP risks ASI01..ASI10, ascending, each once")
+	}
+	if err := rtdomain.CheckTechniques(f.ATLAS, f.ATTACK, f.TechniqueWhy, f.TechniquesNone); err != nil {
+		return bad("%v", err)
 	}
 	seen := map[string]bool{}
 	for _, p := range f.Plants {
@@ -232,8 +244,9 @@ func (s Step) check() error {
 
 // runs is what a campaign's digest covers: only what runs (ADR-0051,
 // HR-661), under the campaign file's own JSON names. The id, title,
-// technique, tier, threats, asi and rules describe the campaign and are left
-// out, so a tag or wording change keeps the digest.
+// technique, tier, threats, asi, rules and the ATLAS and ATT&CK tags (atlas,
+// attack, technique_why, techniques_none; G0 M28 D714c L2) describe the
+// campaign and are left out, so a tag or wording change keeps the digest.
 type runs struct {
 	APIVersion string           `json:"apiVersion"`
 	Task       string           `json:"task"`

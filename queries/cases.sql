@@ -5,11 +5,18 @@
 -- triggers of migration 00122 derive their columns, chain them and move the
 -- case.
 
--- The insert trigger sets the genesis head.
+-- The insert trigger sets the genesis head. A case opened from an alert or
+-- an incident starts with the union of their techniques (G0 M28 D718).
 -- name: InsertCase :one
-INSERT INTO pc.cases (org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id)
+INSERT INTO pc.cases (org_id, id, title, source, opened_by_type, opened_by_id, alert_id, incident_id, atlas, attack)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(title), sqlc.arg(source), sqlc.arg(opened_by_type),
-    sqlc.arg(opened_by_id), sqlc.narg(alert_id), sqlc.narg(incident_id))
+    sqlc.arg(opened_by_id), sqlc.narg(alert_id), sqlc.narg(incident_id),
+    pc.technique_union(
+        (SELECT a.atlas FROM pc.alerts a WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.narg(alert_id)),
+        (SELECT i.atlas FROM pc.incidents i WHERE i.org_id = sqlc.arg(org_id) AND i.id = sqlc.narg(incident_id))),
+    pc.technique_union(
+        (SELECT a.attack FROM pc.alerts a WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.narg(alert_id)),
+        (SELECT i.attack FROM pc.incidents i WHERE i.org_id = sqlc.arg(org_id) AND i.id = sqlc.narg(incident_id))))
 RETURNING *;
 
 -- name: GetCase :one

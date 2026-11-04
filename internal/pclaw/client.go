@@ -124,6 +124,8 @@ type clients struct {
 	// entitlements reads the plan for the range's early edition check (G0 M17
 	// D126); nil skips it, the server checks anyway.
 	entitlements pantherclawv1connect.EntitlementServiceClient
+	// threatmap serves `pclaw threats` (G0 M28 D720).
+	threatmap pantherclawv1connect.ThreatMapServiceClient
 	m6Clients
 	m5p2Clients
 	m7Clients
@@ -156,6 +158,7 @@ func (a *app) clients() (clients, error) {
 		policies:      pantherclawv1connect.NewPolicyServiceClient(c),
 		ranges:        pantherclawv1connect.NewRangeServiceClient(c),
 		entitlements:  pantherclawv1connect.NewEntitlementServiceClient(c),
+		threatmap:     pantherclawv1connect.NewThreatMapServiceClient(c),
 		m6Clients: m6Clients{
 			gateways:    pantherclawv1connect.NewGatewayAdminServiceClient(c),
 			containment: pantherclawv1connect.NewContainmentServiceClient(c),

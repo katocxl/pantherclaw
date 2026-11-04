@@ -22,7 +22,7 @@ func TestHR655_InvestigatorHoldsReadsOnly(t *testing.T) {
 	}
 	want := []domain.Permission{
 		domain.PermOrgRead, domain.PermSearchRead, domain.PermEvidenceRead, domain.PermExposureRead,
-		domain.PermAgentRead, domain.PermRunRead, domain.PermGrantRead, domain.PermIncidentRead,
+		domain.PermAgentRead, domain.PermRunRead, domain.PermGrantRead, domain.PermIncidentRead, domain.PermThreatMapRead,
 	}
 	if !slices.Equal(r.Permissions, want) {
 		t.Errorf("Investigator holds %v", r.Permissions)

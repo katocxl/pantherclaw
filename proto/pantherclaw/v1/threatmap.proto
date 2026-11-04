@@ -1,0 +1,504 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ThreatMapService reads the org's MITRE ATT&CK Enterprise and MITRE ATLAS
+// threat map (G0 M28 D710-D724; F960-F973; HR-680..689).
+//
+// Each technique shows the PantherClaw controls mapped to it in four lanes,
+// Prevent, Detect, Respond and Test, and the evidence for each from the org's
+// own records. A mapped control covers the technique, not every way of
+// carrying it out; techniques outside PantherClaw need other tools. Every
+// response carries the fixed statement that says so. Prevent and Seen follow
+// the agent or environment filter; Detect, Respond and Test are org-wide and
+// every response says so.
+//
+// A person signed in to the console reads the matrix, technique pages and
+// gaps on every edition; an API key or access token needs Team or higher
+// (founder FQ1 A). The Navigator export needs Team, the history Business.
+service ThreatMapService {
+  // ListThreatFrameworks lists the pinned MITRE catalogues.
+  // permission: threatmap.read
+  rpc ListThreatFrameworks(ListThreatFrameworksRequest) returns (ListThreatFrameworksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetThreatMatrix evaluates every technique of a framework: per tactic
+  // counts by status and one cell per technique.
+  // permission: threatmap.read
+  rpc GetThreatMatrix(GetThreatMatrixRequest) returns (GetThreatMatrixResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetThreatTechnique returns one technique's lanes, their evidence, what
+  // was seen, its gaps with fixes, and its sub-techniques.
+  // permission: threatmap.read
+  rpc GetThreatTechnique(GetThreatTechniqueRequest) returns (GetThreatTechniqueResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListThreatGaps lists every gap with its fix, grouped by fix target, then
+  // technique.
+  // permission: threatmap.read
+  rpc ListThreatGaps(ListThreatGapsRequest) returns (ListThreatGapsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ExportNavigatorLayer returns the map as a MITRE ATT&CK Navigator layer
+  // (Team and above).
+  // permission: threatmap.read
+  rpc ExportNavigatorLayer(ExportNavigatorLayerRequest) returns (ExportNavigatorLayerResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetThreatMapHistory returns the daily status counts and every lane that
+  // dropped (Business and above).
+  // permission: threatmap.read
+  rpc GetThreatMapHistory(GetThreatMapHistoryRequest) returns (GetThreatMapHistoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ThreatFramework is a pinned MITRE catalogue.
+enum ThreatFramework {
+  THREAT_FRAMEWORK_UNSPECIFIED = 0;
+  // MITRE ATLAS.
+  THREAT_FRAMEWORK_ATLAS = 1;
+  // MITRE ATT&CK Enterprise.
+  THREAT_FRAMEWORK_ATTACK_ENTERPRISE = 2;
+}
+
+// ThreatLaneState is what the records say of a Prevent, Detect or Respond
+// lane.
+enum ThreatLaneState {
+  THREAT_LANE_STATE_UNSPECIFIED = 0;
+  // A mapped control is on and the records show it acting.
+  THREAT_LANE_STATE_EVIDENCED = 1;
+  // A mapped control is on, with a gap the reasons name.
+  THREAT_LANE_STATE_PARTIAL = 2;
+  // PantherClaw ships a control and it is not working here.
+  THREAT_LANE_STATE_GAP = 3;
+  // Only the org's own rule or automation is mapped: a statement, never
+  // evidence.
+  THREAT_LANE_STATE_STATED = 4;
+  // PantherClaw ships no control for this lane.
+  THREAT_LANE_STATE_NONE_SHIPPED = 5;
+}
+
+// ThreatTestState is what the org's own range results say. A test never
+// raises a status; a failure lowers it.
+enum ThreatTestState {
+  THREAT_TEST_STATE_UNSPECIFIED = 0;
+  THREAT_TEST_STATE_PASSED = 1;
+  THREAT_TEST_STATE_FAILED = 2;
+  // The newest counted result is older than 30 days.
+  THREAT_TEST_STATE_STALE = 3;
+  THREAT_TEST_STATE_NOT_RUN = 4;
+}
+
+// ThreatStatus is a technique's colour.
+enum ThreatStatus {
+  THREAT_STATUS_UNSPECIFIED = 0;
+  THREAT_STATUS_EVIDENCED = 1;
+  THREAT_STATUS_PARTIAL = 2;
+  THREAT_STATUS_GAP = 3;
+  // Outside PantherClaw: another kind of tool covers it.
+  THREAT_STATUS_OUTSIDE = 4;
+}
+
+// ThreatLane names a lane.
+enum ThreatLane {
+  THREAT_LANE_UNSPECIFIED = 0;
+  THREAT_LANE_PREVENT = 1;
+  THREAT_LANE_DETECT = 2;
+  THREAT_LANE_RESPOND = 3;
+  THREAT_LANE_TEST = 4;
+}
+
+// ThreatFixKind is how to close a gap.
+enum ThreatFixKind {
+  // No fix the organization can apply (G0 M28 D720c): a lane capped only
+  // by its sub-techniques, or a lane with no fix.
+  THREAT_FIX_KIND_UNSPECIFIED = 0;
+  THREAT_FIX_KIND_ENABLE_RULE = 1;
+  THREAT_FIX_KIND_END_SUPPRESSION = 2;
+  THREAT_FIX_KIND_SEND_EVENTS = 3;
+  THREAT_FIX_KIND_UPGRADE_EDITION = 4;
+  THREAT_FIX_KIND_TURN_ON_SETTING = 5;
+  THREAT_FIX_KIND_ROUTE_THROUGH_GATEWAY = 6;
+  THREAT_FIX_KIND_ENABLE_PLAYBOOK = 7;
+  THREAT_FIX_KIND_INSTALL_HUB_ITEM = 8;
+  THREAT_FIX_KIND_RUN_SCENARIO = 9;
+  // PantherClaw ships no control for this technique.
+  THREAT_FIX_KIND_NONE = 10;
+}
+
+// ThreatRuleSource says whose rule a Detect row is.
+enum ThreatRuleSource {
+  THREAT_RULE_SOURCE_UNSPECIFIED = 0;
+  // A built-in detection rule.
+  THREAT_RULE_SOURCE_BUILTIN = 1;
+  // A behaviour or content signal kind.
+  THREAT_RULE_SOURCE_KIND = 2;
+  // A Hub rule the org installed and has not changed since.
+  THREAT_RULE_SOURCE_HUB = 3;
+  // The org's own rule: stated, never evidence.
+  THREAT_RULE_SOURCE_CUSTOM = 4;
+}
+
+message ListThreatFrameworksRequest {}
+
+message ListThreatFrameworksResponse {
+  repeated ThreatFrameworkInfo frameworks = 1;
+}
+
+// ThreatFrameworkInfo is one pinned catalogue.
+message ThreatFrameworkInfo {
+  ThreatFramework framework = 1;
+  string title = 2;
+  string catalog_version = 3;
+  // sha256 hex of the embedded catalogue.
+  string catalog_digest = 4;
+  // Matrix techniques (not sub-techniques, deprecated or revoked).
+  int32 technique_count = 5;
+  int32 tactic_count = 6;
+}
+
+message GetThreatMatrixRequest {
+  ThreatFramework framework = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Only this agent's routes and signals (Prevent, Seen).
+  string agent_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // Only this environment's agents (Prevent, Seen).
+  string environment_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+
+  option (buf.validate.message).cel = {
+    id: "threat_matrix_scope"
+    message: "set agent_id or environment_id, not both"
+    expression: "this.agent_id == '' || this.environment_id == ''"
+  };
+}
+
+message GetThreatMatrixResponse {
+  ThreatFramework framework = 1;
+  string catalog_version = 2;
+  repeated ThreatTactic tactics = 3;
+  repeated ThreatTechniqueCell techniques = 4;
+  // What the map is and is not (G0 M28 D717).
+  string statement = 5;
+  google.protobuf.Timestamp evaluated_at = 6;
+  // The lanes that ignore the agent or environment filter.
+  repeated ThreatLane org_wide_lanes = 7;
+  // sha256 hex of the PantherClaw mappings used.
+  string mapping_digest = 8;
+}
+
+// ThreatTactic is one tactic column and its technique counts by status. A
+// technique under two tactics counts in both; there is no total.
+message ThreatTactic {
+  string tactic_id = 1;
+  string short_name = 2;
+  string name = 3;
+  int32 order = 4;
+  repeated string technique_ids = 5;
+  int32 evidenced = 6;
+  int32 partial = 7;
+  int32 gap = 8;
+  int32 outside = 9;
+}
+
+// ThreatTechniqueCell is one technique in the matrix.
+message ThreatTechniqueCell {
+  string technique_id = 1;
+  string name = 2;
+  repeated string tactic_ids = 3;
+  ThreatStatus status = 4;
+  ThreatLaneState prevent = 5;
+  ThreatLaneState detect = 6;
+  ThreatLaneState respond = 7;
+  ThreatTestState test = 8;
+  int32 subtechnique_count = 9;
+  int32 gap_count = 10;
+}
+
+message GetThreatTechniqueRequest {
+  ThreatFramework framework = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string technique_id = 2 [(buf.validate.field).string.pattern = "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"];
+  string agent_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  string environment_id = 4 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+
+  option (buf.validate.message).cel = {
+    id: "threat_technique_scope"
+    message: "set agent_id or environment_id, not both"
+    expression: "this.agent_id == '' || this.environment_id == ''"
+  };
+}
+
+message GetThreatTechniqueResponse {
+  ThreatTechniqueDetail technique = 1;
+  repeated ThreatTechniqueDetail subtechniques = 2;
+  string statement = 3;
+  google.protobuf.Timestamp evaluated_at = 4;
+}
+
+// ThreatTechniqueDetail is a technique page.
+message ThreatTechniqueDetail {
+  ThreatTechniqueCell cell = 1;
+  // The technique on MITRE's site.
+  string url = 2;
+  ThreatPreventLane prevent = 3;
+  ThreatDetectLane detect = 4;
+  ThreatRespondLane respond = 5;
+  ThreatTestLane test = 6;
+  ThreatSeen seen = 7;
+  // Set when the technique is outside PantherClaw.
+  ThreatOutsideInfo outside = 8;
+  // Set when PantherClaw ships no control for it yet.
+  string unaddressed_why = 9;
+  repeated ThreatGap gaps = 10;
+  // Range campaigns labelled with the technique. Labels only: they never
+  // feed the Test lane.
+  repeated string campaigns = 11;
+  // For a sub-technique, its parent.
+  string parent_id = 12;
+}
+
+// ThreatPreventLane is the controls that refuse or hold the technique.
+message ThreatPreventLane {
+  ThreatLaneState state = 1;
+  repeated string reasons = 2;
+  repeated ThreatControl controls = 3;
+  ThreatRouteCounts routes = 4;
+}
+
+// ThreatControl is one mapped Prevent control.
+message ThreatControl {
+  string control_id = 1;
+  string title = 2;
+  // AUTHORITY, GATEWAY, SANDBOX or CREDENTIAL.
+  string surface = 3;
+  repeated string hr_ids = 4;
+  repeated string reason_codes = 5;
+  // Whether what the control requires holds in this org.
+  bool applies = 6;
+  string why = 7;
+}
+
+// ThreatRouteCounts counts the in-scope routes by coverage state.
+message ThreatRouteCounts {
+  int32 enforced = 1;
+  int32 partial = 2;
+  int32 observe_only = 3;
+  int32 unknown = 4;
+  int32 stale = 5;
+}
+
+// ThreatDetectLane is the rules and signal kinds that detect the technique.
+message ThreatDetectLane {
+  ThreatLaneState state = 1;
+  repeated string reasons = 2;
+  repeated ThreatRule rules = 3;
+}
+
+// ThreatRule is one detection rule or signal kind mapped to the technique.
+message ThreatRule {
+  string rule_id = 1;
+  string title = 2;
+  ThreatRuleSource source = 3;
+  bool licensed = 4;
+  bool disabled = 5;
+  bool suppressed = 6;
+  // When matching input last arrived; unset when none has.
+  google.protobuf.Timestamp last_input_time = 7;
+  repeated string input_kinds = 8;
+  // Why the input counts as live, or why not.
+  string input_live_reason = 9;
+}
+
+// ThreatRespondLane is the automations that act on the technique's alerts.
+message ThreatRespondLane {
+  ThreatLaneState state = 1;
+  repeated string reasons = 2;
+  repeated ThreatAutomation automations = 3;
+}
+
+// ThreatAutomation is one org automation or Hub playbook.
+message ThreatAutomation {
+  string automation_id = 1;
+  string name = 2;
+  // ACTIVE, DRAFT or PAUSED; empty for a Hub item not installed.
+  string state = 3;
+  repeated string trigger_rule_ids = 4;
+  bool has_contain = 5;
+  // The Hub item it came from, or that would install it.
+  string hub_item = 6;
+}
+
+// ThreatTestLane is the org's own range results for the technique.
+message ThreatTestLane {
+  ThreatTestState state = 1;
+  repeated string reasons = 2;
+  repeated ThreatScenario scenarios = 3;
+}
+
+// ThreatScenario is one library scenario mapped to the technique and its
+// newest result.
+message ThreatScenario {
+  string scenario_id = 1;
+  string title = 2;
+  string why = 3;
+  google.protobuf.Timestamp last_record_time = 4;
+  // PASS, FAIL, ERROR, SKIPPED or MISSING; empty when never run.
+  string verdict = 5;
+  // SERVER, CLIENT, MIXED or NONE.
+  string observed_by = 6;
+  string range_id = 7;
+}
+
+// ThreatSeen counts what happened in the window, in scope.
+message ThreatSeen {
+  // Alerts raised that carry the technique.
+  int64 alerts_raised = 1;
+  // Refusals by mapped controls.
+  int64 refusals = 2;
+  // Holds by mapped controls.
+  int64 holds = 3;
+  int32 window_days = 4;
+}
+
+// ThreatOutsideInfo says which kind of tool covers a technique outside
+// PantherClaw.
+message ThreatOutsideInfo {
+  string reason = 1;
+  string covered_by = 2;
+  string note = 3;
+}
+
+// ThreatGap is one PARTIAL or GAP lane and its fix.
+message ThreatGap {
+  ThreatLane lane = 1;
+  string technique_id = 2;
+  string reason = 3;
+  ThreatFixKind fix_kind = 4;
+  string target_id = 5;
+  string label = 6;
+  // A pclaw command that applies the fix, when one does.
+  string command = 7;
+}
+
+message ListThreatGapsRequest {
+  ThreatFramework framework = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string agent_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  string environment_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  int32 page_size = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 5 [(buf.validate.field).string.max_len = 256];
+
+  option (buf.validate.message).cel = {
+    id: "threat_gaps_scope"
+    message: "set agent_id or environment_id, not both"
+    expression: "this.agent_id == '' || this.environment_id == ''"
+  };
+}
+
+message ListThreatGapsResponse {
+  repeated ThreatGap gaps = 1;
+  string next_page_token = 2;
+}
+
+message ExportNavigatorLayerRequest {
+  ThreatFramework framework = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string agent_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  string environment_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+
+  option (buf.validate.message).cel = {
+    id: "navigator_layer_scope"
+    message: "set agent_id or environment_id, not both"
+    expression: "this.agent_id == '' || this.environment_id == ''"
+  };
+}
+
+message ExportNavigatorLayerResponse {
+  // The Navigator layer JSON.
+  bytes layer_json = 1;
+  string file_name = 2;
+}
+
+message GetThreatMapHistoryRequest {
+  ThreatFramework framework = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string environment_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  int32 days = 3 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 400
+  }];
+}
+
+message GetThreatMapHistoryResponse {
+  repeated ThreatHistoryDay days = 1;
+  repeated ThreatDrop drops = 2;
+}
+
+// ThreatHistoryDay is one day's technique counts by status.
+message ThreatHistoryDay {
+  // YYYY-MM-DD, UTC.
+  string day = 1;
+  int32 evidenced = 2;
+  int32 partial = 3;
+  int32 gap = 4;
+  int32 outside = 5;
+}
+
+// ThreatDrop is one lane that dropped on a day.
+message ThreatDrop {
+  // YYYY-MM-DD, UTC.
+  string day = 1;
+  string technique_id = 2;
+  ThreatLane lane = 3;
+  // The lane's state before and after, e.g. EVIDENCED and GAP.
+  string from = 4;
+  string to = 5;
+}

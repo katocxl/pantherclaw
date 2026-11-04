@@ -189,6 +189,9 @@ func (e *Engine) Process(ctx context.Context, org ids.OrgID) (RunResult, error) 
 		if err := st.Prune(ctx, e.now()); err != nil {
 			return err
 		}
+		if err := saveInputs(ctx, q, org, set, events); err != nil {
+			return err
+		}
 		n, err := q.AdvanceDetectionCursor(ctx, res.To, org, cursor)
 		if err != nil {
 			return err

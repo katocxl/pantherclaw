@@ -44,13 +44,13 @@ func passes(t *testing.T, c tapp.Caller, procedure string) (bool, tapp.Caller, e
 	return ran, got, err
 }
 
-// TestHR655_InvestigatorReachesOnlyTheFourReads walks every procedure the
-// server serves: an Investigator gets through on the four reads, exactly,
+// TestHR655_InvestigatorReachesOnlyTheFiveReads walks every procedure the
+// server serves: an Investigator gets through on the five reads, exactly,
 // and each is a read. Everything else is refused, including what its
 // permissions declare (the saved queries, model drafting, bundle export) and
 // what any signed-in caller reaches.
 // Covers: F946
-func TestHR655_InvestigatorReachesOnlyTheFourReads(t *testing.T) {
+func TestHR655_InvestigatorReachesOnlyTheFiveReads(t *testing.T) {
 	c := investigatorCaller()
 	var reached []string
 	for proc := range procedurePermissions {

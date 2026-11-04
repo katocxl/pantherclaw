@@ -7,6 +7,7 @@ tier: business
 attacker: A8
 threats: [T-166]
 rules: [HR-359]
+techniques_none: "Tests PantherClaw's own startup: a production server refuses a development billing seam."
 requires: [billing]
 harness_only: false
 steps:

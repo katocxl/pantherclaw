@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
+	"github.com/katocxl/pantherclaw/internal/threatmap/catalog"
 )
 
 // Version is the OCSF schema version of every event.
@@ -266,16 +267,28 @@ type Analytic struct {
 	Version string `json:"version,omitzero"`
 }
 
-// Attack is the OCSF attack object; PantherClaw puts ATLAS (adversarial AI)
-// techniques in it.
+// Attack is the OCSF attack object: one per (technique, tactic) of the
+// ATLAS and ATT&CK techniques an alert or incident carries, with names and
+// tactics from the pinned catalog (G0 M28 D718). A sub-technique fills
+// SubTechnique and its parent Technique. Version is the ATT&CK catalog
+// version, or "ATLAS <version>" for an ATLAS id.
 type Attack struct {
-	Technique Technique `json:"technique"`
-	Version   string    `json:"version,omitzero"`
+	Tactic       *Tactic    `json:"tactic,omitzero"`
+	Technique    *Technique `json:"technique,omitzero"`
+	SubTechnique *Technique `json:"sub_technique,omitzero"`
+	Version      string     `json:"version,omitzero"`
 }
 
-// Technique is the OCSF technique object.
+// Tactic is the OCSF tactic object.
+type Tactic struct {
+	UID  string `json:"uid"`
+	Name string `json:"name,omitzero"`
+}
+
+// Technique is the OCSF technique (and sub-technique) object.
 type Technique struct {
-	UID string `json:"uid"`
+	UID  string `json:"uid"`
+	Name string `json:"name,omitzero"`
 }
 
 // Resource is the OCSF resource details object.
@@ -313,6 +326,7 @@ const (
 	AttrEffect        = "effect"
 	AttrCoverage      = "coverage"
 	AttrATLAS         = "atlas"
+	AttrATTACK        = "attack"
 	AttrOWASP         = "owasp"
 )
 
@@ -321,7 +335,7 @@ const (
 var mappedAttrs = map[string]bool{
 	AttrPolicyVersion: true, AttrRuleID: true, AttrRuleVersion: true, AttrTitle: true, AttrSummary: true,
 	AttrSeverity: true, AttrState: true, AttrID: true, AttrBasis: true, AttrEffect: true, AttrCoverage: true, AttrATLAS: true,
-	AttrOWASP: true,
+	AttrOWASP: true, AttrATTACK: true,
 }
 
 // Map returns the OCSF record of e. productVersion is PantherClaw's
@@ -599,10 +613,60 @@ func findingInfo(e Event) *FindingInfo {
 	if id := e.Attrs[AttrRuleID]; id != "" {
 		f.Analytic = &Analytic{UID: id, Name: id, Type: "Rule", TypeID: 1, Version: e.Attrs[AttrRuleVersion]}
 	}
-	for _, t := range splitList(e.Attrs[AttrATLAS]) {
-		f.Attacks = append(f.Attacks, Attack{Technique: Technique{UID: t}, Version: "ATLAS"})
+	// The full technique lists, never the atlas/attack attributes, which
+	// may be cut to fit (G0 M28 D718b, HR-684).
+	for _, t := range e.ATLAS {
+		f.Attacks = append(f.Attacks, attacksOf(t)...)
+	}
+	for _, t := range e.ATTACK {
+		f.Attacks = append(f.Attacks, attacksOf(t)...)
 	}
 	return f
+}
+
+// attacksOf returns the OCSF attack objects of one technique id: one per
+// tactic the catalog gives it (G0 M28 D718). An id the catalog does not
+// know keeps its uid alone, so a label is never dropped.
+func attacksOf(id string) []Attack {
+	fw, ok := catalog.FrameworkOf(id)
+	if !ok {
+		return []Attack{{Technique: &Technique{UID: id}}}
+	}
+	c := catalog.Load(fw)
+	version := c.Version
+	if fw == catalog.FrameworkATLAS {
+		version = "ATLAS " + c.Version
+	}
+	t, ok := c.Technique(id)
+	if !ok {
+		return []Attack{{Technique: &Technique{UID: id}, Version: version}}
+	}
+	a := Attack{Technique: &Technique{UID: t.ID, Name: t.Name}, Version: version}
+	tactics := t.Tactics
+	if t.Parent != "" {
+		a.SubTechnique = a.Technique
+		a.Technique = &Technique{UID: t.Parent}
+		if p, ok := c.Technique(t.Parent); ok {
+			a.Technique.Name = p.Name
+			if len(tactics) == 0 {
+				tactics = p.Tactics
+			}
+		}
+	}
+	if len(tactics) == 0 {
+		return []Attack{a}
+	}
+	out := make([]Attack, 0, len(tactics))
+	for _, short := range tactics {
+		x := a
+		if tc, ok := c.Tactic(short); ok {
+			x.Tactic = &Tactic{UID: tc.ID, Name: tc.Name}
+		} else {
+			x.Tactic = &Tactic{UID: short}
+		}
+		out = append(out, x)
+	}
+	return out
 }
 
 // splitList reads a comma-separated attribute.

@@ -37,8 +37,12 @@ func TestHR640_ACustomRuleRaisesInferenceAtMost(t *testing.T) {
 		{"org.kill", "business", reflexdomain.BasisHypothesis, reflexdomain.BasisHypothesis},
 		{"pc.test.kill", "community", reflexdomain.BasisObserved, reflexdomain.BasisObserved},
 	} {
+		none := "" // a built-in rule says techniques_none (G0 M28 D714)
+		if strings.HasPrefix(tc.id, "pc.") {
+			none = "techniques_none: A test rule.\n"
+		}
 		r, err := rules.Parse([]byte("id: " + tc.id + "\nversion: \"1\"\ntitle: Kill\ndescription: Custom.\nseverity: LOW\nattention: ALERT\n" +
-			"basis: " + string(tc.declared) + "\nedition: " + tc.edition + "\non: [audit.security.kill_switch_engaged]\ntests: []\n"))
+			"basis: " + string(tc.declared) + "\nedition: " + tc.edition + "\n" + none + "on: [audit.security.kill_switch_engaged]\ntests: []\n"))
 		if err != nil {
 			t.Fatal(err)
 		}

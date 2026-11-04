@@ -67,6 +67,9 @@ func (s *fakeStream) Receive(msg any) error {
 	case *pb.SearchRequest:
 		m.Query = s.request.(*pb.SearchRequest).GetQuery()
 		m.PageSize = s.request.(*pb.SearchRequest).GetPageSize()
+	case *pb.GetThreatTechniqueRequest:
+		r := s.request.(*pb.GetThreatTechniqueRequest)
+		m.Framework, m.TechniqueId, m.AgentId = r.GetFramework(), r.GetTechniqueId(), r.GetAgentId()
 	}
 	return nil
 }

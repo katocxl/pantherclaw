@@ -38,7 +38,9 @@ import (
 	"github.com/katocxl/pantherclaw/internal/redteam/adapters/live"
 	rtapp "github.com/katocxl/pantherclaw/internal/redteam/app"
 	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/library"
 	"github.com/katocxl/pantherclaw/internal/redteam/receipt"
+	"github.com/katocxl/pantherclaw/internal/threatmap/catalog"
 )
 
 // pclaw redteam (G0 M12, PN-009; HR-223..HR-226): the adversarial range.
@@ -53,7 +55,7 @@ import (
 
 func init() {
 	commands["redteam run"] = command{
-		usage: "redteam run --scenarios DIR --workload-file FILE --gateway URL [--suite coding-agent|platform|all] [--grant ID] " +
+		usage: "redteam run --scenarios DIR --workload-file FILE --gateway URL [--suite coding-agent|platform|all] [--technique ID] [--grant ID] " +
 			"[--token-file FILE] [--role ROLE=CONNECTION]… [--fixture NAME=VALUE]… [--provides github,payments,mcp] " +
 			"[--interactive] [--baseline PACK --trust FILE | --baseline-range RANGE_ID] [--out DIR]",
 		run: redteamRun,
@@ -84,6 +86,7 @@ type runOptions struct {
 	dir, suite, keyFile, gateway, grant, tokenFile string
 	roles, fixtures                                list
 	provides, baseline, trust, out, baselineRange  string
+	technique                                      string
 	interactive                                    bool
 }
 
@@ -93,6 +96,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	fs.SetOutput(a.stderr)
 	fs.StringVar(&o.dir, "scenarios", "", "directory of RT-###-*.yaml (library) or CX-###-*.yaml (customer) scenario files")
 	fs.StringVar(&o.suite, "suite", "coding-agent", "coding-agent, platform or all")
+	fs.StringVar(&o.technique, "technique", "", "run only the library scenarios that test this ATLAS or ATT&CK technique or its sub-techniques (any suite unless --suite is given)")
 	fs.StringVar(&o.keyFile, "workload-file", "", "the range instance's enrolled workload key file")
 	fs.StringVar(&o.gateway, "gateway", "", "the gateway's public URL")
 	fs.StringVar(&o.grant, "grant", "", "the range root grant (needed when the range agent has more than one active root grant)")
@@ -110,6 +114,12 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	}
 	switch {
 	case fs.NArg() != 0 || o.dir == "" || o.keyFile == "" || o.gateway == "":
+		return errUsage
+	case o.technique != "" && !catalog.Known(o.technique):
+		_, _ = fmt.Fprintf(a.stderr, "pclaw: --technique %q is not a technique of the pinned ATLAS or ATT&CK catalogs\n", o.technique)
+		return errUsage
+	case o.technique != "" && !catalog.KnownActive(o.technique): // G0 M28 D714e L5
+		_, _ = fmt.Fprintf(a.stderr, "pclaw: --technique %q is revoked or deprecated in the pinned catalog\n", o.technique)
 		return errUsage
 	case !slices.Contains(suites, o.suite):
 		return failExit("--suite must be one of %s", strings.Join(suites, ", "))
@@ -140,9 +150,16 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return failExit("%v", err)
 	}
-	set = slices.DeleteFunc(set, func(l rtapp.Loaded) bool { return o.suite != "all" && l.Scenario.Suite != o.suite })
-	if len(set) == 0 {
-		return failExit("no scenarios of suite %s in %s", o.suite, o.dir)
+	if o.technique != "" {
+		if set, err = byTechnique(set, o.technique); err != nil {
+			return err
+		}
+		if !flagSet(fs, "suite") {
+			o.suite = "all"
+		}
+	}
+	if set, err = ofSuite(set, o.suite, o.technique, o.dir); err != nil {
+		return err
 	}
 	origin, err := setOrigin(set)
 	if err != nil {
@@ -828,4 +845,36 @@ func checkRangeGrant(ctx context.Context, c clients, agent, want string, set []r
 		return "", nil, fmt.Errorf("the range grant has %d of %d delegations left and the range's agent.child steps need %d; %s", left, grantsdomain.MaxChildrenTotal, need, reissue)
 	}
 	return root.GetId(), notes, nil
+}
+
+// byTechnique keeps the scenarios of set the library says test id or one of
+// its sub-techniques (G0 M28 D725). None is exit 2.
+func byTechnique(set []rtapp.Loaded, id string) ([]rtapp.Loaded, error) {
+	ids := library.ByTechnique(id)
+	out := slices.DeleteFunc(slices.Clone(set), func(l rtapp.Loaded) bool { return !slices.Contains(ids, l.Scenario.ID) })
+	if len(out) == 0 {
+		return nil, failExit("no library scenario tests %s", id)
+	}
+	return out, nil
+}
+
+// ofSuite keeps the scenarios of suite ("all" keeps every one). When
+// --technique matched scenarios that the suite then removes, the message
+// still names the technique (G0 M28 D714e L5); both exit 2.
+func ofSuite(set []rtapp.Loaded, suite, technique, dir string) ([]rtapp.Loaded, error) {
+	out := slices.DeleteFunc(slices.Clone(set), func(l rtapp.Loaded) bool { return suite != "all" && l.Scenario.Suite != suite })
+	switch {
+	case len(out) > 0:
+		return out, nil
+	case technique != "":
+		return nil, failExit("no library scenario tests %s in suite %s", technique, suite)
+	}
+	return nil, failExit("no scenarios of suite %s in %s", suite, dir)
+}
+
+// flagSet reports whether the command line gave the flag.
+func flagSet(fs *flag.FlagSet, name string) bool {
+	given := false
+	fs.Visit(func(f *flag.Flag) { given = given || f.Name == name })
+	return given
 }

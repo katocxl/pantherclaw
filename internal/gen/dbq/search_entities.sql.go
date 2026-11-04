@@ -30,8 +30,10 @@ SELECT count(*) FROM (
       AND (cardinality($7::text[]) = 0 OR a.state = ANY ($7::text[]))
       AND (cardinality($8::text[]) = 0 OR a.severity = ANY ($8::text[]))
       AND (cardinality($9::text[]) = 0 OR a.source = ANY ($9::text[]))
-      AND ($10::timestamptz IS NULL OR a.created_at >= $10::timestamptz)
-      AND ($11::timestamptz IS NULL OR a.created_at < $11::timestamptz)
+      AND ($10::text = '' OR EXISTS (SELECT 1 FROM unnest(a.atlas || a.attack) t
+                                                  WHERE t = $10::text OR t LIKE $10::text || '.%'))
+      AND ($11::timestamptz IS NULL OR a.created_at >= $11::timestamptz)
+      AND ($12::timestamptz IS NULL OR a.created_at < $12::timestamptz)
     LIMIT 10001
 ) x
 `
@@ -46,6 +48,7 @@ type CountAlertsParams struct {
 	States     []string
 	Severities []string
 	Sources    []string
+	Technique  string
 	StartTime  *time.Time
 	EndTime    *time.Time
 }
@@ -61,6 +64,7 @@ func (q *Queries) CountAlerts(ctx context.Context, arg CountAlertsParams) (int64
 		arg.States,
 		arg.Severities,
 		arg.Sources,
+		arg.Technique,
 		arg.StartTime,
 		arg.EndTime,
 	)
@@ -299,8 +303,10 @@ SELECT count(*) FROM (
                         AND a.subjects @> jsonb_build_array(jsonb_build_object('type', 'agent', 'id', $5::uuid::text))))
       AND (cardinality($6::text[]) = 0 OR i.state = ANY ($6::text[]))
       AND (cardinality($7::text[]) = 0 OR i.severity = ANY ($7::text[]))
-      AND ($8::timestamptz IS NULL OR i.created_at >= $8::timestamptz)
-      AND ($9::timestamptz IS NULL OR i.created_at < $9::timestamptz)
+      AND ($8::text = '' OR EXISTS (SELECT 1 FROM unnest(i.atlas || i.attack) t
+                                                  WHERE t = $8::text OR t LIKE $8::text || '.%'))
+      AND ($9::timestamptz IS NULL OR i.created_at >= $9::timestamptz)
+      AND ($10::timestamptz IS NULL OR i.created_at < $10::timestamptz)
     LIMIT 10001
 ) x
 `
@@ -313,6 +319,7 @@ type CountIncidentsParams struct {
 	AgentID    *ids.UUID
 	States     []string
 	Severities []string
+	Technique  string
 	StartTime  *time.Time
 	EndTime    *time.Time
 }
@@ -326,6 +333,7 @@ func (q *Queries) CountIncidents(ctx context.Context, arg CountIncidentsParams) 
 		arg.AgentID,
 		arg.States,
 		arg.Severities,
+		arg.Technique,
 		arg.StartTime,
 		arg.EndTime,
 	)
@@ -424,10 +432,12 @@ WHERE a.org_id = $1
   AND (cardinality($8::text[]) = 0 OR a.state = ANY ($8::text[]))
   AND (cardinality($9::text[]) = 0 OR a.severity = ANY ($9::text[]))
   AND (cardinality($10::text[]) = 0 OR a.source = ANY ($10::text[]))
-  AND ($11::timestamptz IS NULL OR a.created_at >= $11::timestamptz)
-  AND ($12::timestamptz IS NULL OR a.created_at < $12::timestamptz)
+  AND ($11::text = '' OR EXISTS (SELECT 1 FROM unnest(a.atlas || a.attack) t
+                                              WHERE t = $11::text OR t LIKE $11::text || '.%'))
+  AND ($12::timestamptz IS NULL OR a.created_at >= $12::timestamptz)
+  AND ($13::timestamptz IS NULL OR a.created_at < $13::timestamptz)
 ORDER BY a.id DESC
-LIMIT $13
+LIMIT $14
 `
 
 type SearchAlertsParams struct {
@@ -441,6 +451,7 @@ type SearchAlertsParams struct {
 	States     []string
 	Severities []string
 	Sources    []string
+	Technique  string
 	StartTime  *time.Time
 	EndTime    *time.Time
 	PageLimit  int32
@@ -487,6 +498,7 @@ func (q *Queries) SearchAlerts(ctx context.Context, arg SearchAlertsParams) ([]S
 		arg.States,
 		arg.Severities,
 		arg.Sources,
+		arg.Technique,
 		arg.StartTime,
 		arg.EndTime,
 		arg.PageLimit,
@@ -991,10 +1003,12 @@ WHERE i.org_id = $1
                     AND a.subjects @> jsonb_build_array(jsonb_build_object('type', 'agent', 'id', $6::uuid::text))))
   AND (cardinality($7::text[]) = 0 OR i.state = ANY ($7::text[]))
   AND (cardinality($8::text[]) = 0 OR i.severity = ANY ($8::text[]))
-  AND ($9::timestamptz IS NULL OR i.created_at >= $9::timestamptz)
-  AND ($10::timestamptz IS NULL OR i.created_at < $10::timestamptz)
+  AND ($9::text = '' OR EXISTS (SELECT 1 FROM unnest(i.atlas || i.attack) t
+                                              WHERE t = $9::text OR t LIKE $9::text || '.%'))
+  AND ($10::timestamptz IS NULL OR i.created_at >= $10::timestamptz)
+  AND ($11::timestamptz IS NULL OR i.created_at < $11::timestamptz)
 ORDER BY i.id DESC
-LIMIT $11
+LIMIT $12
 `
 
 type SearchIncidentsParams struct {
@@ -1006,6 +1020,7 @@ type SearchIncidentsParams struct {
 	AgentID    *ids.UUID
 	States     []string
 	Severities []string
+	Technique  string
 	StartTime  *time.Time
 	EndTime    *time.Time
 	PageLimit  int32
@@ -1034,6 +1049,7 @@ func (q *Queries) SearchIncidents(ctx context.Context, arg SearchIncidentsParams
 		arg.AgentID,
 		arg.States,
 		arg.Severities,
+		arg.Technique,
 		arg.StartTime,
 		arg.EndTime,
 		arg.PageLimit,

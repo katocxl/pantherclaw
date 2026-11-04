@@ -63,3 +63,4 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [siem-packs.md](siem-packs.md) | M27 | SIEM content packs for Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma: ingest, what was not checked, acting on exported alerts |
 | [pclaw-mcp-self.md](pclaw-mcp-self.md) | M27 | `pclaw mcp self`: a read-only MCP server for a SOC agent, the Investigator role and the server's audit of each read (Team) |
 | [siem-forwarder.md](siem-forwarder.md) | M27 | `pclaw siem forward`: verify SIEM export batches and write one OCSF event per line for Sentinel's Azure Monitor Agent or Wazuh (Business) |
+| [threat-map.md](threat-map.md) | M28 | The threat map: MITRE ATLAS and ATT&CK Enterprise lanes, gaps and fixes, `pclaw threats`, the signed report, the Navigator layer and history |

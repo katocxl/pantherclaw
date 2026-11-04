@@ -7,6 +7,7 @@ tier: business
 attacker: A1
 threats: [T-277]
 rules: [HR-648]
+techniques_none: "Tests PantherClaw's own decision order: a content flag never turns a deny into a hold."
 requires: [jira.comment]
 # The operator step sets the mode without the step-up a person's change takes.
 harness_only: true

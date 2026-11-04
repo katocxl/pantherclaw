@@ -10,6 +10,9 @@ rules: [HR-186]
 asi: [ASI08]
 asi_why:
   ASI08: "Cascading failures (ASI08): with the gateway down, the agent's next command must stop rather than run unchecked."
+attack: [T1685]
+technique_why:
+  T1685: "Disable or modify tools (T1685): with the gateway unreachable, the agent's next command tries to run without its check."
 requires: []
 harness_only: false
 steps:

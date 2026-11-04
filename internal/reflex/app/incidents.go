@@ -351,6 +351,7 @@ func (s *Incidents) PromoteAlert(ctx context.Context, id ids.UUID, note string) 
 		inc, err := q.InsertIncident(ctx, dbq.InsertIncidentParams{
 			OrgID: c.Org, ID: ids.NewV7(), Title: a.Title, Severity: a.Severity, GroupKey: a.GroupKey,
 			OpenedBy: "user:" + c.Principal.ID.String(), Test: a.Test,
+			Atlas: a.Atlas, Attack: a.Attack, // G0 M28 D718: the alert's techniques open it
 		})
 		if err != nil {
 			return err

@@ -10,6 +10,8 @@ severity: CRITICAL
 attention: PAGE
 basis: OBSERVED
 owasp: [ASI08]
+atlas: [AML.T0091.000]
+attack: [T1550.001]
 edition: community
 on: [audit.security.effect_without_receipt]
 tests:

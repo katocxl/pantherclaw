@@ -60,9 +60,12 @@ ORDER BY i.id DESC
 LIMIT 1;
 
 -- name: InsertIncident :one
-INSERT INTO pc.incidents (org_id, id, title, severity, group_key, opened_by, test, owner_id)
+-- An incident opened from an alert starts with that alert's techniques
+-- (G0 M28 D718), sorted, distinct and capped like every union.
+INSERT INTO pc.incidents (org_id, id, title, severity, group_key, opened_by, test, owner_id, atlas, attack)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(title), sqlc.arg(severity), sqlc.arg(group_key), sqlc.arg(opened_by),
-        sqlc.arg(test), sqlc.narg(owner_id))
+        sqlc.arg(test), sqlc.narg(owner_id), pc.technique_union(sqlc.arg(atlas)::text[], '{}'),
+        pc.technique_union(sqlc.arg(attack)::text[], '{}'))
 RETURNING *;
 
 -- name: InsertIncidentEvent :exec
@@ -73,6 +76,15 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(incident_id), sqlc.arg(kind), s
 -- name: AttachAlert :execrows
 UPDATE pc.alerts SET incident_id = sqlc.arg(incident_id), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND incident_id IS NULL;
+
+-- name: UnionIncidentTechniques :execrows
+-- The incident lists the union of its alerts' techniques (G0 M28 D718): the
+-- attached alert's ids join it, sorted, distinct, at most 64.
+UPDATE pc.incidents i
+SET atlas = pc.technique_union(i.atlas, a.atlas), attack = pc.technique_union(i.attack, a.attack)
+FROM pc.alerts a
+WHERE i.org_id = sqlc.arg(org_id) AND i.id = sqlc.arg(incident_id) AND a.org_id = i.org_id AND a.id = sqlc.arg(alert_id)
+  AND (NOT a.atlas <@ i.atlas OR NOT a.attack <@ i.attack);
 
 -- name: RaiseIncidentSeverity :execrows
 -- Severity only goes up as alerts attach.

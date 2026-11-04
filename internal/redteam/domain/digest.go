@@ -15,9 +15,10 @@ import (
 
 // runs is what a scenario's digest covers: only what runs (ADR-0051,
 // HR-661), under the scenario file's own JSON names. The id, title,
-// category, suite, tier, attacker, threats, rules, asi and asi_why describe
-// the scenario and are left out, so a tag or wording change keeps the
-// digest.
+// category, suite, tier, attacker, threats, rules, asi, asi_why and the
+// technique tags (atlas, attack, technique_why, techniques_none; G0 M28
+// D714c L2) describe the scenario and are left out, so a tag or wording
+// change keeps the digest.
 type runs struct {
 	APIVersion  string   `json:"apiVersion"`
 	Requires    []string `json:"requires,omitempty"`

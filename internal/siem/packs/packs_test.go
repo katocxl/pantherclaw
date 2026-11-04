@@ -61,6 +61,10 @@ type catalogRule struct {
 	Title    string   `yaml:"title"`
 	Severity string   `yaml:"severity"`
 	FiresOn  []string `yaml:"fires_on"`
+	// ATT&CK Enterprise ids, or a one-line reason the rule names none
+	// (G0 M28 D718).
+	Attack         []string `yaml:"attack"`
+	TechniquesNone string   `yaml:"techniques_none"`
 }
 
 func catalog(t *testing.T) []catalogRule {
@@ -522,6 +526,10 @@ func sigmaPred(t *testing.T, sel map[string]any) pred {
 
 func sigmaRules(t *testing.T) map[string]pred {
 	t.Helper()
+	byID := map[string]catalogRule{}
+	for _, r := range catalog(t) {
+		byID[r.ID] = r
+	}
 	out := map[string]pred{}
 	for _, file := range glob(t, "sigma/rules/*.yml") {
 		var doc struct {
@@ -540,8 +548,17 @@ func sigmaRules(t *testing.T) map[string]pred {
 			t.Fatalf("%s: %v", file, err)
 		}
 		if !sigmaID.MatchString(doc.ID) || doc.Title == "" || doc.Level == "" || doc.LogSource["product"] != "pantherclaw" ||
-			doc.Detection.Condition != "selection and not simulated" || len(doc.Tags) != 1 {
+			doc.Detection.Condition != "selection and not simulated" || len(doc.Tags) == 0 {
 			t.Fatalf("%s: %+v", file, doc)
+		}
+		// The first tag is the rule id; the rest are exactly rules.yaml's
+		// ATT&CK tags (G0 M28 D718).
+		r, ok := byID[doc.Tags[0]]
+		if !ok {
+			t.Fatalf("%s: first tag %q is not a rules.yaml id", file, doc.Tags[0])
+		}
+		if want := sigmaAttackTags(t, r); !slices.Equal(doc.Tags[1:], want) {
+			t.Fatalf("%s: tags after the id %v, want %v", file, doc.Tags[1:], want)
 		}
 		out[doc.Tags[0]] = all(sigmaPred(t, doc.Detection.Selection), not(sigmaPred(t, doc.Detection.Simulated)))
 	}
@@ -616,7 +633,8 @@ func TestPacks_ChronicleParserSetsWhatTheMapReads(t *testing.T) {
 //
 // Covers: F944
 func TestHR654_PacksAreDataAndShipDisabled(t *testing.T) {
-	allowed := []string{"", ".md", ".json", ".ndjson", ".yaml", ".yml", ".conf", ".xml", ".yaral"}
+	// .csv: the Splunk lookup of each rule's ATT&CK ids (G0 M28 D718), data.
+	allowed := []string{"", ".md", ".json", ".ndjson", ".yaml", ".yml", ".conf", ".xml", ".yaral", ".csv"}
 	err := fs.WalkDir(os.DirFS(packRoot), ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

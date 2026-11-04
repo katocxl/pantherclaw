@@ -1015,6 +1015,21 @@ func (q *Queries) SetDetectionRuleErrors(ctx context.Context, arg SetDetectionRu
 	return err
 }
 
+const touchDetectionRuleInput = `-- name: TouchDetectionRuleInput :exec
+INSERT INTO pc.detection_rule_state (org_id, rule_id, last_input_at)
+VALUES ($1, $2, $3::timestamptz)
+ON CONFLICT (org_id, rule_id) DO UPDATE SET last_input_at =
+    greatest(coalesce(pc.detection_rule_state.last_input_at, '-infinity'::timestamptz), EXCLUDED.last_input_at)
+`
+
+// When input matching the rule last arrived (G0 M28 D716): the newest
+// occurred_at of a batch's matching events, written in the transaction that
+// advances the cursor. It never moves back.
+func (q *Queries) TouchDetectionRuleInput(ctx context.Context, orgID ids.OrgID, ruleID string, lastInputAt time.Time) error {
+	_, err := q.db.Exec(ctx, touchDetectionRuleInput, orgID, ruleID, lastInputAt)
+	return err
+}
+
 const touchDetectionWindowGroup = `-- name: TouchDetectionWindowGroup :one
 INSERT INTO pc.detection_window_groups (org_id, rule_id, group_key, last_bucket)
 VALUES ($1, $2, $3, $4)

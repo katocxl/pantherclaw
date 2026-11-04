@@ -7,6 +7,11 @@ tier: business
 attacker: A4
 threats: [T-267]
 rules: [HR-626]
+atlas: [AML.T0091.000]
+attack: [T1550.001]
+technique_why:
+  AML.T0091.000: "Application access token (AML.T0091.000): an MCP access token is tried on another server and a workload token as a bearer token."
+  T1550.001: "Application access token (T1550.001): a token is used where it was not issued for."
 requires: [payments]
 harness_only: true
 steps:

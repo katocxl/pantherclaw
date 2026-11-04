@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.threatmap.lane_lost
+version: "1"
+title: Threat map lane dropped for a technique
+description: >-
+  The daily threat map snapshot found that a lane (Prevent, Detect, Respond
+  or Test) of an ATLAS or ATT&CK technique dropped since the day before,
+  for example because a rule was turned off or its input went quiet. The
+  event names the technique, the lane and why (G0 M28 D719).
+severity: MEDIUM
+attention: ALERT
+basis: OBSERVED
+techniques_none: "Reports a drop in this organization's own coverage, not an attacker technique."
+edition: business
+on: [audit.threatmap.lane_lost]
+group: target
+tests:
+  - name: lane dropped
+    fires: true
+    events:
+      - {kind: audit.threatmap.lane_lost, actor_type: system, attrs: {framework: atlas, technique_id: AML.T0051.001, lane: DETECT, from: EVIDENCED, to: GAP}}
+  - name: another audit event
+    fires: false
+    events:
+      - {kind: audit.detection.rule_disabled, actor_type: system}

@@ -122,6 +122,9 @@ func VerifyPack(raw []byte, o Options) *Report {
 	if m.Scope.Kind == pack.ScopeCompliance {
 		verifyCompliance(r, m, files)
 	}
+	if m.Scope.Kind == pack.ScopeThreatMap {
+		verifyThreatMap(r, m, files)
+	}
 	for _, g := range m.Gaps {
 		r.add("pack.gap", truncate(g.Subject), NotAvailable, "%s: %s", g.Reason, truncate(g.Detail))
 	}

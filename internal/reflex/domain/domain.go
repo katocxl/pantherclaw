@@ -212,8 +212,6 @@ var sources = []string{SourceDetection, SourceResponse, SourceSIEM, SourceSignal
 // another part of the product (response, SIEM delivery, Shared Signals,
 // coverage, the system itself). The Raiser turns it into an alert, a live
 // event or nothing, by its attention (D14).
-//
-//nolint:misspell // MITRE is a proper noun (the ATLAS publisher), not "miter".
 type Signal struct {
 	Org         ids.OrgID
 	Source      string
@@ -233,9 +231,10 @@ type Signal struct {
 	// the same open alert.
 	GroupKey, DedupeKey string
 	// ATLAS and OWASP are the MITRE ATLAS techniques and OWASP agentic
-	// risks the rule maps to.
-	ATLAS, OWASP []string
-	OccurredAt   time.Time
+	// risks the rule maps to; ATTACK its ATT&CK Enterprise techniques
+	// (G0 M28 D718).
+	ATLAS, ATTACK, OWASP []string
+	OccurredAt           time.Time
 	// Test marks a signal raised by a rule test or a test event: capped at
 	// ALERT and never pages (F616).
 	Test bool
@@ -290,7 +289,7 @@ func (s Signal) Validate() error {
 		return bad("at most %d subjects and %d evidence references", MaxSubjects, MaxEvidence)
 	case len(s.GroupKey) > MaxKey || len(s.DedupeKey) > MaxKey:
 		return bad("keys ≤ %d bytes", MaxKey)
-	case len(s.ATLAS) > MaxMappings || len(s.OWASP) > MaxMappings:
+	case len(s.ATLAS) > MaxMappings || len(s.ATTACK) > MaxMappings || len(s.OWASP) > MaxMappings:
 		return bad("at most %d mappings each", MaxMappings)
 	case s.OccurredAt.IsZero():
 		return bad("no time")

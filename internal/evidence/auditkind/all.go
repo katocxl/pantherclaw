@@ -509,6 +509,7 @@ var all = []string{
 	TenancyTeamMemberRemoved,
 	TenancyTeamUpdated,
 	TenancyTermsAccepted,
+	ThreatmapLaneLost,
 	TicketCreated,
 	TicketCreatedUnlinked,
 	TicketFieldOwnerChanged,

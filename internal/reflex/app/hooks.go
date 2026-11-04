@@ -220,9 +220,11 @@ func (h *Hooks) group(ctx context.Context, tx db.TenantTx, q *dbq.Queries, s ref
 	if !escalates {
 		return ids.UUID{}, false, nil
 	}
+	// The incident starts with the stored alert's techniques (first raise
+	// wins), so its opening ledger entry carries them (G0 M28 D718, D718b).
 	inc, err := q.InsertIncident(ctx, dbq.InsertIncidentParams{
 		OrgID: org, ID: ids.NewV7(), Title: s.Title, Severity: string(s.Severity), GroupKey: s.GroupKey,
-		OpenedBy: "alert:" + r.Alert.String(),
+		OpenedBy: "alert:" + r.Alert.String(), Atlas: r.ATLAS, Attack: r.ATTACK,
 	})
 	if err != nil {
 		return ids.UUID{}, false, err
@@ -240,11 +242,17 @@ func (h *Hooks) group(ctx context.Context, tx db.TenantTx, q *dbq.Queries, s ref
 	return inc.ID, true, attach(ctx, q, org, inc.ID, r.Alert, string(s.Severity), "system", "reflex")
 }
 
-// attach links an alert to an incident with a LINK event and raises the
-// incident's severity to the alert's when higher.
+// attach links an alert to an incident with a LINK event, widens the
+// incident's techniques by the alert's and raises the incident's severity
+// to the alert's when higher.
 func attach(ctx context.Context, q *dbq.Queries, org ids.OrgID, incident, alert ids.UUID, severity, actorType, actorID string) error {
 	n, err := q.AttachAlert(ctx, &incident, org, alert)
 	if err != nil || n == 0 {
+		return err
+	}
+	// The incident lists the union of its alerts' techniques, capped at 64,
+	// so attaching never fails on it (G0 M28 D718).
+	if _, err := q.UnionIncidentTechniques(ctx, org, incident, alert); err != nil {
 		return err
 	}
 	if err := q.InsertIncidentEvent(ctx, dbq.InsertIncidentEventParams{
@@ -304,6 +312,14 @@ func IncidentEntryBody(inc dbq.PcIncident, subjects []reflexdomain.Subject, basi
 	}
 	if basis != "" {
 		fields["basis"] = string(basis)
+	}
+	// The incident's techniques travel with it to the feed and the SIEM
+	// export (G0 M28 D718, HR-684).
+	if len(inc.Atlas) > 0 {
+		fields["atlas"] = inc.Atlas
+	}
+	if len(inc.Attack) > 0 {
+		fields["attack"] = inc.Attack
 	}
 	return canonical(fields)
 }

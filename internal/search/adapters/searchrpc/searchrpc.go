@@ -72,7 +72,7 @@ func filtersOf(f *pantherclawv1.SearchFilters) (search.Filters, error) {
 		Decisions: f.GetDecisions(), Modes: f.GetModes(), States: f.GetStates(), Kinds: f.GetKinds(),
 		AccessModes: f.GetAccessModes(), EnvKinds: f.GetEnvironmentKinds(), UnusedSince: optTime(f.GetUnusedSince()),
 		WidensOnly: f.GetWidensOnly(), Start: optTime(f.GetStartTime()), End: optTime(f.GetEndTime()),
-		Severities: f.GetSeverities(), EffectStates: f.GetEffectStates(),
+		Severities: f.GetSeverities(), EffectStates: f.GetEffectStates(), Technique: f.GetTechnique(),
 	}
 	for _, p := range []struct {
 		dst **ids.UUID
@@ -151,7 +151,7 @@ func filtersProto(f search.Filters) *pantherclawv1.SearchFilters {
 		Decisions: f.Decisions, Modes: f.Modes, States: f.States, Kinds: f.Kinds, AccessModes: f.AccessModes,
 		EnvironmentKinds: f.EnvKinds, UnusedSince: ts(f.UnusedSince), WidensOnly: f.WidensOnly,
 		StartTime: ts(f.Start), EndTime: ts(f.End), AlertId: idPtr(f.Alert), IncidentId: idPtr(f.Incident), AutomationId: idPtr(f.Automation),
-		Severities: f.Severities, EffectStates: f.EffectStates,
+		Severities: f.Severities, EffectStates: f.EffectStates, Technique: f.Technique,
 	}
 }
 

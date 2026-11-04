@@ -270,6 +270,7 @@ type PcAlert struct {
 	Test          bool
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	Attack        []string
 }
 
 type PcAlertEvent struct {
@@ -1046,6 +1047,8 @@ type PcCase struct {
 	OperationalClosedAt *time.Time
 	ClosedAt            *time.Time
 	ContainedAt         *time.Time
+	Atlas               []string
+	Attack              []string
 }
 
 type PcCaseEntry struct {
@@ -1789,6 +1792,7 @@ type PcDetectionRuleState struct {
 	WindowGroups       int32
 	SeenKeys           int32
 	UpdatedAt          time.Time
+	LastInputAt        *time.Time
 }
 
 type PcDetectionRuleVersion struct {
@@ -2036,25 +2040,27 @@ type PcEvidenceIntegrity struct {
 }
 
 type PcEvidencePack struct {
-	OrgID            ids.OrgID
-	ID               ids.UUID
-	CreatedBy        ids.UUID
-	ScopeKind        string
-	Scope            []byte
-	Include          []byte
-	State            string
-	ErrorCode        *string
-	Manifest         *string
-	ManifestSha256   []byte
-	Content          []byte
-	ContentSha256    []byte
-	ContentSize      pgtype.Int8
-	Items            *int32
-	CreatedAt        time.Time
-	ReadyAt          *time.Time
-	ExpiresAt        *time.Time
-	AutomationID     *ids.UUID
-	AutomationAgents []ids.UUID
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	CreatedBy         ids.UUID
+	ScopeKind         string
+	Scope             []byte
+	Include           []byte
+	State             string
+	ErrorCode         *string
+	Manifest          *string
+	ManifestSha256    []byte
+	Content           []byte
+	ContentSha256     []byte
+	ContentSize       pgtype.Int8
+	Items             *int32
+	CreatedAt         time.Time
+	ReadyAt           *time.Time
+	ExpiresAt         *time.Time
+	AutomationID      *ids.UUID
+	AutomationAgents  []ids.UUID
+	ThreatFramework   *string
+	ThreatEnvironment *ids.UUID
 }
 
 type PcExecutionAttempt struct {
@@ -2649,6 +2655,8 @@ type PcIncident struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	ContainedAt *time.Time
+	Atlas       []string
+	Attack      []string
 }
 
 type PcIncidentEvent struct {
@@ -4378,6 +4386,19 @@ type PcTeamsCard struct {
 	State           string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+type PcThreatMapSnapshot struct {
+	OrgID          ids.OrgID
+	ScopeKey       string
+	Framework      string
+	Day            pgtype.Date
+	EvaluatedAt    time.Time
+	CatalogVersion string
+	CatalogDigest  string
+	MappingDigest  string
+	States         []byte
+	Counts         []byte
 }
 
 type PcTicketFieldOwner struct {

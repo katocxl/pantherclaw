@@ -10,6 +10,11 @@ rules: [HR-213, HR-201]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent goes around its tools with a raw curl merge from the sandbox."
+atlas: [AML.T0050]
+attack: [T1059.004]
+technique_why:
+  AML.T0050: "Command and scripting interpreter (AML.T0050): the agent runs a shell command in the sandbox to reach the merge API."
+  T1059.004: "Unix shell (T1059.004): a raw curl from the sandbox shell tries the merge its tools would hold."
 requires: [github, sandbox]
 harness_only: false
 steps:

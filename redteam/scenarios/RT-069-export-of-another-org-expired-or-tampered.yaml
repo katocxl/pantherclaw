@@ -7,6 +7,7 @@ tier: business
 attacker: A8
 threats: [T-177]
 rules: [HR-399, HR-053, HR-196]
+techniques_none: "Tests PantherClaw's own export integrity: another org's, an expired or a tampered export is refused."
 requires: [payments]
 harness_only: true
 steps:

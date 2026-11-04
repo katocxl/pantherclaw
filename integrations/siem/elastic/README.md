@@ -28,7 +28,14 @@ PantherClaw posts each batch as one JSON body: `{"type":"pantherclaw.ocsf.batch"
 
 **The webhook signature is not verified.** Logstash doesn't read the Standard Webhooks headers, so anyone who can reach the input can write events that the rules will trust. `pclaw siem forward` verifies it, but it writes the events to a file ([runbook](../../../docs/runbooks/siem-forwarder.md)), which this pack's Logstash pipeline doesn't read. Without it, keep the input reachable only from PantherClaw, for example behind a proxy you run that checks the source.
 
+## ATT&CK and ATLAS techniques
+
+- Per rule: each rule's `threat` array (framework "MITRE ATT&CK", the tactic with its id, name and reference, the techniques with their sub-techniques) holds the ATT&CK Enterprise ids `rules.yaml` gives that rule. A rule that names none has an empty `threat`.
+- Per event, both frameworks: `ingest-pipeline.json` copies every `finding_info.attacks` entry of an alert and every `finding_info_list[].attacks` entry of an incident into ECS `threat.technique.id`, `threat.technique.subtechnique.id` and `threat.tactic.id`, ATLAS and ATT&CK ids side by side. `index-template.json` maps them as keywords. The OCSF fields stay as they are, with each entry's `version` ("20.0" for ATT&CK, "ATLAS 2026.10" for ATLAS).
+
 ## What was not checked
+
+- The pipeline's Painless script has not run in Elasticsearch.
 
 - The import, the pipeline, the template and the Logstash pipeline have not been tried on an Elastic cluster or a Logstash instance.
 - The KQL has not run in Kibana. A test reads the queries and evaluates them over the samples, which checks the logic and not Kibana's parsing.

@@ -4,6 +4,8 @@ rule pc_siem_007_siem_export_changed {
     author = "PantherClaw"
     description = "PantherClaw SIEM export changed"
     severity = "Medium"
+    mitre_attack_tactic = "Defense Impairment"
+    mitre_attack_technique = "T1685.002"
     rule_id = "pc-siem-007"
 
   events:

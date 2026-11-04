@@ -10,6 +10,9 @@ rules: [HR-307, HR-308, HR-309]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent crafts a value to write through a read-only connector."
+attack: [T1565.001]
+technique_why:
+  T1565.001: "Stored data manipulation (T1565.001): the agent crafts a value to write stored data through a read-only connector."
 requires: [pg.query, pg.role_swap]
 harness_only: false
 steps:

@@ -627,6 +627,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerPostureQueueJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM28ThreatMapJobs(evidenceJobs, jreg, pool, bill, cfg.ThreatMap, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerM27BehaviorJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
@@ -988,6 +991,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM26IdAccess(rs, d)
 	registerM24Catalog(rs, d)
 	registerM27Content(rs, d)
+	registerM28ThreatMap(rs, d)
 	d.extDeps = registerM26Provisioning(rs, d)
 	registerM26SaaS(rs, d)
 	authzen := registerAuthZEN(rs, d)

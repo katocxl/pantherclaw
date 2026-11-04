@@ -168,6 +168,7 @@ linters:
       ignore-rules:
         - licence # British spelling used in docs/product text
         - licences
+        - mitre # MITRE, the organization behind ATT&CK and ATLAS (G0 M28)
 
   exclusions:
     generated: lax

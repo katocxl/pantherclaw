@@ -30,6 +30,8 @@ WHERE a.org_id = sqlc.arg(org_id)
   AND (cardinality(sqlc.arg(states)::text[]) = 0 OR a.state = ANY (sqlc.arg(states)::text[]))
   AND (cardinality(sqlc.arg(severities)::text[]) = 0 OR a.severity = ANY (sqlc.arg(severities)::text[]))
   AND (cardinality(sqlc.arg(sources)::text[]) = 0 OR a.source = ANY (sqlc.arg(sources)::text[]))
+  AND (sqlc.arg(technique)::text = '' OR EXISTS (SELECT 1 FROM unnest(a.atlas || a.attack) t
+                                              WHERE t = sqlc.arg(technique)::text OR t LIKE sqlc.arg(technique)::text || '.%'))
   AND (sqlc.narg(start_time)::timestamptz IS NULL OR a.created_at >= sqlc.narg(start_time)::timestamptz)
   AND (sqlc.narg(end_time)::timestamptz IS NULL OR a.created_at < sqlc.narg(end_time)::timestamptz)
 ORDER BY a.id DESC
@@ -50,6 +52,8 @@ SELECT count(*) FROM (
       AND (cardinality(sqlc.arg(states)::text[]) = 0 OR a.state = ANY (sqlc.arg(states)::text[]))
       AND (cardinality(sqlc.arg(severities)::text[]) = 0 OR a.severity = ANY (sqlc.arg(severities)::text[]))
       AND (cardinality(sqlc.arg(sources)::text[]) = 0 OR a.source = ANY (sqlc.arg(sources)::text[]))
+      AND (sqlc.arg(technique)::text = '' OR EXISTS (SELECT 1 FROM unnest(a.atlas || a.attack) t
+                                                  WHERE t = sqlc.arg(technique)::text OR t LIKE sqlc.arg(technique)::text || '.%'))
       AND (sqlc.narg(start_time)::timestamptz IS NULL OR a.created_at >= sqlc.narg(start_time)::timestamptz)
       AND (sqlc.narg(end_time)::timestamptz IS NULL OR a.created_at < sqlc.narg(end_time)::timestamptz)
     LIMIT 10001
@@ -74,6 +78,8 @@ WHERE i.org_id = sqlc.arg(org_id)
                     AND a.subjects @> jsonb_build_array(jsonb_build_object('type', 'agent', 'id', sqlc.narg(agent_id)::uuid::text))))
   AND (cardinality(sqlc.arg(states)::text[]) = 0 OR i.state = ANY (sqlc.arg(states)::text[]))
   AND (cardinality(sqlc.arg(severities)::text[]) = 0 OR i.severity = ANY (sqlc.arg(severities)::text[]))
+  AND (sqlc.arg(technique)::text = '' OR EXISTS (SELECT 1 FROM unnest(i.atlas || i.attack) t
+                                              WHERE t = sqlc.arg(technique)::text OR t LIKE sqlc.arg(technique)::text || '.%'))
   AND (sqlc.narg(start_time)::timestamptz IS NULL OR i.created_at >= sqlc.narg(start_time)::timestamptz)
   AND (sqlc.narg(end_time)::timestamptz IS NULL OR i.created_at < sqlc.narg(end_time)::timestamptz)
 ORDER BY i.id DESC
@@ -95,6 +101,8 @@ SELECT count(*) FROM (
                         AND a.subjects @> jsonb_build_array(jsonb_build_object('type', 'agent', 'id', sqlc.narg(agent_id)::uuid::text))))
       AND (cardinality(sqlc.arg(states)::text[]) = 0 OR i.state = ANY (sqlc.arg(states)::text[]))
       AND (cardinality(sqlc.arg(severities)::text[]) = 0 OR i.severity = ANY (sqlc.arg(severities)::text[]))
+      AND (sqlc.arg(technique)::text = '' OR EXISTS (SELECT 1 FROM unnest(i.atlas || i.attack) t
+                                                  WHERE t = sqlc.arg(technique)::text OR t LIKE sqlc.arg(technique)::text || '.%'))
       AND (sqlc.narg(start_time)::timestamptz IS NULL OR i.created_at >= sqlc.narg(start_time)::timestamptz)
       AND (sqlc.narg(end_time)::timestamptz IS NULL OR i.created_at < sqlc.narg(end_time)::timestamptz)
     LIMIT 10001

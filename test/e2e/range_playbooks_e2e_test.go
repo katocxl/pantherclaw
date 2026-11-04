@@ -32,6 +32,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger/ledgertest"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	hubdomain "github.com/katocxl/pantherclaw/internal/hub/domain"
 	"github.com/katocxl/pantherclaw/internal/hub/seed"
@@ -295,9 +296,7 @@ func newPBRange(t *testing.T, b hubdomain.AutomationBody) *pbRange {
 
 func (r *pbRange) feed(t *testing.T) triggers.FeedResult {
 	t.Helper()
-	if _, err := ledger.ChainAll(context.Background(), r.f.Pool, r.f.Org, 1000); err != nil {
-		t.Fatal(err)
-	}
+	ledgertest.ChainSettled(t, context.Background(), r.f.Pool, r.f.Org)
 	res, err := r.svc.ProcessFeed(context.Background(), r.f.Org)
 	if err != nil {
 		t.Fatal(err)
@@ -368,9 +367,7 @@ func (r *pbRange) detector(t *testing.T) *detengine.Engine {
 func (r *pbRange) detect(t *testing.T, eng *detengine.Engine) int {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := ledger.ChainAll(ctx, r.f.Pool, r.f.Org, 1000); err != nil {
-		t.Fatal(err)
-	}
+	ledgertest.ChainSettled(t, context.Background(), r.f.Pool, r.f.Org)
 	signals := 0
 	for range 50 {
 		res, err := eng.Process(ctx, r.f.Org)

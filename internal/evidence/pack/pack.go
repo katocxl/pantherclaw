@@ -48,6 +48,12 @@ const (
 	// ComplianceStatement is the sentence a pack of scope compliance carries
 	// instead (G0 M25 D301, D312, HR-600).
 	ComplianceStatement = "This report shows evidence and gaps. It is not a certification or statement of compliance."
+	// ThreatMapStatement is the sentence a pack of scope threat_map carries:
+	// the threat map's own (G0 M28 D717, D720), word for word
+	// (TestThreatMapStatementIsTheThreatMaps).
+	ThreatMapStatement = "This map shows the PantherClaw controls mapped to each technique and the evidence for them. " +
+		"A mapped control covers the technique, not every way of carrying it out. " +
+		"Techniques outside PantherClaw need other tools. It is not a score or a guarantee."
 	// ManifestPath and CosignPath are the files outside the item list.
 	ManifestPath = "manifest.jws"
 	CosignPath   = "manifest.mldsa65.json"
@@ -114,6 +120,9 @@ const (
 	// captures/<transaction>/<direction>.bin, the body as captured, only
 	// in a pack whose creator holds evidence.read_restricted and asked.
 	KindCapture = "capture"
+	// KindThreatMap is a framework's threat map report (G0 M28 D720):
+	// threat_map.json, in a pack of scope threat_map.
+	KindThreatMap = "threat_map"
 )
 
 // Scope kinds (design decision 15).
@@ -134,10 +143,17 @@ const (
 	// report: a manifest gains no member, so an older `pclaw verify` still
 	// decodes it.
 	ScopeCompliance = "compliance"
+	// ScopeThreatMap is one framework's threat map at the time the pack is
+	// built (G0 M28 D720). The framework and the environment are in the
+	// report: a manifest gains no member.
+	ScopeThreatMap = "threat_map"
 )
 
 // CompliancePath is where a compliance pack holds its report.
 const CompliancePath = "compliance.json"
+
+// ThreatMapPath is where a threat map pack holds its report.
+const ThreatMapPath = "threat_map.json"
 
 // ErrInvalid reports a pack or manifest that is malformed or does not
 // verify.
