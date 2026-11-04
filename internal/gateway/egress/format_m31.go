@@ -188,7 +188,7 @@ func mailBody(obj map[string]any) ([]byte, error) {
 		}
 		b.WriteString(h.name + ": " + strings.Join(list, ",\r\n ") + "\r\n")
 	}
-	if b.Len() == 0 || obj[defs.MailTo] == nil {
+	if to, _ := obj[defs.MailTo].([]string); len(to) == 0 {
 		return nil, fmt.Errorf("%w: a mail message names at least one To address", ErrBuild)
 	}
 	if v, ok := obj[defs.MailSubject]; ok {
