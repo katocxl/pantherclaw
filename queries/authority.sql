@@ -65,6 +65,16 @@ JOIN pc.transactions t ON t.org_id = p.org_id AND t.id = p.transaction_id
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
 WHERE p.org_id = sqlc.arg(org_id) AND p.id = sqlc.arg(id) AND p.gateway_id = sqlc.arg(gateway_id);
 
+-- ExecutionCredentialKnown: whether a credential the gateway reported
+-- opening is that version of the connection's credential, in any state
+-- (HR-660).
+-- name: ExecutionCredentialKnown :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.credentials
+    WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND connection_id = sqlc.arg(connection_id)
+      AND version = sqlc.arg(version)::integer
+);
+
 -- AuthorityConnection is a connection as the decision pipeline checks it,
 -- with the package version the org pinned for it, whose reads a verifier
 -- can make through it (G0 M7 design decision 2); NULL when none is pinned.

@@ -32,7 +32,7 @@ func (e *Engine) awsSession(ctx context.Context, conn *control.Connection, def *
 	if !ok {
 		return nil, broker.ErrAWSAction
 	}
-	plain, err := e.openCredential(conn)
+	plain, err := e.openCredential(ctx, conn)
 	if err != nil {
 		return nil, err
 	}

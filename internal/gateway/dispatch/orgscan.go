@@ -46,7 +46,7 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 	if err != nil {
 		return githubscan.Result{}, err
 	}
-	app, err := e.openApp(conn)
+	app, err := e.openApp(ctx, conn)
 	if err != nil {
 		return githubscan.Result{}, err
 	}
@@ -130,8 +130,8 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 
 // openApp opens the connection's GitHub App credential, for its
 // recorded installation only; the caller clears it.
-func (e *Engine) openApp(conn *control.Connection) (credentials.GitHubApp, error) {
-	plain, err := e.openCredential(conn)
+func (e *Engine) openApp(ctx context.Context, conn *control.Connection) (credentials.GitHubApp, error) {
+	plain, err := e.openCredential(ctx, conn)
 	if err != nil {
 		return credentials.GitHubApp{}, err
 	}

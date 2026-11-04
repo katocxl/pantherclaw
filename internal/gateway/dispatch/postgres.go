@@ -52,6 +52,11 @@ type pgEntry struct {
 	key  string
 	pool *pgtarget.Pool
 	db   string
+	// credID and credVersion are the sealed credential the pool was opened
+	// with: a dispatch that reuses the pool used it (HR-660). A rotation
+	// changes the key, so it opens a new pool.
+	credID      string
+	credVersion int32
 
 	mu      sync.Mutex
 	checked time.Time
@@ -326,6 +331,7 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 	if ent, ok := pools[conn.GetId()]; ok {
 		if ent.key == key {
 			ent.used = now
+			usedCredentialVersion(ctx, conn.GetId(), ent.credID, ent.credVersion)
 			return ent, nil
 		}
 		go ent.pool.Close()
@@ -348,7 +354,10 @@ func (e *Engine) pgPool(ctx context.Context, conn *control.Connection, def *defs
 	if err != nil {
 		return nil, err
 	}
-	ent := &pgEntry{key: key, pool: p, db: pc.GetDatabase(), used: now}
+	ent := &pgEntry{
+		key: key, pool: p, db: pc.GetDatabase(), used: now,
+		credID: conn.Credential.GetId(), credVersion: conn.Credential.GetVersion(),
+	}
 	pools[conn.GetId()] = ent
 	return ent, nil
 }

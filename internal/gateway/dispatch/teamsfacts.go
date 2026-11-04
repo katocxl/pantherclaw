@@ -93,7 +93,7 @@ func (e *Engine) readTeamsChannel(ctx context.Context, conn *control.Connection,
 	if !def.Target.MatchID(target.ID) || !def.Target.MatchAccount(target.Account) || target.Account == "" {
 		return teamsfacts.Unread("not a Teams channel of a tenant")
 	}
-	oc, err := e.openOAuthClient(conn)
+	oc, err := e.openOAuthClient(ctx, conn)
 	if err != nil {
 		warn(err)
 		return teamsfacts.Unread("the bot's credential could not be opened")
