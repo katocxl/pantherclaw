@@ -119,6 +119,35 @@ func (i *Issuer) Append(n int) {
 	i.rechain(int64(len(i.Entries)) - int64(n) + 1)
 }
 
+// AppendExecution chains an execution receipt of permit whose pap claims
+// are pap (v, kind, org and txn set here), and its receipt.execution entry.
+func (i *Issuer) AppendExecution(permit string, pap map[string]any) {
+	seq := int64(len(i.Entries)) + 1
+	txn := ids.NewV7().String()
+	claims := map[string]any{"v": 1, "kind": "execution", "org": i.Org.String(), "txn": txn}
+	for k, v := range pap {
+		claims[k] = v
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"iss": "https://pantherclaw.test", "jti": permit, "iat": IssuedAt.Unix(), "pap": claims,
+	}, json.Deterministic(true))
+	r, err := i.receipts.Sign("pap-execution+jwt", payload)
+	if err != nil {
+		i.T.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(r))
+	body, err := domain.CanonicalBody(map[string]string{"txn": txn, "permit": permit, "receipt_sha256": hex.EncodeToString(sum[:])})
+	if err != nil {
+		i.T.Fatal(err)
+	}
+	i.Receipts = append(i.Receipts, r)
+	i.Entries = append(i.Entries, bundle.Entry{
+		Seq: seq, ID: ids.NewV7().String(), Kind: "receipt.execution", Actor: domain.Actor{Type: "gateway", ID: "gw-1"},
+		TS: domain.Timestamp(IssuedAt.Add(time.Duration(seq) * time.Second)), Body: jsontext.Value(body),
+	})
+	i.rechain(seq)
+}
+
 // rechain recomputes the links from seq on and rebuilds the tree.
 func (i *Issuer) rechain(from int64) {
 	prev := domain.GenesisHash
