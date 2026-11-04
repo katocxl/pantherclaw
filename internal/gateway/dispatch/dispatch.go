@@ -951,6 +951,9 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
+	if err := e.checkSubjectTarget(ctx, conn, def, target); err != nil { // G0 M31 D956a
+		return nil, nil, nil, err
+	}
 	switch kind := conn.Credential.GetKind(); kind {
 	case credentials.KindGitHubApp:
 		if err := CheckCredentialPattern(def, kind, nil); err != nil {
@@ -1062,6 +1065,9 @@ func (e *Engine) credentialFailed(ctx context.Context, r Result, conn *control.C
 	var granted []func(*pb.RecordExecutionRequest)
 	if errors.Is(err, ErrCredentialPattern) {
 		code = CodeCredentialPattern
+	}
+	if errors.Is(err, ErrNotCredentialSubject) {
+		code = CodeTargetNotCredentialSubject // G0 M31 D956a
 	}
 	if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
 		code = CodeScopeMismatch

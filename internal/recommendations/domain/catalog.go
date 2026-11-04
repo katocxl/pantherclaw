@@ -184,6 +184,10 @@ const (
 	PackageAWS    = "pc.aws"
 	// PackageAWSECS is an AWS connection too (D284: one host per connection).
 	PackageAWSECS = "pc.aws.ecs"
+	// The Google and Microsoft 365 packages (G0 M31 D956).
+	PackageGmail           = "pc.gmail"
+	PackageGoogleWorkspace = "pc.google-workspace"
+	PackageM365            = "pc.m365"
 )
 
 // Procedures that list evidence.

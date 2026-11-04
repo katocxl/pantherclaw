@@ -85,6 +85,16 @@ type HTTPDispatch struct {
 	// on exactly this ARN. Its references are the decision's target and the
 	// connection's own account, region and partition, never a param.
 	AWSResource string `json:"aws_resource,omitzero"`
+	// GraphQL, when set, is the fixed document of a GraphQL POST (G0 M31
+	// D950 c): the body is {"query": <document>, "variables": <the body
+	// mapping>}, so the agent supplies only the mapped values.
+	GraphQL *GraphQLDocument `json:"graphql,omitzero"`
+	// SubjectTarget marks a template whose path names the acting user as
+	// me or primary (G0 M31 D956a): the gateway refuses the dispatch, before
+	// anything is minted or sent, unless the connection's credential is a
+	// google_service_account whose subject equals target.id (ASCII case
+	// folded), TARGET_NOT_CREDENTIAL_SUBJECT.
+	SubjectTarget bool `json:"subject_target,omitzero"`
 	// Subresource is an aws-rest template's fixed subresource, sent as the
 	// whole query (?policy, ?acl); with the method it names the one S3
 	// action (G0 M30 D934a).
@@ -95,10 +105,6 @@ type HTTPDispatch struct {
 	// HeaderParams map enum params to the headers an aws-rest template sends
 	// them in, such as x-amz-acl.
 	HeaderParams map[string]string `json:"header_params,omitzero"`
-	// GraphQL, when set, is the fixed document of a GraphQL POST (G0 M31
-	// D950 c): the body is {"query": <document>, "variables": <the body
-	// mapping>}, so the agent supplies only the mapped values.
-	GraphQL *GraphQLDocument `json:"graphql,omitzero"`
 }
 
 // MCPDispatch is a call of one tool on an upstream (remote) MCP server, or
@@ -418,24 +424,24 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 		if err := d.validateAWSDispatch(at, h); err != nil {
 			return err
 		}
-	case EncodingAWSRest:
-		if err := d.validateAWSRestDispatch(at, h); err != nil {
-			return err
-		}
 	case EncodingRFC5322Raw:
 		if err := d.validateMailDispatch(at, h); err != nil {
+			return err
+		}
+	case EncodingAWSRest:
+		if err := d.validateAWSRestDispatch(at, h); err != nil {
 			return err
 		}
 	default:
 		return invalid("%s.encoding must be json, form, aws-json, aws-query, aws-rest or rfc5322-raw", at)
 	}
-	if h.Encoding != EncodingAWSRest && (h.Subresource != "" || h.BodyParam != "" || len(h.HeaderParams) > 0) {
-		return invalid("%s: subresource, body_param and header_params belong to aws-rest templates", at)
-	}
 	if h.GraphQL != nil {
 		if err := validateGraphQL(at, h); err != nil {
 			return err
 		}
+	}
+	if h.Encoding != EncodingAWSRest && (h.Subresource != "" || h.BodyParam != "" || len(h.HeaderParams) > 0) {
+		return invalid("%s: subresource, body_param and header_params belong to aws-rest templates", at)
 	}
 	if err := d.fields(at+".body", h.Body, inBody, h.Encoding); err != nil {
 		return err
@@ -476,6 +482,11 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 	}
 	if h.AWSResource != "" && !h.Encoding.AWS() {
 		return invalid("%s.aws_resource belongs to aws-json, aws-query and aws-rest templates", at)
+	}
+	if h.SubjectTarget && (h.Encoding.AWS() || h.GraphQL != nil) {
+		// The acting user is a Google service account's subject (G0 M31
+		// D956a): never an AWS session or a GraphQL endpoint.
+		return invalid("%s.subject_target is not for AWS or GraphQL templates", at)
 	}
 	return nil
 }

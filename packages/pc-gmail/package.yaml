@@ -1,0 +1,270 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that send and read Gmail (G0 M31 D956).
+# It reaches gmail.googleapis.com through an http connection whose
+# credential is of kind google_service_account (D952) with domain-wide
+# delegation: PantherClaw holds the service account's private key and, for
+# every dispatch, signs a short-lived JWT assertion for the one user the
+# credential names as its subject and exchanges it for an access token; the
+# token, never the key, is placed on the request, and the agent holds
+# neither. Seal only the scopes these operations need (gmail.send,
+# gmail.readonly).
+#
+# The target is the mailbox's email address, so a grant or policy binds
+# which mailbox an agent may use. A path value may never carry "@"
+# (HR-073), so every path names the mailbox as me, which Google resolves to
+# the credential's subject; subject_target makes the gateway refuse the
+# dispatch unless that subject is the target (D956a,
+# TARGET_NOT_CREDENTIAL_SUBJECT).
+#
+# A message is built by the gateway from the mapped fields (encoding
+# rfc5322-raw, D950 d); a line break in an address or the subject is
+# refused. The subject and the text leave the organization: disclosure
+# params (HR-079), type content, never dispatched as text (HR-023). Mail
+# stays a disclosure, not a share (D958).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.gmail
+version: 1.0.0
+publisher: pantherclaw
+summary: Send Gmail messages as one Workspace user and list and read that user's messages
+
+definitions:
+  - operation: gmail.message.send
+    summary: Send an email from a Gmail mailbox
+    access: write
+    target:
+      type: gmail_mailbox
+      id_pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      account: none
+    params:
+      to:
+        type: identifier_list
+        material: true
+        required: true
+        max_items: 50
+        pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      cc:
+        type: identifier_list
+        material: true
+        max_items: 50
+        pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      subject:
+        type: content
+        material: true
+        required: true
+        max_length: 998
+        # The subject leaves the organization with the message.
+        disclosure: true
+        max_bytes: 998
+      text:
+        type: content
+        material: true
+        required: true
+        max_length: 8000
+        # The message body leaves the organization: a disclosure param,
+        # capped at 8000 bytes.
+        disclosure: true
+        max_bytes: 8000
+    constraints:
+      - kind: target_set
+      - kind: allowed_values
+        param: to
+      - kind: allowed_values
+        param: cc
+    effects:
+      - kind: message.send
+        description: Sends an email that every recipient can read and forward
+    reversibility: irreversible
+    dedupe_key: [target.id, params.to, params.cc, params.subject, params.text]
+    retry:
+      safe: false
+      on_unknown: fail
+    approval:
+      title: Send an email from Gmail mailbox {target.id}
+      fields:
+        - target.id
+        - params.to
+        - params.cc
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: gmail_send_message
+        route: gmail-message-send
+        description: >-
+          Send a plain-text email from a Gmail mailbox, by the mailbox's
+          email address, to at most 50 addresses with at most 50 in copy.
+          The subject is at most 998 bytes and the text at most 8000 bytes.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [mailbox, to, subject, text]
+          properties:
+            mailbox:
+              type: string
+              description: The sending mailbox's email address
+              pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            to:
+              type: array
+              description: The recipients' email addresses
+              maxItems: 50
+              items:
+                type: string
+                pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            cc:
+              type: array
+              description: The copied recipients' email addresses
+              maxItems: 50
+              items:
+                type: string
+                pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            subject:
+              type: string
+              description: The subject, one line
+              maxLength: 998
+            text:
+              type: string
+              description: The message text, plain text
+              maxLength: 8000
+        extract:
+          target_id: input.mailbox
+          params:
+            to: input.to
+            cc: input.?cc
+            subject: input.subject
+            text: input.text
+    dispatch:
+      http:
+        method: POST
+        path: /gmail/v1/users/me/messages/send
+        encoding: rfc5322-raw
+        subject_target: true
+        body:
+          to: params.to
+          cc: params.cc
+          subject: params.subject
+          text: params.text
+
+  - operation: gmail.message.list
+    summary: List a Gmail mailbox's messages
+    access: read
+    target:
+      type: gmail_mailbox
+      id_pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      account: none
+    params:
+      max_results:
+        type: integer
+        material: true
+        unit: count
+        min: '1'
+        max: '100'
+    constraints:
+      - kind: target_set
+      - kind: count_max
+        param: max_results
+        clamp: true
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: gmail_list_messages
+        route: gmail-message-list
+        description: >-
+          List the most recent messages of a Gmail mailbox, by the mailbox's
+          email address: their ids, at most max_results, 1 to 100.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [mailbox]
+          properties:
+            mailbox:
+              type: string
+              description: The mailbox's email address
+              pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            max_results:
+              type: integer
+              description: How many messages, 1 to 100
+              minimum: 1
+              maximum: 100
+        extract:
+          target_id: input.mailbox
+          params:
+            max_results: input.?max_results
+    dispatch:
+      http:
+        method: GET
+        path: /gmail/v1/users/me/messages
+        subject_target: true
+        query:
+          maxResults: params.max_results
+
+  - operation: gmail.message.get
+    summary: Read one Gmail message
+    access: read
+    target:
+      type: gmail_mailbox
+      id_pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      account: none
+    params:
+      id:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9]{1,64}$'
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: gmail_get_message
+        route: gmail-message-get
+        description: >-
+          Read one message of a Gmail mailbox, by the mailbox's email
+          address and the message id.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [mailbox, id]
+          properties:
+            mailbox:
+              type: string
+              description: The mailbox's email address
+              pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            id:
+              type: string
+              description: The message id
+              pattern: '^[A-Za-z0-9]{1,64}$'
+        extract:
+          target_id: input.mailbox
+          params:
+            id: input.id
+    dispatch:
+      http:
+        method: GET
+        path: /gmail/v1/users/me/messages/{params.id}
+        subject_target: true

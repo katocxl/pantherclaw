@@ -9,6 +9,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 )
@@ -32,6 +33,18 @@ const (
 	ShareGitHubVisibility ShareExtractor = "github_visibility"
 	// ShareGitHubOwner is a github_org share of the value.
 	ShareGitHubOwner ShareExtractor = "github_owner"
+	// ShareGoogleDrivePermission reads a Drive permission's type (G0 M31
+	// D958): anyone is public; domain is an email_domain share of the
+	// domain param; user and group are an email_domain share of the
+	// email_address param's domain. A missing or malformed value is public.
+	ShareGoogleDrivePermission ShareExtractor = "google_drive_permission"
+	// ShareEmailRecipients is an email_domain share of each address's
+	// domain (D958); a malformed address is public.
+	ShareEmailRecipients ShareExtractor = "email_recipients"
+	// ShareM365LinkScope reads a Microsoft 365 sharing link's scope (D958):
+	// anonymous is public, organization shares to no one outside it, and
+	// any other value is public.
+	ShareM365LinkScope ShareExtractor = "m365_link_scope"
 )
 
 // accepts reports whether the extractor reads a param of type t.
@@ -39,10 +52,12 @@ func (e ShareExtractor) accepts(t ParamType) bool {
 	switch e {
 	case ShareAWSPolicyPrincipals:
 		return t == TypeContent
-	case ShareAWSCannedACL, ShareGitHubVisibility:
+	case ShareAWSCannedACL, ShareGitHubVisibility, ShareGoogleDrivePermission, ShareM365LinkScope:
 		return t == TypeEnum
 	case ShareGitHubOwner:
 		return t == TypeIdentifier
+	case ShareEmailRecipients:
+		return t == TypeIdentifierList
 	}
 	return false
 }
@@ -68,7 +83,7 @@ func (d *Definition) Shares(vals Values) ([]actionir.Destination, error) {
 		if !ok {
 			continue
 		}
-		for _, s := range p.Share.extract(v) {
+		for _, s := range p.Share.extract(v, vals) {
 			if !slices.Contains(out, s) {
 				out = append(out, s)
 			}
@@ -80,8 +95,31 @@ func (d *Definition) Shares(vals Values) ([]actionir.Destination, error) {
 	return out, nil
 }
 
-func (e ShareExtractor) extract(v Value) []actionir.Destination {
+// extract reads one param's shares; vals are the action's values, which an
+// extractor that combines params reads (G0 M31 D958).
+func (e ShareExtractor) extract(v Value, vals Values) []actionir.Destination {
 	switch e {
+	case ShareGoogleDrivePermission:
+		switch v.Str {
+		case "domain":
+			return []actionir.Destination{emailDomain("@" + vals["domain"].Str)}
+		case "user", "group":
+			return []actionir.Destination{emailDomain(vals["email_address"].Str)}
+		}
+		return []actionir.Destination{public} // anyone, or a type it does not read
+	case ShareEmailRecipients:
+		var out []actionir.Destination
+		for _, addr := range v.List {
+			if d := emailDomain(addr); !slices.Contains(out, d) {
+				out = append(out, d)
+			}
+		}
+		return out
+	case ShareM365LinkScope:
+		if v.Str == "organization" {
+			return nil
+		}
+		return []actionir.Destination{public}
 	case ShareAWSPolicyPrincipals:
 		return policyPrincipals(v.Str)
 	case ShareAWSCannedACL:
@@ -101,6 +139,25 @@ func (e ShareExtractor) extract(v Value) []actionir.Destination {
 		return []actionir.Destination{{Kind: actionir.ShareGitHubOrg, ID: v.Str}}
 	}
 	return []actionir.Destination{public}
+}
+
+// shareDomainRe is a lowercase DNS name with at least one dot, as an
+// email_domain owned account is recorded.
+var shareDomainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// emailDomain is the email_domain share of an address's domain, lowercased
+// (G0 M31 D958); an address without one well-formed domain is public (fail
+// closed).
+func emailDomain(addr string) actionir.Destination {
+	i := strings.LastIndexByte(addr, '@')
+	if i < 0 {
+		return public
+	}
+	d := strings.ToLower(addr[i+1:])
+	if len(d) > 253 || !shareDomainRe.MatchString(d) {
+		return public
+	}
+	return actionir.Destination{Kind: actionir.ShareEmailDomain, ID: d}
 }
 
 // policyPrincipals reads an S3 bucket policy's principals; anything it
