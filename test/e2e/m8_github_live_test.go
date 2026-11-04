@@ -104,7 +104,7 @@ func newDirect(t *testing.T, g *githubSim) *direct {
 	t.Cleanup(func() {
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodDelete, d.api+"/installation/token", nil)
 		req.Header.Set("Authorization", "Bearer "+d.token)
-		if resp, err := http.DefaultClient.Do(req); err == nil {
+		if resp, err := (&http.Client{}).Do(req); err == nil {
 			_ = resp.Body.Close()
 		}
 	})

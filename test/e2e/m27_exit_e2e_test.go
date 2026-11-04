@@ -174,11 +174,11 @@ func TestE2E_M27_SimulatedIncidentDetectedExplainedContained(t *testing.T) {
 		t.Fatalf("profile %+v", pr)
 	}
 	// A real profile of a range agent is never built from simulated work.
-	real, err := behavior.GetAgentProfile(ctx, &pantherclawv1.GetAgentProfileRequest{
+	realProfile, err := behavior.GetAgentProfile(ctx, &pantherclawv1.GetAgentProfileRequest{
 		AgentId: agent.String(), Origin: pantherclawv1.BehaviorOrigin_BEHAVIOR_ORIGIN_REAL,
 	})
-	if err != nil || real.GetProfile().GetState() != pantherclawv1.BehaviorProfileState_BEHAVIOR_PROFILE_STATE_NOT_COLLECTED {
-		t.Fatalf("real profile of a range agent: %+v %v", real, err)
+	if err != nil || realProfile.GetProfile().GetState() != pantherclawv1.BehaviorProfileState_BEHAVIOR_PROFILE_STATE_NOT_COLLECTED {
+		t.Fatalf("real profile of a range agent: %+v %v", realProfile, err)
 	}
 
 	// An inferred alert never contains automatically, even under a containing

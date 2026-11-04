@@ -44,6 +44,8 @@ func (d *rangeDriver) workloadService() pantherclawv1connect.WorkloadServiceClie
 // agentChild starts a child run, asks to delegate a grant wider than the
 // parent's, and then has the child act: with no delegated grant it holds none.
 // The observation is the child's action; the delegation's refusal is its code.
+//
+//nolint:contextcheck // the range stack and its steps live as long as the test (t); the runner's context bounds only the scenario's own waits
 func (d *rangeDriver) agentChild(ctx context.Context, st domain.Step, _ map[string]string) (domain.Observation, error) {
 	var w struct {
 		Grant struct {
@@ -251,7 +253,7 @@ func (d *rangeDriver) refusedApproval(rec *callRec, as string) (domain.Observati
 	return domain.Observation{Outcome: domain.OutcomeRefused, Code: fmt.Sprintf("http_%d", code), Detail: body}, nil
 }
 
-// enrolOtherInstance enrols and admits a second instance of the agent, with
+// enrolOtherInstance enrolls and admits a second instance of the agent, with
 // a key of its own, and returns the key and a workload token.
 func (d *rangeDriver) enrolOtherInstance() (ed25519.PrivateKey, string) {
 	t, s := d.t, d.s

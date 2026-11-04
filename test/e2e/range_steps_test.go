@@ -10,11 +10,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,12 +35,6 @@ import (
 )
 
 type rangeDispatch = sdk.Dispatch
-
-// pemOfGitHubKey is the PEM of the App's private key: what the gateway holds
-// in custody for the github connection.
-func pemOfGitHubKey(g *githubSim) []byte {
-	return pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(g.key)})
-}
 
 // callSDK sends the call over the SDK face and answers as the gateway did.
 func (d *rangeDriver) callSDK(conn string, w callWith, act ids.UUID) (domain.Observation, *callRec, error) {
@@ -108,10 +100,10 @@ func (d *rangeDriver) callHook(w callWith) (domain.Observation, *callRec, error)
 	code, out, errs := d.s.hook(d.t, string(event))
 	d.s.gateway = up
 	obs := domain.Observation{Detail: out + errs}
-	switch {
-	case code == 0:
+	switch code {
+	case 0:
 		obs.Outcome = domain.OutcomeAllow
-	case code == 2:
+	case 2:
 		obs.Outcome, obs.Code = domain.OutcomeRefused, "hook_exit_2"
 	default:
 		obs.Outcome, obs.Code = domain.OutcomeRefused, fmt.Sprintf("hook_exit_%d", code)
@@ -141,7 +133,7 @@ func (r *rangeRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	return r.base.RoundTrip(req)
 }
 
-// otherInstance enrols a second instance of the agent (its own key and
+// otherInstance enrolls a second instance of the agent (its own key and
 // token, the same run) and returns them.
 func (d *rangeDriver) otherInstance() (ed25519.PrivateKey, string) {
 	if d.extra.otherKey == nil {
@@ -152,6 +144,8 @@ func (d *rangeDriver) otherInstance() (ed25519.PrivateKey, string) {
 
 // agentSteal is a call made with what an attacker holding the agent's token
 // would have: the token without its key, a proof replayed, a stale nonce.
+//
+//nolint:contextcheck // the range stack and its steps live as long as the test (t); the runner's context bounds only the scenario's own waits
 func (d *rangeDriver) agentSteal(_ context.Context, st domain.Step) (domain.Observation, error) {
 	var w struct {
 		Mode string   `json:"mode"`
@@ -264,7 +258,7 @@ func (d *rangeDriver) replayProof(url string, body []byte, w callWith) (domain.O
 		return domain.Observation{}, err
 	}
 	r2.Header = rec.got.header.Clone()
-	resp, err := http.DefaultClient.Do(r2)
+	resp, err := (&http.Client{}).Do(r2)
 	if err != nil {
 		return domain.Observation{}, err
 	}
@@ -289,7 +283,7 @@ func (d *rangeDriver) staleNonce(url string, body []byte, w callWith) (domain.Ob
 	}
 	req.Header.Set("Authorization", "PAP "+d.s.token)
 	req.Header.Set("PAP-Proof", proof)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		return domain.Observation{}, err
 	}
@@ -468,7 +462,7 @@ func (d *rangeDriver) killSwitch() (domain.Observation, error) {
 	return domain.Observation{}, nil
 }
 
-// serverRead tries to read an object of another organisation by id, as a
+// serverRead tries to read an object of another organization by id, as a
 // person of this one.
 func (d *rangeDriver) serverRead(st domain.Step) (domain.Observation, error) {
 	var w struct {
@@ -478,7 +472,7 @@ func (d *rangeDriver) serverRead(st domain.Step) (domain.Observation, error) {
 		return domain.Observation{}, err
 	}
 	if d.other == nil {
-		return domain.Observation{}, fmt.Errorf("no second organisation")
+		return domain.Observation{}, fmt.Errorf("no second organization")
 	}
 	id := d.other.objectID(d.t, w.Object)
 	var n int
@@ -490,7 +484,7 @@ func (d *rangeDriver) serverRead(st domain.Step) (domain.Observation, error) {
 	if n == 0 {
 		return domain.Observation{Outcome: domain.OutcomeNotFound}, nil
 	}
-	return domain.Observation{Outcome: domain.OutcomeAllow, Detail: fmt.Sprintf("%d rows of the other organisation visible", n)}, nil
+	return domain.Observation{Outcome: domain.OutcomeAllow, Detail: fmt.Sprintf("%d rows of the other organization visible", n)}, nil
 }
 
 var _ = capp.AccessHeld

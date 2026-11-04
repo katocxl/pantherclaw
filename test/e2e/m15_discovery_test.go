@@ -105,6 +105,7 @@ func discoveryToReviewedTool(t *testing.T) {
 	signed := 0
 	publish := func(version string, raw []byte) {
 		t.Helper()
+		ctx := t.Context()
 		signed++
 		file := writeFile(t, dir, "package-"+version+".yaml", raw)
 		targets := filepath.Join(dir, "targets-"+version+".jws")

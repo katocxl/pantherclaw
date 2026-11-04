@@ -119,7 +119,7 @@ func code(r azReply) string { s, _ := r.body["code"].(string); return s }
 // allowed refund is decided, committed DELEGATED and spent, then forwarded
 // once; a forged proof forwards nothing; a held refund is refused until a
 // person approves it and the agent resubmits the same action; a monitor
-// route answers true and observes; batches honour their semantics.
+// route answers true and observes; batches honor their semantics.
 func TestE2E_M14_AuthZEN(t *testing.T) {
 	s, _, b, key := approvalStack(t)
 	point := authzenPoint(t, s, "agent_held", s.simURL)

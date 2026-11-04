@@ -36,6 +36,7 @@ func TestRange_Scenarios(t *testing.T) {
 			r := &app.Runner{Driver: d, Timeout: 5 * time.Minute} // setup starts a whole stack
 			res := r.Run(context.Background(), l.Scenario)
 			results = append(results, res)
+			//exhaustive:ignore // every other verdict fails the scenario
 			switch res.Verdict {
 			case domain.VerdictPass:
 			case domain.VerdictSkipped:
