@@ -72,12 +72,12 @@ On Team, rule, playbook and test gaps also appear in the posture queue under the
 ## `pclaw threats`
 
 Team or higher, with an API key or access token. Every text output ends with the statement.
-- `pclaw threats matrix [--framework atlas|attack] [--agent ID | --environment ID] [--json]`: counts per tactic, then techniques by status.
-- `pclaw threats technique ID [--agent ID | --environment ID] [--json]`: lanes, evidence and gaps.
-- `pclaw threats gaps [--framework atlas|attack] [--json]`.
-- `pclaw threats export navigator --framework F --out FILE`.
-- `pclaw threats export report --framework F [--environment ID]`: creates a signed pack, like `pclaw pack create`.
-- `pclaw threats history --framework F [--days N]` (Business).
+- `pclaw threats matrix [--framework atlas|attack] [--agent ID | --environment ID] [--json]`: counts per tactic, then techniques by status. `--framework` defaults to `atlas`.
+- `pclaw threats technique ID [--agent ID | --environment ID] [--json]`: lanes, evidence and gaps. The framework follows the id (`AML.` ids are ATLAS).
+- `pclaw threats gaps [--framework atlas|attack] [--agent ID | --environment ID] [--page-size N] [--page-token T] [--json]`. `--framework` defaults to `atlas`. Text lists every page; `--json` prints one page.
+- `pclaw threats export navigator --framework atlas|attack [--agent ID | --environment ID] --out FILE`. `--out` must not exist yet.
+- `pclaw threats export report --framework atlas|attack [--environment ID]`: creates a signed pack, like `pclaw pack create`.
+- `pclaw threats history --framework atlas|attack [--environment ID] [--days N] [--json]` (Business). `--days` defaults to 30, at most 400.
 - Below Team, the command prints the server's `EDITION_REQUIRED` message as is; use the console.
 
 ## Exports
@@ -87,7 +87,7 @@ Team or higher, with an API key or access token. Every text output ends with the
 
 ## Offline verification
 
-`pclaw verify FILE --trust trust.json` checks the signature and statement as for every pack, then re-runs the evaluator on the pack's own inputs and mapping and requires every technique and tactic count to match. Any difference fails. A pack built with a different MITRE catalogue than your `pclaw`'s reads as not available ("built with another MITRE catalogue"), never passed: update `pclaw`. A `pclaw` older than M28 fails a threat-map pack's `pack.statement` check and does not re-derive the map; verify with M28 or later.
+`pclaw verify FILE --trust trust.json` checks the signature and statement as for every pack, then re-runs the evaluator on the pack's own inputs and mapping and requires every technique and tactic count to match. Any difference fails. A pack checked by a pclaw release with another mapping or MITRE catalog than the one that built it shows the threat-map part as not available while its signature still verifies; check that part with the pclaw version that built the pack. A `pclaw` older than M28 fails a threat-map pack's `pack.statement` check and does not re-derive the map; verify with M28 or later.
 
 ## History and drop alerts (Business)
 
