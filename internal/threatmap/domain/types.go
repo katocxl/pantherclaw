@@ -229,6 +229,9 @@ type Automation struct {
 	// TriggerRules are the rule ids its alert trigger names (D713).
 	TriggerRules []string `json:"trigger_rules,omitzero"`
 	HasContain   bool     `json:"has_contain,omitzero"`
+	// Narrowed: the trigger also tests something other than the rule id, so
+	// it may not fire on every alert of its rules (G0 M30 D948).
+	Narrowed bool `json:"narrowed,omitzero"`
 	// HubItem is the Hub item it was installed from, if any.
 	HubItem string `json:"hub_item,omitzero"`
 }
@@ -263,6 +266,13 @@ type DecisionCount struct {
 	Count    int64  `json:"count"`
 }
 
+// OutcomeCount counts real in-scope executions in the window that a connector
+// refused, by outcome code (G0 M30 D948, F-M28-2).
+type OutcomeCount struct {
+	Code  string `json:"code"`
+	Count int64  `json:"count"`
+}
+
 // Inputs is every record the evaluator reads (D720: a pack carries them all,
 // so an offline verifier derives the same map).
 type Inputs struct {
@@ -282,6 +292,8 @@ type Inputs struct {
 	Results             []Result        `json:"results"`
 	Alerts              []AlertGroup    `json:"alerts"`
 	Decisions           []DecisionCount `json:"decisions"`
+	// Outcomes are the connector refusals counted by outcome code (D948).
+	Outcomes []OutcomeCount `json:"outcomes,omitzero"`
 }
 
 // TechniqueMap is what PantherClaw maps to one technique or sub-technique

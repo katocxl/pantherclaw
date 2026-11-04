@@ -20,11 +20,14 @@ const (
 	SurfaceGateway    Surface = "GATEWAY"
 	SurfaceSandbox    Surface = "SANDBOX"
 	SurfaceCredential Surface = "CREDENTIAL"
+	// SurfaceConnector: a connector refuses the act itself, before anything is
+	// sent (G0 M30 D948).
+	SurfaceConnector Surface = "CONNECTOR"
 )
 
 // Surfaces lists every Surface.
 func Surfaces() []Surface {
-	return []Surface{SurfaceAuthority, SurfaceGateway, SurfaceSandbox, SurfaceCredential}
+	return []Surface{SurfaceAuthority, SurfaceGateway, SurfaceSandbox, SurfaceCredential, SurfaceConnector}
 }
 
 // Valid reports whether s is a listed Surface.
@@ -63,6 +66,9 @@ type PreventControl struct {
 	// ReasonCodes are the decisive pc.transactions.reason_code values that
 	// are this control's refusals and holds.
 	ReasonCodes []string `json:"reason_codes"`
+	// OutcomeCodes are the execution outcome codes that are this control's
+	// refusals when it acts after the decision (G0 M30 D948, F-M28-2).
+	OutcomeCodes []string `json:"outcome_codes,omitzero"`
 	// HR are the hardening rules (HR-###) that state the control.
 	HR         []string    `json:"hr"`
 	Requires   Requirement `json:"requires"`
@@ -241,14 +247,15 @@ var Prevent = []PreventControl{
 	{
 		ID: "prevent.content_hold", Title: "In ACTIVE, flagged content holds the run's later writes", Surface: SurfaceGateway,
 		ReasonCodes: []string{"CONTENT_FLAG_HOLD"},
-		HR:          []string{"HR-648", "HR-650"}, Requires: RequiresContentSignalsActive,
-		Techniques: []string{"AML.T0051.001", "AML.T0110.002", "AML.T0099", "AML.T0093", "T1698"},
+		HR:          []string{"HR-648", "HR-650", "HR-703"}, Requires: RequiresContentSignalsActive,
+		Techniques: []string{"AML.T0051.001", "AML.T0110.002", "AML.T0099", "AML.T0093", "T1698", "AML.T0068"},
 		Why: map[string]string{
 			"AML.T0051.001": "Indirect prompt injection (AML.T0051.001): after an injection phrase is flagged, the run's writes wait for a person.",
 			"AML.T0110.002": "AI agent tool poisoning, runtime response (AML.T0110.002): a flagged tool result holds the run's later writes.",
 			"AML.T0099":     "AI agent tool data poisoning (AML.T0099): poisoned data a tool returns, once flagged, holds the run's later writes.",
 			"AML.T0093":     "Prompt infiltration via public-facing application (AML.T0093): a hostile SaaS field returned to the agent, once flagged, holds the run's later writes.",
 			"T1698":         "Indirect prompt injection (T1698): a write carrying or following flagged text is held.",
+			"AML.T0068":     "LLM prompt obfuscation (AML.T0068): text hidden by encoding, escapes, look-alike letters or invisible characters is decoded before matching; a decoded hit holds the run's later writes.",
 		},
 	},
 	{
@@ -267,6 +274,66 @@ var Prevent = []PreventControl{
 		Techniques: []string{"AML.T0053"},
 		Why: map[string]string{
 			"AML.T0053": "AI agent tool invocation (AML.T0053): a call no package maps, or one with ambiguous input, is never allowed by default.",
+		},
+	},
+	// G0 M30 D947, D948: the M30 controls.
+	{
+		ID: "prevent.mcp_token_binding", Title: "An MCP token bound to a client's key is refused without a fresh proof of that key", Surface: SurfaceCredential,
+		ReasonCodes: []string{"invalid_dpop_proof", "use_dpop_nonce"},
+		HR:          []string{"HR-700", "HR-701", "HR-702"}, Requires: RequiresAlways,
+		Techniques: []string{"AML.T0091.000", "T1550.001"},
+		Why: map[string]string{
+			"AML.T0091.000": "Application access token (AML.T0091.000): a copied MCP token bound to a client's key is refused without a fresh proof of that key.",
+			"T1550.001":     "Application access token (T1550.001): a bound MCP token sent as a bearer token, or with a replayed proof, is refused.",
+		},
+	},
+	{
+		ID: "prevent.read_limits", Title: "A read limit counts an agent's reads per task", Surface: SurfaceAuthority,
+		ReasonCodes: []string{"COUNT_LIMIT_REACHED"},
+		HR:          []string{"HR-706"}, Requires: RequiresAlways,
+		Techniques: []string{"AML.T0126", "T1119"},
+		Why: map[string]string{
+			"AML.T0126": "Automated collection (AML.T0126): reads past the grant's read limit for the task are denied.",
+			"T1119":     "Automated collection (T1119): bulk reads stop at the count the grant's read limit allows.",
+		},
+	},
+	{
+		ID: "prevent.share_accounts", Title: "A share to the public or to an account the organization does not own waits for a person", Surface: SurfaceAuthority,
+		ReasonCodes: []string{"SHARE_ACCOUNT_NOT_OWNED", "SHARE_PUBLIC"},
+		HR:          []string{"HR-707", "HR-708"}, Requires: RequiresAlways,
+		Techniques: []string{"T1537"},
+		Why: map[string]string{
+			"T1537": "Transfer data to cloud account (T1537): a bucket policy, ACL, visibility change or transfer that shares with an account not on the organization's list is held.",
+		},
+	},
+	{
+		ID: "prevent.agent_config", Title: "Agent configuration and memory files are read-only in the sandbox and their writes ask the gateway", Surface: SurfaceSandbox,
+		HR:         []string{"HR-710", "HR-712", "HR-713"},
+		Requires:   RequiresAlways,
+		Techniques: []string{"AML.T0081", "AML.T0083", "AML.T0084"},
+		Why: map[string]string{
+			"AML.T0081": "Modify AI agent configuration (AML.T0081): configuration and memory files are bound read-only in the sandbox, and a hooked write to one needs a grant.",
+			"AML.T0083": "Credentials from AI agent configuration (AML.T0083): scans report credential formats found in agent configuration files, never the values.",
+			"AML.T0084": "Discover AI agent configuration (AML.T0084): scans record a digest of each agent configuration file, never its contents.",
+		},
+	},
+	{
+		ID: "prevent.vector_writers", Title: "Only listed agents write to a vector store without a person", Surface: SurfaceAuthority,
+		ReasonCodes: []string{"VECTOR_WRITE_NOT_WRITER"},
+		HR:          []string{"HR-704", "HR-705"}, Requires: RequiresAlways,
+		Techniques: []string{"AML.T0070", "AML.T0071"},
+		Why: map[string]string{
+			"AML.T0070": "RAG poisoning (AML.T0070): an upsert or delete by an agent not on the store's writer list is held, and every entry carries the run that wrote it.",
+			"AML.T0071": "False RAG entry injection (AML.T0071): an entry from an agent not on the writer list waits for a person.",
+		},
+	},
+	{
+		ID: "prevent.query_scope", Title: "A database query reaches only the manifest's tables and columns", Surface: SurfaceConnector,
+		OutcomeCodes: []string{"table_not_allowed", "column_not_allowed", "scope_unsupported"},
+		HR:           []string{"HR-307", "HR-715"}, Requires: RequiresAlways,
+		Techniques: []string{"T1213.006"},
+		Why: map[string]string{
+			"T1213.006": "Databases (T1213.006): a query naming a table, column or record scope outside the connection's manifest is refused before it is sent.",
 		},
 	},
 }

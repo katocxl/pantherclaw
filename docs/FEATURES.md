@@ -46,6 +46,7 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M26 | Enterprise identity: IdP access, MCP client authorization, SCIM, SAML, SaaS agent discovery |
 | M27 | Agent Detection & Response: behaviour profiles, content signals, playbooks, SIEM packs, the read-only MCP server |
 | M28 | Threat map: MITRE ATLAS and ATT&CK Enterprise lanes from evidence, labels on signals and exports, signed report, Navigator export, history |
+| M30 | Firewall gaps from the threat map: DPoP-bound MCP tokens, read limits and share checks, agent configuration and memory, decoding before content signals, a vector-store connector |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -897,6 +898,28 @@ The map shows PantherClaw's controls per MITRE technique and the evidence for th
 | F974 | Pinned MITRE catalogue | ATT&CK Enterprise and ATLAS pinned by version and sha256, ids, names and tactics only, updated by reviewed pull request; `MITRE_MAPPING.md` generated and checked in `task check`. | Next | Community | M28 | new |
 | F975 | Console threat map | Evidence › Threat map: tabs per framework, the matrix with lane marks and legend, tactic counts, filters, a technique drawer with gaps; exports on Team, history on Business. | Next | Community | M28 | new |
 | F976 | Console chips and agent link | Technique chips on alert, incident, case, range result and detection rule views; the agent page links to that agent's map. | Next | Community | M28 | new |
+
+### M30 rows: Firewall gaps from the threat map
+
+M30 closes gaps the threat map named: MCP tokens bound to a client's key, read limits and share checks, agent configuration and memory, decoding before content signals and a vector-store connector ([G0 M30](g0/M30.md), [ADR-0057](adr/0057-firewall-gaps-from-the-threat-map.md)). Bound tokens and decoding are on every edition; the rest takes its parent feature's edition (founder answer E).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F990 | DPoP-bound MCP tokens | A client with a registered key gets MCP tokens bound to it (RFC 9449) at the token endpoint and the ID-JAG exchange; each call proves the key with a nonce and a single-use proof. Standard clients keep the 5-minute bearer. | Next | Community | M30 | new |
+| F991 | Binding shown | Token metadata lists the DPoP algorithms, the MCP client read shows whether a client is bound, and the issuance audit entry names `dpop` or `bearer`. | Next | Community | M30 | new |
+| F992 | Decoded content signals | Content signals also match injection phrases and secret formats in base64, hex, URL and escape encodings, HTML entities, look-alike letters and invisible characters; a finding names its layers. | Next | Community | M30 | F938 |
+| F993 | `pc.vectorstore` connector | A pgvector connection kind with `vector_query`, `vector_upsert` and `vector_delete`, and `pclaw connections vectorstore ddl` printing the table for an admin to create. | Next | Community | M30 | F759 |
+| F994 | Vector-store writers and provenance | A writer list per connection; other agents' writes wait for a person; every entry carries the run, agent and transaction that wrote it. | Next | Community | M30 | new |
+| F995 | Read limits | A count rule can count reads or writes only; the `read-limits` grant template, off until a grant uses it. | Next | Community | M30 | F113 |
+| F996 | Enumeration alert | Built-in rule `pc.reads.enumeration`: one run reading 200 distinct targets in 10 minutes raises an INFERRED alert. | Next | Business | M30 | F932 |
+| F997 | Scheduled-send alert | Built-in rule `pc.exfil.scheduled_sends`: one agent writing to one public connection from 12 runs in 24 hours raises an INFERRED alert. | Next | Business | M30 | F932 |
+| F998 | Owned accounts | `OwnedAccountService` and `pclaw org accounts`: the AWS accounts, GitHub organizations, email domains, GCP projects and Azure tenants the organization owns; adding one is a protected change. | Next | Community | M30 | F123 |
+| F999 | Share checks | New AWS and GitHub operations (bucket policy and ACL, repository visibility and transfer) whose shares to the public or an unlisted account wait for a person. | Next | Community | M30 | F123 |
+| F1000 | Agent config digests and drift | Scans report agent configuration and memory files by digest, credential formats found in them by format, and a changed digest writes `agent.config_changed` and raises `pc.agent.config_changed`. | Next | Community | M30 | F883 |
+| F1001 | Configuration writes asked and fenced | `pclaw hook` asks the gateway before writing a listed configuration or memory file (`agent_config.write`); the sandbox binds them read-only and copy-out lists their changes apart. | Next | Community | M30 | PN-008.2 |
+| F1002 | Opt-in prompt capture | Per model connection, off by default; turning it on is a protected change with a security key; bodies kept per the capture profile. | Next | Business | M30 | new |
+| F1003 | Resume an approved hold | An identical request through the edge after approval reuses its action id, so the approved hold releases it; campaigns can send model traffic through a model connection. | Next | Community | M30 | new |
+| F1004 | Threat-map updates | Six Prevent controls for the M30 checks, decoded content in the content hold, `prevent.query_scope` counting connector refusals, and `NARROWED_TRIGGER` for automations whose trigger tests more than the rule. | Next | Community | M30 | F960 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 

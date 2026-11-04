@@ -214,7 +214,7 @@ func automations(ctx context.Context, q *dbq.Queries, org ids.OrgID, hub map[str
 	for _, r := range rows {
 		a := domain.Automation{ID: r.ID.String(), Name: r.Name, State: r.State, HubItem: hub[r.ID.String()]}
 		if d, err := autodomain.Parse(r.Definition); err == nil {
-			a.TriggerRules, a.HasContain = triggers(d)
+			a.TriggerRules, a.Narrowed, a.HasContain = triggers(d)
 		}
 		out = append(out, a)
 	}
@@ -224,13 +224,14 @@ func automations(ctx context.Context, q *dbq.Queries, org ids.OrgID, hub map[str
 // alertEvents are the events a Respond trigger reads rule ids from (D713).
 var alertEvents = []string{"alert.raised", "alert.inferred"}
 
-func triggers(d *autodomain.Definition) ([]string, bool) {
+func triggers(d *autodomain.Definition) ([]string, bool, bool) {
 	var ids []string
+	narrowed := false
 	if e := d.When.Event; e != nil && slices.Contains(alertEvents, e.On) {
-		ids = celenv.TriggerRules(e.Where)
+		ids, narrowed = celenv.TriggerRulesNarrowed(e.Where)
 	}
 	contain := slices.ContainsFunc(d.Do, func(s autodomain.StepSpec) bool { return s.Step == autodomain.KindContain })
-	return ids, contain
+	return ids, narrowed, contain
 }
 
 // Seen implements ports.Store.
