@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -194,6 +195,20 @@ func TestE2E_M28_ThreatMap(t *testing.T) {
 	alertsX := count(raised, s.org.String())
 	if alertsX != drops {
 		t.Fatalf("%d %s alerts for %d drops of X's Detect", alertsX, m28LaneHit, drops)
+	}
+	// Each alert's target is X's Detect lane in one evaluated scope on the
+	// day: atlas:<scope_key>:AML.T0050:DETECT:<day>, one per scope (D719a).
+	sorted := func(csv string) []string {
+		out := strings.Split(csv, ",")
+		slices.Sort(out)
+		return out
+	}
+	want := sorted(s.row(t, `SELECT string_agg('atlas:' || scope_key || ':`+m28X+`:DETECT:' || day::text, ',') FROM pc.threat_map_snapshots
+		WHERE org_id = $1 AND framework = 'atlas' AND day = (SELECT max(day) FROM pc.threat_map_snapshots WHERE org_id = $1)`, s.org.String()))
+	got := sorted(s.row(t, `SELECT coalesce(string_agg(x->>'id', ','), '') FROM pc.alerts a CROSS JOIN jsonb_array_elements(a.subjects) x
+		WHERE a.org_id = $1 AND a.rule_id = '`+m28LaneHit+`' AND x->>'type' = 'resource'`, s.org.String()))
+	if len(want) != drops || !slices.Equal(got, want) {
+		t.Fatalf("lane_lost alert targets %v, want %v (one per evaluated scope, %d drops)", got, want, drops)
 	}
 	snapshot()
 	if n, a := count(lost, s.org.String())-before, count(raised, s.org.String()); n != drops || a != alertsX {

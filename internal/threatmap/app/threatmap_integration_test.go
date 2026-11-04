@@ -10,9 +10,12 @@ import (
 	"crypto/sha256"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/riverqueue/river"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/detection/engine"
@@ -26,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
 	pvports "github.com/katocxl/pantherclaw/internal/postureview/ports"
 	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
@@ -452,6 +456,109 @@ func liveCandidate(t *testing.T) string {
 		t.Fatal("no built-in rule alone maps two matrix techniques")
 	}
 	return best
+}
+
+// TestHR687_TheDispatcherQueuesOneSnapshotPerActiveOrg: the snapshot jobs
+// register at the shortest interval, and one dispatch queues exactly one
+// threatmap.snapshot_org job per active org; a second dispatch while those
+// wait adds none (G0 M28 D719, D727a).
+// Covers: F972, HR-687
+func TestHR687_TheDispatcherQueuesOneSnapshotPerActiveOrg(t *testing.T) {
+	f := newFx(t)
+	reg := jobs.NewRegistry()
+	periodic, err := tmapp.RegisterSnapshots(reg, &tmapp.Snapshotter{Pool: f.p, Ents: edition(billing.Business), Store: pgthreatmap.Store{}},
+		tmapp.MinSnapshotInterval, nil)
+	if err != nil || len(periodic) != 1 {
+		t.Fatalf("register: %d periodic jobs, %v", len(periodic), err)
+	}
+	if k := reg.Kinds(); !slices.Contains(k, "threatmap.snapshot") || !slices.Contains(k, "threatmap.snapshot_org") {
+		t.Fatalf("kinds %v", k)
+	}
+	// A worker client runs the registered dispatcher; its org jobs snooze,
+	// so they stay queued and a second dispatch meets them.
+	run := jobs.NewRegistry()
+	if err := jobs.Register[tmapp.SnapshotDispatchArgs](run, tmapp.SnapshotDispatcherForTest(f.p)); err != nil {
+		t.Fatal(err)
+	}
+	if err := jobs.Register[tmapp.SnapshotOrgArgs](run, snoozeSnapshot{}); err != nil {
+		t.Fatal(err)
+	}
+	client, err := jobs.NewClient(f.p, run, jobs.Config{Queues: map[string]int{river.QueueDefault: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := client.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		stop, done := context.WithTimeout(context.Background(), 10*time.Second)
+		defer done()
+		_ = client.Stop(stop)
+	})
+	dispatched := 0
+	dispatchOnce := func() {
+		t.Helper()
+		if _, err := client.Insert(ctx, tmapp.SnapshotDispatchArgs{}, nil); err != nil {
+			t.Fatal(err)
+		}
+		dispatched++
+		deadline := time.Now().Add(30 * time.Second)
+		for f.adminCount(`SELECT count(*)::text FROM pc.river_job WHERE kind = 'threatmap.snapshot' AND state = 'completed'`) < dispatched {
+			if time.Now().After(deadline) {
+				t.Fatalf("dispatch %d did not complete", dispatched)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	queued := func() map[string]int {
+		t.Helper()
+		var raw string
+		f.d.AdminQueryRow(t, `SELECT coalesce(string_agg(org || '=' || n, ','), '') FROM (
+			SELECT args->>'org' AS org, count(*)::text AS n FROM pc.river_job WHERE kind = 'threatmap.snapshot_org' GROUP BY 1) q`, nil, &raw)
+		out := map[string]int{}
+		for _, kv := range strings.Split(raw, ",") {
+			if org, n, ok := strings.Cut(kv, "="); ok {
+				out[org], _ = strconv.Atoi(n)
+			}
+		}
+		return out
+	}
+	var active int
+	f.d.AdminQueryRow(t, "SELECT count(*)::int FROM pc.orgs WHERE state = 'ACTIVE'", nil, &active)
+	for i := range 2 {
+		dispatchOnce()
+		q := queued()
+		if q[f.org.String()] != 1 || q[f.other.String()] != 1 || len(q) != active {
+			t.Fatalf("dispatch %d: queued %v for %d active orgs", i+1, q, active)
+		}
+		for org, n := range q {
+			if n != 1 {
+				t.Errorf("dispatch %d: org %s has %d jobs", i+1, org, n)
+			}
+		}
+	}
+}
+
+// snoozeSnapshot keeps an org's snapshot job queued.
+type snoozeSnapshot struct {
+	river.WorkerDefaults[tmapp.SnapshotOrgArgs]
+}
+
+func (snoozeSnapshot) Work(context.Context, *river.Job[tmapp.SnapshotOrgArgs]) error {
+	return river.JobSnooze(time.Hour)
+}
+
+func (f *fx) adminCount(sql string) int {
+	f.t.Helper()
+	var s string
+	f.d.AdminQueryRow(f.t, sql, nil, &s)
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return n
 }
 
 // TestHR680_PostureSinceIsWhenTheRuleWentOff: a rule turned off 20 days ago
