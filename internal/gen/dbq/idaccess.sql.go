@@ -126,7 +126,7 @@ func (q *Queries) ActiveAssertionIssuers(ctx context.Context, orgID ids.OrgID, i
 }
 
 const activeMcpClientByURL = `-- name: ActiveMcpClientByURL :one
-SELECT org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at FROM pc.mcp_clients WHERE org_id = $1 AND client_url = $2 AND state = 'ACTIVE'
+SELECT org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at, dpop_bound FROM pc.mcp_clients WHERE org_id = $1 AND client_url = $2 AND state = 'ACTIVE'
 `
 
 func (q *Queries) ActiveMcpClientByURL(ctx context.Context, orgID ids.OrgID, clientUrl string) (PcMcpClient, error) {
@@ -147,6 +147,7 @@ func (q *Queries) ActiveMcpClientByURL(ctx context.Context, orgID ids.OrgID, cli
 		&i.ActivatedAt,
 		&i.RemovedBy,
 		&i.RemovedAt,
+		&i.DpopBound,
 	)
 	return i, err
 }
@@ -380,7 +381,7 @@ func (q *Queries) GetAssertionIssuer(ctx context.Context, orgID ids.OrgID, iD id
 }
 
 const getMcpClient = `-- name: GetMcpClient :one
-SELECT org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at FROM pc.mcp_clients WHERE org_id = $1 AND id = $2
+SELECT org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at, dpop_bound FROM pc.mcp_clients WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetMcpClient(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcMcpClient, error) {
@@ -401,6 +402,7 @@ func (q *Queries) GetMcpClient(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 		&i.ActivatedAt,
 		&i.RemovedBy,
 		&i.RemovedAt,
+		&i.DpopBound,
 	)
 	return i, err
 }
@@ -522,9 +524,9 @@ func (q *Queries) InsertAssertionIssuer(ctx context.Context, arg InsertAssertion
 
 const insertMcpAuthorizationCode = `-- name: InsertMcpAuthorizationCode :exec
 INSERT INTO pc.mcp_authorization_codes (org_id, code_hash, client_id, user_id, redirect_uri, code_challenge, resource,
-    scope_operations, expires_at)
+    scope_operations, expires_at, dpop_jkt)
 VALUES ($1, $2, $3, $4, $5,
-    $6, $7, $8, now() + interval '60 seconds')
+    $6, $7, $8, now() + interval '60 seconds', $9)
 `
 
 type InsertMcpAuthorizationCodeParams struct {
@@ -536,6 +538,7 @@ type InsertMcpAuthorizationCodeParams struct {
 	CodeChallenge   string
 	Resource        string
 	ScopeOperations []string
+	DpopJkt         *string
 }
 
 func (q *Queries) InsertMcpAuthorizationCode(ctx context.Context, arg InsertMcpAuthorizationCodeParams) error {
@@ -548,15 +551,17 @@ func (q *Queries) InsertMcpAuthorizationCode(ctx context.Context, arg InsertMcpA
 		arg.CodeChallenge,
 		arg.Resource,
 		arg.ScopeOperations,
+		arg.DpopJkt,
 	)
 	return err
 }
 
 const insertMcpClient = `-- name: InsertMcpClient :one
-INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, created_by)
+INSERT INTO pc.mcp_clients (org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, created_by,
+    dpop_bound)
 VALUES ($1, $2, $3, $4, $5, $6,
-    $7, $8, $9)
-RETURNING org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at
+    $7, $8, $9, $10)
+RETURNING org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at, dpop_bound
 `
 
 type InsertMcpClientParams struct {
@@ -569,6 +574,7 @@ type InsertMcpClientParams struct {
 	RedirectUris   []string
 	DocumentDigest []byte
 	CreatedBy      ids.UUID
+	DpopBound      bool
 }
 
 func (q *Queries) InsertMcpClient(ctx context.Context, arg InsertMcpClientParams) (PcMcpClient, error) {
@@ -582,6 +588,7 @@ func (q *Queries) InsertMcpClient(ctx context.Context, arg InsertMcpClientParams
 		arg.RedirectUris,
 		arg.DocumentDigest,
 		arg.CreatedBy,
+		arg.DpopBound,
 	)
 	var i PcMcpClient
 	err := row.Scan(
@@ -599,6 +606,7 @@ func (q *Queries) InsertMcpClient(ctx context.Context, arg InsertMcpClientParams
 		&i.ActivatedAt,
 		&i.RemovedBy,
 		&i.RemovedAt,
+		&i.DpopBound,
 	)
 	return i, err
 }
@@ -658,9 +666,9 @@ func (q *Queries) InsertMcpClientInstance(ctx context.Context, arg InsertMcpClie
 }
 
 const insertMcpRefreshToken = `-- name: InsertMcpRefreshToken :exec
-INSERT INTO pc.mcp_refresh_tokens (org_id, id, family_id, token_hash, client_id, run_id, resource, expires_at)
+INSERT INTO pc.mcp_refresh_tokens (org_id, id, family_id, token_hash, client_id, run_id, resource, expires_at, dpop_jkt)
 VALUES ($1, $2, $3, $4, $5, $6,
-    $7, $8)
+    $7, $8, $9)
 `
 
 type InsertMcpRefreshTokenParams struct {
@@ -672,6 +680,7 @@ type InsertMcpRefreshTokenParams struct {
 	RunID     ids.UUID
 	Resource  string
 	ExpiresAt time.Time
+	DpopJkt   *string
 }
 
 func (q *Queries) InsertMcpRefreshToken(ctx context.Context, arg InsertMcpRefreshTokenParams) error {
@@ -684,6 +693,7 @@ func (q *Queries) InsertMcpRefreshToken(ctx context.Context, arg InsertMcpRefres
 		arg.RunID,
 		arg.Resource,
 		arg.ExpiresAt,
+		arg.DpopJkt,
 	)
 	return err
 }
@@ -732,7 +742,7 @@ func (q *Queries) LapseAssertionIssuer(ctx context.Context, disabledBy *ids.UUID
 const lapseMcpClient = `-- name: LapseMcpClient :one
 UPDATE pc.mcp_clients SET state = 'REMOVED', removed_by = $1, removed_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'PENDING'
-RETURNING org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at
+RETURNING org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at, dpop_bound
 `
 
 func (q *Queries) LapseMcpClient(ctx context.Context, removedBy *ids.UUID, orgID ids.OrgID, iD ids.UUID) (PcMcpClient, error) {
@@ -753,6 +763,7 @@ func (q *Queries) LapseMcpClient(ctx context.Context, removedBy *ids.UUID, orgID
 		&i.ActivatedAt,
 		&i.RemovedBy,
 		&i.RemovedAt,
+		&i.DpopBound,
 	)
 	return i, err
 }
@@ -837,7 +848,7 @@ func (q *Queries) ListAssertionIssuers(ctx context.Context, orgID ids.OrgID) ([]
 }
 
 const listMcpClients = `-- name: ListMcpClients :many
-SELECT org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at FROM pc.mcp_clients WHERE org_id = $1 ORDER BY client_url, id LIMIT 100
+SELECT org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at, dpop_bound FROM pc.mcp_clients WHERE org_id = $1 ORDER BY client_url, id LIMIT 100
 `
 
 func (q *Queries) ListMcpClients(ctx context.Context, orgID ids.OrgID) ([]PcMcpClient, error) {
@@ -864,6 +875,7 @@ func (q *Queries) ListMcpClients(ctx context.Context, orgID ids.OrgID) ([]PcMcpC
 			&i.ActivatedAt,
 			&i.RemovedBy,
 			&i.RemovedAt,
+			&i.DpopBound,
 		); err != nil {
 			return nil, err
 		}
@@ -926,7 +938,7 @@ func (q *Queries) LockAssertionIssuer(ctx context.Context, orgID ids.OrgID, iD i
 }
 
 const lockMcpClient = `-- name: LockMcpClient :one
-SELECT org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at FROM pc.mcp_clients WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at, dpop_bound FROM pc.mcp_clients WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockMcpClient(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcMcpClient, error) {
@@ -947,12 +959,13 @@ func (q *Queries) LockMcpClient(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 		&i.ActivatedAt,
 		&i.RemovedBy,
 		&i.RemovedAt,
+		&i.DpopBound,
 	)
 	return i, err
 }
 
 const lockMcpRefreshToken = `-- name: LockMcpRefreshToken :one
-SELECT org_id, id, family_id, token_hash, client_id, run_id, resource, state, created_at, expires_at FROM pc.mcp_refresh_tokens
+SELECT org_id, id, family_id, token_hash, client_id, run_id, resource, state, created_at, expires_at, dpop_jkt FROM pc.mcp_refresh_tokens
 WHERE org_id = $1 AND token_hash = $2 FOR UPDATE
 `
 
@@ -970,6 +983,7 @@ func (q *Queries) LockMcpRefreshToken(ctx context.Context, orgID ids.OrgID, toke
 		&i.State,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.DpopJkt,
 	)
 	return i, err
 }
@@ -1049,7 +1063,7 @@ func (q *Queries) RemoveAssertionClient(ctx context.Context, removedBy *ids.UUID
 const removeMcpClient = `-- name: RemoveMcpClient :one
 UPDATE pc.mcp_clients SET state = 'REMOVED', removed_by = $1, removed_at = now()
 WHERE org_id = $2 AND id = $3 AND state <> 'REMOVED'
-RETURNING org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at
+RETURNING org_id, id, client_url, agent_id, instance_id, client_name, redirect_uris, document_digest, state, created_by, created_at, activated_at, removed_by, removed_at, dpop_bound
 `
 
 func (q *Queries) RemoveMcpClient(ctx context.Context, removedBy *ids.UUID, orgID ids.OrgID, iD ids.UUID) (PcMcpClient, error) {
@@ -1070,6 +1084,7 @@ func (q *Queries) RemoveMcpClient(ctx context.Context, removedBy *ids.UUID, orgI
 		&i.ActivatedAt,
 		&i.RemovedBy,
 		&i.RemovedAt,
+		&i.DpopBound,
 	)
 	return i, err
 }
@@ -1126,7 +1141,7 @@ func (q *Queries) SetMcpAuthorizationCodeRun(ctx context.Context, runID *ids.UUI
 const spendMcpAuthorizationCode = `-- name: SpendMcpAuthorizationCode :one
 UPDATE pc.mcp_authorization_codes SET used_at = now()
 WHERE org_id = $1 AND code_hash = $2 AND used_at IS NULL AND expires_at > now()
-RETURNING org_id, code_hash, client_id, user_id, redirect_uri, code_challenge, resource, scope_operations, created_at, expires_at, used_at, run_id, reused_at
+RETURNING org_id, code_hash, client_id, user_id, redirect_uri, code_challenge, resource, scope_operations, created_at, expires_at, used_at, run_id, reused_at, dpop_jkt
 `
 
 // A code is spent by the first request that names it, right or wrong.
@@ -1147,20 +1162,22 @@ func (q *Queries) SpendMcpAuthorizationCode(ctx context.Context, orgID ids.OrgID
 		&i.UsedAt,
 		&i.RunID,
 		&i.ReusedAt,
+		&i.DpopJkt,
 	)
 	return i, err
 }
 
 const updateMcpClientDocument = `-- name: UpdateMcpClientDocument :execrows
 UPDATE pc.mcp_clients SET client_name = $1, redirect_uris = $2,
-    document_digest = $3
-WHERE org_id = $4 AND id = $5 AND state = 'ACTIVE' AND document_digest = $6
+    document_digest = $3, dpop_bound = $4
+WHERE org_id = $5 AND id = $6 AND state = 'ACTIVE' AND document_digest = $7
 `
 
 type UpdateMcpClientDocumentParams struct {
 	ClientName     string
 	RedirectUris   []string
 	DocumentDigest []byte
+	DpopBound      bool
 	OrgID          ids.OrgID
 	ID             ids.UUID
 	PreviousDigest []byte
@@ -1173,6 +1190,7 @@ func (q *Queries) UpdateMcpClientDocument(ctx context.Context, arg UpdateMcpClie
 		arg.ClientName,
 		arg.RedirectUris,
 		arg.DocumentDigest,
+		arg.DpopBound,
 		arg.OrgID,
 		arg.ID,
 		arg.PreviousDigest,

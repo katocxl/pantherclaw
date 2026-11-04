@@ -74960,6 +74960,11 @@
             "type": "string",
             "title": "document_digest",
             "description": "SHA-256 of the confirmed document, hex."
+          },
+          "dpopBound": {
+            "type": "boolean",
+            "title": "dpop_bound",
+            "description": "The confirmed document asks for DPoP-bound access tokens (RFC 9449):\n every token request must then carry a DPoP proof (G0 M30 D911, D914)."
           }
         },
         "title": "McpClient",
