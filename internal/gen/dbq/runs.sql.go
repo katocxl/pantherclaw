@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -185,14 +186,14 @@ const insertRun = `-- name: InsertRun :one
 
 INSERT INTO pc.runs (org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id,
     launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject,
-    actor_chain, parent_run_id, depth, grant_id, task_ref, simulated, automation_execution_id, scope_operations, expires_at)
+    actor_chain, parent_run_id, depth, grant_id, task_ref, simulated, automation_execution_id, scope_operations, max_tokens, expires_at)
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9,
     $10, $11, $12, $13,
     $14, $15, $16, $17, $18, $19,
-    $20, $21::text[],
-    LEAST(now() + make_interval(mins => $22::int),
-          coalesce($23::timestamptz, 'infinity'::timestamptz)))
+    $20, $21::text[], $22::bigint,
+    LEAST(now() + make_interval(mins => $23::int),
+          coalesce($24::timestamptz, 'infinity'::timestamptz)))
 RETURNING org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject, actor_chain, parent_run_id, depth, grant_id, task_ref, state, end_reason, created_at, expires_at, ended_at, simulated, automation_execution_id, scope_operations, max_tokens
 `
 
@@ -218,6 +219,7 @@ type InsertRunParams struct {
 	Simulated             bool
 	AutomationExecutionID *ids.UUID
 	ScopeOperations       []string
+	MaxTokens             pgtype.Int8
 	TtlMinutes            int32
 	NotAfter              *time.Time
 }
@@ -254,6 +256,7 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (PcRun, er
 		arg.Simulated,
 		arg.AutomationExecutionID,
 		arg.ScopeOperations,
+		arg.MaxTokens,
 		arg.TtlMinutes,
 		arg.NotAfter,
 	)

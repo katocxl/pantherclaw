@@ -616,8 +616,11 @@ func (q *Queries) InvRunAncestors(ctx context.Context, orgID ids.OrgID, runID id
 const invRunBudget = `-- name: InvRunBudget :many
 SELECT coalesce(r.account_id, r.counter_id)::uuid AS line_id, (r.account_id IS NOT NULL)::boolean AS account,
        coalesce(a.rule, c.rule)::text AS rule, coalesce(a.currency, '')::text AS currency,
+       coalesce(a.unit, '')::text AS unit,
+       -- A run's own token account's cap is the run's (G0 M29 D822).
+       coalesce(CASE WHEN a.owner_kind = 'run' THEN rn.max_tokens END, 0)::bigint AS run_cap,
        coalesce(sum(r.amount) FILTER (WHERE r.state = 'HELD'), 0)::numeric(26,8) AS held,
-       coalesce(sum(r.amount) FILTER (WHERE r.state = 'COMMITTED'), 0)::numeric(26,8) AS committed,
+       coalesce(sum(coalesce(r.settled_amount, r.amount)) FILTER (WHERE r.state = 'COMMITTED'), 0)::numeric(26,8) AS committed,
        coalesce(sum(r.amount) FILTER (WHERE r.state = 'RELEASED'), 0)::numeric(26,8) AS released,
        count(*) FILTER (WHERE r.state = 'HELD')::bigint AS held_count,
        count(*) FILTER (WHERE r.state = 'COMMITTED')::bigint AS committed_count,
@@ -628,8 +631,9 @@ JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.r
 JOIN pc.reservations r ON r.org_id = p.org_id AND r.permit_id = p.id
 LEFT JOIN pc.budget_accounts a ON a.org_id = r.org_id AND a.id = r.account_id
 LEFT JOIN pc.counters c ON c.org_id = r.org_id AND c.id = r.counter_id
+LEFT JOIN pc.runs rn ON rn.org_id = a.org_id AND rn.id = a.owner_id AND a.owner_kind = 'run'
 WHERE t.org_id = $1 AND t.run_id = $2
-GROUP BY 1, 2, 3, 4
+GROUP BY 1, 2, 3, 4, 5, 6
 ORDER BY 3, 1
 LIMIT 500
 `
@@ -639,6 +643,8 @@ type InvRunBudgetRow struct {
 	Account        bool
 	Rule           string
 	Currency       string
+	Unit           string
+	RunCap         int64
 	Held           money.Decimal
 	Committed      money.Decimal
 	Released       money.Decimal
@@ -664,6 +670,8 @@ func (q *Queries) InvRunBudget(ctx context.Context, orgID ids.OrgID, runID ids.U
 			&i.Account,
 			&i.Rule,
 			&i.Currency,
+			&i.Unit,
+			&i.RunCap,
 			&i.Held,
 			&i.Committed,
 			&i.Released,
@@ -1012,6 +1020,44 @@ func (q *Queries) InvRunProfile(ctx context.Context, orgID ids.OrgID, runIds []i
 			&i.Accepted,
 			&i.LastAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const invRunTokenEstimate = `-- name: InvRunTokenEstimate :many
+SELECT coalesce(u.estimate_currency, '')::text AS currency,
+       coalesce(sum(u.estimate), 0)::numeric(26,8) AS amount,
+       count(*)::bigint AS calls
+FROM pc.model_usage u
+WHERE u.org_id = $1 AND u.run_id = $2
+GROUP BY 1
+ORDER BY 1
+`
+
+type InvRunTokenEstimateRow struct {
+	Currency string
+	Amount   money.Decimal
+	Calls    int64
+}
+
+// A cost estimate of a run's model calls (G0 M29 D824): the estimates
+// summed per currency, and how many calls had a price and how many not.
+func (q *Queries) InvRunTokenEstimate(ctx context.Context, orgID ids.OrgID, runID *ids.UUID) ([]InvRunTokenEstimateRow, error) {
+	rows, err := q.db.Query(ctx, invRunTokenEstimate, orgID, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvRunTokenEstimateRow{}
+	for rows.Next() {
+		var i InvRunTokenEstimateRow
+		if err := rows.Scan(&i.Currency, &i.Amount, &i.Calls); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

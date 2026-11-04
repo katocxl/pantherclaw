@@ -258,6 +258,11 @@ type DebitContext struct {
 	// run never changes what real agents depend on (HR-222). Grant-owned
 	// lines still apply.
 	Simulated bool
+	// ModelTokens are the tokens a model call reserves (G0 M29 D813,
+	// ReservedTokens); 0 for every other action, which token rules skip.
+	ModelTokens int64
+	// RunMaxTokens is the run's token cap, when it has one (G0 M29 D822).
+	RunMaxTokens *int64
 }
 
 // Plan is everything one action must reserve.
@@ -297,8 +302,17 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 				continue
 			}
 			if r.IsTokenRule() {
-				// G0 M29 D821: a token rule debits only model calls, by their
-				// reserved tokens; the pipeline's model step adds those.
+				// G0 M29 D821: a token rule debits only model calls that
+				// reserve tokens, by those tokens; every other action skips it.
+				if dc.ModelTokens <= 0 {
+					continue
+				}
+				capTokens, _ := ParseMaxTokens("", r.MaxTokens)
+				key, ok := groupingKey(r.Grouping, task, a, dc)
+				if !ok {
+					return Plan{}, unknownLimit(l.level, "budgets."+r.ID, ReasonLimitKeyMissing, "the action has no "+string(r.Grouping)+" to key this budget")
+				}
+				plan.Budgets = append(plan.Budgets, tokenDebit(owner, r.ID, key, r.Grouping, r.Period, capTokens, dc))
 				continue
 			}
 			d := bdomain.Debit{Grouping: r.Grouping, Period: r.Period}
@@ -355,7 +369,25 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 			plan.Counters = append(plan.Counters, cd)
 		}
 	}
+	// G0 M29 D822: a run's token cap is one more level, owned by the run,
+	// locked last; it covers that run's model calls only and only restricts.
+	if dc.RunMaxTokens != nil && dc.ModelTokens > 0 && !dc.RunID.IsZero() {
+		owner := bdomain.Owner{Kind: bdomain.OwnerRun, ID: dc.RunID, Rank: bdomain.RunRank}
+		plan.Budgets = append(plan.Budgets, tokenDebit(owner, bdomain.RunTokensRule, dc.RunID.String(),
+			bdomain.GroupTask, bdomain.PeriodNone, *dc.RunMaxTokens, dc))
+	}
 	return plan, nil
+}
+
+// tokenDebit is one level's token debit of a model call (G0 M29 D821): the
+// cap is the limit and the reserved tokens the amount, in unit tokens.
+func tokenDebit(owner bdomain.Owner, rule, key string, g bdomain.Grouping, p bdomain.Period, capTokens int64, dc DebitContext) bdomain.Debit {
+	limit, _ := money.FromInt(capTokens)
+	amount, _ := money.FromInt(dc.ModelTokens)
+	return bdomain.Debit{
+		Ref:      bdomain.Ref{Owner: owner, Rule: rule, Key: bdomain.KeyHash(owner, rule, key), Start: p.Start(dc.Now)},
+		Grouping: g, Period: p, Unit: bdomain.UnitTokens, Limit: &limit, Amount: amount,
+	}
 }
 
 func (c Chain) envelopeAt(id ids.UUID) Envelope {

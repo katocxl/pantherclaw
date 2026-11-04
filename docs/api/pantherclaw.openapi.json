@@ -20205,6 +20205,60 @@
         }
       }
     },
+    "/pantherclaw.v1.ModelUsageService/GetTokenReport": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ModelUsageService"
+        ],
+        "summary": "GetTokenReport",
+        "description": "GetTokenReport sums one UTC month of the org's model calls, grouped by\n team, agent, connection or model.\n permission: budget.read",
+        "operationId": "pantherclaw.v1.ModelUsageService.GetTokenReport",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetTokenReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetTokenReportResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.InvestigationService/WhatHappened": {
       "post": {
         "tags": [
@@ -22301,60 +22355,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetModelUsageResponse"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Unsupported media type, no body"
-          }
-        }
-      }
-    },
-    "/pantherclaw.v1.ModelUsageService/GetTokenReport": {
-      "post": {
-        "tags": [
-          "pantherclaw.v1.ModelUsageService"
-        ],
-        "summary": "GetTokenReport",
-        "description": "GetTokenReport sums one UTC month of the org's model calls, grouped by\n team, agent, connection or model.\n permission: budget.read",
-        "operationId": "pantherclaw.v1.ModelUsageService.GetTokenReport",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/pantherclaw.v1.GetTokenReportRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/pantherclaw.v1.GetTokenReportResponse"
                 }
               }
             }
@@ -70558,6 +70558,16 @@
             },
             "title": "scope_operations",
             "description": "The operations the run is narrowed to within its grant (G0 M26 D400);\n empty for the whole grant."
+          },
+          "maxTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_tokens",
+            "format": "int64",
+            "description": "The run's token cap (G0 M29 D822); unset when it has none.",
+            "nullable": true
           }
         },
         "title": "Run",
@@ -70632,6 +70642,19 @@
             "title": "grant_id",
             "format": "uuid",
             "description": "The grant the run uses (G0 M4, PN-002.5). It must be active and valid,\n and bind the same agent (and instance, if it pins one), principal and\n environment; the run's expiry is cut to the grant's.",
+            "nullable": true
+          },
+          "maxTokens": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "max_tokens",
+            "maximum": 1000000000000,
+            "minimum": 1,
+            "format": "int64",
+            "description": "The run's token cap (G0 M29 D822, HR-693, HR-697): one more debit level\n over the run's model calls, set at start and never changed. It only\n restricts. Unset for no run cap.",
             "nullable": true
           }
         },
@@ -71307,6 +71330,11 @@
             "title": "spent_count",
             "format": "int64",
             "description": "Spent count."
+          },
+          "unit": {
+            "type": "string",
+            "title": "unit",
+            "description": "What limit, reserved, spent and available count (G0 M29 D821):\n \"currency\", or \"tokens\" for a token rule (currency empty then)."
           }
         },
         "title": "BudgetAccount",
@@ -76735,6 +76763,199 @@
         "additionalProperties": false,
         "description": "Suppression is one suppression (D16)."
       },
+      "pantherclaw.v1.TokenReportGroupBy": {
+        "type": "string",
+        "title": "TokenReportGroupBy",
+        "enum": [
+          "TOKEN_REPORT_GROUP_BY_UNSPECIFIED",
+          "TOKEN_REPORT_GROUP_BY_TEAM",
+          "TOKEN_REPORT_GROUP_BY_AGENT",
+          "TOKEN_REPORT_GROUP_BY_CONNECTION",
+          "TOKEN_REPORT_GROUP_BY_MODEL"
+        ],
+        "description": "TokenReportGroupBy is what a token report's rows sum by."
+      },
+      "pantherclaw.v1.Estimate": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "description": "ISO 4217 currency of the prices."
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "Decimal string, at most 8 fraction digits."
+          }
+        },
+        "title": "Estimate",
+        "additionalProperties": false,
+        "description": "Estimate is a cost estimate in one currency, computed from prices the\n organization set on its model connections. It is an estimate, not a bill."
+      },
+      "pantherclaw.v1.GetTokenReportRequest": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "month",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "The UTC month, YYYY-MM."
+          },
+          "groupBy": {
+            "title": "group_by",
+            "$ref": "#/components/schemas/pantherclaw.v1.TokenReportGroupBy",
+            "not": {
+              "enum": [
+                "TOKEN_REPORT_GROUP_BY_UNSPECIFIED"
+              ]
+            }
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "0 for the default page size; at most 200."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 512,
+            "description": "Opaque; a model id key makes it longer than an id token."
+          }
+        },
+        "title": "GetTokenReportRequest",
+        "additionalProperties": false,
+        "required": [
+          "month",
+          "groupBy"
+        ]
+      },
+      "pantherclaw.v1.GetTokenReportResponse": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TokenReportRow"
+            },
+            "title": "rows"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          },
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "description": "The fixed statement: what the counts and estimates are."
+          }
+        },
+        "title": "GetTokenReportResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.TokenReportRow": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key",
+            "description": "The team, agent or connection id, or the model id; empty for calls\n without one (an agent without a team)."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "A name for people: the team, agent or connection name, or the model id."
+          },
+          "calls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "calls",
+            "format": "int64",
+            "description": "Model calls recorded."
+          },
+          "unreportedCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unreported_calls",
+            "format": "int64",
+            "description": "Calls whose answer reported no usage (their tokens count as zero here)."
+          },
+          "unknownCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unknown_calls",
+            "format": "int64",
+            "description": "Calls whose outcome is UNKNOWN."
+          },
+          "inputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "input_tokens",
+            "format": "int64"
+          },
+          "outputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "output_tokens",
+            "format": "int64"
+          },
+          "cacheReadTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "cache_read_tokens",
+            "format": "int64"
+          },
+          "cacheWriteTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "cache_write_tokens",
+            "format": "int64"
+          },
+          "totalTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "total_tokens",
+            "format": "int64",
+            "description": "The four counts summed."
+          },
+          "estimates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Estimate"
+            },
+            "title": "estimates",
+            "description": "Cost estimates, one per price currency; empty when no call had a price."
+          }
+        },
+        "title": "TokenReportRow",
+        "additionalProperties": false,
+        "description": "TokenReportRow sums the month's model calls of one key."
+      },
       "pantherclaw.v1.InspectSection": {
         "type": "string",
         "title": "InspectSection",
@@ -77321,6 +77542,11 @@
             "type": "boolean",
             "title": "scope_limited",
             "description": "The caller's scope is narrower than the organization."
+          },
+          "tokenEstimate": {
+            "title": "token_estimate",
+            "description": "A cost estimate of the run's model calls, with the budget section on\n Team and above (G0 M29 D824); unset on Community or without the budget\n section.",
+            "$ref": "#/components/schemas/pantherclaw.v1.RunTokenEstimate"
           }
         },
         "title": "InspectRunResponse",
@@ -77527,6 +77753,16 @@
             "type": "string",
             "title": "remaining",
             "description": "What is left of the rule's amount limit in its current period; empty\n for a counter, a rule without an amount limit or an earlier period."
+          },
+          "unit": {
+            "type": "string",
+            "title": "unit",
+            "description": "What the amounts count (G0 M29 D824): \"currency\", or \"tokens\" for a\n token rule; empty for a counter."
+          },
+          "limit": {
+            "type": "string",
+            "title": "limit",
+            "description": "The rule's cap (decimal string): its amount limit, or its token cap;\n empty for a counter or a rule without one."
           }
         },
         "title": "RunBudgetLine",
@@ -77799,6 +78035,45 @@
         "title": "RunTimeline",
         "additionalProperties": false,
         "description": "RunTimeline is one page of the run's timeline."
+      },
+      "pantherclaw.v1.RunTokenEstimate": {
+        "type": "object",
+        "properties": {
+          "estimates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Estimate"
+            },
+            "title": "estimates",
+            "description": "One per price currency."
+          },
+          "pricedCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "priced_calls",
+            "format": "int64",
+            "description": "Model calls with a price, counted in the estimates."
+          },
+          "unpricedCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unpriced_calls",
+            "format": "int64",
+            "description": "Model calls without a price, left out of the estimates."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "Always \"estimate\"."
+          }
+        },
+        "title": "RunTokenEstimate",
+        "additionalProperties": false,
+        "description": "RunTokenEstimate is a cost estimate of the run's model calls from prices\n the organization set on its model connections (G0 M29 D824; HR-698):\n an estimate, not a bill. Team and above."
       },
       "pantherclaw.v1.TimelineEvent": {
         "type": "object",
@@ -81486,199 +81761,6 @@
         "title": "UpdateModelSettingsResponse",
         "additionalProperties": false,
         "description": "UpdateModelSettingsResponse carries the settings."
-      },
-      "pantherclaw.v1.TokenReportGroupBy": {
-        "type": "string",
-        "title": "TokenReportGroupBy",
-        "enum": [
-          "TOKEN_REPORT_GROUP_BY_UNSPECIFIED",
-          "TOKEN_REPORT_GROUP_BY_TEAM",
-          "TOKEN_REPORT_GROUP_BY_AGENT",
-          "TOKEN_REPORT_GROUP_BY_CONNECTION",
-          "TOKEN_REPORT_GROUP_BY_MODEL"
-        ],
-        "description": "TokenReportGroupBy is what a token report's rows sum by."
-      },
-      "pantherclaw.v1.Estimate": {
-        "type": "object",
-        "properties": {
-          "currency": {
-            "type": "string",
-            "title": "currency",
-            "description": "ISO 4217 currency of the prices."
-          },
-          "amount": {
-            "type": "string",
-            "title": "amount",
-            "description": "Decimal string, at most 8 fraction digits."
-          }
-        },
-        "title": "Estimate",
-        "additionalProperties": false,
-        "description": "Estimate is a cost estimate in one currency, computed from prices the\n organization set on its model connections. It is an estimate, not a bill."
-      },
-      "pantherclaw.v1.GetTokenReportRequest": {
-        "type": "object",
-        "properties": {
-          "month": {
-            "type": "string",
-            "title": "month",
-            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
-            "description": "The UTC month, YYYY-MM."
-          },
-          "groupBy": {
-            "title": "group_by",
-            "$ref": "#/components/schemas/pantherclaw.v1.TokenReportGroupBy",
-            "not": {
-              "enum": [
-                "TOKEN_REPORT_GROUP_BY_UNSPECIFIED"
-              ]
-            }
-          },
-          "pageSize": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "title": "page_size",
-            "maximum": 200,
-            "minimum": 0,
-            "format": "int32",
-            "description": "0 for the default page size; at most 200."
-          },
-          "pageToken": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "title": "page_token",
-            "maxLength": 512,
-            "description": "Opaque; a model id key makes it longer than an id token."
-          }
-        },
-        "title": "GetTokenReportRequest",
-        "additionalProperties": false,
-        "required": [
-          "month",
-          "groupBy"
-        ]
-      },
-      "pantherclaw.v1.GetTokenReportResponse": {
-        "type": "object",
-        "properties": {
-          "rows": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.TokenReportRow"
-            },
-            "title": "rows"
-          },
-          "nextPageToken": {
-            "type": "string",
-            "title": "next_page_token"
-          },
-          "statement": {
-            "type": "string",
-            "title": "statement",
-            "description": "The fixed statement: what the counts and estimates are."
-          }
-        },
-        "title": "GetTokenReportResponse",
-        "additionalProperties": false
-      },
-      "pantherclaw.v1.TokenReportRow": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "title": "key",
-            "description": "The team, agent or connection id, or the model id; empty for calls\n without one (an agent without a team)."
-          },
-          "label": {
-            "type": "string",
-            "title": "label",
-            "description": "A name for people: the team, agent or connection name, or the model id."
-          },
-          "calls": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "calls",
-            "format": "int64",
-            "description": "Model calls recorded."
-          },
-          "unreportedCalls": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "unreported_calls",
-            "format": "int64",
-            "description": "Calls whose answer reported no usage (their tokens count as zero here)."
-          },
-          "unknownCalls": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "unknown_calls",
-            "format": "int64",
-            "description": "Calls whose outcome is UNKNOWN."
-          },
-          "inputTokens": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "input_tokens",
-            "format": "int64"
-          },
-          "outputTokens": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "output_tokens",
-            "format": "int64"
-          },
-          "cacheReadTokens": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "cache_read_tokens",
-            "format": "int64"
-          },
-          "cacheWriteTokens": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "cache_write_tokens",
-            "format": "int64"
-          },
-          "totalTokens": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "total_tokens",
-            "format": "int64",
-            "description": "The four counts summed."
-          },
-          "estimates": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/pantherclaw.v1.Estimate"
-            },
-            "title": "estimates",
-            "description": "Cost estimates, one per price currency; empty when no call had a price."
-          }
-        },
-        "title": "TokenReportRow",
-        "additionalProperties": false,
-        "description": "TokenReportRow sums the month's model calls of one key."
       },
       "pantherclaw.v1.ChannelHealth": {
         "type": "string",
@@ -103656,6 +103738,10 @@
       "description": "IncidentService serves Reflex's alerts, incidents, suppressions and owned\n operational failures (G0 M10 D14–D18; F603, F607, F616, F641; HR-242,\n HR-243). Alert and incident history is append-only: repeats add evidence\n and changes add events. Lists show only what the caller may read: an\n alert or incident about agents is listed when the caller holds\n incident.read where those agents live, and counts never include hidden\n rows (D8)."
     },
     {
+      "name": "pantherclaw.v1.ModelUsageService",
+      "description": "ModelUsageService reports the tokens the org's model calls used (G0 M29\n D825; F988; HR-698). Every model call through a model connection leaves one\n usage row with the token counts the provider reported. Counts are what the\n model providers reported; a cost is an estimate from prices the\n organization set on its model connections, never a bill. Every response\n carries the fixed statement that says so. The report needs Team or higher."
+    },
+    {
       "name": "pantherclaw.v1.InvestigationService",
       "description": "InvestigationService explains runs and actions from recorded evidence\n (G0 M10 D20; F239, F241, F248, F232, F284, F234; HR-247). Every row is\n read with evidence.read where its agent lives; rows of other agents are\n left out before anything is counted, and an action or run outside that\n scope is reported as not found. Nothing here asserts causation: items\n carry their basis, and a comparison never labels a run malicious."
     },
@@ -103670,10 +103756,6 @@
     {
       "name": "pantherclaw.v1.ModelService",
       "description": "ModelService is an organization's optional model drafting (G0 M21 D304,\n D309; G16, F181, F304, HR-541, HR-545). It is off by default, Business\n edition, and uses the organization's own provider key. A person turns it\n on and sets the key only on the browser settings page, with a security-key\n step-up; no RPC does either, and no RPC ever returns the key."
-    },
-    {
-      "name": "pantherclaw.v1.ModelUsageService",
-      "description": "ModelUsageService reports the tokens the org's model calls used (G0 M29\n D825; F988; HR-698). Every model call through a model connection leaves one\n usage row with the token counts the provider reported. Counts are what the\n model providers reported; a cost is an estimate from prices the\n organization set on its model connections, never a bill. Every response\n carries the fixed statement that says so. The report needs Team or higher."
     },
     {
       "name": "pantherclaw.v1.NotificationService",

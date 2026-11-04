@@ -80,6 +80,88 @@ func (q *Queries) InsertModelUsage(ctx context.Context, arg InsertModelUsagePara
 	return err
 }
 
+const modelUsageContext = `-- name: ModelUsageContext :one
+SELECT t.operation, t.run_id, r.agent_id, a.team_id, coalesce(t.target_id, '')::text AS model,
+    m.price_currency, m.price_input, m.price_output, m.price_cache_read, m.price_cache_write
+FROM pc.transactions t
+LEFT JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
+LEFT JOIN pc.model_connections m ON m.org_id = t.org_id AND m.connection_id = $1
+WHERE t.org_id = $2 AND t.id = $3
+`
+
+type ModelUsageContextRow struct {
+	Operation       string
+	RunID           ids.UUID
+	AgentID         *ids.UUID
+	TeamID          *ids.UUID
+	Model           string
+	PriceCurrency   *string
+	PriceInput      *money.Decimal
+	PriceOutput     *money.Decimal
+	PriceCacheRead  *money.Decimal
+	PriceCacheWrite *money.Decimal
+}
+
+// What a model call's usage row records besides its counts, read in the
+// transaction that records the outcome: the operation, run, agent, the
+// agent's team now, the model (the action's target) and the connection's
+// price, when it is a model connection with one.
+func (q *Queries) ModelUsageContext(ctx context.Context, connectionID ids.UUID, orgID ids.OrgID, transactionID ids.UUID) (ModelUsageContextRow, error) {
+	row := q.db.QueryRow(ctx, modelUsageContext, connectionID, orgID, transactionID)
+	var i ModelUsageContextRow
+	err := row.Scan(
+		&i.Operation,
+		&i.RunID,
+		&i.AgentID,
+		&i.TeamID,
+		&i.Model,
+		&i.PriceCurrency,
+		&i.PriceInput,
+		&i.PriceOutput,
+		&i.PriceCacheRead,
+		&i.PriceCacheWrite,
+	)
+	return i, err
+}
+
+const modelUsageLabels = `-- name: ModelUsageLabels :many
+SELECT k.id::text AS key,
+       coalesce(CASE $1::text
+           WHEN 'team' THEN t.name WHEN 'agent' THEN a.name WHEN 'connection' THEN c.name END, '')::text AS label
+FROM unnest($2::uuid[]) AS k (id)
+LEFT JOIN pc.teams t ON t.org_id = $3 AND t.id = k.id
+LEFT JOIN pc.agents a ON a.org_id = $3 AND a.id = k.id
+LEFT JOIN pc.connections c ON c.org_id = $3 AND c.id = k.id
+`
+
+type ModelUsageLabelsRow struct {
+	Key   string
+	Label string
+}
+
+// The names of a token report page's team, agent or connection keys (G0 M29
+// D825).
+func (q *Queries) ModelUsageLabels(ctx context.Context, groupBy string, keys []ids.UUID, orgID ids.OrgID) ([]ModelUsageLabelsRow, error) {
+	rows, err := q.db.Query(ctx, modelUsageLabels, groupBy, keys, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ModelUsageLabelsRow{}
+	for rows.Next() {
+		var i ModelUsageLabelsRow
+		if err := rows.Scan(&i.Key, &i.Label); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const modelUsageReport = `-- name: ModelUsageReport :many
 SELECT g.key::text AS key,
     sum(g.calls)::bigint AS calls,

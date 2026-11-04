@@ -8,10 +8,13 @@ package pgmodelusage
 import (
 	"context"
 	"fmt"
+	"time"
+	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/modelusage/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
@@ -39,6 +42,59 @@ func (Store) Insert(ctx context.Context, tx db.TenantTx, r domain.Record) error 
 		p.Estimate, p.EstimateCurrency = &amount, &currency
 	}
 	return dbq.New(tx).InsertModelUsage(ctx, p)
+}
+
+// Call is a model call's outcome as RecordExecution has it (D825).
+type Call struct {
+	TransactionID ids.UUID
+	ConnectionID  ids.UUID
+	Outcome       domain.Outcome
+	// Usage is what the gateway reported; zero (unreported) when it sent
+	// none, and always zero for an UNKNOWN outcome.
+	Usage domain.Usage
+	// Estimates says whether the org is on Team or higher now (D829): only
+	// then is an estimate written, from the connection's price.
+	Estimates  bool
+	RecordedAt time.Time
+}
+
+// RecordCall writes the usage row of a model create or count call in the
+// caller's transaction (the one that records its outcome), reading the
+// operation, run, agent, the agent's team and the model from the
+// transaction. Other operations leave no row; it reports whether it wrote
+// one.
+func (s Store) RecordCall(ctx context.Context, tx db.TenantTx, c Call) (bool, error) {
+	ctxRow, err := dbq.New(tx).ModelUsageContext(ctx, c.ConnectionID, tx.OrgID(), c.TransactionID)
+	if err != nil {
+		return false, err
+	}
+	if !domain.UsageOperations[ctxRow.Operation] {
+		return false, nil
+	}
+	u := c.Usage
+	if c.Outcome == domain.OutcomeUnknown || !u.Reported {
+		u = domain.Usage{} // HR-003: nothing is known of an UNKNOWN call
+	}
+	run := ctxRow.RunID
+	r := domain.Record{
+		ID: ids.NewV7(), TransactionID: c.TransactionID, RunID: &run, AgentID: ctxRow.AgentID, TeamID: ctxRow.TeamID,
+		ConnectionID: c.ConnectionID, Operation: ctxRow.Operation, Model: ctxRow.Model, Outcome: c.Outcome,
+		Usage: u, RecordedAt: c.RecordedAt,
+	}
+	if utf8.RuneCountInString(r.Model) > domain.MaxModelLength {
+		r.Model = string([]rune(r.Model)[:domain.MaxModelLength])
+	}
+	if c.Estimates && ctxRow.PriceCurrency != nil && ctxRow.PriceInput != nil && ctxRow.PriceOutput != nil {
+		p := domain.Price{
+			Currency: money.Currency(*ctxRow.PriceCurrency), Input: *ctxRow.PriceInput, Output: *ctxRow.PriceOutput,
+			CacheRead: ctxRow.PriceCacheRead, CacheWrite: ctxRow.PriceCacheWrite,
+		}
+		if est, err := domain.Estimate(u, p); err == nil {
+			r.Estimate = &est
+		}
+		// An estimate past the decimal range is left out, never wrapped.
+	}
+	return true, s.Insert(ctx, tx, r)
 }
 
 // ReportQuery is one page of a monthly token report.

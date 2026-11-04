@@ -316,7 +316,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 
-	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: contentSink(pool)}
+	authorityStore := &pgauthority.Store{
+		Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: contentSink(pool),
+		TokenCostReports: tokenCostReports(bill),
+	}
 	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, consoleBaseURL(cfg.Auth.PublicURL, ext), log)
 	if err != nil {
 		return err
@@ -947,6 +950,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerM11Search(rs, d)
 	registerCases(rs, d, grants)
+	registerModelUsage(rs, d)
 	registerResponse(rs, d)
 	registerExposure(rs, d)
 	registerSuggestions(rs, d)

@@ -1049,7 +1049,10 @@ func verdictEffect(v pdomain.Verdict) adomain.Decision {
 // budgets plans every reservation (ancestor debiting, HR-048) and checks it
 // against current usage. The binding reservation is in step 9.
 func (p *Pipeline) budgets(ctx context.Context, s *state) {
-	plan, f := s.chain.Debits(*s.gAction, gdomain.DebitContext{Now: s.cont.Now, RunID: s.ev.RunID, Principal: s.run.Principal, TeamID: s.agent.TeamID, Simulated: s.run.Simulated})
+	plan, f := s.chain.Debits(*s.gAction, gdomain.DebitContext{
+		Now: s.cont.Now, RunID: s.ev.RunID, Principal: s.run.Principal, TeamID: s.agent.TeamID, Simulated: s.run.Simulated,
+		ModelTokens: ModelTokens(s.def, s.vals), RunMaxTokens: s.run.MaxTokens,
+	})
 	if f != nil {
 		s.cl.add(StepBoundaries, effectOf(*f), f.Reason(), f.Finding.Detail, f.Level.String())
 		return
@@ -1066,6 +1069,7 @@ func (p *Pipeline) budgets(ctx context.Context, s *state) {
 	book := bdomain.NewBook()
 	var lines []bdomain.Line
 	labels := map[ids.UUID]string{}
+	tokenLines := map[ids.UUID]bool{}
 	s.ev.Rows = Rows{Accounts: map[bdomain.Ref]ids.UUID{}, Counters: map[bdomain.Ref]ids.UUID{}}
 	for _, d := range plan.Budgets {
 		acc := usage.Accounts[d.Ref]
@@ -1073,9 +1077,15 @@ func (p *Pipeline) budgets(ctx context.Context, s *state) {
 			s.ev.Rows.Accounts[d.Ref] = acc.ID
 		}
 		acc.ID, acc.Rank, acc.Currency, acc.Limit, acc.MaxCount = ids.NewV7(), d.Ref.Owner.Rank, d.Currency, d.Limit, d.MaxCount
+		acc.Unit = d.Unit
 		book.Accounts[acc.ID] = &acc
 		lines = append(lines, bdomain.Line{Kind: bdomain.KindBudget, ID: acc.ID, Rank: acc.Rank, Amount: d.Amount})
 		labels[acc.ID] = levelOf(s.chain, d.Ref.Owner) + " budget " + d.Ref.Rule
+		if d.Unit == bdomain.UnitTokens {
+			// G0 M29 D821: "<level> token budget <rule>: N of M tokens used".
+			labels[acc.ID] = levelOf(s.chain, d.Ref.Owner) + " token budget " + d.Ref.Rule
+			tokenLines[acc.ID] = true
+		}
 	}
 	for _, d := range plan.Counters {
 		c, exists := usage.Counters[d.Ref]
@@ -1095,8 +1105,11 @@ func (p *Pipeline) budgets(ctx context.Context, s *state) {
 	}
 	if failed, err := book.Check(lines); err != nil {
 		code := gdomain.ReasonBudgetExhausted
-		if failed.Kind == bdomain.KindCounter {
+		switch {
+		case failed.Kind == bdomain.KindCounter:
 			code = gdomain.ReasonCountLimitReached
+		case tokenLines[failed.ID]:
+			code = gdomain.ReasonTokenBudgetExhausted // G0 M29 D821
 		}
 		s.cl.add(StepBoundaries, adomain.Deny, code, labels[failed.ID]+": "+err.Error(), "")
 	}

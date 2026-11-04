@@ -57,3 +57,27 @@ FROM (
 GROUP BY g.key
 ORDER BY g.key
 LIMIT sqlc.arg(row_limit);
+
+-- name: ModelUsageContext :one
+-- What a model call's usage row records besides its counts, read in the
+-- transaction that records the outcome: the operation, run, agent, the
+-- agent's team now, the model (the action's target) and the connection's
+-- price, when it is a model connection with one.
+SELECT t.operation, t.run_id, r.agent_id, a.team_id, coalesce(t.target_id, '')::text AS model,
+    m.price_currency, m.price_input, m.price_output, m.price_cache_read, m.price_cache_write
+FROM pc.transactions t
+LEFT JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.agents a ON a.org_id = r.org_id AND a.id = r.agent_id
+LEFT JOIN pc.model_connections m ON m.org_id = t.org_id AND m.connection_id = sqlc.arg(connection_id)
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(transaction_id);
+
+-- name: ModelUsageLabels :many
+-- The names of a token report page's team, agent or connection keys (G0 M29
+-- D825).
+SELECT k.id::text AS key,
+       coalesce(CASE sqlc.arg(group_by)::text
+           WHEN 'team' THEN t.name WHEN 'agent' THEN a.name WHEN 'connection' THEN c.name END, '')::text AS label
+FROM unnest(sqlc.arg(keys)::uuid[]) AS k (id)
+LEFT JOIN pc.teams t ON t.org_id = sqlc.arg(org_id) AND t.id = k.id
+LEFT JOIN pc.agents a ON a.org_id = sqlc.arg(org_id) AND a.id = k.id
+LEFT JOIN pc.connections c ON c.org_id = sqlc.arg(org_id) AND c.id = k.id;

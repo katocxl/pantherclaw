@@ -57,7 +57,8 @@ func Ensure(ctx context.Context, pool *db.Pool, org ids.OrgID, budgets []bdomain
 			}
 			if err := q.EnsureBudgetAccount(ctx, dbq.EnsureBudgetAccountParams{
 				OrgID: org, ID: ids.NewV7(), OwnerKind: kind, OwnerID: owner, Rule: d.Ref.Rule, KeyHash: d.Ref.Key[:],
-				PeriodStart: d.Ref.Start, Rank: int16(d.Ref.Owner.Rank), Currency: currency, //nolint:gosec // 0..5
+				PeriodStart: d.Ref.Start, Rank: int16(d.Ref.Owner.Rank), Currency: currency, //nolint:gosec // 0..6
+				Unit: string(d.Unit.OrCurrency()), // G0 M29 D821
 			}); err != nil {
 				return err
 			}
@@ -269,6 +270,20 @@ func Settle(ctx context.Context, q *dbq.Queries, org ids.OrgID, permit ids.UUID,
 	return err
 }
 
+// SettleTokens sets what the held token reservations of a permit commit:
+// the tokens a model call used, as the provider reported them (G0 M29
+// D821, HR-693). Call it just before Settle with Commit, and only when the
+// usage was reported; otherwise each commits its whole reservation. Spent
+// may then pass a cap by what the call's input estimate missed.
+func SettleTokens(ctx context.Context, q *dbq.Queries, org ids.OrgID, permit ids.UUID, used int64) error {
+	amount, err := money.FromInt(max(used, 0))
+	if err != nil {
+		return err
+	}
+	_, err = q.SetTokenSettledAmounts(ctx, &amount, org, permit)
+	return err
+}
+
 // MaxApplyBatch is how many settled reservations one Apply takes.
 const MaxApplyBatch = 1000
 
@@ -311,7 +326,9 @@ func Apply(ctx context.Context, q *dbq.Queries, org ids.OrgID, maxRows int) (int
 		}
 		s.n++
 		if r.State == "COMMITTED" {
-			if s.spent, err = s.spent.Add(r.Amount); err != nil {
+			// G0 M29 D821: a token reservation commits what the call used
+			// (its settled amount) when the provider reported it.
+			if s.spent, err = s.spent.Add(r.SpentAmount); err != nil {
 				return 0, err
 			}
 			s.spentN++

@@ -135,6 +135,9 @@ type Run struct {
 	// on: the scope an identity assertion narrowed its grant to (G0 M26
 	// D408). Empty is the whole grant.
 	ScopeOperations []string
+	// MaxTokens, when set, is the run's token cap (G0 M29 D822): one more
+	// debit level, owned by the run, for its model calls.
+	MaxTokens *int64
 }
 
 // RunConsequenceCounts are how a run's actions stand downstream (G0 M17

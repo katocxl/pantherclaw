@@ -35,6 +35,8 @@ CREATE TABLE pc.model_usage (
     CONSTRAINT model_usage_estimate CHECK ((estimate IS NULL) = (estimate_currency IS NULL))
 );
 CREATE INDEX model_usage_recorded ON pc.model_usage (org_id, recorded_at);
+-- The run inspector's estimate reads one run's rows (D824).
+CREATE INDEX model_usage_run ON pc.model_usage (org_id, run_id) WHERE run_id IS NOT NULL;
 
 ALTER TABLE pc.model_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.model_usage FORCE ROW LEVEL SECURITY;

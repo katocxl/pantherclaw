@@ -224,7 +224,10 @@ type Run struct {
 	// ScopeOperations narrow the run (G0 M26 D408); recordings made before
 	// them have none and replay with the whole grant, as they were.
 	ScopeOperations []string `json:"scope_operations,omitzero"`
-	Err             string   `json:"err,omitzero"`
+	// MaxTokens is the run's token cap (G0 M29 D822); older recordings have
+	// none and replay unchanged.
+	MaxTokens *int64 `json:"max_tokens,omitzero"`
+	Err       string `json:"err,omitzero"`
 }
 
 // Agent is an agent read.
@@ -356,6 +359,7 @@ type AccountUsage struct {
 	ID            string  `json:"id,omitzero"`
 	Rank          int     `json:"rank,omitzero"`
 	Currency      string  `json:"currency,omitzero"`
+	Unit          string  `json:"unit,omitzero"` // G0 M29 D821
 	Limit         *string `json:"limit,omitzero"`
 	Reserved      string  `json:"reserved"`
 	Spent         string  `json:"spent"`

@@ -22,6 +22,8 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
@@ -39,6 +41,14 @@ import (
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
+
+// int8Ptr is a nullable bigint as a pointer (G0 M29 D822).
+func int8Ptr(v pgtype.Int8) *int64 {
+	if !v.Valid {
+		return nil
+	}
+	return &v.Int64
+}
 
 // Run limits (G0 M3 constraint 17).
 const (
@@ -118,7 +128,9 @@ type Run struct {
 	// ScopeOperations narrow the run within its grant (G0 M26 D400): nil
 	// is the whole grant.
 	ScopeOperations []string
-	TaskRef         string
+	// MaxTokens is the run's token cap (G0 M29 D822); nil for none.
+	MaxTokens *int64
+	TaskRef   string
 	// Simulated runs belong to range agents or descend from one (HR-220);
 	// fixed when the run starts.
 	Simulated bool
@@ -149,8 +161,8 @@ func view(r dbq.PcRun, state string) (Run, error) {
 		Launcher:        actorOf(r.LauncherUserID, r.LauncherSaID, r.LauncherInstanceID),
 		Principal:       actorOf(r.PrincipalUserID, r.PrincipalSaID, nil),
 		PrincipalSource: r.PrincipalSource, ParentRunID: r.ParentRunID, Depth: int(r.Depth), GrantID: r.GrantID, TaskRef: r.TaskRef,
-		ScopeOperations: r.ScopeOperations,
-		Simulated:       r.Simulated, State: state, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, EndedAt: r.EndedAt,
+		ScopeOperations: r.ScopeOperations, MaxTokens: int8Ptr(r.MaxTokens),
+		Simulated: r.Simulated, State: state, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, EndedAt: r.EndedAt,
 	}
 	if r.SubjectIssuer != nil {
 		out.SubjectIssuer = *r.SubjectIssuer
@@ -189,6 +201,9 @@ type StartInput struct {
 	SubjectTokenType string
 	// GrantID, when set, binds the run to that root grant.
 	GrantID *ids.UUID
+	// MaxTokens, when set, is the run's token cap (G0 M29 D822): stored at
+	// creation and never changed; it only restricts.
+	MaxTokens *int64
 }
 
 func checkLabel(taskRef string, ttl time.Duration) (int32, error) {
@@ -304,6 +319,9 @@ func (s *Service) StartRun(ctx context.Context, in StartInput) (Run, error) {
 		p := dbq.InsertRunParams{
 			OrgID: c.Org, ID: ids.NewV7(), AgentID: a.ID, InstanceID: in.InstanceID, EnvironmentID: *a.EnvironmentID,
 			PrincipalSource: SourceLauncher, TaskRef: in.TaskRef, TtlMinutes: minutes, Simulated: a.RangeAgent,
+		}
+		if in.MaxTokens != nil {
+			p.MaxTokens = pgtype.Int8{Int64: *in.MaxTokens, Valid: true} // G0 M29 D822
 		}
 		id := c.Principal.ID
 		if c.Principal.Kind == td.KindUser {

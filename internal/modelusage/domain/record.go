@@ -11,6 +11,16 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
+// UsageOperations are the model operations that leave a usage row (D825):
+// the create and count operations of pc.anthropic and pc.openai (D813).
+// Reading models leaves none.
+var UsageOperations = map[string]bool{
+	"anthropic.messages.create":       true,
+	"anthropic.messages.count_tokens": true,
+	"openai.chat.create":              true,
+	"openai.responses.create":         true,
+}
+
 // Record is one model call's usage row (D825), written in the transaction
 // that records the call's outcome. It holds metadata and counts only, never
 // a prompt or a reply (HR-695). An UNKNOWN outcome carries zero counts and
