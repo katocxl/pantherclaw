@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json/v2"
+	"fmt"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
@@ -270,6 +271,10 @@ func (s *Service) Revoke(ctx context.Context, id ids.UUID, reason string) (Insta
 func (s *Service) close(ctx context.Context, q *dbq.Queries, tx db.TenantTx, c tenancy.Caller, in dbq.PcAgentInstance,
 	a dbq.PcAgent, from, to, entryState, reason string, kind adomain.ChangeKind,
 ) (Instance, error) {
+	auditKind, ok := instanceClosedKinds[to]
+	if !ok {
+		return Instance{}, fmt.Errorf("identity: no audit kind for instance state %q", to)
+	}
 	by := c.Principal.String()
 	r, err := q.CloseInstance(ctx, dbq.CloseInstanceParams{
 		OrgID: c.Org, ID: in.ID, FromState: from, ToState: to, DecidedBy: &by, Reason: &reason,
@@ -289,7 +294,7 @@ func (s *Service) close(ctx context.Context, q *dbq.Queries, tx db.TenantTx, c t
 	}); err != nil {
 		return Instance{}, err
 	}
-	return instanceView(r), callerRecord(ctx, tx, c, instanceClosedKinds[to], in.ID, map[string]string{"agent_id": a.ID.String()})
+	return instanceView(r), callerRecord(ctx, tx, c, auditKind, in.ID, map[string]string{"agent_id": a.ID.String()})
 }
 
 // instanceClosedKinds are the audit kinds of an instance's closing states

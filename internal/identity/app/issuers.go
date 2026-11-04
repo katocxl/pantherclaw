@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -426,6 +427,10 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 				return notFoundAs(err, ErrEntryState)
 			}
 		}
+		auditKind, ok := issuerRevisionKinds[state]
+		if !ok {
+			return fmt.Errorf("identity: no audit kind for issuer revision state %q", state)
+		}
 		binding, err := json.Marshal(in.Binding)
 		if err != nil {
 			return err
@@ -445,7 +450,7 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		if out, err = revisionView(r); err != nil {
 			return err
 		}
-		return recordAs(ctx, tx, c.Actor(), issuerRevisionKinds[state],
+		return recordAs(ctx, tx, c.Actor(), auditKind,
 			"issuer_entry", entryID, map[string]string{
 				"agent_id": a.ID.String(), "revision": strconv.Itoa(int(number)), "kind": string(in.Binding.kind()),
 				"widening": strings.Join(widening, "; "),
