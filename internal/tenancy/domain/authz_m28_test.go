@@ -11,8 +11,8 @@ import (
 )
 
 // TestM28_ThreatMapReadRoles: threatmap.read and the roles that hold it,
-// exactly (G0 M28 D722): the roles that read compliance coverage or
-// detections.
+// exactly (G0 M28 D722, D722a): the roles that read compliance coverage or
+// detections, and the Investigator for technique_coverage (D726).
 // Covers: F960, HR-686
 func TestM28_ThreatMapReadRoles(t *testing.T) {
 	p := domain.PermThreatMapRead
@@ -26,7 +26,9 @@ func TestM28_ThreatMapReadRoles(t *testing.T) {
 		}
 	}
 	slices.Sort(got)
-	want := []domain.RoleName{domain.RoleAuditor, domain.RoleOrgAdmin, domain.RoleResponder, domain.RoleSecurityAdmin}
+	want := []domain.RoleName{
+		domain.RoleAuditor, domain.RoleInvestigator, domain.RoleOrgAdmin, domain.RoleResponder, domain.RoleSecurityAdmin,
+	}
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
 		t.Fatalf("held by %v, want %v", got, want)

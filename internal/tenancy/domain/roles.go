@@ -308,10 +308,10 @@ var roles = []Role{
 	},
 	{
 		Name: RoleInvestigator, Title: "Investigator", Scopes: anyScope, ServiceOnly: true,
-		Description: "For the service account of a customer's SOC agent behind pclaw mcp self: reads what happened, a run's timeline, search results and breach radius in its scope, and nothing else (HR-655). Holds no write. The server admits this role on those four reads only, audits each one and ignores it on every other procedure, so its search.read and evidence.read never reach saved queries, model drafting or bundle export. Restricted evidence stays out. Bound only to service accounts.",
+		Description: "For the service account of a customer's SOC agent behind pclaw mcp self: reads what happened, a run's timeline, search results, breach radius and one technique's threat map in its scope, and nothing else (HR-655). Holds no write. The server admits this role on those five reads only, audits each one and ignores it on every other procedure, so its search.read and evidence.read never reach saved queries, model drafting or bundle export. Restricted evidence stays out. Bound only to service accounts.",
 		Permissions: []Permission{
 			PermOrgRead, PermSearchRead, PermEvidenceRead, PermExposureRead,
-			PermAgentRead, PermRunRead, PermGrantRead, PermIncidentRead,
+			PermAgentRead, PermRunRead, PermGrantRead, PermIncidentRead, PermThreatMapRead,
 		},
 	},
 }
