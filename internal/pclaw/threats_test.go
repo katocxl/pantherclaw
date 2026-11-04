@@ -57,6 +57,7 @@ func (f *fakeThreatMap) GetThreatTechnique(_ context.Context, req *pb.GetThreatT
 		Cell:   &pb.ThreatTechniqueCell{TechniqueId: req.GetTechniqueId(), Name: "Valid Accounts", Status: pb.ThreatStatus_THREAT_STATUS_PARTIAL},
 		Detect: &pb.ThreatDetectLane{State: pb.ThreatLaneState_THREAT_LANE_STATE_PARTIAL, Reasons: []string{"RULE_SILENT"}},
 		Gaps:   []*pb.ThreatGap{{Lane: pb.ThreatLane_THREAT_LANE_DETECT, TechniqueId: req.GetTechniqueId(), Label: "Send events", Command: "pclaw rules enable r1"}},
+		Seen:   &pb.ThreatSeen{AlertsRaised: 3, Refusals: 2, Holds: 1, WindowDays: 30},
 	}}, nil
 }
 
@@ -129,7 +130,8 @@ func TestThreatsCommands(t *testing.T) {
 	code, out, _ = run(t, env, "threats", "technique", "T1078")
 	if code != 0 || f.technique.GetFramework() != pb.ThreatFramework_THREAT_FRAMEWORK_ATTACK_ENTERPRISE || f.technique.GetTechniqueId() != "T1078" ||
 		!strings.Contains(out, "T1078 Valid Accounts: PARTIAL") || !strings.Contains(out, "RULE_SILENT") ||
-		!strings.Contains(out, "fix: pclaw rules enable r1") || !ends(out) {
+		!strings.Contains(out, "fix: pclaw rules enable r1") ||
+		!strings.Contains(out, "Seen in 30 days: 3 alerts raised, 2 refusals by mapped controls, 1 holds by mapped controls") || !ends(out) {
 		t.Fatalf("technique = %d %q", code, out)
 	}
 	if code, _, _ := run(t, env, "threats", "technique", "AML.T0051"); code != 0 || f.technique.GetFramework() != pb.ThreatFramework_THREAT_FRAMEWORK_ATLAS {

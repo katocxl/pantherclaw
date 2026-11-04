@@ -387,7 +387,7 @@ func writeTechniqueDetail(e *ew, d *pb.ThreatTechniqueDetail) {
 		e.f("    scenario %s %s: %s\n", s.GetScenarioId(), s.GetTitle(), verdict)
 	}
 	if s := d.GetSeen(); s != nil {
-		e.f("  Seen in %d days: %d alerts, %d refusals, %d holds\n", s.GetWindowDays(), s.GetAlertsRaised(), s.GetRefusals(), s.GetHolds())
+		e.f("  Seen in %d days: %d alerts raised, %d refusals by mapped controls, %d holds by mapped controls\n", s.GetWindowDays(), s.GetAlertsRaised(), s.GetRefusals(), s.GetHolds())
 	}
 	if len(d.GetCampaigns()) > 0 {
 		e.f("  Range campaigns (labels only): %s\n", strings.Join(d.GetCampaigns(), ", "))
