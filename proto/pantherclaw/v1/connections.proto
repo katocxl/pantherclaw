@@ -161,6 +161,10 @@ enum ConnectionKind {
   // A peer agent reached over the A2A protocol, its agent card pinned
   // (G0 M14 D30); pantherclaw_held only.
   CONNECTION_KIND_A2A = 11;
+  // A model provider's API (G0 M29 D811): pc.anthropic or pc.openai only,
+  // pantherclaw_held only. The gateway holds the provider key, decides each
+  // call, scans the prompt and meters tokens (HR-690, HR-691).
+  CONNECTION_KIND_MODEL = 12;
 }
 
 // ConnectionState is whether actions may use a connection.
@@ -280,6 +284,51 @@ message Connection {
   // Whether the connection is a campaign's model relay (G0 M25 D313): only
   // the gateway's model face serves it, and only during an open campaign.
   bool model_relay = 34;
+  // model is a model connection's settings (G0 M29 D811).
+  ModelConfig model = 35;
+}
+
+// ModelConfig is a model connection's settings (G0 M29 D811, D813, D829).
+message ModelConfig {
+  // The max output tokens the gateway adds to a request that has none
+  // (1..1,000,000; 0 on a create or an update means the default, 64,000).
+  int64 max_output_tokens = 1 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 1000000
+  }];
+  // Provider-side tool types an admin allowed on this connection (HR-696);
+  // every other provider-side tool is refused. Default none.
+  repeated string allowed_server_tools = 2 [(buf.validate.field).repeated = {
+    max_items: 32
+    unique: true
+    items: {
+      string: {pattern: "^[a-z][a-z0-9_.-]{0,63}$"}
+    }
+  }];
+  // An optional price for estimates only (Team, HR-698); unset = no price.
+  // PantherClaw ships no price list.
+  ModelPrice price = 3;
+}
+
+// ModelPrice is what the organization pays its provider per million tokens,
+// used for estimates only (G0 M29 D811, D829). Prices are decimal strings
+// with at most 8 fraction digits.
+message ModelPrice {
+  option (buf.validate.message).cel = {
+    id: "model_price_together"
+    message: "currency, input_per_million and output_per_million are set together"
+    expression: "this.currency != '' && this.input_per_million != '' && this.output_per_million != ''"
+  };
+  // ISO 4217 currency code.
+  string currency = 1 [(buf.validate.field).string.pattern = "^[A-Z]{3}$"];
+  // Price per million input tokens.
+  string input_per_million = 2 [(buf.validate.field).string.pattern = "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?$"];
+  // Price per million output tokens.
+  string output_per_million = 3 [(buf.validate.field).string.pattern = "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?$"];
+  // Price per million cache-read tokens; empty = the input price.
+  string cache_read_per_million = 4 [(buf.validate.field).string.pattern = "^((0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?)?$"];
+  // Price per million cache-write tokens; empty = the input price.
+  string cache_write_per_million = 5 [(buf.validate.field).string.pattern = "^((0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?)?$"];
 }
 
 // A2APinState is where the pin behind an A2AStatus stands.
@@ -627,6 +676,9 @@ message CreateConnectionRequest {
   // connection with no package, no agent hosts and no credential. Fixed for
   // the connection's life.
   bool model_relay = 24;
+  // model is a model connection's settings (G0 M29 D811); only for kind
+  // model, which takes the defaults when it is unset.
+  ModelConfig model = 25;
 }
 
 // CreateConnectionResponse returns the connection.
@@ -744,6 +796,8 @@ message UpdateConnectionRequest {
   // a2a replaces an a2a connection's configuration, or pins its card again
   // (weakens).
   A2AConfig a2a = 21;
+  // model replaces a model connection's settings (G0 M29 D811).
+  ModelConfig model = 22;
 }
 
 // UpdateConnectionResponse returns the connection.

@@ -277,6 +277,9 @@ func (w *World) budgetStates(ev *pipeline.Evaluation) []finalize.BudgetState {
 			Level: d.Ref.Owner.ID.String(), Rule: d.Ref.Rule, Currency: string(d.Currency),
 			Reserved: a.Reserved.String(), Spent: a.Spent.String(),
 		}
+		if d.Unit == bdomain.UnitTokens {
+			s.Unit = string(bdomain.UnitTokens) // G0 M29 D821
+		}
 		if amt, cnt := a.Available(); amt != nil {
 			s.Available = amt.String()
 		} else if cnt != nil {

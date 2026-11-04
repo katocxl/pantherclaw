@@ -365,6 +365,7 @@ func (s *Store) BudgetAccounts(ctx context.Context, org ids.OrgID, owners []ids.
 			a := app.BudgetAccount{
 				ID: r.ID, OwnerKind: r.OwnerKind, OwnerID: r.OwnerID, Rule: r.Rule, PeriodStart: r.PeriodStart, Rank: int(r.Rank),
 				Reserved: r.Reserved, Spent: r.Spent, ReservedCount: int64(r.ReservedCount), SpentCount: int64(r.SpentCount),
+				Unit: r.Unit, // G0 M29 D821
 			}
 			if r.Currency != nil {
 				a.Currency = *r.Currency

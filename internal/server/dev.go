@@ -83,6 +83,8 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	jiraURL := fs.String("jira-url", "", "with --gateway-out: also seed pc.jira and the connection \"jira\" to this Jira site (pantherclaw-sim jira: http://127.0.0.1:9096), its project facts read by the gateway")
 	awsECSURL := fs.String("aws-ecs-url", "", "with --gateway-out: also seed pc.aws.ecs and the connection \"aws-ecs\" to this ECS endpoint (pantherclaw-sim aws)")
 	gitlabURL := fs.String("gitlab-url", "", "with --gateway-out: also seed pc.gitlab and the connection \"gitlab\" to this GitLab instance (pantherclaw-sim gitlab: http://127.0.0.1:9097), its merge request facts read by the gateway")
+	modelURL := fs.String("model-url", "", "with --gateway-out: also seed pc.anthropic, pc.openai and the simulated model connections \"anthropic\" and \"openai\" "+
+		"to this fake model (pantherclaw-sim model: "+devSimModelURL+"), held by the gateway (G0 M29 D811)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -127,7 +129,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 	}
 	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "" ||
-		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "") && *gatewayOut == "" {
+		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "") && *gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
 	if *a2aURL != "" && (*workloadOut == "" || *a2aPeerOut == "") {
@@ -206,6 +208,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	}
 	if *awsECSURL != "" {
 		pkgs = append(pkgs, devPackage{pcawsecs.Name, pcawsecs.Version, pcawsecs.Package})
+	}
+	if *modelURL != "" {
+		pkgs = append(pkgs, devModelPackages()...)
 	}
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
@@ -294,6 +299,11 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			_, _ = fmt.Fprintf(stdout, "seeded aws-ecs connection %s (%s) to %s, its deployment controller read by the gateway; seal a base key with "+
 				"pclaw seal --connection %s --from-file SECRET --aws-access-key-id ID --aws-role-arn ARN --aws-sts-url URL --aws-sts-region R --aws-region R --aws-service ecs\n",
 				c.ID, c.Name, *awsECSURL, c.ID)
+		}
+		if *modelURL != "" {
+			if err := seedModelConnections(ctx, cfg, pool, org, gw, *modelURL, stdout); err != nil {
+				return err
+			}
 		}
 		if *a2aURL != "" {
 			if err := seedA2A(ctx, cfg, pool, org, gw, w, *a2aURL, *a2aPeerOut, stdout); err != nil {

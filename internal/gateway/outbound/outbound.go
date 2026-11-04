@@ -99,6 +99,9 @@ var formats = []format{
 	{"aws_access_key", regexp.MustCompile(`(?:AKIA|ASIA)[A-Z0-9]{16}`)},
 	{"slack_token", regexp.MustCompile(`xox[abposr]-[A-Za-z0-9-]{10,}`)},
 	{"pantherclaw_token", regexp.MustCompile(`pc[kidrsebgl]_[A-Za-z0-9_]{20,}`)},
+	// Model provider keys, for every connection (G0 M29 D816).
+	{"anthropic", regexp.MustCompile(`sk-ant-[a-z0-9]{2,12}-[A-Za-z0-9_-]{32,}`)},
+	{"openai", regexp.MustCompile(`sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{32,}|sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}`)},
 }
 
 // Formats returns the kinds of the known credential formats text holds, in
@@ -124,7 +127,11 @@ type part struct {
 
 // Scan checks one action's request against the held secrets.
 func Scan(in Input, held [][]byte) Result {
-	c := collect(in)
+	return scanParts(collect(in), held)
+}
+
+// scanParts checks what c collected.
+func scanParts(c *collector, held [][]byte) Result {
 	needles := needles(held)
 	for _, p := range c.parts {
 		for _, n := range needles {
@@ -217,6 +224,7 @@ func needles(held [][]byte) []string {
 
 // collector gathers the strings of a request, within the caps.
 type collector struct {
+	lim   limits
 	parts []part
 	// n counts the strings that are not whole-body copies.
 	n int
@@ -232,9 +240,16 @@ func (c *collector) add(loc, text string) bool {
 	if text == "" {
 		return true
 	}
-	if c.n >= MaxParts {
+	if c.n >= c.lim.parts {
 		c.stopAt(loc)
 		return false
+	}
+	if c.lim.countText {
+		if c.decoded+len(text) > c.lim.decodedTotal {
+			c.stopAt(loc)
+			return false
+		}
+		c.decoded += len(text)
 	}
 	c.n++
 	c.parts = append(c.parts, part{location: loc, text: text})
@@ -249,7 +264,7 @@ func (c *collector) base64(loc, s string) {
 	if len(s) < minBase64 || !alphabet(s) {
 		return
 	}
-	if base64.StdEncoding.DecodedLen(len(s)) > MaxDecoded+3 {
+	if base64.StdEncoding.DecodedLen(len(s)) > c.lim.decoded+3 {
 		c.stopAt(loc + "(base64)")
 		return
 	}
@@ -258,7 +273,7 @@ func (c *collector) base64(loc, s string) {
 		if err != nil {
 			continue
 		}
-		if len(b) > MaxDecoded || c.decoded+len(b) > MaxDecodedTotal {
+		if len(b) > c.lim.decoded || c.decoded+len(b) > c.lim.decodedTotal {
 			c.stopAt(loc + "(base64)")
 			return
 		}
@@ -289,7 +304,7 @@ func alphabet(s string) bool {
 }
 
 func collect(in Input) *collector {
-	c := &collector{}
+	c := &collector{lim: actionLimits}
 	if len(in.Body) > 0 {
 		valid := c.json("body:", in.Body)
 		c.parts = append(c.parts, part{location: "body", text: string(in.Body), heldOnly: valid})

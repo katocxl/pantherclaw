@@ -26,7 +26,8 @@ func launchLimits(perGrant gdomain.Limits, want *gdomain.Limits) (gdomain.Limits
 		}
 		w := want.Budgets[i]
 		if w.Grouping != p.Grouping || !slices.Equal(w.Operations, p.Operations) || w.Currency != p.Currency ||
-			w.Period != p.Period || !notAbove(w.Limit, p.Limit) || !notAbove(w.MaxCount, p.MaxCount) {
+			w.Period != p.Period || !notAbove(w.Limit, p.Limit) || !notAbove(w.MaxCount, p.MaxCount) ||
+			!notAbove(w.MaxTokens, p.MaxTokens) { // G0 M29 D821: a token cap only narrows too
 			return gdomain.Limits{}, false
 		}
 	}

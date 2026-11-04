@@ -170,6 +170,7 @@ var all = []string{
 	ConnectionRouteModeChanged,
 	ConnectionSealedRevoked,
 	ConnectionSealedStored,
+	ConnectionModelServerToolRefused,
 	ConnectionSecretInPayloadRefused,
 	ConnectionTestTokensMinted,
 	ConnectionTested,

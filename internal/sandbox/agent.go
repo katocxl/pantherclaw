@@ -56,18 +56,27 @@ func (s *Sandbox) PrepareAgent(ctx context.Context, a Agent) error {
 		return err
 	}
 	proxy := "http://" + s.EdgeAddr
-	env := []string{"HTTPS_PROXY=" + proxy, "https_proxy=" + proxy, "HTTP_PROXY=" + proxy, "http_proxy=" + proxy, "NO_PROXY=", "no_proxy=", "HOME=/tmp"}
+	env := []string{
+		"HTTPS_PROXY=" + proxy, "https_proxy=" + proxy, "HTTP_PROXY=" + proxy, "http_proxy=" + proxy, "NO_PROXY=", "no_proxy=", "HOME=/tmp",
+		// Node's fetch honors the proxy variables only with this (G0 M29 D815).
+		"NODE_USE_ENV_PROXY=1",
+	}
 	for _, v := range caEnv {
 		env = append(env, v+"="+caPath)
+	}
+	// Agent configuration and memory files stay read-only (G0 M30 D944).
+	protected, err := s.protectedBinds(a.Workspace)
+	if err != nil {
+		return err
 	}
 	s.Agent = "pc-agent-" + short(s.o.Session)
 	info, err := s.container(ctx, docker.Container{
 		Name: s.Agent, Image: a.Image, User: AgentUser, Args: a.Args, Networks: []string{s.Internal},
 		Env: append(env, a.Env...), WorkDir: probe.Workspace,
-		Mounts: []docker.Mount{
+		Mounts: append([]docker.Mount{
 			{Kind: docker.Bind, Source: s.CAFile, Target: caPath},
 			{Kind: docker.Volume, Source: s.Workspace, Target: probe.Workspace},
-		},
+		}, protected...),
 	})
 	if err != nil {
 		return err
@@ -79,7 +88,8 @@ func (s *Sandbox) PrepareAgent(ctx context.Context, a Agent) error {
 // agentChecks are pclaw's configuration checks of the agent's container as
 // the engine made it, which the closure of the host route needs: no mount
 // names the engine's socket, and every bind is a file of the session's
-// private directory (the session CA certificate), never another host path.
+// private directory (the session CA certificate and the read-only copies of
+// protected agent configuration files), never another host path.
 func agentChecks(info docker.ContainerInfo, dir string) []report.Check {
 	sock := report.Check{ID: "agent_no_docker_socket", OK: true}
 	bind := report.Check{ID: "agent_no_host_bind", OK: true}

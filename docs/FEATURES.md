@@ -898,6 +898,23 @@ The map shows PantherClaw's controls per MITRE technique and the evidence for th
 | F975 | Console threat map | Evidence › Threat map: tabs per framework, the matrix with lane marks and legend, tactic counts, filters, a technique drawer with gaps; exports on Team, history on Business. | Next | Community | M28 | new |
 | F976 | Console chips and agent link | Technique chips on alert, incident, case, range result and detection rule views; the agent page links to that agent's map. | Next | Community | M28 | new |
 
+### M29 rows: Model connections and token budgets
+
+An agent reaches its model through the gateway, which holds the key, checks each call and counts tokens against caps. Estimates come only from prices the organization sets and are never a bill ([G0 M29](g0/M29.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F980 | Model connections | Connection kind `model` with packages `pc.anthropic` and `pc.openai`. The gateway holds and places the key, decides each call on metadata and a body hash, scans the prompt and captures nothing. | Next | Community | M29 | new |
+| F981 | Model route limits | Model connections take 16 MiB each way, stream answers and allow 10 minutes a call, on the edge and the gateway. Refusals come in the provider's error shape with the agent-safe explanation. | Next | Community | M29 | new |
+| F982 | Token budgets | `max_tokens` budget rules on grants and guardrail envelopes: reserve by estimate before a call, refuse over the cap with `TOKEN_BUDGET_EXHAUSTED`, settle at reported usage. Unknown outcomes keep their reservation. | Next | Community | M29 | F110, F113, F114 |
+| F983 | Run token cap | `StartRun.max_tokens` and `pclaw sandbox run --max-tokens` add a run-level token cap that only restricts. | Next | Community | M29 | F110 |
+| F984 | Sandbox model settings | `pclaw sandbox run --env` refuses proxy, CA, key and PantherClaw names and credential values; a per-session key placeholder; `NODE_USE_ENV_PROXY` for Node's fetch. | Next | Community | M29 | new |
+| F985 | Fake model | `pantherclaw-sim model` on 127.0.0.1:9103: Anthropic and OpenAI shapes, streams, usage numbers and faults by model id; range scenarios RT-190..RT-197. No test spends a token. | Next | Community | M29 | PN-009.3 |
+| F986 | Token views | Budget lines with unit and cap in the run inspector, explanations, receipts and the approval display (model, max tokens, input size, provider-side tools; never prompt text). | Next | Community | M29 | F113, F227 |
+| F987 | Cost estimates | Organization-set prices per million tokens on a model connection give an estimate per call and per run, labelled an estimate. No price list ships. | Next | Team | M29 | new |
+| F988 | Monthly token report | `GetTokenReport` and `pclaw tokens report`: one UTC month's calls and tokens by team, agent, connection or model, with estimates and the fixed statement. | Next | Team | M29 | new |
+| F989 | Console token views | Console run and approval token lines, model connection settings (max output tokens, provider-side tools, prices on Team) and the monthly token report page on Team. | Next | Community | M29 | new |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.

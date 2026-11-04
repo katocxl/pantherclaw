@@ -118,6 +118,11 @@ type Options struct {
 	// the agent's model key variables, which the edge drops without
 	// reporting it. The model key itself is never here (HR-607).
 	ModelHost, ModelConnection, ModelPlaceholder string
+	// ModelConnections name the mapped connections of kind model, which the
+	// edge forwards with the model path's limits (G0 M29 D814); the server
+	// names them when the session starts. ModelPlaceholder is then the value
+	// of the agent's model key variables too (D815).
+	ModelConnections []string
 }
 
 // Sandbox is a running sandbox: its networks and edge.
@@ -233,6 +238,7 @@ func (s *Sandbox) start(ctx context.Context) error {
 		GatewayURL: s.o.GatewayURL, GatewayAddr: gatewayAddr, GatewayCAPin: s.o.GatewayCAPin, Hosts: s.o.Hosts, Run: s.o.Run,
 		KeyFile: keyPath, TokenFile: tokenDir + "/" + filepath.Base(s.o.TokenFile),
 		ModelHost: s.o.ModelHost, ModelConnection: s.o.ModelConnection, Placeholder: s.o.ModelPlaceholder,
+		ModelConnections: s.o.ModelConnections,
 	}
 	path, err := s.writeJSON("edge.json", cfg)
 	if err != nil {

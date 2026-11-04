@@ -309,8 +309,10 @@ type Run struct {
 	// The operations the run is narrowed to within its grant (G0 M26 D400);
 	// empty for the whole grant.
 	ScopeOperations []string `protobuf:"bytes,20,rep,name=scope_operations,json=scopeOperations,proto3" json:"scope_operations,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The run's token cap (G0 M29 D822); unset when it has none.
+	MaxTokens     *int64 `protobuf:"varint,21,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Run) Reset() {
@@ -483,6 +485,13 @@ func (x *Run) GetScopeOperations() []string {
 	return nil
 }
 
+func (x *Run) GetMaxTokens() int64 {
+	if x != nil && x.MaxTokens != nil {
+		return *x.MaxTokens
+	}
+	return 0
+}
+
 // StartRunRequest starts a run.
 type StartRunRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -503,7 +512,11 @@ type StartRunRequest struct {
 	// The grant the run uses (G0 M4, PN-002.5). It must be active and valid,
 	// and bind the same agent (and instance, if it pins one), principal and
 	// environment; the run's expiry is cut to the grant's.
-	GrantId       *string `protobuf:"bytes,7,opt,name=grant_id,json=grantId,proto3,oneof" json:"grant_id,omitempty"`
+	GrantId *string `protobuf:"bytes,7,opt,name=grant_id,json=grantId,proto3,oneof" json:"grant_id,omitempty"`
+	// The run's token cap (G0 M29 D822, HR-693, HR-697): one more debit level
+	// over the run's model calls, set at start and never changed. It only
+	// restricts. Unset for no run cap.
+	MaxTokens     *int64 `protobuf:"varint,8,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -585,6 +598,13 @@ func (x *StartRunRequest) GetGrantId() string {
 		return *x.GrantId
 	}
 	return ""
+}
+
+func (x *StartRunRequest) GetMaxTokens() int64 {
+	if x != nil && x.MaxTokens != nil {
+		return *x.MaxTokens
+	}
+	return 0
 }
 
 // StartRunResponse returns the run.
@@ -961,7 +981,7 @@ const file_pantherclaw_v1_runs_proto_rawDesc = "" +
 	"\x19pantherclaw/v1/runs.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"+\n" +
 	"\x05Actor\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xcf\x06\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\x82\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x1f\n" +
@@ -988,7 +1008,10 @@ const file_pantherclaw_v1_runs_proto_rawDesc = "" +
 	"expireTime\x125\n" +
 	"\bend_time\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x19\n" +
 	"\bgrant_id\x18\x13 \x01(\tR\agrantId\x12)\n" +
-	"\x10scope_operations\x18\x14 \x03(\tR\x0fscopeOperations\"\xa6\x04\n" +
+	"\x10scope_operations\x18\x14 \x03(\tR\x0fscopeOperations\x12\"\n" +
+	"\n" +
+	"max_tokens\x18\x15 \x01(\x03H\x00R\tmaxTokens\x88\x01\x01B\r\n" +
+	"\v_max_tokens\"\xe9\x04\n" +
 	"\x0fStartRunRequest\x12#\n" +
 	"\bagent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x12.\n" +
 	"\vinstance_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\n" +
@@ -999,10 +1022,13 @@ const file_pantherclaw_v1_runs_proto_rawDesc = "" +
 	"ttlMinutes\x12.\n" +
 	"\rsubject_token\x18\x05 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x01R\fsubjectToken\x12X\n" +
 	"\x12subject_token_type\x18\x06 \x01(\x0e2 .pantherclaw.v1.SubjectTokenTypeB\b\xbaH\x05\x82\x01\x02\x10\x01R\x10subjectTokenType\x12(\n" +
-	"\bgrant_id\x18\a \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\agrantId\x88\x01\x01:\x8b\x01\xbaH\x87\x01\x1a\x84\x01\n" +
+	"\bgrant_id\x18\a \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\agrantId\x88\x01\x01\x122\n" +
+	"\n" +
+	"max_tokens\x18\b \x01(\x03B\x0e\xbaH\v\"\t\x18\x80\xa0\x94\xa5\x8d\x1d(\x01H\x02R\tmaxTokens\x88\x01\x01:\x8b\x01\xbaH\x87\x01\x1a\x84\x01\n" +
 	"\x12subject_token_type\x120subject_token and subject_token_type go together\x1a<(this.subject_token == '') == (this.subject_token_type == 0)B\x0e\n" +
 	"\f_instance_idB\v\n" +
-	"\t_grant_idR\rtask_template\"9\n" +
+	"\t_grant_idB\r\n" +
+	"\v_max_tokensR\rtask_template\"9\n" +
 	"\x10StartRunResponse\x12%\n" +
 	"\x03run\x18\x01 \x01(\v2\x13.pantherclaw.v1.RunR\x03run\")\n" +
 	"\rGetRunRequest\x12\x18\n" +
@@ -1116,6 +1142,7 @@ func file_pantherclaw_v1_runs_proto_init() {
 	if File_pantherclaw_v1_runs_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_runs_proto_msgTypes[1].OneofWrappers = []any{}
 	file_pantherclaw_v1_runs_proto_msgTypes[2].OneofWrappers = []any{}
 	file_pantherclaw_v1_runs_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
