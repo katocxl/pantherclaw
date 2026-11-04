@@ -2724,6 +2724,14 @@ type PcKillSwitchRequest struct {
 	DecidedAt    *time.Time
 }
 
+type PcKubeAdmissionSeen struct {
+	OrgID         ids.OrgID
+	Cluster       string
+	Namespace     string
+	LastAllowedAt *time.Time
+	LastDeniedAt  *time.Time
+}
+
 type PcKubeClosure struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
