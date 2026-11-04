@@ -6,6 +6,8 @@ package seed_test
 import (
 	"context"
 	"fmt"
+	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -16,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
+	connapp "github.com/katocxl/pantherclaw/internal/connections/app"
 	detengine "github.com/katocxl/pantherclaw/internal/detection/engine"
 	"github.com/katocxl/pantherclaw/internal/detection/pack"
 	"github.com/katocxl/pantherclaw/internal/detection/rules"
@@ -35,13 +38,17 @@ import (
 )
 
 // The response playbook library (G0 M27 D508, N14): six automations in hub/.
-// None contains (D539, D550): a playbook may contain only a subject its real
-// alerts carry, on a confirmed basis, and no real alert does that today.
-// Leaked-key's and poisoned-mcp-server's alerts name a key or a connection;
-// no confirmed incident names a run; and the rogue sub-agent alert covers a
-// refused revision, whose grant the caller chose, alike with a refused
-// delegation, with nothing in the trigger to tell them apart. Each opens a
-// case for a person, and all six run on Team.
+// None contains (D539, D550): leaked-key's and poisoned-mcp-server's alerts
+// name a key or a connection; no confirmed incident names a run; and the
+// rogue sub-agent alert covers a refused revision, whose grant the caller
+// chose, alike with a refused delegation. Each opens a case for a person,
+// and all six run on Team.
+//
+// Containment lives only in two separate containment playbooks (HR-665,
+// Business): alerts keep the kind of the event that raised them, and a
+// refused delegation and a drift found during a call name their run, so each
+// containment playbook pins one event kind that always carries a run,
+// requires the run subject, and suspends only that run, on CONFIRMED alerts.
 
 // containingGraph is a v2 definition whose only step node contains: what a
 // containing node in a graph playbook looks like to Definition.Contains.
@@ -66,6 +73,30 @@ nodes:
 var playbookNames = []string{
 	"pc.playbook.compromised-laptop", "pc.playbook.data-flow-hold-escalation", "pc.playbook.leaked-key",
 	"pc.playbook.offboarded-owner", "pc.playbook.poisoned-mcp-server", "pc.playbook.rogue-sub-agent",
+}
+
+// containNames are the containment playbooks (HR-665), each with the event
+// kind its trigger pins.
+var containNames = map[string]string{
+	"pc.playbook.poisoned-mcp-server-contain": "audit.package.transitioned",
+	"pc.playbook.rogue-sub-agent-contain":     "audit.grant.delegate_refused",
+}
+
+// containing reports a containment playbook (HR-665).
+func containing(name string) bool {
+	_, ok := containNames[name]
+	return ok
+}
+
+// responseBooks are the six response playbooks; containBooks the containment ones.
+func responseBooks(t *testing.T) []playbook {
+	t.Helper()
+	return slices.DeleteFunc(playbooks(t), func(p playbook) bool { return containing(p.item.Entry.Name) })
+}
+
+func containBooks(t *testing.T) []playbook {
+	t.Helper()
+	return slices.DeleteFunc(playbooks(t), func(p playbook) bool { return !containing(p.item.Entry.Name) })
 }
 
 type playbook struct {
@@ -104,14 +135,19 @@ func book(t *testing.T, name string) playbook {
 	return playbook{}
 }
 
-// TestPlaybooks_TheLibrary: the six playbooks D508 names, each an automation
-// item a Hub install turns into a draft (HR-561).
+// TestPlaybooks_TheLibrary: the six playbooks D508 names and, listed apart,
+// the two containment playbooks (HR-665), each an automation item a Hub
+// install turns into a draft (HR-561).
 //
 // Covers: F942
 func TestPlaybooks_TheLibrary(t *testing.T) {
-	var names []string
+	var names, contain []string
 	for _, p := range playbooks(t) {
-		names = append(names, p.item.Entry.Name)
+		if containing(p.item.Entry.Name) {
+			contain = append(contain, p.item.Entry.Name)
+		} else {
+			names = append(names, p.item.Entry.Name)
+		}
 		if !p.def.ReviewBy.IsZero() || p.def.Authority.Revocable != nil {
 			t.Errorf("%s names a review date or a revocable scope", p.item.Entry.Name)
 		}
@@ -119,19 +155,28 @@ func TestPlaybooks_TheLibrary(t *testing.T) {
 	if !slices.Equal(names, playbookNames) {
 		t.Fatalf("playbooks %v, want %v", names, playbookNames)
 	}
+	if want := slices.Sorted(maps.Keys(containNames)); !slices.Equal(contain, want) {
+		t.Fatalf("containment playbooks %v, want %v", contain, want)
+	}
 }
 
-// TestHR653_NoLibraryPlaybookContains: no library playbook contains or
-// revokes beyond its own execution, since no real alert names a subject it
-// could act on safely (D539, D550). What counts as containing is the
-// automations domain's own answer (Definition.Contains, which a v2 graph's
-// step nodes reach through Parse), and no step is of a kind the catalog marks
-// as revoking beyond the execution. Every playbook validates on Team and
-// says so, every signal-started one opens its case as its first step and says
-// it contains nothing, and none names a revocable scope.
+// TestHR653_LibraryContainsOnlyInContainmentPlaybooks: no response playbook
+// contains or revokes beyond its own execution (HR-653, D539, D550), and a
+// library playbook contains only as a containment playbook (HR-665). What
+// counts as containing is the automations domain's own answer
+// (Definition.Contains, which a v2 graph's step nodes reach through Parse),
+// and no step is of a kind the catalog marks as revoking beyond the
+// execution. Every response playbook validates on Team and says so, every
+// signal-started one opens its case as its first step and says it contains
+// nothing, and none names a revocable scope. Every containment playbook
+// starts on alert.raised, has exactly one step, SUSPEND_RUN on TRIGGER_RUN,
+// fails validation on Team only for the edition and validates on Business,
+// and its trigger, through triggers.MatchEvent, matches the alert its
+// producer's event raises with the run, and no alert without a run subject
+// or of another event kind.
 //
 // Covers: F943
-func TestHR653_NoLibraryPlaybookContains(t *testing.T) {
+func TestHR653_LibraryContainsOnlyInContainmentPlaybooks(t *testing.T) {
 	graph, err := autodomain.Parse([]byte(containingGraph))
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +184,13 @@ func TestHR653_NoLibraryPlaybookContains(t *testing.T) {
 	if !graph.Contains() {
 		t.Fatal("Contains misses a containing node of a v2 graph")
 	}
-	for _, p := range playbooks(t) {
+	for _, p := range containBooks(t) {
+		checkContainment(t, p)
+	}
+	if n := len(containBooks(t)); n != len(containNames) {
+		t.Fatalf("%d containment playbooks, want %d", n, len(containNames))
+	}
+	for _, p := range responseBooks(t) {
 		name := p.item.Entry.Name
 		if p.def.Contains() {
 			t.Errorf("%s contains", name)
@@ -178,6 +229,165 @@ func TestHR653_NoLibraryPlaybookContains(t *testing.T) {
 		if !strings.Contains(p.item.Entry.Summary, "contains nothing") {
 			t.Errorf("%s: the summary does not say it contains nothing", name)
 		}
+	}
+}
+
+// checkContainment: p starts on alert.raised, has exactly one step,
+// SUSPEND_RUN on TRIGGER_RUN, revokes nothing beyond its execution, says it
+// needs Business, fails validation on Team only for the edition and
+// validates on Business (HR-284, HR-665).
+func checkContainment(t *testing.T, p playbook) {
+	t.Helper()
+	name := p.item.Entry.Name
+	if p.def.When.Event == nil || p.def.When.Event.On != "alert.raised" {
+		t.Errorf("%s does not start on alert.raised", name)
+	}
+	if len(p.def.Do) != 1 || p.def.IfFails != nil || len(p.def.Nodes) != 0 || !p.def.Contains() {
+		t.Fatalf("%s: steps %+v, want exactly one contain step", name, p.def.Do)
+	}
+	w, err := p.def.Do[0].DecodeWith()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := w.(*autodomain.ContainWith); !ok || c.Action != autodomain.ContainSuspendRun || c.Subject != autodomain.SubjectTriggerRun {
+		t.Errorf("%s: the step is %+v, want SUSPEND_RUN on TRIGGER_RUN", name, w)
+	}
+	if revokesBeyond(p.def) || p.def.Authority.Revocable != nil {
+		t.Errorf("%s can revoke beyond its execution", name)
+	}
+	if !strings.Contains(p.item.Entry.Summary, "Needs Business.") {
+		t.Errorf("%s: the summary does not say it needs Business", name)
+	}
+	def := *p.def
+	def.ReviewBy = autodomain.NewDate(time.Now().AddDate(0, 0, 30))
+	team := autodomain.Validate(context.Background(), &def, automationEnv{now: time.Now()})
+	if !slices.ContainsFunc(team, func(f autodomain.Finding) bool {
+		return f.Severity == autodomain.SeverityError && f.Code == autodomain.CodeUnsupportedCapability && strings.Contains(f.Message, "business")
+	}) {
+		t.Errorf("%s validates on Team: %+v", name, team)
+	}
+	for _, f := range team {
+		if f.Severity == autodomain.SeverityError && (f.Code != autodomain.CodeUnsupportedCapability || !strings.Contains(f.Message, "business")) {
+			t.Errorf("%s on Team: %s %s: %s", name, f.Code, f.Path, f.Message)
+		}
+	}
+	for _, f := range autodomain.Validate(context.Background(), &def, automationEnv{now: time.Now(), business: true}) {
+		if f.Severity == autodomain.SeverityError {
+			t.Errorf("%s on Business: %s %s: %s", name, f.Code, f.Path, f.Message)
+		}
+	}
+}
+
+// TestHR665_ContainmentTriggers drives each containment playbook's trigger
+// from the audit event the producing code writes, through the detection
+// engine's built-in rules and Reflex's own alert entry, to
+// triggers.MatchEvent. It matches the alert of its pinned event kind that
+// names the run; it does not match that alert without its run subject, nor
+// with another event kind, nor the alerts of a refused issue or a periodic
+// drift check (no run), nor the other playbook's alert. Every signal the
+// pinned event raises is CONFIRMED, and every rule a containment playbook
+// names is a built-in rule with a CONFIRMED basis whose `on` lists the
+// pinned event kind.
+//
+// Covers: F943
+func TestHR665_ContainmentTriggers(t *testing.T) {
+	ctx := context.Background()
+	rogue, poisoned := book(t, "pc.playbook.rogue-sub-agent-contain"), book(t, "pc.playbook.poisoned-mcp-server-contain")
+	env, err := detengine.NewEnv(celenv.DefaultLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk, err := pack.Load(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	builtin := map[string]*rules.Rule{}
+	for _, c := range pk.Rules {
+		builtin[c.Rule.ID] = c.Rule
+	}
+	ruleNames := regexp.MustCompile(`"((?:pc|org)\.[A-Za-z0-9_.-]+)"`)
+	for _, p := range containBooks(t) {
+		kind := containNames[p.item.Entry.Name]
+		named := ruleNames.FindAllStringSubmatch(p.def.When.Event.Where, -1)
+		if len(named) == 0 {
+			t.Errorf("%s names no rule", p.item.Entry.Name)
+		}
+		for _, m := range named {
+			r, ok := builtin[m[1]]
+			switch {
+			case !ok || !r.Builtin():
+				t.Errorf("%s names %s, not a built-in rule", p.item.Entry.Name, m[1])
+			case !r.Basis.Confirmed():
+				t.Errorf("%s names %s, whose basis %s is not CONFIRMED", p.item.Entry.Name, m[1], r.Basis)
+			case !slices.Contains(r.On, kind):
+				t.Errorf("%s names %s, which does not raise on %s", p.item.Entry.Name, m[1], kind)
+			}
+		}
+	}
+	alert := func(e feed.Event, rule string) feed.Event {
+		t.Helper()
+		s := one(t, detect(t, e), rule)
+		for _, sig := range detect(t, e) {
+			if !sig.Basis.Confirmed() {
+				t.Errorf("%s on %s raises %s, not CONFIRMED", sig.RuleID, e.Kind, sig.Basis)
+			}
+		}
+		return signalEvent(t, reflexdomain.KindAlert, s)
+	}
+	delegation := alert(delegateRefused(t), "pc.authority.self_issue")
+	drift := alert(driftDuringCall(t, runID), "pc.tools.drift")
+	match := func(p playbook, e feed.Event) bool {
+		t.Helper()
+		if !triggers.Means(p.def.When.Event.On, e, triggers.Facts{}) {
+			return false
+		}
+		ok, err := triggers.MatchEvent(ctx, p.def.When.Event.Where, e)
+		if err != nil {
+			t.Fatalf("%s: %v", p.item.Entry.Name, err)
+		}
+		return ok
+	}
+	withoutRun := func(e feed.Event) feed.Event {
+		e.Subjects = slices.DeleteFunc(slices.Clone(e.Subjects), func(s reflexdomain.Subject) bool { return s.Type == reflexdomain.SubjectRun })
+		return e
+	}
+	otherKind := func(e feed.Event, kind string) feed.Event {
+		e.Attrs = maps.Clone(e.Attrs)
+		e.Attrs["event_kind"] = kind
+		return e
+	}
+	for _, c := range []struct {
+		name string
+		p    playbook
+		e    feed.Event
+		want bool
+	}{
+		{"a refused delegation naming its run", rogue, delegation, true},
+		{"a refused delegation without its run", rogue, withoutRun(delegation), false},
+		{"a refused delegation's alert with another event kind", rogue, otherKind(delegation, "audit.grant.issue_refused"), false},
+		{"a refused issue", rogue, alert(issueRefused(t), "pc.authority.self_issue"), false},
+		{"a refused revision of another agent's grant", rogue, alert(reviseRefused(t), "pc.authority.self_issue"), false},
+		{"a drift alert", rogue, drift, false},
+		{"a drift found during a call", poisoned, drift, true},
+		{"a drift without its run", poisoned, withoutRun(drift), false},
+		{"a drift alert with another event kind", poisoned, otherKind(drift, "audit.connection.drift_reported"), false},
+		{"a drift found by the periodic check", poisoned, alert(driftDuringCall(t, ids.UUID{}), "pc.tools.drift"), false},
+		{"a refused delegation's alert", poisoned, delegation, false},
+	} {
+		if got := match(c.p, c.e); got != c.want {
+			t.Errorf("%s: %s matches %v, want %v", c.p.item.Entry.Name, c.name, got, c.want)
+		}
+		if c.want {
+			if _, ok := c.e.Subject(reflexdomain.SubjectRun); !ok {
+				t.Errorf("%s: the alert names no run", c.name)
+			}
+			if c.e.Attrs["event_kind"] != containNames[c.p.item.Entry.Name] {
+				t.Errorf("%s: event kind %q", c.name, c.e.Attrs["event_kind"])
+			}
+		}
+	}
+	if r, _ := delegation.Subject(reflexdomain.SubjectRun); r != runID.String() {
+		t.Errorf("the delegation alert names run %q, want the delegating run %s", r, runID)
 	}
 }
 
@@ -368,6 +578,7 @@ var (
 	runID    = mustUUID("0192f942-0000-7000-8000-0000000009c1")
 	txnID    = mustUUID("0192f942-0000-7000-8000-0000000009d1")
 	otherID  = mustUUID("0192f942-0000-7000-8000-0000000009f1") // another agent's grant
+	connID   = mustUUID("0192f942-0000-7000-8000-0000000009f3")
 	instance = mustUUID("0192f942-0000-7000-8000-0000000009e1")
 	sa       = evdomain.Actor{Type: "service_account", ID: "0192f942-0000-7000-8000-0000000009e2"}
 )
@@ -379,7 +590,7 @@ func reviseRefused(t *testing.T) feed.Event {
 }
 
 func delegateRefused(t *testing.T) feed.Event {
-	return produced(t, grantsapp.DelegateRefusedEvent(instance, parentID, agentID))
+	return produced(t, grantsapp.DelegateRefusedEvent(instance, parentID, agentID, runID))
 }
 
 func issueRefused(t *testing.T) feed.Event {
@@ -388,6 +599,13 @@ func issueRefused(t *testing.T) feed.Event {
 
 func delegated(t *testing.T) feed.Event {
 	return produced(t, grantsapp.DelegatedEvent(instance, childID, parentID, 1, runID))
+}
+
+// driftDuringCall is the quarantine entry of a drift the server resolved to
+// run (zero: a periodic check, or a transaction it has no row of).
+func driftDuringCall(t *testing.T, run ids.UUID) feed.Event {
+	return produced(t, connapp.DriftQuarantinedEvent(evdomain.Actor{Type: "gateway", ID: instance.String()}, connID,
+		"acme/refunds", "1.0.0", "ACTIVE", "get_refund", "sha256:aa", "sha256:bb", "clean", run))
 }
 
 func tampered(t *testing.T) feed.Event {

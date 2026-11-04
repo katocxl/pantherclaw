@@ -223,3 +223,10 @@ WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND r.expires_at > now(
   AND (a.name, g.id) > (sqlc.arg(after_name)::text, sqlc.arg(after_id)::uuid)
 ORDER BY a.name, g.id
 LIMIT sqlc.arg(page)::integer;
+
+-- DriftTransactionRun is the run of the org's own transaction that went
+-- through the connection, for a call-time drift report (HR-665): no row
+-- when the id names no such transaction, or one of another connection.
+-- name: DriftTransactionRun :one
+SELECT run_id FROM pc.transactions
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND connection_id = sqlc.arg(connection_id);

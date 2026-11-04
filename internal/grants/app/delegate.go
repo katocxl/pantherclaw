@@ -103,7 +103,7 @@ func (s *Service) delegateWith(ctx context.Context, d delegation, w Workload, re
 	if err := child.ValidateIssue(ic); err != nil {
 		// A delegation beyond the parent grant or the guardrails is an agent
 		// trying to widen its own authority (G0 M10 D59 H1, PN-006.3).
-		s.refuseDelegation(ctx, w, parent, childRun.AgentID)
+		s.refuseDelegation(ctx, w, parent, childRun.AgentID, parentRun.ID)
 		return domain.Grant{}, apiError(err)
 	}
 	caps := domain.EffectiveCaps(ic.Envelopes)
@@ -144,13 +144,13 @@ func Delegation(depth, maxChildren int32) domain.Delegation {
 }
 
 // refuseDelegation audits a refused delegation as grant.delegate_refused
-// with the delegating instance as actor. The refusal stands whether or not
-// the audit is written.
-func (s *Service) refuseDelegation(ctx context.Context, w Workload, parent domain.Grant, child ids.UUID) {
+// with the delegating instance as actor, naming the run that tried to
+// delegate. The refusal stands whether or not the audit is written.
+func (s *Service) refuseDelegation(ctx context.Context, w Workload, parent domain.Grant, child, run ids.UUID) {
 	if s.Refusals == nil {
 		return
 	}
-	_ = s.Refusals.RecordRefusal(context.WithoutCancel(ctx), w.Org, DelegateRefusedEvent(w.InstanceID, parent.ID.UUID(), child))
+	_ = s.Refusals.RecordRefusal(context.WithoutCancel(ctx), w.Org, DelegateRefusedEvent(w.InstanceID, parent.ID.UUID(), child, run))
 }
 
 // DelegatedEvent is the grant.delegated audit event: the delegating
@@ -167,11 +167,14 @@ func DelegatedEvent(instance, child, parent ids.UUID, parentRevision int, childR
 
 // DelegateRefusedEvent is the grant.delegate_refused audit event: the
 // delegating instance tried to give the child agent more than its parent
-// grant holds; the object is that parent grant.
-func DelegateRefusedEvent(instance, parent, child ids.UUID) audit.Event {
+// grant holds; the object is that parent grant, and run is the delegating
+// (parent) run, so the alert it raises names the run (HR-665).
+func DelegateRefusedEvent(instance, parent, child, run ids.UUID) audit.Event {
 	return audit.Event{
 		Name: auditkind.GrantDelegateRefused, Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
 		Outcome: audit.Denied, ReasonCode: "DELEGATION_EXCEEDS_PARENT", Object: &audit.Object{Type: "grant", ID: parent.String()},
-		Details: map[string]string{"agent": child.String(), "parent": parent.String(), "attempted": "grant.delegate"},
+		Details: map[string]string{
+			"agent": child.String(), "parent": parent.String(), "attempted": "grant.delegate", "run": run.String(),
+		},
 	}
 }

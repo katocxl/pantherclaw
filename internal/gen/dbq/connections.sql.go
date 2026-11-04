@@ -214,6 +214,21 @@ func (q *Queries) ConnectionTestFacts(ctx context.Context, orgID ids.OrgID, iD i
 	return i, err
 }
 
+const driftTransactionRun = `-- name: DriftTransactionRun :one
+SELECT run_id FROM pc.transactions
+WHERE org_id = $1 AND id = $2 AND connection_id = $3
+`
+
+// DriftTransactionRun is the run of the org's own transaction that went
+// through the connection, for a call-time drift report (HR-665): no row
+// when the id names no such transaction, or one of another connection.
+func (q *Queries) DriftTransactionRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID, connectionID *ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, driftTransactionRun, orgID, iD, connectionID)
+	var run_id ids.UUID
+	err := row.Scan(&run_id)
+	return run_id, err
+}
+
 const getConnection = `-- name: GetConnection :one
 SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay FROM pc.connections WHERE org_id = $1 AND id = $2
 `

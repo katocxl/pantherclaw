@@ -1,12 +1,12 @@
 name: pc.playbook.poisoned-mcp-server
-version: 1.0.0
+version: 1.0.1
 kind: automation
 title: "Playbook: poisoned MCP server"
 summary: >-
   When an alert says an MCP tool changed under an agent, or a tool description
   reads like instructions, open a case so a person reviews the server. It
-  contains nothing: the alert names a connection, not a run, and disabling a
-  connection or revoking the server is a person's action. Runs on Team.
+  contains nothing: disabling a connection or revoking the server is a
+  person's action. Runs on Team.
 body:
   automation_name: hub-playbook-poisoned-mcp-server
   purpose: Open a case on a tool-drift or tool-injection alert so a person reviews the MCP server.
