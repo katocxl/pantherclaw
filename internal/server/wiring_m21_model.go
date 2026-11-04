@@ -27,6 +27,7 @@ import (
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
+	pcbedrock "github.com/katocxl/pantherclaw/packages/pc-bedrock"
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
@@ -42,6 +43,7 @@ import (
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
 	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
 	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
+	pcvertex "github.com/katocxl/pantherclaw/packages/pc-vertex"
 )
 
 // newModel builds model drafting's service (G0 M21 D304, D309). Without the
@@ -68,7 +70,7 @@ func builtinPackages() ([]*defsdomain.Package, error) {
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcawss3.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
 		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package, pcvectorstore.Package,
-		pcsalesforce.Package, pcnotion.Package, pclinear.Package,
+		pcsalesforce.Package, pcnotion.Package, pclinear.Package, pcvertex.Package, pcbedrock.Package,
 	}
 	pkgs := make([]*defsdomain.Package, 0, len(raws))
 	for _, raw := range raws {

@@ -19,7 +19,8 @@ import (
 )
 
 // KindModel is a model provider's API reached through the gateway (G0 M29
-// D811, HR-690): backed only by pc.anthropic or pc.openai, held by
+// D811, HR-690): backed only by pc.anthropic or pc.openai (and, since G0 M31
+// D961, pc.vertex or pc.bedrock), held by
 // PantherClaw only, its limits fixed (D814) rather than the connection's.
 const KindModel = "model"
 
@@ -32,13 +33,22 @@ const (
 
 // ModelPackageCredential is where a model package's key goes by default
 // (D811): an admin may name another header (Azure's api-key).
-type ModelPackageCredential struct{ Header, Scheme string }
+type ModelPackageCredential struct {
+	Header, Scheme string
+	// TokenHost: the credential mints its token at another host (a Google
+	// token endpoint, AWS STS), which the connection's allowed hosts must
+	// name beside the base URL's (G0 M31 D961).
+	TokenHost bool
+}
 
 // ModelPackages are the packages that back model connections, and back
-// nothing else (D811).
+// nothing else (D811). pc.vertex holds a google_service_account and
+// pc.bedrock an aws_sigv4 credential (G0 M31 D961).
 var ModelPackages = map[string]ModelPackageCredential{
 	"pc.anthropic": {Header: "x-api-key"},
 	"pc.openai":    {Header: "Authorization", Scheme: "Bearer"},
+	"pc.vertex":    {Header: "Authorization", Scheme: "Bearer", TokenHost: true},
+	"pc.bedrock":   {Header: "Authorization", Scheme: "AWS4-HMAC-SHA256", TokenHost: true},
 }
 
 // Errors of the model kind.
@@ -160,7 +170,7 @@ func checkModelCreate(in *CreateInput) error {
 // modelShape is a model connection's base URL and hosts (D811): an https
 // base URL with an optional path prefix (a loopback or private literal over
 // http when simulated), and the credential sent to its host only.
-func (s *Service) modelShape(baseURL string, allowed []string, simulated bool, scheme, header string) (*string, []string, error) {
+func (s *Service) modelShape(pkg, baseURL string, allowed []string, simulated bool, scheme, header string) (*string, []string, error) {
 	if header == "" || (scheme != "" && header == "") {
 		return nil, nil, ErrShape
 	}
@@ -176,7 +186,19 @@ func (s *Service) modelShape(baseURL string, allowed []string, simulated bool, s
 		return nil, nil, err
 	}
 	if len(allowed) > 0 && !slices.Equal(allowed, hosts) {
-		return nil, nil, ErrShape
+		// A package whose credential mints at another host names it too,
+		// beside the base URL's host (G0 M31 D961).
+		if !ModelPackages[pkg].TokenHost {
+			return nil, nil, ErrShape
+		}
+		all, err := checkAllowedHosts(allowed, ep, norm, s.own)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !slices.Contains(all, hosts[0]) {
+			return nil, nil, ErrShape
+		}
+		hosts = all
 	}
 	if simulated {
 		if err := checkSimulated(&norm, hosts); err != nil {

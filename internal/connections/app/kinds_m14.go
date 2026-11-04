@@ -531,7 +531,7 @@ func checkKindConfig(kind string, simulated bool, pg *PostgresConfig, peer *A2AC
 func (s *Service) m14Shape(kind string, simulated bool, in *CreateInput) (*string, []string, error) {
 	switch kind {
 	case KindModel:
-		return s.modelShape(in.BaseURL, in.AllowedHosts, simulated, in.CredentialScheme, in.CredentialHeader)
+		return s.modelShape(in.Package, in.BaseURL, in.AllowedHosts, simulated, in.CredentialScheme, in.CredentialHeader)
 	case KindPostgres, KindVectorstore:
 		// A vectorstore connection's host is in its settings and its
 		// password goes in no header, as a postgres connection's (G0 M30

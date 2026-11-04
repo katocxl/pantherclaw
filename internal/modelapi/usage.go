@@ -72,6 +72,13 @@ func usageOf(api API, u map[string]jsontext.Value) (Usage, bool) {
 		oks = append(oks, ok)
 	}
 	switch {
+	case api.Bedrock():
+		// Converse counts cache reads and writes apart from input, as
+		// Anthropic does (G0 M31 D961).
+		read(&out.Input, u, "inputTokens")
+		read(&out.Output, u, "outputTokens")
+		read(&out.CacheRead, u, "cacheReadInputTokens")
+		read(&out.CacheWrite, u, "cacheWriteInputTokens")
 	case api.Anthropic():
 		read(&out.Input, u, "input_tokens")
 		read(&out.Output, u, "output_tokens")
@@ -208,7 +215,7 @@ func (s *Stream) dispatch() {
 		_ = json.Unmarshal(v, &typ)
 	}
 	switch s.api {
-	case AnthropicMessages, AnthropicCountTokens:
+	case AnthropicMessages, AnthropicCountTokens, VertexRawPredict, VertexStream:
 		s.anthropic(typ, top)
 	case OpenAIChat:
 		switch {
@@ -231,8 +238,9 @@ func (s *Stream) dispatch() {
 				s.usage = u
 			}
 		}
-	case AnthropicModels, OpenAIModels:
-		// A read is never a stream.
+	case AnthropicModels, OpenAIModels, BedrockConverse, BedrockStream:
+		// A read is never a stream; Bedrock streams are AWS event
+		// streams, read by EventStream.
 	}
 }
 

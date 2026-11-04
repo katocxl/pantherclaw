@@ -314,7 +314,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 				if p.AccessMode != AccessHeld {
 					return ErrShape
 				}
-				nb, nh, err = s.modelShape(base, hosts, conn.Simulated, deref(conn.CredentialScheme), deref(conn.CredentialHeader))
+				nb, nh, err = s.modelShape(conn.Package, base, hosts, conn.Simulated, deref(conn.CredentialScheme), deref(conn.CredentialHeader))
 			} else {
 				nb, nh, err = s.shape(conn.Kind, base, hosts, p.AccessMode, deref(conn.CredentialHeader), deref(conn.CredentialScheme))
 			}

@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for Anthropic models on Google Vertex AI over a
+# model connection (G0 M31 D961; follows pc.anthropic, G0 M29 D811, D813,
+# D813a; HR-690, HR-691, HR-696, HR-727).
+#
+# The connection is kind model. Its base URL is the publisher's models path,
+# such as
+# https://us-east5-aiplatform.googleapis.com/v1/projects/PROJECT/locations/us-east5/publishers/anthropic/models
+# (pantherclaw-sim model at http://127.0.0.1:9103/vertex/models in
+# development and tests). Its credential is a google_service_account
+# (D952): the gateway mints an access token for every call from a signed
+# assertion and places that, never the key; the connection's allowed hosts
+# name the token endpoint's host beside the base URL's. The agent holds
+# neither.
+#
+# The body is the Messages format with the model in the path, not the body
+# (a body that names a model must name the path's). As with pc.anthropic the
+# gateway strictly parses it, decides on its metadata and the sha256 of the
+# re-encoded body, and forwards exactly that body (HR-691); its only edit is
+# adding the connection's max_tokens when the request has none.
+# streamRawPredict always answers a stream.
+#
+# server_tools lists the provider-side tool types a request names, as for
+# pc.anthropic; each is refused unless an admin allowed it (HR-696).
+#
+# Model calls have no dedupe key (D813a).
+format: 1
+name: pc.vertex
+version: 1.0.0
+publisher: pantherclaw
+summary: Anthropic models on Google Vertex AI (rawPredict, streamRawPredict) through a model connection
+
+definitions:
+  - operation: vertex.messages.create
+    summary: Ask an Anthropic model on Vertex AI for a reply
+    access: write
+    target:
+      type: model
+      id_pattern: '^[a-z0-9][a-z0-9.@_-]{0,127}$'
+      account: none
+    params:
+      model:
+        type: identifier
+        material: true
+        required: true
+        max_length: 256
+      max_tokens:
+        type: integer
+        material: true
+        required: true
+        unit: count
+        min: "1"
+        max: "1000000"
+      stream:
+        type: boolean
+        material: true
+        required: true
+      input_bytes:
+        type: integer
+        material: true
+        required: true
+        unit: bytes
+        min: "0"
+        max: "16777216"
+      server_tools:
+        type: identifier_list
+        material: true
+        max_items: 32
+        pattern: '^[a-z][a-z0-9_.-]{0,63}$'
+      body_sha256:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+    effects:
+      - kind: model.inference
+        description: The provider generates a reply and bills the tokens it uses
+    reversibility: reversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Send a request to the model {params.model} on Vertex AI
+      fields: [params.model, params.max_tokens, params.stream, params.input_bytes, params.server_tools]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      model:
+        api: vertex.anthropic.raw_predict
+        path: /{id}:rawPredict
+    mappings:
+      - channel: http
+        method: POST
+        path: /{id}:rawPredict
+        route: vertex-raw-predict
+
+  - operation: vertex.messages.stream
+    summary: Ask an Anthropic model on Vertex AI for a streamed reply
+    access: write
+    target:
+      type: model
+      id_pattern: '^[a-z0-9][a-z0-9.@_-]{0,127}$'
+      account: none
+    params:
+      model:
+        type: identifier
+        material: true
+        required: true
+        max_length: 256
+      max_tokens:
+        type: integer
+        material: true
+        required: true
+        unit: count
+        min: "1"
+        max: "1000000"
+      stream:
+        type: boolean
+        material: true
+        required: true
+      input_bytes:
+        type: integer
+        material: true
+        required: true
+        unit: bytes
+        min: "0"
+        max: "16777216"
+      server_tools:
+        type: identifier_list
+        material: true
+        max_items: 32
+        pattern: '^[a-z][a-z0-9_.-]{0,63}$'
+      body_sha256:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+    effects:
+      - kind: model.inference
+        description: The provider generates a reply and bills the tokens it uses
+    reversibility: reversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Send a streamed request to the model {params.model} on Vertex AI
+      fields: [params.model, params.max_tokens, params.stream, params.input_bytes, params.server_tools]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      model:
+        api: vertex.anthropic.stream_raw_predict
+        path: /{id}:streamRawPredict
+    mappings:
+      - channel: http
+        method: POST
+        path: /{id}:streamRawPredict
+        route: vertex-stream-raw-predict

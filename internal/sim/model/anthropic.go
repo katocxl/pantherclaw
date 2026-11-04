@@ -56,6 +56,12 @@ func (s *Server) messages(w http.ResponseWriter, r *http.Request, c call) {
 	if !ok {
 		return
 	}
+	s.answerMessages(w, r, c, req)
+}
+
+// answerMessages answers a checked Messages request (the Messages API's
+// own route, or Vertex AI's rawPredict and streamRawPredict, G0 M31 D961).
+func (s *Server) answerMessages(w http.ResponseWriter, r *http.Request, c call, req anthropicRequest) {
 	w.Header().Set("Request-Id", fmt.Sprintf("req_sim%017d", c.id))
 	if req.Model == ModelError {
 		apiError(w, apiAnthropic, 529, "SIMULATED: Overloaded")
