@@ -82,7 +82,7 @@ Team or higher, with an API key or access token. Every text output ends with the
 
 ## Exports
 
-- **Navigator layer:** ATT&CK Navigator layer format 4.5. One entry per technique and tactic with a fixed colour (green `#2e7d32`, amber `#f9a825`, red `#c62828`, grey `#9e9e9e`) and a comment "Prevent … · Detect … · Respond … · Test …" plus the first gap. The statement is the layer's description. No score, gradient or numeric metadata. Merge it with your other tools' layers in Navigator.
+- **Navigator layer:** ATT&CK Enterprise only: layer format 4.5, domain `enterprise-attack`, for ATT&CK Navigator 5.3.2. ATLAS has no current Navigator data (MITRE's ATLAS Navigator data is deprecated and stops at an older ATLAS release), so `pclaw threats export navigator --framework atlas` answers `NAVIGATOR_NOT_AVAILABLE`; use the console or `pclaw threats matrix --framework atlas`. One entry per technique and tactic with a fixed colour (green `#2e7d32`, amber `#f9a825`, red `#c62828`, grey `#9e9e9e`) and a comment "Prevent … · Detect … · Respond … · Test …" plus the first gap. The statement is the layer's description. No score, gradient or numeric metadata. Merge it with your other tools' layers in Navigator.
 - **Signed report:** pack scope `threat_map` with `threat_map.json`: framework, scope, time, statement, catalogue version and digest, mapping digest, every input and the mapping used, and each technique's lanes and gaps.
 
 ## Offline verification

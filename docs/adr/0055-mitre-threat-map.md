@@ -20,6 +20,7 @@
 - A green technique says a mapped control acted with evidence, not that every way of carrying out the technique is covered.
 - A reader of the map learns which techniques are unwatched (R-72).
 - A MITRE release that changes a mapped id fails CI until the mapping is updated.
+- The Navigator export covers ATT&CK Enterprise only (layer format 4.5, domain `enterprise-attack`, Navigator 5.3.2). MITRE's ATLAS Navigator data is deprecated and stops at an older ATLAS release that lists techniques 2026.10 dropped, so an ATLAS export answers `NAVIGATOR_NOT_AVAILABLE`.
 - A `pclaw verify` older than M28 checks a threat-map pack's signature and file digests, but expects the general evidence statement, so its `pack.statement` check fails, and it never re-derives the map. Verify with `pclaw` M28 or later. A pack built with another catalogue reads as not available.
 
 **Alternatives.** A coverage score or percentage (F797); ATT&CK limited to cloud, SaaS and identity, or ATLAS only (Q1 B, C); all of it on Team, or all on every edition (Q2 B, C); a hosted test runner (Q3 B); forcing every agent-reachable technique into a mapping or Outside (founder decision 2026-11-03); copying MITRE's descriptions (MITRE's terms, and it would go stale); mapping the organization's other tools (they merge Navigator layers instead).
