@@ -235,6 +235,13 @@ type Execution = finalize.Execution
 // Access is what a dispatch's minted credential allowed (ADR-0021 item 5).
 type Access = finalize.Access
 
+// CredentialUsed is the sealed credential a dispatch opened (HR-660).
+type CredentialUsed = finalize.CredentialUsed
+
+// ErrCredentialNotOfConnection refuses a reported credential that is no
+// version of the permit's connection's credential (HR-660).
+var ErrCredentialNotOfConnection = finalize.ErrCredentialNotOfConnection
+
 // RecordExecution records the outcome of a DISPATCHING permit: accepted
 // commits every reservation, failed releases them, unknown keeps them held
 // and leaves the permit UNKNOWN for reconciliation (HR-003). It returns the

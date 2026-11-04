@@ -328,7 +328,7 @@ func (e *Engine) listCredential(ctx context.Context, conn *control.Connection) (
 	if err != nil {
 		return nil, err
 	}
-	app, err := e.openApp(conn)
+	app, err := e.openApp(ctx, conn)
 	if err != nil {
 		return nil, err
 	}
