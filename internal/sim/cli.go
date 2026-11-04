@@ -51,6 +51,7 @@ Usage:
   pantherclaw-sim salesforce [--addr 127.0.0.1:9106] [--client-file FILE] [--invalid-client] [--expire-tokens] [--rate-limit 0]
   pantherclaw-sim notion [--addr 127.0.0.1:9107] [--token-file FILE] [--rate-limit 0] [--unauthorized]
   pantherclaw-sim linear [--addr 127.0.0.1:9108] [--key-file FILE] [--rate-limit 0] [--unauthorized]
+  pantherclaw-sim snowflake [--addr 127.0.0.1:9109] [--public-key-file FILE] [--async 0] [--rate-limit 0] [--unauthorized]
   pantherclaw-sim aws --secret-file FILE [--addr 127.0.0.1:9099] [--external-id ID] [--role-actions *] [--throttle 0] [--deny-assume-role]
                       [--long-sessions]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
@@ -83,6 +84,7 @@ var defaultAddrs = map[string]string{
 	"salesforce":         "127.0.0.1:9106",
 	"notion":             "127.0.0.1:9107",
 	"linear":             "127.0.0.1:9108",
+	"snowflake":          "127.0.0.1:9109",
 	"canary":             "127.0.0.1:18433",
 }
 
@@ -129,6 +131,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runNotion(ctx, args[1:], stderr)
 	case "linear":
 		err = runLinear(ctx, args[1:], stderr)
+	case "snowflake":
+		err = runSnowflake(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	case "a2a":

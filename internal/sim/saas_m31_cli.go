@@ -5,6 +5,7 @@ package sim
 
 import (
 	"context"
+	"crypto/rsa"
 	"errors"
 	"flag"
 	"io"
@@ -17,7 +18,35 @@ import (
 	"github.com/katocxl/pantherclaw/internal/sim/linear"
 	"github.com/katocxl/pantherclaw/internal/sim/notion"
 	"github.com/katocxl/pantherclaw/internal/sim/salesforce"
+	"github.com/katocxl/pantherclaw/internal/sim/snowflake"
 )
+
+// runSnowflake serves the simulated Snowflake SQL API (G0 M31 D962).
+func runSnowflake(ctx context.Context, args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("snowflake", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	addr := fs.String("addr", defaultAddrs["snowflake"], "listen address (loopback)")
+	keyFile := fs.String("public-key-file", "", "the user's RSA public key (PEM): only JWTs it verifies pass (otherwise any well-formed one does)")
+	async := fs.Int("async", 0, "answer the first N statements 202 (still running)")
+	rate := fs.Int("rate-limit", 0, "answer the first N requests with 429")
+	unauthorized := fs.Bool("unauthorized", false, "answer every request 401 (a removed public key)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var pub *rsa.PublicKey
+	if *keyFile != "" {
+		b, err := os.ReadFile(*keyFile)
+		if err != nil {
+			return err
+		}
+		if pub, err = snowflake.ParsePublicKey(b); err != nil {
+			return err
+		}
+	}
+	log := pclog.New(stderr, pclog.Options{Service: "pantherclaw-sim", Version: version.Get().Version})
+	sim := snowflake.New(pub, snowflake.Faults{Async: *async, RateLimit: *rate, Unauthorized: *unauthorized}, log)
+	return serve(ctx, *addr, sim.Handler(), log, "sim.snowflake_listening")
+}
 
 var (
 	notionTokenPattern = regexp.MustCompile(`^(secret_|ntn_)[A-Za-z0-9]{40,60}$`)

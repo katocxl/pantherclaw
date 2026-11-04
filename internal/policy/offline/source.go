@@ -43,6 +43,7 @@ import (
 	pcsalesforce "github.com/katocxl/pantherclaw/packages/pc-salesforce"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
+	pcsnowflake "github.com/katocxl/pantherclaw/packages/pc-snowflake"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
 	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
 	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
@@ -105,7 +106,7 @@ func builtin() [][]byte {
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcawss3.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
 		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package, pcvectorstore.Package,
-		pcsalesforce.Package, pcnotion.Package, pclinear.Package, pcvertex.Package, pcbedrock.Package,
+		pcsalesforce.Package, pcnotion.Package, pclinear.Package, pcvertex.Package, pcbedrock.Package, pcsnowflake.Package,
 	}
 }
 
