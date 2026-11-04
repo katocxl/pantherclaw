@@ -26,6 +26,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -292,7 +294,7 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.
 				details["expires_at"] = until.UTC().Format(time.RFC3339)
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "agent.promoted", Actor: c.Actor(), Outcome: audit.Success,
+				Name: auditkind.AgentPromoted, Actor: c.Actor(), Outcome: audit.Success,
 				Object: &audit.Object{Type: "agent", ID: in.Agent.String()}, Details: details,
 			}); err != nil {
 				return err
@@ -347,7 +349,7 @@ func (s *Service) RevokePromotion(ctx context.Context, id ids.UUID, reason strin
 		}
 		out = promotionOf(row)
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "agent.promotion_revoked", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.AgentPromotionRevoked, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "agent", ID: row.AgentID.String()},
 			Details: map[string]string{
 				"promotion": id.String(), "environment": row.EnvironmentID.String(), "operation": row.Operation, "reason": reason,

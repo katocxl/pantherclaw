@@ -22,6 +22,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	billingdomain "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -310,7 +312,7 @@ func (s *Service) Enable(ctx context.Context, su stepup.StepUp) (Settings, error
 		if n == 0 {
 			return ErrNoKey
 		}
-		if err := s.record(ctx, tx, c, "model.drafting_enabled", map[string]string{"security_key": su.Credential.String()}); err != nil {
+		if err := s.record(ctx, tx, c, auditkind.ModelDraftingEnabled, map[string]string{"security_key": su.Credential.String()}); err != nil {
 			return err
 		}
 		return s.notifyAdmins(ctx, tx, q, c, "ENABLED")
@@ -341,7 +343,7 @@ func (s *Service) SetKey(ctx context.Context, key string, su stepup.StepUp) (Set
 		if err := q.SetModelKey(ctx, blob, &c.Principal.ID, c.Org); err != nil {
 			return err
 		}
-		if err := s.record(ctx, tx, c, "model.key_set", map[string]string{"security_key": su.Credential.String()}); err != nil {
+		if err := s.record(ctx, tx, c, auditkind.ModelKeySet, map[string]string{"security_key": su.Credential.String()}); err != nil {
 			return err
 		}
 		return s.notifyAdmins(ctx, tx, q, c, "KEY_SET")
@@ -372,7 +374,7 @@ func (s *Service) Disable(ctx context.Context) (Settings, error) {
 		if err != nil || n == 0 {
 			return err
 		}
-		return s.record(ctx, tx, c, "model.drafting_disabled", nil)
+		return s.record(ctx, tx, c, auditkind.ModelDraftingDisabled, nil)
 	})
 }
 
@@ -387,7 +389,7 @@ func (s *Service) ClearKey(ctx context.Context) (Settings, error) {
 		if err != nil || n == 0 {
 			return err
 		}
-		return s.record(ctx, tx, c, "model.key_cleared", nil)
+		return s.record(ctx, tx, c, auditkind.ModelKeyCleared, nil)
 	})
 }
 
@@ -433,7 +435,7 @@ func (s *Service) SetLimits(ctx context.Context, l Limits) (Settings, error) {
 		if err := q.SetModelLimits(ctx, dbq.SetModelLimitsParams{Model: l.Model, CallsPerMinute: calls, TokensPerDay: tokens, OrgID: c.Org}); err != nil {
 			return err
 		}
-		return s.record(ctx, tx, c, "model.settings_updated", map[string]string{
+		return s.record(ctx, tx, c, auditkind.ModelSettingsUpdated, map[string]string{
 			"model": l.Model, "calls_per_minute": strconv.Itoa(l.CallsPerMinute), "usage_per_day": strconv.FormatInt(l.TokensPerDay, 10),
 		})
 	})

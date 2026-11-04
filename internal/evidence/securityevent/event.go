@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -74,38 +76,38 @@ type rule struct{ direction, objectType, detail string }
 // These are exact audit names, not suffix or prefix matches. A new kind
 // requires explicit review and an accompanying replay implementation.
 var kinds = map[string]rule{
-	"signing_key.revoked":                {"tighten", "signing_key", ""},
-	"gateway.revoked":                    {"tighten", "gateway", ""},
-	"gateway.certificate_revoked":        {"tighten", "gateway_certificate", "certificate_id"},
-	"access.api_key_revoked":             {"tighten", "api_key", ""},
-	"access.service_account_key_revoked": {"tighten", "service_account_key", "key"},
-	"access.service_account_disabled":    {"tighten", "service_account", ""},
-	"access.service_account_enabled":     {"loosen", "service_account", ""},
-	"access.user_disabled":               {"tighten", "user", ""},
-	"access.user_enabled":                {"loosen", "user", ""},
-	"access.invitation_revoked":          {"tighten", "invitation", ""},
-	"package.signing_key.revoked":        {"tighten", "package_signing_key", ""},
-	"authn.webauthn_suspended":           {"tighten", "webauthn", ""},
-	"authn.webauthn_removed":             {"tighten", "webauthn", ""},
-	"authn.session_revoked":              {"tighten", "session", ""},
-	"authn.session_ended":                {"tighten", "session", ""},
-	"authn.sessions_revoked":             {"tighten", "user_sessions", ""},
-	"response.credential_revoked":        {"tighten", "sealed_credential", "version"},
-	"connection.sealed_revoked":          {"tighten", "sealed_credential", "version"},
-	"connection.quarantined":             {"tighten", "connection", ""},
-	"connection.restored":                {"loosen", "connection", ""},
-	"grant.revoked":                      {"tighten", "grant", ""},
-	"identity.issuer_disabled":           {"tighten", "issuer", ""},
-	"response.contain":                   {"tighten", "containment_control", "control_id"},
-	"mcp.catalog.server_revoked":         {"tighten", "mcp_server", ""},
-	"agents.agent_suspended":             {"tighten", "agent", ""},
-	"agents.agent_restored":              {"loosen", "agent", ""},
-	"security.kill_switch_engaged":       {"tighten", "org", ""},
-	"security.kill_switch_restored":      {"loosen", "org", ""},
-	"org.deletion_started":               {"tighten", "org", ""},
-	"org.deleted":                        {"tighten", "org", ""},
-	"account.deletion_started":           {"tighten", "account", ""},
-	"account.deleted":                    {"tighten", "account", ""},
+	auditkind.SigningKeyRevoked:              {"tighten", "signing_key", ""},
+	auditkind.GatewayRevoked:                 {"tighten", "gateway", ""},
+	auditkind.GatewayCertificateRevoked:      {"tighten", "gateway_certificate", "certificate_id"},
+	auditkind.AccessApiKeyRevoked:            {"tighten", "api_key", ""},
+	auditkind.AccessServiceAccountKeyRevoked: {"tighten", "service_account_key", "key"},
+	auditkind.AccessServiceAccountDisabled:   {"tighten", "service_account", ""},
+	auditkind.AccessServiceAccountEnabled:    {"loosen", "service_account", ""},
+	auditkind.AccessUserDisabled:             {"tighten", "user", ""},
+	auditkind.AccessUserEnabled:              {"loosen", "user", ""},
+	auditkind.AccessInvitationRevoked:        {"tighten", "invitation", ""},
+	auditkind.PackageSigningKeyRevoked:       {"tighten", "package_signing_key", ""},
+	auditkind.AuthnWebauthnSuspended:         {"tighten", "webauthn", ""},
+	auditkind.AuthnWebauthnRemoved:           {"tighten", "webauthn", ""},
+	auditkind.AuthnSessionRevoked:            {"tighten", "session", ""},
+	auditkind.AuthnSessionEnded:              {"tighten", "session", ""},
+	auditkind.AuthnSessionsRevoked:           {"tighten", "user_sessions", ""},
+	auditkind.ResponseCredentialRevoked:      {"tighten", "sealed_credential", "version"},
+	auditkind.ConnectionSealedRevoked:        {"tighten", "sealed_credential", "version"},
+	auditkind.ConnectionQuarantined:          {"tighten", "connection", ""},
+	auditkind.ConnectionRestored:             {"loosen", "connection", ""},
+	auditkind.GrantRevoked:                   {"tighten", "grant", ""},
+	auditkind.IdentityIssuerDisabled:         {"tighten", "issuer", ""},
+	auditkind.ResponseContain:                {"tighten", "containment_control", "control_id"},
+	auditkind.McpCatalogServerRevoked:        {"tighten", "mcp_server", ""},
+	auditkind.AgentsAgentSuspended:           {"tighten", "agent", ""},
+	"agents.agent_restored":                  {"loosen", "agent", ""},
+	auditkind.SecurityKillSwitchEngaged:      {"tighten", "org", ""},
+	auditkind.SecurityKillSwitchRestored:     {"loosen", "org", ""},
+	auditkind.OrgDeletionStarted:             {"tighten", "org", ""},
+	auditkind.OrgDeleted:                     {"tighten", "org", ""},
+	auditkind.AccountDeletionStarted:         {"tighten", "account", ""},
+	auditkind.AccountDeleted:                 {"tighten", "account", ""},
 }
 
 // Rule returns the required direction and object type of a closed kind.
@@ -139,9 +141,9 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 	if r.detail != "" {
 		obj.ID = body.Details[r.detail]
 		switch kind {
-		case "response.credential_revoked":
+		case auditkind.ResponseCredentialRevoked:
 			obj.ID = body.Details["connection"] + "/" + obj.ID
-		case "connection.sealed_revoked":
+		case auditkind.ConnectionSealedRevoked:
 			obj.ID = body.Object.ID + "/" + obj.ID
 		}
 	}
@@ -149,10 +151,10 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 		return Event{}, false, fmt.Errorf("security event: %s has no object id", kind)
 	}
 	e := Event{Timestamp: entry.OccurredAt, Org: entry.Org, LedgerSeq: seq, Kind: kind, Direction: r.direction, Object: obj, Actor: entry.Actor}
-	if kind == "org.deleted" || kind == "account.deleted" {
+	if kind == auditkind.OrgDeleted || kind == auditkind.AccountDeleted {
 		e.RecordDigest = body.Details["record_digest"]
 	}
-	if kind == "org.deletion_started" {
+	if kind == auditkind.OrgDeletionStarted {
 		request, err := ids.ParseUUID(body.Details["request_id"])
 		if err != nil {
 			return Event{}, false, fmt.Errorf("security event: invalid deletion intent request")
@@ -160,13 +162,13 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 		e.RequestID = request
 		e.JournalDigest = body.Details["journal_digest"]
 	}
-	if kind == "account.deletion_started" {
+	if kind == auditkind.AccountDeletionStarted {
 		e.JournalDigest = body.Details["journal_digest"]
 	}
-	if kind == "package.signing_key.revoked" {
+	if kind == auditkind.PackageSigningKeyRevoked {
 		e.RevocationReason = body.Details["reason"]
 	}
-	if kind == "response.contain" {
+	if kind == auditkind.ResponseContain {
 		action, err := ids.ParseUUID(body.Details["action"])
 		if err != nil {
 			return Event{}, false, fmt.Errorf("security event: invalid containment action")
@@ -177,7 +179,7 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 		}
 		e.Containment = &Containment{ActionID: action, ControlID: control, ScopeType: body.Details["scope_type"], ScopeID: body.Details["scope"], Control: body.Details["control"], Operation: body.Details["operation"], Source: body.Details["source"], Server: body.Details["server"]}
 	}
-	if kind == "mcp.catalog.server_revoked" {
+	if kind == auditkind.McpCatalogServerRevoked {
 		e.McpServer = serverOf(body.Details)
 	}
 	if err := Validate(e); err != nil {

@@ -6,6 +6,8 @@ package pgapprovals
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -75,7 +77,7 @@ func Restore(ctx context.Context, tx db.TenantTx, org ids.OrgID, permit ids.UUID
 	if n, err := q.ReopenTransaction(ctx, org, *row.TransactionID); err != nil || n != 1 {
 		return false, changed(err)
 	}
-	return true, event(ctx, tx, "approval.restored", actor, audit.Success, ReasonPermitReleased, row.ID, map[string]string{
+	return true, event(ctx, tx, auditkind.ApprovalRestored, actor, audit.Success, ReasonPermitReleased, row.ID, map[string]string{
 		"permit": permit.String(), "transaction": row.TransactionID.String(),
 	})
 }

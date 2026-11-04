@@ -6,6 +6,8 @@ package endpoints
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -63,7 +65,7 @@ func (s *Service) SetDestinationSignatureScheme(ctx context.Context, id ids.UUID
 		if kid != "" {
 			details["kid"] = kid
 		}
-		if err := s.audit(ctx, tx, c, "automation.destination_signature_scheme_set", "automation_destination", id, details); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.AutomationDestinationSignatureSchemeSet, "automation_destination", id, details); err != nil {
 			return err
 		}
 		out, err = getDestination(ctx, q, c.Org, id)

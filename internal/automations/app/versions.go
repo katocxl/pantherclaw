@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/changes"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -86,7 +88,7 @@ func createVersionTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, automat
 	if err != nil {
 		return Version{}, err
 	}
-	return versionView(v), record(ctx, tx, c.Actor(), "automation.version_created", automation, map[string]string{
+	return versionView(v), record(ctx, tx, c.Actor(), auditkind.AutomationVersionCreated, automation, map[string]string{
 		"version": id.String(), "number": itoa(int(n)), "digest": hexDigest(digest),
 	})
 }
@@ -130,7 +132,7 @@ func (s *Service) UpdateDraftVersion(ctx context.Context, version ids.UUID, raw,
 			return err
 		}
 		out = versionView(v)
-		return record(ctx, tx, c.Actor(), "automation.version_updated", v.AutomationID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationVersionUpdated, v.AutomationID, map[string]string{
 			"version": version.String(), "digest": hexDigest(digest),
 		})
 	})
@@ -184,7 +186,7 @@ func (s *Service) ValidateVersion(ctx context.Context, version ids.UUID) (Versio
 			return err
 		}
 		out = versionView(v)
-		return record(ctx, tx, c.Actor(), "automation.version_validated", v.AutomationID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationVersionValidated, v.AutomationID, map[string]string{
 			"version": version.String(), "valid": boolString(valid), "findings": itoa(len(findings)),
 		})
 	})

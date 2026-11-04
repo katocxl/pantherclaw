@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
@@ -152,7 +154,7 @@ func (s *Service) CreateDestination(ctx context.Context, in NewDestination) (Cre
 		} else if err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "automation.destination_created", "automation_destination", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.AutomationDestinationCreated, "automation_destination", id, map[string]string{
 			"name": in.Name, "host": hostOf(in.URL), "internal": fmt.Sprint(in.Internal), "purposes": strings.Join(in.Purposes, ","),
 		}); err != nil {
 			return err
@@ -208,7 +210,7 @@ func (s *Service) ActivateDestination(ctx context.Context, id ids.UUID, su *step
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "automation.destination_activated", "automation_destination", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.AutomationDestinationActivated, "automation_destination", id, map[string]string{
 			"host": hostOf(d.URL), "internal": fmt.Sprint(d.Internal), "security_key": su.Credential.String(),
 		}); err != nil {
 			return err
@@ -268,7 +270,7 @@ func (s *Service) RotateDestinationSecret(ctx context.Context, id ids.UUID, su *
 		if n == 0 {
 			return ErrRotating
 		}
-		return s.audit(ctx, tx, c, "automation.destination_secret_rotated", "automation_destination", id,
+		return s.audit(ctx, tx, c, auditkind.AutomationDestinationSecretRotated, "automation_destination", id,
 			map[string]string{"security_key": su.Credential.String()})
 	})
 	if err != nil {
@@ -330,7 +332,7 @@ func (s *Service) SetDestinationState(ctx context.Context, id ids.UUID, state st
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "automation.destination_state_changed", "automation_destination", id,
+		if err := s.audit(ctx, tx, c, auditkind.AutomationDestinationStateChanged, "automation_destination", id,
 			map[string]string{"from": d.State, "to": state}); err != nil {
 			return err
 		}

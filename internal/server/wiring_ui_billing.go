@@ -82,12 +82,28 @@ func (a extAuthorizer) Require(ctx context.Context, permission string) error {
 
 // errExtensionAudit refuses an audit record the extension may not write.
 var errExtensionAudit = pcerr.New(pcerr.InvalidArgument, "INVALID_AUDIT",
-	"extension audit records need a billing., scim. or saml. kind and small, non-secret fields")
+	"extension audit records need a "+prefixList(extension.AuditKindPrefixes)+" kind and small, non-secret fields")
+
+// prefixList joins prefixes for a message: "a., b. or c.".
+func prefixList(prefixes []string) string {
+	if len(prefixes) < 2 {
+		return strings.Join(prefixes, "")
+	}
+	return strings.Join(prefixes[:len(prefixes)-1], ", ") + " or " + prefixes[len(prefixes)-1]
+}
 
 // extensionKind is the shape of an extension audit kind (D88, G0 M26 D405):
 // a prefix of extension.AuditKindPrefixes, then dotted lowercase segments,
 // each starting with a letter.
-var extensionKind = regexp.MustCompile(`^(billing|scim|saml)\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
+var extensionKind = regexp.MustCompile(extensionKindPattern(extension.AuditKindPrefixes))
+
+func extensionKindPattern(prefixes []string) string {
+	quoted := make([]string, len(prefixes))
+	for i, p := range prefixes {
+		quoted[i] = regexp.QuoteMeta(strings.TrimSuffix(p, "."))
+	}
+	return `^(` + strings.Join(quoted, "|") + `)\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`
+}
 
 // maxExtensionKind bounds an extension audit kind in bytes (D88).
 const maxExtensionKind = 64

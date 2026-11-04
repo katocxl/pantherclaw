@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/model/ports"
@@ -146,7 +148,7 @@ func (s *Service) reserve(ctx context.Context, c tenancy.Caller, task ports.Task
 		refused = overCap(calls, tokens, maxCalls, maxTokens)
 		if refused != nil {
 			_, err := audit.Record(ctx, tx, audit.Event{
-				Name: "model.call", Actor: c.Actor(), Outcome: audit.Denied, ReasonCode: pcerr.ReasonOf(refused),
+				Name: auditkind.ModelCall, Actor: c.Actor(), Outcome: audit.Denied, ReasonCode: pcerr.ReasonOf(refused),
 				Object: &audit.Object{Type: "model_settings", ID: c.Org.String()}, Details: map[string]string{"task": string(task), "model": row.Model},
 			})
 			return err
@@ -158,7 +160,7 @@ func (s *Service) reserve(ctx context.Context, c tenancy.Caller, task ports.Task
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "model.call.started", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.ModelCallStarted, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "model_call", ID: out.id.String()},
 			Details: map[string]string{"task": string(task), "model": row.Model, "reserved": strconv.Itoa(int(held))},
 		})
@@ -222,7 +224,7 @@ func (r reservation) held(resp ports.DraftResponse, callErr error) int32 {
 func (s *Service) finish(ctx context.Context, c tenancy.Caller, r reservation, task ports.TaskKind, resp ports.DraftResponse, callErr error) error {
 	outcome := outcomeOf(callErr)
 	ev := audit.Event{
-		Name: "model.call", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.ModelCall, Actor: c.Actor(), Outcome: audit.Success,
 		Object: &audit.Object{Type: "model_call", ID: r.id.String()},
 		Details: map[string]string{
 			"task": string(task), "model": r.model, "usage_in": strconv.Itoa(resp.InputTokens), "usage_out": strconv.Itoa(resp.OutputTokens),

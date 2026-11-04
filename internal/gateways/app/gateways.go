@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -121,7 +123,7 @@ func (s *Service) CreateGateway(ctx context.Context, name string) (dbq.PcGateway
 			return err
 		}
 		out = g
-		return record(ctx, tx, c.Actor(), "gateway.created", g.ID, map[string]string{"name": name})
+		return record(ctx, tx, c.Actor(), auditkind.GatewayCreated, g.ID, map[string]string{"name": name})
 	})
 	return out, err
 }
@@ -175,7 +177,7 @@ func (s *Service) CreateEnrollmentToken(ctx context.Context, gateway ids.UUID) (
 			return err
 		}
 		out = EnrollmentToken{Secret: tok, ExpiresAt: r.ExpiresAt, CAFingerprint: ca.Fingerprint(s.ca.Certificate()), GatewayAPIURL: s.gatewayAPIURL}
-		return record(ctx, tx, c.Actor(), "gateway.enrollment_issued", g.ID, map[string]string{"enrollment_id": r.ID.String()})
+		return record(ctx, tx, c.Actor(), auditkind.GatewayEnrollmentIssued, g.ID, map[string]string{"enrollment_id": r.ID.String()})
 	})
 	return out, err
 }
@@ -288,7 +290,7 @@ func (s *Service) RevokeGateway(ctx context.Context, id ids.UUID, reason string)
 			return err
 		}
 		out = g
-		return record(ctx, tx, c.Actor(), "gateway.revoked", id, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.GatewayRevoked, id, map[string]string{
 			"certificates": strconv.FormatInt(n, 10), "broker_keys": strconv.FormatInt(keys, 10),
 		})
 	})
@@ -320,7 +322,7 @@ func (s *Service) RevokeCertificate(ctx context.Context, gateway, cert ids.UUID)
 		if err := bumpEpoch(ctx, q, c.Org); err != nil {
 			return err
 		}
-		return record(ctx, tx, c.Actor(), "gateway.certificate_revoked", gateway, map[string]string{"certificate_id": cert.String()})
+		return record(ctx, tx, c.Actor(), auditkind.GatewayCertificateRevoked, gateway, map[string]string{"certificate_id": cert.String()})
 	})
 	if err == nil {
 		s.auth.forget(cert)

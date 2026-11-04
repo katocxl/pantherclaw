@@ -12,11 +12,13 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
@@ -357,6 +359,18 @@ func Note(ctx context.Context, tx db.TenantTx, id ids.UUID, note string, actor e
 	return auditMove(ctx, tx, id, "NOTE", actor, note, map[string]string{"state": f.State})
 }
 
+// findingKinds are the audit kinds of the finding events a person or a
+// service account causes (HR-664). REMEDIATED and EXPIRED come only from
+// the recomputation (System), which auditMove never audits.
+var findingKinds = map[string]string{
+	"ASSIGNED":            auditkind.PostureFindingAssigned,
+	"TESTING":             auditkind.PostureFindingTesting,
+	"ACCEPTED":            auditkind.PostureFindingAccepted,
+	"EVIDENCE_INCOMPLETE": auditkind.PostureFindingEvidenceIncomplete,
+	"REOPENED":            auditkind.PostureFindingReopened,
+	"NOTE":                auditkind.PostureFindingNote,
+}
+
 // auditMove writes audit.posture.finding_<event> for a person's or a
 // service account's change (D6, D63 M6): who, which finding, from and to,
 // and the reason or note. A recomputation's own changes are the ledger's
@@ -367,11 +381,15 @@ func auditMove(ctx context.Context, tx db.TenantTx, id ids.UUID, kind string, ac
 	if actor == System {
 		return nil
 	}
+	name, ok := findingKinds[kind]
+	if !ok {
+		return fmt.Errorf("posture: no audit kind for finding event %q", kind)
+	}
 	if note = strings.TrimSpace(note); note != "" {
 		details["note"] = truncate(note, 500)
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "posture.finding_" + strings.ToLower(kind), Actor: actor, Outcome: audit.Success,
+		Name: name, Actor: actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "posture_finding", ID: id.String()}, Details: details,
 	})
 	return err

@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -148,7 +150,7 @@ func (s *Service) CreateGroup(ctx context.Context, pt ports.Token, in ports.Grou
 		if err != nil {
 			return err
 		}
-		if err := s.record(ctx, tx, t, "scim.group_created", "group", g.ID, map[string]string{
+		if err := s.record(ctx, tx, t, auditkind.ScimGroupCreated, "group", g.ID, map[string]string{
 			"members_added": strconv.Itoa(len(add)), "bindings_added": strconv.Itoa(added), "bindings_removed": strconv.Itoa(removed),
 		}); err != nil {
 			return err
@@ -234,7 +236,7 @@ func (s *Service) changeGroup(ctx context.Context, pt ports.Token, id string, re
 		if err != nil {
 			return err
 		}
-		if err := s.record(ctx, tx, t, "scim.group_changed", "group", g.ID, map[string]string{
+		if err := s.record(ctx, tx, t, auditkind.ScimGroupChanged, "group", g.ID, map[string]string{
 			"members_added": strconv.Itoa(len(add)), "members_removed": strconv.Itoa(len(remove)),
 			"bindings_added": strconv.Itoa(added), "bindings_removed": strconv.Itoa(removed),
 		}); err != nil {
@@ -309,7 +311,7 @@ func (s *Service) DeleteGroup(ctx context.Context, pt ports.Token, id string) er
 			}
 			removed += r
 		}
-		return s.record(ctx, tx, t, "scim.group_deleted", "group", g.ID, map[string]string{
+		return s.record(ctx, tx, t, auditkind.ScimGroupDeleted, "group", g.ID, map[string]string{
 			"members_removed": strconv.Itoa(len(have)), "bindings_removed": strconv.Itoa(removed),
 		})
 	})

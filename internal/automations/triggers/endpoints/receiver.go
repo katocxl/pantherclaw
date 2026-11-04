@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/inbound"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -272,7 +274,7 @@ func (s *Service) record(ctx context.Context, org ids.OrgID, src ids.UUID, hdr i
 			return nil
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "automation.event_received", Actor: receiveActor(src), Outcome: audit.Success,
+			Name: auditkind.AutomationEventReceived, Actor: receiveActor(src), Outcome: audit.Success,
 			Object: &audit.Object{Type: "automation_event_source", ID: src.String()},
 			Details: map[string]string{
 				"source": src.String(), "type": ev.Type, "webhook_id": hdr.ID, "digest": hex.EncodeToString(digest[:]),

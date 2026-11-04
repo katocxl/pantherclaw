@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
 	approvalsapp "github.com/katocxl/pantherclaw/internal/approvals/app"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
@@ -498,7 +500,7 @@ func TamperedEvent(gatewayID string, txn ids.UUID, simulated bool) audit.Event {
 		details = map[string]string{"simulated": "true"}
 	}
 	return audit.Event{
-		Name: "security.action_tampered", Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Denied,
+		Name: auditkind.SecurityActionTampered, Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Denied,
 		ReasonCode: "ACTION_TAMPERED", Object: &audit.Object{Type: "transaction", ID: txn.String()}, Details: details,
 	}
 }
@@ -770,7 +772,7 @@ func revokeFailed(ctx context.Context, tx db.TenantTx, gatewayID string, txn ids
 		details["expires_at"] = a.Expires.UTC().Format(time.RFC3339)
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "credential.revoke_failed", Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Failure,
+		Name: auditkind.CredentialRevokeFailed, Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Failure,
 		Object: &audit.Object{Type: "transaction", ID: txn.String()}, Details: details,
 	})
 	return err

@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -43,7 +45,7 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) (int, error) {
 			return err
 		}
 		for _, x := range expired {
-			if err := s.audit(ctx, tx, system, x, "policy.exception_expired", nil); err != nil {
+			if err := s.audit(ctx, tx, system, x, auditkind.PolicyExceptionExpired, nil); err != nil {
 				return err
 			}
 		}
@@ -53,7 +55,7 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) (int, error) {
 			return err
 		}
 		for _, x := range declined {
-			if err := s.audit(ctx, tx, system, x, "policy.exception_declined", nil); err != nil {
+			if err := s.audit(ctx, tx, system, x, auditkind.PolicyExceptionDeclined, nil); err != nil {
 				return err
 			}
 		}

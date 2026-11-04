@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -209,7 +211,7 @@ func (s *Service) pauseChannel(ctx context.Context, tx db.TenantTx, q *dbq.Queri
 	s.log.WarnContext(ctx, "notifications.channel_paused", slog.String("org", org.String()), slog.String("channel", id.String()),
 		slog.String("reason", reason))
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "notification.channel_paused", Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
+		Name: auditkind.NotificationChannelPaused, Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
 		Outcome: audit.Success, ReasonCode: reason, Object: &audit.Object{Type: "notification_channel", ID: id.String()},
 	}); err != nil {
 		return err

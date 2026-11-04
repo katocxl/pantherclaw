@@ -11,6 +11,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -112,7 +114,7 @@ func (s *Service) StartSimulation(ctx context.Context, versionID ids.UUID, from,
 		if err := jobs.InsertTx(ctx, s.Jobs, tx, SimulateArgs{Org: c.Org, Simulation: simID}, nil); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "automation.simulation_started", versionID, map[string]string{
+		return record(ctx, tx, c, auditkind.AutomationSimulationStarted, versionID, map[string]string{
 			"automation": v.AutomationID.String(), "simulation": id.String(),
 			"from": from.UTC().Format(time.RFC3339), "to": to.UTC().Format(time.RFC3339),
 		})

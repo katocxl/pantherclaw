@@ -42,6 +42,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/anchor"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -426,7 +428,7 @@ func (s *Service) fail(ctx context.Context, a dbq.PcAnchor, code string, cause e
 	s.log().WarnContext(ctx, "evidence.anchor_failed", attrs...)
 	err = s.Pool.InTenantTx(ctx, ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.anchor_failed", Actor: Actor, Outcome: audit.Failure,
+			Name: auditkind.EvidenceAnchorFailed, Actor: Actor, Outcome: audit.Failure,
 			Object:  &audit.Object{Type: "anchor", ID: a.ID.String()},
 			Details: map[string]string{"code": code, "attempt": fmt.Sprint(attempt), "period": a.Period.UTC().Format(time.RFC3339)},
 		})

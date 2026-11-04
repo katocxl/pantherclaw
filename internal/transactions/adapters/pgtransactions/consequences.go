@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -170,7 +172,7 @@ func auditUnknownConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Querie
 // verified on its own, and why.
 func notVerified(ctx context.Context, tx db.TenantTx, parent ids.UUID, operation, reason string, actor evdomain.Actor) error {
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "transaction.consequence_not_verified", Actor: actor, Outcome: audit.Failure, ReasonCode: reason,
+		Name: auditkind.TransactionConsequenceNotVerified, Actor: actor, Outcome: audit.Failure, ReasonCode: reason,
 		Object: &audit.Object{Type: "transaction", ID: parent.String()}, Details: map[string]string{"operation": operation},
 	})
 	return err
@@ -181,7 +183,7 @@ func notVerified(ctx context.Context, tx db.TenantTx, parent ids.UUID, operation
 // to find it by (HR-450).
 func notVerifiable(ctx context.Context, tx db.TenantTx, parent ids.UUID, operation string, actor evdomain.Actor) error {
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "transaction.consequence_not_verifiable", Actor: actor, Outcome: audit.Failure, ReasonCode: "NOT_VERIFIABLE",
+		Name: auditkind.TransactionConsequenceNotVerifiable, Actor: actor, Outcome: audit.Failure, ReasonCode: "NOT_VERIFIABLE",
 		Object: &audit.Object{Type: "transaction", ID: parent.String()}, Details: map[string]string{"operation": operation},
 	})
 	return err
@@ -261,7 +263,7 @@ func openConsequence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org id
 	}
 	details["params"] = strconv.Itoa(len(params))
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "transaction.consequence_opened", Actor: actor, Outcome: audit.Success,
+		Name: auditkind.TransactionConsequenceOpened, Actor: actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "transaction", ID: id.String()}, Details: details,
 	})
 	return err

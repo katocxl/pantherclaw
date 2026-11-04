@@ -6,6 +6,8 @@ package pgapprovals
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -38,7 +40,7 @@ func SupersedeByKey(ctx context.Context, tx db.TenantTx, org ids.OrgID, key stri
 		if err := closeEntry(ctx, q, org, id, entryCancelled, apdomain.EndBindingChanged); err != nil {
 			return 0, err
 		}
-		if err := event(ctx, tx, "approval.superseded", actor, audit.Success, apdomain.EndBindingChanged, id,
+		if err := event(ctx, tx, auditkind.ApprovalSuperseded, actor, audit.Success, apdomain.EndBindingChanged, id,
 			map[string]string{"changed": key}); err != nil {
 			return 0, err
 		}

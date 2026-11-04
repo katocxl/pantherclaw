@@ -12,6 +12,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
@@ -247,7 +249,7 @@ func (v *Versions) CreateExpectingWith(ctx context.Context, raw []byte, expected
 		return VersionInfo{}, err
 	}
 	ev := &audit.Event{
-		Name: "policy.version_created", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.PolicyVersionCreated, Actor: c.Actor(), Outcome: audit.Success,
 		Object: &audit.Object{Type: "policy", ID: b.ID}, Details: details,
 	}
 	id, _, err := v.Store.CreateVersion(ctx, c.Org, b, c.Principal.String(), ev)

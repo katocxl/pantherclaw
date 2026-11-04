@@ -8,6 +8,8 @@ import (
 	"encoding/json/v2"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -106,7 +108,7 @@ func (s *Service) RequestRestoration(ctx context.Context, agent ids.UUID, reason
 		if err != nil {
 			return err
 		}
-		if err := event(ctx, tx, "approval.restoration_requested", userActor(user), "", id,
+		if err := event(ctx, tx, auditkind.ApprovalRestorationRequested, userActor(user), "", id,
 			map[string]string{"agent": agent.String()}); err != nil {
 			return err
 		}

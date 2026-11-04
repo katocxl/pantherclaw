@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
@@ -112,7 +114,7 @@ func seedSlackAgentConnection(ctx context.Context, cfg *Config, pool *db.Pool, o
 		ID: ids.NewV7(), Org: org, Name: "slack.gateway", GatewayID: gateway, ConnectionID: c.ID, State: fdomain.ProviderActive, Facts: decls,
 	}
 	ev := audit.Event{
-		Name: "facts.provider_registered", Actor: devSeedActor, Outcome: audit.Success,
+		Name: auditkind.FactsProviderRegistered, Actor: devSeedActor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "fact_provider", ID: p.ID.String()},
 		Details: map[string]string{"gateway": gateway.String(), "connection": c.ID.String(), "facts": strconv.Itoa(len(decls))},
 	}

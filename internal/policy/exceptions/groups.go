@@ -17,6 +17,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/cohorts"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -207,7 +209,7 @@ func (s *Service) RequestGroup(ctx context.Context, r GroupRequest) (Group, Chan
 		if err != nil {
 			return err
 		}
-		return s.auditGroup(ctx, tx, c.Actor(), out, "policy.exception_group_requested", nil)
+		return s.auditGroup(ctx, tx, c.Actor(), out, auditkind.PolicyExceptionGroupRequested, nil)
 	})
 	if err != nil {
 		return out, cr, err
@@ -326,13 +328,13 @@ func (s *Service) ActivateGroup(ctx context.Context, tx db.TenantTx, org ids.Org
 		return g, err
 	}
 	for _, x := range members {
-		if err := s.audit(ctx, tx, system, x, "policy.exception_activated", map[string]string{
+		if err := s.audit(ctx, tx, system, x, auditkind.PolicyExceptionActivated, map[string]string{
 			"expires": x.ExpiresAt.UTC().Format(time.RFC3339), "group": g.ID.String(),
 		}); err != nil {
 			return g, err
 		}
 	}
-	if err := s.auditGroup(ctx, tx, system, g, "policy.exception_group_activated", map[string]string{
+	if err := s.auditGroup(ctx, tx, system, g, auditkind.PolicyExceptionGroupActivated, map[string]string{
 		"expires": g.ExpiresAt.UTC().Format(time.RFC3339), "truncated": strconv.FormatBool(truncated),
 	}); err != nil {
 		return g, err
@@ -349,7 +351,7 @@ func (s *Service) DeclineGroup(ctx context.Context, tx db.TenantTx, org ids.OrgI
 	} else if err != nil {
 		return g, err
 	}
-	return g, s.auditGroup(ctx, tx, system, g, "policy.exception_group_declined", nil)
+	return g, s.auditGroup(ctx, tx, system, g, auditkind.PolicyExceptionGroupDeclined, nil)
 }
 
 // RevokeGroup ends a pending or active group and every open member row
@@ -385,11 +387,11 @@ func (s *Service) RevokeGroup(ctx context.Context, id ids.UUID, reason string) (
 			return err
 		}
 		for _, x := range members {
-			if err := s.audit(ctx, tx, c.Actor(), x, "policy.exception_revoked", map[string]string{"group": id.String()}); err != nil {
+			if err := s.audit(ctx, tx, c.Actor(), x, auditkind.PolicyExceptionRevoked, map[string]string{"group": id.String()}); err != nil {
 				return err
 			}
 		}
-		return s.auditGroup(ctx, tx, c.Actor(), out, "policy.exception_group_revoked", map[string]string{
+		return s.auditGroup(ctx, tx, c.Actor(), out, auditkind.PolicyExceptionGroupRevoked, map[string]string{
 			"members_revoked": strconv.Itoa(len(members)),
 		})
 	})
@@ -486,7 +488,7 @@ func (s *Service) sweepGroups(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		return err
 	}
 	for _, g := range expired {
-		if err := s.auditGroup(ctx, tx, system, g, "policy.exception_group_expired", nil); err != nil {
+		if err := s.auditGroup(ctx, tx, system, g, auditkind.PolicyExceptionGroupExpired, nil); err != nil {
 			return err
 		}
 	}
@@ -495,7 +497,7 @@ func (s *Service) sweepGroups(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		return err
 	}
 	for _, g := range declined {
-		if err := s.auditGroup(ctx, tx, system, g, "policy.exception_group_declined", nil); err != nil {
+		if err := s.auditGroup(ctx, tx, system, g, auditkind.PolicyExceptionGroupDeclined, nil); err != nil {
 			return err
 		}
 	}

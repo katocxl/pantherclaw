@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/connections/ports"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
@@ -526,7 +528,7 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 		if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
 			return err
 		}
-		if err := record(ctx, tx, c, "connection.created", conn.ID, map[string]string{
+		if err := record(ctx, tx, c, auditkind.ConnectionCreated, conn.ID, map[string]string{
 			"name": conn.Name, "kind": conn.Kind, "gateway_id": conn.GatewayID.String(), "package": conn.Package,
 			"base_url": deref(conn.BaseUrl), "allowed_hosts": strings.Join(conn.AllowedHosts, ","), "access_mode": conn.AccessMode,
 			"default_mode": conn.DefaultMode, "routes": strconv.Itoa(len(rs)), "agent_hosts": strings.Join(conn.AgentHosts, ","),

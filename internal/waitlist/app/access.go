@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -194,7 +196,7 @@ func (w *Writer) DismissAccessRequest(ctx context.Context, id ids.UUID, reason s
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "waitlist.access_request_dismissed", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.WaitlistAccessRequestDismissed, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "waitlist_entry", ID: id.String()}, Details: map[string]string{"grant": r.SubjectID.String()},
 		}); err != nil {
 			return err

@@ -7,6 +7,8 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -45,6 +47,6 @@ func (s *Service) LiftA2ACardDriftTx(ctx context.Context, tx db.TenantTx, caller
 	}
 	p := params(c, conn)
 	p.State, p.QuarantineReason = StateActive, nil
-	_, err = s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateActive, weakens: true}}, "connection.restored", details)
+	_, err = s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateActive, weakens: true}}, auditkind.ConnectionRestored, details)
 	return err == nil, err
 }

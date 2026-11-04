@@ -8,6 +8,8 @@ import (
 	"slices"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -137,7 +139,7 @@ func (s *Service) AddInventoryNote(ctx context.Context, id ids.UUID, note string
 		})); err != nil {
 			return err
 		}
-		if err := record(ctx, tx, c, "connection.inventory_note_added", row.ConnectionID, map[string]string{
+		if err := record(ctx, tx, c, auditkind.ConnectionInventoryNoteAdded, row.ConnectionID, map[string]string{
 			"item_id": id.String(), "kind": row.Kind, "name": row.Name, "digest": row.Digest,
 		}); err != nil {
 			return err

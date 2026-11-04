@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -94,7 +96,7 @@ func (s *Store) MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "connection.test_tokens_minted", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+			Name: auditkind.ConnectionTestTokensMinted, Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
 			Object: &audit.Object{Type: "connection", ID: ct.ConnectionID.String()},
 			Details: map[string]string{
 				"test_id": ct.TestID.String(), "attempt": strconv.Itoa(int(ct.Attempts)), "operation": ct.Operation,
@@ -262,7 +264,7 @@ func finishTest(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.Org
 		details["result"] = result
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "connection.tested", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+		Name: auditkind.ConnectionTested, Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "connection", ID: task.ConnectionID.String()}, Details: details,
 	})
 	return err

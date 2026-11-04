@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -193,9 +195,9 @@ func (r *Router) step(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids
 
 func routedEvent(step int) string {
 	if step == 0 {
-		return "waitlist.routed"
+		return auditkind.WaitlistRouted
 	}
-	return "waitlist.escalated"
+	return auditkind.WaitlistEscalated
 }
 
 // family names the notice types of an entry after its first notice: an
@@ -317,7 +319,7 @@ func (r *Router) deliveryHealth(ctx context.Context, tx db.TenantTx, org ids.Org
 			break
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "waitlist.delivery_failing", Actor: pgwaitlist.System, Outcome: audit.Failure, ReasonCode: wdomain.HealthDeliveryFailing,
+			Name: auditkind.WaitlistDeliveryFailing, Actor: pgwaitlist.System, Outcome: audit.Failure, ReasonCode: wdomain.HealthDeliveryFailing,
 			Object: &audit.Object{Type: "waitlist_entry", ID: id.String()},
 		})
 	}

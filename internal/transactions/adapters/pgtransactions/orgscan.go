@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	agentsapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -105,7 +107,7 @@ func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify agentsa
 		return app.Applied{}, err
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "github.scan_finished", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+		Name: auditkind.GithubScanFinished, Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "connection", ID: task.ConnectionID.String()},
 		Details: map[string]string{
 			"scan": task.RunID.String(), "state": state, "not_scanned": strconv.Itoa(len(notScanned)),

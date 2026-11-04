@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
@@ -276,7 +278,7 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 			}
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.pack_created", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.EvidencePackCreated, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "evidence_pack", ID: id.String()},
 			Details: map[string]string{"scope": req.Kind, "include": includeList(req.Include)},
 		}); err != nil {
@@ -445,7 +447,7 @@ func (s *Service) DownloadEvidencePack(ctx context.Context, id ids.UUID) (Downlo
 		}
 		sum := sha256.Sum256(r.Content)
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.pack_downloaded", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.EvidencePackDownloaded, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "evidence_pack", ID: id.String()},
 		}); err != nil {
 			return err

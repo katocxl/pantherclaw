@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -191,7 +193,7 @@ func (s *Containment) RequestRestorationIn(ctx context.Context, tx db.TenantTx, 
 			return ids.UUID{}, nil, err
 		}
 	}
-	if _, err := auditRecord(ctx, tx, userActor(r.Requester), "response.restoration_requested", "restoration_plan", plan.String(),
+	if _, err := auditRecord(ctx, tx, userActor(r.Requester), auditkind.ResponseRestorationRequested, "restoration_plan", plan.String(),
 		withReason(map[string]string{"controls": strconv.Itoa(len(r.Controls)), "stages": strconv.Itoa(len(r.Stages))}, r.Reason)); err != nil {
 		return ids.UUID{}, nil, err
 	}
@@ -416,7 +418,7 @@ func (s *Containment) ApplyStageIn(ctx context.Context, tx db.TenantTx, sp Stage
 	}
 	details := map[string]string{"stage": strconv.Itoa(int(sp.Ordinal)), "tests": strconv.Itoa(len(results)), "passed": strconv.FormatBool(passed)}
 	if !passed {
-		if _, err := auditRecord(ctx, tx, userActor(reviewer), "response.restoration_stage_failed", "restoration_plan", sp.Plan.String(), details); err != nil {
+		if _, err := auditRecord(ctx, tx, userActor(reviewer), auditkind.ResponseRestorationStageFailed, "restoration_plan", sp.Plan.String(), details); err != nil {
 			return "", err
 		}
 		return PlanStaging, nil
@@ -445,7 +447,7 @@ func (s *Containment) ApplyStageIn(ctx context.Context, tx db.TenantTx, sp Stage
 			return "", err
 		}
 	}
-	if _, err := auditRecord(ctx, tx, userActor(reviewer), "response.restoration_stage_applied", "restoration_plan", sp.Plan.String(), details); err != nil {
+	if _, err := auditRecord(ctx, tx, userActor(reviewer), auditkind.ResponseRestorationStageApplied, "restoration_plan", sp.Plan.String(), details); err != nil {
 		return "", err
 	}
 	return next, nil
@@ -650,7 +652,7 @@ func (s *Containment) ProposeExpiredIn(ctx context.Context, tx db.TenantTx) (int
 		if err := q.InsertRestorationPlanControl(ctx, org, plan, c.ID); err != nil {
 			return 0, err
 		}
-		if _, err := auditRecord(ctx, tx, sweeperActor, "response.restoration_proposed", "restoration_plan", plan.String(),
+		if _, err := auditRecord(ctx, tx, sweeperActor, auditkind.ResponseRestorationProposed, "restoration_plan", plan.String(),
 			map[string]string{"control": c.ID.String(), "reason": "EXPIRED"}); err != nil {
 			return 0, err
 		}

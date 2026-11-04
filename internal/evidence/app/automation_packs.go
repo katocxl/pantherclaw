@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -99,7 +101,7 @@ func (s *Service) CreateForAutomationTx(ctx context.Context, tx pgx.Tx, in Autom
 		scope = strconv.Itoa(len(agents)) + " agents"
 	}
 	if _, err := audit.Record(ctx, ttx, audit.Event{
-		Name: "evidence.pack_created", Actor: evdomain.Actor{Type: "automation", ID: in.Automation.String()}, Outcome: audit.Success,
+		Name: auditkind.EvidencePackCreated, Actor: evdomain.Actor{Type: "automation", ID: in.Automation.String()}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "evidence_pack", ID: id.String()},
 		Details: map[string]string{
 			"scope": in.Request.Kind, "include": includeList(in.Request.Include), "automation": in.Automation.String(),

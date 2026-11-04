@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/automations/automationctx"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -297,7 +299,7 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 	for _, a := range c.Approvers {
 		approvers = append(approvers, a.String())
 	}
-	ev := grantEvent(actor, "grant.issued", g, map[string]string{
+	ev := grantEvent(actor, auditkind.GrantIssued, g, map[string]string{
 		"agent": g.AgentID.String(), "principal": g.Principal.String(), "expires_at": g.ExpiresAt.UTC().Format(time.RFC3339),
 		"ceiling": c.ID.String(), "approvers": strings.Join(approvers, ","),
 	})
@@ -471,7 +473,7 @@ func (s *Service) RevokeForAutomationTx(ctx context.Context, tx db.TenantTx, in 
 		if !found || g.State != domain.StateActive {
 			continue
 		}
-		ev := grantEvent(actor, "grant.revoked", g, map[string]string{"reason": in.Reason, "scope": in.Scope})
+		ev := grantEvent(actor, auditkind.GrantRevoked, g, map[string]string{"reason": in.Reason, "scope": in.Scope})
 		revoked, err := s.Store.RevokeInTx(ctx, tx, in.Org, gid, ev)
 		if err != nil {
 			return nil, apiError(err)

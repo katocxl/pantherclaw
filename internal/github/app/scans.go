@@ -9,6 +9,8 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -203,7 +205,7 @@ func schedule(ctx context.Context, tx db.TenantTx, connection ids.UUID, startedB
 		return ids.UUID{}, err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "github.scan_started", Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: connection.String()},
+		Name: auditkind.GithubScanStarted, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: connection.String()},
 		Details: map[string]string{"scan": run.String(), "started_by": startedBy},
 	})
 	return run, err

@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -111,8 +113,8 @@ func AcknowledgeIn(ctx context.Context, tx db.TenantTx, through int64) (int64, e
 func IntentAcknowledged(ctx context.Context, pool *db.Pool, kind string, target ids.UUID, digest string) (bool, error) {
 	typ := "org"
 	switch kind {
-	case "org.deletion_started":
-	case "account.deletion_started":
+	case auditkind.OrgDeletionStarted:
+	case auditkind.AccountDeletionStarted:
 		typ = "account"
 	default:
 		return false, errors.New("security outbox: closed deletion intent kind required")

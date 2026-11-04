@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/cases/domain"
 	"github.com/katocxl/pantherclaw/internal/cases/store"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -185,7 +187,7 @@ func (s *Service) Export(ctx context.Context, c ids.UUID) (Export, error) {
 		}
 		out.Document = v
 		ev, err := audit.Record(ctx, tx, audit.Event{
-			Name: "case.exported", Actor: caller.Actor(), Outcome: audit.Success,
+			Name: auditkind.CaseExported, Actor: caller.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "case", ID: c.String()},
 			Details: map[string]string{
 				"entries":   strconv.Itoa(len(doc.Entries)),

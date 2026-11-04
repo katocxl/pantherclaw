@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/securityevent"
@@ -76,7 +78,7 @@ func (r *Registry) RegisterScoped(kind string, h ScopedHandler) error {
 }
 
 func deletion(kind string) bool {
-	return kind == "org.deleted" || kind == "account.deleted" || kind == "org.deletion_started" || kind == "account.deletion_started"
+	return kind == auditkind.OrgDeleted || kind == auditkind.AccountDeleted || kind == auditkind.OrgDeletionStarted || kind == auditkind.AccountDeletionStarted
 }
 
 // Parse validates the entire bounded input before any state changes. Input
@@ -230,7 +232,7 @@ func Audit(ctx context.Context, tx db.TenantTx, entries []Event, operator domain
 	details := map[string]string{"count": strconv.Itoa(len(entries)), "first_seq": strconv.FormatInt(first, 10), "last_seq": strconv.FormatInt(last, 10)}
 	local, noLocal := 0, 0
 	for _, e := range entries {
-		if e.Kind != "response.credential_revoked" {
+		if e.Kind != auditkind.ResponseCredentialRevoked {
 			continue
 		}
 		connection, version, _ := strings.Cut(e.Object.ID, "/")
@@ -248,6 +250,6 @@ func Audit(ctx context.Context, tx db.TenantTx, entries []Event, operator domain
 		details["local_material"] = strconv.Itoa(local)
 		details["no_local_material"] = strconv.Itoa(noLocal)
 	}
-	_, err := audit.Record(ctx, tx, audit.Event{Name: "restore.reapplied", Actor: operator, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: tx.OrgID().String()}, Details: details})
+	_, err := audit.Record(ctx, tx, audit.Event{Name: auditkind.RestoreReapplied, Actor: operator, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: tx.OrgID().String()}, Details: details})
 	return err
 }

@@ -8,6 +8,8 @@ import (
 	"encoding/json/v2"
 	"slices"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -70,5 +72,5 @@ func (s *Service) DeclineContainmentHold(ctx context.Context, transaction ids.UU
 	}
 	reason := containmentDecline
 	return s.end(ctx, id, dbq.InsertApprovalResponseParams{Kind: "DECLINE", ReasonCode: &reason, Note: note},
-		apdomain.EndDeclined, "approval.declined", reason)
+		apdomain.EndDeclined, auditkind.ApprovalDeclined, reason)
 }

@@ -8,6 +8,8 @@ import (
 	"crypto/subtle"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -198,7 +200,7 @@ func (s *Service) networkChanged(ctx context.Context, q *dbq.Queries, tx db.Tena
 // not used before.
 func NetworkChangedEvent(instance, agent ids.UUID, from, to string) audit.Event {
 	return audit.Event{
-		Name: "security.instance_network_changed", Actor: evdomainSystem(), Outcome: audit.Success,
+		Name: auditkind.SecurityInstanceNetworkChanged, Actor: evdomainSystem(), Outcome: audit.Success,
 		Object:  &audit.Object{Type: "instance", ID: instance.String()},
 		Details: map[string]string{"agent_id": agent.String(), "from_network": from, "to_network": to},
 	}

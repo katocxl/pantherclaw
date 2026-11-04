@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -191,7 +193,7 @@ func (s *Service) create(ctx context.Context, tx db.TenantTx, c tenancy.Caller, 
 		}
 		details["weekly"], details["one_off"] = strconv.Itoa(len(out.Weekly)), strconv.Itoa(len(out.OneOff))
 		details["freezes"], details["window_sha256"] = strconv.Itoa(len(out.Freezes)), digest
-		return s.audit(ctx, tx, c, "release.window.created", row.ID, details)
+		return s.audit(ctx, tx, c, auditkind.ReleaseWindowCreated, row.ID, details)
 	}
 	if replaced == nil || s.Protect == nil {
 		return out, nil, write(ctx)
@@ -349,7 +351,7 @@ func (s *Service) retire(ctx context.Context, tx db.TenantTx, c tenancy.Caller, 
 		if out, err = recordOf(row); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "release.window.retired", id, map[string]string{
+		return s.audit(ctx, tx, c, auditkind.ReleaseWindowRetired, id, map[string]string{
 			"environment": row.Environment, "reason": reason,
 		})
 	}

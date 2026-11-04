@@ -6,6 +6,8 @@ package app
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -48,7 +50,7 @@ func (s *Service) reportCardDrift(ctx context.Context, c actor, gateway, id ids.
 		if conn.Simulated {
 			details["simulated"] = "true"
 			_, err := audit.Record(ctx, tx, audit.Event{
-				Name: "connection.drift_reported", Actor: c.Audit, Outcome: audit.Success,
+				Name: auditkind.ConnectionDriftReported, Actor: c.Audit, Outcome: audit.Success,
 				Object: &audit.Object{Type: "connection", ID: conn.ID.String()}, Details: details,
 			})
 			return err
@@ -71,7 +73,7 @@ func (s *Service) reportCardDrift(ctx context.Context, c actor, gateway, id ids.
 		p.State, p.QuarantineReason = StateQuarantined, &reason
 		details["reason"] = reason
 		after, err := s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateQuarantined}},
-			"connection.quarantined", details)
+			auditkind.ConnectionQuarantined, details)
 		if err != nil {
 			return err
 		}

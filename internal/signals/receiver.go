@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -308,7 +310,7 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, tid
 		details["user"] = p.UserID.String()
 	}
 	entry, err := audit.Record(ctx, tx, audit.Event{
-		Name: "signals.event_received", Actor: evdomain.Actor{Type: "ssf_transmitter", ID: tid.String()}, Outcome: audit.Success,
+		Name: auditkind.SignalsEventReceived, Actor: evdomain.Actor{Type: "ssf_transmitter", ID: tid.String()}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "ssf_event", ID: p.ID.String()}, Details: details,
 	})
 	if err != nil {

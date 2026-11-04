@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -62,7 +64,7 @@ func (s *Service) Install(ctx context.Context, doc []byte, actor evdomain.Actor)
 				return err
 			}
 			_, err := audit.Record(ctx, tx, audit.Event{
-				Name: "licence.rejected", Actor: actor, Outcome: audit.Denied, ReasonCode: reason,
+				Name: auditkind.LicenceRejected, Actor: actor, Outcome: audit.Denied, ReasonCode: reason,
 			})
 			return err
 		}
@@ -74,7 +76,7 @@ func (s *Service) Install(ctx context.Context, doc []byte, actor evdomain.Actor)
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "licence.installed", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.LicenceInstalled, Actor: actor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "licence", ID: claims.LicenceID},
 			Details: map[string]string{
 				"edition": string(claims.Edition), "customer_id": claims.CustomerID,

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -290,7 +292,7 @@ func (s *Incidents) SetAlertState(ctx context.Context, id ids.UUID, to, note str
 				return err
 			}
 		}
-		if err := s.audit(ctx, tx, c, "incident.alert_state_set", "alert", id, map[string]string{"from": a.State, "to": to}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.IncidentAlertStateSet, "alert", id, map[string]string{"from": a.State, "to": to}); err != nil {
 			return err
 		}
 		out, err = q.GetAlert(ctx, c.Org, id)
@@ -370,7 +372,7 @@ func (s *Incidents) PromoteAlert(ctx context.Context, id ids.UUID, note string) 
 		if err := IncidentEntry(ctx, tx, inc, subs); err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "incident.alert_promoted", "incident", inc.ID, map[string]string{"alert": a.ID.String()}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.IncidentAlertPromoted, "incident", inc.ID, map[string]string{"alert": a.ID.String()}); err != nil {
 			return err
 		}
 		out, err = q.GetIncident(ctx, c.Org, inc.ID)
@@ -410,7 +412,7 @@ func (s *Incidents) LinkAlert(ctx context.Context, alert, incident ids.UUID) (db
 		if err := attach(ctx, q, c.Org, inc.ID, a.ID, a.Severity, act.Type, act.ID); err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "incident.alert_linked", "incident", inc.ID, map[string]string{"alert": a.ID.String()}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.IncidentAlertLinked, "incident", inc.ID, map[string]string{"alert": a.ID.String()}); err != nil {
 			return err
 		}
 		out, err = q.GetAlert(ctx, c.Org, alert)
@@ -607,7 +609,7 @@ func (s *Incidents) AssignIncident(ctx context.Context, id, owner ids.UUID) (dbq
 		if err := incidentEvent(ctx, q, c, id, "OWNER", from, owner.String(), "", nil); err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "incident.assigned", "incident", id, map[string]string{"owner": owner.String()}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.IncidentAssigned, "incident", id, map[string]string{"owner": owner.String()}); err != nil {
 			return err
 		}
 		out, err = q.GetIncident(ctx, c.Org, id)
@@ -652,7 +654,7 @@ func (s *Incidents) SetIncidentState(ctx context.Context, id ids.UUID, to, note 
 		if err := IncidentEntry(ctx, tx, inc, nil); err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "incident.state_set", "incident", id, map[string]string{"from": from, "to": to}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.IncidentStateSet, "incident", id, map[string]string{"from": from, "to": to}); err != nil {
 			return err
 		}
 		out, err = q.GetIncident(ctx, c.Org, id)
@@ -730,7 +732,7 @@ func (s *Incidents) CreateSuppression(ctx context.Context, r SuppressionRequest)
 			return err
 		}
 		out = Suppression{PcSuppression: sup}
-		return s.audit(ctx, tx, c, "incident.suppression_created", "suppression", sup.ID, map[string]string{
+		return s.audit(ctx, tx, c, auditkind.IncidentSuppressionCreated, "suppression", sup.ID, map[string]string{
 			"rule": r.Rule, "max_severity": string(r.MaxSeverity), "subjects": itoa(len(r.Subjects)),
 			"expires_at": sup.ExpiresAt.UTC().Format(time.RFC3339),
 		})
@@ -820,7 +822,7 @@ func (s *Incidents) EndSuppression(ctx context.Context, id ids.UUID, reason stri
 		if out, err = withBreaks(ctx, q, r); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "incident.suppression_ended", "suppression", id, nil)
+		return s.audit(ctx, tx, c, auditkind.IncidentSuppressionEnded, "suppression", id, nil)
 	})
 	return out, err
 }
@@ -886,7 +888,7 @@ func (s *Incidents) AssignFailure(ctx context.Context, id, owner ids.UUID) (dbq.
 		if n == 0 {
 			return ErrState
 		}
-		return s.audit(ctx, tx, c, "incident.failure_assigned", "failure", id, map[string]string{"owner": o})
+		return s.audit(ctx, tx, c, auditkind.IncidentFailureAssigned, "failure", id, map[string]string{"owner": o})
 	})
 	return out, err
 }
@@ -912,7 +914,7 @@ func (s *Incidents) ResolveFailure(ctx context.Context, id ids.UUID, resolution 
 		if n == 0 {
 			return ErrState
 		}
-		return s.audit(ctx, tx, c, "incident.failure_resolved", "failure", id, map[string]string{"kind": out.Kind})
+		return s.audit(ctx, tx, c, auditkind.IncidentFailureResolved, "failure", id, map[string]string{"kind": out.Kind})
 	})
 	return out, err
 }

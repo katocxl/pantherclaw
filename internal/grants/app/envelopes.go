@@ -7,6 +7,8 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/grants/domain"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -76,7 +78,7 @@ func (s *Service) PutEnvelope(ctx context.Context, req EnvelopeRequest) (domain.
 	}
 	change := domain.Compare(cur, next)
 	ev := audit.Event{
-		Name: "guardrails.changed", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.GuardrailsChanged, Actor: c.Actor(), Outcome: audit.Success,
 		Object: &audit.Object{Type: "envelope", ID: next.ID.String()},
 		Details: map[string]string{
 			"scope": next.Scope.String(), "revision": strconv.Itoa(next.Revision),

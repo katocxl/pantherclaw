@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
@@ -116,7 +118,7 @@ func (s *Containment) TerminateIn(ctx context.Context, tx db.TenantTx, t Termina
 	if err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
-	if err := recordAction(ctx, tx, evActor, "response.run_terminated", a.ID, map[string]string{
+	if err := recordAction(ctx, tx, evActor, auditkind.ResponseRunTerminated, a.ID, map[string]string{
 		"action": a.ID.String(), "run": t.Run.String(), "runs_revoked": strconv.Itoa(len(runs)),
 		"approvals_voided": strconv.Itoa(len(waiting)), "epoch": strconv.FormatInt(epoch, 10),
 	}, t.Reason); err != nil {

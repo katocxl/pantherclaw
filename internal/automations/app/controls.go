@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
@@ -181,7 +183,7 @@ func (s *Service) endCeilingTx(ctx context.Context, tx db.TenantTx, org ids.OrgI
 	if err := s.revokeGrantsTx(ctx, tx, q, a, grantsapp.RevokeScopeCeiling, ceiling, "ceiling "+strings.ToLower(string(state)), &eff); err != nil {
 		return err
 	}
-	if err := record(ctx, tx, systemActor, "automation.ceiling_ended", a.ID, map[string]string{
+	if err := record(ctx, tx, systemActor, auditkind.AutomationCeilingEnded, a.ID, map[string]string{
 		"ceiling": ceiling.String(), "state": string(state), "reason": reason,
 		"grants_revoked": itoa(len(eff.GrantsRevoked)), "runs_ended": itoa(len(eff.RunsEnded)),
 	}); err != nil {
@@ -267,7 +269,7 @@ func (s *Service) PauseAutomation(ctx context.Context, automation ids.UUID, canc
 			return err
 		}
 		out = automationView(r)
-		return record(ctx, tx, c.Actor(), "automation.paused", a.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationPaused, a.ID, map[string]string{
 			"reason": string(autodomain.PauseUser), "cancel_active": boolString(cancelActive), "note_sha256": noteDigest(reason),
 			"executions_canceled": itoa(len(eff.ExecutionsAffected)), "deliveries_not_verified": itoa(len(eff.DeliveriesNotVerified)),
 		})
@@ -323,7 +325,7 @@ func (s *Service) ResumeAutomation(ctx context.Context, automation ids.UUID) (Au
 			return err
 		}
 		out = automationView(r)
-		return record(ctx, tx, c.Actor(), "automation.resumed", a.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationResumed, a.ID, map[string]string{
 			"was": deref2(a.PauseReason), "replayed": itoa(replayed),
 		})
 	})
@@ -370,7 +372,7 @@ func (s *Service) ResumePaused(ctx context.Context, ptx pgx.Tx, org ids.OrgID, a
 			return false, err
 		}
 	}
-	return true, record(ctx, tx, systemActor, "automation.resumed", a.ID, map[string]string{
+	return true, record(ctx, tx, systemActor, auditkind.AutomationResumed, a.ID, map[string]string{
 		"was": string(reason), "replayed": itoa(replayed),
 	})
 }
@@ -523,7 +525,7 @@ func (s *Service) RetireAutomation(ctx context.Context, automation ids.UUID, rea
 			return err
 		}
 		out = automationView(r)
-		return record(ctx, tx, c.Actor(), "automation.retired", a.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationRetired, a.ID, map[string]string{
 			"note_sha256": noteDigest(reason), "executions_canceled": itoa(len(eff.ExecutionsAffected)), "deliveries_not_verified": itoa(len(eff.DeliveriesNotVerified)),
 		})
 	})
@@ -581,7 +583,7 @@ func (s *Service) RevokeAuthority(ctx context.Context, automation ids.UUID, reas
 			return err
 		}
 		out = automationView(r)
-		return record(ctx, tx, c.Actor(), "automation.authority_revoked", a.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationAuthorityRevoked, a.ID, map[string]string{
 			"ceilings_revoked": itoa(len(ended)), "grants_revoked": itoa(len(eff.GrantsRevoked)), "runs_ended": itoa(len(eff.RunsEnded)),
 			"executions_canceled": itoa(len(eff.ExecutionsAffected)), "deliveries_not_verified": itoa(len(eff.DeliveriesNotVerified)),
 			"note_sha256": noteDigest(reason),

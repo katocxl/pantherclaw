@@ -31,6 +31,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/entitlements"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -302,7 +304,7 @@ func (s *Service) Request(ctx context.Context, st Staff, in RequestInput) (Reque
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "support.access_requested", Actor: staffActor(m.Account), Outcome: audit.Success,
+			Name: auditkind.SupportAccessRequested, Actor: staffActor(m.Account), Outcome: audit.Success,
 			Object: &audit.Object{Type: "support_request", ID: r.ID.String()},
 			Details: map[string]string{
 				"task": task, "scope": in.Scope, "hours": strconv.Itoa(in.Hours), "staff_org": m.StaffOrg.String(),
@@ -413,14 +415,14 @@ func (s *Service) Decide(ctx context.Context, id ids.UUID, approve bool, su *ste
 			// Recorded, then refused (T-174).
 			refused = ErrSelfApproval
 			_, err := audit.Record(ctx, tx, audit.Event{
-				Name: "support.self_decision_refused", Actor: c.Actor(), Outcome: audit.Denied, ReasonCode: "SELF_APPROVAL",
+				Name: auditkind.SupportSelfDecisionRefused, Actor: c.Actor(), Outcome: audit.Denied, ReasonCode: "SELF_APPROVAL",
 				Object: &audit.Object{Type: "support_request", ID: r.ID.String()},
 			})
 			return err
 		}
-		state, event := "DENIED", "support.access_denied"
+		state, event := "DENIED", auditkind.SupportAccessDenied
 		if approve {
-			state, event = "APPROVED", "support.access_approved"
+			state, event = "APPROVED", auditkind.SupportAccessApproved
 		}
 		key := su.Credential
 		n, err := q.DecideSupportRequest(ctx, dbq.DecideSupportRequestParams{
@@ -503,7 +505,7 @@ func (s *Service) Revoke(ctx context.Context, id ids.UUID) (Grant, error) {
 				return err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "support.grant_revoked", Actor: c.Actor(), Outcome: audit.Success,
+				Name: auditkind.SupportGrantRevoked, Actor: c.Actor(), Outcome: audit.Success,
 				Object:  &audit.Object{Type: "support_grant", ID: id.String()},
 				Details: map[string]string{"sessions_ended": strconv.FormatInt(ended, 10), "staff": g.AccountID.String()},
 			}); err != nil {

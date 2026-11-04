@@ -6,6 +6,8 @@ package app
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -68,7 +70,7 @@ func (s *Service) SetChannelSignatureScheme(ctx context.Context, id ids.UUID, sc
 		if kid != "" {
 			details["kid"] = kid
 		}
-		if err := s.audit(ctx, tx, c, "notification.channel_signature_scheme_set", id, details); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.NotificationChannelSignatureSchemeSet, id, details); err != nil {
 			return err
 		}
 		ch, err := q.GetChannel(ctx, c.Org, id)

@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evd "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -322,7 +324,7 @@ func (d *Deletion) scrub(ctx context.Context, account ids.UUID, r db.OrgRef) err
 		if err := q.MarkAccountUserDeleted(ctx, r.Org, account); err != nil {
 			return err
 		}
-		_, err = audit.Record(ctx, tx, audit.Event{Name: "account.user_deleted", Actor: evd.Actor{Type: "account", ID: account.String()}, Outcome: audit.Success, Object: &audit.Object{Type: "user", ID: r.ID.String()}})
+		_, err = audit.Record(ctx, tx, audit.Event{Name: auditkind.AccountUserDeleted, Actor: evd.Actor{Type: "account", ID: account.String()}, Outcome: audit.Success, Object: &audit.Object{Type: "user", ID: r.ID.String()}})
 		return err
 	})
 }
@@ -422,7 +424,7 @@ func (d *Deletion) Reapply(ctx context.Context, account ids.UUID, sourceDigest s
 		return err
 	}
 	return d.store.pool.InTenantTx(ctx, ids.PlatformOrg, func(ctx context.Context, tx db.TenantTx) error {
-		_, err := audit.Record(ctx, tx, audit.Event{Name: "restore.account_reapplied", Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "account", ID: account.String()}, Details: map[string]string{"source_digest": sourceDigest}})
+		_, err := audit.Record(ctx, tx, audit.Event{Name: auditkind.RestoreAccountReapplied, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "account", ID: account.String()}, Details: map[string]string{"source_digest": sourceDigest}})
 		return err
 	})
 }

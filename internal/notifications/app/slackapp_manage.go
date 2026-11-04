@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -258,7 +260,7 @@ func (s *Service) ActivateSlackApp(ctx context.Context, id ids.UUID, version str
 		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "notification.slack_app_activated", id, map[string]string{
+		return s.audit(ctx, tx, c, auditkind.NotificationSlackAppActivated, id, map[string]string{
 			"slack_channel": cfg.SlackChannel, "team": w.TeamID, "bot": w.BotID, "security_key": su.Credential.String(),
 		})
 	})
@@ -287,7 +289,7 @@ func (s *Service) replaceSlackToken(ctx context.Context, tx db.TenantTx, q *dbq.
 	if _, err := q.ReturnSlackAppToPending(ctx, ptr(c.Actor().Type+":"+c.Actor().ID), c.Org, id); err != nil {
 		return err
 	}
-	return s.audit(ctx, tx, c, "notification.slack_token_replaced", id, nil)
+	return s.audit(ctx, tx, c, auditkind.NotificationSlackTokenReplaced, id, nil)
 }
 
 // SlackConfirmPath is a slack_app channel's activation page.

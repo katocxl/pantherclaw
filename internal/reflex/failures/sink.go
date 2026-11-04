@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -170,7 +172,7 @@ func (s *Sink) ResolveInScope(ctx context.Context, ptx pgx.Tx, org ids.OrgID, ki
 func recordResolved(ctx context.Context, tx db.TenantTx, kind string, resolved []ids.UUID, actor evdomain.Actor) error {
 	for _, id := range resolved {
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "incident.failure_resolved", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.IncidentFailureResolved, Actor: actor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "failure", ID: id.String()}, Details: map[string]string{"kind": kind},
 		}); err != nil {
 			return err

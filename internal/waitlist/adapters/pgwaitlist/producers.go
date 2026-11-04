@@ -13,6 +13,8 @@ import (
 	"encoding/json/v2"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -94,7 +96,7 @@ func open(ctx context.Context, tx db.TenantTx, org ids.OrgID, e entry, actor evd
 		return ids.UUID{}, err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "waitlist.entry_opened", Actor: actor, Outcome: audit.Success,
+		Name: auditkind.WaitlistEntryOpened, Actor: actor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "waitlist_entry", ID: id.String()},
 		Details: map[string]string{"kind": e.kind, "subject": e.subjectType + ":" + e.subject.String()},
 	})
@@ -179,7 +181,7 @@ func ExpireEntries(ctx context.Context, tx db.TenantTx, org ids.OrgID) (int, err
 	}
 	for _, r := range rows {
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "waitlist.entry_expired", Actor: System, Outcome: audit.Denied, ReasonCode: "EXPIRED",
+			Name: auditkind.WaitlistEntryExpired, Actor: System, Outcome: audit.Denied, ReasonCode: "EXPIRED",
 			Object:  &audit.Object{Type: "waitlist_entry", ID: r.ID.String()},
 			Details: map[string]string{"kind": r.Kind},
 		}); err != nil {

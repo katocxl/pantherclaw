@@ -6,6 +6,8 @@ package siem
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -63,7 +65,7 @@ func (s *Service) SetSignatureScheme(ctx context.Context, id ids.UUID, scheme st
 		if kid != "" {
 			details["kid"] = kid
 		}
-		if err := s.audit(ctx, tx, c, "siem.destination_signature_scheme_set", id, details); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.SiemDestinationSignatureSchemeSet, id, details); err != nil {
 			return err
 		}
 		out, err = get(ctx, q, c.Org, id)

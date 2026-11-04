@@ -6,6 +6,8 @@ package pgwaitlist
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -53,7 +55,7 @@ func CloseReconciliation(ctx context.Context, tx db.TenantTx, org ids.OrgID, tra
 		return err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "waitlist.entry_closed", Actor: by, Outcome: audit.Success, ReasonCode: resolution,
+		Name: auditkind.WaitlistEntryClosed, Actor: by, Outcome: audit.Success, ReasonCode: resolution,
 		Object:  &audit.Object{Type: "waitlist_entry", ID: entry.String()},
 		Details: map[string]string{"kind": wdomain.KindReconciliation, "state": state, "subject": "transaction:" + transaction.String()},
 	})

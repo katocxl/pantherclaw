@@ -36,6 +36,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -480,7 +482,7 @@ func (s *Service) Create(ctx context.Context, in NewDestination) (Destination, e
 		} else if err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "export.destination_created", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.ExportDestinationCreated, id, map[string]string{
 			"name": in.Name, "kind": in.Kind, "host": hostOf(in.Target), "internal": boolString(in.Internal),
 			"data_classes": strings.Join(in.DataClasses, ","),
 		}); err != nil {
@@ -529,7 +531,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "export.destination_activated", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.ExportDestinationActivated, id, map[string]string{
 			"host": hostOf(d.Target), "internal": boolString(d.Internal), "security_key": su.Credential.String(),
 		}); err != nil {
 			return err
@@ -574,7 +576,7 @@ func (s *Service) SetState(ctx context.Context, id ids.UUID, state string) (Dest
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "export.destination_state_changed", id, map[string]string{"from": d.State, "to": state}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.ExportDestinationStateChanged, id, map[string]string{"from": d.State, "to": state}); err != nil {
 			return err
 		}
 		out, err = get(ctx, q, c.Org, id)
@@ -611,7 +613,7 @@ func (s *Service) ReplaceCredential(ctx context.Context, id ids.UUID, cred Crede
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "export.destination_credential_replaced", id, nil); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.ExportDestinationCredentialReplaced, id, nil); err != nil {
 			return err
 		}
 		out, err = get(ctx, q, c.Org, id)

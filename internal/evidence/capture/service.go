@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -177,7 +179,7 @@ func (s *Service) CreateProfile(ctx context.Context, r ProfileRequest) (Profile,
 		}
 		expires := p.ExpiresAt.UTC().Format(time.RFC3339)
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.capture_profile_created", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.EvidenceCaptureProfileCreated, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "capture_profile", ID: p.ID.String()},
 			Details: map[string]string{
 				"connections": strconv.Itoa(len(r.Connections)), "operations": strconv.Itoa(len(r.Operations)),
@@ -225,7 +227,7 @@ func (s *Service) DisableProfile(ctx context.Context, id ids.UUID) (Profile, err
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.capture_profile_disabled", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.EvidenceCaptureProfileDisabled, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "capture_profile", ID: id.String()},
 		}); err != nil {
 			return err
@@ -352,7 +354,7 @@ func (s *Service) ReadCapture(ctx context.Context, txn ids.UUID, dir Direction, 
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.payload_read", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.EvidencePayloadRead, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "payload_capture", ID: row.ID.String()},
 			Details: map[string]string{"transaction": txn.String(), "direction": string(dir), "reason": reason},
 		})

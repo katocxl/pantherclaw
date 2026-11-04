@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -127,7 +129,7 @@ func (s *Service) closeWindows(ctx context.Context, tx db.TenantTx) error {
 		return err
 	}
 	for _, r := range closed {
-		if err := s.rotationAudit(ctx, tx, evdomain.Actor{Type: "system", ID: rotationSystem}, "credential.rotation_window_closed",
+		if err := s.rotationAudit(ctx, tx, evdomain.Actor{Type: "system", ID: rotationSystem}, auditkind.CredentialRotationWindowClosed,
 			r.ConnectionID, r.ID, nil); err != nil {
 			return err
 		}
@@ -194,7 +196,7 @@ func (s *Service) RequestRotation(ctx context.Context, connection ids.UUID, dige
 		if err != nil {
 			return err
 		}
-		return s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_requested", conn.ID, out.ID, map[string]string{
+		return s.rotationAudit(ctx, tx, c.Actor(), auditkind.CredentialRotationRequested, conn.ID, out.ID, map[string]string{
 			"old_version": strconv.Itoa(int(active.Version)), "preview_digest": out.PreviewDigest,
 		})
 	})
@@ -264,7 +266,7 @@ func (s *Service) SealCandidate(ctx context.Context, rotation ids.UUID, in PutIn
 			AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, State: row.State, CreatedBy: c.Principal.String(),
 			CreatedAt: row.CreatedAt, Kind: in.Kind,
 		}
-		return s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_candidate_sealed", conn.ID, r.ID, map[string]string{
+		return s.rotationAudit(ctx, tx, c.Actor(), auditkind.CredentialRotationCandidateSealed, conn.ID, r.ID, map[string]string{
 			"version": strconv.Itoa(int(row.Version)), "broker_key_fingerprint": key.Fingerprint, "sealed_sha256": hex.EncodeToString(sum[:]),
 		})
 	})
@@ -331,7 +333,7 @@ func (s *Service) TestRotation(ctx context.Context, rotation ids.UUID) (Rotation
 		} else if n != 1 {
 			return ErrRotationState
 		}
-		if err := s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_test_requested", r.ConnectionID, r.ID,
+		if err := s.rotationAudit(ctx, tx, c.Actor(), auditkind.CredentialRotationTestRequested, r.ConnectionID, r.ID,
 			map[string]string{"task": task.String()}); err != nil {
 			return err
 		}
@@ -477,7 +479,7 @@ func (s *Service) activate(ctx context.Context, tx db.TenantTx, c tenancy.Caller
 	if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
 		return err
 	}
-	if err := s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_activated", conn.ID, r.ID, map[string]string{
+	if err := s.rotationAudit(ctx, tx, c.Actor(), auditkind.CredentialRotationActivated, conn.ID, r.ID, map[string]string{
 		"old_version_id": r.OldCredentialID.String(), "candidate_version_id": r.CandidateCredentialID.String(),
 		"weakening": "sealed_replaced",
 	}); err != nil {
@@ -627,7 +629,7 @@ func (s *Service) rollBack(ctx context.Context, tx db.TenantTx, c tenancy.Caller
 	if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
 		return err
 	}
-	if err := s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_rolled_back", conn.ID, r.ID, map[string]string{
+	if err := s.rotationAudit(ctx, tx, c.Actor(), auditkind.CredentialRotationRolledBack, conn.ID, r.ID, map[string]string{
 		"reason": reason, "weakening": "sealed_restored",
 	}); err != nil {
 		return err
@@ -689,7 +691,7 @@ func (s *Service) ConfirmRotation(ctx context.Context, rotation ids.UUID) (Rotat
 		} else if n != 1 {
 			return ErrRotationState
 		}
-		if err := s.rotationAudit(ctx, tx, c.Actor(), "credential.rotation_confirm_requested", r.ConnectionID, r.ID,
+		if err := s.rotationAudit(ctx, tx, c.Actor(), auditkind.CredentialRotationConfirmRequested, r.ConnectionID, r.ID,
 			map[string]string{"task": task.String()}); err != nil {
 			return err
 		}
@@ -739,7 +741,7 @@ func (s *Service) fail(ctx context.Context, tx db.TenantTx, actor evdomain.Actor
 			return err
 		}
 	}
-	return s.rotationAudit(ctx, tx, actor, "credential.rotation_failed", r.ConnectionID, r.ID, map[string]string{"reason": reason})
+	return s.rotationAudit(ctx, tx, actor, auditkind.CredentialRotationFailed, r.ConnectionID, r.ID, map[string]string{"reason": reason})
 }
 
 // GetRotation returns a rotation (connection.read).
@@ -857,7 +859,7 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 			// No answer, a rate limit or a server error proves nothing: the
 			// rotation stays TESTING for another test (D274).
 			details["result"] = "inconclusive"
-			return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_tested", r.ConnectionID, r.ID, details)
+			return done, s.rotationAudit(ctx, tx, actor, auditkind.CredentialRotationTested, r.ConnectionID, r.ID, details)
 		}
 		if !p.TestPassed() {
 			details["result"] = "failed"
@@ -865,13 +867,13 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 			if err := s.fail(ctx, tx, actor, r, reason); err != nil {
 				return done, err
 			}
-			return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_tested", r.ConnectionID, r.ID, details)
+			return done, s.rotationAudit(ctx, tx, actor, auditkind.CredentialRotationTested, r.ConnectionID, r.ID, details)
 		}
 		if _, err := q.PassRotationTest(ctx, org, r.ID); err != nil {
 			return done, err
 		}
 		details["result"] = "passed"
-		return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_tested", r.ConnectionID, r.ID, details)
+		return done, s.rotationAudit(ctx, tx, actor, auditkind.CredentialRotationTested, r.ConnectionID, r.ID, details)
 	case txdomain.PurposeRotationConfirm:
 		if r.State != string(domain.RotationConfirming) || r.ConfirmVerificationID == nil || *r.ConfirmVerificationID != task.ID {
 			return done, nil
@@ -880,7 +882,7 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 			if _, err := q.AwaitOldRemoval(ctx, org, r.ID); err != nil {
 				return done, err
 			}
-			return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_not_confirmed", r.ConnectionID, r.ID, details)
+			return done, s.rotationAudit(ctx, tx, actor, auditkind.CredentialRotationNotConfirmed, r.ConnectionID, r.ID, details)
 		}
 		by := rotationSystem
 		if n, err := q.RevokeCredentialByID(ctx, &by, org, r.OldCredentialID); err != nil {
@@ -894,7 +896,7 @@ func (s *Service) ReportRotation(ctx context.Context, tx db.TenantTx, gateway id
 			return done, ErrRotationState
 		}
 		details["old_version_id"] = r.OldCredentialID.String()
-		return done, s.rotationAudit(ctx, tx, actor, "credential.rotation_confirmed", r.ConnectionID, r.ID, details)
+		return done, s.rotationAudit(ctx, tx, actor, auditkind.CredentialRotationConfirmed, r.ConnectionID, r.ID, details)
 	case txdomain.PurposeFollowUp, txdomain.PurposeReconcile, txdomain.PurposeTargetLog, txdomain.PurposeOrgScan,
 		txdomain.PurposeSaaSScan, txdomain.PurposeConnectionTest, txdomain.PurposeConsequence:
 		return done, txapp.ErrLease

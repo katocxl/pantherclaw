@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billingdomain "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -199,7 +201,7 @@ func (s *Service) CreateChannel(ctx context.Context, in ChannelInput) (ChannelVi
 		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "notification.channel_created", created.ID, map[string]string{"kind": string(in.Kind), "name": in.Name})
+		return s.audit(ctx, tx, c, auditkind.NotificationChannelCreated, created.ID, map[string]string{"kind": string(in.Kind), "name": in.Name})
 	})
 	return out, secret, err
 }
@@ -332,7 +334,7 @@ func (s *Service) UpdateChannel(ctx context.Context, id ids.UUID, u ChannelUpdat
 		if out, err = s.withSlackApp(ctx, q, c.Org, channelView(row)); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "notification.channel_updated", id, details)
+		return s.audit(ctx, tx, c, auditkind.NotificationChannelUpdated, id, details)
 	})
 	return out, err
 }
@@ -351,7 +353,7 @@ func (s *Service) DeleteChannel(ctx context.Context, id ids.UUID) error {
 		if _, err := q.CancelPendingDeliveries(ctx, c.Org, &id); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "notification.channel_deleted", id, nil)
+		return s.audit(ctx, tx, c, auditkind.NotificationChannelDeleted, id, nil)
 	})
 }
 
@@ -397,7 +399,7 @@ func (s *Service) RotateChannelSecret(ctx context.Context, id ids.UUID) (string,
 			until = *exp
 		}
 		shown = domain.FormatSecret(fresh)
-		return s.audit(ctx, tx, c, "notification.channel_secret_rotated", id, nil)
+		return s.audit(ctx, tx, c, auditkind.NotificationChannelSecretRotated, id, nil)
 	})
 	return shown, until, err
 }
@@ -419,7 +421,7 @@ func (s *Service) TestChannel(ctx context.Context, id ids.UUID) (ids.UUID, error
 			return err
 		}
 		note = out.Notification
-		return s.audit(ctx, tx, c, "notification.channel_tested", id, nil)
+		return s.audit(ctx, tx, c, auditkind.NotificationChannelTested, id, nil)
 	})
 	return note, err
 }

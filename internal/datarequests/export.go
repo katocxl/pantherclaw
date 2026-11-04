@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
@@ -356,7 +358,7 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 		if n != 1 {
 			return db.ErrLostRace
 		}
-		return requestAudit(ctx, tx, caller, "data.export_ready", id)
+		return requestAudit(ctx, tx, caller, auditkind.DataExportReady, id)
 	}, db.RepeatableRead())
 	if errors.Is(err, ErrTooLarge) {
 		return s.failExport(ctx, org, id, "EXPORT_TOO_LARGE")

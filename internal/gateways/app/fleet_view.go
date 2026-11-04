@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -135,7 +137,7 @@ func (f *Fleet) SetFleetPolicy(ctx context.Context, minimum string, silenceAfter
 			details["minimum_version"] = *minText
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "gateway.fleet_policy_set", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.GatewayFleetPolicySet, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "gateway_fleet_policy", ID: c.Org.String()}, Details: details,
 		})
 		return err
