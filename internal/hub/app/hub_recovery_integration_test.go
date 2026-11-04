@@ -38,7 +38,6 @@ func (w *world) crash(name string) {
 // done on the draft that exists, and makes no second one.
 func TestD130_RetryFindsTheDraftACrashLeft(t *testing.T) {
 	w := newWorld(t, billing.Business)
-	ctx := w.admin()
 	var policyBody domain.PolicyTemplateBody
 	if err := json.Unmarshal([]byte(`{"rules":[{"id":"hub-no-curl","per":"org","kind":"FORBID","summary":"no curl",
 		"operations":["shell.command.run"],"when":"action.params.command.startsWith('curl')","reason":"NO_CURL"}]}`), &policyBody); err != nil {
@@ -62,6 +61,7 @@ func TestD130_RetryFindsTheDraftACrashLeft(t *testing.T) {
 		"package":    {pkg, pke.Name, "SELECT count(*) FROM pc.package_versions"},
 	} {
 		t.Run(name, func(t *testing.T) {
+			ctx := w.admin()
 			first, err := w.svc.Install(ctx, app.Input{IndexJWS: doc, Item: c.raw})
 			if err != nil {
 				t.Fatal(err)
@@ -311,6 +311,7 @@ func TestD142_FindingADraftKeepsItsKindsGate(t *testing.T) {
 		"automation": {auto, ae, td.RolePolicyAuthor},
 	} {
 		t.Run(name, func(t *testing.T) {
+			admin := w.admin()
 			if _, err := w.svc.Install(admin, app.Input{IndexJWS: doc, Item: c.raw}); err != nil {
 				t.Fatal(err)
 			}

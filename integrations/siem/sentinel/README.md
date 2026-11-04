@@ -53,7 +53,20 @@ az monitor data-collection rule create --resource-group <group> --name panthercl
 
 **The webhook signature is not verified** by Sentinel, which never sees it. `pclaw siem forward` verifies it before it writes a line. It checks every signature it is configured with: the HMAC `v1,` signature when it is given the destination's secret, the Ed25519 `v1a,` one when it is given the org's JWKS, and both when it is given both. Given only a JWKS, it checks no HMAC. It also checks a timestamp window, and answers a re-sent batch without writing it again. Whatever else writes to the file or posts to the Logs Ingestion API is trusted as it is: keep the file writable only by the forwarder, and anything you run in front of the API must check the signature itself.
 
+## ATT&CK and ATLAS techniques
+
+- Per rule: each analytic rule's `tactics` (Sentinel tactic names), `techniques` (parent technique ids) and `subTechniques` hold the ATT&CK Enterprise ids `rules.yaml` gives that rule. A rule that names none leaves them empty.
+- Per event, both frameworks: `table.json` and `dcr.json` keep `finding_info` and `finding_info_list` whole inside `Ocsf`. An alert's techniques are in `Ocsf.finding_info.attacks` and an incident's in `Ocsf.finding_info_list[].attacks`; each entry has `technique.uid`, `sub_technique.uid` (when the id is a sub-technique), `tactic.uid` and `version` ("20.0" for ATT&CK, "ATLAS 2026.10" for ATLAS). For example:
+
+  ```
+  PantherClawOCSF_CL
+  | mv-expand attack = Ocsf.finding_info.attacks
+  | project TimeGenerated, technique = tostring(attack.technique.uid), sub_technique = tostring(attack.sub_technique.uid), tactic = tostring(attack.tactic.uid)
+  ```
+
 ## What was not checked
+
+- Whether Sentinel accepts the tactic name `DefenseImpairment` (ATT&CK 20.0's Defense Impairment, TA0112) and `subTechniques` at the template's `apiVersion` has not been tried; a test checks the values equal `rules.yaml`.
 
 - The template and the data collection rule have not been deployed, and the `apiVersion` the template names has not been tried against a live workspace.
 - The KQL has not run in Log Analytics. A test reads the rules' `where` clauses and evaluates them over the samples, which checks the logic and not KQL's parsing.

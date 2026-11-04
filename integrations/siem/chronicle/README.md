@@ -20,9 +20,16 @@ The parser does the split. It drops anything that isn't a batch, loops over `dat
 
 **The webhook signature is not verified.** Chronicle doesn't read the Standard Webhooks headers, so anyone holding the feed's keys can write events that the rules will trust. A webhook feed also wants its API key and secret on each request, and the export sends neither. `pclaw siem forward` verifies the signature, but it writes the events to a file and adds no key ([runbook](../../../docs/runbooks/siem-forwarder.md)), so something you run must add them.
 
+## ATT&CK and ATLAS techniques
+
+- Per rule: each rule's `meta:` has `mitre_attack_tactic` (the tactic name) and `mitre_attack_technique` (the technique id) before `rule_id`, as `rules.yaml` gives them. A rule that names none has neither.
+- Per event, both frameworks: the parser turns every `finding_info.attacks` entry of an alert and every `finding_info_list[].attacks` entry of an incident into UDM `security_result.attack_details`: `tactics` (`id`, `name`) and `techniques` (`id`, `name`, `subtechnique_id`, `subtechnique_name`), ATLAS and ATT&CK ids side by side.
+
 ## What was not checked
 
 This is the least proven pack. Read this before you rely on it.
+
+- The parser's `attack_details` loops have not run in Chronicle; a test checks that they read only the batch entry.
 
 - **The parser has never run.** It was written offline and no parser validator has seen it. Expect to fix it in the parser editor with `../samples/batch/batch.json`. Its loop syntax, the field removal between entries, and the `%{ev.…}` references inside the loop are the likeliest to need changes. A test checks only that the parser mentions every field `udm-map.json` names and that it has the batch loop.
 - **The rules have not been compiled.** A test reads them and evaluates them over the samples through `udm-map.json`. That assumes the parser does what the map says.

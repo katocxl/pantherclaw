@@ -421,8 +421,8 @@ func TestRace_AnUnknownOutcomeIsReleasedOnce(t *testing.T) {
 // TestHR192_TheWaitlistEntryClosesWithItsReconciliation (M5 part 2 audit
 // finding F1): an unknown outcome's RECONCILIATION entry, opened by the
 // gateway's report or by the sweeper, is linked to its reconciliation, and
-// closes when the task resolves: CANCELLED when evidence resolves it (the
-// verifier, a late report), APPROVED when a person does. (The target log's
+// closes when the task resolves: canceled when evidence resolves it (the
+// verifier, a late report), approved when a person does. (The target log's
 // path is checked in TestHR112_TargetLogsFindEffectsWithoutReceipts, the
 // release's in TestHR192_OnlyAnIndependentPersonReleasesWithAKeyOverTheBasis.)
 func TestHR192_TheWaitlistEntryClosesWithItsReconciliation(t *testing.T) {
@@ -450,7 +450,7 @@ func TestHR192_TheWaitlistEntryClosesWithItsReconciliation(t *testing.T) {
 	}); err != nil || !a.Resolved {
 		t.Fatalf("found: %+v %v", a, err)
 	}
-	if got := w.entry(found.TransactionID); got != "CANCELLED OCCURRED gateway:"+w.gwID.String() {
+	if got := w.entry(found.TransactionID); got != "CANCELLED OCCURRED gateway:"+w.gwID.String() { //nolint:misspell // stored state
 		t.Fatalf("after the verifier: %q", got)
 	}
 
@@ -467,7 +467,7 @@ func TestHR192_TheWaitlistEntryClosesWithItsReconciliation(t *testing.T) {
 	if _, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{Permit: late.PermitID, Outcome: finalize.Accepted, TargetStatus: 200, DispatchMS: -1}); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.entry(late.TransactionID); got != "CANCELLED OCCURRED gateway:"+w.gwID.String() {
+	if got := w.entry(late.TransactionID); got != "CANCELLED OCCURRED gateway:"+w.gwID.String() { //nolint:misspell // stored state
 		t.Fatalf("after the late report: %q", got)
 	}
 

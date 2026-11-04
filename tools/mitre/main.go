@@ -16,8 +16,6 @@
 //
 // It never runs in CI or `task check`: `task mitre:update` runs it after a
 // reviewed edit of pins.json.
-//
-//nolint:misspell // MITRE is a proper noun (the ATT&CK and ATLAS publisher), not "miter".
 package main
 
 import (

@@ -18,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
+	"github.com/katocxl/pantherclaw/internal/threatmap/mapping"
 )
 
 // Sink takes what a gateway found (G0 M27 D507, D512; HR-648, HR-650, HR-651)
@@ -168,7 +169,10 @@ func (s *Sink) tell(ctx context.Context, tx db.TenantTx, o Observed, found []dom
 			continue
 		}
 		seen[f.Kind] = true
+		// The kind's techniques label the alert (G0 M28 D718).
+		m := mapping.Kinds["content."+f.Kind]
 		sig := reflexdomain.Signal{
+			ATLAS: slices.Clone(m.ATLAS), ATTACK: slices.Clone(m.ATTACK),
 			Org: o.Org, Source: reflexdomain.SourceSystem, Title: "Content flag (inference): " + f.Kind,
 			Summary:  "A content pattern matched on a " + string(o.Surface) + " at " + f.Location + ". This is inference, not proof, and no value is kept.",
 			Severity: reflexdomain.SeverityMedium, Attention: reflexdomain.AttentionAlert, Basis: reflexdomain.BasisInferred,

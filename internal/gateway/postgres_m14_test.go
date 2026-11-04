@@ -53,7 +53,7 @@ func withPostgres(t *testing.T, tg *pgtargettest.Target, writer bool) func(*harn
 		h.conn.Credential = &pb.SealedCredential{Id: ids.NewV7().String(), ConnectionId: connID, Version: 1, BrokerKeyId: "bk-1", Sealed: blob}
 		col := func(n, ty, cl string) *pb.PostgresColumn { return &pb.PostgresColumn{Name: n, Type: ty, Class: cl} }
 		g.Postgres = &pb.PostgresConfig{
-			Host: c.Endpoint.Host, Port: int32(c.Endpoint.Port), Database: c.Endpoint.Database, User: c.Endpoint.User, //nolint:gosec // G115: a port
+			Host: c.Endpoint.Host, Port: int32(c.Endpoint.Port), Database: c.Endpoint.Database, User: c.Endpoint.User,
 			Sslmode: "verify-full", CaPem: c.Endpoint.CAPEM, Internal: true, StatementTimeoutMs: 1000,
 			Tables: []*pb.PostgresTable{
 				{Schema: "shop", Name: "customers", ScopeKey: "customer", ScopeColumn: "id", Columns: []*pb.PostgresColumn{
@@ -102,8 +102,14 @@ func TestHR307_PostgresFacesAnswerAlike(t *testing.T) {
 	if err := json.Unmarshal(m.body.Result.StructuredContent, &viaMCP); err != nil {
 		t.Fatal(err)
 	}
-	a, _ := json.Marshal(viaHTTP)
-	b, _ := json.Marshal(viaMCP)
+	a, err := json.Marshal(viaHTTP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(viaMCP)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(a) != string(b) {
 		t.Fatalf("faces differ:\n%s\n%s", a, b)
 	}

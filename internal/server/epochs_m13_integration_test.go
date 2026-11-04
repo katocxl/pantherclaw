@@ -54,7 +54,7 @@ func (o epochOrgs) all() []ids.OrgID { return []ids.OrgID{o.active, o.suspended,
 // nothing changes; with them ACTIVE/SUSPENDED orgs, and one without a
 // containment row, gets max(epoch + 1, now in ms) with one audit event in
 // its own transaction, the kill switch untouched; a second run raises
-// every eligible epoch again. DELETED organisations receive no writes (D57).
+// every eligible epoch again. DELETED organizations receive no writes (D57).
 func TestHR373_BumpEpochsRaisesEveryOrgAndAudits(t *testing.T) {
 	d := dbtest.New(t)
 	cfgPath := testConfig(t, d, RoleAPI)

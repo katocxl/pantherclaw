@@ -45,6 +45,12 @@ func TestQueryValidate(t *testing.T) {
 		{"too many values", Query{Entity: EntityTransactions, Filters: Filters{Decisions: long}}, false},
 		{"malformed value", Query{Entity: EntityRuns, Filters: Filters{States: []string{"ACTIVE OR 1=1"}}}, false},
 		{"backwards range", Query{Entity: EntityRuns, Filters: Filters{Start: &now, End: &earlier}}, false},
+		// G0 M28 D726: the technique filter, alerts and incidents only.
+		{"alert technique", Query{Entity: EntityAlerts, Filters: Filters{Technique: "T1552.001"}}, true},
+		{"incident atlas technique", Query{Entity: EntityIncidents, Filters: Filters{Technique: "AML.T0051"}}, true},
+		{"technique of another entity", Query{Entity: EntityRuns, Filters: Filters{Technique: "T1078"}}, false},
+		{"malformed technique", Query{Entity: EntityAlerts, Filters: Filters{Technique: "T1078%"}}, false},
+		{"technique pattern", Query{Entity: EntityAlerts, Filters: Filters{Technique: "T1"}}, false},
 	} {
 		err := tc.q.Validate()
 		if tc.ok && err != nil {

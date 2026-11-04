@@ -113,7 +113,8 @@ enum RangeObservedBy {
 }
 
 // RangeScenarioDecl declares a scenario of the set a range runs. The
-// digest is the SHA-256 (lowercase hex) of the scenario's canonical form.
+// digest is the SHA-256 (lowercase hex) of the canonical form of what the
+// scenario runs: its apiVersion, requires, harness_only and steps (ADR-0051).
 // RT-### is the PantherClaw library: the server accepts it only with the
 // library's digest and takes its tier from the library. CX-### is
 // customer-authored (G0 M17 D124, D125).
@@ -288,6 +289,22 @@ message RangeResult {
   // origin is "library" or "customer" (customer-authored), derived by the
   // server from the scenario id.
   string origin = 9;
+  // The MITRE ATLAS and ATT&CK techniques the library scenario tests, from
+  // the server's library, set only when origin is "library" and the digest
+  // is the library's (G0 M28 D718).
+  // PROVISIONAL field numbers until post-M27's proto changes land (D703).
+  repeated string atlas = 10 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
+  repeated string attack = 11 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
 }
 
 message RecordResultResponse {

@@ -60,7 +60,7 @@ func TestF832_AnAgentsScanStateSumsItsFindings(t *testing.T) {
 			t.Fatal(err)
 		}
 		listed := byID()[found].ScanState
-		for name, s := range map[string]*app.ScanState{"get": sum.Agent.ScanState, "list": listed} {
+		for name, s := range map[string]*app.ScanState{"get": sum.ScanState, "list": listed} {
 			if s == nil || s.MissedScans != missed || s.Vanished != vanished {
 				t.Fatalf("%s, %s: %+v, want %d missed, vanished %v", step, name, s, missed, vanished)
 			}

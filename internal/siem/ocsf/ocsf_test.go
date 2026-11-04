@@ -85,13 +85,16 @@ func TestMapClasses(t *testing.T) {
 				e := event("reflex.alert")
 				e.Attrs = map[string]string{
 					AttrRuleID: "pc.authority.self_issue", AttrRuleVersion: "1", AttrTitle: "Self-issued grant", AttrSeverity: "HIGH",
-					AttrState: "OPEN", AttrID: "alert-1", AttrBasis: "RULE_MATCH", AttrATLAS: "AML.T0051, AML.T0053", AttrOWASP: "ASI03",
+					AttrState: "OPEN", AttrID: "alert-1", AttrBasis: "RULE_MATCH", AttrATLAS: "AML.T0051,AML.T0053", AttrOWASP: "ASI03",
 				}
+				// The export reads the full lists (G0 M28 D718b).
+				e.ATLAS = []string{"AML.T0051", "AML.T0053"}
 				return e
 			},
 			check: func(t *testing.T, r Record) {
 				f := r.FindingInfo
-				if f == nil || f.UID != "alert-1" || f.Analytic.UID != "pc.authority.self_issue" || len(f.Attacks) != 2 ||
+				// AML.T0051 has one tactic, AML.T0053 three: one attack each.
+				if f == nil || f.UID != "alert-1" || f.Analytic.UID != "pc.authority.self_issue" || len(f.Attacks) != 4 ||
 					f.Attacks[1].Technique.UID != "AML.T0053" || len(f.Types) != 1 || f.Types[0] != "ASI03" {
 					t.Errorf("finding = %+v", f)
 				}

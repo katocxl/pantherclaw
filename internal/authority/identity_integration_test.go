@@ -408,12 +408,11 @@ func TestHR022_VerifyWorkloadChecksTheRun(t *testing.T) {
 	agent, otherAgent := f.agent(t), f.agent(t)
 	first, second := f.admitted(t, agent), f.admitted(t, agent)
 	h := authority.NewHandler(f.svc)
-	ctx := authority.WithGateway(context.Background(), f.gw)
 	verify := func(wl workload, run string) (*pantherclawv1.VerifyWorkloadResponse, error) {
 		t.Helper()
 		c := f.creds(t, wl, wl.token)
 		w := &pantherclawv1.WorkloadCredentials{WorkloadToken: c.Token, Proof: c.Proof, BodySha256: c.BodySHA256[:], Htm: c.Method, Htu: c.URL}
-		return h.VerifyWorkload(ctx, &pantherclawv1.VerifyWorkloadRequest{Workload: w, RunId: run})
+		return h.VerifyWorkload(authority.WithGateway(t.Context(), f.gw), &pantherclawv1.VerifyWorkloadRequest{Workload: w, RunId: run})
 	}
 	run := f.startRun(t, agent, nil)
 	r, err := verify(first, run.String())

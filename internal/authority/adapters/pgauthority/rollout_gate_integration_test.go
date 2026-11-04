@@ -304,7 +304,7 @@ func TestHR234_APilotWhoseBaseIsNoLongerPublishedSelectsNothing(t *testing.T) {
 	}
 }
 
-// TestHR234_CancellingVoidsTheRolloutsChangeRequests (D31): cancelling a
+// TestHR234_CancellingVoidsTheRolloutsChangeRequests (D31): canceling a
 // rollout whose loosening completion waits for confirmation voids that
 // PUBLISH request, so a later confirmation publishes nothing.
 func TestHR234_CancellingVoidsTheRolloutsChangeRequests(t *testing.T) {
@@ -319,7 +319,7 @@ func TestHR234_CancellingVoidsTheRolloutsChangeRequests(t *testing.T) {
 		t.Fatalf("cancel: %+v %v", got.Stage, err)
 	}
 	req, _ := g.versions.Changes.Get(g.publisher, cr.ID)
-	if req.State != papp.ChangeVoided || req.DecidedReason != "ROLLOUT_CANCELLED" {
+	if req.State != papp.ChangeVoided || req.DecidedReason != "ROLLOUT_CANCELLED" { //nolint:misspell // stored reason, as the stage
 		t.Fatalf("its publish request: %s %s", req.State, req.DecidedReason)
 	}
 	if _, err := g.confirm(g.pat, cr.ID); err == nil {

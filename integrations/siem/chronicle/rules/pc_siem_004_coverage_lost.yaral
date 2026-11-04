@@ -4,6 +4,8 @@ rule pc_siem_004_coverage_lost {
     author = "PantherClaw"
     description = "PantherClaw enforcement coverage invalidated"
     severity = "Medium"
+    mitre_attack_tactic = "Defense Impairment"
+    mitre_attack_technique = "T1685"
     rule_id = "pc-siem-004"
 
   events:

@@ -6,7 +6,6 @@
 package pgauthority_test
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"sync"
@@ -39,13 +38,13 @@ func BenchmarkAuthorizeReplayInputs(b *testing.B) {
 				charges[i] = fmt.Sprintf("ch_%d", i)
 			}
 			w.refundable(charges...)
-			ctx := context.Background()
 			took := make([]time.Duration, b.N)
 			var next atomic.Int64
 			var wg sync.WaitGroup
 			b.ResetTimer()
 			for range workers {
 				wg.Go(func() {
+					ctx := b.Context()
 					for i := int(next.Add(1)) - 1; i < b.N; i = int(next.Add(1)) - 1 {
 						auth := &plain
 						if i%2 == 1 {

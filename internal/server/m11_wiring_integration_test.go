@@ -221,7 +221,8 @@ func m11StructPorts(rv reflect.Value) []string {
 		if _, ok := m11Optional[name]; ok {
 			continue
 		}
-		switch fv := rv.Field(i); fv.Kind() { //exhaustive:ignore // values and slices are not ports
+		//exhaustive:ignore // values and slices are not ports
+		switch fv := rv.Field(i); fv.Kind() {
 		case reflect.Pointer, reflect.Interface, reflect.Func, reflect.Map:
 			if fv.IsNil() {
 				out = append(out, name)
@@ -271,7 +272,7 @@ func driverUsesSharedCore(t *testing.T, role string, got map[string][]any) {
 		if core.grants != nil {
 			if st, ok := core.grants.Store.(*grantspg.Store); !ok || st.Promotions == nil {
 				t.Errorf("%s: automations core #%d: its grants store does not gate in the transaction (D93)", role, i+1)
-			} else if _, real := st.Promotions.(promotions.Gate); !real {
+			} else if _, isGate := st.Promotions.(promotions.Gate); !isGate {
 				t.Errorf("%s: automations core #%d: the store gate is %T, not promotions.Gate (D116)", role, i+1, st.Promotions)
 			}
 		}

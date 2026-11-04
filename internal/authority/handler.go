@@ -229,6 +229,10 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "invalid outcome")
 	}
+	cred, err := credentialOf(req.GetCredentialUsed())
+	if err != nil {
+		return nil, err
+	}
 	receipt, err := h.svc.RecordExecution(ctx, gw, Execution{
 		Permit: id, Outcome: outcome, TargetStatus: req.GetTargetStatus(),
 		ResponseDigest: req.GetResponseDigest(), DispatchMS: req.GetDispatchMs(), TargetRef: req.GetTargetRef(),
@@ -236,6 +240,7 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 		DataScope:       dataScopeOf(req.GetDataScope()),
 		ContentFindings: contentOf(req.GetContentFindings()),
 		ContentScan:     scanOf(req.GetContentScan()),
+		Credential:      cred,
 	})
 	if err != nil {
 		return nil, err
@@ -328,6 +333,19 @@ func (h *Handler) ReportUnknownWorkload(ctx context.Context, req *pantherclawv1.
 		out.DiscoveryId = id.String()
 	}
 	return out, nil
+}
+
+// credentialOf maps the credential a gateway reported opening (HR-660);
+// nil when it reported none.
+func credentialOf(c *pantherclawv1.CredentialUsed) (*CredentialUsed, error) {
+	if c == nil {
+		return nil, nil
+	}
+	id, err := ids.ParseUUID(c.GetCredentialId())
+	if err != nil || c.GetVersion() <= 0 {
+		return nil, ErrCredentialNotOfConnection
+	}
+	return &CredentialUsed{ID: id, Version: c.GetVersion()}, nil
 }
 
 // accessOf is what a dispatch's minted credential allowed, as the gateway

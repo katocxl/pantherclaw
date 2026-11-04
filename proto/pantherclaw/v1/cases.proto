@@ -127,6 +127,22 @@ message Case {
   google.protobuf.Timestamp contain_time = 16;
   // When it was closed; unset otherwise.
   google.protobuf.Timestamp close_time = 17;
+  // The union of the MITRE ATLAS and ATT&CK techniques of the alert or
+  // incident it was opened from and of the alerts and incidents it links,
+  // sorted, at most 64 each (G0 M28 D718).
+  // PROVISIONAL field numbers until post-M27's proto changes land (D703).
+  repeated string atlas = 18 [(buf.validate.field).repeated = {
+    max_items: 64
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
+  repeated string attack = 19 [(buf.validate.field).repeated = {
+    max_items: 64
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
 }
 
 // CaseEntryDraft is an entry to add. Only the fields of its kind may be

@@ -61,6 +61,7 @@ func BenchmarkRefund(b *testing.B) {
 			b.ResetTimer()
 			for range workers {
 				wg.Go(func() {
+					ctx := b.Context()
 					for i := int(next.Add(1)) - 1; i < b.N; i = int(next.Add(1)) - 1 {
 						req := w.request(run, ids.NewV7(), charges[i], "1.00")
 						start := time.Now()

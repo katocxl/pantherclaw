@@ -155,7 +155,7 @@ func (rw *rolloutWorld) selection(r finalize.Result) (ref, rolloutID, selected s
 // TestHR234_PilotSelectsItsVersionForTheCohortsAgentsOnly: the Authority
 // decides an agent of a pilot's ENFORCE cohort under the pilot's version
 // and records the selection; once the agent is excluded (EXCEPTION), or the
-// rollout cancelled, the published version decides it again. Nothing in
+// rollout canceled, the published version decides it again. Nothing in
 // the request takes part in the selection.
 func TestHR234_PilotSelectsItsVersionForTheCohortsAgentsOnly(t *testing.T) {
 	w := newWorld(t)
@@ -404,9 +404,9 @@ func TestHR233_ShadowAddsNothingToTheDecisionPath(t *testing.T) {
 }
 
 func sameChecklist(a, b []pipeline.Item) bool {
-	x, _ := json.Marshal(a)
-	y, _ := json.Marshal(b)
-	return string(x) == string(y)
+	x, errX := json.Marshal(a)
+	y, errY := json.Marshal(b)
+	return errX == nil && errY == nil && string(x) == string(y)
 }
 
 // TestHR232_ShadowSweepWritesOnlyItsOwnRows: a sweep that replays shadow
@@ -474,7 +474,10 @@ func TestHR237_ShadowSummaryIsLabelledAndCarriesNoInputValues(t *testing.T) {
 	if s.ExpandedExposure != 0 || !strings.HasPrefix(s.ExpandedExposureNote, "expanded exposure: 0 ") {
 		t.Fatalf("expanded exposure: %d %q", s.ExpandedExposure, s.ExpandedExposureNote)
 	}
-	raw, _ := json.Marshal(s)
+	raw, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, secret := range []string{"ch_973", "73.21", "19.87"} {
 		if strings.Contains(string(raw), secret) {
 			t.Fatalf("the summary carries the input value %q: %s", secret, raw)
@@ -523,7 +526,7 @@ func TestT103_RolloutsCannotBeConfused(t *testing.T) {
 		t.Fatalf("another org's rollout: %v", err)
 	}
 	if _, err := rw.svc.CancelRollout(otherCtx, r.ID); !errors.Is(err, rollout.ErrNotFound) {
-		t.Fatalf("another org cancelled it: %v", err)
+		t.Fatalf("another org canceled it: %v", err)
 	}
 	sa := tapp.WithCaller(context.Background(), tapp.Caller{Subject: tdomain.Subject{
 		Org: w.org, Principal: tdomain.PrincipalRef{Kind: tdomain.KindServiceAccount, ID: w.billing},

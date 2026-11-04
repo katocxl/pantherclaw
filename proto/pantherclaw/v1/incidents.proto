@@ -133,6 +133,14 @@ message Alert {
   google.protobuf.Timestamp last_seen_time = 22;
   // A test alert, capped at ALERT; it never pages.
   bool test = 23;
+  // MITRE ATT&CK techniques of the rule that raised it (G0 M28 D718).
+  // PROVISIONAL field number until post-M27's proto changes land (D703).
+  repeated string attack = 24 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
 }
 
 // AlertEvidence is one recorded fact an alert rests on.
@@ -179,6 +187,21 @@ message Incident {
   string opened_by = 7;
   google.protobuf.Timestamp create_time = 8;
   google.protobuf.Timestamp update_time = 9;
+  // The union of its alerts' MITRE ATLAS and ATT&CK techniques, sorted, at
+  // most 64 each (G0 M28 D718).
+  // PROVISIONAL field numbers until post-M27's proto changes land (D703).
+  repeated string atlas = 10 [(buf.validate.field).repeated = {
+    max_items: 64
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
+  repeated string attack = 11 [(buf.validate.field).repeated = {
+    max_items: 64
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
 }
 
 // PageRequest fields shared by lists.

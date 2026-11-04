@@ -240,6 +240,10 @@ type Case struct {
 	Created, Updated     time.Time
 	OperationalClosed    *time.Time
 	Closed               *time.Time
+	// ATLAS and ATTACK are the union of the ATLAS and ATT&CK techniques of
+	// the alert or incident it was opened from and of the alerts and
+	// incidents it links, sorted, at most 64 each (G0 M28 D718).
+	ATLAS, ATTACK []string
 }
 
 // NewCase is what opening a case needs.

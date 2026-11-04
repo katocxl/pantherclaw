@@ -38,7 +38,10 @@ func sampleEvents() map[string]feed.Event {
 		e.Attrs = map[string]string{
 			ocsf.AttrID: "0192f944-0000-7000-8000-0000000000d1", ocsf.AttrRuleID: "pc.authority.self_issue", ocsf.AttrSeverity: severity,
 			"attention": "ALERT",
+			// The rule's own mapping (G0 M28 D718): the samples carry attacks.
+			ocsf.AttrATLAS: "AML.T0053", ocsf.AttrATTACK: "T1098", ocsf.AttrOWASP: "ASI03",
 		}
+		e.ATLAS, e.ATTACK = []string{"AML.T0053"}, []string{"T1098"}
 		for i := 0; i+1 < len(more); i += 2 {
 			e.Attrs[more[i]] = more[i+1]
 		}
@@ -47,7 +50,10 @@ func sampleEvents() map[string]feed.Event {
 	incident := func(state string) feed.Event {
 		e := base("reflex.incident")
 		e.Outcome = state
-		e.Attrs = map[string]string{ocsf.AttrID: "0192f944-0000-7000-8000-0000000000d2", ocsf.AttrSeverity: "HIGH"}
+		e.Attrs = map[string]string{
+			ocsf.AttrID: "0192f944-0000-7000-8000-0000000000d2", ocsf.AttrSeverity: "HIGH", ocsf.AttrATLAS: "AML.T0053", ocsf.AttrATTACK: "T1098",
+		}
+		e.ATLAS, e.ATTACK = []string{"AML.T0053"}, []string{"T1098"}
 		return e
 	}
 	decision := func(verdict, reason string) feed.Event {

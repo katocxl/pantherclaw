@@ -10,6 +10,7 @@ import (
 	"errors"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -19,15 +20,17 @@ import (
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	tmdomain "github.com/katocxl/pantherclaw/internal/threatmap/domain"
 )
 
-// Backend is everything the tools can ask the server: the four reads and no
+// Backend is everything the tools can ask the server: the five reads and no
 // other method (HR-656).
 type Backend interface {
 	WhatHappened(context.Context, *pb.WhatHappenedRequest) (*pb.WhatHappenedResponse, error)
 	GetRunTimeline(context.Context, *pb.GetRunTimelineRequest) (*pb.GetRunTimelineResponse, error)
 	Search(context.Context, *pb.SearchRequest) (*pb.SearchResponse, error)
 	GetGraph(context.Context, *pb.GetGraphRequest) (*pb.GetGraphResponse, error)
+	GetThreatTechnique(context.Context, *pb.GetThreatTechniqueRequest) (*pb.GetThreatTechniqueResponse, error)
 }
 
 // reads is the Backend over a Connect client. It keeps the generated clients
@@ -36,15 +39,21 @@ type reads struct {
 	investigations pantherclawv1connect.InvestigationServiceClient
 	search         pantherclawv1connect.SearchServiceClient
 	graphs         pantherclawv1connect.GraphServiceClient
+	threats        pantherclawv1connect.ThreatMapServiceClient
 }
 
-// NewBackend returns the four reads over c. Give c an AllowList transport.
+// NewBackend returns the five reads over c. Give c an AllowList transport.
 func NewBackend(c *connect.Client) Backend {
 	return reads{
 		investigations: pantherclawv1connect.NewInvestigationServiceClient(c),
 		search:         pantherclawv1connect.NewSearchServiceClient(c),
 		graphs:         pantherclawv1connect.NewGraphServiceClient(c),
+		threats:        pantherclawv1connect.NewThreatMapServiceClient(c),
 	}
+}
+
+func (r reads) GetThreatTechnique(ctx context.Context, q *pb.GetThreatTechniqueRequest) (*pb.GetThreatTechniqueResponse, error) {
+	return r.threats.GetThreatTechnique(ctx, q)
 }
 
 func (r reads) WhatHappened(ctx context.Context, q *pb.WhatHappenedRequest) (*pb.WhatHappenedResponse, error) {
@@ -77,7 +86,13 @@ var (
 	operationShape = regexp.MustCompile(`^[A-Za-z0-9._:/-]*$`)
 	decisionShape  = regexp.MustCompile(`^[A-Z_]{1,32}$`)
 	pageTokenShape = regexp.MustCompile(`^[A-Za-z0-9_-]{0,64}$`)
+	// techniqueShape is an ATLAS or ATT&CK id, or none (G0 M28 D718, D726).
+	techniqueShape = regexp.MustCompile(techniquePattern)
+	// techniqueEntities are the entities the technique filter applies to.
+	techniqueEntities = []string{"alerts", "incidents"}
 )
+
+const techniquePattern = `^(T[0-9]{4}(\.[0-9]{3})?|AML\.T[0-9]{4}(\.[0-9]{3})?)?$`
 
 // errInput is a tool argument that failed its limit. Its text is fixed: an
 // argument never comes back.
@@ -189,6 +204,7 @@ type searchArgs struct {
 	Operation       string   `json:"operation"`
 	OperationPrefix string   `json:"operation_prefix"`
 	Decisions       []string `json:"decisions"`
+	Technique       string   `json:"technique"`
 	StartTime       string   `json:"start_time"`
 	EndTime         string   `json:"end_time"`
 	PageSize        int32    `json:"page_size"`
@@ -196,7 +212,7 @@ type searchArgs struct {
 }
 
 func (a searchArgs) request() (*pb.SearchRequest, error) {
-	f := &pb.SearchFilters{Operation: a.Operation, OperationPrefix: a.OperationPrefix, Decisions: a.Decisions}
+	f := &pb.SearchFilters{Operation: a.Operation, OperationPrefix: a.OperationPrefix, Decisions: a.Decisions, Technique: a.Technique}
 	var err error
 	for _, x := range []struct {
 		dst **string
@@ -224,7 +240,9 @@ func (a searchArgs) request() (*pb.SearchRequest, error) {
 		!pageTokenShape.MatchString(a.PageToken),
 		len(a.Operation) > maxOperation || !operationShape.MatchString(a.Operation),
 		len(a.OperationPrefix) > maxOperation || !operationShape.MatchString(a.OperationPrefix),
-		len(a.Decisions) > maxDecisions:
+		len(a.Decisions) > maxDecisions,
+		!techniqueShape.MatchString(a.Technique),
+		a.Technique != "" && !slices.Contains(techniqueEntities, a.Entity):
 		return nil, errInput
 	}
 	for _, d := range a.Decisions {
@@ -247,6 +265,58 @@ func searchRecords(ctx context.Context, b Backend, raw jsontext.Value) (proto.Me
 	return b.Search(ctx, q)
 }
 
+// Frameworks the technique_coverage tool names (G0 M28 D726).
+const (
+	frameworkATLAS  = "atlas"
+	frameworkATTACK = "attack-enterprise"
+)
+
+// techniqueIDPattern is one ATLAS or ATT&CK id (D718).
+const techniqueIDPattern = `^(T[0-9]{4}(\.[0-9]{3})?|AML\.T[0-9]{4}(\.[0-9]{3})?)$`
+
+var techniqueIDShape = regexp.MustCompile(techniqueIDPattern)
+
+// techniqueCoverage reads one technique's lanes and evidence. The framework
+// defaults from the id and must agree with it (G0 M28 D726).
+func techniqueCoverage(ctx context.Context, b Backend, raw jsontext.Value) (proto.Message, error) {
+	a, err := args[struct {
+		TechniqueID string `json:"technique_id"`
+		Framework   string `json:"framework"`
+		AgentID     string `json:"agent_id"`
+	}](raw)
+	if err != nil {
+		return nil, err
+	}
+	if !techniqueIDShape.MatchString(a.TechniqueID) {
+		return nil, errInput
+	}
+	of := frameworkATTACK
+	fw := pb.ThreatFramework_THREAT_FRAMEWORK_ATTACK_ENTERPRISE
+	if strings.HasPrefix(a.TechniqueID, "AML.") {
+		of, fw = frameworkATLAS, pb.ThreatFramework_THREAT_FRAMEWORK_ATLAS
+	}
+	if a.Framework != "" && a.Framework != of {
+		return nil, errInput
+	}
+	agent, err := optionalID(a.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	q := &pb.GetThreatTechniqueRequest{Framework: fw, TechniqueId: a.TechniqueID}
+	if agent != nil {
+		q.AgentId = *agent
+	}
+	resp, err := b.GetThreatTechnique(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	// The result always says what the map is and is not (D717).
+	if resp.GetStatement() == "" {
+		resp.Statement = tmdomain.Statement
+	}
+	return resp, nil
+}
+
 func schema(required []string, props map[string]any) map[string]any {
 	return map[string]any{"type": "object", "properties": props, "required": required, "additionalProperties": false}
 }
@@ -255,7 +325,7 @@ func uuidProp(description string) map[string]any {
 	return map[string]any{"type": "string", "format": "uuid", "description": description}
 }
 
-// tools is the whole tool layer: four reads.
+// tools is the whole tool layer: five reads.
 var tools = []tool{
 	{
 		Name: "search", Title: "Search records", Procedure: pantherclawv1connect.SearchServiceSearchProcedure, run: searchRecords,
@@ -271,10 +341,14 @@ var tools = []tool{
 			"operation":        map[string]any{"type": "string", "maxLength": maxOperation, "description": "An exact operation."},
 			"operation_prefix": map[string]any{"type": "string", "maxLength": maxOperation, "description": "An operation prefix."},
 			"decisions":        map[string]any{"type": "array", "maxItems": maxDecisions, "items": map[string]any{"type": "string", "maxLength": 32}},
-			"start_time":       map[string]any{"type": "string", "format": "date-time"},
-			"end_time":         map[string]any{"type": "string", "format": "date-time"},
-			"page_size":        map[string]any{"type": "integer", "minimum": 1, "maximum": maxPageSize},
-			"page_token":       map[string]any{"type": "string", "maxLength": 64},
+			"technique": map[string]any{
+				"type": "string", "pattern": techniquePattern,
+				"description": "Alerts or incidents mapped to this ATLAS or ATT&CK technique or one of its sub-techniques.",
+			},
+			"start_time": map[string]any{"type": "string", "format": "date-time"},
+			"end_time":   map[string]any{"type": "string", "format": "date-time"},
+			"page_size":  map[string]any{"type": "integer", "minimum": 1, "maximum": maxPageSize},
+			"page_token": map[string]any{"type": "string", "maxLength": 64},
 		}),
 	},
 	{
@@ -296,6 +370,20 @@ var tools = []tool{
 		Schema: schema([]string{"scope_type", "scope_id"}, map[string]any{
 			"scope_type": map[string]any{"type": "string", "enum": scopeTypes},
 			"scope_id":   uuidProp("The agent, run or incident id."),
+		}),
+	},
+	{
+		Name: "technique_coverage", Title: "Technique coverage",
+		Procedure: pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, run: techniqueCoverage,
+		Description: "One ATLAS or ATT&CK technique on this organization's threat map: the PantherClaw controls mapped to it, " +
+			"each lane's state with its reasons and evidence, and the gaps with their fixes. The result carries the map's statement.",
+		Schema: schema([]string{"technique_id"}, map[string]any{
+			"technique_id": map[string]any{"type": "string", "pattern": techniqueIDPattern, "description": "An ATLAS (AML.T####) or ATT&CK (T####) id."},
+			"framework": map[string]any{
+				"type": "string", "enum": []string{frameworkATLAS, frameworkATTACK},
+				"description": "The id's framework; it defaults from the id and must agree with it.",
+			},
+			"agent_id": uuidProp("Only this agent's routes and evidence."),
 		}),
 	},
 }

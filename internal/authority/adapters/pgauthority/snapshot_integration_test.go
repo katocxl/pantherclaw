@@ -37,10 +37,10 @@ func TestReaderSnapshotIsOneSnapshot(t *testing.T) {
 		}
 		// Meanwhile, in other transactions: the grant is revoked and the
 		// kill switch engaged.
-		if _, err := w.grants.Revoke(w.human, g.ID, "done"); err != nil {
+		if _, err := w.grants.Revoke(w.human, g.ID, "done"); err != nil { //nolint:contextcheck // another transaction, outside the snapshot
 			t.Fatal(err)
 		}
-		w.db.AdminExec(t, "UPDATE pc.org_containment SET epoch = epoch + 1, kill_switch = true, engaged_at = now(), engaged_by = 'test' WHERE org_id = $1", w.org)
+		w.db.AdminExec(t, "UPDATE pc.org_containment SET epoch = epoch + 1, kill_switch = true, engaged_at = now(), engaged_by = 'test' WHERE org_id = $1", w.org) //nolint:contextcheck // another transaction, outside the snapshot
 		after, err := r.Containment(ctx, w.org)
 		if err != nil {
 			return err

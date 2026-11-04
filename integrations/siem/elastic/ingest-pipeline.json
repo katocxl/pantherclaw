@@ -1,6 +1,13 @@
 {
-  "description": "PantherClaw OCSF events: use the event's own time",
+  "description": "PantherClaw OCSF events: use the event's own time; copy the ATLAS and ATT&CK techniques into ECS threat fields",
   "processors": [
-    {"date": {"field": "time", "formats": ["UNIX_MS"], "target_field": "@timestamp"}}
+    {"date": {"field": "time", "formats": ["UNIX_MS"], "target_field": "@timestamp"}},
+    {
+      "script": {
+        "description": "finding_info.attacks and finding_info_list[].attacks to threat.tactic.id, threat.technique.id and threat.technique.subtechnique.id",
+        "lang": "painless",
+        "source": "def lists = new ArrayList(); if (ctx.finding_info instanceof Map && ctx.finding_info.attacks instanceof List) { lists.add(ctx.finding_info.attacks); } if (ctx.finding_info_list instanceof List) { for (def f : ctx.finding_info_list) { if (f instanceof Map && f.attacks instanceof List) { lists.add(f.attacks); } } } def tactics = new LinkedHashSet(); def techniques = new LinkedHashSet(); def subs = new LinkedHashSet(); for (def l : lists) { for (def a : l) { if (!(a instanceof Map)) { continue; } if (a.tactic instanceof Map && a.tactic.uid != null) { tactics.add(a.tactic.uid); } if (a.technique instanceof Map && a.technique.uid != null) { techniques.add(a.technique.uid); } if (a.sub_technique instanceof Map && a.sub_technique.uid != null) { subs.add(a.sub_technique.uid); } } } if (techniques.isEmpty()) { return; } def technique = new HashMap(); technique.id = new ArrayList(techniques); if (!subs.isEmpty()) { technique.subtechnique = ['id': new ArrayList(subs)]; } ctx.threat = ['technique': technique, 'tactic': ['id': new ArrayList(tactics)]];"
+      }
+    }
   ]
 }

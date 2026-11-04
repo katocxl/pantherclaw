@@ -3,7 +3,7 @@
 
 // Package selfmcp is PantherClaw's own read-only MCP server (G0 M27 D510,
 // H9): `pclaw mcp self` speaks MCP on stdio so a customer's SOC agent can
-// investigate. It has four tools, each one read procedure. It is not an
+// investigate. It has five tools, each one read procedure. It is not an
 // assistant: it calls no model and nothing here sends a record to one
 // (HR-542).
 package selfmcp
@@ -24,6 +24,7 @@ var procedures = []string{
 	pantherclawv1connect.InvestigationServiceGetRunTimelineProcedure,
 	pantherclawv1connect.SearchServiceSearchProcedure,
 	pantherclawv1connect.GraphServiceGetGraphProcedure,
+	pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, // G0 M28 D726
 }
 
 // Procedures returns the allow-list.
@@ -33,8 +34,19 @@ func Procedures() []string { return slices.Clone(procedures) }
 // process.
 var errNotAllowed = errors.New("selfmcp: the procedure is not on the read allow-list")
 
+// ClientHeader and ClientValue name `pclaw mcp self` to the server on every
+// call it sends, and no other pclaw command sends them. The server records
+// an allow-listed read that carries them even from a key without the
+// Investigator role (HR-663). It is the client's claim: it never grants,
+// refuses or changes a decision.
+const (
+	ClientHeader = "Pantherclaw-Client"
+	ClientValue  = "mcp-self"
+)
+
 // AllowList is the HTTP transport under the tool layer: it sends a POST to an
-// allow-listed procedure and refuses anything else before it leaves.
+// allow-listed procedure, naming the client, and refuses anything else
+// before it leaves.
 type AllowList struct {
 	Base http.RoundTripper
 }
@@ -51,5 +63,11 @@ func (t AllowList) RoundTrip(r *http.Request) (*http.Response, error) {
 	if base == nil {
 		base = http.DefaultTransport
 	}
+	// A RoundTripper leaves the caller's request as it is (net/http).
+	r = r.Clone(r.Context())
+	if r.Header == nil {
+		r.Header = http.Header{}
+	}
+	r.Header.Set(ClientHeader, ClientValue)
 	return base.RoundTrip(r)
 }

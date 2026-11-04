@@ -26,7 +26,7 @@ import (
 var (
 	// errInvestigatorReads refuses the Investigator role outside its reads.
 	errInvestigatorReads = pcerr.New(pcerr.PermissionDenied, "INVESTIGATOR_READS_ONLY",
-		"the Investigator role reads what happened, run timelines, search and breach radius, and nothing else")
+		"the Investigator role reads what happened, run timelines, search, breach radius and technique coverage, and nothing else")
 	// errSelfMCPEdition: the org's plan has no SelfMCP.
 	errSelfMCPEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
 		"reading through PantherClaw's own MCP server needs the Team edition or above")
@@ -39,9 +39,25 @@ var (
 		"the organization's edition could not be checked; try again")
 )
 
-// selfMCPAuditName is the event of one read by the role: kind
-// audit.self_mcp.read.
+// selfMCPAuditName is the event of one read by the role, or by a caller
+// that sent the client header (HR-663): kind audit.self_mcp.read.
 const selfMCPAuditName = "self_mcp.read"
+
+// The header `pclaw mcp self` sends on every call (selfmcp.ClientHeader,
+// selfmcp.ClientValue; HR-663). It is the client's claim: it only adds a
+// record, and never grants, refuses or changes a decision.
+const (
+	selfMCPClientHeader = "Pantherclaw-Client"
+	selfMCPClientValue  = "mcp-self"
+)
+
+// Why a read is recorded, the record's basis detail (HR-663): the caller
+// holds the Investigator role, or a caller without it sent the client
+// header.
+const (
+	selfMCPBasisRole   = "role"
+	selfMCPBasisHeader = "client_header"
+)
 
 // selfMCPEditions reports the org's entitlements (billing.Service).
 type selfMCPEditions interface {
@@ -80,7 +96,9 @@ func poolRecorder(pool *db.Pool) selfMCPRecorder {
 // with the caller's other bindings, or is refused when those do not admit
 // it. On the reads, a holder of the role needs the edition, whatever else it
 // holds, and is audited. Every refusal the gate makes to a holder is audited
-// too. A nil editions or record fails closed.
+// too. A nil editions or record fails closed. A caller without the role is
+// audited on the reads only when it sends the client header of
+// `pclaw mcp self`, and is otherwise left as it is (HR-663).
 type selfMCPGate struct {
 	editions selfMCPEditions
 	record   selfMCPRecorder
@@ -90,8 +108,16 @@ type selfMCPGate struct {
 func (g *selfMCPGate) intercept(next connect.ServerFunc) connect.ServerFunc {
 	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		c, err := tapp.CallerFrom(ctx)
-		if err != nil || !tapp.IsInvestigator(c) {
+		if err != nil {
 			return next(ctx, spec, stream) // public, workload and gateway calls carry no caller here
+		}
+		if !tapp.IsInvestigator(c) {
+			if slices.Contains(selfMCPReads, spec.Procedure) && fromSelfMCP(ctx) {
+				// Recorded as the role's reads are, and decided as without
+				// the header: no edition gate, the same caller (HR-663).
+				return g.audited(ctx, c, spec, stream, next, selfMCPBasisHeader)
+			}
+			return next(ctx, spec, stream)
 		}
 		rest := tapp.WithoutInvestigator(c)
 		if !slices.Contains(selfMCPReads, spec.Procedure) {
@@ -103,8 +129,15 @@ func (g *selfMCPGate) intercept(next connect.ServerFunc) connect.ServerFunc {
 		if err := g.edition(ctx); err != nil {
 			return g.refuse(ctx, c, spec.Procedure, err)
 		}
-		return g.audited(ctx, c, spec, stream, next)
+		return g.audited(ctx, c, spec, stream, next, selfMCPBasisRole)
 	}
+}
+
+// fromSelfMCP reports whether the call carries the client header of
+// `pclaw mcp self` (HR-663).
+func fromSelfMCP(ctx context.Context) bool {
+	info, ok := connect.CallInfoForServerContext(ctx)
+	return ok && info.RequestHeader().Get(selfMCPClientHeader) == selfMCPClientValue
 }
 
 // refuse records the gate's refusal of a holder of the role (HR-657) and
@@ -118,7 +151,7 @@ func (g *selfMCPGate) refuse(ctx context.Context, c tapp.Caller, procedure strin
 	if pcerr.CodeOf(refusal) == pcerr.Unavailable {
 		outcome = audit.Failure
 	}
-	ev := selfMCPEvent(c, procedure, nil, outcome)
+	ev := selfMCPEvent(c, procedure, nil, outcome, selfMCPBasisRole)
 	ev.ReasonCode = pcerr.ReasonOf(refusal)
 	if err := g.record(context.WithoutCancel(ctx), c.Org, ev); err != nil {
 		g.logger().ErrorContext(ctx, "self_mcp.audit_failed", slog.String("procedure", procedure), pclog.Err(err))
@@ -140,16 +173,17 @@ func (g *selfMCPGate) edition(ctx context.Context) error {
 	return nil
 }
 
-// audited runs the read and records it before its answer leaves: the record
-// is written when the handler sends, and a failure to write it fails the
-// call with nothing sent. A read that fails is recorded with its code.
+// audited runs the read and records it, with basis, before its answer
+// leaves: the record is written when the handler sends, and a failure to
+// write it fails the call with nothing sent. A read that fails is recorded
+// with its code.
 func (g *selfMCPGate) audited(ctx context.Context, c tapp.Caller, spec connect.Spec, stream connect.ServerStream,
-	next connect.ServerFunc,
+	next connect.ServerFunc, basis string,
 ) error {
 	if g.record == nil {
 		return errSelfMCPAudit
 	}
-	s := &auditedStream{ServerStream: stream, ctx: ctx, g: g, c: c, procedure: spec.Procedure}
+	s := &auditedStream{ServerStream: stream, ctx: ctx, g: g, c: c, procedure: spec.Procedure, basis: basis}
 	err := next(ctx, spec, s)
 	if err != nil && !s.recorded {
 		reason := pcerr.ReasonOf(err)
@@ -179,6 +213,7 @@ type auditedStream struct {
 	g         *selfMCPGate
 	c         tapp.Caller
 	procedure string
+	basis     string
 	request   any
 	recorded  bool
 }
@@ -205,7 +240,7 @@ func (s *auditedStream) Send(msg any) error {
 
 func (s *auditedStream) write(ctx context.Context, outcome audit.Outcome, reason string) error {
 	s.recorded = true
-	ev := selfMCPEvent(s.c, s.procedure, s.request, outcome)
+	ev := selfMCPEvent(s.c, s.procedure, s.request, outcome, s.basis)
 	if reason != "" && reasonShape(reason) {
 		ev.ReasonCode = reason
 	}
@@ -219,12 +254,13 @@ func reasonShape(r string) bool {
 	return strings.Trim(r, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") == ""
 }
 
-// selfMCPEvent names the read and what it asked for: an id, a scope or an
-// entity, never filter text or results (HR-657).
-func selfMCPEvent(c tapp.Caller, procedure string, request any, outcome audit.Outcome) audit.Event {
+// selfMCPEvent names the read, why it is recorded (basis, HR-663) and what
+// it asked for: an id, a scope or an entity, never filter text or results
+// (HR-657).
+func selfMCPEvent(c tapp.Caller, procedure string, request any, outcome audit.Outcome, basis string) audit.Event {
 	ev := audit.Event{
 		Name: selfMCPAuditName, Actor: c.Actor(), Outcome: outcome,
-		Details: map[string]string{"procedure": procedure},
+		Details: map[string]string{"procedure": procedure, "basis": basis},
 	}
 	if !c.CredentialID.IsZero() {
 		ev.Details["key_id"] = c.CredentialID.String()
@@ -245,6 +281,11 @@ func selfMCPEvent(c tapp.Caller, procedure string, request any, outcome audit.Ou
 	case *pb.SearchRequest:
 		ev.Details["entity"] = r.GetQuery().GetEntity()
 		ev.Details["page_size"] = strconv.Itoa(int(r.GetPageSize()))
+	case *pb.GetThreatTechniqueRequest:
+		// The technique is a validated id, never free text (G0 M28 D726).
+		object("agent", r.GetAgentId())
+		ev.Details["technique_id"] = r.GetTechniqueId()
+		ev.Details["framework"] = strings.ToLower(strings.TrimPrefix(r.GetFramework().String(), "THREAT_FRAMEWORK_"))
 	}
 	return ev
 }

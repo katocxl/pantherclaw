@@ -124,7 +124,10 @@ type Alert struct {
 	FirstSeenTime *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=first_seen_time,json=firstSeenTime,proto3" json:"first_seen_time,omitempty"`
 	LastSeenTime  *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
 	// A test alert, capped at ALERT; it never pages.
-	Test          bool `protobuf:"varint,23,opt,name=test,proto3" json:"test,omitempty"`
+	Test bool `protobuf:"varint,23,opt,name=test,proto3" json:"test,omitempty"`
+	// MITRE ATT&CK techniques of the rule that raised it (G0 M28 D718).
+	// PROVISIONAL field number until post-M27's proto changes land (D703).
+	Attack        []string `protobuf:"bytes,24,rep,name=attack,proto3" json:"attack,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -320,6 +323,13 @@ func (x *Alert) GetTest() bool {
 	return false
 }
 
+func (x *Alert) GetAttack() []string {
+	if x != nil {
+		return x.Attack
+	}
+	return nil
+}
+
 // AlertEvidence is one recorded fact an alert rests on.
 type AlertEvidence struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -512,9 +522,14 @@ type Incident struct {
 	// Evidence-based grouping key; empty for one opened by hand.
 	GroupKey string `protobuf:"bytes,6,opt,name=group_key,json=groupKey,proto3" json:"group_key,omitempty"`
 	// "alert:<id>" or "user:<id>".
-	OpenedBy      string                 `protobuf:"bytes,7,opt,name=opened_by,json=openedBy,proto3" json:"opened_by,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	OpenedBy   string                 `protobuf:"bytes,7,opt,name=opened_by,json=openedBy,proto3" json:"opened_by,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// The union of its alerts' MITRE ATLAS and ATT&CK techniques, sorted, at
+	// most 64 each (G0 M28 D718).
+	// PROVISIONAL field numbers until post-M27's proto changes land (D703).
+	Atlas         []string `protobuf:"bytes,10,rep,name=atlas,proto3" json:"atlas,omitempty"`
+	Attack        []string `protobuf:"bytes,11,rep,name=attack,proto3" json:"attack,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -608,6 +623,20 @@ func (x *Incident) GetCreateTime() *timestamppb.Timestamp {
 func (x *Incident) GetUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdateTime
+	}
+	return nil
+}
+
+func (x *Incident) GetAtlas() []string {
+	if x != nil {
+		return x.Atlas
+	}
+	return nil
+}
+
+func (x *Incident) GetAttack() []string {
+	if x != nil {
+		return x.Attack
 	}
 	return nil
 }
@@ -2635,7 +2664,7 @@ const file_pantherclaw_v1_incidents_proto_rawDesc = "" +
 	"\x1epantherclaw/v1/incidents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"3\n" +
 	"\rReflexSubject\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xb3\x06\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\x91\a\n" +
 	"\x05Alert\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x17\n" +
@@ -2662,7 +2691,8 @@ const file_pantherclaw_v1_incidents_proto_rawDesc = "" +
 	"\x05count\x18\x14 \x01(\x05R\x05count\x12B\n" +
 	"\x0ffirst_seen_time\x18\x15 \x01(\v2\x1a.google.protobuf.TimestampR\rfirstSeenTime\x12@\n" +
 	"\x0elast_seen_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x12\x12\n" +
-	"\x04test\x18\x17 \x01(\bR\x04test\x1a8\n" +
+	"\x04test\x18\x17 \x01(\bR\x04test\x12\\\n" +
+	"\x06attack\x18\x18 \x03(\tBD\xbaHA\x92\x01>\x10\x10\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x06attack\x1a8\n" +
 	"\n" +
 	"FactsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -2684,7 +2714,7 @@ const file_pantherclaw_v1_incidents_proto_rawDesc = "" +
 	"\balert_id\x18\a \x01(\tR\aalertId\x12\x12\n" +
 	"\x04note\x18\b \x01(\tR\x04note\x12;\n" +
 	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xb1\x02\n" +
+	"createTime\"\xeb\x03\n" +
 	"\bIncident\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1a\n" +
@@ -2696,7 +2726,10 @@ const file_pantherclaw_v1_incidents_proto_rawDesc = "" +
 	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\xc2\x02\n" +
+	"updateTime\x12Z\n" +
+	"\x05atlas\x18\n" +
+	" \x03(\tBD\xbaHA\x92\x01>\x10@\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x05atlas\x12\\\n" +
+	"\x06attack\x18\v \x03(\tBD\xbaHA\x92\x01>\x10@\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x06attack\"\xc2\x02\n" +
 	"\x11ListAlertsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +

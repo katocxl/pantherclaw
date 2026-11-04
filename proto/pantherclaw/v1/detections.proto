@@ -98,6 +98,16 @@ message DetectionRule {
   // The protected change, waiting for a second person, that would confirm
   // this version; empty when none is pending.
   string pending_confirmation_change_id = 21;
+  // ATT&CK Enterprise techniques the rule maps to (G0 M28 D718).
+  repeated string attack = 22 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {pattern: "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$"}
+    }
+  }];
+  // Why a built-in rule maps to no technique, in one line; empty
+  // otherwise (G0 M28 D714, D718).
+  string techniques_none = 23;
 }
 
 // CustomRuleConfirmation is a second person's confirmation of one exact

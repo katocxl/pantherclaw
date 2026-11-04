@@ -18,7 +18,14 @@ PantherClaw posts batches: `{"type":"pantherclaw.ocsf.batch","data":{…,"events
 
 **The webhook signature is not verified** by any converted rule, and Sigma never sees it. `pclaw siem forward` verifies it before it writes the events to a file ([runbook](../../../docs/runbooks/siem-forwarder.md)).
 
+## ATT&CK and ATLAS techniques
+
+- Per rule: the first tag is the rule id; the rest are the `rules.yaml` ATT&CK Enterprise ids as Sigma tags, `attack.<tactic short name>` then `attack.t####[.###]`. A rule that names none has only its id tag.
+- Per event, both frameworks: a backend reads the event as is. An alert carries them in `finding_info.attacks` and an incident in `finding_info_list[].attacks`, each entry with `technique.uid`, `sub_technique.uid` (when the id is a sub-technique), `tactic.uid` and `version` ("20.0" for ATT&CK, "ATLAS 2026.10" for ATLAS).
+
 ## What was not checked
+
+- Whether `sigma check` accepts the tactic tag `attack.defense-impairment` (ATT&CK 20.0) has not been tried.
 
 - `sigma check` has not run on these rules, and they have not been converted with any backend.
 - A test reads the rules and evaluates the selection and filter over the samples, which checks the logic and not any conversion.

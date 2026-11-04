@@ -42,7 +42,14 @@ It appends each event of a verified batch as one compact line, in the layout of 
 
 **The webhook signature is not verified** by Wazuh, which never sees it. The forwarder verifies it before it writes a line. It checks every signature it is configured with: the HMAC `v1,` signature when it is given the destination's secret, the Ed25519 `v1a,` one when it is given the org's JWKS, and both when it is given both. Given only a JWKS, it checks no HMAC. It also checks a timestamp window, and answers a re-sent batch without writing it again. Wazuh trusts whatever else lands in the file, so keep it writable only by the forwarder.
 
+## ATT&CK and ATLAS techniques
+
+- Per rule: a rule that names ATT&CK Enterprise techniques in `rules.yaml` has a `<mitre><id>T####</id></mitre>` block with them. A rule that names none has no block.
+- Per event, both frameworks: the decoded JSON keeps `finding_info.attacks` (an alert) and `finding_info_list` (an incident) as they are; each entry has `technique.uid`, `sub_technique.uid` (when the id is a sub-technique), `tactic.uid` and `version` ("20.0" for ATT&CK, "ATLAS 2026.10" for ATLAS).
+
 ## What was not checked
+
+- Whether this Wazuh version's MITRE database knows ATT&CK 20.0's ids (`T1685`, `T1685.002`) has not been tried; a test checks the ids equal `rules.yaml`.
 
 - The rules have not been loaded by `wazuh-analysisd` or run through `wazuh-logtest`.
 - A test reads the XML and evaluates the fields with Go's regular expressions, not PCRE2. It assumes that the first child that matches takes the event, and that the JSON decoder joins an array with commas.

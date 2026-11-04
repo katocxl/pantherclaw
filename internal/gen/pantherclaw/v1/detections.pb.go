@@ -64,8 +64,13 @@ type DetectionRule struct {
 	// The protected change, waiting for a second person, that would confirm
 	// this version; empty when none is pending.
 	PendingConfirmationChangeId string `protobuf:"bytes,21,opt,name=pending_confirmation_change_id,json=pendingConfirmationChangeId,proto3" json:"pending_confirmation_change_id,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	// ATT&CK Enterprise techniques the rule maps to (G0 M28 D718).
+	Attack []string `protobuf:"bytes,22,rep,name=attack,proto3" json:"attack,omitempty"`
+	// Why a built-in rule maps to no technique, in one line; empty
+	// otherwise (G0 M28 D714, D718).
+	TechniquesNone string `protobuf:"bytes,23,opt,name=techniques_none,json=techniquesNone,proto3" json:"techniques_none,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DetectionRule) Reset() {
@@ -241,6 +246,20 @@ func (x *DetectionRule) GetConfirmation() *CustomRuleConfirmation {
 func (x *DetectionRule) GetPendingConfirmationChangeId() string {
 	if x != nil {
 		return x.PendingConfirmationChangeId
+	}
+	return ""
+}
+
+func (x *DetectionRule) GetAttack() []string {
+	if x != nil {
+		return x.Attack
+	}
+	return nil
+}
+
+func (x *DetectionRule) GetTechniquesNone() string {
+	if x != nil {
+		return x.TechniquesNone
 	}
 	return ""
 }
@@ -1290,7 +1309,7 @@ var File_pantherclaw_v1_detections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_detections_proto_rawDesc = "" +
 	"\n" +
-	"\x1fpantherclaw/v1/detections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\x05\n" +
+	"\x1fpantherclaw/v1/detections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe7\x06\n" +
 	"\rDetectionRule\x12\x17\n" +
 	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +
@@ -1313,7 +1332,9 @@ const file_pantherclaw_v1_detections_proto_rawDesc = "" +
 	"\x12consecutive_errors\x18\x12 \x01(\x05R\x11consecutiveErrors\x12\x18\n" +
 	"\acontent\x18\x13 \x01(\tR\acontent\x12J\n" +
 	"\fconfirmation\x18\x14 \x01(\v2&.pantherclaw.v1.CustomRuleConfirmationR\fconfirmation\x12C\n" +
-	"\x1epending_confirmation_change_id\x18\x15 \x01(\tR\x1bpendingConfirmationChangeId\"\xeb\x01\n" +
+	"\x1epending_confirmation_change_id\x18\x15 \x01(\tR\x1bpendingConfirmationChangeId\x12\\\n" +
+	"\x06attack\x18\x16 \x03(\tBD\xbaHA\x92\x01>\x10\x10\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x06attack\x12'\n" +
+	"\x0ftechniques_none\x18\x17 \x01(\tR\x0etechniquesNone\"\xeb\x01\n" +
 	"\x16CustomRuleConfirmation\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12%\n" +
 	"\x0econtent_digest\x18\x02 \x01(\tR\rcontentDigest\x12=\n" +

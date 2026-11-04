@@ -40833,6 +40833,31 @@
         "title": "RequestedEntry",
         "additionalProperties": false
       },
+      "pantherclaw.v1.CredentialUsed": {
+        "type": "object",
+        "properties": {
+          "credentialId": {
+            "type": "string",
+            "title": "credential_id",
+            "format": "uuid",
+            "description": "The credential's id."
+          },
+          "version": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+            "title": "version",
+            "format": "int32",
+            "description": "Its version."
+          }
+        },
+        "title": "CredentialUsed",
+        "additionalProperties": false,
+        "description": "CredentialUsed names a sealed credential by id and version, never its\n value (HR-660).",
+        "required": [
+          "credentialId",
+          "version"
+        ]
+      },
       "pantherclaw.v1.DataScopeApplied": {
         "type": "object",
         "properties": {
@@ -41516,6 +41541,18 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.ContentScan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "credentialUsed": {
+            "title": "credential_used",
+            "description": "The credential of the permit's connection, when the gateway opened it\n for this dispatch, or opened the pool this dispatch reused, an App key\n it minted with included (HR-660); unset otherwise. A connector's egress credential is not named. The Authority\n accepts it only when it is a version of the permit's connection's\n credential, and then names it on the receipt.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.CredentialUsed"
               },
               {
                 "type": "null"
@@ -47905,6 +47942,27 @@
             "title": "close_time",
             "description": "When it was closed; unset otherwise.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "atlas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 64
+            },
+            "title": "atlas",
+            "maxItems": 64,
+            "description": "The union of the MITRE ATLAS and ATT\u0026CK techniques of the alert or\n incident it was opened from and of the alerts and incidents it links,\n sorted, at most 64 each (G0 M28 D718).\n PROVISIONAL field numbers until post-M27's proto changes land (D703)."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 64
+            },
+            "title": "attack",
+            "maxItems": 64
           }
         },
         "title": "Case",
@@ -59170,6 +59228,22 @@
             "type": "string",
             "title": "pending_confirmation_change_id",
             "description": "The protected change, waiting for a second person, that would confirm\n this version; empty when none is pending."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "attack",
+            "maxItems": 16,
+            "description": "ATT\u0026CK Enterprise techniques the rule maps to (G0 M28 D718)."
+          },
+          "techniquesNone": {
+            "type": "string",
+            "title": "techniques_none",
+            "description": "Why a built-in rule maps to no technique, in one line; empty\n otherwise (G0 M28 D714, D718)."
           }
         },
         "title": "DetectionRule",
@@ -68801,6 +68875,22 @@
                 "maxLength": 0
               }
             ]
+          },
+          "transactionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "transaction_id",
+            "description": "The transaction whose own call-time check found the drift; empty from\n the periodic check. The server takes the run from its own transaction\n row of this connection, never from the gateway, and processes the\n report without a run when there is no such row (HR-665).",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "ReportDriftRequest",
@@ -69776,7 +69866,9 @@
           "PRINCIPAL_SOURCE_UNSPECIFIED",
           "PRINCIPAL_SOURCE_LAUNCHER",
           "PRINCIPAL_SOURCE_SUBJECT_TOKEN",
-          "PRINCIPAL_SOURCE_PARENT_RUN"
+          "PRINCIPAL_SOURCE_PARENT_RUN",
+          "PRINCIPAL_SOURCE_ID_JAG",
+          "PRINCIPAL_SOURCE_AUTOMATION"
         ],
         "description": "PrincipalSource says how the represented principal was established."
       },
@@ -70100,6 +70192,14 @@
             "type": "string",
             "title": "grant_id",
             "description": "The grant whose authority the run uses; empty for a run without one,\n whose actions are denied (NO_GRANT)."
+          },
+          "scopeOperations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "scope_operations",
+            "description": "The operations the run is narrowed to within its grant (G0 M26 D400);\n empty for the whole grant."
           }
         },
         "title": "Run",
@@ -75098,6 +75198,17 @@
             "type": "boolean",
             "title": "test",
             "description": "A test alert, capped at ALERT; it never pages."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "attack",
+            "maxItems": 16,
+            "description": "MITRE ATT\u0026CK techniques of the rule that raised it (G0 M28 D718).\n PROVISIONAL field number until post-M27's proto changes land (D703)."
           }
         },
         "title": "Alert",
@@ -75466,6 +75577,27 @@
           "updateTime": {
             "title": "update_time",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "atlas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 64
+            },
+            "title": "atlas",
+            "maxItems": 64,
+            "description": "The union of its alerts' MITRE ATLAS and ATT\u0026CK techniques, sorted, at\n most 64 each (G0 M28 D718).\n PROVISIONAL field numbers until post-M27's proto changes land (D703)."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 64
+            },
+            "title": "attack",
+            "maxItems": 64
           }
         },
         "title": "Incident",
@@ -79828,6 +79960,12 @@
             "format": "uuid",
             "description": "Automation executions of this automation.",
             "nullable": true
+          },
+          "technique": {
+            "type": "string",
+            "title": "technique",
+            "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)?$",
+            "description": "Alerts and incidents carrying this ATLAS or ATT\u0026CK technique or one of\n its sub-techniques (G0 M28 D726). Other entities refuse it."
           }
         },
         "title": "SearchFilters",
@@ -80147,6 +80285,22 @@
             "format": "uuid",
             "description": "Automation executions of this automation.",
             "nullable": true
+          },
+          "technique": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "technique",
+            "description": "Alerts and incidents carrying this ATLAS or ATT\u0026CK technique or one of\n its sub-techniques (G0 M28 D726). Other entities refuse it.",
+            "anyOf": [
+              {
+                "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "SearchFilters",
@@ -90100,6 +90254,27 @@
             "type": "string",
             "title": "origin",
             "description": "origin is \"library\" or \"customer\" (customer-authored), derived by the\n server from the scenario id."
+          },
+          "atlas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "atlas",
+            "maxItems": 16,
+            "description": "The MITRE ATLAS and ATT\u0026CK techniques the library scenario tests, from\n the server's library, set only when origin is \"library\" and the digest\n is the library's (G0 M28 D718).\n PROVISIONAL field numbers until post-M27's proto changes land (D703)."
+          },
+          "attack": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "attack",
+            "maxItems": 16
           }
         },
         "title": "RangeResult",
@@ -90161,7 +90336,7 @@
         },
         "title": "RangeScenarioDecl",
         "additionalProperties": false,
-        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form.\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125)."
+        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the canonical form of what the\n scenario runs: its apiVersion, requires, harness_only and steps (ADR-0051).\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125)."
       },
       "pantherclaw.v1.RangeScenarioDeclInput": {
         "type": "object",
@@ -90221,7 +90396,7 @@
         },
         "title": "RangeScenarioDecl",
         "additionalProperties": false,
-        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form.\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125).",
+        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the canonical form of what the\n scenario runs: its apiVersion, requires, harness_only and steps (ADR-0051).\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125).",
         "x-pantherclaw-input-of": "pantherclaw.v1.RangeScenarioDecl",
         "required": [
           "id",

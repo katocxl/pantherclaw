@@ -70,7 +70,10 @@ type SearchFilters struct {
 	// Transaction effect states (CONFIRMED, NONE_CONFIRMED, PARTIAL, UNKNOWN, ...).
 	EffectStates []string `protobuf:"bytes,30,rep,name=effect_states,json=effectStates,proto3" json:"effect_states,omitempty"`
 	// Automation executions of this automation.
-	AutomationId  *string `protobuf:"bytes,31,opt,name=automation_id,json=automationId,proto3,oneof" json:"automation_id,omitempty"`
+	AutomationId *string `protobuf:"bytes,31,opt,name=automation_id,json=automationId,proto3,oneof" json:"automation_id,omitempty"`
+	// Alerts and incidents carrying this ATLAS or ATT&CK technique or one of
+	// its sub-techniques (G0 M28 D726). Other entities refuse it.
+	Technique     string `protobuf:"bytes,32,opt,name=technique,proto3" json:"technique,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -318,6 +321,13 @@ func (x *SearchFilters) GetEffectStates() []string {
 func (x *SearchFilters) GetAutomationId() string {
 	if x != nil && x.AutomationId != nil {
 		return *x.AutomationId
+	}
+	return ""
+}
+
+func (x *SearchFilters) GetTechnique() string {
+	if x != nil {
+		return x.Technique
 	}
 	return ""
 }
@@ -3129,7 +3139,7 @@ var File_pantherclaw_v1_search_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpantherclaw/v1/search.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf9\f\n" +
+	"\x1bpantherclaw/v1/search.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd7\r\n" +
 	"\rSearchFilters\x12\x1d\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x02id\x88\x01\x01\x12(\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\aagentId\x88\x01\x01\x12$\n" +
@@ -3171,7 +3181,8 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"severities\x18\x1d \x03(\tB\b\xbaH\x05\x92\x01\x02\x10\x10R\n" +
 	"severities\x12-\n" +
 	"\reffect_states\x18\x1e \x03(\tB\b\xbaH\x05\x92\x01\x02\x10\x10R\feffectStates\x122\n" +
-	"\rautomation_id\x18\x1f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\fR\fautomationId\x88\x01\x01B\x05\n" +
+	"\rautomation_id\x18\x1f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\fR\fautomationId\x88\x01\x01\x12\\\n" +
+	"\ttechnique\x18  \x01(\tB>\xbaH;r927^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)?$R\ttechniqueB\x05\n" +
 	"\x03_idB\v\n" +
 	"\t_agent_idB\t\n" +
 	"\a_run_idB\v\n" +

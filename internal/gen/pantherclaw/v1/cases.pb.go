@@ -174,7 +174,13 @@ type Case struct {
 	// When it was contained; unset otherwise.
 	ContainTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=contain_time,json=containTime,proto3" json:"contain_time,omitempty"`
 	// When it was closed; unset otherwise.
-	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	CloseTime *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	// The union of the MITRE ATLAS and ATT&CK techniques of the alert or
+	// incident it was opened from and of the alerts and incidents it links,
+	// sorted, at most 64 each (G0 M28 D718).
+	// PROVISIONAL field numbers until post-M27's proto changes land (D703).
+	Atlas         []string `protobuf:"bytes,18,rep,name=atlas,proto3" json:"atlas,omitempty"`
+	Attack        []string `protobuf:"bytes,19,rep,name=attack,proto3" json:"attack,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -324,6 +330,20 @@ func (x *Case) GetContainTime() *timestamppb.Timestamp {
 func (x *Case) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CloseTime
+	}
+	return nil
+}
+
+func (x *Case) GetAtlas() []string {
+	if x != nil {
+		return x.Atlas
+	}
+	return nil
+}
+
+func (x *Case) GetAttack() []string {
+	if x != nil {
+		return x.Attack
 	}
 	return nil
 }
@@ -1592,7 +1612,7 @@ const file_pantherclaw_v1_cases_proto_rawDesc = "" +
 	"\x0fCaseEvidenceRef\x12H\n" +
 	"\x04kind\x18\x01 \x01(\tB4\xbaH1r/R\x06ledgerR\vtransactionR\x03runR\areceiptR\n" +
 	"case_entryR\x04kind\x12\x18\n" +
-	"\x02id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xe1\x04\n" +
+	"\x02id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x9b\x06\n" +
 	"\x04Case\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -1615,7 +1635,9 @@ const file_pantherclaw_v1_cases_proto_rawDesc = "" +
 	"updateTime\x12=\n" +
 	"\fcontain_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\vcontainTime\x129\n" +
 	"\n" +
-	"close_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\"\xec\x06\n" +
+	"close_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12Z\n" +
+	"\x05atlas\x18\x12 \x03(\tBD\xbaHA\x92\x01>\x10@\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x05atlas\x12\\\n" +
+	"\x06attack\x18\x13 \x03(\tBD\xbaHA\x92\x01>\x10@\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x06attack\"\xec\x06\n" +
 	"\x0eCaseEntryDraft\x12_\n" +
 	"\x04kind\x18\x01 \x01(\tBK\xbaHHrFR\x04FACTR\n" +
 	"HYPOTHESISR\bQUESTIONR\x06ANSWERR\x04NOTER\x06IMPACTR\x04LINKR\x05OWNERR\x05STATER\x04kind\x12\x1c\n" +

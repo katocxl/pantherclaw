@@ -332,10 +332,10 @@ func TestHR113_AProposalExpiresAndEitherPersonCanCancel(t *testing.T) {
 		t.Fatalf("a viewer canceled: %v", err)
 	}
 	if err := e.svc.CancelRestore(alice.ctx, p2.ID); err != nil {
-		t.Fatalf("the other person cancelling: %v", err)
+		t.Fatalf("the other person canceling: %v", err)
 	}
 	if err := e.svc.CancelRestore(alice.ctx, p2.ID); !is(err, app.ErrRestoreGone) {
-		t.Fatalf("cancelling twice: %v", err)
+		t.Fatalf("canceling twice: %v", err)
 	}
 	if _, err := e.svc.ConfirmRestore(alice.ctx, alice.now(), p2.ID); !is(err, app.ErrRestoreGone) {
 		t.Fatalf("confirming a canceled proposal: %v", err)
@@ -375,6 +375,6 @@ func TestHR113_TheKillSwitchIsReadWithContainmentRead(t *testing.T) {
 		t.Fatalf("confirming another org's proposal: %v", err)
 	}
 	if err := e.svc.CancelRestore(bob.ctx, p.ID); !is(err, app.ErrRestoreNotFound) {
-		t.Fatalf("cancelling another org's proposal: %v", err)
+		t.Fatalf("canceling another org's proposal: %v", err)
 	}
 }

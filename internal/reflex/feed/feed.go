@@ -46,6 +46,11 @@ type Event struct {
 	// Attrs are scalar attributes: at most MaxAttrs keys of at most
 	// MaxAttrValue bytes, never payloads or secrets.
 	Attrs map[string]string
+	// ATLAS and ATTACK are the full technique lists of a Reflex entry
+	// (an incident holds up to 64 of each), sorted and distinct. The
+	// atlas/attack attributes may be cut to fit; the SIEM export reads
+	// these (G0 M28 D718b).
+	ATLAS, ATTACK []string
 }
 
 // Limits on an event's attributes.
@@ -221,16 +226,22 @@ func sandboxClosure(e *Event, body []byte) error {
 }
 
 // reflexEntry reads Reflex's own entries (alerts, live events, incidents):
-// detection skips them, the live stream and export read them.
+// detection skips them, the live stream and export read them. An alert's
+// event_kind attribute is the kind of the event that raised it (HR-665),
+// for alert triggers to filter on.
 func reflexEntry(e *Event, body []byte) error {
 	var b struct {
 		ID        string                 `json:"id"`
 		Rule      string                 `json:"rule"`
+		EventKind string                 `json:"event_kind"`
 		Severity  string                 `json:"severity"`
 		Attention string                 `json:"attention"`
 		Basis     string                 `json:"basis"`
 		State     string                 `json:"state"`
 		Subjects  []reflexdomain.Subject `json:"subjects"`
+		ATLAS     []string               `json:"atlas"`
+		ATTACK    []string               `json:"attack"`
+		OWASP     []string               `json:"owasp"`
 		Test      bool                   `json:"test"`
 	}
 	if err := json.Unmarshal(body, &b); err != nil {
@@ -242,8 +253,57 @@ func reflexEntry(e *Event, body []byte) error {
 		}
 	}
 	e.Outcome, e.Test = b.State, b.Test
-	e.Attrs = attrs("id", b.ID, "rule", b.Rule, "severity", b.Severity, "attention", b.Attention, "basis", b.Basis)
+	// The techniques and risks the entry carries reach the live stream and
+	// the SIEM export (G0 M28 D718, HR-684): the full technique lists as
+	// fields, which the export reads, and comma-joined attributes for rules,
+	// which may be cut (D718b).
+	e.ATLAS, e.ATTACK = sortedList(b.ATLAS), sortedList(b.ATTACK)
+	e.Attrs = attrs("id", b.ID, "rule", b.Rule, "event_kind", b.EventKind, "severity", b.Severity,
+		"attention", b.Attention, "basis", b.Basis,
+		"atlas", joinSorted(e.ATLAS), "attack", joinSorted(e.ATTACK), "owasp", joinSorted(sortedList(b.OWASP)))
 	return nil
+}
+
+// maxTechniques bounds a technique list read from an entry: an incident's
+// union holds at most 64 (migration 00320).
+const maxTechniques = 64
+
+// sortedList returns a list's distinct, non-empty, comma-free values,
+// sorted, at most maxTechniques; nil when none.
+func sortedList(vs []string) []string {
+	var out []string
+	for _, v := range vs {
+		if v = strings.TrimSpace(v); v != "" && !strings.Contains(v, ",") {
+			out = append(out, v)
+		}
+	}
+	slices.Sort(out)
+	out = slices.Compact(out)
+	if len(out) > maxTechniques {
+		out = out[:maxTechniques]
+	}
+	return out
+}
+
+// joinSorted joins a sorted list. It keeps the leading values that fit in
+// MaxAttrValue bytes, so a long list (an incident's union holds up to 64
+// ids) is cut at a value boundary rather than dropped by clamp.
+func joinSorted(vs []string) string {
+	var b strings.Builder
+	for _, v := range vs {
+		n := len(v)
+		if b.Len() > 0 {
+			n++
+		}
+		if b.Len()+n > MaxAttrValue {
+			break
+		}
+		if b.Len() > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(v)
+	}
+	return b.String()
 }
 
 // objectTypes maps audit object types to subject types.

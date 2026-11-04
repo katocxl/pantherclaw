@@ -88,8 +88,8 @@ func AlertProto(a dbq.PcAlert) *pb.Alert {
 	return &pb.Alert{
 		Id: a.ID.String(), Source: a.Source, RuleId: a.RuleID, RuleVersion: a.RuleVersion, RuleDigest: a.RuleDigest,
 		PackVersion: a.PackVersion, Title: a.Title, Summary: a.Summary, Severity: a.Severity, Attention: a.Attention,
-		Basis: a.Basis, Subjects: subjects(a.Subjects), Atlas: a.Atlas, Owasp: a.Owasp, Facts: facts, GroupKey: a.GroupKey,
-		State: a.State, IncidentId: idStr(a.IncidentID), SuppressionId: idStr(a.SuppressionID), Count: a.Count,
+		Basis: a.Basis, Subjects: subjects(a.Subjects), Atlas: a.Atlas, Attack: a.Attack, Owasp: a.Owasp, Facts: facts,
+		GroupKey: a.GroupKey, State: a.State, IncidentId: idStr(a.IncidentID), SuppressionId: idStr(a.SuppressionID), Count: a.Count,
 		FirstSeenTime: ts(a.FirstSeen), LastSeenTime: ts(a.LastSeen), Test: a.Test,
 	}
 }
@@ -99,6 +99,7 @@ func IncidentProto(i dbq.PcIncident) *pb.Incident {
 	return &pb.Incident{
 		Id: i.ID.String(), Title: i.Title, Severity: i.Severity, State: i.State, OwnerId: idStr(i.OwnerID),
 		GroupKey: i.GroupKey, OpenedBy: i.OpenedBy, CreateTime: ts(i.CreatedAt), UpdateTime: ts(i.UpdatedAt),
+		Atlas: i.Atlas, Attack: i.Attack,
 	}
 }
 

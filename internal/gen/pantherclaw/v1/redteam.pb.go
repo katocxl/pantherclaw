@@ -369,7 +369,8 @@ func (CampaignBasis) EnumDescriptor() ([]byte, []int) {
 }
 
 // RangeScenarioDecl declares a scenario of the set a range runs. The
-// digest is the SHA-256 (lowercase hex) of the scenario's canonical form.
+// digest is the SHA-256 (lowercase hex) of the canonical form of what the
+// scenario runs: its apiVersion, requires, harness_only and steps (ADR-0051).
 // RT-### is the PantherClaw library: the server accepts it only with the
 // library's digest and takes its tier from the library. CX-### is
 // customer-authored (G0 M17 D124, D125).
@@ -995,7 +996,13 @@ type RangeResult struct {
 	RecordTime     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=record_time,json=recordTime,proto3" json:"record_time,omitempty"`
 	// origin is "library" or "customer" (customer-authored), derived by the
 	// server from the scenario id.
-	Origin        string `protobuf:"bytes,9,opt,name=origin,proto3" json:"origin,omitempty"`
+	Origin string `protobuf:"bytes,9,opt,name=origin,proto3" json:"origin,omitempty"`
+	// The MITRE ATLAS and ATT&CK techniques the library scenario tests, from
+	// the server's library, set only when origin is "library" and the digest
+	// is the library's (G0 M28 D718).
+	// PROVISIONAL field numbers until post-M27's proto changes land (D703).
+	Atlas         []string `protobuf:"bytes,10,rep,name=atlas,proto3" json:"atlas,omitempty"`
+	Attack        []string `protobuf:"bytes,11,rep,name=attack,proto3" json:"attack,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1091,6 +1098,20 @@ func (x *RangeResult) GetOrigin() string {
 		return x.Origin
 	}
 	return ""
+}
+
+func (x *RangeResult) GetAtlas() []string {
+	if x != nil {
+		return x.Atlas
+	}
+	return nil
+}
+
+func (x *RangeResult) GetAttack() []string {
+	if x != nil {
+		return x.Attack
+	}
+	return nil
 }
 
 type RecordResultResponse struct {
@@ -2974,7 +2995,7 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	" \x01(\tR\x0fdecisiveControl\x12\x12\n" +
 	"\x04kind\x18\v \x01(\tR\x04kind\x12\x1d\n" +
 	"\n" +
-	"probe_kind\x18\f \x01(\tR\tprobeKind\"\x8c\x03\n" +
+	"probe_kind\x18\f \x01(\tR\tprobeKind\"\xc6\x04\n" +
 	"\vRangeResult\x12\x1f\n" +
 	"\vscenario_id\x18\x01 \x01(\tR\n" +
 	"scenarioId\x12'\n" +
@@ -2986,7 +3007,10 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x05steps\x18\a \x03(\v2\x19.pantherclaw.v1.RangeStepR\x05steps\x12;\n" +
 	"\vrecord_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"recordTime\x12\x16\n" +
-	"\x06origin\x18\t \x01(\tR\x06origin\"K\n" +
+	"\x06origin\x18\t \x01(\tR\x06origin\x12Z\n" +
+	"\x05atlas\x18\n" +
+	" \x03(\tBD\xbaHA\x92\x01>\x10\x10\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x05atlas\x12\\\n" +
+	"\x06attack\x18\v \x03(\tBD\xbaHA\x92\x01>\x10\x10\":r826^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$R\x06attack\"K\n" +
 	"\x14RecordResultResponse\x123\n" +
 	"\x06result\x18\x01 \x01(\v2\x1b.pantherclaw.v1.RangeResultR\x06result\"9\n" +
 	"\x12FinishRangeRequest\x12#\n" +

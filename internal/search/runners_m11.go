@@ -41,6 +41,7 @@ func alertParams(c tenancy.Caller, sc Scope, f Filters) dbq.SearchAlertsParams {
 	return dbq.SearchAlertsParams{
 		OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(), ID: f.ID, AgentID: f.Agent, IncidentID: f.Incident,
 		States: list(f.States), Severities: list(f.Severities), Sources: list(f.Kinds), StartTime: f.Start, EndTime: f.End,
+		Technique: f.Technique,
 	}
 }
 
@@ -75,6 +76,7 @@ func countAlerts(ctx context.Context, _ *Service, c tenancy.Caller, tx db.Tenant
 	n, err := dbq.New(tx).CountAlerts(ctx, dbq.CountAlertsParams{
 		OrgID: p.OrgID, AllAgents: p.AllAgents, Agents: p.Agents, ID: p.ID, AgentID: p.AgentID, IncidentID: p.IncidentID,
 		States: p.States, Severities: p.Severities, Sources: p.Sources, StartTime: p.StartTime, EndTime: p.EndTime,
+		Technique: p.Technique,
 	})
 	return int(n), err
 }
@@ -83,6 +85,7 @@ func pageIncidents(ctx context.Context, _ *Service, c tenancy.Caller, tx db.Tena
 	rows, err := dbq.New(tx).SearchIncidents(ctx, dbq.SearchIncidentsParams{
 		OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(), Before: before(pr), ID: f.ID, AgentID: f.Agent,
 		States: list(f.States), Severities: list(f.Severities), StartTime: f.Start, EndTime: f.End, PageLimit: pr.Limit(),
+		Technique: f.Technique,
 	})
 	if err != nil {
 		return nil, "", err
@@ -104,7 +107,7 @@ func pageIncidents(ctx context.Context, _ *Service, c tenancy.Caller, tx db.Tena
 func countIncidents(ctx context.Context, _ *Service, c tenancy.Caller, tx db.TenantTx, sc Scope, f Filters) (int, error) {
 	n, err := dbq.New(tx).CountIncidents(ctx, dbq.CountIncidentsParams{
 		OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(), ID: f.ID, AgentID: f.Agent,
-		States: list(f.States), Severities: list(f.Severities), StartTime: f.Start, EndTime: f.End,
+		States: list(f.States), Severities: list(f.Severities), StartTime: f.Start, EndTime: f.End, Technique: f.Technique,
 	})
 	return int(n), err
 }
