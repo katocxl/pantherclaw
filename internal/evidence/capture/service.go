@@ -37,6 +37,9 @@ var (
 	ErrReason             = pcerr.New(pcerr.InvalidArgument, "INVALID_REASON", "a reason of 1 to 500 bytes is required")
 	ErrDirection          = pcerr.New(pcerr.InvalidArgument, "INVALID_DIRECTION", "the direction is request or response")
 	ErrCaptureUnavailable = pcerr.New(pcerr.Internal, "PAYLOAD_CAPTURE_UNREADABLE", "the payload capture cannot be opened")
+	// ErrModelCapture: a model connection's prompts and replies are never
+	// captured (G0 M29 D820, HR-695).
+	ErrModelCapture = pcerr.New(pcerr.FailedPrecondition, "MODEL_CONNECTION_NOT_CAPTURED", "model connections are not captured (G0 M29 D820)")
 )
 
 // Notifier enqueues notifications in the caller's transaction (M5).
@@ -158,6 +161,11 @@ func (s *Service) CreateProfile(ctx context.Context, r ProfileRequest) (Profile,
 		}
 		if int(n) != len(r.Connections) {
 			return ErrConnection
+		}
+		if m, err := q.CountModelConnections(ctx, c.Org, r.Connections); err != nil {
+			return err
+		} else if m > 0 {
+			return ErrModelCapture
 		}
 		p, err := q.InsertCaptureProfile(ctx, dbq.InsertCaptureProfileParams{
 			OrgID: c.Org, ID: ids.NewV7(), Purpose: r.Purpose, Connections: r.Connections, Operations: r.Operations,

@@ -22,6 +22,14 @@ const CodeKindNotImplemented = "kind_not_implemented"
 // without its configuration (G0 M14 D94); nothing is asked or sent.
 const CodeKindConfigMissing = "kind_config_missing"
 
+// CodeKindNotServed: a call reached a face that does not serve the
+// connection's kind, such as an MCP, hook, SDK or A2A call through a model
+// connection (G0 M29 D811); nothing is asked or sent.
+const CodeKindNotServed = "kind_not_served"
+
+// KindModel is the kind of a model connection (G0 M29 D811).
+const KindModel = "model"
+
 // errKindNotImplemented is what a client lookup returns for such a kind.
 var errKindNotImplemented = errors.New("dispatch: connection kind not implemented")
 
@@ -53,6 +61,10 @@ func kindNotImplemented(kind string) bool {
 // postgres connection without its configuration.
 func kindRefusal(conn *control.Connection) string {
 	switch kind := conn.GetKind(); {
+	case kind == KindModel:
+		// A model connection is served by the model path only (G0 M29 D811,
+		// D812): no face maps a call through it.
+		return CodeKindNotServed
 	case kindNotImplemented(kind):
 		return CodeKindNotImplemented
 	case kind == "a2a" && conn.GetA2A() == nil, kind == "postgres" && conn.GetPostgres() == nil:

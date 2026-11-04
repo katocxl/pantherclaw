@@ -13,8 +13,9 @@ import (
 // MaxUsageCount bounds each reported count (the ModelUsage message's range).
 const MaxUsageCount = 1_000_000_000
 
-// MaxEvent is the largest stream event whose data is read for usage (D818).
-const MaxEvent = 1 << 20
+// MaxEvent is the largest stream event whose data is read for usage: the
+// answer cap, so any event that fits in the answer is read (G0 M29 D873).
+const MaxEvent = MaxBody
 
 // Usage is a call's token usage as the provider reported it, normalized
 // (D818): OpenAI's cached tokens are part of its prompt or input tokens, so

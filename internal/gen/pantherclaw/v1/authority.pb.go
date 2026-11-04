@@ -1091,8 +1091,8 @@ func (x *ContentFinding) GetLocation() string {
 // PayloadFinding is one credential-shaped value in an action's payload.
 type PayloadFinding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The format: github_token, private_key, aws_access_key, slack_token or
-	// pantherclaw_token; or scan_incomplete, when the gateway could not look
+	// The format: github_token, private_key, aws_access_key, slack_token,
+	// pantherclaw_token, anthropic or openai (G0 M29 D816); or scan_incomplete, when the gateway could not look
 	// at the whole payload (too many strings, a base64 value too large).
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Where it is, such as arg:content or body:/files/0/content(base64);
