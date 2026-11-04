@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-//nolint:misspell // MITRE is a proper noun (the ATT&CK and ATLAS publisher) and mitre-attack its STIX source name.
 package main
 
 import (
