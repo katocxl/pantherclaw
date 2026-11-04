@@ -11,7 +11,7 @@ All changes follow [docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md) and the gates in [
 1. **G0 brief** exists for the milestone (scope, threat slice, constraints, tests).
 2. Work on a short-lived branch from `origin/main` in your own worktree, so parallel sessions don't overwrite each other ([docs/PARALLEL_WORK.md](docs/PARALLEL_WORK.md)).
 3. Every source file carries the SPDX + copyright header (`task license:fix`).
-4. Tests first for security-relevant behavior; reference requirement IDs (`F###`, `PN-###`, `HR-###`, `T-###`) in test names or comments.
+4. Tests first for security-relevant behavior; reference requirement IDs (`F###` or, from F1000, `F####`, `PN-###`, `HR-###`, `T-###`) in test names or comments.
 5. `task check` must pass locally (format, lint, unit tests, headers, secrets scan), and so must `task test:integration` (start the cluster with `task up PROFILE=test`) and `task trace` when the change touches what they cover. A change to `internal/authority`, `internal/gateway`, `internal/sandbox`, `internal/redteam`, `packages/`, `redteam/` or `test/e2e/` also runs `task range` (`SANDBOX=1 task range` when `internal/sandbox` changed).
 6. Commit with a [Conventional Commit](https://www.conventionalcommits.org/) message, push the branch, open a pull request and turn on squash auto-merge (`gh pr merge <n> --auto --squash`); GitHub merges it once the required check `ci-ok` is green. A pull request that changes `.github/` gets no auto-merge; the founder merges it. Auto-merge after CI replaces the G1 founder review for now ([EX-005](docs/security/GATES_AND_REVIEW.md#4-exceptions)).
 
