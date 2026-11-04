@@ -77,6 +77,9 @@ type Config struct {
 	// connection, with streaming. Sandbox mode only.
 	ModelHost       string `json:"model_host,omitzero"`
 	ModelConnection string `json:"model_connection,omitzero"`
+	// ModelConnections name the mapped connections of kind model, forwarded
+	// with the model path's limits (G0 M29 D814). Sandbox mode only.
+	ModelConnections []string `json:"model_connections,omitzero"`
 }
 
 // ReadConfig reads a configuration file strictly.
@@ -92,7 +95,7 @@ func ReadConfig(path string) (Config, error) {
 	switch {
 	case c.Format != ConfigFormat:
 		return Config{}, fmt.Errorf("edge: format %q, want %s", c.Format, ConfigFormat)
-	case c.Mode != ModeSandbox && (c.ModelHost != "" || c.ModelConnection != ""):
+	case c.Mode != ModeSandbox && (c.ModelHost != "" || c.ModelConnection != "" || len(c.ModelConnections) > 0):
 		return Config{}, errors.New("edge: only a sandbox's edge has a model route")
 	case c.Mode == ModeConnector && (c.Listen == "" || c.Subnet == "" || c.BindingFile == "" || c.KeyFile != "" || c.TokenFile != ""):
 		return Config{}, errors.New("edge: a connector's edge needs listen, subnet and binding_file, and has no workload key or token")
@@ -154,6 +157,7 @@ func Run(ctx context.Context, c Config, out io.Writer, log *slog.Logger) error {
 		o.Placeholder = c.Placeholder
 	default:
 		o.ModelHost, o.ModelConnection, o.Placeholder = c.ModelHost, c.ModelConnection, c.Placeholder
+		o.ModelConnections = c.ModelConnections
 		kf, err := workloadclient.ReadKeyFile(c.KeyFile)
 		if err != nil {
 			return err

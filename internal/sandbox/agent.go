@@ -56,7 +56,11 @@ func (s *Sandbox) PrepareAgent(ctx context.Context, a Agent) error {
 		return err
 	}
 	proxy := "http://" + s.EdgeAddr
-	env := []string{"HTTPS_PROXY=" + proxy, "https_proxy=" + proxy, "HTTP_PROXY=" + proxy, "http_proxy=" + proxy, "NO_PROXY=", "no_proxy=", "HOME=/tmp"}
+	env := []string{
+		"HTTPS_PROXY=" + proxy, "https_proxy=" + proxy, "HTTP_PROXY=" + proxy, "http_proxy=" + proxy, "NO_PROXY=", "no_proxy=", "HOME=/tmp",
+		// Node's fetch honors the proxy variables only with this (G0 M29 D815).
+		"NODE_USE_ENV_PROXY=1",
+	}
 	for _, v := range caEnv {
 		env = append(env, v+"="+caPath)
 	}

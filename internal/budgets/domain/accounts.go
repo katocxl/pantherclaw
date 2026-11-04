@@ -15,8 +15,11 @@ import (
 // Account is the state of one budget row: a limit on value, on the number
 // of actions, or both, and what is reserved and spent against it.
 type Account struct {
-	ID            ids.UUID
-	Rank          int
+	ID   ids.UUID
+	Rank int
+	// Unit is what Limit, Reserved and Spent count (G0 M29 D821); unset is
+	// UnitCurrency.
+	Unit          Unit
 	Currency      money.Currency
 	Limit         *money.Decimal
 	Reserved      money.Decimal
@@ -63,6 +66,11 @@ func (a Account) fits(amount money.Decimal) error {
 			return err
 		}
 		if used.Cmp(*a.Limit) > 0 {
+			if a.Unit == UnitTokens {
+				// G0 M29 D821: "N of M tokens used".
+				held, _ := a.Spent.Add(a.Reserved)
+				return fmt.Errorf("%w: %s of %s tokens used", ErrExhausted, held, *a.Limit)
+			}
 			return fmt.Errorf("%w: %s %s left", ErrExhausted, mustSub(*a.Limit, a.Spent, a.Reserved), a.Currency)
 		}
 	}
