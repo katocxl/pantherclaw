@@ -245,7 +245,7 @@ func TestE2E_M28_ThreatMap(t *testing.T) {
 	if code, out, errs := d.admin.pclaw(t, "pack", "download", packID, "--out", file); code != 0 {
 		t.Fatalf("pack download: %d %s %s", code, out, errs)
 	}
-	code, rep := p.verify(t, file)
+	code, rep := p.verify(t, ctx, file)
 	if code != 0 || !all(rep, "threatmap.report", bundle.Passed) || !all(rep, "threatmap.lanes", bundle.Passed) {
 		t.Fatalf("pclaw verify the threat map pack: %d %+v", code, rep.Checks)
 	}
@@ -257,7 +257,7 @@ func TestE2E_M28_ThreatMap(t *testing.T) {
 	if err := os.WriteFile(edited, m28FlipFirstTechnique(t, raw), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code, rep := p.verify(t, edited); code == 0 || !slices.Contains(statuses(rep, "pack.item"), bundle.Failed) {
+	if code, rep := p.verify(t, ctx, edited); code == 0 || !slices.Contains(statuses(rep, "pack.item"), bundle.Failed) {
 		t.Fatalf("an edited threat map verified: %d %+v", code, rep.Checks)
 	}
 
