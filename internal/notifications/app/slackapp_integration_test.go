@@ -527,7 +527,7 @@ func TestT145_SlackReconcilerClosesCardsAndPausesSharedChannels(t *testing.T) {
 	}
 	// The decided and expired notices never reach Slack; after a downgrade,
 	// closing still happens.
-	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'") //nolint:misspell // the schema's state name
+	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'")
 	s.svc.SetEditions(edition(billingdomain.Community))
 	r, err := s.svc.ReconcileSlack(context.Background(), s.org)
 	if err != nil || r.Closed != 2 {
@@ -610,7 +610,7 @@ func TestHR314_SlackCardSummaryShowsNoBoundValues(t *testing.T) {
 func TestM14_SlackAPIBaseIsSlackOrLoopback(t *testing.T) {
 	e := newEnv(t)
 	for _, base := range []string{"https://evil.example/api", "http://10.0.0.1/api", "ftp://127.0.0.1/api", "http://user@127.0.0.1/api"} {
-		if err := e.svc.SetSlackAPI(base, http.DefaultClient); !errors.Is(err, napp.ErrSlackAPIBase) {
+		if err := e.svc.SetSlackAPI(base, &http.Client{}); !errors.Is(err, napp.ErrSlackAPIBase) {
 			t.Fatalf("%s: %v", base, err)
 		}
 	}
@@ -697,7 +697,7 @@ func (s *slackEnv) expireUnnoticed(t *testing.T) {
 	if _, err := approvals.SweepOrg(context.Background(), s.pool, s.svc, s.org); err != nil {
 		t.Fatal(err)
 	}
-	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'") //nolint:misspell // the schema's state name
+	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'")
 }
 
 // health is a channel's failure bookkeeping.
@@ -796,7 +796,7 @@ func TestT145_AnInvalidatedRequestsCardIsClosed(t *testing.T) {
 	if st := s.str(t, "SELECT state FROM pc.approval_requests WHERE id = $1", req); st != "INVALIDATED" {
 		t.Fatalf("request: %s", st)
 	}
-	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'") //nolint:misspell // the schema's state name
+	s.exec(t, "UPDATE pc.deliveries SET state = 'CANCELLED', finished_at = now() WHERE state = 'PENDING' AND kind = 'slack_app'")
 	if r, err := s.svc.ReconcileSlack(context.Background(), s.org); err != nil || r.Closed != 1 {
 		t.Fatalf("reconcile: %v %+v", err, r)
 	}
@@ -807,10 +807,11 @@ func TestT145_AnInvalidatedRequestsCardIsClosed(t *testing.T) {
 
 func (s *slackEnv) cardRow(t *testing.T, request ids.UUID) dbq.PcSlackCard {
 	t.Helper()
+	channel := mustUUIDStr(t, s.str(t, "SELECT channel_record_id::text FROM pc.slack_cards WHERE request_id = $1 LIMIT 1", request))
 	var c dbq.PcSlackCard
 	if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
-		c, err = dbq.New(tx).LatestSlackCard(ctx, s.org, request, mustUUIDStr(t, s.str(t, "SELECT channel_record_id::text FROM pc.slack_cards WHERE request_id = $1 LIMIT 1", request)))
+		c, err = dbq.New(tx).LatestSlackCard(ctx, s.org, request, channel)
 		return err
 	}); err != nil {
 		t.Fatal(err)

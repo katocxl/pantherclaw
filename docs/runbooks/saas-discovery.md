@@ -48,7 +48,7 @@ pclaw discover import --source chatgpt_enterprise --file recording.json
 
 ```
 pantherclaw-sim copilot-studio [--addr 127.0.0.1:9100] [--deny-components]
-pantherclaw-sim chatgpt-enterprise [--addr 127.0.0.1:9101] [--key-file FILE] [--deny]
+pantherclaw-sim chatgpt-enterprise [--addr 127.0.0.1:9102] [--key-file FILE] [--deny]
 ```
 
 Rows are SYNTHETIC and include one hostile name. `GET /__sim/stats` counts content columns asked for and conversation reads; both must stay 0.

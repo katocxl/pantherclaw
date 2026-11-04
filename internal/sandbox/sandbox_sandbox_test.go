@@ -95,7 +95,7 @@ func newRig(t *testing.T, agent bool) *rig {
 		t.Fatal(err)
 	}
 	// The edge's uid reads it through a read-only mount, as pclaw sandbox run writes it (0644 in a private directory).
-	if err := os.Chmod(keyFile, 0o644); err != nil { //nolint:gosec // G302: see above
+	if err := os.Chmod(keyFile, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tokens := filepath.Join(dir, "token")

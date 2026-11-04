@@ -64,7 +64,7 @@ func TestNodeUp_RealDocker(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		// Remove the containers and every volume of this test node.
-		_ = exec.Command("docker", "compose", "--file", filepath.Join(dir, nodeComposeFile), "--project-directory", dir, //nolint:gosec // test cleanup
+		_ = exec.Command("docker", "compose", "--file", filepath.Join(dir, nodeComposeFile), "--project-directory", dir,
 			"--profile", "tools", "--profile", "gateway", "down", "--volumes", "--remove-orphans").Run()
 	})
 	code, out, errs := run("up", "--dir", dir, "--port", strconv.Itoa(api), "--gateway-port", strconv.Itoa(gw))

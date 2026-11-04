@@ -26,7 +26,7 @@ func runCanary(ctx context.Context, args []string, stderr io.Writer) error {
 	dns := fs.Int("dns-port", 18453, "DNS port, UDP and TCP")
 	https := fs.Int("https-port", 18443, "HTTPS port")
 	ssh := fs.Int("ssh-port", 18422, "SSH port")
-	query := fs.String("query-addr", "127.0.0.1:18433", "where hits are queried (loopback)")
+	query := fs.String("query-addr", defaultAddrs["canary"], "where hits are queried (loopback)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

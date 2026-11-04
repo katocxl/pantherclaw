@@ -58,6 +58,7 @@ func TestHR515_ABundleWhoseEvidenceIsRemovedGetsANotice(t *testing.T) {
 	}
 	removed := func(seq int64) {
 		t.Helper()
+		ctx := t.Context()
 		entry := ids.NewV7()
 		f.d.AdminDo(t, func(c *pgx.Conn) error {
 			tx, err := c.Begin(ctx)

@@ -98,8 +98,8 @@ func TestHR221_SimulatedTargetsMustBeLocalLiterals(t *testing.T) {
 	}
 
 	// A real connection keeps its ordinary rules and is not simulated.
-	real := e.payments(t, "real")
-	if real.Simulated {
+	realConn := e.payments(t, "real")
+	if realConn.Simulated {
 		t.Error("a real connection reads as simulated")
 	}
 
@@ -110,7 +110,7 @@ func TestHR221_SimulatedTargetsMustBeLocalLiterals(t *testing.T) {
 	if err != nil || !local.Simulated || local.BaseUrl != nil {
 		t.Errorf("simulated local connection: %+v, %v", local.PcConnection, err)
 	}
-	through := real.ID
+	through := realConn.ID
 	_, err = e.svc.Create(e.admin, app.CreateInput{
 		Name: "sim-container", Kind: app.KindMCPContainer, Package: mockpayments.Name, Gateway: e.gateway, AccessMode: app.AccessNone,
 		Simulated: true, Connector: &app.ConnectorSpec{Image: "ghcr.io/example/x@sha256:" + zeros(64), Command: []string{"/server"}, EgressConnection: &through},
@@ -140,11 +140,11 @@ func TestHR220_ConnectionSimulatedFlagIsImmutable(t *testing.T) {
 	if err != nil || !sim.Simulated {
 		t.Fatal(sim.PcConnection, err)
 	}
-	real := e.payments(t, "real")
+	realConn := e.payments(t, "real")
 	for _, c := range []struct {
 		id string
 		to bool
-	}{{real.ID.String(), true}, {sim.ID.String(), false}} {
+	}{{realConn.ID.String(), true}, {sim.ID.String(), false}} {
 		err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
 			_, err := tx.Exec(ctx, "UPDATE pc.connections SET simulated = $1 WHERE org_id = $2 AND id = $3", c.to, e.org, c.id)
 			return err
@@ -196,14 +196,14 @@ func TestHR222_SimulatedDriftQuarantinesNothing(t *testing.T) {
 		t.Errorf("an unreviewed tool on a simulated connection: %v", err)
 	}
 	// The real connection of the same package still quarantines.
-	real, err := e.svc.Create(e.admin, app.CreateInput{
+	realConn, err := e.svc.Create(e.admin, app.CreateInput{
 		Name: "upstream", Kind: app.KindMCP, Package: upstreamPackage, BaseURL: "https://mcp.example.test/mcp", Gateway: e.gateway,
 		AccessMode: app.AccessNone,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q, err := e.svc.ReportDrift(ctx, e.org, e.gateway, real.ID, "get_refund", upstreamDigest, observed); err != nil || !q || quarantined() != 1 {
+	if q, err := e.svc.ReportDrift(ctx, e.org, e.gateway, realConn.ID, "get_refund", upstreamDigest, observed); err != nil || !q || quarantined() != 1 {
 		t.Fatalf("real drift: %v %v, quarantined %d", q, err, quarantined())
 	}
 }
@@ -216,7 +216,7 @@ func TestHR222_SimulatedToolCallsLeaveNoObservation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	real := e.payments(t, "real")
+	realConn := e.payments(t, "real")
 	agent, run := e.agentRun(t, "coder")
 	instance := ids.NewV7()
 	e.exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
@@ -224,7 +224,7 @@ func TestHR222_SimulatedToolCallsLeaveNoObservation(t *testing.T) {
 	for _, c := range []struct {
 		conn ids.UUID
 		want int64
-	}{{sim.ID, 0}, {real.ID, 1}} {
+	}{{sim.ID, 0}, {realConn.ID, 1}} {
 		id, err := e.svc.RecordToolObservation(context.Background(), e.org, e.gateway, app.ToolObservation{
 			Run: run, Instance: instance, Connection: c.conn, Tool: "x", InputSHA256: make([]byte, 32),
 		})
