@@ -82,6 +82,40 @@ func sigmaAttackTags(t *testing.T, r catalogRule) []string {
 
 var attackID = regexp.MustCompile(`^T[0-9]{4}(\.[0-9]{3})?$`)
 
+// sentinelTactics names each ATT&CK Enterprise tactic as Sentinel's
+// analytic rule `tactics` field spells it (G0 M28 D718f). A fixed table,
+// never a name with its spaces removed.
+var sentinelTactics = map[string]string{
+	"TA0043": "Reconnaissance",
+	"TA0042": "ResourceDevelopment",
+	"TA0001": "InitialAccess",
+	"TA0002": "Execution",
+	"TA0003": "Persistence",
+	"TA0004": "PrivilegeEscalation",
+	"TA0005": "DefenseEvasion",
+	"TA0006": "CredentialAccess",
+	"TA0007": "Discovery",
+	"TA0008": "LateralMovement",
+	"TA0009": "Collection",
+	"TA0011": "CommandAndControl",
+	"TA0010": "Exfiltration",
+	"TA0040": "Impact",
+	// Defense Impairment is new in ATT&CK 20.0. Whether Sentinel accepts
+	// this name has not been tried (see sentinel/README.md).
+	"TA0112": "DefenseImpairment",
+}
+
+// TestT306_EveryATTACKTacticHasASentinelName: the table names every tactic
+// of the pinned ATT&CK catalog (G0 M28 D718f). Covers: F965, T-306
+func TestT306_EveryATTACKTacticHasASentinelName(t *testing.T) {
+	c := tmcatalog.Load(tmcatalog.FrameworkATTACK)
+	for _, ta := range c.Tactics {
+		if _, ok := sentinelTactics[ta.ID]; !ok {
+			t.Errorf("ATT&CK %s tactic %s (%s) has no Sentinel name", c.Version, ta.ID, ta.Name)
+		}
+	}
+}
+
 // TestT306_SIEMRulesNameActiveATTACKTechniquesOrSayWhyNot: every
 // rules.yaml rule names ATT&CK Enterprise ids or one line saying why it
 // names none, never both; every id is active in the pinned catalog, neither
@@ -143,7 +177,11 @@ func TestT306_EveryPackNamesRulesYamlsTechniques(t *testing.T) {
 			m := mitreOf(t, r)
 			var tactics []string
 			for _, ta := range m.Tactics {
-				tactics = append(tactics, strings.ReplaceAll(ta.Name, " ", ""))
+				name, ok := sentinelTactics[ta.ID]
+				if !ok {
+					t.Fatalf("%s: tactic %s has no Sentinel name", r.ID, ta.ID)
+				}
+				tactics = append(tactics, name)
 			}
 			if !eq(x.Properties.Tactics, tactics) || !eq(x.Properties.Techniques, m.Techniques) || !eq(x.Properties.SubTechniques, m.Subs) ||
 				x.Properties.Tactics == nil || x.Properties.Techniques == nil || x.Properties.SubTechniques == nil {
