@@ -7,6 +7,7 @@ tier: business
 attacker: A8
 threats: [T-174]
 rules: [HR-385, HR-386, HR-388]
+techniques_none: "Tests PantherClaw's own support access: support cannot approve its own request or reuse a revoked session."
 requires: [payments, billing]
 harness_only: true
 steps:

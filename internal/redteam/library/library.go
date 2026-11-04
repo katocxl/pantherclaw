@@ -33,6 +33,8 @@ type Entry struct {
 	ATLAS        []string          `json:"atlas,omitzero"`
 	ATTACK       []string          `json:"attack,omitzero"`
 	TechniqueWhy map[string]string `json:"technique_why,omitzero"`
+	// TechniquesNone says why the file maps no technique (G0 M28 D714b).
+	TechniquesNone string `json:"techniques_none,omitzero"`
 }
 
 //go:embed library.json
@@ -59,6 +61,8 @@ type CampaignEntry struct {
 	ATLAS        []string          `json:"atlas,omitzero"`
 	ATTACK       []string          `json:"attack,omitzero"`
 	TechniqueWhy map[string]string `json:"technique_why,omitzero"`
+	// TechniquesNone says why the file maps no technique (G0 M28 D714b).
+	TechniquesNone string `json:"techniques_none,omitzero"`
 }
 
 //go:embed campaigns.json

@@ -11,6 +11,7 @@ asi: [ASI03, ASI10]
 asi_why:
   ASI03: "Identity and privilege abuse (ASI03): the agent keeps acting on a grant after it was revoked."
   ASI10: "Rogue agents (ASI10): an agent whose authority was taken away keeps trying to act."
+techniques_none: "Tests PantherClaw's own revocation: a revoked grant refuses the next action."
 requires: [payments]
 harness_only: false
 steps:

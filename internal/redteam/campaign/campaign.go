@@ -101,11 +101,14 @@ type File struct {
 	ATLAS        []string          `json:"atlas,omitzero"`
 	ATTACK       []string          `json:"attack,omitzero"`
 	TechniqueWhy map[string]string `json:"technique_why,omitzero"`
-	Rules        []string          `json:"rules,omitzero"`
-	Task         string            `json:"task"`
-	Plants       []Plant           `json:"plants,omitzero"`
-	Attempts     []domain.Attempt  `json:"attempts"`
-	Script       []Step            `json:"script"`
+	// TechniquesNone replaces ATLAS and ATTACK on a campaign that tests
+	// PantherClaw itself: one line (G0 M28 D714b).
+	TechniquesNone string           `json:"techniques_none,omitzero"`
+	Rules          []string         `json:"rules,omitzero"`
+	Task           string           `json:"task"`
+	Plants         []Plant          `json:"plants,omitzero"`
+	Attempts       []domain.Attempt `json:"attempts"`
+	Script         []Step           `json:"script"`
 }
 
 var asiRE = regexp.MustCompile(`^ASI(0[1-9]|10)$`)
@@ -166,7 +169,7 @@ func (f *File) Validate() error {
 	case !validASI(f.ASI):
 		return bad("asi: OWASP risks ASI01..ASI10, ascending, each once")
 	}
-	if err := rtdomain.CheckTechniques(f.ATLAS, f.ATTACK, f.TechniqueWhy); err != nil {
+	if err := rtdomain.CheckTechniques(f.ATLAS, f.ATTACK, f.TechniqueWhy, f.TechniquesNone); err != nil {
 		return bad("%v", err)
 	}
 	seen := map[string]bool{}

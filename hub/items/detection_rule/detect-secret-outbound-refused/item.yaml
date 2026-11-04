@@ -1,5 +1,5 @@
 name: pc.detect.secret-outbound-refused
-version: 1.0.0
+version: 1.1.0
 kind: detection_rule
 title: Outbound text with a secret was refused
 summary: >-
@@ -17,6 +17,8 @@ body:
     attention: ALERT
     basis: INFERRED
     owasp: [ASI02]
+    atlas: [AML.T0086]
+    attack: [T1552]
     edition: business
     on: [receipt.decision]
     match: event.decision == "DENY" && event.reason == "SECRET_OUTBOUND"

@@ -26,25 +26,40 @@ func TestHR683_ScenarioTechniquesComeFromTheCatalogueWithAReason(t *testing.T) {
 	if len(s.ATLAS) != 1 || len(s.ATTACK) != 1 || len(s.TechniqueWhy) != 2 {
 		t.Fatalf("techniques: %v %v %v", s.ATLAS, s.ATTACK, s.TechniqueWhy)
 	}
-	for name, bad := range map[string]string{
-		"unknown ATLAS":     "atlas: [AML.T9999]\ntechnique_why:\n  AML.T9999: \"x (AML.T9999)\"\n",
-		"unknown ATT&CK":    "attack: [T9999]\ntechnique_why:\n  T9999: \"x (T9999)\"\n",
-		"ATT&CK as ATLAS":   "atlas: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n",
-		"ATLAS as ATT&CK":   "attack: [AML.T0051]\ntechnique_why:\n  AML.T0051: \"x (AML.T0051)\"\n",
-		"repeated":          "attack: [T1078, T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n",
-		"no reason":         "atlas: [AML.T0051.001]\nattack: [T1078]\n",
-		"missing reason":    "atlas: [AML.T0051.001]\nattack: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n",
-		"reason for other":  "attack: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n  T1059: \"x (T1059)\"\n",
-		"reason, no id":     "attack: [T1078]\nattack: []\n",
-		"no citation":       "attack: [T1078]\ntechnique_why:\n  T1078: \"Valid accounts: its credential.\"\n",
-		"two lines":         "attack: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\\ny\"\n",
-		"too long":          "attack: [T1078]\ntechnique_why:\n  T1078: \"(T1078) " + strings.Repeat("x", 200) + "\"\n",
-		"blank":             "attack: [T1078]\ntechnique_why:\n  T1078: \" \"\n",
-		"retired ATLAS id":  "atlas: [AML.T0057]\ntechnique_why:\n  AML.T0057: \"x (AML.T0057)\"\n",
-		"why without a tag": "technique_why:\n  T1078: \"x (T1078)\"\n",
+	// A library scenario that tests PantherClaw itself says so (G0 M28 D714b).
+	if s, err := domain.Parse(asiFile("RT-901", "techniques_none: \"Tests the export of PantherClaw's own evidence.\"\n")); err != nil || s.TechniquesNone == "" {
+		t.Fatalf("techniques_none: %v", err)
+	}
+	const (
+		notInCatalog = "not a technique of the pinned catalog"
+		oneEach      = "one reason for each"
+		oneLine      = "must be one line"
+	)
+	for _, c := range []struct{ name, tags, want string }{
+		{"unknown ATLAS", "atlas: [AML.T9999]\ntechnique_why:\n  AML.T9999: \"x (AML.T9999)\"\n", notInCatalog},
+		{"unknown ATT&CK", "attack: [T9999]\ntechnique_why:\n  T9999: \"x (T9999)\"\n", notInCatalog},
+		{"ATT&CK as ATLAS", "atlas: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n", notInCatalog},
+		{"ATLAS as ATT&CK", "attack: [AML.T0051]\ntechnique_why:\n  AML.T0051: \"x (AML.T0051)\"\n", notInCatalog},
+		{"repeated", "attack: [T1078, T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n", "duplicate"},
+		{"no reason", "atlas: [AML.T0051.001]\nattack: [T1078]\n", oneEach},
+		{"missing reason", "atlas: [AML.T0051.001]\nattack: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n", oneEach},
+		{"reason for other", "attack: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n  T1059: \"x (T1059)\"\n", oneEach},
+		{"reason, no id", "attack: [T1078]\ntechnique_why:\n  T1059: \"x (T1059)\"\n", "gives no reason for T1078"},
+		{"no citation", "attack: [T1078]\ntechnique_why:\n  T1078: \"Valid accounts: its credential.\"\n", "must cite"},
+		{"two lines", "attack: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\\ny\"\n", oneLine},
+		{"too long", "attack: [T1078]\ntechnique_why:\n  T1078: \"(T1078) " + strings.Repeat("x", 200) + "\"\n", oneLine},
+		{"blank", "attack: [T1078]\ntechnique_why:\n  T1078: \" \"\n", oneLine},
+		{"retired ATLAS id", "atlas: [AML.T0057]\ntechnique_why:\n  AML.T0057: \"x (AML.T0057)\"\n", notInCatalog},
+		{"why without a tag", "technique_why:\n  T1078: \"x (T1078)\"\n", oneEach},
+		{"none beside ids", "attack: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\ntechniques_none: \"Tests the export.\"\n", "techniques_none replaces"},
+		{"none beside a reason", "technique_why:\n  T1078: \"x (T1078)\"\ntechniques_none: \"Tests the export.\"\n", "techniques_none replaces"},
+		{"none on two lines", "techniques_none: \"Tests\\nthe export.\"\n", "techniques_none must be one line"},
+		{"none too long", "techniques_none: \"" + strings.Repeat("x", 201) + "\"\n", "techniques_none must be one line"},
+		{"none blank", "techniques_none: \" \"\n", "techniques_none must be one line"},
 	} {
-		if _, err := domain.Parse(asiFile("RT-901", bad)); !errors.Is(err, domain.ErrInvalid) {
-			t.Errorf("%s: %v", name, err)
+		_, err := domain.Parse(asiFile("RT-901", c.tags))
+		if !errors.Is(err, domain.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: got %v, want the %q check", c.name, err, c.want)
 		}
 	}
 }
@@ -65,6 +80,7 @@ func TestHR685_CustomerScenarioCarriesNoTechnique(t *testing.T) {
 		"attack":        "attack: [T1078]\ntechnique_why:\n  T1078: \"x (T1078)\"\n",
 		"both":          techniques,
 		"only a reason": "technique_why:\n  T1078: \"x (T1078)\"\n",
+		"none":          "techniques_none: \"Tests the export.\"\n",
 	} {
 		_, err := domain.Parse(cx(tags))
 		if !errors.Is(err, domain.ErrInvalid) || !strings.Contains(err.Error(), "techniques are for library scenarios") {

@@ -11,8 +11,9 @@ description: >-
 severity: HIGH
 attention: ALERT
 basis: INFERRED
-atlas: [AML.T0051.001]
 owasp: [ASI01, ASI06]
+atlas: [AML.T0051.001, AML.T0110.000]
+attack: [T1698]
 edition: community
 on: [audit.connection.tool_description_flagged]
 group: connection

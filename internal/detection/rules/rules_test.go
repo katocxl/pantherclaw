@@ -79,6 +79,7 @@ func TestHR682_RuleMappingsComeFromThePinnedCatalogue(t *testing.T) {
 		"too many ATT&CK":      base + "attack: [" + strings.TrimSuffix(strings.Repeat("T1059, ", 17), ", ") + "]\n",
 		"custom says none":     base + "techniques_none: Not a detection.\n",
 		"built-in both":        builtinBase + "attack: [T1078]\ntechniques_none: Not a detection.\n",
+		"built-in neither":     builtinBase,
 		"none on two lines":    builtinBase + "techniques_none: \"one\\ntwo\"\n",
 		"none blank":           builtinBase + "techniques_none: \"  \"\n",
 		"none longer than 200": builtinBase + "techniques_none: " + strings.Repeat("a", 201) + "\n",

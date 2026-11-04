@@ -12,6 +12,7 @@ severity: HIGH
 attention: ALERT
 basis: OBSERVED
 owasp: [ASI02]
+attack: [T1685]
 edition: community
 on: [coverage.snapshot]
 match: event.attrs.?previous_state.orValue("") == "ENFORCED" && event.outcome != "ENFORCED"

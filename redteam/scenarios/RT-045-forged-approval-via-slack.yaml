@@ -10,6 +10,11 @@ rules: [HR-313]
 asi: [ASI09]
 asi_why:
   ASI09: "Human-agent trust exploitation (ASI09): a Slack action that looks like an approval tries to release a held action."
+atlas: [AML.T0073]
+attack: [T1548]
+technique_why:
+  AML.T0073: "Impersonation (AML.T0073): a Slack action poses as a person's approval."
+  T1548: "Abuse elevation control mechanism (T1548): the forged approval tries to release a held action."
 requires: [payments, person, slack.interaction_post]
 harness_only: false
 steps:

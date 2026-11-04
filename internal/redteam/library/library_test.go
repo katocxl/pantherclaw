@@ -37,7 +37,7 @@ func TestLibrary_MatchesTheShippedScenarios(t *testing.T) {
 	for _, l := range set {
 		want[l.Scenario.ID] = library.Entry{
 			Digest: l.Digest, Tier: l.Scenario.Tier, ASI: l.Scenario.ASI, ASIWhy: l.Scenario.ASIWhy,
-			ATLAS: l.Scenario.ATLAS, ATTACK: l.Scenario.ATTACK, TechniqueWhy: l.Scenario.TechniqueWhy,
+			ATLAS: l.Scenario.ATLAS, ATTACK: l.Scenario.ATTACK, TechniqueWhy: l.Scenario.TechniqueWhy, TechniquesNone: l.Scenario.TechniquesNone,
 		}
 	}
 	if *update {
@@ -52,7 +52,7 @@ func TestLibrary_MatchesTheShippedScenarios(t *testing.T) {
 	}
 	same := func(a, b library.Entry) bool {
 		return a.Digest == b.Digest && a.Tier == b.Tier && slices.Equal(a.ASI, b.ASI) && maps.Equal(a.ASIWhy, b.ASIWhy) &&
-			slices.Equal(a.ATLAS, b.ATLAS) && slices.Equal(a.ATTACK, b.ATTACK) && maps.Equal(a.TechniqueWhy, b.TechniqueWhy)
+			slices.Equal(a.ATLAS, b.ATLAS) && slices.Equal(a.ATTACK, b.ATTACK) && maps.Equal(a.TechniqueWhy, b.TechniqueWhy) && a.TechniquesNone == b.TechniquesNone
 	}
 	if got := library.All(); !maps.EqualFunc(got, want, same) {
 		t.Fatalf("library.json is out of date with %s: run task range:library", dir)
@@ -109,7 +109,7 @@ func TestLibrary_MatchesTheShippedCampaigns(t *testing.T) {
 	for _, l := range set {
 		want[l.File.ID] = library.CampaignEntry{
 			Digest: l.Digest, Tier: l.File.Tier, Attempts: l.File.Attempts, ASI: l.File.ASI,
-			ATLAS: l.File.ATLAS, ATTACK: l.File.ATTACK, TechniqueWhy: l.File.TechniqueWhy,
+			ATLAS: l.File.ATLAS, ATTACK: l.File.ATTACK, TechniqueWhy: l.File.TechniqueWhy, TechniquesNone: l.File.TechniquesNone,
 		}
 	}
 	if *update {
@@ -127,7 +127,7 @@ func TestLibrary_MatchesTheShippedCampaigns(t *testing.T) {
 		got, ok := library.Campaign(l.File.ID)
 		if !ok || got.Digest != l.Digest || got.Tier != l.File.Tier || !slices.Equal(got.Attempts, l.File.Attempts) ||
 			!slices.Equal(got.ASI, l.File.ASI) || !slices.Equal(got.ATLAS, l.File.ATLAS) || !slices.Equal(got.ATTACK, l.File.ATTACK) ||
-			!maps.Equal(got.TechniqueWhy, l.File.TechniqueWhy) {
+			!maps.Equal(got.TechniqueWhy, l.File.TechniqueWhy) || got.TechniquesNone != l.File.TechniquesNone {
 			t.Fatalf("campaigns.json is out of date with %s (%s): run task range:library", campaignDir, l.File.ID)
 		}
 		// The lookup S25a's compliance adapter calls gives the file's tags

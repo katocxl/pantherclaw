@@ -272,10 +272,10 @@ func (s *Scenario) Validate() error {
 	}
 	// A customer scenario is the customer's word: it is no evidence for a
 	// technique (G0 M28 D714, HR-685).
-	if customer && (len(s.ATLAS) > 0 || len(s.ATTACK) > 0 || len(s.TechniqueWhy) > 0) {
+	if customer && (len(s.ATLAS) > 0 || len(s.ATTACK) > 0 || len(s.TechniqueWhy) > 0 || s.TechniquesNone != "") {
 		return invalid("techniques are for library scenarios")
 	}
-	if err := CheckTechniques(s.ATLAS, s.ATTACK, s.TechniqueWhy); err != nil {
+	if err := CheckTechniques(s.ATLAS, s.ATTACK, s.TechniqueWhy, s.TechniquesNone); err != nil {
 		return err
 	}
 	for _, r := range s.Requires {

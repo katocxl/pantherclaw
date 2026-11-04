@@ -9,6 +9,7 @@ description: >-
 severity: CRITICAL
 attention: INCIDENT
 basis: OBSERVED
+techniques_none: "Reports PantherClaw's own containment being engaged by a person, not an attacker technique."
 edition: community
 on: [audit.security.kill_switch_engaged]
 tests:

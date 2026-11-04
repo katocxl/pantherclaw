@@ -144,6 +144,13 @@ func TestHR682_Lookups(t *testing.T) {
 		if (te.Deprecated || te.Revoked) && (!catalog.KnownATTACK(te.ID) || attack.Active(te.ID)) {
 			t.Errorf("%s: deprecated or revoked ids are known and not active", te.ID)
 		}
+		if catalog.KnownActive(te.ID) != attack.Active(te.ID) {
+			t.Errorf("%s: KnownActive disagrees with Active", te.ID)
+		}
+	}
+	// G0 M28 D714e L5: KnownActive is what --technique accepts.
+	if !catalog.KnownActive("T1685") || !catalog.KnownActive("AML.T0051") || catalog.KnownActive("T1562.001") || catalog.KnownActive("X1") || catalog.KnownActive("T9999") {
+		t.Error("KnownActive")
 	}
 }
 
@@ -155,4 +162,30 @@ func TestHR682_LoadPanicsOnUnknownFramework(t *testing.T) {
 		}
 	}()
 	catalog.Load("mobile-attack")
+}
+
+// TestHR682_AccessorsReturnCopies: what Load and the lookups return is the
+// caller's own, so no caller can change the pinned catalog (G0 M28 D714c L5).
+// Covers: F974, HR-682
+func TestHR682_AccessorsReturnCopies(t *testing.T) {
+	a := catalog.Load(catalog.FrameworkATTACK)
+	a.Techniques[0].ID = "changed"
+	a.Tactics[0].Name = "changed"
+	te, _ := a.Technique("T1059.001")
+	te.Tactics[0] = "changed"
+	a.Subtechniques("T1059")[0].Tactics[0] = "changed"
+	a.Matrix()[0].Platforms = nil
+
+	b := catalog.Load(catalog.FrameworkATTACK)
+	if b.Techniques[0].ID == "changed" || b.Tactics[0].Name == "changed" {
+		t.Error("Load shares its slices")
+	}
+	for _, id := range []string{"T1059.001", b.Subtechniques("T1059")[0].ID} {
+		if te, _ := b.Technique(id); slices.Contains(te.Tactics, "changed") {
+			t.Errorf("%s: a lookup shares its tactics", id)
+		}
+	}
+	if !catalog.KnownATTACK(b.Techniques[0].ID) {
+		t.Error("the shared index changed")
+	}
 }

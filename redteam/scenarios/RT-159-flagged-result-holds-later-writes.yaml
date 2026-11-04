@@ -7,6 +7,11 @@ tier: business
 attacker: A1
 threats: [T-276]
 rules: [HR-648]
+atlas: [AML.T0051.001]
+attack: [T1698]
+technique_why:
+  AML.T0051.001: "Indirect prompt injection (AML.T0051.001): a flagged tool result precedes the run's later writes."
+  T1698: "Indirect prompt injection (T1698): the tool result carries the injected text."
 requires: [jira.comment]
 # The operator step sets the mode without the step-up a person's change takes.
 harness_only: true

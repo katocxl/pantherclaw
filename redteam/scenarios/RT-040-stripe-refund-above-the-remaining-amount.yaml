@@ -10,6 +10,11 @@ rules: [HR-305]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent asks for a refund above what is left on the payment."
+atlas: [AML.T0048.000]
+attack: [T1657]
+technique_why:
+  AML.T0048.000: "Financial harm (AML.T0048.000): the agent asks for a refund above what is left on the payment."
+  T1657: "Financial theft (T1657): the refund tries to move more money than the payment holds."
 requires: [stripe.refund]
 harness_only: false
 steps:

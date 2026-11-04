@@ -1,5 +1,5 @@
 name: pc.detect.held-merge-then-shell
-version: 1.0.0
+version: 1.1.0
 kind: detection_rule
 title: Shell merge tried after a held merge
 summary: >-
@@ -19,6 +19,8 @@ body:
     attention: ALERT
     basis: INFERRED
     owasp: [ASI02, ASI10]
+    atlas: [AML.T0050]
+    attack: [T1059.004]
     edition: business
     sequence:
       within: 30m

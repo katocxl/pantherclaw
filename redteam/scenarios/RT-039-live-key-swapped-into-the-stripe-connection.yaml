@@ -7,6 +7,7 @@ tier: business
 attacker: A7
 threats: [T-141]
 rules: [HR-301, HR-303]
+techniques_none: "Tests PantherClaw's own test/live separation: a live key in a test connection sends nothing."
 requires: [stripe.key_swap, stripe.refund]
 harness_only: false
 steps:

@@ -10,6 +10,9 @@ rules: [HR-122]
 asi: [ASI05]
 asi_why:
   ASI05: "Unexpected code execution (ASI05): code run in the sandbox tries DNS to the Docker resolver and the internet."
+attack: [T1071.004]
+technique_why:
+  T1071.004: "DNS (T1071.004): code in the sandbox tries DNS to the Docker resolver and the internet as a way out."
 requires: [sandbox]
 harness_only: false
 steps:

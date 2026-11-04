@@ -10,6 +10,9 @@ rules: [HR-030, HR-031]
 asi: [ASI09]
 asi_why:
   ASI09: "Human-agent trust exploitation (ASI09): a person approves one amount and the agent changes it afterwards."
+attack: [T1548]
+technique_why:
+  T1548: "Abuse elevation control mechanism (T1548): a person approves one amount and the agent changes it afterwards."
 requires: [payments, person]
 harness_only: false
 steps:

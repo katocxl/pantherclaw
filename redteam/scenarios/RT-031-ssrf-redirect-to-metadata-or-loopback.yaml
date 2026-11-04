@@ -10,6 +10,9 @@ rules: [HR-070, HR-077, HR-221]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): a tool call is steered to an unlisted address or a redirect (SSRF)."
+attack: [T1552.005]
+technique_why:
+  T1552.005: "Cloud instance metadata API (T1552.005): a tool call is steered by redirect toward the metadata address."
 requires: [payments]
 harness_only: false
 steps:
