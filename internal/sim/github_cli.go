@@ -46,7 +46,7 @@ jobs:
 func runGitHub(ctx context.Context, args []string, stderr io.Writer) error {
 	fl := flag.NewFlagSet("github", flag.ContinueOnError)
 	fl.SetOutput(stderr)
-	addr := fl.String("addr", "127.0.0.1:9092", "listen address (loopback)")
+	addr := fl.String("addr", defaultAddrs["github"], "listen address (loopback)")
 	appID := fl.Int64("app-id", 1, "the App's id")
 	clientID := fl.String("client-id", "Iv23liSimulated", "the App's client id")
 	keyFile := fl.String("app-key", "", "the App's private key (PEM); created when it does not exist, for pclaw seal")

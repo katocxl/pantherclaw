@@ -21,7 +21,7 @@ import (
 func runStripe(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("stripe", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9093", "listen address (loopback)")
+	addr := fs.String("addr", defaultAddrs["stripe"], "listen address (loopback)")
 	latency := fs.Duration("latency", 0, "added latency per request")
 	decline := fs.Float64("decline-rate", 0, "probability that a refund or payment intent is declined (402 card_declined)")
 	lose := fs.Float64("lose-response-rate", 0, "probability that a create takes effect and then never answers")

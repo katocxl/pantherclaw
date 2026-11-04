@@ -53,7 +53,7 @@ func JiraIssues() []jira.Issue {
 func runJira(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("jira", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9096", "listen address (loopback)")
+	addr := fs.String("addr", defaultAddrs["jira"], "listen address (loopback)")
 	secretFile := fs.String("secret-file", "", "file holding the only Basic credential accepted, base64 of email:api-token (otherwise any is)")
 	customer := fs.String("customer-visible", "", "comma-separated project keys to make service desks (customer-visible)")
 	webhookURL := fs.String("webhook-url", "", "post Jira-shaped webhooks for issue changes to this URL")

@@ -132,7 +132,7 @@ func (p *packWorld) create(ctx context.Context, req evapp.PackRequest) evapp.Pac
 	if pk.State != "BUILDING" || !slices.Contains(p.queued, pk.ID) {
 		p.t.Fatalf("a new pack: %+v, queued %v", pk, p.queued)
 	}
-	if err := p.builder.Build(context.Background(), p.org, pk.ID); err != nil {
+	if err := p.builder.Build(ctx, p.org, pk.ID); err != nil {
 		p.t.Fatal(err)
 	}
 	got, err := p.svc.GetEvidencePack(ctx, pk.ID)

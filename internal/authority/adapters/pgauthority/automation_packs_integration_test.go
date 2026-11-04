@@ -37,11 +37,11 @@ func (p *packWorld) automation(name string, owner ids.UUID) (automation, account
 
 // automationPack creates an automation's pack in its own transaction and
 // builds it.
-func (p *packWorld) automationPack(in evapp.AutomationPack) (ids.UUID, error) {
+func (p *packWorld) automationPack(ctx context.Context, in evapp.AutomationPack) (ids.UUID, error) {
 	p.t.Helper()
 	in.Org = p.org
 	var id ids.UUID
-	err := p.pool.InTenantTx(context.Background(), p.org, func(ctx context.Context, tx db.TenantTx) error {
+	err := p.pool.InTenantTx(ctx, p.org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
 		id, err = p.svc.CreateForAutomationTx(ctx, tx.Pgx(), in)
 		return err
@@ -49,7 +49,7 @@ func (p *packWorld) automationPack(in evapp.AutomationPack) (ids.UUID, error) {
 	if err != nil {
 		return id, err
 	}
-	return id, p.builder.Build(context.Background(), p.org, id)
+	return id, p.builder.Build(ctx, p.org, id)
 }
 
 // TestHR286_AnAutomationsPackIsItsOwnWithinItsDeclaredAgents (G0 M11 part 2
@@ -80,7 +80,7 @@ func TestHR286_AnAutomationsPackIsItsOwnWithinItsDeclaredAgents(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			in := base
 			in.Agents = tc.agents
-			id, err := p.automationPack(in)
+			id, err := p.automationPack(auditor, in)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,7 +93,7 @@ func TestHR286_AnAutomationsPackIsItsOwnWithinItsDeclaredAgents(t *testing.T) {
 				t.Fatalf("%d transactions, gaps %+v", len(m.Transactions), m.Gaps)
 			}
 			var row dbq.EvidencePackAutomationRow
-			if err := p.pool.InTenantTx(context.Background(), p.org, func(ctx context.Context, tx db.TenantTx) error {
+			if err := p.pool.InTenantTx(auditor, p.org, func(ctx context.Context, tx db.TenantTx) error {
 				row, err = dbq.New(tx).EvidencePackAutomation(ctx, p.org, id)
 				return err
 			}); err != nil || row.AutomationID == nil || *row.AutomationID != auto || !slices.Equal(row.AutomationAgents, tc.agents) {
@@ -109,18 +109,18 @@ func TestHR286_AnAutomationsPackIsItsOwnWithinItsDeclaredAgents(t *testing.T) {
 	for _, creator := range []ids.UUID{other, owner} {
 		in := base
 		in.ServiceAccount = creator
-		if _, err := p.automationPack(in); err == nil {
+		if _, err := p.automationPack(t.Context(), in); err == nil {
 			t.Fatalf("an automation pack created by %s", creator)
 		}
 	}
 	// Only time ranges and transactions; Community gets none.
 	in := base
 	in.Request = evapp.PackRequest{Kind: pack.ScopeRun, Run: run, Include: req.Include}
-	if _, err := p.automationPack(in); !errors.Is(err, evapp.ErrBadPackScope) {
+	if _, err := p.automationPack(t.Context(), in); !errors.Is(err, evapp.ErrBadPackScope) {
 		t.Fatalf("a run-scoped automation pack: %v", err)
 	}
 	p.edition.ed = billing.Community
-	if _, err := p.automationPack(base); !errors.Is(err, evapp.ErrPacksEdition) {
+	if _, err := p.automationPack(t.Context(), base); !errors.Is(err, evapp.ErrPacksEdition) {
 		t.Fatalf("on Community: %v", err)
 	}
 	p.edition.ed = billing.Team

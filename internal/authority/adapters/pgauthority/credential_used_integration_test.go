@@ -71,7 +71,7 @@ func TestHR660_TheServerChecksTheReportedCredential(t *testing.T) {
 
 	refused := func(permit ids.UUID, name string, c finalize.CredentialUsed) {
 		t.Helper()
-		_, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{
+		_, err := w.auth.RecordExecution(t.Context(), w.gw, finalize.Execution{
 			Permit: permit, Outcome: finalize.Accepted, TargetStatus: 200, DispatchMS: 5, TargetRef: "re_1", Credential: &c,
 		})
 		if !errors.Is(err, finalize.ErrCredentialNotOfConnection) {

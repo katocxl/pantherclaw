@@ -23,9 +23,9 @@ import (
 func TestHR220_RangeMarkIsImmutable(t *testing.T) {
 	w := newWorld(t)
 	ctx := w.teamOwner()
-	real, err := w.inv.Create(ctx, w.details())
-	if err != nil || real.RangeAgent {
-		t.Fatalf("real agent: %+v, %v", real, err)
+	realAgent, err := w.inv.Create(ctx, w.details())
+	if err != nil || realAgent.RangeAgent {
+		t.Fatalf("real agent: %+v, %v", realAgent, err)
 	}
 	d := w.details()
 	d.RangeAgent = true
@@ -37,7 +37,7 @@ func TestHR220_RangeMarkIsImmutable(t *testing.T) {
 		id   string
 		to   bool
 		what string
-	}{{real.ID.String(), true, "real to range"}, {rng.ID.String(), false, "range to real"}} {
+	}{{realAgent.ID.String(), true, "real to range"}, {rng.ID.String(), false, "range to real"}} {
 		err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
 			_, err := tx.Exec(ctx, "UPDATE pc.agents SET range_agent = $1 WHERE org_id = $2 AND id = $3", c.to, w.org, c.id)
 			return err
@@ -46,7 +46,7 @@ func TestHR220_RangeMarkIsImmutable(t *testing.T) {
 			t.Errorf("%s: the update succeeded, want permission denied", c.what)
 		}
 	}
-	for _, a := range []app.Agent{real, rng} {
+	for _, a := range []app.Agent{realAgent, rng} {
 		got, err := w.inv.Get(ctx, a.ID)
 		if err != nil || got.RangeAgent != a.RangeAgent {
 			t.Errorf("agent %s read back range=%v, %v, want %v", a.ID, got.RangeAgent, err, a.RangeAgent)

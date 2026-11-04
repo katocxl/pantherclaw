@@ -59,9 +59,9 @@ func (n *fakeNotifier) Enqueue(_ context.Context, _ db.TenantTx, m notifapp.Mess
 // agent there, and binds people at different scopes.
 type rfx struct {
 	*wfx
-	team, bu, env ids.UUID
-	n             *fakeNotifier
-	router        *waitlist.Router
+	team, bu ids.UUID
+	n        *fakeNotifier
+	router   *waitlist.Router
 }
 
 func newRFx(t *testing.T) *rfx {

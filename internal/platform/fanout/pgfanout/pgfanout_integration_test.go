@@ -43,7 +43,7 @@ func TestIntFanoutDeliversAtCommitOnly(t *testing.T) {
 			}
 			return nil
 		})
-		if err != nil && !(rollback && errors.Is(err, errRollback)) {
+		if err != nil && (!rollback || !errors.Is(err, errRollback)) {
 			t.Fatal(err)
 		}
 	}

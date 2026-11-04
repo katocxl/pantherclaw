@@ -242,7 +242,9 @@ func TestHR516_ACanceledPushStillAborts(t *testing.T) {
 		t.Fatal(err)
 	}
 	cancel()
-	f.svc.abortUpload(ctx, p)
+	if err := f.svc.abortUpload(ctx, p); err != nil {
+		t.Fatalf("abort after the caller's cancel: %v", err)
+	}
 	if f.sim.abortCount() != 1 || f.sim.openUploads() != 0 {
 		t.Fatalf("%d aborts, %d open", f.sim.abortCount(), f.sim.openUploads())
 	}

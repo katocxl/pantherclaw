@@ -57,7 +57,7 @@ func GitLabStart() ([]gitlab.Project, []gitlab.MergeRequest, []gitlab.Pipeline) 
 func runGitLab(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("gitlab", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9097", "listen address (loopback)")
+	addr := fs.String("addr", defaultAddrs["gitlab"], "listen address (loopback)")
 	tokenFile := fs.String("token-file", "", "file holding the only access token accepted (otherwise any glpat- token is)")
 	approved := fs.Bool("approved", false, "start the merge request approved")
 	rate := fs.Int("rate-limit", 0, "answer the first N requests with 429 and Retry-After")

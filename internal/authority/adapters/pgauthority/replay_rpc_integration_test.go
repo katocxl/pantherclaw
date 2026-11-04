@@ -163,7 +163,7 @@ func TestHR197_ReplayDecisionThroughTheRPC(t *testing.T) {
 		}
 		want := pantherclawv1.Decision(pantherclawv1.Decision_value["DECISION_"+string(r.Decision)])
 		if !res.GetReproduced() || !res.GetComplete() || res.GetDecision() != want || res.GetOriginalDecision() != want ||
-			res.GetBasisDigest() != r.BasisDigest || res.GetPolicy() != "org-policy@1" || res.GetEvaluation() != int32(r.Evaluation) || //nolint:gosec // G115
+			res.GetBasisDigest() != r.BasisDigest || res.GetPolicy() != "org-policy@1" || res.GetEvaluation() != int32(r.Evaluation) ||
 			len(res.GetChecklist()) == 0 || len(res.GetInputs()) != 0 {
 			t.Errorf("unchanged replay of %s: %v", r.Decision, res)
 		}

@@ -419,7 +419,7 @@ func TestHR195_ABadInclusionProofOrTimestampLeavesTheAnchorFailed(t *testing.T) 
 	}
 	failed := func(want string, attempts int32) dbq.PcAnchor {
 		t.Helper()
-		res, err := f.svc.Submit(ctx, c.ID)
+		res, err := f.svc.Submit(t.Context(), c.ID)
 		if err != nil || res.State != "FAILED" || res.Code != want {
 			t.Fatalf("Submit = %+v, %v; want FAILED %s", res, err, want)
 		}
