@@ -420,6 +420,15 @@ func (s *snapshot) Connection(ctx context.Context, org ids.OrgID, id ids.UUID) (
 		}
 		out.Reads = p.HTTPReads()
 	}
+	if c.Kind == "vectorstore" {
+		// The writer agents (G0 M30 D924); a vectorstore connection without
+		// its settings row is not found (fail closed).
+		vs, err := q.GetVectorstoreConnection(ctx, org, id)
+		if err != nil {
+			return pipeline.Connection{}, notFound(err)
+		}
+		out.Writers = vs.WriterAgentIds
+	}
 	return out, nil
 }
 

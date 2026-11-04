@@ -233,7 +233,18 @@ func Open(ctx context.Context, c Config) (*Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	tc, err := tlsConfig(ep, c.RootCAs)
+	p, err := newPool(ctx, ep, c.Password, c.Allowed, c.RootCAs)
+	if err != nil {
+		return nil, err
+	}
+	return &Pool{pool: p, manifest: m, settings: settings}, nil
+}
+
+// newPool builds a pgx pool for the endpoint with every HR-330 and egress
+// setting: TLS as the endpoint requires, dial-time address checks, no
+// fallback, a read-only default session. It dials nothing.
+func newPool(ctx context.Context, ep Endpoint, password string, allowed []netip.Prefix, roots *x509.CertPool) (*pgxpool.Pool, error) {
+	tc, err := tlsConfig(ep, roots)
 	if err != nil {
 		return nil, err
 	}
@@ -244,10 +255,10 @@ func Open(ctx context.Context, c Config) (*Pool, error) {
 		return nil, err
 	}
 	cc := pc.ConnConfig
-	cc.Host, cc.Port, cc.Database, cc.User, cc.Password = ep.Host, uint16(ep.Port), ep.Database, ep.User, c.Password
+	cc.Host, cc.Port, cc.Database, cc.User, cc.Password = ep.Host, uint16(ep.Port), ep.Database, ep.User, password
 	cc.TLSConfig, cc.Fallbacks, cc.SSLNegotiation = tc, nil, "postgres"
 	cc.ConnectTimeout = ConnectTimeout
-	cc.DialFunc = dialer(ep.Internal, c.Allowed).DialContext
+	cc.DialFunc = dialer(ep.Internal, allowed).DialContext
 	cc.LookupFunc = net.DefaultResolver.LookupHost
 	cc.MaxProtocolMessageBodyLen = maxMessage
 	cc.RuntimeParams = pgdispatch.StartupParams()
@@ -260,11 +271,7 @@ func Open(ctx context.Context, c Config) (*Pool, error) {
 	pc.MaxConnIdleTime, pc.MaxConnLifetime = 5*time.Minute, 30*time.Minute
 	pc.HealthCheckPeriod = time.Minute
 	pc.BeforeConnect, pc.AfterConnect, pc.PrepareConn, pc.AfterRelease = nil, nil, nil, nil
-	p, err := pgxpool.NewWithConfig(ctx, pc)
-	if err != nil {
-		return nil, err
-	}
-	return &Pool{pool: p, manifest: m, settings: settings}, nil
+	return pgxpool.NewWithConfig(ctx, pc)
 }
 
 // Close closes the pool.

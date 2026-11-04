@@ -554,11 +554,15 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 		bound = eff
 	}
 	want := permitWant{PermitID: ar.GetPermitId(), Txn: ar.GetTransactionId(), Act: bound.HashHex(), Epoch: ar.GetEpoch()}
-	approval, err := e.permits.verify(ctx, ar.GetPermit(), want)
+	claims, err := e.permits.claims(ctx, ar.GetPermit(), want)
 	if err != nil {
 		e.log.ErrorContext(ctx, "security.permit_rejected", slog.String("transaction_id", want.Txn), pclog.Err(err))
 		return ctx, decided{}, r.fail(EnforcementFailed, CodePermitInvalid), false
 	}
+	approval := claims.Pap.Approval
+	// A vectorstore write's provenance comes from the verified permit only
+	// (G0 M30 D923, HR-704).
+	want.Run, want.Agent = claims.Pap.Run, claims.Pap.Agent
 	if err := e.approved(approval, c.Action, bound); err != nil {
 		e.log.ErrorContext(ctx, "security.approval_unverified", slog.String("transaction_id", want.Txn), pclog.Err(err))
 		return ctx, decided{}, r.fail(EnforcementFailed, CodeApprovalUnverified), false

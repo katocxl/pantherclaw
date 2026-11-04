@@ -315,3 +315,41 @@ func checkMetadata(m map[string]string) error {
 	}
 	return nil
 }
+
+// The transactions of a vectorstore connection (D923): a query runs as a
+// postgres read does, read only and always rolled back; a write runs read
+// write at read committed and commits. Both take VectorSettings.
+const (
+	VectorWriteBeginSQL = "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE"
+	CommitSQL           = "COMMIT"
+	// VectorStatementTimeoutMS bounds each vector statement.
+	VectorStatementTimeoutMS = DefaultStatementTimeout
+	// VectorMaxResultBytes bounds a vector_query's answer.
+	VectorMaxResultBytes = DefaultMaxResultBytes
+)
+
+// VectorExtensionSQL finds the schema the vector extension is installed
+// in, which the search path names after pg_catalog so its type and
+// operators resolve.
+const VectorExtensionSQL = `SELECT n.nspname FROM pg_catalog.pg_extension e ` +
+	`JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'vector'`
+
+// VectorSettings are the SET LOCAL statements of a vector transaction:
+// LocalSettings' fixed values, with the vector extension's schema on the
+// search path after pg_catalog. A schema name outside the identifier
+// spelling is refused.
+func VectorSettings(extSchema string) ([]string, error) {
+	if !ValidIdentifier(extSchema) {
+		return nil, &Error{Code: CodeManifestInvalid, Detail: "the vector extension's schema is not a plain identifier"}
+	}
+	ms := strconv.Itoa(VectorStatementTimeoutMS)
+	return []string{
+		"SET LOCAL statement_timeout = " + ms,
+		"SET LOCAL lock_timeout = " + strconv.Itoa(LockTimeoutMS),
+		"SET LOCAL idle_in_transaction_session_timeout = " + ms,
+		"SET LOCAL search_path = pg_catalog, " + quote(extSchema) + ", pg_temp",
+		"SET LOCAL TimeZone = 'UTC'",
+		"SET LOCAL DateStyle = 'ISO, YMD'",
+		"SET LOCAL IntervalStyle = 'postgres'",
+	}, nil
+}

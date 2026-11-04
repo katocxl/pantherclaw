@@ -60,6 +60,10 @@ type UpdateInput struct {
 	// max output tokens or a newly allowed server tool weakens; a price
 	// alone is neither, and needs Team (D829).
 	Model *ModelConfig `json:",omitzero"`
+	// Vectorstore replaces a vectorstore connection's settings (G0 M30
+	// D922, D925a): its endpoint must stay as it is; a new writer or
+	// another table weakens.
+	Vectorstore *VectorstoreConfig `json:",omitzero"`
 }
 
 // change is one changed field with its old and new values and whether it
@@ -381,7 +385,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		}
 		peer := in.A2A
 		if in.A2APublicURL != nil {
-			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil || in.Model != nil {
+			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil || in.Model != nil || in.Vectorstore != nil {
 				return ErrShape
 			}
 			current, _, err := s.currentA2A(ctx, tx, c.Org, conn.ID)
@@ -399,8 +403,8 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			peer = current
 		}
 		var kc *kindConfig
-		if in.Postgres != nil || peer != nil || in.Model != nil {
-			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer, in.Model)
+		if in.Postgres != nil || peer != nil || in.Model != nil || in.Vectorstore != nil {
+			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer, in.Model, in.Vectorstore)
 			if err != nil {
 				return err
 			}
@@ -419,6 +423,16 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 					return err
 				}
 				set(KindModel, modelSummary(before), modelSummary(m), modelWeakens(before, m))
+			} else if v, isVector := cfg.(*VectorstoreConfig); isVector {
+				// G0 M30 D925a: the endpoint is fixed for the connection's life.
+				before, err := loadVectorstore(ctx, q, conn)
+				if err != nil {
+					return err
+				}
+				if before != nil && !before.sameEndpoint(*v) {
+					return ErrVectorstoreEndpointImmutable
+				}
+				set(KindVectorstore, vectorstoreSummary(before), vectorstoreSummary(v), vectorstoreWeakens(before, v))
 			} else {
 				set(conn.Kind, "current", "replaced", true)
 			}

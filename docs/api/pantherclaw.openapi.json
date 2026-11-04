@@ -52309,7 +52309,8 @@
           "CONNECTION_KIND_MCP_CONTAINER",
           "CONNECTION_KIND_POSTGRES",
           "CONNECTION_KIND_A2A",
-          "CONNECTION_KIND_MODEL"
+          "CONNECTION_KIND_MODEL",
+          "CONNECTION_KIND_VECTORSTORE"
         ],
         "description": "ConnectionKind is what a connection reaches."
       },
@@ -52962,6 +52963,11 @@
             "title": "model",
             "description": "model is a model connection's settings (G0 M29 D811).",
             "$ref": "#/components/schemas/pantherclaw.v1.ModelConfig"
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore is a vectorstore connection's settings (G0 M30 D922).",
+            "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfig"
           }
         },
         "title": "Connection",
@@ -53719,6 +53725,18 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/pantherclaw.v1.ModelConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore is required for, and only for, a vectorstore connection\n (G0 M30 D922).",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfigInput"
               },
               {
                 "type": "null"
@@ -55612,6 +55630,18 @@
                 "type": "null"
               }
             ]
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore replaces a vectorstore connection's settings (G0 M30\n D922): its endpoint must stay as it is (VECTORSTORE_ENDPOINT_IMMUTABLE);\n a new writer weakens.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "UpdateConnectionRequest",
@@ -55634,6 +55664,227 @@
         "title": "UpdateConnectionResponse",
         "additionalProperties": false,
         "description": "UpdateConnectionResponse returns the connection."
+      },
+      "pantherclaw.v1.VectorstoreConfig": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$",
+            "description": "Database host name or address."
+          },
+          "port": {
+            "type": "integer",
+            "title": "port",
+            "maximum": 65535,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Port (default 5432)."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Database name."
+          },
+          "user": {
+            "type": "string",
+            "title": "user",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Role the gateway logs in as; never a superuser."
+          },
+          "sslmode": {
+            "type": "string",
+            "title": "sslmode",
+            "enum": [
+              "verify-full",
+              "require"
+            ],
+            "description": "\"verify-full\" (required), or \"require\" only with internal and a pinned\n CA."
+          },
+          "caPem": {
+            "type": "string",
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "Optional pinned CA certificate (PEM)."
+          },
+          "internal": {
+            "type": "boolean",
+            "title": "internal",
+            "description": "Allows a private address; set only with a step-up."
+          },
+          "schemaName": {
+            "type": "string",
+            "title": "schema_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's schema."
+          },
+          "tableName": {
+            "type": "string",
+            "title": "table_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's name."
+          },
+          "dimensions": {
+            "type": "integer",
+            "title": "dimensions",
+            "maximum": 16000,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The embedding's dimensions (1..16000)."
+          },
+          "distance": {
+            "type": "string",
+            "title": "distance",
+            "enum": [
+              "cosine",
+              "l2",
+              "inner_product"
+            ],
+            "description": "The distance metric: cosine, l2 or inner_product."
+          },
+          "writerAgentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 64,
+              "uniqueItems": true
+            },
+            "title": "writer_agent_ids",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "description": "Agents that may write without a person (at most 64); a write by any\n other agent is held (VECTOR_WRITE_NOT_WRITER, HR-705)."
+          }
+        },
+        "title": "VectorstoreConfig",
+        "additionalProperties": false,
+        "description": "VectorstoreConfig is a vectorstore connection (G0 M30 D922-D925a): where\n the database is, the one table the admin created from the printed DDL,\n and the agents that may write without a person. Its password is the\n connection's sealed static credential. The endpoint (host through\n internal) is fixed once the connection exists: a change is refused with\n VECTORSTORE_ENDPOINT_IMMUTABLE, and a store that moves is a new\n connection."
+      },
+      "pantherclaw.v1.VectorstoreConfigInput": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$",
+            "description": "Database host name or address."
+          },
+          "port": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "port",
+            "maximum": 65535,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Port (default 5432)."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Database name."
+          },
+          "user": {
+            "type": "string",
+            "title": "user",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Role the gateway logs in as; never a superuser."
+          },
+          "sslmode": {
+            "type": "string",
+            "title": "sslmode",
+            "enum": [
+              "verify-full",
+              "require"
+            ],
+            "description": "\"verify-full\" (required), or \"require\" only with internal and a pinned\n CA."
+          },
+          "caPem": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "Optional pinned CA certificate (PEM)."
+          },
+          "internal": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "internal",
+            "description": "Allows a private address; set only with a step-up."
+          },
+          "schemaName": {
+            "type": "string",
+            "title": "schema_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's schema."
+          },
+          "tableName": {
+            "type": "string",
+            "title": "table_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's name."
+          },
+          "dimensions": {
+            "type": "integer",
+            "title": "dimensions",
+            "maximum": 16000,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The embedding's dimensions (1..16000)."
+          },
+          "distance": {
+            "type": "string",
+            "title": "distance",
+            "enum": [
+              "cosine",
+              "l2",
+              "inner_product"
+            ],
+            "description": "The distance metric: cosine, l2 or inner_product."
+          },
+          "writerAgentIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 64,
+              "uniqueItems": true
+            },
+            "title": "writer_agent_ids",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "description": "Agents that may write without a person (at most 64); a write by any\n other agent is held (VECTOR_WRITE_NOT_WRITER, HR-705)."
+          }
+        },
+        "title": "VectorstoreConfig",
+        "additionalProperties": false,
+        "description": "VectorstoreConfig is a vectorstore connection (G0 M30 D922-D925a): where\n the database is, the one table the admin created from the printed DDL,\n and the agents that may write without a person. Its password is the\n connection's sealed static credential. The endpoint (host through\n internal) is fixed once the connection exists: a change is refused with\n VECTORSTORE_ENDPOINT_IMMUTABLE, and a store that moves is a new\n connection.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.VectorstoreConfig",
+        "required": [
+          "host",
+          "database",
+          "user",
+          "sslmode",
+          "schemaName",
+          "tableName",
+          "dimensions",
+          "distance"
+        ]
       },
       "pantherclaw.v1.ConsequenceRuleSpec": {
         "type": "object",
@@ -67921,6 +68172,11 @@
             "title": "model",
             "description": "A model connection's settings (G0 M29 D811): the max output tokens\n the gateway adds and the provider-side tool types it lets through.",
             "$ref": "#/components/schemas/pantherclaw.v1.ModelConfig"
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "A vectorstore connection's settings (G0 M30 D922): its database, its\n table and the agents that may write without a person.",
+            "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfig"
           }
         },
         "title": "GatewayConnection",

@@ -67,7 +67,8 @@ func kindRefusal(conn *control.Connection) string {
 		return CodeKindNotServed
 	case kindNotImplemented(kind):
 		return CodeKindNotImplemented
-	case kind == "a2a" && conn.GetA2A() == nil, kind == "postgres" && conn.GetPostgres() == nil:
+	case kind == "a2a" && conn.GetA2A() == nil, kind == "postgres" && conn.GetPostgres() == nil,
+		kind == KindVectorstore && conn.GetVectorstore() == nil:
 		return CodeKindConfigMissing
 	}
 	return ""
