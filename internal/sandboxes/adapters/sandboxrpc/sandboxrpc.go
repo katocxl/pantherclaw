@@ -63,7 +63,7 @@ func (h *Handler) StartSession(ctx context.Context, r *pantherclawv1.SandboxServ
 func started(s app.Started) *pantherclawv1.SandboxServiceStartSessionResponse {
 	return &pantherclawv1.SandboxServiceStartSessionResponse{
 		Session: session(s.Session, s.Connections), EnrollmentToken: s.EnrollmentToken.Reveal(), Nonces: nonces(s.Nonces),
-		AgentHosts: s.AgentHosts,
+		AgentHosts: s.AgentHosts, ModelConnections: s.ModelConnections, // G0 M29 D814
 	}
 }
 

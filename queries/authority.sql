@@ -59,7 +59,8 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 -- and the verification level its decision required (G0 M7).
 -- name: ExecutionContext :one
 SELECT p.mode, p.connection_id, t.channel, c.access_mode, t.id AS transaction_id, t.action_hash, t.effective_hash,
-       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required, t.simulated
+       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required, t.simulated,
+       c.kind AS connection_kind
 FROM pc.permits p
 JOIN pc.transactions t ON t.org_id = p.org_id AND t.id = p.transaction_id
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id

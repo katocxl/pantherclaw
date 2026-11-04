@@ -30,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	"github.com/katocxl/pantherclaw/internal/gateway/modelconn"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -69,6 +70,8 @@ type Handler struct {
 	config    Configuration
 	publicURL string
 	log       *slog.Logger
+	// model serves model connections (G0 M29 D812).
+	model *modelconn.Handler
 }
 
 // New returns the HTTP face. publicURL is the base URL workloads call:
@@ -78,7 +81,10 @@ func New(engine *dispatch.Engine, config Configuration, publicURL string, log *s
 	if log == nil {
 		log = pclog.Discard()
 	}
-	return &Handler{engine: engine, config: config, publicURL: strings.TrimSuffix(publicURL, "/"), log: log}
+	return &Handler{
+		engine: engine, config: config, publicURL: strings.TrimSuffix(publicURL, "/"), log: log,
+		model: modelconn.New(engine, publicURL, log),
+	}
 }
 
 // Refusal is the JSON body of every refusal.
@@ -114,6 +120,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var conn *control.Connection
 	if ok && cfg != nil {
 		conn = cfg.ByName[name]
+	}
+	if modelconn.Serves(conn) {
+		// A model connection's call takes the model path, which reads up to
+		// 16 MiB itself (G0 M29 D812, D814).
+		h.model.Serve(w, r, cfg, conn, rest)
+		return
 	}
 	if conn == nil || conn.Mapper == nil {
 		refuse(w, http.StatusNotFound, Refusal{ErrorClass: string(dispatch.CannotAuthorize), Error: CodeUnknownConnection})

@@ -129,6 +129,8 @@ message Run {
   // The operations the run is narrowed to within its grant (G0 M26 D400);
   // empty for the whole grant.
   repeated string scope_operations = 20;
+  // The run's token cap (G0 M29 D822); unset when it has none.
+  optional int64 max_tokens = 21;
 }
 
 // StartRunRequest starts a run.
@@ -156,6 +158,13 @@ message StartRunRequest {
   // and bind the same agent (and instance, if it pins one), principal and
   // environment; the run's expiry is cut to the grant's.
   optional string grant_id = 7 [(buf.validate.field).string.uuid = true];
+  // The run's token cap (G0 M29 D822, HR-693, HR-697): one more debit level
+  // over the run's model calls, set at start and never changed. It only
+  // restricts. Unset for no run cap.
+  optional int64 max_tokens = 8 [(buf.validate.field).int64 = {
+    gte: 1
+    lte: 1000000000000
+  }];
 
   option (buf.validate.message).cel = {
     id: "subject_token_type"

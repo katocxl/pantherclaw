@@ -94,6 +94,11 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 	m := &Mapper{pkg: pkg, mcp: map[string]*compiled{}, hook: map[string]*compiled{}, a2a: map[string]*compiled{}}
 	for i := range pkg.Definitions {
 		d := &pkg.Definitions[i]
+		if d.IsModel() {
+			// A model call is never mapped: the gateway's model path builds
+			// its action from the strictly parsed body (G0 M29 D812, D813).
+			continue
+		}
 		for _, mp := range d.Mappings {
 			c, err := compile(env, d, mp)
 			if err != nil {

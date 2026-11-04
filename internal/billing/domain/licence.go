@@ -381,6 +381,15 @@ func (e Entitlements) APIKeyIPAllowLists() bool { return e.Edition.Paid() }
 // gates the view only; gateways keep reporting and serving in every edition.
 func (e Entitlements) FleetView() bool { return e.Edition.Paid() }
 
+// TokenCostReports reports whether the edition sets prices on model
+// connections and shows cost estimates and the monthly token report (G0 M29
+// D829, HR-698): Team and above. It gates setting a price, the run estimate,
+// the usage row's estimate and the report; model connections, token rules,
+// the run cap and every token view without estimates work in every edition.
+// A price kept after a downgrade stays stored, but no estimate is shown or
+// written.
+func (e Entitlements) TokenCostReports() bool { return e.Edition.Paid() }
+
 // FleetPolicy reports whether the edition sets a fleet policy (an advisory
 // minimum version and a silence threshold) and sends its alerts
 // (PN-010.6): Enterprise. It gates setting or changing the policy; reading

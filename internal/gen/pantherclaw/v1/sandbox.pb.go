@@ -609,9 +609,13 @@ type SandboxServiceStartSessionResponse struct {
 	Nonces          *ProbeNonces `protobuf:"bytes,3,opt,name=nonces,proto3" json:"nonces,omitempty"`
 	// agent_hosts maps each host agents use to its connection's name: the
 	// edge's mapping (connections' agent_hosts).
-	AgentHosts    map[string]string `protobuf:"bytes,4,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AgentHosts map[string]string `protobuf:"bytes,4,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// model_connections names the connections among agent_hosts' values that
+	// are of kind model (G0 M29 D814): the edge sends their hosts' requests
+	// on its model path (streamed, 16 MiB, 10 minutes).
+	ModelConnections []string `protobuf:"bytes,5,rep,name=model_connections,json=modelConnections,proto3" json:"model_connections,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SandboxServiceStartSessionResponse) Reset() {
@@ -668,6 +672,13 @@ func (x *SandboxServiceStartSessionResponse) GetNonces() *ProbeNonces {
 func (x *SandboxServiceStartSessionResponse) GetAgentHosts() map[string]string {
 	if x != nil {
 		return x.AgentHosts
+	}
+	return nil
+}
+
+func (x *SandboxServiceStartSessionResponse) GetModelConnections() []string {
+	if x != nil {
+		return x.ModelConnections
 	}
 	return nil
 }
@@ -1459,13 +1470,14 @@ const file_pantherclaw_v1_sandbox_proto_rawDesc = "" +
 	"\x0fhost_public_key\x18\b \x01(\fB\a\xbaH\x04z\x02h R\rhostPublicKey\x12=\n" +
 	"\x06engine\x18\x06 \x01(\v2\x1d.pantherclaw.v1.SandboxEngineB\x06\xbaH\x03\xc8\x01\x01R\x06engine\x12=\n" +
 	"\x03ttl\x18\a \x01(\v2\x19.google.protobuf.DurationB\x10\xbaH\r\xaa\x01\n" +
-	"\"\x04\b\x80\xa3\x052\x02\b<R\x03ttl\"\xe2\x02\n" +
+	"\"\x04\b\x80\xa3\x052\x02\b<R\x03ttl\"\x8f\x03\n" +
 	"\"SandboxServiceStartSessionResponse\x128\n" +
 	"\asession\x18\x01 \x01(\v2\x1e.pantherclaw.v1.SandboxSessionR\asession\x12)\n" +
 	"\x10enrollment_token\x18\x02 \x01(\tR\x0fenrollmentToken\x123\n" +
 	"\x06nonces\x18\x03 \x01(\v2\x1b.pantherclaw.v1.ProbeNoncesR\x06nonces\x12c\n" +
 	"\vagent_hosts\x18\x04 \x03(\v2B.pantherclaw.v1.SandboxServiceStartSessionResponse.AgentHostsEntryR\n" +
-	"agentHosts\x1a=\n" +
+	"agentHosts\x12+\n" +
+	"\x11model_connections\x18\x05 \x03(\tR\x10modelConnections\x1a=\n" +
 	"\x0fAgentHostsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x01\n" +

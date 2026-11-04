@@ -9,9 +9,9 @@
 -- applies them to the rows in batches (ADR-0015).
 
 -- name: EnsureBudgetAccount :exec
-INSERT INTO pc.budget_accounts (org_id, id, owner_kind, owner_id, rule, key_hash, period_start, rank, currency)
+INSERT INTO pc.budget_accounts (org_id, id, owner_kind, owner_id, rule, key_hash, period_start, rank, currency, unit)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(owner_kind), sqlc.arg(owner_id), sqlc.arg(rule), sqlc.arg(key_hash),
-        sqlc.arg(period_start), sqlc.arg(rank), sqlc.narg(currency))
+        sqlc.arg(period_start), sqlc.arg(rank), sqlc.narg(currency), sqlc.arg(unit))
 ON CONFLICT (org_id, owner_id, rule, key_hash, period_start) DO NOTHING;
 
 -- name: GetBudgetAccount :one
@@ -76,6 +76,16 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(transaction_id), sqlc.arg(permi
 -- SettleHeldReservations records an outcome on every held reservation of a
 -- permit and leaves them pending: the rows are updated later, by
 -- ApplyToBudgetAccount and ApplyToCounter (ADR-0015).
+-- SetTokenSettledAmounts sets what each held token reservation of a permit
+-- commits: the tokens the model call used, as the provider reported them
+-- (G0 M29 D821, HR-693). It runs just before SettleHeldReservations; money
+-- and count reservations keep committing their whole amount.
+-- name: SetTokenSettledAmounts :execrows
+UPDATE pc.reservations r SET settled_amount = sqlc.arg(settled_amount)
+FROM pc.budget_accounts a
+WHERE r.org_id = sqlc.arg(org_id) AND r.permit_id = sqlc.arg(permit_id) AND r.state = 'HELD'
+  AND a.org_id = r.org_id AND a.id = r.account_id AND a.unit = 'tokens';
+
 -- name: SettleHeldReservations :execrows
 UPDATE pc.reservations SET state = sqlc.arg(to_state), settled_at = now(), pending = true
 WHERE org_id = sqlc.arg(org_id) AND permit_id = sqlc.arg(permit_id) AND state = 'HELD';
@@ -84,7 +94,9 @@ WHERE org_id = sqlc.arg(org_id) AND permit_id = sqlc.arg(permit_id) AND state = 
 -- rank of the row each one reserved (for the lock order), skipping any
 -- that another settlement holds.
 -- name: LockPendingReservations :many
-SELECT r.id, r.account_id, r.counter_id, r.amount, r.state, coalesce(a.rank, c.rank)::smallint AS rank
+SELECT r.id, r.account_id, r.counter_id, r.amount,
+       coalesce(r.settled_amount, r.amount)::numeric(26,8) AS spent_amount,
+       r.state, coalesce(a.rank, c.rank)::smallint AS rank
 FROM pc.reservations r
 LEFT JOIN pc.budget_accounts a ON a.org_id = r.org_id AND a.id = r.account_id
 LEFT JOIN pc.counters c ON c.org_id = r.org_id AND c.id = r.counter_id
@@ -108,7 +120,7 @@ SELECT a.id,
 FROM pc.budget_accounts a
 LEFT JOIN LATERAL (
     SELECT sum(r.amount) AS amount, count(*) AS n,
-           sum(r.amount) FILTER (WHERE r.state = 'COMMITTED') AS spent,
+           sum(coalesce(r.settled_amount, r.amount)) FILTER (WHERE r.state = 'COMMITTED') AS spent,
            count(*) FILTER (WHERE r.state = 'COMMITTED') AS spent_n
     FROM pc.reservations r
     WHERE r.org_id = a.org_id AND r.account_id = a.id AND r.pending
@@ -121,7 +133,7 @@ WHERE a.org_id = sqlc.arg(org_id) AND a.owner_id = sqlc.arg(owner_id) AND a.rule
 -- reservations applied (ADR-0015).
 -- name: ListOwnerBudgetAccounts :many
 SELECT DISTINCT ON (a.owner_id, a.rule, a.key_hash)
-       a.id, a.owner_kind, a.owner_id, a.rule, a.period_start, a.rank, a.currency,
+       a.id, a.owner_kind, a.owner_id, a.rule, a.period_start, a.rank, a.currency, a.unit,
        (a.reserved - coalesce(p.amount, 0))::numeric(26,8) AS reserved,
        (a.spent + coalesce(p.spent, 0))::numeric(26,8) AS spent,
        (a.reserved_count - coalesce(p.n, 0))::integer AS reserved_count,
@@ -129,7 +141,7 @@ SELECT DISTINCT ON (a.owner_id, a.rule, a.key_hash)
 FROM pc.budget_accounts a
 LEFT JOIN LATERAL (
     SELECT sum(r.amount) AS amount, count(*) AS n,
-           sum(r.amount) FILTER (WHERE r.state = 'COMMITTED') AS spent,
+           sum(coalesce(r.settled_amount, r.amount)) FILTER (WHERE r.state = 'COMMITTED') AS spent,
            count(*) FILTER (WHERE r.state = 'COMMITTED') AS spent_n
     FROM pc.reservations r
     WHERE r.org_id = a.org_id AND r.account_id = a.id AND r.pending
