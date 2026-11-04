@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -25,20 +26,58 @@ const selfCall = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name"
 // the path and bearer of what reaches it.
 func selfServer(t *testing.T) (*httptest.Server, func() ([]string, []string)) {
 	t.Helper()
+	s, seen := clientServer(t)
+	return s, func() ([]string, []string) {
+		paths, bearers, _ := seen()
+		return paths, bearers
+	}
+}
+
+// clientServer is selfServer that also records each request's
+// Pantherclaw-Client header.
+func clientServer(t *testing.T) (*httptest.Server, func() ([]string, []string, []string)) {
+	t.Helper()
 	var mu sync.Mutex
-	var paths, bearers []string
+	var paths, bearers, clients []string
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		mu.Lock()
 		paths, bearers = append(paths, r.URL.Path), append(bearers, r.Header.Get("Authorization"))
+		clients = append(clients, r.Header.Get("Pantherclaw-Client"))
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/proto")
 	}))
 	t.Cleanup(s.Close)
-	return s, func() ([]string, []string) {
+	return s, func() ([]string, []string, []string) {
 		mu.Lock()
 		defer mu.Unlock()
-		return paths, bearers
+		return slices.Clone(paths), slices.Clone(bearers), slices.Clone(clients)
+	}
+}
+
+// TestHR663_OnlyMcpSelfNamesItself: `pclaw mcp self` sends
+// Pantherclaw-Client: mcp-self with its read; another command with the same
+// key and server sends no such header.
+// Covers: F947
+func TestHR663_OnlyMcpSelfNamesItself(t *testing.T) {
+	s, seen := clientServer(t)
+	env := map[string]string{"PANTHERCLAW_API_KEY": "pc_test_key", "PANTHERCLAW_SERVER": s.URL}
+	if code, _, errs := selfRun(t, env, selfCall+"\n"); code != 0 {
+		t.Fatalf("mcp self = %d: %s", code, errs)
+	}
+	if _, _, clients := seen(); len(clients) != 1 || clients[0] != "mcp-self" {
+		t.Fatalf("mcp self sent %q", clients)
+	}
+	var out, errb bytes.Buffer
+	Run(context.Background(), []string{"whoami"}, &out, &errb, envOf(env), Options{})
+	paths, _, clients := seen()
+	if len(paths) < 2 {
+		t.Fatalf("whoami reached nothing: %v %s", paths, errb.String())
+	}
+	for i, c := range clients[1:] {
+		if c != "" {
+			t.Errorf("%s sent Pantherclaw-Client %q", paths[i+1], c)
+		}
 	}
 }
 
