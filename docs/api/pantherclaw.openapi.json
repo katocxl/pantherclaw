@@ -22311,6 +22311,60 @@
         }
       }
     },
+    "/pantherclaw.v1.ModelUsageService/GetTokenReport": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ModelUsageService"
+        ],
+        "summary": "GetTokenReport",
+        "description": "GetTokenReport sums one UTC month of the org's model calls, grouped by\n team, agent, connection or model.\n permission: budget.read",
+        "operationId": "pantherclaw.v1.ModelUsageService.GetTokenReport",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetTokenReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetTokenReportResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.NotificationService/CreateChannel": {
       "post": {
         "tags": [
@@ -81129,6 +81183,199 @@
         "additionalProperties": false,
         "description": "UpdateModelSettingsResponse carries the settings."
       },
+      "pantherclaw.v1.TokenReportGroupBy": {
+        "type": "string",
+        "title": "TokenReportGroupBy",
+        "enum": [
+          "TOKEN_REPORT_GROUP_BY_UNSPECIFIED",
+          "TOKEN_REPORT_GROUP_BY_TEAM",
+          "TOKEN_REPORT_GROUP_BY_AGENT",
+          "TOKEN_REPORT_GROUP_BY_CONNECTION",
+          "TOKEN_REPORT_GROUP_BY_MODEL"
+        ],
+        "description": "TokenReportGroupBy is what a token report's rows sum by."
+      },
+      "pantherclaw.v1.Estimate": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "description": "ISO 4217 currency of the prices."
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "Decimal string, at most 8 fraction digits."
+          }
+        },
+        "title": "Estimate",
+        "additionalProperties": false,
+        "description": "Estimate is a cost estimate in one currency, computed from prices the\n organization set on its model connections. It is an estimate, not a bill."
+      },
+      "pantherclaw.v1.GetTokenReportRequest": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "month",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "The UTC month, YYYY-MM."
+          },
+          "groupBy": {
+            "title": "group_by",
+            "$ref": "#/components/schemas/pantherclaw.v1.TokenReportGroupBy",
+            "not": {
+              "enum": [
+                "TOKEN_REPORT_GROUP_BY_UNSPECIFIED"
+              ]
+            }
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "0 for the default page size; at most 200."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 512,
+            "description": "Opaque; a model id key makes it longer than an id token."
+          }
+        },
+        "title": "GetTokenReportRequest",
+        "additionalProperties": false,
+        "required": [
+          "month",
+          "groupBy"
+        ]
+      },
+      "pantherclaw.v1.GetTokenReportResponse": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TokenReportRow"
+            },
+            "title": "rows"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          },
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "description": "The fixed statement: what the counts and estimates are."
+          }
+        },
+        "title": "GetTokenReportResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.TokenReportRow": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key",
+            "description": "The team, agent or connection id, or the model id; empty for calls\n without one (an agent without a team)."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "A name for people: the team, agent or connection name, or the model id."
+          },
+          "calls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "calls",
+            "format": "int64",
+            "description": "Model calls recorded."
+          },
+          "unreportedCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unreported_calls",
+            "format": "int64",
+            "description": "Calls whose answer reported no usage (their tokens count as zero here)."
+          },
+          "unknownCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unknown_calls",
+            "format": "int64",
+            "description": "Calls whose outcome is UNKNOWN."
+          },
+          "inputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "input_tokens",
+            "format": "int64"
+          },
+          "outputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "output_tokens",
+            "format": "int64"
+          },
+          "cacheReadTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "cache_read_tokens",
+            "format": "int64"
+          },
+          "cacheWriteTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "cache_write_tokens",
+            "format": "int64"
+          },
+          "totalTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "total_tokens",
+            "format": "int64",
+            "description": "The four counts summed."
+          },
+          "estimates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Estimate"
+            },
+            "title": "estimates",
+            "description": "Cost estimates, one per price currency; empty when no call had a price."
+          }
+        },
+        "title": "TokenReportRow",
+        "additionalProperties": false,
+        "description": "TokenReportRow sums the month's model calls of one key."
+      },
       "pantherclaw.v1.ChannelHealth": {
         "type": "string",
         "title": "ChannelHealth",
@@ -103111,6 +103358,10 @@
     {
       "name": "pantherclaw.v1.ModelService",
       "description": "ModelService is an organization's optional model drafting (G0 M21 D304,\n D309; G16, F181, F304, HR-541, HR-545). It is off by default, Business\n edition, and uses the organization's own provider key. A person turns it\n on and sets the key only on the browser settings page, with a security-key\n step-up; no RPC does either, and no RPC ever returns the key."
+    },
+    {
+      "name": "pantherclaw.v1.ModelUsageService",
+      "description": "ModelUsageService reports the tokens the org's model calls used (G0 M29\n D825; F988; HR-698). Every model call through a model connection leaves one\n usage row with the token counts the provider reported. Counts are what the\n model providers reported; a cost is an estimate from prices the\n organization set on its model connections, never a bill. Every response\n carries the fixed statement that says so. The report needs Team or higher."
     },
     {
       "name": "pantherclaw.v1.NotificationService",

@@ -28,6 +28,10 @@ type Limits struct {
 // per grouping and period. A grant's rules are task budgets (grouping
 // "task"), shared by its runs and by every grant delegated from it; an
 // envelope's rules group by principal, account, team or org.
+//
+// A token rule (G0 M29 D821) sets MaxTokens and none of Currency, Limit and
+// MaxCount: it caps the model tokens of the model calls it covers, in the
+// unit "tokens".
 type BudgetRule struct {
 	ID         string           `json:"id"`
 	Grouping   bdomain.Grouping `json:"grouping"`
@@ -35,8 +39,12 @@ type BudgetRule struct {
 	Currency   string           `json:"currency,omitzero"`
 	Limit      string           `json:"limit,omitzero"`
 	MaxCount   string           `json:"max_count,omitzero"`
+	MaxTokens  string           `json:"max_tokens,omitzero"`
 	Period     bdomain.Period   `json:"period"`
 }
+
+// IsTokenRule reports whether r caps model tokens (G0 M29 D821).
+func (r BudgetRule) IsTokenRule() bool { return r.MaxTokens != "" }
 
 // CountRule limits how many of the actions it covers may happen per key
 // and window (HR-049). Key is one of: task (the declaring grant, or for an
@@ -55,7 +63,19 @@ type CountRule struct {
 const (
 	maxRules      = 16
 	maxCountValue = 1_000_000_000
+	// MaxTokensValue is the largest token cap a rule may set (G0 M29 D821).
+	MaxTokensValue = 1_000_000_000_000
 )
+
+// ParseMaxTokens parses a token cap: a whole number from 1 to
+// MaxTokensValue in canonical form (G0 M29 D821).
+func ParseMaxTokens(name, s string) (int64, error) {
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 1 || n > MaxTokensValue || strconv.FormatInt(n, 10) != s {
+		return 0, invalid("%s: %q is not a whole number of tokens from 1 to %d", name, s, int64(MaxTokensValue))
+	}
+	return n, nil
+}
 
 var (
 	ruleIDPattern  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
@@ -99,10 +119,18 @@ func (l Limits) validate(onGrant bool) error {
 			return invalid("%s: task budgets belong on grants", name)
 		case !r.Period.Valid():
 			return invalid("%s: unknown period %q", name, r.Period)
+		case r.IsTokenRule() && (r.Currency != "" || r.Limit != "" || r.MaxCount != ""):
+			// G0 M29 D821: a token rule counts tokens only.
+			return invalid("%s: a max_tokens budget sets no currency, limit or max_count", name)
+		case r.IsTokenRule():
+			if _, err := ParseMaxTokens(name+".max_tokens", r.MaxTokens); err != nil {
+				return err
+			}
+			continue
 		case (r.Currency == "") != (r.Limit == ""):
 			return invalid("%s: currency and limit go together", name)
 		case r.Limit == "" && r.MaxCount == "":
-			return invalid("%s: set a limit, a max_count or both", name)
+			return invalid("%s: set a limit, a max_count or both, or max_tokens alone", name)
 		}
 		if r.Limit != "" {
 			m, err := money.ParseMoney(r.Limit, r.Currency)
@@ -181,6 +209,19 @@ func (l Limits) checkDispatched(lookup func(op string) *defs.Definition) error {
 	return nil
 }
 
+// ReservedTokens is what a model call reserves against a token rule (G0 M29
+// D813, HR-693): its max tokens times its choices (1 unless the API takes
+// several), plus a third of its request bytes, rounded up. It applies to
+// the create operations; count and read operations reserve none. Inputs
+// are clamped (0..MaxTokensValue tokens, 1..1,000,000 choices, 0 or more
+// bytes), so the sum cannot overflow.
+func ReservedTokens(maxTokens, choices, inputBytes int64) int64 {
+	maxTokens = min(max(maxTokens, 0), MaxTokensValue)
+	choices = min(max(choices, 1), 1_000_000)
+	inputBytes = max(inputBytes, 0)
+	return maxTokens*choices + inputBytes/3 + min(inputBytes%3, 1)
+}
+
 // DecodeLimits strictly decodes a limits document, like DecodeBounds.
 func DecodeLimits(raw []byte) (Limits, error) {
 	if len(raw) == 0 || len(raw) > MaxBoundsBytes {
@@ -199,6 +240,7 @@ func DecodeLimits(raw []byte) (Limits, error) {
 // Stable reason codes for budgets and counters.
 const (
 	ReasonBudgetExhausted       = "BUDGET_EXHAUSTED"
+	ReasonTokenBudgetExhausted  = "TOKEN_BUDGET_EXHAUSTED" //nolint:gosec // G101: a reason code (G0 M29 D821), not a credential
 	ReasonCountLimitReached     = "COUNT_LIMIT_REACHED"
 	ReasonBudgetCurrency        = "BUDGET_CURRENCY_NOT_COVERED"
 	ReasonBudgetValueAmbiguous  = "BUDGET_VALUE_AMBIGUOUS"
@@ -252,6 +294,11 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 		amountRules, inCurrency := 0, 0
 		for _, r := range limits.Budgets {
 			if !r.Operations.Matches(a.Operation) {
+				continue
+			}
+			if r.IsTokenRule() {
+				// G0 M29 D821: a token rule debits only model calls, by their
+				// reserved tokens; the pipeline's model step adds those.
 				continue
 			}
 			d := bdomain.Debit{Grouping: r.Grouping, Period: r.Period}
