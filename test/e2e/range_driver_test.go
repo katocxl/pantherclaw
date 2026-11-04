@@ -171,7 +171,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.s = start(t, o)
 	}
 	if d.business {
-		activePlan(t, d.s.pool, d.s.org)
+		activePlan(t, d.s.pool, d.s.org) //nolint:contextcheck // test setup: the plan is applied before the scenario's context is used
 	}
 	d.fix = app.Fixture{}
 	d.plant()
