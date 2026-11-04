@@ -120,3 +120,40 @@ func TestHR196_PackCommandsAskForTheScopeAndCheckTheDownload(t *testing.T) {
 		t.Fatal("a corrupted download was written")
 	}
 }
+
+// TestHR688_PackCreateAsksForAThreatMap: `pclaw pack create --threat-map`
+// sends the threat map scope with its framework and environment and no
+// contents; it takes no range and no other scope, and --environment needs
+// it (G0 M28 D720).
+// Covers: F968, HR-688
+func TestHR688_PackCreateAsksForAThreatMap(t *testing.T) {
+	srv := &packServer{}
+	cs := connect.NewServer()
+	pantherclawv1connect.RegisterEvidenceServiceHandler(cs, srv)
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, cs)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	env := envOf(map[string]string{"PANTHERCLAW_SERVER": ts.URL, "PANTHERCLAW_API_KEY": "pck_test_x"})
+	const envID = "0192aaaa-bbbb-7ccc-8ddd-000000000002"
+
+	if code, stdout, errs := run(t, env, "pack", "create", "--threat-map", "attack", "--environment", envID); code != 0 {
+		t.Fatalf("pack create --threat-map = %d %s %s", code, stdout, errs)
+	}
+	tm := srv.created.GetThreatMap()
+	in := srv.created.GetInclude()
+	if tm.GetFramework() != pantherclawv1.ThreatFramework_THREAT_FRAMEWORK_ATTACK_ENTERPRISE || tm.GetEnvironmentId() != envID ||
+		in.GetReceipts() || in.GetVersions() || in.GetApprovals() || in.GetContainment() || in.GetCaptures() {
+		t.Fatalf("request = %v", srv.created)
+	}
+	for _, args := range [][]string{
+		{"--threat-map", "capec"},
+		{"--threat-map", "atlas", "--from", "2026-10-01T00:00:00Z", "--to", "2026-10-02T00:00:00Z"},
+		{"--threat-map", "atlas", "--agent", envID},
+		{"--run", envID, "--environment", envID},
+	} {
+		if code, _, _ := run(t, env, append([]string{"pack", "create"}, args...)...); code == 0 {
+			t.Errorf("pack create %v was accepted", args)
+		}
+	}
+}

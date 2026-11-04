@@ -16,6 +16,23 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const evidencePackThreatMap = `-- name: EvidencePackThreatMap :one
+SELECT threat_framework, threat_environment FROM pc.evidence_packs WHERE org_id = $1 AND id = $2
+`
+
+type EvidencePackThreatMapRow struct {
+	ThreatFramework   *string
+	ThreatEnvironment *ids.UUID
+}
+
+// The framework and environment of a pack of scope threat_map (D720a).
+func (q *Queries) EvidencePackThreatMap(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (EvidencePackThreatMapRow, error) {
+	row := q.db.QueryRow(ctx, evidencePackThreatMap, orgID, iD)
+	var i EvidencePackThreatMapRow
+	err := row.Scan(&i.ThreatFramework, &i.ThreatEnvironment)
+	return i, err
+}
+
 const expireEvidencePacks = `-- name: ExpireEvidencePacks :execrows
 UPDATE pc.evidence_packs
 SET state = 'EXPIRED', content = NULL
@@ -109,17 +126,20 @@ func (q *Queries) GetEvidencePackContent(ctx context.Context, orgID ids.OrgID, i
 
 const insertEvidencePack = `-- name: InsertEvidencePack :exec
 
-INSERT INTO pc.evidence_packs (org_id, id, created_by, scope_kind, scope, include)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO pc.evidence_packs (org_id, id, created_by, scope_kind, scope, include, threat_framework, threat_environment)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8)
 `
 
 type InsertEvidencePackParams struct {
-	OrgID     ids.OrgID
-	ID        ids.UUID
-	CreatedBy ids.UUID
-	ScopeKind string
-	Scope     []byte
-	Include   []byte
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	CreatedBy         ids.UUID
+	ScopeKind         string
+	Scope             []byte
+	Include           []byte
+	ThreatFramework   *string
+	ThreatEnvironment *ids.UUID
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -127,6 +147,8 @@ type InsertEvidencePackParams struct {
 //
 // Evidence packs (G0 M7 design decision 15, HR-196). Every query runs
 // inside db.InTenantTx and also filters by org_id explicitly.
+// threat_framework and threat_environment are set for a pack of scope
+// threat_map only, at insert only (G0 M28 D720a).
 func (q *Queries) InsertEvidencePack(ctx context.Context, arg InsertEvidencePackParams) error {
 	_, err := q.db.Exec(ctx, insertEvidencePack,
 		arg.OrgID,
@@ -135,6 +157,8 @@ func (q *Queries) InsertEvidencePack(ctx context.Context, arg InsertEvidencePack
 		arg.ScopeKind,
 		arg.Scope,
 		arg.Include,
+		arg.ThreatFramework,
+		arg.ThreatEnvironment,
 	)
 	return err
 }

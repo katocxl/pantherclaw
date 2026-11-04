@@ -239,6 +239,14 @@ func (s *Service) evaluate(ctx context.Context, g gate, f catalog.Framework, sc 
 // evaluateAs evaluates for a caller whose permission and edition are
 // checked.
 func (s *Service) evaluateAs(ctx context.Context, c tenancy.Caller, e billing.Entitlements, f catalog.Framework, sc Scope) (domain.Map, error) {
+	m, _, _, err := s.evaluateWith(ctx, c, e, f, sc)
+	return m, err
+}
+
+// evaluateWith evaluates and also returns the inputs and the mapping it
+// read, which a pack carries (D720).
+func (s *Service) evaluateWith(ctx context.Context, c tenancy.Caller, e billing.Entitlements, f catalog.Framework, sc Scope,
+) (domain.Map, domain.Inputs, domain.Mapping, error) {
 	now := s.now()
 	var err error
 	var in domain.Inputs
@@ -250,9 +258,32 @@ func (s *Service) evaluateAs(ctx context.Context, c tenancy.Caller, e billing.En
 		return err
 	}, db.ReadOnly(), db.RepeatableRead())
 	if err != nil {
-		return domain.Map{}, err
+		return domain.Map{}, domain.Inputs{}, domain.Mapping{}, err
 	}
-	return domain.Evaluate(catalog.Load(f), mapset.Evaluator(f), in), nil
+	mp := mapset.Evaluator(f)
+	return domain.Evaluate(catalog.Load(f), mp, in), in, mp, nil
+}
+
+// CheckPackScope checks a threat map pack's scope when it is created (G0
+// M28 D720a): threatmap.read at org scope without an environment, or on an
+// environment of the org, which is otherwise NotFound.
+func (s *Service) CheckPackScope(ctx context.Context, tx db.TenantTx, c tenancy.Caller, env ids.UUID) error {
+	return s.inScope(ctx, tx, c, Scope{Environment: env})
+}
+
+// PackReport evaluates the report a threat map pack holds, as the pack's
+// creator in ctx when the pack is built (D720): Team or higher, and
+// threatmap.read on the scope then.
+func (s *Service) PackReport(ctx context.Context, f catalog.Framework, env ids.UUID) (domain.Report, error) {
+	c, e, err := s.editions(ctx, gateExport)
+	if err != nil {
+		return domain.Report{}, err
+	}
+	m, in, mp, err := s.evaluateWith(ctx, c, e, f, Scope{Environment: env})
+	if err != nil {
+		return domain.Report{}, err
+	}
+	return domain.NewReport(c.Org.String(), m, in, mp), nil
 }
 
 // FrameworkInfo is one framework's catalog.

@@ -20,12 +20,13 @@ import (
 
 var at = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 
-// shippedMaps evaluates both frameworks with the shipped mapping: an org
-// with nothing, and one with every edition, an active agent and rules with
-// recent input.
-func shippedMaps(t *testing.T) []domain.Map {
+// shippedEvaluations evaluates both frameworks with the shipped mapping (an
+// org with nothing, and one with every edition, an active agent and rules
+// with recent input) and gives each map's threat_map.json report (D720).
+func shippedEvaluations(t *testing.T) ([]domain.Map, []domain.Report) {
 	t.Helper()
 	var out []domain.Map
+	var reports []domain.Report
 	for _, f := range catalog.Frameworks() {
 		m := mapset.Evaluator(f)
 		rich := domain.Inputs{
@@ -42,10 +43,12 @@ func shippedMaps(t *testing.T) []domain.Map {
 			rich.Rules = append(rich.Rules, domain.Rule{ID: id, Source: domain.SourceBuiltin, Published: true, Disabled: len(id)%3 == 0})
 		}
 		for _, in := range []domain.Inputs{{Framework: f, EvaluatedAt: at}, rich} {
-			out = append(out, domain.Evaluate(catalog.Load(f), m, in))
+			ev := domain.Evaluate(catalog.Load(f), m, in)
+			out = append(out, ev)
+			reports = append(reports, domain.NewReport("0192aaaa-bbbb-7ccc-8ddd-000000000001", ev, in, m))
 		}
 	}
-	return out
+	return out, reports
 }
 
 // names are every catalog technique and tactic name, longest first: MITRE's
@@ -70,16 +73,22 @@ func names() []string {
 // shipped mapping yields, in its JSON and in its Navigator layer, carries
 // none of the banned words once the Statement and MITRE's own names are
 // removed; and no JSON key names a score (G0 M28 D717, D717a).
-// Covers: F960, F962, F969, HR-681, T-305
+// The signed pack's threat_map.json is held to the same (T-305).
+// Covers: F960, F962, F968, F969, HR-681, T-305
 func TestHR681_ShippedMapHasNoBannedWord(t *testing.T) {
 	strip := names()
 	keyRE := regexp.MustCompile(`(?i)score|percent|rating|weight|gradient`)
-	for _, m := range shippedMaps(t) {
+	maps, reports := shippedEvaluations(t)
+	for i, m := range maps {
 		raw, err := json.Marshal(m)
 		if err != nil {
 			t.Fatal(err)
 		}
-		docs := []string{string(raw)}
+		report, err := json.Marshal(reports[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		docs := []string{string(raw), string(report)}
 		if layer, _, err := navigator.JSON(m); err == nil {
 			docs = append(docs, string(layer))
 		}

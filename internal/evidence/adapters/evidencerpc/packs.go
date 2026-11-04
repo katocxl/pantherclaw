@@ -13,6 +13,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
+	"github.com/katocxl/pantherclaw/internal/threatmap/adapters/threatmaprpc"
 )
 
 var packStates = map[string]pantherclawv1.EvidencePackState{
@@ -91,6 +92,15 @@ func (e *Evidence) CreateEvidencePack(ctx context.Context, req *pantherclawv1.Cr
 		r.Kind = pack.ScopeCompliance
 		r.Framework = string(compliancerpc.FrameworkOf(s.Compliance.GetFramework()))
 		rangeOf(s.Compliance.GetPeriod())
+	case *pantherclawv1.CreateEvidencePackRequest_ThreatMap:
+		// G0 M28 D720: a point-in-time report; no period.
+		r.Kind = pack.ScopeThreatMap
+		r.ThreatFramework = string(threatmaprpc.FrameworkOf(s.ThreatMap.GetFramework()))
+		if env := s.ThreatMap.GetEnvironmentId(); env != "" {
+			if r.ThreatEnvironment, err = parseID(env); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if req.GetWithin() != nil && r.Kind != pack.ScopeRun && r.Kind != pack.ScopeAgent {
 		return nil, evapp.ErrBadPackScope

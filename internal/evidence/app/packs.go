@@ -65,8 +65,29 @@ var (
 	// (G0 M25 D311).
 	ErrComplianceEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "this framework needs a higher edition")
 	ErrPacksUnwired      = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
-	errPackNoContent     = errors.New("app: a ready pack without content")
+	// ErrThreatMapEdition: a threat map report needs Team or higher (G0
+	// M28 D720).
+	ErrThreatMapEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "Exporting the threat map needs Team or higher.")
+	errPackNoContent    = errors.New("app: a ready pack without content")
 )
+
+// Threat map frameworks a pack of scope threat_map names (the values of
+// pc.evidence_packs.threat_framework, migration 00322).
+var threatFrameworks = []string{"atlas", "attack-enterprise"}
+
+// ThreatMapScope checks a threat map pack's environment when the pack is
+// created (G0 M28 D720a): it exists in the caller's org and the caller holds
+// threatmap.read on it; otherwise NotFound.
+type ThreatMapScope interface {
+	CheckPackScope(ctx context.Context, tx db.TenantTx, c tenancy.Caller, env ids.UUID) error
+}
+
+// WithThreatMap adds packs of scope threat_map; without it they are
+// unavailable.
+func (s *Service) WithThreatMap(scope ThreatMapScope) *Service {
+	s.threatMap = scope
+	return s
+}
 
 // PackEnqueuer enqueues a pack's build job in the creating transaction.
 type PackEnqueuer func(ctx context.Context, tx db.TenantTx, org ids.OrgID, pack ids.UUID) error
@@ -95,6 +116,10 @@ type PackRequest struct {
 	// Framework is the framework of a pack of scope compliance (G0 M25
 	// D301); From and To are its period.
 	Framework string
+	// ThreatFramework and ThreatEnvironment are the framework and optional
+	// environment of a pack of scope threat_map (G0 M28 D720, D720a).
+	ThreatFramework   string
+	ThreatEnvironment ids.UUID
 	// From and To bound a time range, or narrow a run or an agent.
 	From, To *time.Time
 	Include  pack.Include
@@ -175,6 +200,12 @@ func (r PackRequest) scope() (pack.Scope, error) {
 		if r.From == nil || r.Framework == "" {
 			return sc, ErrBadPackScope
 		}
+	case pack.ScopeThreatMap:
+		// Point in time: the framework and environment are kept on the
+		// pack's row and go into threat_map.json, never the scope.
+		if r.From != nil || !slices.Contains(threatFrameworks, r.ThreatFramework) {
+			return sc, ErrBadPackScope
+		}
 	default:
 		return sc, ErrBadPackScope
 	}
@@ -215,6 +246,16 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 	}
 	if req.Kind == pack.ScopeCompliance && !ents.ComplianceFramework(req.Framework) {
 		return Pack{}, ErrComplianceEdition
+	}
+	if req.Kind == pack.ScopeThreatMap {
+		// The report names no transaction: the pack holds nothing else.
+		req.Include = pack.Include{}
+		if !ents.ThreatMapExport() {
+			return Pack{}, ErrThreatMapEdition
+		}
+		if s.threatMap == nil {
+			return Pack{}, ErrPacksUnwired
+		}
 	}
 	scopeJSON, err := pack.Canonical(sc)
 	if err != nil {
@@ -260,10 +301,22 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 			if rng.Origin != "library" {
 				return ErrRangeCustomer
 			}
+		case pack.ScopeThreatMap:
+			// threatmap.read at org scope, or on the environment (D720a).
+			if err := s.threatMap.CheckPackScope(ctx, tx, c, req.ThreatEnvironment); err != nil {
+				return err
+			}
 		}
-		if err := q.InsertEvidencePack(ctx, dbq.InsertEvidencePackParams{
+		ins := dbq.InsertEvidencePackParams{
 			OrgID: c.Org, ID: id, CreatedBy: c.Principal.ID, ScopeKind: req.Kind, Scope: scopeJSON, Include: includeJSON,
-		}); err != nil {
+		}
+		if req.Kind == pack.ScopeThreatMap {
+			ins.ThreatFramework = &req.ThreatFramework
+			if !req.ThreatEnvironment.IsZero() {
+				ins.ThreatEnvironment = &req.ThreatEnvironment
+			}
+		}
+		if err := q.InsertEvidencePack(ctx, ins); err != nil {
 			return err
 		}
 		if req.Kind == pack.ScopeCompliance {

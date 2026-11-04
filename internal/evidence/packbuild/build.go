@@ -118,8 +118,11 @@ type Service struct {
 	// Compliance derives the report of a pack of scope compliance (G0 M25
 	// D301); nil fails them.
 	Compliance Compliance
-	Clock      clock.Clock
-	Log        *slog.Logger
+	// ThreatMap evaluates the report of a pack of scope threat_map (G0 M28
+	// D720); nil fails them.
+	ThreatMap ThreatMap
+	Clock     clock.Clock
+	Log       *slog.Logger
 }
 
 func (s *Service) now() time.Time {
@@ -241,6 +244,15 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 			return err
 		}
 	}
+	if r.scope.Kind == pack.ScopeThreatMap {
+		if b.threatMapFile, err = b.loadThreatMap(); errors.Is(err, errThreatMapEdition) {
+			return s.fail(ctx, org, id, CodeEditionRequired)
+		} else if errors.Is(err, errThreatMap) {
+			return s.fail(ctx, org, id, CodeThreatMapUnavailable)
+		} else if err != nil {
+			return err
+		}
+	}
 	content, manifest, items, err := b.build()
 	switch {
 	case errors.Is(err, pack.ErrTooLarge):
@@ -313,6 +325,8 @@ type builder struct {
 	execData *execData
 	// complianceData is the report of a pack of scope compliance.
 	complianceData *complianceData
+	// threatMapFile is threat_map.json of a pack of scope threat_map.
+	threatMapFile *pack.File
 }
 
 func (b *builder) gap(subject, reason, format string, args ...any) {
@@ -361,6 +375,9 @@ func (b *builder) build() ([]byte, string, int, error) {
 	}
 	if b.complianceData != nil {
 		b.files = append(b.files, b.complianceData.file)
+	}
+	if b.threatMapFile != nil {
+		b.files = append(b.files, *b.threatMapFile)
 	}
 	if r.include.Versions {
 		if err := b.versions(); err != nil {
@@ -456,6 +473,10 @@ func (b *builder) scopeIDs() ([]ids.UUID, bool, error) {
 	}
 	if sc.Kind == pack.ScopeCompliance {
 		return b.complianceData.transactions, true, nil
+	}
+	if sc.Kind == pack.ScopeThreatMap {
+		// A threat map report names no transaction (D720).
+		return nil, true, nil
 	}
 	if sc.Kind == pack.ScopeTransactions {
 		out := make([]ids.UUID, 0, len(sc.Transactions))

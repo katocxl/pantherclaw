@@ -28,7 +28,8 @@ import (
 
 func init() {
 	commands["pack create"] = command{
-		usage: "pack create (--txn ID [--txn ID]… | --run ID | --agent ID | --framework NAME --from TIME --to TIME | --from TIME --to TIME) [--from TIME --to TIME] " +
+		usage: "pack create (--txn ID [--txn ID]… | --run ID | --agent ID | --framework NAME --from TIME --to TIME | --threat-map atlas|attack [--environment ID] | " +
+			"--from TIME --to TIME) [--from TIME --to TIME] " +
 			"[--include receipts,versions,approvals,containment[,captures]]",
 		run: packCreate,
 	}
@@ -90,18 +91,20 @@ func packCreate(ctx context.Context, a *app, args []string) error {
 	to := fs.String("to", "", "end of the time range (RFC 3339)")
 	include := fs.String("include", defaultInclude, "what to include: receipts, versions, approvals, containment, captures")
 	framework := fs.String("framework", "", "a signed report of this framework for --from and --to: "+frameworkNames())
+	threatMap := fs.String("threat-map", "", "a signed threat map report of this framework now: atlas or attack (G0 M28 D720)")
+	environment := fs.String("environment", "", "with --threat-map: only this environment's agents (Prevent, Seen)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	scopes := 0
-	for _, set := range []bool{len(txns) > 0, *run != "", *agent != "", *framework != ""} {
+	for _, set := range []bool{len(txns) > 0, *run != "", *agent != "", *framework != "", *threatMap != ""} {
 		if set {
 			scopes++
 		}
 	}
 	ranged := *from != "" || *to != ""
 	if fs.NArg() != 0 || scopes > 1 || (scopes == 0 && !ranged) || (ranged && (*from == "" || *to == "")) || (len(txns) > 0 && ranged) ||
-		(*framework != "" && !ranged) {
+		(*framework != "" && !ranged) || (*threatMap != "" && ranged) || (*environment != "" && *threatMap == "") {
 		return errUsage
 	}
 	in, err := includeOf(*include)
@@ -135,6 +138,16 @@ func packCreate(ctx context.Context, a *app, args []string) error {
 		}
 		req.Scope = &pantherclawv1.CreateEvidencePackRequest_Compliance{
 			Compliance: &pantherclawv1.PackCompliance{Framework: fw, Period: tr},
+		}
+	case *threatMap != "":
+		fw, err := threatFrameworkOf(*threatMap)
+		if err != nil {
+			return err
+		}
+		// The report names no transaction, so nothing else is included.
+		req.Include = &pantherclawv1.PackContents{}
+		req.Scope = &pantherclawv1.CreateEvidencePackRequest_ThreatMap{
+			ThreatMap: &pantherclawv1.PackThreatMap{Framework: fw, EnvironmentId: *environment},
 		}
 	default:
 		req.Scope = &pantherclawv1.CreateEvidencePackRequest_TimeRange{TimeRange: tr}
