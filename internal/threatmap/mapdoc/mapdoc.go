@@ -7,8 +7,6 @@
 // PantherClaw, or No PantherClaw control yet) and what PantherClaw maps to
 // it. The document is generated and checked in task check, never edited by
 // hand.
-//
-//nolint:misspell // MITRE is a proper noun (the ATT&CK and ATLAS publisher), not "miter".
 package mapdoc
 
 import (
