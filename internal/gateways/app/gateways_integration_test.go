@@ -265,7 +265,7 @@ func TestHR181_RevokingCoversASupersededCertificate(t *testing.T) {
 	ctx := context.Background()
 	renew := func(name string) (app.Identity, app.Identity) {
 		_, id := e.enroll(t, name)
-		renewed, err := e.svc.Renew(ctx, id, csr(t))
+		renewed, err := e.svc.Renew(t.Context(), id, csr(t))
 		if err != nil {
 			t.Fatal(err)
 		}

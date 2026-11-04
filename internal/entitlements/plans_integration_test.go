@@ -128,6 +128,7 @@ func TestHR356_PlanRequiredGateKeepsOnlyTheAllowListWithoutAPlan(t *testing.T) {
 	g := entitlements.NewGate(s, true, func(p string) entitlements.Class { return class[p] })
 	check := func(want map[string]bool) {
 		t.Helper()
+		ctx := t.Context()
 		for p, ok := range want {
 			err := g.Check(ctx, org, p)
 			if ok != (err == nil) {

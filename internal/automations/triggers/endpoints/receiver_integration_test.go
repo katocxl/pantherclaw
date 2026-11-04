@@ -77,7 +77,7 @@ func (f *inboundFixture) post(t *testing.T, url, msgID string, ts time.Time, bod
 		}
 		req.Header.Set(inbound.HeaderSignature, sig)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestHR275_InboundEventsAreSignedFreshUnseenAndDeclared(t *testing.T) {
 			req.Header.Set(inbound.HeaderID, tc.id)
 			req.Header.Set(inbound.HeaderTimestamp, strconv.FormatInt(now.Unix(), 10))
 			req.Header.Set(inbound.HeaderSignature, ndomain.Sign(f.secret, tc.id, now.Unix(), []byte(body)))
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := (&http.Client{}).Do(req)
 			if err != nil {
 				t.Fatal(err)
 			}

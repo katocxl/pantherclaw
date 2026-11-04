@@ -380,7 +380,7 @@ func TestHR171_ChangesInvalidateLiveRequests(t *testing.T) {
 			if s := f.str("SELECT state || '/' || end_reason FROM pc.approval_requests WHERE id = $1", req); s != "INVALIDATED/"+c.reason {
 				t.Fatalf("request %s", s)
 			}
-			if s := f.str("SELECT state FROM pc.waitlist_entries WHERE subject_id = $1", req); s != "CANCELLED" {
+			if s := f.str("SELECT state FROM pc.waitlist_entries WHERE subject_id = $1", req); s != "CANCELLED" { //nolint:misspell // stored state
 				t.Fatalf("entry %s", s)
 			}
 		})

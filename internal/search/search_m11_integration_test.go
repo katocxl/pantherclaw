@@ -78,7 +78,7 @@ func newM11Fx(t *testing.T) *m11fx {
 	f.incidentB = f.incident("Exfil from bravo", f.agentB, f.runB)
 	f.s.Editions = edition(billing.Team)
 	f.s.Cases = capp.NewOpener(edition(billing.Team))
-	f.auditor = f.caller(td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: f.fx.org.UUID()})
+	f.auditor = f.caller(td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
 	f.responder = f.caller(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: f.teamA})
 	return f
 }
@@ -277,9 +277,9 @@ func TestHR296_ExportNeedsExportPermissionCapsAndIsAudited(t *testing.T) {
 	}
 	var n int
 	var body string
-	if err := f.p.InTenantTx(context.Background(), f.fx.org, func(ctx context.Context, tx db.TenantTx) error {
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		return tx.QueryRow(ctx, `SELECT count(*), max(convert_from(body, 'UTF8')) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.search.exported'`,
-			f.fx.org).Scan(&n, &body)
+			f.org).Scan(&n, &body)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +293,7 @@ func TestHR296_ExportNeedsExportPermissionCapsAndIsAudited(t *testing.T) {
 	}
 	f.exec(`INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id, state)
 		SELECT $1, t, $2, a, $3, 'payments.refund.create', 'ALLOW', 'R', 'gw', 'OPEN'
-		FROM unnest($4::uuid[], $5::uuid[]) AS x(t, a)`, f.fx.org, f.runA, make([]byte, 32), v7s(10000), v7s(10000))
+		FROM unnest($4::uuid[], $5::uuid[]) AS x(t, a)`, f.org, f.runA, make([]byte, 32), v7s(10000), v7s(10000))
 	e, err = f.s.ExportResults(as(f.auditor), src, FormatJSON)
 	if err != nil {
 		t.Fatal(err)
@@ -316,9 +316,9 @@ func TestHR296_OpenCaseCarriesOnlyTheChosenItems(t *testing.T) {
 		t.Fatal(err)
 	}
 	var refs []string
-	if err := f.p.InTenantTx(context.Background(), f.fx.org, func(ctx context.Context, tx db.TenantTx) error {
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		rows, err := tx.Query(ctx, `SELECT ref_kind || ':' || lower(ref_id) FROM pc.case_entries
-			WHERE org_id = $1 AND case_id = $2 AND kind = 'LINK' ORDER BY 1`, f.fx.org, id)
+			WHERE org_id = $1 AND case_id = $2 AND kind = 'LINK' ORDER BY 1`, f.org, id)
 		if err != nil {
 			return err
 		}
@@ -400,13 +400,13 @@ func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
 	f := newM11Fx(t)
 	sa, auto, version, trigger, exec := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
 	// The identity and the automation reference each other (deferred keys).
-	if err := f.p.InTenantTx(context.Background(), f.fx.org, func(ctx context.Context, tx db.TenantTx) error {
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO pc.service_accounts (org_id, id, name, created_by, automation_id)
-			VALUES ($1, $2, 'nightly-triage-sa', 'test', $3)`, f.fx.org, sa, auto); err != nil {
+			VALUES ($1, $2, 'nightly-triage-sa', 'test', $3)`, f.org, sa, auto); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, `INSERT INTO pc.automations (org_id, id, name, purpose, kind, owner_user_id, service_account_id, created_by)
-		VALUES ($1, $2, 'nightly-triage', 'Triage alerts nightly', 'SECURITY_WORK', $3, $4, $3)`, f.fx.org, auto, f.user, sa)
+		VALUES ($1, $2, 'nightly-triage', 'Triage alerts nightly', 'SECURITY_WORK', $3, $4, $3)`, f.org, auto, f.user, sa)
 		if err != nil {
 			return err
 		}
@@ -416,13 +416,13 @@ func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
 			args []any
 		}{
 			{`INSERT INTO pc.automation_versions (org_id, id, automation_id, number, definition, digest, created_by)
-			VALUES ($1, $2, $3, 1, '{}', $5, $4)`, []any{f.fx.org, version, auto, f.user, make([]byte, 32)}},
+			VALUES ($1, $2, $3, 1, '{}', $5, $4)`, []any{f.org, version, auto, f.user, make([]byte, 32)}},
 			{`INSERT INTO pc.automation_triggers (org_id, id, automation_id, version_id, kind, mode, source_ref, authenticity,
 			root_trigger_id, state, occurred_at) VALUES ($1, $4, $3, $2, 'MANUAL', 'TEST', 'test', 'USER_SESSION', $4,
-			'ACCEPTED', now())`, []any{f.fx.org, version, auto, trigger}},
+			'ACCEPTED', now())`, []any{f.org, version, auto, trigger}},
 			{`INSERT INTO pc.automation_executions (org_id, id, automation_id, version_id, trigger_id, mode, service_account_id,
 			principal_user_id, trigger_kind, occurred_at, root_trigger_id, deadline_at)
-			VALUES ($1, $2, $3, $4, $5, 'TEST', $6, $7, 'MANUAL', now(), $5, now() + interval '1 hour')`, []any{f.fx.org, exec, auto, version, trigger, sa, f.user}},
+			VALUES ($1, $2, $3, $4, $5, 'TEST', $6, $7, 'MANUAL', now(), $5, now() + interval '1 hour')`, []any{f.org, exec, auto, version, trigger, sa, f.user}},
 		} {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
 				return err
@@ -441,7 +441,7 @@ func TestHR295_AutomationsNeedAutomationReadAcrossTheOrg(t *testing.T) {
 	}
 	// An org-wide responder reads automations but not service accounts:
 	// the identity is left out (D86 Q5).
-	orgResponder := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeOrg, ID: f.fx.org.UUID()})
+	orgResponder := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
 	if r := f.search(orgResponder, Query{Entity: EntityAutomations}); r.Count != 1 || r.Items[0].Fields["service_account"] != "" ||
 		len(r.Items[0].Evidence) != 1 {
 		t.Fatalf("org responder: %+v", r.Items)

@@ -130,16 +130,28 @@ func TestHR174_TheWaitStreamServesOnlyTheRunsInstance(t *testing.T) {
 	if v["state"] != "PENDING" || v["handle"] != txn.String() || v["approval_request_id"] != request.String() || v["retry_after_seconds"] != 5.0 {
 		t.Fatalf("first event %v", v)
 	}
-	if busy := s.wait(t, w, txn); busy.StatusCode != http.StatusTooManyRequests || busy.Header.Get("Retry-After") != "5" {
+	busy := s.wait(t, w, txn)
+	_ = busy.Body.Close()
+	if busy.StatusCode != http.StatusTooManyRequests || busy.Header.Get("Retry-After") != "5" {
 		t.Fatalf("a second stream: %d", busy.StatusCode)
 	}
 	other := o.waiter(t, s)
-	if resp := s.wait(t, other, txn); resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("another instance: %d", resp.StatusCode)
+	foreign := s.wait(t, other, txn)
+	_ = foreign.Body.Close()
+	if foreign.StatusCode != http.StatusNotFound {
+		t.Fatalf("another instance: %d", foreign.StatusCode)
 	}
-	if resp, err := http.Get(s.url + workloadrpc.WaitPath + txn.String()); err != nil || resp.StatusCode != http.StatusUnauthorized ||
-		resp.Header.Get("PAP-Error") == "" {
-		t.Fatalf("no credentials: %v %v", resp, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.url+workloadrpc.WaitPath+txn.String(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	anon, err := (&http.Client{}).Do(req)
+	if err != nil {
+		t.Fatalf("no credentials: %v", err)
+	}
+	_ = anon.Body.Close()
+	if anon.StatusCode != http.StatusUnauthorized || anon.Header.Get("PAP-Error") == "" {
+		t.Fatalf("no credentials: %d %v", anon.StatusCode, anon.Header)
 	}
 
 	s.exec(t, o.org, "UPDATE pc.approval_requests SET state = 'DECLINED', end_reason = 'APPROVAL_DECLINED', ended_at = now() WHERE id = $1", request)

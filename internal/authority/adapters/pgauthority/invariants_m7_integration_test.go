@@ -107,16 +107,21 @@ func (w *world) m7TryLease(s *txapp.Service, txn ids.UUID) (txapp.Lease, bool) {
 // page (HR-192), which no automatic path reaches.
 func TestINV09_NoAutomaticRetryAfterUnknownThroughReconciliation(t *testing.T) {
 	w := newWorld(t)
-	ctx := context.Background()
 	w.auth.PermitTTL = time.Hour
 	s := w.verifier()
 	rec := &txapp.Reconciler{Store: &pgtransactions.Store{Pool: w.pool}, Effects: s}
 	person, _ := w.reconciler("rita")
+	// askRead is the person asking for another read of txn.
+	askRead := func(txn ids.UUID) error {
+		_, err := rec.RequestVerification(person, txn)
+		return err
+	}
 	grant := w.grant("100000")
 	run := w.run(grant.ID, ids.UUID{})
 	n := 0
 
 	rapid.Check(t, func(rt *rapid.T) {
+		ctx := t.Context()
 		n++
 		charge := fmt.Sprintf("ch_inv09x%d", n)
 		amount := rapid.SampledFrom([]string{"1.00", "12.50", "30.00"}).Draw(rt, "amount")
@@ -232,7 +237,7 @@ func TestINV09_NoAutomaticRetryAfterUnknownThroughReconciliation(t *testing.T) {
 				}
 			case 7:
 				step = "a person asking for another read"
-				if _, err := rec.RequestVerification(person, txn); err != nil {
+				if err := askRead(txn); err != nil {
 					rt.Fatalf("%s: %v", step, err)
 				}
 			}
@@ -371,7 +376,7 @@ func TestINV11_AValidSignatureNeverReadsAsAnEffect(t *testing.T) {
 		t.Helper()
 		w.db.AdminExec(t, "UPDATE pc.verifications SET next_at = now() WHERE transaction_id = $1 AND state = 'PENDING'", accepted.TransactionID)
 		l := w.lease(s, accepted.TransactionID)
-		a, err := s.Report(ctx, w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: refundOf("ch_1", status, "30.00")})
+		a, err := s.Report(t.Context(), w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: refundOf("ch_1", status, "30.00")})
 		if err != nil {
 			t.Fatal(err)
 		}

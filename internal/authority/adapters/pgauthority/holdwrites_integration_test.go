@@ -151,7 +151,7 @@ func TestHR171_AHoldIsRecordedOnceAndSupersededWhenItsBindingChanges(t *testing.
 	if s := w.str("SELECT previous_id::text FROM pc.approval_requests WHERE id = $1", second); s != first.String() {
 		t.Fatalf("previous %s", s)
 	}
-	if s := w.str("SELECT state FROM pc.waitlist_entries WHERE subject_id = $1", first); s != "CANCELLED" {
+	if s := w.str("SELECT state FROM pc.waitlist_entries WHERE subject_id = $1", first); s != "CANCELLED" { //nolint:misspell // stored state
 		t.Fatalf("old entry %s", s)
 	}
 	if n := w.count("SELECT pending FROM pc.hold_slots WHERE scope_kind = 'grant' AND scope_id = $1", g.ID.UUID()); n != 1 {

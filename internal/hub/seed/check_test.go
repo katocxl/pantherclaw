@@ -76,7 +76,7 @@ func TestHubSeed_Counts(t *testing.T) {
 	for _, it := range items(t) {
 		count[it.Entry.Kind]++
 	}
-	want := map[domain.Kind]int{domain.KindPolicyTemplate: 6, domain.KindDetectionRule: 8, domain.KindRangeScenario: 5, domain.KindAutomation: 9}
+	want := map[domain.Kind]int{domain.KindPolicyTemplate: 6, domain.KindDetectionRule: 8, domain.KindRangeScenario: 5, domain.KindAutomation: 11}
 	if !maps.Equal(count, want) {
 		t.Fatalf("seed %v, want %v", count, want)
 	}

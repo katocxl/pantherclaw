@@ -68875,6 +68875,22 @@
                 "maxLength": 0
               }
             ]
+          },
+          "transactionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "transaction_id",
+            "description": "The transaction whose own call-time check found the drift; empty from\n the periodic check. The server takes the run from its own transaction\n row of this connection, never from the gateway, and processes the\n report without a run when there is no such row (HR-665).",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "ReportDriftRequest",

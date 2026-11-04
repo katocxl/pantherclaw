@@ -115,24 +115,23 @@ func TestHR174_AStreamSendsChangesAndEndsAtAFinalState(t *testing.T) {
 	go func() { _ = w.Run(ctx) }()
 	var states []string
 	done := make(chan error, 1)
-	go func() {
-		done <- w.Stream(ctx, f.org, inst, f.txn, func(v approvals.WaitView, heartbeat bool) error {
-			if !heartbeat {
-				states = append(states, v.State)
-			}
-			if len(states) == 1 && v.State == "PENDING" {
-				go func() {
-					if _, err := f.approve(f.bob, req); err != nil {
-						t.Error(err)
-					}
-				}()
-			}
-			if v.State == "READY" {
-				f.exec("UPDATE pc.approval_requests SET state = 'INVALIDATED', end_reason = 'RUN_ENDED', ended_at = now() WHERE id = $1", req)
-			}
-			return nil
-		})
-	}()
+	send := func(v approvals.WaitView, heartbeat bool) error {
+		if !heartbeat {
+			states = append(states, v.State)
+		}
+		if len(states) == 1 && v.State == "PENDING" {
+			go func() {
+				if _, err := f.approve(f.bob, req); err != nil {
+					t.Error(err)
+				}
+			}()
+		}
+		if v.State == "READY" {
+			f.exec("UPDATE pc.approval_requests SET state = 'INVALIDATED', end_reason = 'RUN_ENDED', ended_at = now() WHERE id = $1", req)
+		}
+		return nil
+	}
+	go func() { done <- w.Stream(ctx, f.org, inst, f.txn, send) }()
 	select {
 	case err := <-done:
 		if err != nil || len(states) != 3 || states[0] != "PENDING" || states[1] != "READY" || states[2] != "INVALIDATED" {

@@ -156,7 +156,7 @@ func TestHR206_AConfirmedActionsConsequenceIsVerifiedOnItsOwn(t *testing.T) {
 		l := w.lease(s, r.TransactionID)
 		fields := refundOf(charge, "succeeded", "30.00")
 		fields["/id"] = ref
-		if a, err := s.Report(ctx, w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: fields}); err != nil ||
+		if a, err := s.Report(t.Context(), w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: fields}); err != nil ||
 			a.State != txdomain.Confirmed {
 			t.Fatalf("%s: confirm %+v %v", charge, a, err)
 		}
@@ -182,7 +182,7 @@ func TestHR206_AConfirmedActionsConsequenceIsVerifiedOnItsOwn(t *testing.T) {
 		if state != "" {
 			r.Fields = map[string]string{"/0/state": state}
 		}
-		a, err := s.Report(ctx, w.org, w.gwID, r)
+		a, err := s.Report(t.Context(), w.org, w.gwID, r)
 		if err != nil {
 			t.Fatalf("report %s: %v", state, err)
 		}

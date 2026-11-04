@@ -539,7 +539,7 @@ func fakeIssuer(t *testing.T) *http.Client {
 	tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, network, addr)
 	}
-	tr.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec // G402: the test server stands in for idp.example.com
+	tr.TLSClientConfig.InsecureSkipVerify = true
 	c.Transport = tr
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return c
@@ -673,7 +673,7 @@ func TestD169_LimitCountsLiveProviders(t *testing.T) {
 	if !errors.Is(err, idps.ErrTooMany) || !strings.Contains(err.Error(), "UpdateIdentityProvider") {
 		t.Fatalf("over the limit: %v", err)
 	}
-	close := func(f idps.Filed, state string) {
+	closeChange := func(f idps.Filed, state string) {
 		t.Helper()
 		if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
 			return e.gate.Closed(ctx, tx, f.Request, state, state)
@@ -681,8 +681,8 @@ func TestD169_LimitCountsLiveProviders(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	close(filed[0], changes.StateDeclined)
-	close(filed[1], changes.StateExpired)
+	closeChange(filed[0], changes.StateDeclined)
+	closeChange(filed[1], changes.StateExpired)
 	for _, p := range pending[:2] {
 		if got, _ := e.svc.Get(e.admin(e.alice), p.ID); got.State != idps.StateDisabled {
 			t.Fatalf("a lapsed activation left %s %s", got.Name, got.State)
@@ -705,7 +705,7 @@ func TestD169_LimitCountsLiveProviders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	close(f, changes.StateDeclined)
+	closeChange(f, changes.StateDeclined)
 	if got, _ := e.svc.Get(e.admin(e.alice), act.ID); got.State != idps.StateActive || got.TrustEmail {
 		t.Fatalf("a declined change moved an active provider: %+v", got)
 	}

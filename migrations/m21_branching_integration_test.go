@@ -117,7 +117,7 @@ func TestHR530_WaitingV1ExecutionsMigrate(t *testing.T) {
 }
 
 // TestHR530_DeletedOrgsDoNotStopTheUpgrade: every organisation's attempts are
-// backfilled in its own context. A DELETED organisation permits no write, so
+// backfilled in its own context. A DELETED organization permits no write, so
 // its attempts stay as they are and the upgrade goes on; every new row is
 // held by the check.
 //
@@ -147,17 +147,17 @@ func TestHR530_DeletedOrgsDoNotStopTheUpgrade(t *testing.T) {
 		return out
 	}
 	if got := node(live, kept); got == nil || *got != "first" {
-		t.Errorf("live organisation: node %v", got)
+		t.Errorf("live organization: node %v", got)
 	}
 	if got := node(gone, left); got != nil {
-		t.Errorf("deleted organisation: node %q", *got)
+		t.Errorf("deleted organization: node %q", *got)
 	}
 	var valid bool
 	if err := d.Pool(t, d.Migrator).Pgx().QueryRow(ctx, m21NodeSet).Scan(&valid); err != nil {
 		t.Fatal(err)
 	}
 	if valid {
-		t.Error("the check should stay NOT VALID, with old rows of deleted organisations under it")
+		t.Error("the check should stay NOT VALID, with old rows of deleted organizations under it")
 	}
 }
 

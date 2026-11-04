@@ -37,8 +37,8 @@ func TestIntHR657_ReadIsInTheOrgsLedger(t *testing.T) {
 }
 
 // TestIntHR657_TechniqueCoverageReadIsInTheOrgsLedger: technique_coverage's
-// read is recorded like the others, naming the technique id, its framework
-// and the agent asked about (G0 M28 D726). Covers: F948, HR-657
+// read is recorded like the others, naming the technique id, its framework,
+// the agent asked about and its basis (G0 M28 D726, HR-663). Covers: F948, HR-657
 func TestIntHR657_TechniqueCoverageReadIsInTheOrgsLedger(t *testing.T) {
 	d := dbtest.New(t)
 	c := investigatorCaller()
@@ -49,14 +49,50 @@ func TestIntHR657_TechniqueCoverageReadIsInTheOrgsLedger(t *testing.T) {
 		Framework: pb.ThreatFramework_THREAT_FRAMEWORK_ATTACK_ENTERPRISE, TechniqueId: "T1552.001", AgentId: agent,
 	}
 	s := &fakeStream{request: req}
-	if err := call(g, c, pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, s, &pb.GetThreatTechniqueRequest{}, nil); err != nil {
+	if _, err := served(g, c, pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, "", s,
+		handler(&pb.GetThreatTechniqueRequest{}, nil)); err != nil {
 		t.Fatal(err)
 	}
 	var n int
 	d.AdminQueryRow(t, `SELECT count(*)::int FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.self_mcp.read'
 		AND position(convert_to($2::text, 'UTF8') IN body) > 0 AND position(convert_to('T1552.001', 'UTF8') IN body) > 0
-		AND position(convert_to('attack_enterprise', 'UTF8') IN body) > 0`, []any{c.Org, agent}, &n)
+		AND position(convert_to('attack_enterprise', 'UTF8') IN body) > 0
+		AND position(convert_to('"basis":"role"', 'UTF8') IN body) > 0`, []any{c.Org, agent}, &n)
 	if n != 1 || len(s.sent) != 1 {
 		t.Errorf("records %d, sent %d", n, len(s.sent))
+	}
+}
+
+// TestIntHR663_AHeaderedReadIsInTheOrgsLedger: an Org Admin key's read with
+// the header of `pclaw mcp self` is in the caller's org's ledger with basis
+// client_header, before the answer; the same read without the header is
+// not recorded.
+// Covers: F948
+func TestIntHR663_AHeaderedReadIsInTheOrgsLedger(t *testing.T) {
+	d := dbtest.New(t)
+	c := adminCaller()
+	d.AdminExec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'self-mcp-header')", c.Org)
+	g := &selfMCPGate{editions: fixedEditions(billing.Community), record: poolRecorder(d.AppPool(t))}
+	count := func() int {
+		var n int
+		d.AdminQueryRow(t, `SELECT count(*)::int FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.self_mcp.read'
+			AND position(convert_to('"basis":"client_header"', 'UTF8') IN body) > 0`, []any{c.Org}, &n)
+		return n
+	}
+	s := &fakeStream{}
+	if _, err := served(g, c, pantherclawv1connect.SearchServiceSearchProcedure, "mcp-self", s, nil); err != nil || len(s.sent) != 1 {
+		t.Fatalf("headered read: %v, sent %d", err, len(s.sent))
+	}
+	if n := count(); n != 1 {
+		t.Errorf("records %d, want 1", n)
+	}
+	s = &fakeStream{}
+	if _, err := served(g, c, pantherclawv1connect.SearchServiceSearchProcedure, "", s, nil); err != nil || len(s.sent) != 1 {
+		t.Fatalf("plain read: %v, sent %d", err, len(s.sent))
+	}
+	var all int
+	d.AdminQueryRow(t, `SELECT count(*)::int FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.self_mcp.read'`, []any{c.Org}, &all)
+	if all != 1 {
+		t.Errorf("%d records after a read without the header, want 1", all)
 	}
 }
