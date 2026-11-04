@@ -30,7 +30,7 @@ const (
 func runSlack(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("slack", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9095", "listen address (loopback)")
+	addr := fs.String("addr", defaultAddrs["slack"], "listen address (loopback)")
 	tokenFile := fs.String("token-file", "", "file holding the only bot token accepted (otherwise any xoxb- token is)")
 	extra := fs.String("channels", "", "comma-separated extra channel ids the bot is a member of")
 	external := fs.String("external-shared", "", "comma-separated channel ids to mark shared with another organization")
