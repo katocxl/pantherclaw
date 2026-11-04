@@ -89,11 +89,23 @@
       ]
     },
     {
+      "name": "pc.playbook.poisoned-mcp-server-contain",
+      "rules": [
+        "pc.tools.drift"
+      ]
+    },
+    {
       "name": "pc.playbook.rogue-sub-agent",
       "rules": [
         "pc.authority.self_approve",
         "pc.authority.self_issue",
         "pc.delegation.depth_anomaly"
+      ]
+    },
+    {
+      "name": "pc.playbook.rogue-sub-agent-contain",
+      "rules": [
+        "pc.authority.self_issue"
       ]
     }
   ]
