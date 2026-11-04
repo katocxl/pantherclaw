@@ -105,6 +105,8 @@ type Started struct {
 	Nonces          Nonces
 	// AgentHosts maps each agent host to its connection's name.
 	AgentHosts map[string]string
+	// ModelConnections name the model connections among them (G0 M29 D814).
+	ModelConnections []string
 }
 
 // Nonces are one probe run's server nonces.
@@ -141,7 +143,7 @@ func (s *Service) StartSession(ctx context.Context, in StartInput) (Started, err
 		if !adomain.State(a.State).Usable() || a.EnvironmentID == nil {
 			return ErrAgent
 		}
-		hosts, err := mappedHosts(ctx, q, c.Org, in.Connections)
+		hosts, models, err := mappedHosts(ctx, q, c.Org, in.Connections)
 		if err != nil {
 			return err
 		}
@@ -190,7 +192,7 @@ func (s *Service) StartSession(ctx context.Context, in StartInput) (Started, err
 		if err != nil {
 			return err
 		}
-		out = Started{Session: sess, Connections: in.Connections, EnrollmentToken: tok, Nonces: nonces, AgentHosts: hosts}
+		out = Started{Session: sess, Connections: in.Connections, EnrollmentToken: tok, Nonces: nonces, AgentHosts: hosts, ModelConnections: models}
 		return record(ctx, tx, c, auditkind.SandboxSessionStarted, sess.ID, map[string]string{
 			"agent_id": a.ID.String(), "config_digest": in.ConfigDigest, "runtime": in.Runtime,
 		})
@@ -223,29 +225,34 @@ func agentFor(ctx context.Context, c tenancy.Caller, q *dbq.Queries, id ids.UUID
 
 // mappedHosts checks the mapped connections (active, one gateway, no host
 // named twice) and returns the edge's mapping: agent host → connection
-// name.
-func mappedHosts(ctx context.Context, q *dbq.Queries, org ids.OrgID, conns []ids.UUID) (map[string]string, error) {
+// name, and the names of the model connections among them (G0 M29 D814),
+// which the edge forwards with the model path's limits.
+func mappedHosts(ctx context.Context, q *dbq.Queries, org ids.OrgID, conns []ids.UUID) (map[string]string, []string, error) {
 	hosts := map[string]string{}
+	var models []string
 	var gateway ids.UUID
 	for i, id := range conns {
 		conn, err := q.GetConnection(ctx, org, id)
 		if db.IsNoRows(err) {
-			return nil, ErrConnections
+			return nil, nil, ErrConnections
 		} else if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if conn.State != "ACTIVE" || len(conn.AgentHosts) == 0 || (i > 0 && conn.GatewayID != gateway) {
-			return nil, ErrConnections
+			return nil, nil, ErrConnections
 		}
 		gateway = conn.GatewayID
+		if conn.Kind == "model" { // connections' KindModel
+			models = append(models, conn.Name)
+		}
 		for _, h := range conn.AgentHosts {
 			if _, dup := hosts[h]; dup {
-				return nil, ErrConnections
+				return nil, nil, ErrConnections
 			}
 			hosts[h] = conn.Name
 		}
 	}
-	return hosts, nil
+	return hosts, models, nil
 }
 
 // invalidateChanged records sandbox_image or sandbox_config for each

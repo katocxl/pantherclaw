@@ -22,9 +22,12 @@ type Dispatch struct {
 	MCP  *MCPDispatch  `json:"mcp,omitzero"`
 	// SQL is a structured read of a postgres connection (G0 M14 D9, D16);
 	// A2A is a call to a peer agent (D9, D31). Each definition has
-	// exactly one of http, mcp, sql and a2a.
+	// exactly one of http, mcp, sql, a2a and model.
 	SQL *SQLDispatch `json:"sql,omitzero"`
 	A2A *A2ADispatch `json:"a2a,omitzero"`
+	// Model is a call of a model provider's API over a model connection
+	// (G0 M29 D813): the gateway forwards the checked request body itself.
+	Model *ModelDispatch `json:"model,omitzero"`
 	// CredentialScope is the least privilege of the connection's credential
 	// the operation needs, as name to level, which the credential kind
 	// interprets (G0 M8): for a GitHub App, GitHub permission names and
@@ -276,13 +279,13 @@ func (d *Definition) validateDispatch() error {
 	}
 	at := d.Operation + ": dispatch"
 	n := 0
-	for _, set := range []bool{x.HTTP != nil, x.MCP != nil, x.SQL != nil, x.A2A != nil} {
+	for _, set := range []bool{x.HTTP != nil, x.MCP != nil, x.SQL != nil, x.A2A != nil, x.Model != nil} {
 		if set {
 			n++
 		}
 	}
 	if n != 1 {
-		return invalid("%s: exactly one of http, mcp, sql and a2a", at)
+		return invalid("%s: exactly one of http, mcp, sql, a2a and model", at)
 	}
 	if len(x.CredentialScope) > 16 {
 		return invalid("%s.credential_scope: at most 16 entries", at)
@@ -330,6 +333,11 @@ func (d *Definition) validateDispatch() error {
 	}
 	if a := x.A2A; a != nil && !slices.Contains(A2AMethods, a.Method) {
 		return invalid("%s.a2a: method one of %v", at, A2AMethods)
+	}
+	if m := x.Model; m != nil {
+		if err := d.validateModelDispatch(at, m); err != nil {
+			return err
+		}
 	}
 	return nil
 }

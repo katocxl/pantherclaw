@@ -2451,7 +2451,13 @@ type RunBudgetLine struct {
 	Count int64 `protobuf:"varint,7,opt,name=count,proto3" json:"count,omitempty"`
 	// What is left of the rule's amount limit in its current period; empty
 	// for a counter, a rule without an amount limit or an earlier period.
-	Remaining     string `protobuf:"bytes,8,opt,name=remaining,proto3" json:"remaining,omitempty"`
+	Remaining string `protobuf:"bytes,8,opt,name=remaining,proto3" json:"remaining,omitempty"`
+	// What the amounts count (G0 M29 D824): "currency", or "tokens" for a
+	// token rule; empty for a counter.
+	Unit string `protobuf:"bytes,9,opt,name=unit,proto3" json:"unit,omitempty"`
+	// The rule's cap (decimal string): its amount limit, or its token cap;
+	// empty for a counter or a rule without one.
+	Limit         string `protobuf:"bytes,10,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2542,6 +2548,95 @@ func (x *RunBudgetLine) GetRemaining() string {
 	return ""
 }
 
+func (x *RunBudgetLine) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *RunBudgetLine) GetLimit() string {
+	if x != nil {
+		return x.Limit
+	}
+	return ""
+}
+
+// RunTokenEstimate is a cost estimate of the run's model calls from prices
+// the organization set on its model connections (G0 M29 D824; HR-698):
+// an estimate, not a bill. Team and above.
+type RunTokenEstimate struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One per price currency.
+	Estimates []*Estimate `protobuf:"bytes,1,rep,name=estimates,proto3" json:"estimates,omitempty"`
+	// Model calls with a price, counted in the estimates.
+	PricedCalls int64 `protobuf:"varint,2,opt,name=priced_calls,json=pricedCalls,proto3" json:"priced_calls,omitempty"`
+	// Model calls without a price, left out of the estimates.
+	UnpricedCalls int64 `protobuf:"varint,3,opt,name=unpriced_calls,json=unpricedCalls,proto3" json:"unpriced_calls,omitempty"`
+	// Always "estimate".
+	Label         string `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunTokenEstimate) Reset() {
+	*x = RunTokenEstimate{}
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunTokenEstimate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunTokenEstimate) ProtoMessage() {}
+
+func (x *RunTokenEstimate) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunTokenEstimate.ProtoReflect.Descriptor instead.
+func (*RunTokenEstimate) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RunTokenEstimate) GetEstimates() []*Estimate {
+	if x != nil {
+		return x.Estimates
+	}
+	return nil
+}
+
+func (x *RunTokenEstimate) GetPricedCalls() int64 {
+	if x != nil {
+		return x.PricedCalls
+	}
+	return 0
+}
+
+func (x *RunTokenEstimate) GetUnpricedCalls() int64 {
+	if x != nil {
+		return x.UnpricedCalls
+	}
+	return 0
+}
+
+func (x *RunTokenEstimate) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
 // RunRouteCoverage is a coverage snapshot the run's decisions claimed.
 type RunRouteCoverage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2565,7 +2660,7 @@ type RunRouteCoverage struct {
 
 func (x *RunRouteCoverage) Reset() {
 	*x = RunRouteCoverage{}
-	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2577,7 +2672,7 @@ func (x *RunRouteCoverage) String() string {
 func (*RunRouteCoverage) ProtoMessage() {}
 
 func (x *RunRouteCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[24]
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2590,7 +2685,7 @@ func (x *RunRouteCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunRouteCoverage.ProtoReflect.Descriptor instead.
 func (*RunRouteCoverage) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{24}
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *RunRouteCoverage) GetConnectionId() string {
@@ -2664,7 +2759,7 @@ type RunGap struct {
 
 func (x *RunGap) Reset() {
 	*x = RunGap{}
-	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2676,7 +2771,7 @@ func (x *RunGap) String() string {
 func (*RunGap) ProtoMessage() {}
 
 func (x *RunGap) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[25]
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2689,7 +2784,7 @@ func (x *RunGap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunGap.ProtoReflect.Descriptor instead.
 func (*RunGap) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{25}
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RunGap) GetKind() string {
@@ -2758,14 +2853,18 @@ type InspectRunResponse struct {
 	// Asked-for sections the caller may not read, left out whole.
 	OmittedSections []InspectSection `protobuf:"varint,10,rep,packed,name=omitted_sections,json=omittedSections,proto3,enum=pantherclaw.v1.InspectSection" json:"omitted_sections,omitempty"`
 	// The caller's scope is narrower than the organization.
-	ScopeLimited  bool `protobuf:"varint,11,opt,name=scope_limited,json=scopeLimited,proto3" json:"scope_limited,omitempty"`
+	ScopeLimited bool `protobuf:"varint,11,opt,name=scope_limited,json=scopeLimited,proto3" json:"scope_limited,omitempty"`
+	// A cost estimate of the run's model calls, with the budget section on
+	// Team and above (G0 M29 D824); unset on Community or without the budget
+	// section.
+	TokenEstimate *RunTokenEstimate `protobuf:"bytes,12,opt,name=token_estimate,json=tokenEstimate,proto3" json:"token_estimate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InspectRunResponse) Reset() {
 	*x = InspectRunResponse{}
-	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2777,7 +2876,7 @@ func (x *InspectRunResponse) String() string {
 func (*InspectRunResponse) ProtoMessage() {}
 
 func (x *InspectRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[26]
+	mi := &file_pantherclaw_v1_investigations_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2790,7 +2889,7 @@ func (x *InspectRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InspectRunResponse.ProtoReflect.Descriptor instead.
 func (*InspectRunResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{26}
+	return file_pantherclaw_v1_investigations_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *InspectRunResponse) GetRun() *RunSummary {
@@ -2870,11 +2969,18 @@ func (x *InspectRunResponse) GetScopeLimited() bool {
 	return false
 }
 
+func (x *InspectRunResponse) GetTokenEstimate() *RunTokenEstimate {
+	if x != nil {
+		return x.TokenEstimate
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_investigations_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\n" +
-	"#pantherclaw/v1/investigations.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"8\n" +
+	"#pantherclaw/v1/investigations.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a pantherclaw/v1/model_usage.proto\"8\n" +
 	"\x12InvestigationParty\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\"\xd4\x02\n" +
@@ -3096,7 +3202,7 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\x14downstream_truncated\x18\x06 \x01(\bR\x13downstreamTruncated\"{\n" +
 	"\vRunTimeline\x125\n" +
 	"\x06events\x18\x01 \x03(\v2\x1d.pantherclaw.v1.TimelineEventR\x06events\x125\n" +
-	"\x06phases\x18\x02 \x03(\v2\x1d.pantherclaw.v1.TimelinePhaseR\x06phases\"\xe0\x01\n" +
+	"\x06phases\x18\x02 \x03(\v2\x1d.pantherclaw.v1.TimelinePhaseR\x06phases\"\x8a\x02\n" +
 	"\rRunBudgetLine\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x12\n" +
@@ -3106,7 +3212,15 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\tcommitted\x18\x05 \x01(\tR\tcommitted\x12\x1a\n" +
 	"\breleased\x18\x06 \x01(\tR\breleased\x12\x14\n" +
 	"\x05count\x18\a \x01(\x03R\x05count\x12\x1c\n" +
-	"\tremaining\x18\b \x01(\tR\tremaining\"\x8f\x02\n" +
+	"\tremaining\x18\b \x01(\tR\tremaining\x12\x12\n" +
+	"\x04unit\x18\t \x01(\tR\x04unit\x12\x14\n" +
+	"\x05limit\x18\n" +
+	" \x01(\tR\x05limit\"\xaa\x01\n" +
+	"\x10RunTokenEstimate\x126\n" +
+	"\testimates\x18\x01 \x03(\v2\x18.pantherclaw.v1.EstimateR\testimates\x12!\n" +
+	"\fpriced_calls\x18\x02 \x01(\x03R\vpricedCalls\x12%\n" +
+	"\x0eunpriced_calls\x18\x03 \x01(\x03R\runpricedCalls\x12\x14\n" +
+	"\x05label\x18\x04 \x01(\tR\x05label\"\x8f\x02\n" +
 	"\x10RunRouteCoverage\x12#\n" +
 	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1f\n" +
@@ -3124,7 +3238,7 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\n" +
 	"gateway_id\x18\x04 \x01(\tR\tgatewayId\x12#\n" +
 	"\rconnection_id\x18\x05 \x01(\tR\fconnectionId\x12\x1c\n" +
-	"\toperation\x18\x06 \x01(\tR\toperation\"\xde\x04\n" +
+	"\toperation\x18\x06 \x01(\tR\toperation\"\xa7\x05\n" +
 	"\x12InspectRunResponse\x12,\n" +
 	"\x03run\x18\x01 \x01(\v2\x1a.pantherclaw.v1.RunSummaryR\x03run\x124\n" +
 	"\alineage\x18\x02 \x01(\v2\x1a.pantherclaw.v1.RunLineageR\alineage\x127\n" +
@@ -3137,7 +3251,8 @@ const file_pantherclaw_v1_investigations_proto_rawDesc = "" +
 	"\x04gaps\x18\t \x03(\v2\x16.pantherclaw.v1.RunGapR\x04gaps\x12I\n" +
 	"\x10omitted_sections\x18\n" +
 	" \x03(\x0e2\x1e.pantherclaw.v1.InspectSectionR\x0fomittedSections\x12#\n" +
-	"\rscope_limited\x18\v \x01(\bR\fscopeLimited*\xdf\x01\n" +
+	"\rscope_limited\x18\v \x01(\bR\fscopeLimited\x12G\n" +
+	"\x0etoken_estimate\x18\f \x01(\v2 .pantherclaw.v1.RunTokenEstimateR\rtokenEstimate*\xdf\x01\n" +
 	"\x0eInspectSection\x12\x1f\n" +
 	"\x1bINSPECT_SECTION_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18INSPECT_SECTION_TIMELINE\x10\x01\x12\x1b\n" +
@@ -3169,7 +3284,7 @@ func file_pantherclaw_v1_investigations_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_investigations_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pantherclaw_v1_investigations_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_pantherclaw_v1_investigations_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_pantherclaw_v1_investigations_proto_goTypes = []any{
 	(InspectSection)(0),                 // 0: pantherclaw.v1.InspectSection
 	(*InvestigationParty)(nil),          // 1: pantherclaw.v1.InvestigationParty
@@ -3196,90 +3311,94 @@ var file_pantherclaw_v1_investigations_proto_goTypes = []any{
 	(*RunLineage)(nil),                  // 22: pantherclaw.v1.RunLineage
 	(*RunTimeline)(nil),                 // 23: pantherclaw.v1.RunTimeline
 	(*RunBudgetLine)(nil),               // 24: pantherclaw.v1.RunBudgetLine
-	(*RunRouteCoverage)(nil),            // 25: pantherclaw.v1.RunRouteCoverage
-	(*RunGap)(nil),                      // 26: pantherclaw.v1.RunGap
-	(*InspectRunResponse)(nil),          // 27: pantherclaw.v1.InspectRunResponse
-	(*timestamppb.Timestamp)(nil),       // 28: google.protobuf.Timestamp
+	(*RunTokenEstimate)(nil),            // 25: pantherclaw.v1.RunTokenEstimate
+	(*RunRouteCoverage)(nil),            // 26: pantherclaw.v1.RunRouteCoverage
+	(*RunGap)(nil),                      // 27: pantherclaw.v1.RunGap
+	(*InspectRunResponse)(nil),          // 28: pantherclaw.v1.InspectRunResponse
+	(*timestamppb.Timestamp)(nil),       // 29: google.protobuf.Timestamp
+	(*Estimate)(nil),                    // 30: pantherclaw.v1.Estimate
 }
 var file_pantherclaw_v1_investigations_proto_depIdxs = []int32{
-	28, // 0: pantherclaw.v1.InvestigationApproval.create_time:type_name -> google.protobuf.Timestamp
-	28, // 1: pantherclaw.v1.InvestigationApproval.approve_time:type_name -> google.protobuf.Timestamp
-	28, // 2: pantherclaw.v1.InvestigationApproval.end_time:type_name -> google.protobuf.Timestamp
+	29, // 0: pantherclaw.v1.InvestigationApproval.create_time:type_name -> google.protobuf.Timestamp
+	29, // 1: pantherclaw.v1.InvestigationApproval.approve_time:type_name -> google.protobuf.Timestamp
+	29, // 2: pantherclaw.v1.InvestigationApproval.end_time:type_name -> google.protobuf.Timestamp
 	1,  // 3: pantherclaw.v1.WhatHappenedResponse.launcher:type_name -> pantherclaw.v1.InvestigationParty
 	1,  // 4: pantherclaw.v1.WhatHappenedResponse.principal:type_name -> pantherclaw.v1.InvestigationParty
 	5,  // 5: pantherclaw.v1.WhatHappenedResponse.grantors:type_name -> pantherclaw.v1.InvestigationGrantor
 	6,  // 6: pantherclaw.v1.WhatHappenedResponse.delegation:type_name -> pantherclaw.v1.InvestigationDelegation
 	2,  // 7: pantherclaw.v1.WhatHappenedResponse.approvals:type_name -> pantherclaw.v1.InvestigationApproval
-	28, // 8: pantherclaw.v1.WhatHappenedResponse.create_time:type_name -> google.protobuf.Timestamp
+	29, // 8: pantherclaw.v1.WhatHappenedResponse.create_time:type_name -> google.protobuf.Timestamp
 	1,  // 9: pantherclaw.v1.InvestigationGrantor.grantor:type_name -> pantherclaw.v1.InvestigationParty
 	1,  // 10: pantherclaw.v1.InvestigationGrantor.principal:type_name -> pantherclaw.v1.InvestigationParty
-	28, // 11: pantherclaw.v1.InvestigationGrantor.create_time:type_name -> google.protobuf.Timestamp
-	28, // 12: pantherclaw.v1.InvestigationGrantor.revoke_time:type_name -> google.protobuf.Timestamp
+	29, // 11: pantherclaw.v1.InvestigationGrantor.create_time:type_name -> google.protobuf.Timestamp
+	29, // 12: pantherclaw.v1.InvestigationGrantor.revoke_time:type_name -> google.protobuf.Timestamp
 	1,  // 13: pantherclaw.v1.InvestigationDelegation.launcher:type_name -> pantherclaw.v1.InvestigationParty
 	1,  // 14: pantherclaw.v1.InvestigationDelegation.principal:type_name -> pantherclaw.v1.InvestigationParty
-	28, // 15: pantherclaw.v1.TimelineEvent.time:type_name -> google.protobuf.Timestamp
-	28, // 16: pantherclaw.v1.TimelineGap.time:type_name -> google.protobuf.Timestamp
-	28, // 17: pantherclaw.v1.TimelineLane.create_time:type_name -> google.protobuf.Timestamp
-	28, // 18: pantherclaw.v1.TimelineLane.end_time:type_name -> google.protobuf.Timestamp
+	29, // 15: pantherclaw.v1.TimelineEvent.time:type_name -> google.protobuf.Timestamp
+	29, // 16: pantherclaw.v1.TimelineGap.time:type_name -> google.protobuf.Timestamp
+	29, // 17: pantherclaw.v1.TimelineLane.create_time:type_name -> google.protobuf.Timestamp
+	29, // 18: pantherclaw.v1.TimelineLane.end_time:type_name -> google.protobuf.Timestamp
 	8,  // 19: pantherclaw.v1.TimelineLane.events:type_name -> pantherclaw.v1.TimelineEvent
 	9,  // 20: pantherclaw.v1.TimelineLane.gaps:type_name -> pantherclaw.v1.TimelineGap
-	28, // 21: pantherclaw.v1.TimelinePhase.start_time:type_name -> google.protobuf.Timestamp
-	28, // 22: pantherclaw.v1.TimelinePhase.end_time:type_name -> google.protobuf.Timestamp
-	28, // 23: pantherclaw.v1.GetRunTimelineResponse.start_time:type_name -> google.protobuf.Timestamp
-	28, // 24: pantherclaw.v1.GetRunTimelineResponse.end_time:type_name -> google.protobuf.Timestamp
+	29, // 21: pantherclaw.v1.TimelinePhase.start_time:type_name -> google.protobuf.Timestamp
+	29, // 22: pantherclaw.v1.TimelinePhase.end_time:type_name -> google.protobuf.Timestamp
+	29, // 23: pantherclaw.v1.GetRunTimelineResponse.start_time:type_name -> google.protobuf.Timestamp
+	29, // 24: pantherclaw.v1.GetRunTimelineResponse.end_time:type_name -> google.protobuf.Timestamp
 	8,  // 25: pantherclaw.v1.GetRunTimelineResponse.events:type_name -> pantherclaw.v1.TimelineEvent
 	9,  // 26: pantherclaw.v1.GetRunTimelineResponse.gaps:type_name -> pantherclaw.v1.TimelineGap
 	10, // 27: pantherclaw.v1.GetRunTimelineResponse.lanes:type_name -> pantherclaw.v1.TimelineLane
 	11, // 28: pantherclaw.v1.GetRunTimelineResponse.phases:type_name -> pantherclaw.v1.TimelinePhase
-	28, // 29: pantherclaw.v1.GetPrecedingContextRequest.start_time:type_name -> google.protobuf.Timestamp
-	28, // 30: pantherclaw.v1.GetPrecedingContextRequest.end_time:type_name -> google.protobuf.Timestamp
-	28, // 31: pantherclaw.v1.ContextItem.time:type_name -> google.protobuf.Timestamp
-	28, // 32: pantherclaw.v1.GetPrecedingContextResponse.start_time:type_name -> google.protobuf.Timestamp
-	28, // 33: pantherclaw.v1.GetPrecedingContextResponse.end_time:type_name -> google.protobuf.Timestamp
+	29, // 29: pantherclaw.v1.GetPrecedingContextRequest.start_time:type_name -> google.protobuf.Timestamp
+	29, // 30: pantherclaw.v1.GetPrecedingContextRequest.end_time:type_name -> google.protobuf.Timestamp
+	29, // 31: pantherclaw.v1.ContextItem.time:type_name -> google.protobuf.Timestamp
+	29, // 32: pantherclaw.v1.GetPrecedingContextResponse.start_time:type_name -> google.protobuf.Timestamp
+	29, // 33: pantherclaw.v1.GetPrecedingContextResponse.end_time:type_name -> google.protobuf.Timestamp
 	14, // 34: pantherclaw.v1.GetPrecedingContextResponse.items:type_name -> pantherclaw.v1.ContextItem
-	28, // 35: pantherclaw.v1.CompareRunRequest.start_time:type_name -> google.protobuf.Timestamp
-	28, // 36: pantherclaw.v1.CompareRunRequest.end_time:type_name -> google.protobuf.Timestamp
-	28, // 37: pantherclaw.v1.CompareRunResponse.start_time:type_name -> google.protobuf.Timestamp
-	28, // 38: pantherclaw.v1.CompareRunResponse.end_time:type_name -> google.protobuf.Timestamp
+	29, // 35: pantherclaw.v1.CompareRunRequest.start_time:type_name -> google.protobuf.Timestamp
+	29, // 36: pantherclaw.v1.CompareRunRequest.end_time:type_name -> google.protobuf.Timestamp
+	29, // 37: pantherclaw.v1.CompareRunResponse.start_time:type_name -> google.protobuf.Timestamp
+	29, // 38: pantherclaw.v1.CompareRunResponse.end_time:type_name -> google.protobuf.Timestamp
 	17, // 39: pantherclaw.v1.CompareRunResponse.new_destinations:type_name -> pantherclaw.v1.CompareDestination
 	0,  // 40: pantherclaw.v1.InspectRunRequest.include:type_name -> pantherclaw.v1.InspectSection
 	1,  // 41: pantherclaw.v1.RunSummary.launcher:type_name -> pantherclaw.v1.InvestigationParty
 	1,  // 42: pantherclaw.v1.RunSummary.principal:type_name -> pantherclaw.v1.InvestigationParty
-	28, // 43: pantherclaw.v1.RunSummary.start_time:type_name -> google.protobuf.Timestamp
-	28, // 44: pantherclaw.v1.RunSummary.end_time:type_name -> google.protobuf.Timestamp
-	28, // 45: pantherclaw.v1.RunExecutionLink.create_time:type_name -> google.protobuf.Timestamp
-	28, // 46: pantherclaw.v1.RunExecutionLink.end_time:type_name -> google.protobuf.Timestamp
+	29, // 43: pantherclaw.v1.RunSummary.start_time:type_name -> google.protobuf.Timestamp
+	29, // 44: pantherclaw.v1.RunSummary.end_time:type_name -> google.protobuf.Timestamp
+	29, // 45: pantherclaw.v1.RunExecutionLink.create_time:type_name -> google.protobuf.Timestamp
+	29, // 46: pantherclaw.v1.RunExecutionLink.end_time:type_name -> google.protobuf.Timestamp
 	6,  // 47: pantherclaw.v1.RunLineage.parents:type_name -> pantherclaw.v1.InvestigationDelegation
 	10, // 48: pantherclaw.v1.RunLineage.children:type_name -> pantherclaw.v1.TimelineLane
 	21, // 49: pantherclaw.v1.RunLineage.upstream_execution:type_name -> pantherclaw.v1.RunExecutionLink
 	21, // 50: pantherclaw.v1.RunLineage.downstream_executions:type_name -> pantherclaw.v1.RunExecutionLink
 	8,  // 51: pantherclaw.v1.RunTimeline.events:type_name -> pantherclaw.v1.TimelineEvent
 	11, // 52: pantherclaw.v1.RunTimeline.phases:type_name -> pantherclaw.v1.TimelinePhase
-	28, // 53: pantherclaw.v1.RunRouteCoverage.computed_at:type_name -> google.protobuf.Timestamp
-	28, // 54: pantherclaw.v1.RunGap.time:type_name -> google.protobuf.Timestamp
-	20, // 55: pantherclaw.v1.InspectRunResponse.run:type_name -> pantherclaw.v1.RunSummary
-	22, // 56: pantherclaw.v1.InspectRunResponse.lineage:type_name -> pantherclaw.v1.RunLineage
-	23, // 57: pantherclaw.v1.InspectRunResponse.timeline:type_name -> pantherclaw.v1.RunTimeline
-	24, // 58: pantherclaw.v1.InspectRunResponse.budget:type_name -> pantherclaw.v1.RunBudgetLine
-	2,  // 59: pantherclaw.v1.InspectRunResponse.approvals:type_name -> pantherclaw.v1.InvestigationApproval
-	25, // 60: pantherclaw.v1.InspectRunResponse.coverage:type_name -> pantherclaw.v1.RunRouteCoverage
-	26, // 61: pantherclaw.v1.InspectRunResponse.gaps:type_name -> pantherclaw.v1.RunGap
-	0,  // 62: pantherclaw.v1.InspectRunResponse.omitted_sections:type_name -> pantherclaw.v1.InspectSection
-	3,  // 63: pantherclaw.v1.InvestigationService.WhatHappened:input_type -> pantherclaw.v1.WhatHappenedRequest
-	7,  // 64: pantherclaw.v1.InvestigationService.GetRunTimeline:input_type -> pantherclaw.v1.GetRunTimelineRequest
-	13, // 65: pantherclaw.v1.InvestigationService.GetPrecedingContext:input_type -> pantherclaw.v1.GetPrecedingContextRequest
-	16, // 66: pantherclaw.v1.InvestigationService.CompareRun:input_type -> pantherclaw.v1.CompareRunRequest
-	19, // 67: pantherclaw.v1.InvestigationService.InspectRun:input_type -> pantherclaw.v1.InspectRunRequest
-	4,  // 68: pantherclaw.v1.InvestigationService.WhatHappened:output_type -> pantherclaw.v1.WhatHappenedResponse
-	12, // 69: pantherclaw.v1.InvestigationService.GetRunTimeline:output_type -> pantherclaw.v1.GetRunTimelineResponse
-	15, // 70: pantherclaw.v1.InvestigationService.GetPrecedingContext:output_type -> pantherclaw.v1.GetPrecedingContextResponse
-	18, // 71: pantherclaw.v1.InvestigationService.CompareRun:output_type -> pantherclaw.v1.CompareRunResponse
-	27, // 72: pantherclaw.v1.InvestigationService.InspectRun:output_type -> pantherclaw.v1.InspectRunResponse
-	68, // [68:73] is the sub-list for method output_type
-	63, // [63:68] is the sub-list for method input_type
-	63, // [63:63] is the sub-list for extension type_name
-	63, // [63:63] is the sub-list for extension extendee
-	0,  // [0:63] is the sub-list for field type_name
+	30, // 53: pantherclaw.v1.RunTokenEstimate.estimates:type_name -> pantherclaw.v1.Estimate
+	29, // 54: pantherclaw.v1.RunRouteCoverage.computed_at:type_name -> google.protobuf.Timestamp
+	29, // 55: pantherclaw.v1.RunGap.time:type_name -> google.protobuf.Timestamp
+	20, // 56: pantherclaw.v1.InspectRunResponse.run:type_name -> pantherclaw.v1.RunSummary
+	22, // 57: pantherclaw.v1.InspectRunResponse.lineage:type_name -> pantherclaw.v1.RunLineage
+	23, // 58: pantherclaw.v1.InspectRunResponse.timeline:type_name -> pantherclaw.v1.RunTimeline
+	24, // 59: pantherclaw.v1.InspectRunResponse.budget:type_name -> pantherclaw.v1.RunBudgetLine
+	2,  // 60: pantherclaw.v1.InspectRunResponse.approvals:type_name -> pantherclaw.v1.InvestigationApproval
+	26, // 61: pantherclaw.v1.InspectRunResponse.coverage:type_name -> pantherclaw.v1.RunRouteCoverage
+	27, // 62: pantherclaw.v1.InspectRunResponse.gaps:type_name -> pantherclaw.v1.RunGap
+	0,  // 63: pantherclaw.v1.InspectRunResponse.omitted_sections:type_name -> pantherclaw.v1.InspectSection
+	25, // 64: pantherclaw.v1.InspectRunResponse.token_estimate:type_name -> pantherclaw.v1.RunTokenEstimate
+	3,  // 65: pantherclaw.v1.InvestigationService.WhatHappened:input_type -> pantherclaw.v1.WhatHappenedRequest
+	7,  // 66: pantherclaw.v1.InvestigationService.GetRunTimeline:input_type -> pantherclaw.v1.GetRunTimelineRequest
+	13, // 67: pantherclaw.v1.InvestigationService.GetPrecedingContext:input_type -> pantherclaw.v1.GetPrecedingContextRequest
+	16, // 68: pantherclaw.v1.InvestigationService.CompareRun:input_type -> pantherclaw.v1.CompareRunRequest
+	19, // 69: pantherclaw.v1.InvestigationService.InspectRun:input_type -> pantherclaw.v1.InspectRunRequest
+	4,  // 70: pantherclaw.v1.InvestigationService.WhatHappened:output_type -> pantherclaw.v1.WhatHappenedResponse
+	12, // 71: pantherclaw.v1.InvestigationService.GetRunTimeline:output_type -> pantherclaw.v1.GetRunTimelineResponse
+	15, // 72: pantherclaw.v1.InvestigationService.GetPrecedingContext:output_type -> pantherclaw.v1.GetPrecedingContextResponse
+	18, // 73: pantherclaw.v1.InvestigationService.CompareRun:output_type -> pantherclaw.v1.CompareRunResponse
+	28, // 74: pantherclaw.v1.InvestigationService.InspectRun:output_type -> pantherclaw.v1.InspectRunResponse
+	70, // [70:75] is the sub-list for method output_type
+	65, // [65:70] is the sub-list for method input_type
+	65, // [65:65] is the sub-list for extension type_name
+	65, // [65:65] is the sub-list for extension extendee
+	0,  // [0:65] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_investigations_proto_init() }
@@ -3287,6 +3406,7 @@ func file_pantherclaw_v1_investigations_proto_init() {
 	if File_pantherclaw_v1_investigations_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_model_usage_proto_init()
 	file_pantherclaw_v1_investigations_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -3294,7 +3414,7 @@ func file_pantherclaw_v1_investigations_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_investigations_proto_rawDesc), len(file_pantherclaw_v1_investigations_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -69,6 +69,8 @@ type ExplainedGrant struct {
 type ExplainedBudget struct {
 	Account, Owner, Rule, Currency  string
 	Limit, Reserved, Spent, Unknown string
+	// Unit is "tokens" for a token rule; empty means currency (G0 M29 D821).
+	Unit string
 }
 
 // Explanation is a decision explained for people (F066, F647).
@@ -108,6 +110,7 @@ type receiptClaims struct {
 			Level     string `json:"level"`
 			Rule      string `json:"rule"`
 			Currency  string `json:"currency"`
+			Unit      string `json:"unit"` // G0 M29 D821; empty: currency
 			Available string `json:"available"`
 			Reserved  string `json:"reserved"`
 			Spent     string `json:"spent"`
@@ -333,6 +336,7 @@ func explain(ev *Evidence, in explainInputs) *Explanation {
 		for _, b := range claims.Pap.Budgets {
 			eb := ExplainedBudget{Account: in.accounts[b.Level+"/"+b.Rule], Owner: b.Level, Rule: b.Rule, Currency: b.Currency, Reserved: b.Reserved, Spent: b.Spent}
 			eb.Limit = limitOf(b.Available, b.Reserved, b.Spent)
+			eb.Unit = b.Unit // G0 M29 D821
 			if u, ok := in.unknown[b.Level+"/"+b.Rule]; ok {
 				eb.Unknown = u.String()
 			}
