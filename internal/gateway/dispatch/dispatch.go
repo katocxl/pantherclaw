@@ -986,6 +986,21 @@ func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *
 			return nil, nil, nil, err
 		}
 		return tok.Token(), tok.Clear, func() *pb.CredentialAccess { return nil }, nil
+	case credentials.KindSnowflakeKeypair:
+		// A key-pair JWT signed for this dispatch is placed, never the key
+		// (G0 M31 D962, HR-726).
+		if err := CheckCredentialPattern(def, kind, nil); err != nil {
+			return nil, nil, nil, err
+		}
+		tok, err := e.snowflakeToken(ctx, conn)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := tok.Place(req); err != nil {
+			tok.Clear()
+			return nil, nil, nil, err
+		}
+		return tok.Token(), tok.Clear, func() *pb.CredentialAccess { return nil }, nil
 	case credentials.KindAWSSigV4:
 		// Signed with a session assumed for this dispatch and narrowed to
 		// its one action, never with the base key (G0 M20 D254, HR-525).

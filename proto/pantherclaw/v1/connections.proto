@@ -161,8 +161,8 @@ enum ConnectionKind {
   // A peer agent reached over the A2A protocol, its agent card pinned
   // (G0 M14 D30); pantherclaw_held only.
   CONNECTION_KIND_A2A = 11;
-  // A model provider's API (G0 M29 D811): pc.anthropic or pc.openai only,
-  // pantherclaw_held only. The gateway holds the provider key, decides each
+  // A model provider's API (G0 M29 D811): pc.anthropic, pc.openai, and
+  // since G0 M31 D961 pc.vertex or pc.bedrock only, pantherclaw_held only. The gateway holds the provider key, decides each
   // call, scans the prompt and meters tokens (HR-690, HR-691).
   CONNECTION_KIND_MODEL = 12;
   // A pgvector retrieval index (G0 M30 D922): pc.vectorstore only,
@@ -170,6 +170,11 @@ enum ConnectionKind {
   // each record's provenance from the permit and holds writes by agents not
   // on the writer list (HR-704, HR-705).
   CONNECTION_KIND_VECTORSTORE = 13;
+  // A Snowflake account read over the Snowflake SQL API (G0 M31 D962):
+  // pc.snowflake only, pantherclaw_held only. The gateway builds every
+  // statement from the reviewed manifest, as for postgres, and signs a
+  // key-pair JWT per call (HR-726).
+  CONNECTION_KIND_SNOWFLAKE = 14;
 }
 
 // ConnectionState is whether actions may use a connection.
@@ -293,6 +298,57 @@ message Connection {
   ModelConfig model = 35;
   // vectorstore is a vectorstore connection's settings (G0 M30 D922).
   VectorstoreConfig vectorstore = 36;
+  // snowflake is a snowflake connection's configuration and manifest (G0
+  // M31 D962).
+  SnowflakeConfig snowflake = 37;
+}
+
+// SnowflakeConfig is a snowflake connection (G0 M31 D962): the account,
+// warehouse, database and schema the gateway names on each statement, and
+// the reviewed manifest of what it may read, kept and confirmed as a
+// postgres manifest is. Its credential is a snowflake_keypair. Identifiers
+// are lower-case, as in a postgres manifest; the gateway upper-cases them,
+// as Snowflake stores unquoted names. The account, warehouse, database and
+// schema are fixed once the connection exists (SNOWFLAKE_ENDPOINT_IMMUTABLE).
+message SnowflakeConfig {
+  // The account identifier (orgname-account_name, or a locator with its
+  // region and cloud).
+  string account = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+    pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{0,254}(\\.[A-Za-z0-9_-]{1,64}){0,2}$"
+  }];
+  // The warehouse every statement runs on.
+  string warehouse = 2 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // The database every statement runs in.
+  string database = 3 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // The schema statements name by default.
+  string schema = 4 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // Tables the gateway may read.
+  repeated PostgresTable tables = 5 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 64
+  }];
+  // Row cap per query (default 200, at most 1000).
+  int32 max_rows = 6 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+  // Statement timeout in milliseconds (default 30000, at most 60000).
+  int32 statement_timeout_ms = 7 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 60000
+  }];
+  // Answer cap in bytes (default 1 MiB, at most 4 MiB).
+  int32 max_result_bytes = 8 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 4194304
+  }];
+  // Smallest group an aggregate returns (default 5, at least 2).
+  int32 min_group_size = 9 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000000
+  }];
 }
 
 // VectorstoreConfig is a vectorstore connection (G0 M30 D922-D925a): where
@@ -757,6 +813,9 @@ message CreateConnectionRequest {
   // vectorstore is required for, and only for, a vectorstore connection
   // (G0 M30 D922).
   VectorstoreConfig vectorstore = 26;
+  // snowflake is required for, and only for, a snowflake connection (G0
+  // M31 D962).
+  SnowflakeConfig snowflake = 27;
 }
 
 // CreateConnectionResponse returns the connection.
@@ -880,6 +939,10 @@ message UpdateConnectionRequest {
   // D922): its endpoint must stay as it is (VECTORSTORE_ENDPOINT_IMMUTABLE);
   // a new writer weakens.
   VectorstoreConfig vectorstore = 23;
+  // snowflake replaces a snowflake connection's manifest (G0 M31 D962): its
+  // account, warehouse, database and schema must stay as they are; a
+  // widening manifest change weakens and waits for confirmation.
+  SnowflakeConfig snowflake = 24;
 }
 
 // UpdateConnectionResponse returns the connection.

@@ -236,7 +236,8 @@ func checkPut(in *PutInput) error {
 		in.Kind = domain.KindStatic
 	}
 	if !domain.ValidKind(in.Kind) || (in.Kind == domain.KindGitHubApp && (in.Header != domain.GitHubAppHeader || in.Scheme != domain.GitHubAppScheme)) ||
-		(in.Kind == domain.KindGoogleServiceAccount && (in.Header != domain.GoogleServiceAccountHeader || in.Scheme != domain.GoogleServiceAccountScheme)) {
+		(in.Kind == domain.KindGoogleServiceAccount && (in.Header != domain.GoogleServiceAccountHeader || in.Scheme != domain.GoogleServiceAccountScheme)) ||
+		(in.Kind == domain.KindSnowflakeKeypair && (in.Header != domain.SnowflakeKeypairHeader || in.Scheme != domain.SnowflakeKeypairScheme)) {
 		return ErrKind
 	}
 	if (in.Kind == domain.KindGitHubApp) != (in.GitHub != nil) || (in.GitHub != nil && in.GitHub.Validate() != nil) {

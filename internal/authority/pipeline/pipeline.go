@@ -493,8 +493,9 @@ func dispatches(kind string, d *defs.Definition) bool {
 		// A peer agent's methods (G0 M14 D9, D64); the gateway dispatches
 		// them only through a registered sender (D75).
 		return d.Dispatch != nil && d.Dispatch.A2A != nil
-	case "postgres":
-		// Structured reads (D9, D64), likewise only through a sender.
+	case "postgres", "snowflake":
+		// Structured reads (D9, D64; a Snowflake account's since G0 M31
+		// D962), likewise only through a sender.
 		return d.Dispatch != nil && d.Dispatch.SQL != nil && !slices.Contains(defs.VectorOperations, d.Dispatch.SQL.Operation)
 	case "vectorstore":
 		// A retrieval index's queries and writes (G0 M30 D922), through

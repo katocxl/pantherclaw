@@ -454,13 +454,13 @@ type kindConfig struct {
 // registered is refused with ErrKindNotImplemented and nothing is created
 // (G0 M14 D4, D64: fail closed). It returns nil for the other kinds.
 func (s *Service) checkM14Kind(in *CreateInput) (*kindConfig, error) {
-	if in.Kind != KindPostgres && in.Kind != KindA2A && in.Kind != KindModel && in.Kind != KindVectorstore {
-		if in.Postgres != nil || in.A2A != nil || in.Model != nil || in.Vectorstore != nil {
+	if in.Kind != KindPostgres && in.Kind != KindA2A && in.Kind != KindModel && in.Kind != KindVectorstore && in.Kind != KindSnowflake {
+		if in.Postgres != nil || in.A2A != nil || in.Model != nil || in.Vectorstore != nil || in.Snowflake != nil {
 			return nil, ErrShape
 		}
 		return nil, nil
 	}
-	cfg, err := checkKindConfig(in.Kind, in.Simulated, in.Postgres, in.A2A, in.Model, in.Vectorstore)
+	cfg, err := checkKindConfig(in.Kind, in.Simulated, in.Postgres, in.A2A, in.Model, in.Vectorstore, in.Snowflake)
 	if err != nil {
 		return nil, err
 	}
@@ -476,11 +476,23 @@ func (s *Service) checkM14Kind(in *CreateInput) (*kindConfig, error) {
 
 // checkKindConfig validates the configuration a kind carries: exactly its
 // own, checked and with its defaults.
-func checkKindConfig(kind string, simulated bool, pg *PostgresConfig, peer *A2AConfig, model *ModelConfig, vs *VectorstoreConfig) (any, error) {
-	if vs != nil && kind != KindVectorstore {
+func checkKindConfig(kind string, simulated bool, pg *PostgresConfig, peer *A2AConfig, model *ModelConfig, vs *VectorstoreConfig,
+	sf *SnowflakeConfig,
+) (any, error) {
+	if (vs != nil && kind != KindVectorstore) || (sf != nil && kind != KindSnowflake) {
 		return nil, ErrShape
 	}
 	switch kind {
+	case KindSnowflake:
+		// G0 M31 D962.
+		if sf == nil || pg != nil || peer != nil || model != nil {
+			return nil, ErrShape
+		}
+		cfg, err := sf.Check()
+		if err != nil {
+			return nil, err
+		}
+		return &cfg, nil
 	case KindVectorstore:
 		// G0 M30 D922, D925a.
 		if vs == nil || pg != nil || peer != nil || model != nil {
@@ -532,6 +544,8 @@ func (s *Service) m14Shape(kind string, simulated bool, in *CreateInput) (*strin
 	switch kind {
 	case KindModel:
 		return s.modelShape(in.Package, in.BaseURL, in.AllowedHosts, simulated, in.CredentialScheme, in.CredentialHeader)
+	case KindSnowflake:
+		return s.snowflakeShape(simulated, in) // G0 M31 D962
 	case KindPostgres, KindVectorstore:
 		// A vectorstore connection's host is in its settings and its
 		// password goes in no header, as a postgres connection's (G0 M30

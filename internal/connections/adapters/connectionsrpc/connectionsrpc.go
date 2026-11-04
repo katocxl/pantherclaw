@@ -15,6 +15,7 @@ import (
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/connections/pgmodel"
 	"github.com/katocxl/pantherclaw/internal/connections/pgvectorstore"
+	"github.com/katocxl/pantherclaw/internal/connections/sfmanifest"
 	credapp "github.com/katocxl/pantherclaw/internal/credentials/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -44,6 +45,7 @@ var (
 		pb.ConnectionKind_CONNECTION_KIND_POSTGRES: capp.KindPostgres, pb.ConnectionKind_CONNECTION_KIND_A2A: capp.KindA2A,
 		pb.ConnectionKind_CONNECTION_KIND_MODEL:       capp.KindModel,
 		pb.ConnectionKind_CONNECTION_KIND_VECTORSTORE: capp.KindVectorstore,
+		pb.ConnectionKind_CONNECTION_KIND_SNOWFLAKE:   capp.KindSnowflake,
 	}
 	modes = map[pb.RouteMode]string{
 		pb.RouteMode_ROUTE_MODE_MONITOR: capp.ModeMonitor, pb.RouteMode_ROUTE_MODE_ENFORCE: capp.ModeEnforce,
@@ -105,6 +107,9 @@ func connectionOf(c capp.Connection) *pb.Connection {
 	}
 	out.Model = pgmodel.ToProto(c.Model)                   // G0 M29 D811
 	out.Vectorstore = pgvectorstore.ToProto(c.Vectorstore) // G0 M30 D922
+	if c.Snowflake != nil {
+		out.Snowflake = sfmanifest.Proto(*c.Snowflake) // G0 M31 D962
+	}
 	if c.A2AStatus != nil {
 		out.A2AStatus = &pb.A2AStatus{PublicUrl: c.A2AStatus.PublicURL, PinState: pinStates[c.A2AStatus.PinState]}
 	}
@@ -162,7 +167,7 @@ func (h *Handler) CreateConnection(ctx context.Context, req *pb.CreateConnection
 		MaxResponseBytes: req.GetMaxResponseBytes(), TimeoutMs: req.GetTimeoutMs(), AgentHosts: req.GetAgentHosts(),
 		Connector: spec, Simulated: req.GetSimulated(), ModelRelay: req.GetModelRelay(),
 		Postgres: postgresIn(req.GetPostgres()), A2A: peer,
-		Model: pgmodel.FromProto(req.GetModel()), Vectorstore: vs,
+		Model: pgmodel.FromProto(req.GetModel()), Vectorstore: vs, Snowflake: sfmanifest.FromProto(req.GetSnowflake()),
 	})
 	if err != nil {
 		return nil, err
@@ -224,6 +229,7 @@ func (h *Handler) UpdateConnection(ctx context.Context, req *pb.UpdateConnection
 	}
 	in.Postgres = postgresIn(req.GetPostgres())
 	in.Model = pgmodel.FromProto(req.GetModel())
+	in.Snowflake = sfmanifest.FromProto(req.GetSnowflake()) // G0 M31 D962
 	if in.Vectorstore, err = pgvectorstore.FromProto(req.GetVectorstore()); err != nil {
 		return nil, err
 	}
