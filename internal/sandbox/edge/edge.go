@@ -125,6 +125,10 @@ type Options struct {
 	// relay connection, streaming the answer (model.go). The edge still
 	// dials only the gateway (HR-213), and the host is no agent host.
 	ModelHost, ModelConnection string
+	// ModelConnections name the mapped connections of kind model (G0 M29
+	// D814): their hosts are forwarded with the model path's limits,
+	// streaming (modelconn_m29.go).
+	ModelConnections []string
 }
 
 // Edge is one session's sidecar.
@@ -137,8 +141,12 @@ type Edge struct {
 	client                *http.Client
 	// model is the campaign's model route, nil without one; stream is the
 	// client without an overall timeout that it uses.
-	model             *modelRoute
-	stream            *http.Client
+	model  *modelRoute
+	stream *http.Client
+	// modelConns are the model connections, and modelConn the client their
+	// calls use (G0 M29 D814).
+	modelConns        map[string]bool
+	modelConn         *http.Client
 	ca                *authority
 	log               *slog.Logger
 	refused, stripped atomic.Int64
@@ -182,6 +190,10 @@ func New(o Options) (*Edge, error) {
 	if err != nil {
 		return nil, err
 	}
+	modelConns, err := modelConnections(o)
+	if err != nil {
+		return nil, err
+	}
 	tlsConf, err := gatewayTLS(o.GatewayCAPin)
 	if err != nil {
 		return nil, err
@@ -221,6 +233,11 @@ func New(o Options) (*Edge, error) {
 		ForceAttemptHTTP2:     true,
 	}
 	var transport http.RoundTripper = &workloadclient.Transport{Key: o.Key, Token: o.Token, Base: base}
+	// A model connection's answer may start late: its headers come after the
+	// model answers (G0 M29 D814).
+	modelBase := base.Clone()
+	modelBase.ResponseHeaderTimeout = modelConnTimeout
+	var modelTransport http.RoundTripper = &workloadclient.Transport{Key: o.Key, Token: o.Token, Base: modelBase}
 	if o.Binding != nil {
 		transport = base // the egress listener checks the binding token
 	}
@@ -233,6 +250,7 @@ func New(o Options) (*Edge, error) {
 		// A stream lasts as long as the model writes; modelTimeout bounds
 		// each call through its context.
 		model: model, stream: &http.Client{Transport: transport, CheckRedirect: noRedirect},
+		modelConns: modelConns, modelConn: &http.Client{Transport: modelTransport, CheckRedirect: noRedirect},
 	}, nil
 }
 
@@ -441,6 +459,10 @@ func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string
 		e.forwardModel(w, r, host)
 		return
 	}
+	if e.modelConns[conn] {
+		e.forwardModelConnection(w, r, host, conn)
+		return
+	}
 	e.strip(r, host)
 	query := e.stripQuery(r, host)
 	body, err := io.ReadAll(io.LimitReader(r.Body, MaxBody+1))
@@ -537,7 +559,7 @@ func (e *Edge) stripQuery(r *http.Request, host string) string {
 		if err1 != nil || err2 != nil {
 			name, value = k, v
 		}
-		kind := tokenKind(value)
+		kind := TokenKind(value)
 		if kind == "" && !slices.Contains(credentialParams, strings.ToLower(name)) {
 			kept = append(kept, p)
 			continue
@@ -563,7 +585,7 @@ func credentialKind(header, v string) string {
 	if !found {
 		scheme, token = "", scheme
 	}
-	if k := tokenKind(token); k != "" {
+	if k := TokenKind(token); k != "" {
 		return k
 	}
 	if scheme != "" {
@@ -572,8 +594,13 @@ func credentialKind(header, v string) string {
 	return strings.ToLower(header)
 }
 
-// tokenKind names a token by its well-known prefix, "" when it has none.
-func tokenKind(token string) string {
+// TokenKind names a token by its well-known prefix, "" when it has none. It
+// is exported for pclaw's --env check (G0 M29 D816, D823), and knows the
+// Anthropic and OpenAI key formats (HR-694).
+func TokenKind(token string) string {
+	if kind := modelKeyKind(token); kind != "" {
+		return kind
+	}
 	for _, p := range []struct{ prefix, kind string }{
 		{"github_pat_", "github_pat"},
 		{"ghp_", "github_pat"},

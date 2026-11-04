@@ -24,11 +24,11 @@ func NarrowLimits(base, narrow Limits) (Limits, error) {
 		}
 		b := out.Budgets[i]
 		shape := b
-		shape.Limit, shape.MaxCount = r.Limit, r.MaxCount
+		shape.Limit, shape.MaxCount, shape.MaxTokens = r.Limit, r.MaxCount, r.MaxTokens
 		if !slicesContainsJSON([]BudgetRule{shape}, r) {
 			return Limits{}, outside("budget %q changes more than its limit or count", r.ID)
 		}
-		if !decimalAtMost(r.Limit, b.Limit) || !countAtMost(r.MaxCount, b.MaxCount) {
+		if !decimalAtMost(r.Limit, b.Limit) || !countAtMost(r.MaxCount, b.MaxCount) || !tokensAtMost(r.MaxTokens, b.MaxTokens) {
 			return Limits{}, outside("budget %q is higher than the per-grant budget", r.ID)
 		}
 		out.Budgets[i] = r
@@ -78,6 +78,19 @@ func decimalAtMost(next, base string) bool {
 	n, err1 := money.Parse(next)
 	b, err2 := money.Parse(base)
 	return err1 == nil && err2 == nil && n.Cmp(b) <= 0
+}
+
+// tokensAtMost is countAtMost for token caps (G0 M29 D821).
+func tokensAtMost(next, base string) bool {
+	if base == "" {
+		return true
+	}
+	if next == "" {
+		return false
+	}
+	n, err1 := ParseMaxTokens("max_tokens", next)
+	b, err2 := ParseMaxTokens("max_tokens", base)
+	return err1 == nil && err2 == nil && n <= b
 }
 
 func countAtMost(next, base string) bool {

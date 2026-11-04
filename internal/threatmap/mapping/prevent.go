@@ -336,4 +336,15 @@ var Prevent = []PreventControl{
 			"T1213.006": "Databases (T1213.006): a query naming a table, column or record scope outside the connection's manifest is refused before it is sent.",
 		},
 	},
+	{
+		// G0 M30 D947: M29's token caps (G0 M29 D821).
+		ID: "prevent.token_caps", Title: "Token rules bound what an agent spends on its model", Surface: SurfaceAuthority,
+		ReasonCodes: []string{"TOKEN_BUDGET_EXHAUSTED"},
+		HR:          []string{"HR-693"}, Requires: RequiresAlways,
+		Techniques: []string{"AML.T0034", "AML.T0029"},
+		Why: map[string]string{
+			"AML.T0034": "Cost harvesting (AML.T0034): a model call past the grant's, envelope's or run's token rule is denied before it reaches the provider.",
+			"AML.T0029": "Denial of AI service (AML.T0029): an agent flooding its model connection stops at its token rule.",
+		},
+	},
 }

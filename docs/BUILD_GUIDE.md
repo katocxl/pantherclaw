@@ -835,7 +835,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Reads and shares** (FD6, answer S): read limits on count rules, off by default; enumeration and scheduled-send alerts; owned accounts and holds for shares to the public or unlisted accounts.
 - **Agent configuration** (FD5, answer C): digests and a drift alert from scans, a hook route and read-only sandbox binds; never contents or values.
 - **Content and retrieval** (FD7): decoding before content signals; `pc.vectorstore` on pgvector with a writer list and provenance.
-- **Threat map:** six new Prevent controls (seven with M29's token caps), `NARROWED_TRIGGER`, connector refusals counted.
+- **Threat map:** seven new Prevent controls, M29's token caps among them, `NARROWED_TRIGGER`, connector refusals counted.
 - Migrations `00340`–`00345` (`00343` reserved; `00346`–`00349` spare).
 
 ---

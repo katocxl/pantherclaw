@@ -255,6 +255,14 @@ func (Store) Seen(ctx context.Context, tx db.TenantTx, org ids.OrgID, since time
 	for _, d := range decisions {
 		out.Decisions = append(out.Decisions, domain.DecisionCount{ReasonCode: d.ReasonCode, Decision: d.Decision, Count: d.N})
 	}
+	outcomes, err := q.ThreatMapOutcomeCounts(ctx, dbq.ThreatMapOutcomeCountsParams{OrgID: org, Since: since, AllAgents: all, Agents: agents})
+	if err != nil {
+		return ports.Seen{}, err
+	}
+	out.Outcomes = make([]domain.OutcomeCount, 0, len(outcomes))
+	for _, o := range outcomes {
+		out.Outcomes = append(out.Outcomes, domain.OutcomeCount{Code: o.OutcomeCode, Count: o.N}) // G0 M30 D947a
+	}
 	return out, nil
 }
 

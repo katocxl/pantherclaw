@@ -18,6 +18,9 @@ const maxCapture = 64 << 10
 // profileFor returns the first active, unexpired capture profile of conn
 // that covers op, or nil (G0 M7 design decision 10, HR-199).
 func profileFor(conn *control.Connection, op string, now time.Time) *pb.GatewayCaptureProfile {
+	if conn.GetKind() == KindModel {
+		return nil // G0 M29 D820
+	}
 	for _, p := range conn.Captures {
 		if exp := p.GetExpireTime(); exp == nil || !now.Before(exp.AsTime()) {
 			continue
@@ -49,7 +52,9 @@ func captured(p *pb.GatewayCaptureProfile, d pb.CaptureDirection, body []byte) *
 // any echo of the credential redacted (HR-076). Monitor-mode dispatches
 // capture nothing; delegated outcomes never reach here.
 func captures(conn *control.Connection, op string, monitor bool, request []byte, response *[]byte, secret []byte, now time.Time) []*pb.PayloadCapture {
-	if monitor {
+	// A model connection's prompts and replies are never captured (G0 M29
+	// D820, HR-695).
+	if monitor || conn.GetKind() == KindModel {
 		return nil
 	}
 	p := profileFor(conn, op, now)

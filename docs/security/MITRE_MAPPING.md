@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `79949593c301d033fd050e38332c3022353ef923205c5f348a3b024561f0f8f4`.
+Mapping digest: `60efb5c322f38caa1e6bdfcda809fd83463b58b842fe093475ed46a2d2bb6959`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -231,9 +231,9 @@ Mapping digest: `79949593c301d033fd050e38332c3022353ef923205c5f348a3b024561f0f8f
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
 | [AML.T0130](https://atlas.mitre.org/techniques/AML.T0130) | AI Agent Response Biasing | No PantherClaw control yet | AI agent response biasing (AML.T0130): bias in what an assistant recommends never reaches a PantherClaw decision. |
-| [AML.T0034](https://atlas.mitre.org/techniques/AML.T0034) | Cost Harvesting | Mapped | AML.T0034.002: kinds `behavior.VOLUME_SPIKE` |
+| [AML.T0034](https://atlas.mitre.org/techniques/AML.T0034) | Cost Harvesting | Mapped | prevent `prevent.token_caps`<br>AML.T0034.002: kinds `behavior.VOLUME_SPIKE` |
 | [AML.T0101](https://atlas.mitre.org/techniques/AML.T0101) | Data Destruction via AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope` |
-| [AML.T0029](https://atlas.mitre.org/techniques/AML.T0029) | Denial of AI Service | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
+| [AML.T0029](https://atlas.mitre.org/techniques/AML.T0029) | Denial of AI Service | Mapped | prevent `prevent.token_caps` |
 | [AML.T0031](https://atlas.mitre.org/techniques/AML.T0031) | Erode AI Model Integrity | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0059](https://atlas.mitre.org/techniques/AML.T0059) | Erode Dataset Integrity | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0015](https://atlas.mitre.org/techniques/AML.T0015) | Evade AI Model | Outside PantherClaw: covered by model security | It happens in model development. |

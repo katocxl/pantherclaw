@@ -62,6 +62,17 @@ func TestDeliveryOrder(t *testing.T) {
 	if got := Missing(m28, nil, map[string]bool{}, "M28"); len(got) != 1 || !strings.HasPrefix(got[0], "HR-680") {
 		t.Fatalf("through M28: %v, want only HR-680", got)
 	}
+	// G0 M29 D801: M29 follows M28, and its rules are not due through M28.
+	if i := milestoneIndex("M29"); i < 0 || i != milestoneIndex("M28")+1 {
+		t.Fatalf("milestone order %v: want M29 right after M28", milestones)
+	}
+	m29 := []Item{{ID: "HR-690", Due: "M29"}}
+	if got := Missing(m29, nil, map[string]bool{}, "M28"); len(got) != 0 {
+		t.Fatalf("through M28: %v, want nothing due", got)
+	}
+	if got := Missing(m29, nil, map[string]bool{}, "M29"); len(got) != 1 || !strings.HasPrefix(got[0], "HR-690") {
+		t.Fatalf("through M29: %v, want only HR-690", got)
+	}
 }
 
 func TestM11PartOneComesBetweenM12AndM10(t *testing.T) {

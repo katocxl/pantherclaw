@@ -56,6 +56,10 @@ type UpdateInput struct {
 	// configuration that is current when the update runs, so a held update
 	// stores the URL and no configuration (SetA2APublicURL).
 	A2APublicURL *string `json:",omitzero"`
+	// Model replaces a model connection's settings (G0 M29 D811): a higher
+	// max output tokens or a newly allowed server tool weakens; a price
+	// alone is neither, and needs Team (D829).
+	Model *ModelConfig `json:",omitzero"`
 }
 
 // change is one changed field with its old and new values and whether it
@@ -299,7 +303,17 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			} else if in.BaseURL != nil {
 				hosts = nil // a new base URL defaults its own host again
 			}
-			nb, nh, err := s.shape(conn.Kind, base, hosts, p.AccessMode, deref(conn.CredentialHeader), deref(conn.CredentialScheme))
+			var nb *string
+			var nh []string
+			if conn.Kind == KindModel {
+				// Held only, the credential on the base URL's host (G0 M29 D811).
+				if p.AccessMode != AccessHeld {
+					return ErrShape
+				}
+				nb, nh, err = s.modelShape(base, hosts, conn.Simulated, deref(conn.CredentialScheme), deref(conn.CredentialHeader))
+			} else {
+				nb, nh, err = s.shape(conn.Kind, base, hosts, p.AccessMode, deref(conn.CredentialHeader), deref(conn.CredentialScheme))
+			}
 			if err != nil {
 				return err
 			}
@@ -334,6 +348,9 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			set("default_mode", conn.DefaultMode, p.DefaultMode, p.DefaultMode == ModeMonitor)
 		}
 		limits := map[string]string{}
+		if conn.Kind == KindModel && (in.MaxResponseBytes != nil || in.TimeoutMs != nil) {
+			return ErrShape // the model path's limits are fixed (G0 M29 D811, D814)
+		}
 		if in.MaxResponseBytes != nil {
 			if *in.MaxResponseBytes < 1024 || *in.MaxResponseBytes > 8<<20 {
 				return ErrShape
@@ -364,7 +381,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		}
 		peer := in.A2A
 		if in.A2APublicURL != nil {
-			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil {
+			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil || in.Model != nil {
 				return ErrShape
 			}
 			current, _, err := s.currentA2A(ctx, tx, c.Org, conn.ID)
@@ -382,8 +399,8 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			peer = current
 		}
 		var kc *kindConfig
-		if in.Postgres != nil || peer != nil {
-			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer)
+		if in.Postgres != nil || peer != nil || in.Model != nil {
+			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer, in.Model)
 			if err != nil {
 				return err
 			}
@@ -392,7 +409,19 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 				return ErrKindNotImplemented
 			}
 			kc = &kindConfig{cfg: cfg, store: store}
-			set(conn.Kind, "current", "replaced", true)
+			if m, isModel := cfg.(*ModelConfig); isModel {
+				// G0 M29 D811, D829.
+				if err := s.checkModelPrice(ctx, m); err != nil {
+					return err
+				}
+				before, err := loadModel(ctx, q, conn)
+				if err != nil {
+					return err
+				}
+				set(KindModel, modelSummary(before), modelSummary(m), modelWeakens(before, m))
+			} else {
+				set(conn.Kind, "current", "replaced", true)
+			}
 		}
 		// A connection never moves to a server the catalog would refuse
 		// (HR-585); a held update checks again when it applies.

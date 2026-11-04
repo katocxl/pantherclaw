@@ -14,6 +14,7 @@ import (
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/investigations"
+	mudomain "github.com/katocxl/pantherclaw/internal/modelusage/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -263,7 +264,16 @@ func (h *Handler) InspectRun(ctx context.Context, req *pantherclawv1.InspectRunR
 		out.Budget = append(out.Budget, &pantherclawv1.RunBudgetLine{
 			AccountId: b.Account.String(), Rule: b.Rule, Currency: b.Currency, Held: b.Held, Committed: b.Committed,
 			Released: b.Released, Count: b.Count, Remaining: b.Remaining,
+			Unit: b.Unit, Limit: b.Limit, // G0 M29 D824
 		})
+	}
+	if t := x.TokenEstimate; t != nil {
+		// G0 M29 D824, HR-698: labeled an estimate wherever it appears.
+		te := &pantherclawv1.RunTokenEstimate{PricedCalls: t.PricedCalls, UnpricedCalls: t.UnpricedCalls, Label: mudomain.EstimateLabel}
+		for _, e := range t.Estimates {
+			te.Estimates = append(te.Estimates, &pantherclawv1.Estimate{Currency: string(e.Currency), Amount: e.Amount.String()})
+		}
+		out.TokenEstimate = te
 	}
 	for _, a := range x.Approvals {
 		out.Approvals = append(out.Approvals, approval(a))

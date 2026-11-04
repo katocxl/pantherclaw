@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+
+// ModelUsageService reports the tokens the org's model calls used (G0 M29
+// D825; F988; HR-698). Every model call through a model connection leaves one
+// usage row with the token counts the provider reported. Counts are what the
+// model providers reported; a cost is an estimate from prices the
+// organization set on its model connections, never a bill. Every response
+// carries the fixed statement that says so. The report needs Team or higher.
+service ModelUsageService {
+  // GetTokenReport sums one UTC month of the org's model calls, grouped by
+  // team, agent, connection or model.
+  // permission: budget.read
+  rpc GetTokenReport(GetTokenReportRequest) returns (GetTokenReportResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// TokenReportGroupBy is what a token report's rows sum by.
+enum TokenReportGroupBy {
+  TOKEN_REPORT_GROUP_BY_UNSPECIFIED = 0;
+  // The agent's team when the call was recorded.
+  TOKEN_REPORT_GROUP_BY_TEAM = 1;
+  // The calling agent.
+  TOKEN_REPORT_GROUP_BY_AGENT = 2;
+  // The model connection.
+  TOKEN_REPORT_GROUP_BY_CONNECTION = 3;
+  // The model id the request named.
+  TOKEN_REPORT_GROUP_BY_MODEL = 4;
+}
+
+// Estimate is a cost estimate in one currency, computed from prices the
+// organization set on its model connections. It is an estimate, not a bill.
+message Estimate {
+  // ISO 4217 currency of the prices.
+  string currency = 1;
+  // Decimal string, at most 8 fraction digits.
+  string amount = 2;
+}
+
+message GetTokenReportRequest {
+  // The UTC month, YYYY-MM.
+  string month = 1 [(buf.validate.field).string.pattern = "^\\d{4}-(0[1-9]|1[0-2])$"];
+  TokenReportGroupBy group_by = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // 0 for the default page size; at most 200.
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Opaque; a model id key makes it longer than an id token.
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+// TokenReportRow sums the month's model calls of one key.
+message TokenReportRow {
+  // The team, agent or connection id, or the model id; empty for calls
+  // without one (an agent without a team).
+  string key = 1;
+  // A name for people: the team, agent or connection name, or the model id.
+  string label = 2;
+  // Model calls recorded.
+  int64 calls = 3;
+  // Calls whose answer reported no usage (their tokens count as zero here).
+  int64 unreported_calls = 4;
+  // Calls whose outcome is UNKNOWN.
+  int64 unknown_calls = 5;
+  int64 input_tokens = 6;
+  int64 output_tokens = 7;
+  int64 cache_read_tokens = 8;
+  int64 cache_write_tokens = 9;
+  // The four counts summed.
+  int64 total_tokens = 10;
+  // Cost estimates, one per price currency; empty when no call had a price.
+  repeated Estimate estimates = 11;
+}
+
+message GetTokenReportResponse {
+  repeated TokenReportRow rows = 1;
+  string next_page_token = 2;
+  // The fixed statement: what the counts and estimates are.
+  string statement = 3;
+}

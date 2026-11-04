@@ -899,6 +899,23 @@ The map shows PantherClaw's controls per MITRE technique and the evidence for th
 | F975 | Console threat map | Evidence › Threat map: tabs per framework, the matrix with lane marks and legend, tactic counts, filters, a technique drawer with gaps; exports on Team, history on Business. | Next | Community | M28 | new |
 | F976 | Console chips and agent link | Technique chips on alert, incident, case, range result and detection rule views; the agent page links to that agent's map. | Next | Community | M28 | new |
 
+### M29 rows: Model connections and token budgets
+
+An agent reaches its model through the gateway, which holds the key, checks each call and counts tokens against caps. Estimates come only from prices the organization sets and are never a bill ([G0 M29](g0/M29.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F980 | Model connections | Connection kind `model` with packages `pc.anthropic` and `pc.openai`. The gateway holds and places the key, decides each call on metadata and a body hash, scans the prompt and captures nothing. | Next | Community | M29 | new |
+| F981 | Model route limits | Model connections take 16 MiB each way, stream answers and allow 10 minutes a call, on the edge and the gateway. Refusals come in the provider's error shape with the agent-safe explanation. | Next | Community | M29 | new |
+| F982 | Token budgets | `max_tokens` budget rules on grants and guardrail envelopes: reserve by estimate before a call, refuse over the cap with `TOKEN_BUDGET_EXHAUSTED`, settle at reported usage. Unknown outcomes keep their reservation. | Next | Community | M29 | F110, F113, F114 |
+| F983 | Run token cap | `StartRun.max_tokens` and `pclaw sandbox run --max-tokens` add a run-level token cap that only restricts. | Next | Community | M29 | F110 |
+| F984 | Sandbox model settings | `pclaw sandbox run --env` refuses proxy, CA, key and PantherClaw names and credential values; a per-session key placeholder; `NODE_USE_ENV_PROXY` for Node's fetch. | Next | Community | M29 | new |
+| F985 | Fake model | `pantherclaw-sim model` on 127.0.0.1:9103: Anthropic and OpenAI shapes, streams, usage numbers and faults by model id; range scenarios RT-190..RT-197. No test spends a token. | Next | Community | M29 | PN-009.3 |
+| F986 | Token views | Budget lines with unit and cap in the run inspector, explanations, receipts and the approval display (model, max tokens, input size, provider-side tools; never prompt text). | Next | Community | M29 | F113, F227 |
+| F987 | Cost estimates | Organization-set prices per million tokens on a model connection give an estimate per call and per run, labelled an estimate. No price list ships. | Next | Team | M29 | new |
+| F988 | Monthly token report | `GetTokenReport` and `pclaw tokens report`: one UTC month's calls and tokens by team, agent, connection or model, with estimates and the fixed statement. | Next | Team | M29 | new |
+| F989 | Console token views | Console run and approval token lines, model connection settings (max output tokens, provider-side tools, prices on Team) and the monthly token report page on Team. | Next | Community | M29 | new |
+
 ### M30 rows: Firewall gaps from the threat map
 
 M30 closes gaps the threat map named: MCP tokens bound to a client's key, read limits and share checks, agent configuration and memory, decoding before content signals and a vector-store connector ([G0 M30](g0/M30.md), [ADR-0057](adr/0057-firewall-gaps-from-the-threat-map.md)). Bound tokens and decoding are on every edition; the rest takes its parent feature's edition (founder answer E).
@@ -919,7 +936,7 @@ M30 closes gaps the threat map named: MCP tokens bound to a client's key, read l
 | F1001 | Configuration writes asked and fenced | `pclaw hook` asks the gateway before writing a listed configuration or memory file (`agent_config.write`); the sandbox binds them read-only and copy-out lists their changes apart. | Next | Community | M30 | PN-008.2 |
 | F1002 | Opt-in prompt capture | Per model connection, off by default; turning it on is a protected change with a security key; bodies kept per the capture profile. | Next | Business | M30 | new |
 | F1003 | Resume an approved hold | An identical request through the edge after approval reuses its action id, so the approved hold releases it; campaigns can send model traffic through a model connection. | Next | Community | M30 | new |
-| F1004 | Threat-map updates | Six Prevent controls for the M30 checks, decoded content in the content hold, `prevent.query_scope` counting connector refusals, and `NARROWED_TRIGGER` for automations whose trigger tests more than the rule. | Next | Community | M30 | F960 |
+| F1004 | Threat-map updates | Seven Prevent controls for the M30 checks and M29's token caps, decoded content in the content hold, `prevent.query_scope` counting connector refusals, and `NARROWED_TRIGGER` for automations whose trigger tests more than the rule. | Next | Community | M30 | F960 |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
