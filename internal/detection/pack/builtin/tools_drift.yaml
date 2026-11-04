@@ -12,8 +12,8 @@ description: >-
 severity: HIGH
 attention: ALERT
 basis: OBSERVED
-atlas: [AML.T0010]
 owasp: [ASI04]
+atlas: [AML.T0010.005, AML.T0109]
 edition: community
 on: [audit.package.transitioned]
 match: event.attrs.?to.orValue("") == "QUARANTINED" && event.attrs.?reason.orValue("") == "upstream_drift"

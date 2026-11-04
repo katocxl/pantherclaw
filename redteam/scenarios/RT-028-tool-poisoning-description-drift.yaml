@@ -10,6 +10,9 @@ rules: [HR-081]
 asi: [ASI04]
 asi_why:
   ASI04: "Agentic supply chain (ASI04): a tool's description changes under the package that was reviewed."
+atlas: [AML.T0110.000]
+technique_why:
+  AML.T0110.000: "AI agent tool poisoning, definition and instructions (AML.T0110.000): a tool's description changes under the reviewed package."
 requires: [mcp]
 harness_only: false
 steps:

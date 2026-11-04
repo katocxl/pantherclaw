@@ -11,8 +11,9 @@ description: >-
 severity: HIGH
 attention: ALERT
 basis: INFERRED
-atlas: [AML.T0057]
 owasp: [ASI01, ASI02]
+atlas: [AML.T0086]
+attack: [T1567, T1700]
 edition: business
 sequence:
   within: 30m

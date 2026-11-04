@@ -7,6 +7,7 @@ tier: business
 attacker: A8
 threats: [T-175]
 rules: [HR-389]
+techniques_none: "Tests PantherClaw's own break glass: it needs a designated holder and that holder's fresh key."
 requires: [payments, billing]
 harness_only: true
 steps:

@@ -7,6 +7,7 @@ tier: business
 attacker: A1
 threats: [T-176]
 rules: [HR-392]
+techniques_none: "Tests PantherClaw's own recovery: a deleted org's gateway stops and its agents are refused."
 requires: [payments]
 harness_only: true
 steps:

@@ -10,6 +10,12 @@ rules: [HR-122]
 asi: [ASI05]
 asi_why:
   ASI05: "Unexpected code execution (ASI05): code run in the sandbox tries IPv6, ICMP, the host gateway, metadata and docker.sock."
+atlas: [AML.T0105]
+attack: [T1611, T1552.005]
+technique_why:
+  AML.T0105: "Escape to host (AML.T0105): code in the sandbox tries the host gateway and docker.sock."
+  T1611: "Escape to host (T1611): code in the sandbox tries the host gateway and docker.sock to reach the host."
+  T1552.005: "Cloud instance metadata API (T1552.005): code in the sandbox tries the metadata address."
 requires: [sandbox]
 harness_only: false
 steps:

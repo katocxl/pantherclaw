@@ -11,6 +11,8 @@ severity: LOW
 attention: FINDING
 basis: INFERRED
 owasp: [ASI10]
+atlas: [AML.T0086]
+attack: [T1567]
 edition: business
 on: [receipt.decision]
 match: >-

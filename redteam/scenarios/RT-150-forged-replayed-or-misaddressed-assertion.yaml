@@ -7,6 +7,9 @@ tier: business
 attacker: A4
 threats: [T-266]
 rules: [HR-620, HR-622]
+attack: [T1606]
+technique_why:
+  T1606: "Forge web credentials (T1606): a forged, replayed or misaddressed IdP assertion tries to gain a grant."
 requires: [payments]
 harness_only: true
 steps:

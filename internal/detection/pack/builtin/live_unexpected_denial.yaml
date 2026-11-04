@@ -10,6 +10,7 @@ description: >-
 severity: LOW
 attention: LIVE
 basis: OBSERVED
+techniques_none: "A live view of denied actions, not a detection."
 edition: community
 on: [receipt.decision]
 match: >-

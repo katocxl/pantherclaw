@@ -35,7 +35,10 @@ func TestLibrary_MatchesTheShippedScenarios(t *testing.T) {
 	}
 	want := map[string]library.Entry{}
 	for _, l := range set {
-		want[l.Scenario.ID] = library.Entry{Digest: l.Digest, Tier: l.Scenario.Tier, ASI: l.Scenario.ASI, ASIWhy: l.Scenario.ASIWhy}
+		want[l.Scenario.ID] = library.Entry{
+			Digest: l.Digest, Tier: l.Scenario.Tier, ASI: l.Scenario.ASI, ASIWhy: l.Scenario.ASIWhy,
+			ATLAS: l.Scenario.ATLAS, ATTACK: l.Scenario.ATTACK, TechniqueWhy: l.Scenario.TechniqueWhy, TechniquesNone: l.Scenario.TechniquesNone,
+		}
 	}
 	if *update {
 		b, err := json.Marshal(want, json.Deterministic(true), jsontext.WithIndent("  "))
@@ -48,7 +51,8 @@ func TestLibrary_MatchesTheShippedScenarios(t *testing.T) {
 		return
 	}
 	same := func(a, b library.Entry) bool {
-		return a.Digest == b.Digest && a.Tier == b.Tier && slices.Equal(a.ASI, b.ASI) && maps.Equal(a.ASIWhy, b.ASIWhy)
+		return a.Digest == b.Digest && a.Tier == b.Tier && slices.Equal(a.ASI, b.ASI) && maps.Equal(a.ASIWhy, b.ASIWhy) &&
+			slices.Equal(a.ATLAS, b.ATLAS) && slices.Equal(a.ATTACK, b.ATTACK) && maps.Equal(a.TechniqueWhy, b.TechniqueWhy) && a.TechniquesNone == b.TechniquesNone
 	}
 	if got := library.All(); !maps.EqualFunc(got, want, same) {
 		t.Fatalf("library.json is out of date with %s: run task range:library", dir)
@@ -103,7 +107,10 @@ func TestLibrary_MatchesTheShippedCampaigns(t *testing.T) {
 	}
 	want := map[string]library.CampaignEntry{}
 	for _, l := range set {
-		want[l.File.ID] = library.CampaignEntry{Digest: l.Digest, Tier: l.File.Tier, Attempts: l.File.Attempts, ASI: l.File.ASI}
+		want[l.File.ID] = library.CampaignEntry{
+			Digest: l.Digest, Tier: l.File.Tier, Attempts: l.File.Attempts, ASI: l.File.ASI,
+			ATLAS: l.File.ATLAS, ATTACK: l.File.ATTACK, TechniqueWhy: l.File.TechniqueWhy, TechniquesNone: l.File.TechniquesNone,
+		}
 	}
 	if *update {
 		b, err := json.Marshal(want, json.Deterministic(true), jsontext.WithIndent("  "))
@@ -119,7 +126,8 @@ func TestLibrary_MatchesTheShippedCampaigns(t *testing.T) {
 	for _, l := range set {
 		got, ok := library.Campaign(l.File.ID)
 		if !ok || got.Digest != l.Digest || got.Tier != l.File.Tier || !slices.Equal(got.Attempts, l.File.Attempts) ||
-			!slices.Equal(got.ASI, l.File.ASI) {
+			!slices.Equal(got.ASI, l.File.ASI) || !slices.Equal(got.ATLAS, l.File.ATLAS) || !slices.Equal(got.ATTACK, l.File.ATTACK) ||
+			!maps.Equal(got.TechniqueWhy, l.File.TechniqueWhy) || got.TechniquesNone != l.File.TechniquesNone {
 			t.Fatalf("campaigns.json is out of date with %s (%s): run task range:library", campaignDir, l.File.ID)
 		}
 		// The lookup S25a's compliance adapter calls gives the file's tags
@@ -144,5 +152,30 @@ func TestLibrary_MatchesTheShippedCampaigns(t *testing.T) {
 	}
 	if len(set) != 10 || len(techniques) != len(campaign.Techniques) {
 		t.Fatalf("the library holds %d campaigns over %d techniques, want RT-140..RT-149 over all %d", len(set), len(techniques), len(campaign.Techniques))
+	}
+}
+
+// Covers: F974, HR-683
+func TestLibrary_ByTechniqueFollowsTheTagsAndTheirParents(t *testing.T) {
+	all := library.All()
+	for id, e := range all {
+		for _, tag := range append(slices.Clone(e.ATLAS), e.ATTACK...) {
+			parent, _, _ := strings.Cut(strings.TrimPrefix(tag, "AML."), ".")
+			if strings.HasPrefix(tag, "AML.") {
+				parent = "AML." + parent
+			}
+			for _, q := range []string{tag, parent} {
+				if got := library.ByTechnique(q); !slices.Contains(got, id) || !slices.IsSorted(got) {
+					t.Errorf("ByTechnique(%s) = %v, want it to hold %s, sorted", q, got, id)
+				}
+			}
+		}
+	}
+	if got := library.ByTechnique("T9999"); len(got) != 0 {
+		t.Errorf("ByTechnique of an unknown id = %v", got)
+	}
+	// A prefix of an id is not its parent: T105 matches neither T1059 nor T1059.001.
+	if got := library.ByTechnique("T105"); len(got) != 0 {
+		t.Errorf("ByTechnique(T105) = %v", got)
 	}
 }

@@ -10,6 +10,7 @@ severity: CRITICAL
 attention: PAGE
 basis: OBSERVED
 owasp: [ASI08]
+attack: [T1565.002]
 edition: community
 on: [audit.security.action_tampered]
 tests:

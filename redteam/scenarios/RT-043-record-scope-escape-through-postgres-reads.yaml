@@ -10,6 +10,11 @@ rules: [HR-310, HR-311]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent bends a scoped read to reach columns outside its scope."
+atlas: [AML.T0036]
+attack: [T1213.006]
+technique_why:
+  AML.T0036: "Data from information repositories (AML.T0036): the agent bends a scoped read to reach columns outside its scope."
+  T1213.006: "Databases (T1213.006): the read targets Postgres columns outside the grant."
 requires: [pg.query]
 harness_only: false
 steps:

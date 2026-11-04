@@ -7,6 +7,11 @@ tier: business
 attacker: A1
 threats: [T-276]
 rules: [HR-648, HR-649]
+atlas: [AML.T0051.001]
+attack: [T1698]
+technique_why:
+  AML.T0051.001: "Indirect prompt injection (AML.T0051.001): an outbound comment carries an injection phrase."
+  T1698: "Indirect prompt injection (T1698): the injected text reaches an outbound comment."
 requires: [jira.comment]
 # The operator step sets the mode without the step-up a person's change takes.
 harness_only: true

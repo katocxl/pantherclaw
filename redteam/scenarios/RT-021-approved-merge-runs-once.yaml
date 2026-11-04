@@ -7,6 +7,7 @@ tier: community
 attacker: A1
 threats: [T-083, T-012]
 rules: [HR-205]
+techniques_none: "Tests PantherClaw's own recovery: an approved merge runs once and a retry is a duplicate."
 requires: [github, person]
 harness_only: false
 steps:

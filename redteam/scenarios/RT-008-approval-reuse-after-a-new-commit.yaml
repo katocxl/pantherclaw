@@ -10,6 +10,9 @@ rules: [HR-205]
 asi: [ASI09]
 asi_why:
   ASI09: "Human-agent trust exploitation (ASI09): a person's approval of one merge is reused after the change under it moved."
+attack: [T1548]
+technique_why:
+  T1548: "Abuse elevation control mechanism (T1548): a person's approval of one merge is reused after the change under it moved."
 requires: [github, person]
 harness_only: false
 steps:
