@@ -158,6 +158,11 @@ type Connection struct {
 	// A2AStatus is an a2a connection's public URL and pin state, set by Get
 	// and Update and never by List; nil otherwise.
 	A2AStatus *A2AStatus
+	// Model is a model connection's settings (G0 M29 D811); nil otherwise.
+	Model *ModelConfig
+	// Vectorstore is a vectorstore connection's settings (G0 M30 D922);
+	// nil otherwise.
+	Vectorstore *VectorstoreConfig
 }
 
 // CreateInput is a new connection. Zero values take the defaults.
@@ -183,6 +188,11 @@ type CreateInput struct {
 	Postgres *PostgresConfig
 	// A2A is an a2a connection's configuration (G0 M14 D30).
 	A2A *A2AConfig
+	// Model is a model connection's settings (G0 M29 D811); nil takes the
+	// defaults.
+	Model *ModelConfig
+	// Vectorstore is a vectorstore connection's settings (G0 M30 D922).
+	Vectorstore *VectorstoreConfig
 }
 
 // actor is who makes a change: a person holding the permission, or the
@@ -332,10 +342,20 @@ func servedRoutes(kind string, d *domain.Definition) []string {
 		case KindA2A:
 			// A peer agent's methods (G0 M14 D9, D64).
 			serves = d.Dispatch != nil && d.Dispatch.A2A != nil && m.Channel == domain.ChannelA2A
+		case KindModel:
+			// A model provider's API (G0 M29 D813): its params come from the
+			// model API parser, never a mapping's extraction.
+			serves = d.IsModel() && m.Channel == domain.ChannelHTTP
 		case KindPostgres:
 			// Structured reads, served natively on the gateway's MCP and HTTP
 			// faces (D17, D64).
-			serves = d.Dispatch != nil && d.Dispatch.SQL != nil && (m.Channel == domain.ChannelMCP || m.Channel == domain.ChannelHTTP)
+			serves = d.Dispatch != nil && d.Dispatch.SQL != nil && !slices.Contains(domain.VectorOperations, d.Dispatch.SQL.Operation) &&
+				(m.Channel == domain.ChannelMCP || m.Channel == domain.ChannelHTTP)
+		case KindVectorstore:
+			// The vector operations, served natively on the gateway's MCP and
+			// HTTP faces like a postgres connection's reads (G0 M30 D922).
+			serves = d.Dispatch != nil && d.Dispatch.SQL != nil && slices.Contains(domain.VectorOperations, d.Dispatch.SQL.Operation) &&
+				(m.Channel == domain.ChannelMCP || m.Channel == domain.ChannelHTTP)
 		}
 		if serves && !slices.Contains(out, m.Route) {
 			out = append(out, m.Route)
@@ -415,6 +435,21 @@ func (s *Service) Seed(ctx context.Context, org ids.OrgID, operator string, in C
 func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connection, error) {
 	if slices.Contains(reservedNames, in.Name) {
 		return Connection{}, ErrNameReserved
+	}
+	// A model connection's package, access and fixed limits, before the
+	// defaults apply (G0 M29 D811).
+	if err := checkModelCreate(&in); err != nil {
+		return Connection{}, err
+	}
+	if err := s.checkModelPrice(ctx, in.Model); err != nil {
+		return Connection{}, err
+	}
+	if in.Model != nil && in.Model.CapturePrompts {
+		return Connection{}, ErrModelCaptureOnCreate // G0 M30 D945b
+	}
+	// A vectorstore connection's package and access (G0 M30 D922).
+	if err := checkVectorstoreCreate(&in); err != nil {
+		return Connection{}, err
 	}
 	in.DestinationClass = orDefault(in.DestinationClass, ClassPublic)
 	in.DefaultMode = orDefault(in.DefaultMode, ModeMonitor)
@@ -568,6 +603,12 @@ func load(ctx context.Context, q *dbq.Queries, conn dbq.PcConnection) (Connectio
 			return Connection{}, err
 		}
 		out.Connector = &spec
+	}
+	if out.Model, err = loadModel(ctx, q, conn); err != nil {
+		return Connection{}, err
+	}
+	if out.Vectorstore, err = loadVectorstore(ctx, q, conn); err != nil {
+		return Connection{}, err
 	}
 	return out, nil
 }

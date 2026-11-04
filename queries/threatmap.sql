@@ -149,3 +149,16 @@ WHERE t.org_id = sqlc.arg(org_id) AND NOT t.simulated AND t.created_at >= sqlc.a
   AND (sqlc.arg(all_agents)::boolean OR r.agent_id = ANY (sqlc.arg(agents)::uuid[]))
 GROUP BY t.reason_code, t.decision
 ORDER BY t.reason_code, t.decision;
+
+-- name: ThreatMapOutcomeCounts :many
+-- Real connector refusals after the decision since since, by outcome code,
+-- in scope (G0 M30 D947a).
+SELECT a.outcome_code::text AS outcome_code, count(*)::bigint AS n
+FROM pc.execution_attempts a
+JOIN pc.transactions t ON t.org_id = a.org_id AND t.id = a.transaction_id
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE a.org_id = sqlc.arg(org_id) AND NOT t.simulated AND a.recorded_at >= sqlc.arg(since)
+  AND a.outcome_code IS NOT NULL
+  AND (sqlc.arg(all_agents)::boolean OR r.agent_id = ANY (sqlc.arg(agents)::uuid[]))
+GROUP BY a.outcome_code
+ORDER BY a.outcome_code;

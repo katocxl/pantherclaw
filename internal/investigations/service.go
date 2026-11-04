@@ -39,12 +39,18 @@ type Service struct {
 	Budgets BudgetLimits
 }
 
-// BudgetLimits reports what is left of each budget account's amount limit
-// in its current period, by account id, for the accounts the given grants'
-// actions debit (grants BudgetState); accounts without an amount limit are
-// left out.
+// BudgetLimits reports each budget account's cap and what is left of it in
+// its current period, by account id, for the accounts the given grants'
+// actions debit (grants BudgetState); accounts without an amount or token
+// cap are left out.
 type BudgetLimits interface {
-	Remaining(ctx context.Context, grants []ids.UUID) (map[ids.UUID]string, error)
+	Remaining(ctx context.Context, grants []ids.UUID) (map[ids.UUID]AccountLimit, error)
+}
+
+// AccountLimit is one account's cap, what is left of it, and its unit
+// ("currency" or "tokens", G0 M29 D824).
+type AccountLimit struct {
+	Limit, Remaining, Unit string
 }
 
 // callerScope is the caller's evidence.read scope.
@@ -170,6 +176,7 @@ func (s *Service) InspectRun(ctx context.Context, run ids.UUID, o InspectOptions
 		return Inspection{}, err
 	}
 	o.WithPhases = e.ReflexTeam()
+	o.WithTokenEstimate = e.TokenCostReports() // G0 M29 D824, D829
 	var out Inspection
 	err = s.read(ctx, func(ctx context.Context, tx db.TenantTx, sc Scope) error {
 		var err error
@@ -185,8 +192,8 @@ func (s *Service) InspectRun(ctx context.Context, run ids.UUID, o InspectOptions
 			return Inspection{}, err
 		}
 		for i, l := range out.Budget {
-			if l.IsAccount {
-				out.Budget[i].Remaining = left[l.Account]
+			if lim, ok := left[l.Account]; ok && l.IsAccount && l.Limit == "" {
+				out.Budget[i].Remaining, out.Budget[i].Limit = lim.Remaining, lim.Limit
 			}
 		}
 	}

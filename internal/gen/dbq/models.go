@@ -931,6 +931,7 @@ type PcBudgetAccount struct {
 	ReservedCount int32
 	SpentCount    int32
 	CreatedAt     time.Time
+	Unit          string
 }
 
 type PcBudgetLedger struct {
@@ -2076,6 +2077,7 @@ type PcExecutionAttempt struct {
 	AccessMode     *string
 	RecordedBy     string
 	TargetRef      *string
+	OutcomeCode    *string
 }
 
 type PcExecutionReceipt struct {
@@ -2815,6 +2817,7 @@ type PcMcpAuthorizationCode struct {
 	UsedAt          *time.Time
 	RunID           *ids.UUID
 	ReusedAt        *time.Time
+	DpopJkt         *string
 }
 
 type PcMcpCatalogSetting struct {
@@ -2839,6 +2842,7 @@ type PcMcpClient struct {
 	ActivatedAt    *time.Time
 	RemovedBy      *ids.UUID
 	RemovedAt      *time.Time
+	DpopBound      bool
 }
 
 type PcMcpRefreshToken struct {
@@ -2852,6 +2856,7 @@ type PcMcpRefreshToken struct {
 	State     string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	DpopJkt   *string
 }
 
 type PcMcpServer struct {
@@ -2904,6 +2909,20 @@ type PcModelCall struct {
 	FinishedAt     *time.Time
 }
 
+type PcModelConnection struct {
+	OrgID              ids.OrgID
+	ConnectionID       ids.UUID
+	MaxOutputTokens    int64
+	AllowedServerTools []string
+	PriceCurrency      *string
+	PriceInput         *money.Decimal
+	PriceOutput        *money.Decimal
+	PriceCacheRead     *money.Decimal
+	PriceCacheWrite    *money.Decimal
+	UpdatedAt          time.Time
+	CapturePrompts     bool
+}
+
 type PcModelDraft struct {
 	OrgID       ids.OrgID
 	VersionID   ids.UUID
@@ -2927,6 +2946,27 @@ type PcModelSetting struct {
 	EnabledBy         *ids.UUID
 	EnabledCredential *ids.UUID
 	UpdatedAt         time.Time
+}
+
+type PcModelUsage struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	TransactionID    ids.UUID
+	RunID            *ids.UUID
+	AgentID          *ids.UUID
+	TeamID           *ids.UUID
+	ConnectionID     ids.UUID
+	Operation        string
+	Model            string
+	Outcome          string
+	Reported         bool
+	InputTokens      int64
+	OutputTokens     int64
+	CacheReadTokens  int64
+	CacheWriteTokens int64
+	Estimate         *money.Decimal
+	EstimateCurrency *string
+	RecordedAt       time.Time
 }
 
 type PcNotification struct {
@@ -3159,6 +3199,15 @@ type PcOutcomeMetricSample struct {
 	Reasons     []byte
 	Collected   bool
 	SampledAt   time.Time
+}
+
+type PcOwnedAccount struct {
+	OrgID   ids.OrgID
+	ID      ids.UUID
+	Kind    string
+	Value   string
+	AddedBy string
+	AddedAt time.Time
 }
 
 type PcPackagePin struct {
@@ -3743,6 +3792,7 @@ type PcReservation struct {
 	CreatedAt     time.Time
 	SettledAt     *time.Time
 	Pending       bool
+	SettledAmount *money.Decimal
 }
 
 type PcResponseAction struct {
@@ -3895,6 +3945,8 @@ type PcRun struct {
 	Simulated             bool
 	AutomationExecutionID *ids.UUID
 	ScopeOperations       []string
+	MaxTokens             pgtype.Int8
+	TokenCapRunID         *ids.UUID
 }
 
 type PcSaasScanRun struct {
@@ -4577,6 +4629,24 @@ type PcUser struct {
 	UpdatedAt   time.Time
 	LastLoginAt *time.Time
 	AccountID   *ids.UUID
+}
+
+type PcVectorstoreConnection struct {
+	OrgID          ids.OrgID
+	ConnectionID   ids.UUID
+	Host           string
+	Port           int32
+	Database       string
+	DbUser         string
+	Sslmode        string
+	CaPem          *string
+	Internal       bool
+	SchemaName     string
+	TableName      string
+	Dimensions     int32
+	Distance       string
+	WriterAgentIds []ids.UUID
+	UpdatedAt      time.Time
 }
 
 type PcVerification struct {

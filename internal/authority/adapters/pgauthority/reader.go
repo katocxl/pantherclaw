@@ -364,6 +364,13 @@ func (s *snapshot) Run(ctx context.Context, org ids.OrgID, id ids.UUID) (pipelin
 		Launcher:        principal(row.LauncherUserID, row.LauncherSaID, row.LauncherInstanceID),
 		ScopeOperations: row.ScopeOperations,
 	}
+	if row.MaxTokens.Valid {
+		capTokens := row.MaxTokens.Int64
+		out.MaxTokens = &capTokens // G0 M29 D822
+		if row.TokenCapRunID != nil {
+			out.TokenCapRunID = *row.TokenCapRunID // G0 M29 D875
+		}
+	}
 	if row.ParentRunID != nil {
 		ancestors, err := dbq.New(s.tx).RunAncestors(ctx, org, id)
 		if err != nil {
@@ -412,6 +419,15 @@ func (s *snapshot) Connection(ctx context.Context, org ids.OrgID, id ids.UUID) (
 			return pipeline.Connection{}, err
 		}
 		out.Reads = p.HTTPReads()
+	}
+	if c.Kind == "vectorstore" {
+		// The writer agents (G0 M30 D924); a vectorstore connection without
+		// its settings row is not found (fail closed).
+		vs, err := q.GetVectorstoreConnection(ctx, org, id)
+		if err != nil {
+			return pipeline.Connection{}, notFound(err)
+		}
+		out.Writers = vs.WriterAgentIds
 	}
 	return out, nil
 }

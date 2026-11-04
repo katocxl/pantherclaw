@@ -84,7 +84,7 @@ func RunProto(r app.Run) *pantherclawv1.Run {
 		SubjectIssuer: r.SubjectIssuer, SubjectSubject: r.SubjectSubject, ParentRunId: optID(r.ParentRunID),
 		Depth: int32(r.Depth), TaskRef: r.TaskRef, State: stateToProto[r.State], EndReason: r.EndReason, //nolint:gosec // G115: at most 8
 		CreateTime: ts(r.CreatedAt), ExpireTime: ts(r.ExpiresAt), GrantId: optID(r.GrantID),
-		ScopeOperations: r.ScopeOperations,
+		ScopeOperations: r.ScopeOperations, MaxTokens: r.MaxTokens, // MaxTokens: G0 M29 D822
 	}
 	for _, a := range r.ActorChain {
 		out.ActorChain = append(out.ActorChain, actor(a))
@@ -104,6 +104,7 @@ func (s *Runs) StartRun(ctx context.Context, req *pantherclawv1.StartRunRequest)
 	in := app.StartInput{
 		AgentID: agent, TaskRef: req.GetTaskRef(), TTL: time.Duration(req.GetTtlMinutes()) * time.Minute,
 		SubjectToken: req.GetSubjectToken(), SubjectTokenType: subjectTypes[req.GetSubjectTokenType()],
+		MaxTokens: req.MaxTokens, // G0 M29 D822; protovalidate bounds it
 	}
 	if req.InstanceId != nil {
 		id, err := ParseID(req.GetInstanceId())

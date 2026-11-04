@@ -62,7 +62,7 @@ func (e *Engine) resultContent(ctx context.Context, r Result) ([]*pb.ContentFind
 func contentProto(in []domain.Finding) []*pb.ContentFinding {
 	var out []*pb.ContentFinding
 	for _, f := range in {
-		out = append(out, &pb.ContentFinding{Kind: f.Kind, Location: f.Location})
+		out = append(out, &pb.ContentFinding{Kind: f.Kind, Location: f.Location, Encoding: f.Encoding})
 	}
 	return out
 }

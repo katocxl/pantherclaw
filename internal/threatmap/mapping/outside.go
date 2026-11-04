@@ -147,7 +147,6 @@ var Outside = []OutsideEntry{
 	{ID: "AML.T0123", Reason: OutsideEndpoint, CoveredBy: ToolEDR},
 	{ID: "AML.T0127", Reason: OutsideEndpoint, CoveredBy: ToolEDR},
 	{ID: "AML.T0142", Reason: OutsideEndpoint, CoveredBy: ToolEDR},
-	{ID: "AML.T0029", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
 	{ID: "AML.T0132", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
 	{ID: "T1583", Reason: OutsidePreCompromise, CoveredBy: ToolThreatIntelligence},
 	{ID: "T1584", Reason: OutsidePreCompromise, CoveredBy: ToolThreatIntelligence},

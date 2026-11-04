@@ -115,6 +115,9 @@ type Reads struct {
 	// (pipeline 6, G0 M17 D106); earlier recordings have none.
 	CustomerRules   *CustomerRules    `json:"customer_rules,omitzero"`
 	RunConsequences []RunConsequences `json:"run_consequences,omitzero"`
+	// OwnedAccounts are the reads of the org's owned accounts, one per kind
+	// (pipeline 8, G0 M30 D935a); earlier recordings have none.
+	OwnedAccounts []OwnedAccounts `json:"owned_accounts,omitzero"`
 }
 
 // Containment is the org's containment state and the database time: the
@@ -224,7 +227,12 @@ type Run struct {
 	// ScopeOperations narrow the run (G0 M26 D408); recordings made before
 	// them have none and replay with the whole grant, as they were.
 	ScopeOperations []string `json:"scope_operations,omitzero"`
-	Err             string   `json:"err,omitzero"`
+	// MaxTokens is the run's token cap (G0 M29 D822); older recordings have
+	// none and replay unchanged.
+	MaxTokens *int64 `json:"max_tokens,omitzero"`
+	// TokenCapRunID is the run that set MaxTokens (G0 M29 D875).
+	TokenCapRunID string `json:"token_cap_run,omitzero"`
+	Err           string `json:"err,omitzero"`
 }
 
 // Agent is an agent read.
@@ -356,6 +364,7 @@ type AccountUsage struct {
 	ID            string  `json:"id,omitzero"`
 	Rank          int     `json:"rank,omitzero"`
 	Currency      string  `json:"currency,omitzero"`
+	Unit          string  `json:"unit,omitzero"` // G0 M29 D821
 	Limit         *string `json:"limit,omitzero"`
 	Reserved      string  `json:"reserved"`
 	Spent         string  `json:"spent"`
@@ -403,6 +412,7 @@ type Connection struct {
 	DestinationClass string            `json:"destination_class,omitzero"`
 	Modes            map[string]string `json:"modes,omitzero"`
 	Reads            []string          `json:"reads,omitzero"`
+	Writers          []string          `json:"writers,omitzero"` // G0 M30 D924
 	Err              string            `json:"err,omitzero"`
 }
 
@@ -548,4 +558,12 @@ type Content struct {
 	Mode  string   `json:"mode,omitzero"`
 	Kinds []string `json:"kinds,omitzero"`
 	Err   string   `json:"err,omitzero"`
+}
+
+// OwnedAccounts is one read of the org's owned accounts of a kind (G0 M30
+// D935a): the listed values the share step compared against.
+type OwnedAccounts struct {
+	Kind   string   `json:"kind"`
+	Values []string `json:"values,omitzero"`
+	Err    string   `json:"err,omitzero"`
 }

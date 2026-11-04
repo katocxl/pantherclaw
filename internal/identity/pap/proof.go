@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -153,6 +154,12 @@ func VerifyRequest(tokens *jws.Verifier, issuer string, req Request, proof strin
 // parseProof checks the proof's header strictly, verifies its signature
 // with the embedded key and decodes its claims.
 func parseProof(compact string) (ed25519.PublicKey, proofClaims, error) {
+	return parseProofOf(compact, ProofType)
+}
+
+// parseProofOf is parseProof for a proof of JWS type typ: a PAP/1 proof or
+// a DPoP proof (G0 M30 D912), both EdDSA with the embedded public jwk only.
+func parseProofOf(compact, typ string) (ed25519.PublicKey, proofClaims, error) {
 	var c proofClaims
 	if len(compact) > MaxProofBytes || strings.ContainsAny(compact, " \t\r\n") || strings.Count(compact, ".") != 2 {
 		return nil, c, fail(CodeInvalidProof, "malformed")
@@ -165,7 +172,7 @@ func parseProof(compact string) (ed25519.PublicKey, proofClaims, error) {
 	if err := json.Unmarshal(raw, &h, json.RejectUnknownMembers(true)); err != nil {
 		return nil, c, fail(CodeInvalidProof, "header: %v", err)
 	}
-	if h.Alg != string(jose.EdDSA) || h.Typ != ProofType {
+	if !slices.Contains(ProofAlgorithms, h.Alg) || h.Typ != typ {
 		return nil, c, fail(CodeInvalidProof, "alg %q typ %q", h.Alg, h.Typ)
 	}
 	key, err := jws.JWK{Kty: h.JWK.Kty, Crv: h.JWK.Crv, X: h.JWK.X}.Key()

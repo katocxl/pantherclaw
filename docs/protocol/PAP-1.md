@@ -170,10 +170,13 @@ JWS, `typ: "pap-permit+jwt"`, TTL ≈ 5 s:
 ```json
 {"iss": "…", "aud": "gw:<gateway_id>", "jti": "<permit_id>", "iat": …, "exp": …,
  "pap": {"v": 1, "org": "…", "txn": "<transaction_id>", "act": "<action_hash>", "epoch": 42,
+         "agent": "<agent_id>", "run": "<run_id>",
          "approval": {"binding": "…", "input": "<canonical binding input>",
                       "assertions": [{"requirement": 0, "credential_id": "…", "authenticator_data": "…",
                                       "client_data_json": "…", "signature": "…", "batch": ["<binding>", "…"]}]}}}
 ```
+
+`agent` and `run` are the run's agent and run ids (G0 M30 D923a). A gateway that records them in a target, such as the vector-store provenance columns, takes them only from the verified permit; a write that needs them and finds them missing fails closed (`CANNOT_AUTHORIZE`).
 
 `approval` is present only when the decision rests on an approval (§8). All of its byte strings are base64url without padding.
 - `binding` is the approval's binding, and `input` the canonical binding input whose SHA-256 it is.

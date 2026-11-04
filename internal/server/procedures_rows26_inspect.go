@@ -33,8 +33,8 @@ type inspectBudgets struct {
 
 var _ investigations.BudgetLimits = inspectBudgets{}
 
-func (b inspectBudgets) Remaining(ctx context.Context, grants []ids.UUID) (map[ids.UUID]string, error) {
-	out := map[ids.UUID]string{}
+func (b inspectBudgets) Remaining(ctx context.Context, grants []ids.UUID) (map[ids.UUID]investigations.AccountLimit, error) {
+	out := map[ids.UUID]investigations.AccountLimit{}
 	for _, g := range grants {
 		id, err := domain.ParseGrantID(g.String())
 		if err != nil {
@@ -51,7 +51,8 @@ func (b inspectBudgets) Remaining(ctx context.Context, grants []ids.UUID) (map[i
 		}
 		for _, a := range accounts {
 			if left := a.Available(); left != nil {
-				out[a.ID] = left.String()
+				// The cap and its unit too (G0 M29 D824).
+				out[a.ID] = investigations.AccountLimit{Limit: a.Limit.String(), Remaining: left.String(), Unit: a.Unit}
 			}
 		}
 	}

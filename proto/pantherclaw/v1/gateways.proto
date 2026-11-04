@@ -630,6 +630,12 @@ message GatewayConnection {
   // Whether the connection is a campaign's model relay (G0 M25 D313): it has
   // no package, and only the model face serves it.
   bool model_relay = 26;
+  // A model connection's settings (G0 M29 D811): the max output tokens
+  // the gateway adds and the provider-side tool types it lets through.
+  ModelConfig model = 27;
+  // A vectorstore connection's settings (G0 M30 D922): its database, its
+  // table and the agents that may write without a person.
+  VectorstoreConfig vectorstore = 28;
 }
 
 // RouteModeSetting is one route's mode.
@@ -818,7 +824,7 @@ message ReportLocalRefusalRequest {
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
   // The refusal code.
   string code = 2 [(buf.validate.field).string = {
-    in: ["secret_in_payload", "elicitation_refused"]
+    in: ["secret_in_payload", "elicitation_refused", "model_server_tool_not_allowed"]
   }];
   // The refused action's operation.
   string operation = 3 [(buf.validate.field).string = {

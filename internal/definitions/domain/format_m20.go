@@ -100,9 +100,10 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 	return nil
 }
 
-// AWSAction is the one AWS action an aws-json or aws-query dispatch names,
-// fixed by the package (G0 M20 D254): the operation of its X-Amz-Target
-// ("Service_Version.Operation"), or its literal Action. A session for the
+// AWSAction is the one AWS action an aws-json, aws-query or aws-rest
+// dispatch names, fixed by the package (G0 M20 D254): the operation of its
+// X-Amz-Target ("Service_Version.Operation"), its literal Action, or its
+// method and subresource (G0 M30 D934a). A session for the
 // dispatch is narrowed to exactly this action (HR-525).
 func (d *Definition) AWSAction() (string, bool) {
 	if d.Dispatch == nil || d.Dispatch.HTTP == nil {
@@ -124,6 +125,9 @@ func (d *Definition) AWSAction() (string, bool) {
 		}
 		a, ok := strings.CutPrefix(ref, "literal.")
 		return a, ok && a != ""
+	case EncodingAWSRest:
+		// The method and fixed subresource (G0 M30 D934a).
+		return awsRestAction(h)
 	}
 	return "", false
 }

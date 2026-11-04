@@ -13,6 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	"github.com/katocxl/pantherclaw/internal/connections/pgmodel"
+	"github.com/katocxl/pantherclaw/internal/connections/pgvectorstore"
 	credapp "github.com/katocxl/pantherclaw/internal/credentials/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -40,6 +42,8 @@ var (
 		pb.ConnectionKind_CONNECTION_KIND_HTTP: capp.KindHTTP, pb.ConnectionKind_CONNECTION_KIND_MCP: capp.KindMCP,
 		pb.ConnectionKind_CONNECTION_KIND_LOCAL: capp.KindLocal, pb.ConnectionKind_CONNECTION_KIND_MCP_CONTAINER: capp.KindMCPContainer,
 		pb.ConnectionKind_CONNECTION_KIND_POSTGRES: capp.KindPostgres, pb.ConnectionKind_CONNECTION_KIND_A2A: capp.KindA2A,
+		pb.ConnectionKind_CONNECTION_KIND_MODEL:       capp.KindModel,
+		pb.ConnectionKind_CONNECTION_KIND_VECTORSTORE: capp.KindVectorstore,
 	}
 	modes = map[pb.RouteMode]string{
 		pb.RouteMode_ROUTE_MODE_MONITOR: capp.ModeMonitor, pb.RouteMode_ROUTE_MODE_ENFORCE: capp.ModeEnforce,
@@ -99,6 +103,8 @@ func connectionOf(c capp.Connection) *pb.Connection {
 	if c.GitHub != nil {
 		out.Github = githubOf(*c.GitHub)
 	}
+	out.Model = pgmodel.ToProto(c.Model)                   // G0 M29 D811
+	out.Vectorstore = pgvectorstore.ToProto(c.Vectorstore) // G0 M30 D922
 	if c.A2AStatus != nil {
 		out.A2AStatus = &pb.A2AStatus{PublicUrl: c.A2AStatus.PublicURL, PinState: pinStates[c.A2AStatus.PinState]}
 	}
@@ -145,6 +151,10 @@ func (h *Handler) CreateConnection(ctx context.Context, req *pb.CreateConnection
 	if err != nil {
 		return nil, err
 	}
+	vs, err := pgvectorstore.FromProto(req.GetVectorstore())
+	if err != nil {
+		return nil, err
+	}
 	c, err := h.s.Create(ctx, capp.CreateInput{
 		Name: req.GetName(), Kind: kinds[req.GetKind()], Package: req.GetPackage(), BaseURL: req.GetBaseUrl(), Gateway: gw,
 		AllowedHosts: req.GetAllowedHosts(), DestinationClass: classes[req.GetDestinationClass()], AccessMode: access[req.GetAccessMode()],
@@ -152,6 +162,7 @@ func (h *Handler) CreateConnection(ctx context.Context, req *pb.CreateConnection
 		MaxResponseBytes: req.GetMaxResponseBytes(), TimeoutMs: req.GetTimeoutMs(), AgentHosts: req.GetAgentHosts(),
 		Connector: spec, Simulated: req.GetSimulated(), ModelRelay: req.GetModelRelay(),
 		Postgres: postgresIn(req.GetPostgres()), A2A: peer,
+		Model: pgmodel.FromProto(req.GetModel()), Vectorstore: vs,
 	})
 	if err != nil {
 		return nil, err
@@ -212,6 +223,10 @@ func (h *Handler) UpdateConnection(ctx context.Context, req *pb.UpdateConnection
 		return nil, err
 	}
 	in.Postgres = postgresIn(req.GetPostgres())
+	in.Model = pgmodel.FromProto(req.GetModel())
+	if in.Vectorstore, err = pgvectorstore.FromProto(req.GetVectorstore()); err != nil {
+		return nil, err
+	}
 	if in.A2A, err = a2aIn(req.GetA2A()); err != nil {
 		return nil, err
 	}

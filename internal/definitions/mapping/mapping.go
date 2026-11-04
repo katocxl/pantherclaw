@@ -94,6 +94,11 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 	m := &Mapper{pkg: pkg, mcp: map[string]*compiled{}, hook: map[string]*compiled{}, a2a: map[string]*compiled{}}
 	for i := range pkg.Definitions {
 		d := &pkg.Definitions[i]
+		if d.IsModel() {
+			// A model call is never mapped: the gateway's model path builds
+			// its action from the strictly parsed body (G0 M29 D812, D813).
+			continue
+		}
 		for _, mp := range d.Mappings {
 			c, err := compile(env, d, mp)
 			if err != nil {
@@ -133,6 +138,10 @@ func paramType(t domain.ParamType) *types.Type {
 		return cel.ListType(cel.StringType)
 	case domain.TypeQueryFilter:
 		return cel.ListType(cel.DynType)
+	case domain.TypeFloatArray:
+		return cel.ListType(cel.DoubleType)
+	case domain.TypeStringMap:
+		return cel.MapType(cel.StringType, cel.StringType)
 	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath:
 		return cel.StringType
 	}
@@ -414,6 +423,12 @@ func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domai
 		}
 		dests = append(dests, actionir.Destination{Kind: c.m.Extract.Destinations[i].Kind, ID: id})
 	}
+	// Shares come from the definition's share extractors over the checked
+	// values, never from an agent-supplied field (G0 M30 D934).
+	shares, err := c.def.Shares(vals)
+	if err != nil {
+		return actionir.Parsed{}, ambiguous("shares: %v", err)
+	}
 	dedupe, err := c.def.DedupeKey(target, vals)
 	if err != nil {
 		return actionir.Parsed{}, err
@@ -423,7 +438,7 @@ func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domai
 		Operation:  c.def.Operation,
 		Definition: actionir.Definition{Package: m.pkg.Name, Version: m.pkg.Version, Digest: c.def.Digest},
 		Channel:    string(channel), Route: c.m.Route, Target: target, Params: params,
-		Destinations: dests, DedupeKey: dedupe,
+		Destinations: dests, Shares: shares, DedupeKey: dedupe,
 	})
 }
 
@@ -488,6 +503,10 @@ func evalParam(ctx context.Context, p *celenv.Program, t domain.ParamType, vars 
 		out.Str = string(s)
 	case domain.TypeIdentifierList:
 		out.List, ok = stringList(v)
+	case domain.TypeFloatArray:
+		out.Floats, ok = floatList(v)
+	case domain.TypeStringMap:
+		out.Map, ok = stringMap(v)
 	case domain.TypeQueryFilter:
 		var err error
 		if out.Filter, err = queryFilter(v); err != nil {
@@ -511,6 +530,28 @@ func stringList(v ref.Val) ([]string, bool) {
 }
 
 var reflectStrings = reflect.TypeOf([]string(nil))
+
+func floatList(v ref.Val) ([]float64, bool) {
+	native, err := v.ConvertToNative(reflectFloats)
+	if err != nil {
+		return nil, false
+	}
+	l, ok := native.([]float64)
+	return l, ok
+}
+
+var reflectFloats = reflect.TypeOf([]float64(nil))
+
+func stringMap(v ref.Val) (map[string]string, bool) {
+	native, err := v.ConvertToNative(reflectStringMap)
+	if err != nil {
+		return nil, false
+	}
+	m, ok := native.(map[string]string)
+	return m, ok
+}
+
+var reflectStringMap = reflect.TypeOf(map[string]string(nil))
 
 // queryFilter converts an extracted list of predicates to its typed form:
 // the CEL value becomes plain JSON and is decoded as strictly as an

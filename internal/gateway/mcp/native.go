@@ -7,7 +7,8 @@ import "github.com/katocxl/pantherclaw/internal/definitions/domain"
 
 // native reports whether the gateway serves a definition itself on a
 // connection with no upstream MCP server: a postgres connection's reviewed
-// reads (G0 M14 D17), whose tools the face lists and calls like any other.
+// reads (G0 M14 D17) and a vectorstore connection's queries and writes
+// (G0 M30 D922), whose tools the face lists and calls like any other.
 func native(kind string, d *domain.Definition) bool {
-	return kind == "postgres" && d.Dispatch != nil && d.Dispatch.SQL != nil
+	return (kind == "postgres" || kind == "vectorstore") && d.Dispatch != nil && d.Dispatch.SQL != nil
 }

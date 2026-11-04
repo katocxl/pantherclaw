@@ -23,9 +23,12 @@ const (
 	ConnectionRouteModeChanged          = "connection.route_mode_changed"
 	ConnectionSealedRevoked             = "connection.sealed_revoked"
 	ConnectionSealedStored              = "connection.sealed_stored"
-	ConnectionSecretInPayloadRefused    = "connection.secret_in_payload_refused"
-	ConnectionTestTokensMinted          = "connection.test_tokens_minted"
-	ConnectionTested                    = "connection.tested"
-	ConnectionToolDescriptionFlagged    = "connection.tool_description_flagged"
-	ConnectionUpdated                   = "connection.updated"
+	// ConnectionModelServerToolRefused: a model request named a provider-side
+	// tool its connection does not allow (G0 M29 D813, HR-696).
+	ConnectionModelServerToolRefused = "connection.model_server_tool_refused"
+	ConnectionSecretInPayloadRefused = "connection.secret_in_payload_refused"
+	ConnectionTestTokensMinted       = "connection.test_tokens_minted"
+	ConnectionTested                 = "connection.tested"
+	ConnectionToolDescriptionFlagged = "connection.tool_description_flagged"
+	ConnectionUpdated                = "connection.updated"
 )

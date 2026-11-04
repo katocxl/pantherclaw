@@ -5,6 +5,7 @@ package auditkind
 
 // Audit kinds under "agent.". The ledger stores each as "audit." + the kind.
 const (
+	AgentConfigChanged       = "agent.config_changed"
 	AgentDiscovered          = "agent.discovered"
 	AgentDiscoveryChanged    = "agent.discovery_changed"
 	AgentDiscoveryReappeared = "agent.discovery_reappeared"

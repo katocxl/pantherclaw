@@ -22,9 +22,12 @@ type Dispatch struct {
 	MCP  *MCPDispatch  `json:"mcp,omitzero"`
 	// SQL is a structured read of a postgres connection (G0 M14 D9, D16);
 	// A2A is a call to a peer agent (D9, D31). Each definition has
-	// exactly one of http, mcp, sql and a2a.
+	// exactly one of http, mcp, sql, a2a and model.
 	SQL *SQLDispatch `json:"sql,omitzero"`
 	A2A *A2ADispatch `json:"a2a,omitzero"`
+	// Model is a call of a model provider's API over a model connection
+	// (G0 M29 D813): the gateway forwards the checked request body itself.
+	Model *ModelDispatch `json:"model,omitzero"`
 	// CredentialScope is the least privilege of the connection's credential
 	// the operation needs, as name to level, which the credential kind
 	// interprets (G0 M8): for a GitHub App, GitHub permission names and
@@ -86,6 +89,16 @@ type HTTPDispatch struct {
 	// D950 c): the body is {"query": <document>, "variables": <the body
 	// mapping>}, so the agent supplies only the mapped values.
 	GraphQL *GraphQLDocument `json:"graphql,omitzero"`
+	// Subresource is an aws-rest template's fixed subresource, sent as the
+	// whole query (?policy, ?acl); with the method it names the one S3
+	// action (G0 M30 D934a).
+	Subresource string `json:"subresource,omitzero"`
+	// BodyParam names the content param an aws-rest template sends as its
+	// raw body (application/json).
+	BodyParam string `json:"body_param,omitzero"`
+	// HeaderParams map enum params to the headers an aws-rest template sends
+	// them in, such as x-amz-acl.
+	HeaderParams map[string]string `json:"header_params,omitzero"`
 }
 
 // MCPDispatch is a call of one tool on an upstream (remote) MCP server, or
@@ -212,6 +225,8 @@ func (d *Definition) reference(at, ref string, where place) error {
 		return invalid("%s: untrusted text %q is never sent from a template", at, name)
 	case p.Type == TypeQueryFilter:
 		return invalid("%s: query filter %q is applied by the gateway, never sent from a template", at, name)
+	case p.Type == TypeFloatArray || p.Type == TypeStringMap:
+		return invalid("%s: %s %q is bound by the gateway, never sent from a template", at, p.Type, name)
 	case p.Type == TypeMoney && part != "value" && part != "currency" && part != "minor":
 		return invalid("%s: money %q is sent as params.%s.value, .currency or .minor", at, name, name)
 	case p.Type != TypeMoney && part != "":
@@ -300,13 +315,13 @@ func (d *Definition) validateDispatch() error {
 	}
 	at := d.Operation + ": dispatch"
 	n := 0
-	for _, set := range []bool{x.HTTP != nil, x.MCP != nil, x.SQL != nil, x.A2A != nil} {
+	for _, set := range []bool{x.HTTP != nil, x.MCP != nil, x.SQL != nil, x.A2A != nil, x.Model != nil} {
 		if set {
 			n++
 		}
 	}
 	if n != 1 {
-		return invalid("%s: exactly one of http, mcp, sql and a2a", at)
+		return invalid("%s: exactly one of http, mcp, sql, a2a and model", at)
 	}
 	if len(x.CredentialScope) > 16 {
 		return invalid("%s.credential_scope: at most 16 entries", at)
@@ -347,13 +362,22 @@ func (d *Definition) validateDispatch() error {
 			return err
 		}
 	}
-	if s := x.SQL; s != nil {
+	if s := x.SQL; s != nil && slices.Contains(VectorOperations, s.Operation) {
+		if err := d.validateVectorDispatch(at, s.Operation); err != nil {
+			return err
+		}
+	} else if s != nil {
 		if !slices.Contains(SQLOperations, s.Operation) || d.Access != AccessRead {
 			return invalid("%s.sql: a read with operation one of %v", at, SQLOperations)
 		}
 	}
 	if a := x.A2A; a != nil && !slices.Contains(A2AMethods, a.Method) {
 		return invalid("%s.a2a: method one of %v", at, A2AMethods)
+	}
+	if m := x.Model; m != nil {
+		if err := d.validateModelDispatch(at, m); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -398,13 +422,20 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 		if err := d.validateMailDispatch(at, h); err != nil {
 			return err
 		}
+	case EncodingAWSRest:
+		if err := d.validateAWSRestDispatch(at, h); err != nil {
+			return err
+		}
 	default:
-		return invalid("%s.encoding must be json, form, aws-json, aws-query or rfc5322-raw", at)
+		return invalid("%s.encoding must be json, form, aws-json, aws-query, aws-rest or rfc5322-raw", at)
 	}
 	if h.GraphQL != nil {
 		if err := validateGraphQL(at, h); err != nil {
 			return err
 		}
+	}
+	if h.Encoding != EncodingAWSRest && (h.Subresource != "" || h.BodyParam != "" || len(h.HeaderParams) > 0) {
+		return invalid("%s: subresource, body_param and header_params belong to aws-rest templates", at)
 	}
 	if err := d.fields(at+".body", h.Body, inBody, h.Encoding); err != nil {
 		return err
@@ -444,7 +475,7 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 		return invalid("%s.success.field %q", at, s.Field)
 	}
 	if h.AWSResource != "" && !h.Encoding.AWS() {
-		return invalid("%s.aws_resource belongs to aws-json and aws-query templates", at)
+		return invalid("%s.aws_resource belongs to aws-json, aws-query and aws-rest templates", at)
 	}
 	return nil
 }

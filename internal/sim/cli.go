@@ -47,6 +47,7 @@ Usage:
   pantherclaw-sim okta [--addr 127.0.0.1:9101] [--base-url URL] [--expired] [--wrong-audience] [--cnf]
   pantherclaw-sim copilot-studio [--addr 127.0.0.1:9100] [--deny-components]
   pantherclaw-sim chatgpt-enterprise [--addr 127.0.0.1:9102] [--key-file FILE] [--deny]
+  pantherclaw-sim model [--addr 127.0.0.1:9103] [--key KEY] [--stream-delay 0s] [--status 0]
   pantherclaw-sim salesforce [--addr 127.0.0.1:9106] [--client-file FILE] [--invalid-client] [--expire-tokens] [--rate-limit 0]
   pantherclaw-sim notion [--addr 127.0.0.1:9107] [--token-file FILE] [--rate-limit 0] [--unauthorized]
   pantherclaw-sim linear [--addr 127.0.0.1:9108] [--key-file FILE] [--rate-limit 0] [--unauthorized]
@@ -78,6 +79,7 @@ var defaultAddrs = map[string]string{
 	"copilot-studio":     "127.0.0.1:9100",
 	"okta":               "127.0.0.1:9101",
 	"chatgpt-enterprise": "127.0.0.1:9102",
+	"model":              "127.0.0.1:9103",
 	"salesforce":         "127.0.0.1:9106",
 	"notion":             "127.0.0.1:9107",
 	"linear":             "127.0.0.1:9108",
@@ -117,6 +119,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runCopilotStudio(ctx, args[1:], stderr)
 	case "chatgpt-enterprise":
 		err = runChatGPTEnterprise(ctx, args[1:], stderr)
+	case "model":
+		err = runModel(ctx, args[1:], stderr)
 	case "aws":
 		err = runAWS(ctx, args[1:], stderr)
 	case "salesforce":

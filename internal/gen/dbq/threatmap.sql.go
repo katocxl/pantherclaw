@@ -436,6 +436,57 @@ func (q *Queries) ThreatMapOrgWideSuppressions(ctx context.Context, orgID ids.Or
 	return items, nil
 }
 
+const threatMapOutcomeCounts = `-- name: ThreatMapOutcomeCounts :many
+SELECT a.outcome_code::text AS outcome_code, count(*)::bigint AS n
+FROM pc.execution_attempts a
+JOIN pc.transactions t ON t.org_id = a.org_id AND t.id = a.transaction_id
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE a.org_id = $1 AND NOT t.simulated AND a.recorded_at >= $2
+  AND a.outcome_code IS NOT NULL
+  AND ($3::boolean OR r.agent_id = ANY ($4::uuid[]))
+GROUP BY a.outcome_code
+ORDER BY a.outcome_code
+`
+
+type ThreatMapOutcomeCountsParams struct {
+	OrgID     ids.OrgID
+	Since     time.Time
+	AllAgents bool
+	Agents    []ids.UUID
+}
+
+type ThreatMapOutcomeCountsRow struct {
+	OutcomeCode string
+	N           int64
+}
+
+// Real connector refusals after the decision since since, by outcome code,
+// in scope (G0 M30 D947a).
+func (q *Queries) ThreatMapOutcomeCounts(ctx context.Context, arg ThreatMapOutcomeCountsParams) ([]ThreatMapOutcomeCountsRow, error) {
+	rows, err := q.db.Query(ctx, threatMapOutcomeCounts,
+		arg.OrgID,
+		arg.Since,
+		arg.AllAgents,
+		arg.Agents,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ThreatMapOutcomeCountsRow{}
+	for rows.Next() {
+		var i ThreatMapOutcomeCountsRow
+		if err := rows.Scan(&i.OutcomeCode, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const threatMapResults = `-- name: ThreatMapResults :many
 SELECT DISTINCT ON (x.scenario_id, x.scenario_digest)
        x.scenario_id, x.scenario_digest, x.range_id, x.verdict, x.observed_by, x.recorded_at

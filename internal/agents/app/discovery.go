@@ -216,6 +216,10 @@ const untrustedPrefix = "untrusted."
 func (w discoverer) changed(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, kind string,
 	prior dbq.GetScanDiscoveryRow, now map[string]string,
 ) error {
+	if kind == domain.ScanKindAgentConfig {
+		// Its drift is agent.config_changed instead (configChanged, G0 M30 D941).
+		return nil
+	}
 	var before map[string]string
 	_ = json.Unmarshal(prior.Observed, &before) // unreadable reads as nothing before
 	details := map[string]string{"discovery_id": prior.ID.String(), "source": w.source, "kind": kind}

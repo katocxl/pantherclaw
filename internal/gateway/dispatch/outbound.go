@@ -36,6 +36,8 @@ func (e *Engine) simulatorRefusal(ctx context.Context, conn *control.Connection)
 	switch conn.GetKind() {
 	case "local":
 		return "" // no target to send to
+	case KindModel:
+		return e.modelSimRefusal(ctx, conn) // G0 M29 D812, D826
 	case "postgres":
 		return e.pgSimVerify(ctx, conn) // D110
 	case "http", "mcp", "a2a":

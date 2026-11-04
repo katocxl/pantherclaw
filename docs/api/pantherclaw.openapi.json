@@ -20205,6 +20205,60 @@
         }
       }
     },
+    "/pantherclaw.v1.ModelUsageService/GetTokenReport": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ModelUsageService"
+        ],
+        "summary": "GetTokenReport",
+        "description": "GetTokenReport sums one UTC month of the org's model calls, grouped by\n team, agent, connection or model.\n permission: budget.read",
+        "operationId": "pantherclaw.v1.ModelUsageService.GetTokenReport",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetTokenReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetTokenReportResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.InvestigationService/WhatHappened": {
       "post": {
         "tags": [
@@ -23327,6 +23381,168 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.GetOutcomeMetricsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.OwnedAccountService/ListOwnedAccounts": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "ListOwnedAccounts",
+        "description": "ListOwnedAccounts lists the org's owned accounts.\n permission: org.owned_accounts.read",
+        "operationId": "pantherclaw.v1.OwnedAccountService.ListOwnedAccounts",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListOwnedAccountsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListOwnedAccountsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.OwnedAccountService/AddOwnedAccount": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "AddOwnedAccount",
+        "description": "AddOwnedAccount files the protected change that adds an account (a\n person). Nothing changes until a second person confirms it.\n permission: org.owned_accounts.manage",
+        "operationId": "pantherclaw.v1.OwnedAccountService.AddOwnedAccount",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AddOwnedAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AddOwnedAccountResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.OwnedAccountService/RemoveOwnedAccount": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.OwnedAccountService"
+        ],
+        "summary": "RemoveOwnedAccount",
+        "description": "RemoveOwnedAccount removes an account at once (a person): shares to it\n hold again.\n permission: org.owned_accounts.manage",
+        "operationId": "pantherclaw.v1.OwnedAccountService.RemoveOwnedAccount",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveOwnedAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveOwnedAccountResponse"
                 }
               }
             }
@@ -40694,7 +40910,23 @@
             "type": "string",
             "title": "location",
             "pattern": "^[!-~]{1,128}$",
-            "description": "Where, such as result/content/0/text; for scan_incomplete, over_bound,\n classifier_unavailable or builtin_failed."
+            "description": "Where, such as result/content/0/text; for scan_incomplete, over_bound,\n classifier_unavailable, builtin_failed or decode_bound."
+          },
+          "encoding": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "encoding",
+            "description": "The decoding layers a hit was found through, joined by \"+\" in\n application order (base64, hex, url, escape, entity, confusable,\n zero_width); empty for a plain hit (G0 M30 D921).",
+            "anyOf": [
+              {
+                "pattern": "^[a-z_+]{0,64}$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "ContentFinding",
@@ -41096,6 +41328,16 @@
             "type": "string",
             "title": "owner_id",
             "description": "The grant or guardrail that owns the rule."
+          },
+          "unit": {
+            "type": "string",
+            "title": "unit",
+            "enum": [
+              "",
+              "currency",
+              "tokens"
+            ],
+            "description": "What the amounts count (G0 M29 D821): \"currency\", or \"tokens\" for a\n token rule (no currency then); empty on records from before M29 means\n currency."
           }
         },
         "title": "ExplainedBudget",
@@ -41232,6 +41474,70 @@
         "title": "GetNonceResponse",
         "additionalProperties": false,
         "description": "GetNonceResponse returns it."
+      },
+      "pantherclaw.v1.ModelUsage": {
+        "type": "object",
+        "properties": {
+          "inputTokens": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "input_tokens",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "format": "int64",
+            "description": "Input tokens not read from or written to the provider's cache."
+          },
+          "outputTokens": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "output_tokens",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "format": "int64",
+            "description": "Output tokens."
+          },
+          "cacheReadTokens": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "cache_read_tokens",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "format": "int64",
+            "description": "Input tokens read from the provider's cache."
+          },
+          "cacheWriteTokens": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "cache_write_tokens",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "format": "int64",
+            "description": "Input tokens written to the provider's cache."
+          },
+          "reported": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "reported",
+            "description": "Whether the answer carried the provider's usage; when false the counts\n are not used and the whole reservation commits (D821)."
+          }
+        },
+        "title": "ModelUsage",
+        "additionalProperties": false,
+        "description": "ModelUsage is the token usage of one model call (G0 M29 D818). OpenAI's\n cached tokens are counted in cache_read_tokens, not in input_tokens."
       },
       "pantherclaw.v1.NextAction": {
         "type": "object",
@@ -41372,7 +41678,7 @@
             "title": "kind",
             "maxLength": 32,
             "minLength": 1,
-            "description": "The format: github_token, private_key, aws_access_key, slack_token or\n pantherclaw_token; or scan_incomplete, when the gateway could not look\n at the whole payload (too many strings, a base64 value too large)."
+            "description": "The format: github_token, private_key, aws_access_key, slack_token,\n pantherclaw_token, anthropic or openai (G0 M29 D816); or scan_incomplete, when the gateway could not look\n at the whole payload (too many strings, a base64 value too large)."
           },
           "location": {
             "type": [
@@ -41556,6 +41862,34 @@
               },
               {
                 "type": "null"
+              }
+            ]
+          },
+          "modelUsage": {
+            "title": "model_usage",
+            "description": "The tokens a model call used, as the provider reported them (G0 M29\n D818); sent only for model operations. A token reservation settles at\n their total when reported is true (D821).",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ModelUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcomeCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "outcome_code",
+            "description": "The code of a connector's refusal after the decision, e.g.\n table_not_allowed (G0 M30 D947a); empty otherwise. The threat map counts\n it against a Prevent control's outcome codes.",
+            "anyOf": [
+              {
+                "pattern": "^([a-z][a-z0-9_]{0,63})?$"
+              },
+              {
+                "maxLength": 0
               }
             ]
           }
@@ -52152,7 +52486,9 @@
           "CONNECTION_KIND_LOCAL",
           "CONNECTION_KIND_MCP_CONTAINER",
           "CONNECTION_KIND_POSTGRES",
-          "CONNECTION_KIND_A2A"
+          "CONNECTION_KIND_A2A",
+          "CONNECTION_KIND_MODEL",
+          "CONNECTION_KIND_VECTORSTORE"
         ],
         "description": "ConnectionKind is what a connection reaches."
       },
@@ -52800,6 +53136,16 @@
             "type": "boolean",
             "title": "model_relay",
             "description": "Whether the connection is a campaign's model relay (G0 M25 D313): only\n the gateway's model face serves it, and only during an open campaign."
+          },
+          "model": {
+            "title": "model",
+            "description": "model is a model connection's settings (G0 M29 D811).",
+            "$ref": "#/components/schemas/pantherclaw.v1.ModelConfig"
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore is a vectorstore connection's settings (G0 M30 D922).",
+            "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfig"
           }
         },
         "title": "Connection",
@@ -53550,6 +53896,30 @@
             ],
             "title": "model_relay",
             "description": "Creates a campaign's model relay (G0 M25 D313): a simulated http\n connection with no package, no agent hosts and no credential. Fixed for\n the connection's life."
+          },
+          "model": {
+            "title": "model",
+            "description": "model is a model connection's settings (G0 M29 D811); only for kind\n model, which takes the defaults when it is unset.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ModelConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore is required for, and only for, a vectorstore connection\n (G0 M30 D922).",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "CreateConnectionRequest",
@@ -54216,6 +54586,207 @@
         "title": "ListCredentialsResponse",
         "additionalProperties": false,
         "description": "ListCredentialsResponse lists its credentials, newest first."
+      },
+      "pantherclaw.v1.ModelConfig": {
+        "type": "object",
+        "properties": {
+          "maxOutputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_output_tokens",
+            "maximum": 1000000,
+            "minimum": 0,
+            "format": "int64",
+            "description": "The max output tokens the gateway adds to a request that has none\n (1..1,000,000; 0 on a create or an update means the default, 64,000)."
+          },
+          "allowedServerTools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+              "maxItems": 32,
+              "uniqueItems": true
+            },
+            "title": "allowed_server_tools",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "description": "Provider-side tool types an admin allowed on this connection (HR-696);\n every other provider-side tool is refused. Default none."
+          },
+          "price": {
+            "title": "price",
+            "description": "An optional price for estimates only (Team, HR-698); unset = no price.\n PantherClaw ships no price list.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ModelPrice"
+          },
+          "capturePrompts": {
+            "type": "boolean",
+            "title": "capture_prompts",
+            "description": "Prompt capture (Business, G0 M30 D945b): while on, a capture profile\n that covers this connection keeps its requests and replies for the\n profile's retention. Off by default; turning it on waits for a second\n person's security-key confirmation, turning it off applies at once."
+          }
+        },
+        "title": "ModelConfig",
+        "additionalProperties": false,
+        "description": "ModelConfig is a model connection's settings (G0 M29 D811, D813, D829)."
+      },
+      "pantherclaw.v1.ModelConfigInput": {
+        "type": "object",
+        "properties": {
+          "maxOutputTokens": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "max_output_tokens",
+            "maximum": 1000000,
+            "minimum": 0,
+            "format": "int64",
+            "description": "The max output tokens the gateway adds to a request that has none\n (1..1,000,000; 0 on a create or an update means the default, 64,000)."
+          },
+          "allowedServerTools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+              "maxItems": 32,
+              "uniqueItems": true
+            },
+            "title": "allowed_server_tools",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "description": "Provider-side tool types an admin allowed on this connection (HR-696);\n every other provider-side tool is refused. Default none."
+          },
+          "price": {
+            "title": "price",
+            "description": "An optional price for estimates only (Team, HR-698); unset = no price.\n PantherClaw ships no price list.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ModelPriceInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capturePrompts": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "capture_prompts",
+            "description": "Prompt capture (Business, G0 M30 D945b): while on, a capture profile\n that covers this connection keeps its requests and replies for the\n profile's retention. Off by default; turning it on waits for a second\n person's security-key confirmation, turning it off applies at once."
+          }
+        },
+        "title": "ModelConfig",
+        "additionalProperties": false,
+        "description": "ModelConfig is a model connection's settings (G0 M29 D811, D813, D829).",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ModelConfig"
+      },
+      "pantherclaw.v1.ModelPrice": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "pattern": "^[A-Z]{3}$",
+            "description": "ISO 4217 currency code."
+          },
+          "inputPerMillion": {
+            "type": "string",
+            "title": "input_per_million",
+            "pattern": "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?$",
+            "description": "Price per million input tokens."
+          },
+          "outputPerMillion": {
+            "type": "string",
+            "title": "output_per_million",
+            "pattern": "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?$",
+            "description": "Price per million output tokens."
+          },
+          "cacheReadPerMillion": {
+            "type": "string",
+            "title": "cache_read_per_million",
+            "pattern": "^((0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?)?$",
+            "description": "Price per million cache-read tokens; empty = the input price."
+          },
+          "cacheWritePerMillion": {
+            "type": "string",
+            "title": "cache_write_per_million",
+            "pattern": "^((0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?)?$",
+            "description": "Price per million cache-write tokens; empty = the input price."
+          }
+        },
+        "title": "ModelPrice",
+        "additionalProperties": false,
+        "description": "ModelPrice is what the organization pays its provider per million tokens,\n used for estimates only (G0 M29 D811, D829). Prices are decimal strings\n with at most 8 fraction digits.\ncurrency, input_per_million and output_per_million are set together:\n```\nthis.currency != '' \u0026\u0026 this.input_per_million != '' \u0026\u0026 this.output_per_million != ''\n```\n\n"
+      },
+      "pantherclaw.v1.ModelPriceInput": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "pattern": "^[A-Z]{3}$",
+            "description": "ISO 4217 currency code."
+          },
+          "inputPerMillion": {
+            "type": "string",
+            "title": "input_per_million",
+            "pattern": "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?$",
+            "description": "Price per million input tokens."
+          },
+          "outputPerMillion": {
+            "type": "string",
+            "title": "output_per_million",
+            "pattern": "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?$",
+            "description": "Price per million output tokens."
+          },
+          "cacheReadPerMillion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "cache_read_per_million",
+            "description": "Price per million cache-read tokens; empty = the input price.",
+            "anyOf": [
+              {
+                "pattern": "^((0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "cacheWritePerMillion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "cache_write_per_million",
+            "description": "Price per million cache-write tokens; empty = the input price.",
+            "anyOf": [
+              {
+                "pattern": "^((0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ModelPrice",
+        "additionalProperties": false,
+        "description": "ModelPrice is what the organization pays its provider per million tokens,\n used for estimates only (G0 M29 D811, D829). Prices are decimal strings\n with at most 8 fraction digits.\ncurrency, input_per_million and output_per_million are set together:\n```\nthis.currency != '' \u0026\u0026 this.input_per_million != '' \u0026\u0026 this.output_per_million != ''\n```\n\n",
+        "x-pantherclaw-input-of": "pantherclaw.v1.ModelPrice",
+        "required": [
+          "currency",
+          "inputPerMillion",
+          "outputPerMillion"
+        ]
       },
       "pantherclaw.v1.PostgresColumn": {
         "type": "object",
@@ -55238,6 +55809,30 @@
                 "type": "null"
               }
             ]
+          },
+          "model": {
+            "title": "model",
+            "description": "model replaces a model connection's settings (G0 M29 D811).",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.ModelConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "vectorstore replaces a vectorstore connection's settings (G0 M30\n D922): its endpoint must stay as it is (VECTORSTORE_ENDPOINT_IMMUTABLE);\n a new writer weakens.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfigInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "UpdateConnectionRequest",
@@ -55260,6 +55855,227 @@
         "title": "UpdateConnectionResponse",
         "additionalProperties": false,
         "description": "UpdateConnectionResponse returns the connection."
+      },
+      "pantherclaw.v1.VectorstoreConfig": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$",
+            "description": "Database host name or address."
+          },
+          "port": {
+            "type": "integer",
+            "title": "port",
+            "maximum": 65535,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Port (default 5432)."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Database name."
+          },
+          "user": {
+            "type": "string",
+            "title": "user",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Role the gateway logs in as; never a superuser."
+          },
+          "sslmode": {
+            "type": "string",
+            "title": "sslmode",
+            "enum": [
+              "verify-full",
+              "require"
+            ],
+            "description": "\"verify-full\" (required), or \"require\" only with internal and a pinned\n CA."
+          },
+          "caPem": {
+            "type": "string",
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "Optional pinned CA certificate (PEM)."
+          },
+          "internal": {
+            "type": "boolean",
+            "title": "internal",
+            "description": "Allows a private address; set only with a step-up."
+          },
+          "schemaName": {
+            "type": "string",
+            "title": "schema_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's schema."
+          },
+          "tableName": {
+            "type": "string",
+            "title": "table_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's name."
+          },
+          "dimensions": {
+            "type": "integer",
+            "title": "dimensions",
+            "maximum": 16000,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The embedding's dimensions (1..16000)."
+          },
+          "distance": {
+            "type": "string",
+            "title": "distance",
+            "enum": [
+              "cosine",
+              "l2",
+              "inner_product"
+            ],
+            "description": "The distance metric: cosine, l2 or inner_product."
+          },
+          "writerAgentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 64,
+              "uniqueItems": true
+            },
+            "title": "writer_agent_ids",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "description": "Agents that may write without a person (at most 64); a write by any\n other agent is held (VECTOR_WRITE_NOT_WRITER, HR-705)."
+          }
+        },
+        "title": "VectorstoreConfig",
+        "additionalProperties": false,
+        "description": "VectorstoreConfig is a vectorstore connection (G0 M30 D922-D925a): where\n the database is, the one table the admin created from the printed DDL,\n and the agents that may write without a person. Its password is the\n connection's sealed static credential. The endpoint (host through\n internal) is fixed once the connection exists: a change is refused with\n VECTORSTORE_ENDPOINT_IMMUTABLE, and a store that moves is a new\n connection."
+      },
+      "pantherclaw.v1.VectorstoreConfigInput": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$",
+            "description": "Database host name or address."
+          },
+          "port": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "port",
+            "maximum": 65535,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Port (default 5432)."
+          },
+          "database": {
+            "type": "string",
+            "title": "database",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Database name."
+          },
+          "user": {
+            "type": "string",
+            "title": "user",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Role the gateway logs in as; never a superuser."
+          },
+          "sslmode": {
+            "type": "string",
+            "title": "sslmode",
+            "enum": [
+              "verify-full",
+              "require"
+            ],
+            "description": "\"verify-full\" (required), or \"require\" only with internal and a pinned\n CA."
+          },
+          "caPem": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "ca_pem",
+            "maxLength": 16384,
+            "description": "Optional pinned CA certificate (PEM)."
+          },
+          "internal": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "internal",
+            "description": "Allows a private address; set only with a step-up."
+          },
+          "schemaName": {
+            "type": "string",
+            "title": "schema_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's schema."
+          },
+          "tableName": {
+            "type": "string",
+            "title": "table_name",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The table's name."
+          },
+          "dimensions": {
+            "type": "integer",
+            "title": "dimensions",
+            "maximum": 16000,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The embedding's dimensions (1..16000)."
+          },
+          "distance": {
+            "type": "string",
+            "title": "distance",
+            "enum": [
+              "cosine",
+              "l2",
+              "inner_product"
+            ],
+            "description": "The distance metric: cosine, l2 or inner_product."
+          },
+          "writerAgentIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 64,
+              "uniqueItems": true
+            },
+            "title": "writer_agent_ids",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "description": "Agents that may write without a person (at most 64); a write by any\n other agent is held (VECTOR_WRITE_NOT_WRITER, HR-705)."
+          }
+        },
+        "title": "VectorstoreConfig",
+        "additionalProperties": false,
+        "description": "VectorstoreConfig is a vectorstore connection (G0 M30 D922-D925a): where\n the database is, the one table the admin created from the printed DDL,\n and the agents that may write without a person. Its password is the\n connection's sealed static credential. The endpoint (host through\n internal) is fixed once the connection exists: a change is refused with\n VECTORSTORE_ENDPOINT_IMMUTABLE, and a store that moves is a new\n connection.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.VectorstoreConfig",
+        "required": [
+          "host",
+          "database",
+          "user",
+          "sslmode",
+          "schemaName",
+          "tableName",
+          "dimensions",
+          "distance"
+        ]
       },
       "pantherclaw.v1.ConsequenceRuleSpec": {
         "type": "object",
@@ -67542,6 +68358,16 @@
             "type": "boolean",
             "title": "model_relay",
             "description": "Whether the connection is a campaign's model relay (G0 M25 D313): it has\n no package, and only the model face serves it."
+          },
+          "model": {
+            "title": "model",
+            "description": "A model connection's settings (G0 M29 D811): the max output tokens\n the gateway adds and the provider-side tool types it lets through.",
+            "$ref": "#/components/schemas/pantherclaw.v1.ModelConfig"
+          },
+          "vectorstore": {
+            "title": "vectorstore",
+            "description": "A vectorstore connection's settings (G0 M30 D922): its database, its\n table and the agents that may write without a person.",
+            "$ref": "#/components/schemas/pantherclaw.v1.VectorstoreConfig"
           }
         },
         "title": "GatewayConnection",
@@ -69004,7 +69830,8 @@
             "title": "code",
             "enum": [
               "secret_in_payload",
-              "elicitation_refused"
+              "elicitation_refused",
+              "model_server_tool_not_allowed"
             ],
             "description": "The refusal code."
           },
@@ -70200,6 +71027,16 @@
             },
             "title": "scope_operations",
             "description": "The operations the run is narrowed to within its grant (G0 M26 D400);\n empty for the whole grant."
+          },
+          "maxTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_tokens",
+            "format": "int64",
+            "description": "The run's token cap (G0 M29 D822); unset when it has none.",
+            "nullable": true
           }
         },
         "title": "Run",
@@ -70274,6 +71111,19 @@
             "title": "grant_id",
             "format": "uuid",
             "description": "The grant the run uses (G0 M4, PN-002.5). It must be active and valid,\n and bind the same agent (and instance, if it pins one), principal and\n environment; the run's expiry is cut to the grant's.",
+            "nullable": true
+          },
+          "maxTokens": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "max_tokens",
+            "maximum": 1000000000000,
+            "minimum": 1,
+            "format": "int64",
+            "description": "The run's token cap (G0 M29 D822, HR-693, HR-697): one more debit level\n over the run's model calls, set at start and never changed. It only\n restricts. Unset for no run cap.",
             "nullable": true
           }
         },
@@ -70949,6 +71799,11 @@
             "title": "spent_count",
             "format": "int64",
             "description": "Spent count."
+          },
+          "unit": {
+            "type": "string",
+            "title": "unit",
+            "description": "What limit, reserved, spent and available count (G0 M29 D821):\n \"currency\", or \"tokens\" for a token rule (currency empty then)."
           }
         },
         "title": "BudgetAccount",
@@ -74960,6 +75815,11 @@
             "type": "string",
             "title": "document_digest",
             "description": "SHA-256 of the confirmed document, hex."
+          },
+          "dpopBound": {
+            "type": "boolean",
+            "title": "dpop_bound",
+            "description": "The confirmed document asks for DPoP-bound access tokens (RFC 9449):\n every token request must then carry a DPoP proof (G0 M30 D911, D914)."
           }
         },
         "title": "McpClient",
@@ -76377,6 +77237,199 @@
         "additionalProperties": false,
         "description": "Suppression is one suppression (D16)."
       },
+      "pantherclaw.v1.TokenReportGroupBy": {
+        "type": "string",
+        "title": "TokenReportGroupBy",
+        "enum": [
+          "TOKEN_REPORT_GROUP_BY_UNSPECIFIED",
+          "TOKEN_REPORT_GROUP_BY_TEAM",
+          "TOKEN_REPORT_GROUP_BY_AGENT",
+          "TOKEN_REPORT_GROUP_BY_CONNECTION",
+          "TOKEN_REPORT_GROUP_BY_MODEL"
+        ],
+        "description": "TokenReportGroupBy is what a token report's rows sum by."
+      },
+      "pantherclaw.v1.Estimate": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "description": "ISO 4217 currency of the prices."
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "Decimal string, at most 8 fraction digits."
+          }
+        },
+        "title": "Estimate",
+        "additionalProperties": false,
+        "description": "Estimate is a cost estimate in one currency, computed from prices the\n organization set on its model connections. It is an estimate, not a bill."
+      },
+      "pantherclaw.v1.GetTokenReportRequest": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "month",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "The UTC month, YYYY-MM."
+          },
+          "groupBy": {
+            "title": "group_by",
+            "$ref": "#/components/schemas/pantherclaw.v1.TokenReportGroupBy",
+            "not": {
+              "enum": [
+                "TOKEN_REPORT_GROUP_BY_UNSPECIFIED"
+              ]
+            }
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "0 for the default page size; at most 200."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 512,
+            "description": "Opaque; a model id key makes it longer than an id token."
+          }
+        },
+        "title": "GetTokenReportRequest",
+        "additionalProperties": false,
+        "required": [
+          "month",
+          "groupBy"
+        ]
+      },
+      "pantherclaw.v1.GetTokenReportResponse": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.TokenReportRow"
+            },
+            "title": "rows"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          },
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "description": "The fixed statement: what the counts and estimates are."
+          }
+        },
+        "title": "GetTokenReportResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.TokenReportRow": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key",
+            "description": "The team, agent or connection id, or the model id; empty for calls\n without one (an agent without a team)."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "A name for people: the team, agent or connection name, or the model id."
+          },
+          "calls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "calls",
+            "format": "int64",
+            "description": "Model calls recorded."
+          },
+          "unreportedCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unreported_calls",
+            "format": "int64",
+            "description": "Calls whose answer reported no usage (their tokens count as zero here)."
+          },
+          "unknownCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unknown_calls",
+            "format": "int64",
+            "description": "Calls whose outcome is UNKNOWN."
+          },
+          "inputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "input_tokens",
+            "format": "int64"
+          },
+          "outputTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "output_tokens",
+            "format": "int64"
+          },
+          "cacheReadTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "cache_read_tokens",
+            "format": "int64"
+          },
+          "cacheWriteTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "cache_write_tokens",
+            "format": "int64"
+          },
+          "totalTokens": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "total_tokens",
+            "format": "int64",
+            "description": "The four counts summed."
+          },
+          "estimates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Estimate"
+            },
+            "title": "estimates",
+            "description": "Cost estimates, one per price currency; empty when no call had a price."
+          }
+        },
+        "title": "TokenReportRow",
+        "additionalProperties": false,
+        "description": "TokenReportRow sums the month's model calls of one key."
+      },
       "pantherclaw.v1.InspectSection": {
         "type": "string",
         "title": "InspectSection",
@@ -76963,6 +78016,11 @@
             "type": "boolean",
             "title": "scope_limited",
             "description": "The caller's scope is narrower than the organization."
+          },
+          "tokenEstimate": {
+            "title": "token_estimate",
+            "description": "A cost estimate of the run's model calls, with the budget section on\n Team and above (G0 M29 D824); unset on Community or without the budget\n section.",
+            "$ref": "#/components/schemas/pantherclaw.v1.RunTokenEstimate"
           }
         },
         "title": "InspectRunResponse",
@@ -77169,6 +78227,16 @@
             "type": "string",
             "title": "remaining",
             "description": "What is left of the rule's amount limit in its current period; empty\n for a counter, a rule without an amount limit or an earlier period."
+          },
+          "unit": {
+            "type": "string",
+            "title": "unit",
+            "description": "What the amounts count (G0 M29 D824): \"currency\", or \"tokens\" for a\n token rule; empty for a counter."
+          },
+          "limit": {
+            "type": "string",
+            "title": "limit",
+            "description": "The rule's cap (decimal string): its amount limit, or its token cap;\n empty for a counter or a rule without one."
           }
         },
         "title": "RunBudgetLine",
@@ -77441,6 +78509,45 @@
         "title": "RunTimeline",
         "additionalProperties": false,
         "description": "RunTimeline is one page of the run's timeline."
+      },
+      "pantherclaw.v1.RunTokenEstimate": {
+        "type": "object",
+        "properties": {
+          "estimates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.Estimate"
+            },
+            "title": "estimates",
+            "description": "One per price currency."
+          },
+          "pricedCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "priced_calls",
+            "format": "int64",
+            "description": "Model calls with a price, counted in the estimates."
+          },
+          "unpricedCalls": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unpriced_calls",
+            "format": "int64",
+            "description": "Model calls without a price, left out of the estimates."
+          },
+          "label": {
+            "type": "string",
+            "title": "label",
+            "description": "Always \"estimate\"."
+          }
+        },
+        "title": "RunTokenEstimate",
+        "additionalProperties": false,
+        "description": "RunTokenEstimate is a cost estimate of the run's model calls from prices\n the organization set on its model connections (G0 M29 D824; HR-698):\n an estimate, not a bill. Team and above."
       },
       "pantherclaw.v1.TimelineEvent": {
         "type": "object",
@@ -83006,6 +84113,133 @@
         "title": "OutcomeUnmeasured",
         "additionalProperties": false,
         "description": "OutcomeUnmeasured is why some cases were not measured."
+      },
+      "pantherclaw.v1.AddOwnedAccountRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "aws_account",
+              "github_org",
+              "email_domain",
+              "gcp_project",
+              "azure_tenant"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "title": "value",
+            "maxLength": 253,
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "AddOwnedAccountRequest",
+        "additionalProperties": false,
+        "description": "AddOwnedAccountRequest names an account to add.",
+        "required": [
+          "kind",
+          "value",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.AddOwnedAccountResponse": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id"
+          }
+        },
+        "title": "AddOwnedAccountResponse",
+        "additionalProperties": false,
+        "description": "AddOwnedAccountResponse names the protected change filed."
+      },
+      "pantherclaw.v1.ListOwnedAccountsRequest": {
+        "type": "object",
+        "title": "ListOwnedAccountsRequest",
+        "additionalProperties": false,
+        "description": "ListOwnedAccountsRequest asks for the list."
+      },
+      "pantherclaw.v1.ListOwnedAccountsResponse": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.OwnedAccount"
+            },
+            "title": "accounts"
+          }
+        },
+        "title": "ListOwnedAccountsResponse",
+        "additionalProperties": false,
+        "description": "ListOwnedAccountsResponse is the list, by kind and value."
+      },
+      "pantherclaw.v1.OwnedAccount": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "aws_account, github_org, email_domain, gcp_project or azure_tenant."
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          },
+          "addedBy": {
+            "type": "string",
+            "title": "added_by"
+          },
+          "addTime": {
+            "title": "add_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "OwnedAccount",
+        "additionalProperties": false,
+        "description": "OwnedAccount is one account the org named as its own."
+      },
+      "pantherclaw.v1.RemoveOwnedAccountRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "RemoveOwnedAccountRequest",
+        "additionalProperties": false,
+        "description": "RemoveOwnedAccountRequest names an account to remove.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RemoveOwnedAccountResponse": {
+        "type": "object",
+        "title": "RemoveOwnedAccountResponse",
+        "additionalProperties": false,
+        "description": "RemoveOwnedAccountResponse is empty."
       },
       "pantherclaw.v1.PackageState": {
         "type": "string",
@@ -94116,6 +95350,14 @@
               "title": "value"
             },
             "description": "agent_hosts maps each host agents use to its connection's name: the\n edge's mapping (connections' agent_hosts)."
+          },
+          "modelConnections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "model_connections",
+            "description": "model_connections names the connections among agent_hosts' values that\n are of kind model (G0 M29 D814): the edge sends their hosts' requests\n on its model path (streamed, 16 MiB, 10 minutes)."
           }
         },
         "title": "SandboxServiceStartSessionResponse",
@@ -103097,6 +104339,10 @@
       "description": "IncidentService serves Reflex's alerts, incidents, suppressions and owned\n operational failures (G0 M10 D14–D18; F603, F607, F616, F641; HR-242,\n HR-243). Alert and incident history is append-only: repeats add evidence\n and changes add events. Lists show only what the caller may read: an\n alert or incident about agents is listed when the caller holds\n incident.read where those agents live, and counts never include hidden\n rows (D8)."
     },
     {
+      "name": "pantherclaw.v1.ModelUsageService",
+      "description": "ModelUsageService reports the tokens the org's model calls used (G0 M29\n D825; F988; HR-698). Every model call through a model connection leaves one\n usage row with the token counts the provider reported. Counts are what the\n model providers reported; a cost is an estimate from prices the\n organization set on its model connections, never a bill. Every response\n carries the fixed statement that says so. The report needs Team or higher."
+    },
+    {
       "name": "pantherclaw.v1.InvestigationService",
       "description": "InvestigationService explains runs and actions from recorded evidence\n (G0 M10 D20; F239, F241, F248, F232, F284, F234; HR-247). Every row is\n read with evidence.read where its agent lives; rows of other agents are\n left out before anything is counted, and an action or run outside that\n scope is reported as not found. Nothing here asserts causation: items\n carry their basis, and a comparison never labels a run malicious."
     },
@@ -103127,6 +104373,10 @@
     {
       "name": "pantherclaw.v1.OutcomeService",
       "description": "OutcomeService reads the outcome metrics (G0 M21 D303, F774; HR-537..540;\n Business). Each metric is a distribution of durations or a share, with the\n cases it measured and the cases it could not, never a raw volume presented\n as value. A window without a measured case is NOT_COLLECTED, never 0.\n Every metric states its scope and as-of time, and its definition stays a\n draft until the founder signs it off."
+    },
+    {
+      "name": "pantherclaw.v1.OwnedAccountService",
+      "description": "OwnedAccountService is the org's list of its own cloud accounts, GitHub\n organizations, email domains, GCP projects and Azure tenants (G0 M30 D933,\n D935; HR-707, HR-708).\n\n An action that shares to an account not on the list holds for a person\n (SHARE_ACCOUNT_NOT_OWNED), and an empty list holds every cross-account\n share. Adding an account loosens that hold, so it files a protected change\n that applies only when a second person confirms it with a security key.\n Removing one applies at once."
     },
     {
       "name": "pantherclaw.v1.PackageService",

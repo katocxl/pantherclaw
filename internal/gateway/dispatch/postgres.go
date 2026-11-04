@@ -109,13 +109,18 @@ func (e *Engine) sendPostgres(ctx context.Context, r Result, conn *control.Conne
 	ctx = context.WithoutCancel(ctx)
 	if buildErr != nil {
 		code := CodeRequest
+		var extra []func(*pb.RecordExecutionRequest)
 		if c := pgdispatch.CodeOf(buildErr); c != "" {
 			code = strings.ToLower(c)
+			if c == pgdispatch.CodeTableNotAllowed || c == pgdispatch.CodeColumnNotAllowed {
+				// The threat map counts these refusals (G0 M30 D947a).
+				extra = append(extra, func(req *pb.RecordExecutionRequest) { req.OutcomeCode = code })
+			}
 		} else if errors.Is(buildErr, errDatabaseMismatch) {
 			code = CodeTargetMismatch
 		}
 		e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), pclog.Err(buildErr))
-		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t)
+		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t, extra...)
 	}
 	start := time.Now()
 	var res pgtarget.Result
@@ -480,6 +485,7 @@ func (e *Engine) pgSimVerify(ctx context.Context, conn *control.Connection) stri
 // Configured closes the pools of postgres connections a new configuration
 // no longer serves, or serves with another configuration (D105).
 func (e *Engine) Configured(cfg *control.Config) {
+	e.vectorConfigured(cfg) // G0 M30 D922 (vectorstore.go)
 	var closing []*pgtarget.Pool
 	defer func() {
 		// Outside the lock and off the configuration load: closing waits for

@@ -12,8 +12,6 @@ import (
 	"net/netip"
 	"regexp"
 	"strings"
-
-	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // Connector mode (G0 M9 track C, the edge protocol): the edge in front of
@@ -84,9 +82,11 @@ func (e *Edge) egress(w http.ResponseWriter, r *http.Request, host, conn string)
 	}
 	out.Header.Set("Content-Type", "application/json")
 	out.Header.Set(HeaderBinding, binding)
-	action := ids.NewV7().String()
+	key := fingerprint(r.Method, conn+" "+host+in.Path+"?"+query, body)
+	action := e.held.action(key)
 	out.Header.Set(headerAction, action)
 	res, err := e.client.Do(out) //nolint:bodyclose // relay closes the body
+	e.heldAnswer(key, action, res, err)
 	e.relay(w, r, host, conn, action, res, err)
 }
 

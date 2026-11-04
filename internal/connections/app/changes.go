@@ -56,6 +56,14 @@ type UpdateInput struct {
 	// configuration that is current when the update runs, so a held update
 	// stores the URL and no configuration (SetA2APublicURL).
 	A2APublicURL *string `json:",omitzero"`
+	// Model replaces a model connection's settings (G0 M29 D811): a higher
+	// max output tokens or a newly allowed server tool weakens; a price
+	// alone is neither, and needs Team (D829).
+	Model *ModelConfig `json:",omitzero"`
+	// Vectorstore replaces a vectorstore connection's settings (G0 M30
+	// D922, D925a): its endpoint must stay as it is; a new writer or
+	// another table weakens.
+	Vectorstore *VectorstoreConfig `json:",omitzero"`
 }
 
 // change is one changed field with its old and new values and whether it
@@ -299,7 +307,17 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			} else if in.BaseURL != nil {
 				hosts = nil // a new base URL defaults its own host again
 			}
-			nb, nh, err := s.shape(conn.Kind, base, hosts, p.AccessMode, deref(conn.CredentialHeader), deref(conn.CredentialScheme))
+			var nb *string
+			var nh []string
+			if conn.Kind == KindModel {
+				// Held only, the credential on the base URL's host (G0 M29 D811).
+				if p.AccessMode != AccessHeld {
+					return ErrShape
+				}
+				nb, nh, err = s.modelShape(base, hosts, conn.Simulated, deref(conn.CredentialScheme), deref(conn.CredentialHeader))
+			} else {
+				nb, nh, err = s.shape(conn.Kind, base, hosts, p.AccessMode, deref(conn.CredentialHeader), deref(conn.CredentialScheme))
+			}
 			if err != nil {
 				return err
 			}
@@ -334,6 +352,9 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			set("default_mode", conn.DefaultMode, p.DefaultMode, p.DefaultMode == ModeMonitor)
 		}
 		limits := map[string]string{}
+		if conn.Kind == KindModel && (in.MaxResponseBytes != nil || in.TimeoutMs != nil) {
+			return ErrShape // the model path's limits are fixed (G0 M29 D811, D814)
+		}
 		if in.MaxResponseBytes != nil {
 			if *in.MaxResponseBytes < 1024 || *in.MaxResponseBytes > 8<<20 {
 				return ErrShape
@@ -364,7 +385,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		}
 		peer := in.A2A
 		if in.A2APublicURL != nil {
-			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil {
+			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil || in.Model != nil || in.Vectorstore != nil {
 				return ErrShape
 			}
 			current, _, err := s.currentA2A(ctx, tx, c.Org, conn.ID)
@@ -381,9 +402,14 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			current.PublicURL = *in.A2APublicURL
 			peer = current
 		}
+		// Prompt capture on a model connection (G0 M30 D945b): turning it on
+		// waits on its own always-protected surface, and is recorded with
+		// turning it off once applied.
+		surface := protect.SurfaceConnectionUpdate
+		var modelBefore, modelAfter *ModelConfig
 		var kc *kindConfig
-		if in.Postgres != nil || peer != nil {
-			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer)
+		if in.Postgres != nil || peer != nil || in.Model != nil || in.Vectorstore != nil {
+			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer, in.Model, in.Vectorstore)
 			if err != nil {
 				return err
 			}
@@ -392,7 +418,36 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 				return ErrKindNotImplemented
 			}
 			kc = &kindConfig{cfg: cfg, store: store}
-			set(conn.Kind, "current", "replaced", true)
+			if m, isModel := cfg.(*ModelConfig); isModel {
+				// G0 M29 D811, D829.
+				if err := s.checkModelPrice(ctx, m); err != nil {
+					return err
+				}
+				before, err := loadModel(ctx, q, conn)
+				if err != nil {
+					return err
+				}
+				if err := s.checkModelCapture(ctx, before, m); err != nil {
+					return err
+				}
+				if captureTurnsOn(before, m) {
+					surface = protect.SurfaceModelCapture
+				}
+				modelBefore, modelAfter = before, m
+				set(KindModel, modelSummary(before), modelSummary(m), modelWeakens(before, m))
+			} else if v, isVector := cfg.(*VectorstoreConfig); isVector {
+				// G0 M30 D925a: the endpoint is fixed for the connection's life.
+				before, err := loadVectorstore(ctx, q, conn)
+				if err != nil {
+					return err
+				}
+				if before != nil && !before.sameEndpoint(*v) {
+					return ErrVectorstoreEndpointImmutable
+				}
+				set(KindVectorstore, vectorstoreSummary(before), vectorstoreSummary(v), vectorstoreWeakens(before, v))
+			} else {
+				set(conn.Kind, "current", "replaced", true)
+			}
 		}
 		// A connection never moves to a server the catalog would refuse
 		// (HR-585); a held update checks again when it applies.
@@ -431,6 +486,9 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			if err != nil {
 				return err
 			}
+			if err := recordModelCapture(ctx, tx, c, conn.ID, modelBefore, modelAfter); err != nil {
+				return err
+			}
 			if in.Connector != nil {
 				if _, err := putConnector(ctx, q, c, after, spec); err != nil {
 					return err
@@ -445,7 +503,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		if !slices.ContainsFunc(changes, func(ch change) bool { return ch.weakens }) {
 			return write(ctx)
 		}
-		held, err = s.protect.Hold(ctx, tx, c.Caller, custodyChange(protect.SurfaceConnectionUpdate, conn.ID, changes, in), write)
+		held, err = s.protect.Hold(ctx, tx, c.Caller, custodyChange(surface, conn.ID, changes, in), write)
 		return err
 	}()
 	return out, held, err
@@ -704,6 +762,9 @@ func (s *Service) WithProtect(g *protect.Gate) *Service {
 	if g != nil {
 		g.Register(protect.SurfaceConnectionUpdate, s.ApplyProtectedUpdate, s.ProtectedUpdateState)
 		g.Register(protect.SurfaceRouteMode, s.ApplyProtectedRouteMode, s.ProtectedRouteModeState)
+		// Prompt capture on a model connection re-runs the update it was
+		// filed with (G0 M30 D945b).
+		g.Register(protect.SurfaceModelCapture, s.ApplyProtectedUpdate, s.ProtectedUpdateState)
 	}
 	return s
 }

@@ -37,10 +37,11 @@ type Identified struct {
 	// AgentState is the agent's state after this request.
 	AgentState string
 	// Proof is how the request was proven: "" for a PAP/1 proof, "bearer"
-	// for a pap-mcp+jwt (G0 M26 D402, HR-627).
+	// for a pap-mcp+jwt (G0 M26 D402, HR-627), "dpop" for a DPoP-bound one
+	// (G0 M30 D913; JKT is then its key).
 	Proof string
 	// Bearer is the verified MCP access token, set only when Proof is
-	// "bearer".
+	// "bearer" or "dpop".
 	Bearer *mcptoken.Token
 }
 

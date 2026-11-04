@@ -234,8 +234,14 @@ LIMIT sqlc.arg(max_rows);
 -- name: InvRunBudget :many
 SELECT coalesce(r.account_id, r.counter_id)::uuid AS line_id, (r.account_id IS NOT NULL)::boolean AS account,
        coalesce(a.rule, c.rule)::text AS rule, coalesce(a.currency, '')::text AS currency,
+       coalesce(a.unit, '')::text AS unit,
+       -- A run token account's cap is the capping run's, shared by its run
+       -- tree (G0 M29 D822, D875); run_used is what the whole tree holds and
+       -- committed on it.
+       coalesce(CASE WHEN a.owner_kind = 'run' THEN rn.max_tokens END, 0)::bigint AS run_cap,
+       coalesce(ru.used, 0)::numeric(26,8) AS run_used,
        coalesce(sum(r.amount) FILTER (WHERE r.state = 'HELD'), 0)::numeric(26,8) AS held,
-       coalesce(sum(r.amount) FILTER (WHERE r.state = 'COMMITTED'), 0)::numeric(26,8) AS committed,
+       coalesce(sum(coalesce(r.settled_amount, r.amount)) FILTER (WHERE r.state = 'COMMITTED'), 0)::numeric(26,8) AS committed,
        coalesce(sum(r.amount) FILTER (WHERE r.state = 'RELEASED'), 0)::numeric(26,8) AS released,
        count(*) FILTER (WHERE r.state = 'HELD')::bigint AS held_count,
        count(*) FILTER (WHERE r.state = 'COMMITTED')::bigint AS committed_count,
@@ -246,10 +252,27 @@ JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.r
 JOIN pc.reservations r ON r.org_id = p.org_id AND r.permit_id = p.id
 LEFT JOIN pc.budget_accounts a ON a.org_id = r.org_id AND a.id = r.account_id
 LEFT JOIN pc.counters c ON c.org_id = r.org_id AND c.id = r.counter_id
+LEFT JOIN pc.runs rn ON rn.org_id = a.org_id AND rn.id = a.owner_id AND a.owner_kind = 'run'
+LEFT JOIN LATERAL (
+    SELECT sum(CASE WHEN x.state = 'HELD' THEN x.amount ELSE coalesce(x.settled_amount, x.amount) END) AS used
+    FROM pc.reservations x
+    WHERE a.owner_kind = 'run' AND x.org_id = a.org_id AND x.account_id = a.id AND x.state IN ('HELD', 'COMMITTED')
+) ru ON true
 WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = sqlc.arg(run_id)
-GROUP BY 1, 2, 3, 4
+GROUP BY 1, 2, 3, 4, 5, 6, 7
 ORDER BY 3, 1
 LIMIT 500;
+
+-- A cost estimate of a run's model calls (G0 M29 D824): the estimates
+-- summed per currency, and how many calls had a price and how many not.
+-- name: InvRunTokenEstimate :many
+SELECT coalesce(u.estimate_currency, '')::text AS currency,
+       coalesce(sum(u.estimate), 0)::numeric(26,8) AS amount,
+       count(*)::bigint AS calls
+FROM pc.model_usage u
+WHERE u.org_id = sqlc.arg(org_id) AND u.run_id = sqlc.arg(run_id)
+GROUP BY 1
+ORDER BY 1;
 
 -- The grants a run's transactions decided under.
 -- name: InvRunGrants :many

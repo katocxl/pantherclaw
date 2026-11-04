@@ -109,9 +109,11 @@ type ClaimWrite struct {
 // BudgetState is one account's state after the reservation, for the
 // receipt (F113, F119).
 type BudgetState struct {
-	Level     string `json:"level"`
-	Rule      string `json:"rule"`
-	Currency  string `json:"currency,omitzero"`
+	Level    string `json:"level"`
+	Rule     string `json:"rule"`
+	Currency string `json:"currency,omitzero"`
+	// Unit is "tokens" for a token rule (G0 M29 D821); empty means currency.
+	Unit      string `json:"unit,omitzero"`
 	Available string `json:"available,omitzero"`
 	Reserved  string `json:"reserved,omitzero"`
 	Spent     string `json:"spent,omitzero"`

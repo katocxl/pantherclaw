@@ -7,4 +7,7 @@ package auditkind
 const (
 	OrgDeleted         = "org.deleted"
 	OrgDeletionStarted = "org.deletion_started"
+	// The owned account list (G0 M30 D933).
+	OrgOwnedAccountAdded   = "org.owned_account_added"
+	OrgOwnedAccountRemoved = "org.owned_account_removed"
 )
