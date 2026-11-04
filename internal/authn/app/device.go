@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/assertion"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/authn/token"
@@ -428,7 +430,7 @@ func (d *Device) approve(ctx context.Context, tx db.TenantTx, org ids.OrgID, idp
 		return Outcome{Reason: "LOGIN_FAILED"}, nil
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "authn.login", Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
+		Name: auditkind.AuthnLogin, Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "user", ID: u.ID.String()},
 		Details: map[string]string{"method": "device_code", "provider": idp.Name(), "device_code": row.ID.String()},
 	})
@@ -473,9 +475,9 @@ func (d *Device) acceptInvitation(ctx context.Context, q *dbq.Queries, tx db.Ten
 	}
 	actor := evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}
 	for _, ev := range []audit.Event{
-		{Name: "access.user_created", Object: &audit.Object{Type: "user", ID: u.ID.String()}, Details: map[string]string{"provider": idp.Name()}},
+		{Name: auditkind.AccessUserCreated, Object: &audit.Object{Type: "user", ID: u.ID.String()}, Details: map[string]string{"provider": idp.Name()}},
 		{
-			Name: "access.invitation_accepted", Object: &audit.Object{Type: "invitation", ID: inv.ID.String()},
+			Name: auditkind.AccessInvitationAccepted, Object: &audit.Object{Type: "invitation", ID: inv.ID.String()},
 			Details: map[string]string{"kind": inv.Kind, "roles": joinStrings(inv.Roles)},
 		},
 	} {
@@ -591,7 +593,7 @@ func (d *Device) newSession(ctx context.Context, tx db.TenantTx, q *dbq.Queries,
 		return TokenResponse{}, err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "authn.session_created", Actor: evdomain.Actor{Type: string(td.KindUser), ID: user.String()}, Outcome: audit.Success,
+		Name: auditkind.AuthnSessionCreated, Actor: evdomain.Actor{Type: string(td.KindUser), ID: user.String()}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "cli_session", ID: sid.String()}, Details: map[string]string{"device_jkt": jkt},
 	})
 	at.RefreshToken = refresh.Reveal()
@@ -633,7 +635,7 @@ func (d *Device) RefreshGrant(ctx context.Context, form url.Values) (TokenRespon
 			}
 			reuse = true
 			_, err = audit.Record(ctx, tx, audit.Event{
-				Name: "authn.session_revoked", Actor: evdomain.Actor{Type: "system", ID: "refresh-reuse-detector"},
+				Name: auditkind.AuthnSessionRevoked, Actor: evdomain.Actor{Type: "system", ID: "refresh-reuse-detector"},
 				Outcome: audit.Success, ReasonCode: reason, Object: &audit.Object{Type: "cli_session", ID: prev.ID.String()},
 				Details: map[string]string{"user": prev.UserID.String()},
 			})
@@ -691,7 +693,7 @@ func (d *Device) Revoke(ctx context.Context, refresh string) error {
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.session_revoked", Actor: evdomain.Actor{Type: string(td.KindUser), ID: s.UserID.String()},
+			Name: auditkind.AuthnSessionRevoked, Actor: evdomain.Actor{Type: string(td.KindUser), ID: s.UserID.String()},
 			Outcome: audit.Success, ReasonCode: reason, Object: &audit.Object{Type: "cli_session", ID: s.ID.String()},
 		})
 		return err

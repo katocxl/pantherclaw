@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -28,7 +30,7 @@ func Validate(e Event) error {
 	if e.Timestamp.IsZero() || e.Org.IsZero() || e.LedgerSeq < 1 || e.Object.ID == "" || len(e.Object.ID) > 256 || e.Actor.Type == "" || len(e.Actor.Type) > 32 || e.Actor.ID == "" || len(e.Actor.ID) > 256 {
 		return errors.New("security event: missing or oversized fields")
 	}
-	if e.Kind == "org.deleted" || e.Kind == "account.deleted" {
+	if e.Kind == auditkind.OrgDeleted || e.Kind == auditkind.AccountDeleted {
 		if e.Org != ids.PlatformOrg || len(e.RecordDigest) != 64 {
 			return errors.New("security event: deletion requires platform ledger and record digest")
 		}
@@ -38,8 +40,8 @@ func Validate(e Event) error {
 	} else if e.RecordDigest != "" {
 		return errors.New("security event: unexpected record digest")
 	}
-	if e.Kind == "org.deletion_started" || e.Kind == "account.deletion_started" {
-		if e.Org != ids.PlatformOrg || len(e.JournalDigest) != 64 || (e.Kind == "org.deletion_started" && e.RequestID.IsZero()) || (e.Kind == "account.deletion_started" && !e.RequestID.IsZero()) {
+	if e.Kind == auditkind.OrgDeletionStarted || e.Kind == auditkind.AccountDeletionStarted {
+		if e.Org != ids.PlatformOrg || len(e.JournalDigest) != 64 || (e.Kind == auditkind.OrgDeletionStarted && e.RequestID.IsZero()) || (e.Kind == auditkind.AccountDeletionStarted && !e.RequestID.IsZero()) {
 			return errors.New("security event: invalid deletion intent provenance")
 		}
 		if _, err := hex.DecodeString(e.JournalDigest); err != nil {
@@ -59,7 +61,7 @@ var serverName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
 // a restore uses it.
 func validateServer(e Event) error {
 	s := e.McpServer
-	if e.Kind != "mcp.catalog.server_revoked" {
+	if e.Kind != auditkind.McpCatalogServerRevoked {
 		return errors.New("security event: unexpected server spec")
 	}
 	if !serverName.MatchString(s.Name) || (s.Transport != "http" && s.Transport != "stdio" && s.Transport != "container") {
@@ -75,10 +77,10 @@ func validateServer(e Event) error {
 }
 
 func validateObject(e Event) error {
-	if e.Kind == "security.kill_switch_engaged" && e.Object.ID != e.Org.String() {
+	if e.Kind == auditkind.SecurityKillSwitchEngaged && e.Object.ID != e.Org.String() {
 		return errors.New("restore: kill switch object is another organization")
 	}
-	if e.Kind == "package.signing_key.revoked" {
+	if e.Kind == auditkind.PackageSigningKeyRevoked {
 		if e.RevocationReason != "ROTATED" && e.RevocationReason != "COMPROMISED" {
 			return errors.New("restore: invalid package key revocation reason")
 		}
@@ -99,7 +101,7 @@ func validateObject(e Event) error {
 			return errors.New("restore: invalid connection id")
 		}
 		v, err := strconv.ParseInt(version, 10, 32)
-		if err != nil || v < 0 || v == 0 && e.Kind != "response.credential_revoked" || strconv.FormatInt(v, 10) != version {
+		if err != nil || v < 0 || v == 0 && e.Kind != auditkind.ResponseCredentialRevoked || strconv.FormatInt(v, 10) != version {
 			return errors.New("restore: invalid credential version")
 		}
 	default:
@@ -112,7 +114,7 @@ func validateObject(e Event) error {
 			return err
 		}
 	}
-	if e.Kind != "response.contain" {
+	if e.Kind != auditkind.ResponseContain {
 		if e.Containment != nil {
 			return errors.New("restore: unexpected containment metadata")
 		}

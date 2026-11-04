@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/grants/domain"
@@ -156,7 +158,7 @@ func (s *Service) refuseDelegation(ctx context.Context, w Workload, parent domai
 // instance delegated child from parent (at its revision) to the child run.
 func DelegatedEvent(instance, child, parent ids.UUID, parentRevision int, childRun ids.UUID) audit.Event {
 	return audit.Event{
-		Name: "grant.delegated", Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
+		Name: auditkind.GrantDelegated, Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
 		Outcome: audit.Success, Object: &audit.Object{Type: "grant", ID: child.String()},
 		Details: map[string]string{
 			"parent": parent.String(), "parent_revision": fmt.Sprint(parentRevision), "child_run": childRun.String(),
@@ -170,7 +172,7 @@ func DelegatedEvent(instance, child, parent ids.UUID, parentRevision int, childR
 // (parent) run, so the alert it raises names the run (HR-665).
 func DelegateRefusedEvent(instance, parent, child, run ids.UUID) audit.Event {
 	return audit.Event{
-		Name: "grant.delegate_refused", Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
+		Name: auditkind.GrantDelegateRefused, Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
 		Outcome: audit.Denied, ReasonCode: "DELEGATION_EXCEEDS_PARENT", Object: &audit.Object{Type: "grant", ID: parent.String()},
 		Details: map[string]string{
 			"agent": child.String(), "parent": parent.String(), "attempted": "grant.delegate", "run": run.String(),

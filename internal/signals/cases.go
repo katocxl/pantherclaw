@@ -5,10 +5,13 @@ package signals
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strconv"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/jackc/pgx/v5"
 
@@ -205,7 +208,7 @@ func (s *Service) playbookActs(ctx context.Context, tx db.TenantTx, r Received, 
 		return err
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "signals.playbook_acted", Actor: evdomain.Actor{Type: "system", ID: PlaybookActor.ID}, Outcome: audit.Success,
+		Name: auditkind.SignalsPlaybookActed, Actor: evdomain.Actor{Type: "system", ID: PlaybookActor.ID}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "ssf_event", ID: r.Event.String()},
 		Details: map[string]string{
 			"user": r.User.String(), "event_type": ShortName(r.EventType), "principal_contained": strconv.FormatBool(res.principal),
@@ -331,10 +334,20 @@ func (s *Service) attempt(ctx context.Context, tx db.TenantTx, r Received, f fun
 	return sp.Commit(ctx) == nil
 }
 
+// playbookNoteKinds are the audit kinds of the playbook's notes (HR-664).
+var playbookNoteKinds = map[string]string{
+	"skipped": auditkind.SignalsPlaybookSkipped,
+	"failed":  auditkind.SignalsPlaybookFailed,
+}
+
 // playbookNote records what the playbook did (or why it did not act).
 func (s *Service) playbookNote(ctx context.Context, tx db.TenantTx, r Received, what, reason string) error {
+	name, ok := playbookNoteKinds[what]
+	if !ok {
+		return fmt.Errorf("signals: no audit kind for playbook note %q", what)
+	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "signals.playbook_" + what, Actor: evdomain.Actor{Type: "system", ID: PlaybookActor.ID}, Outcome: audit.Success,
+		Name: name, Actor: evdomain.Actor{Type: "system", ID: PlaybookActor.ID}, Outcome: audit.Success,
 		ReasonCode: reason, Object: &audit.Object{Type: "ssf_event", ID: r.Event.String()},
 		Details: map[string]string{"user": r.User.String(), "event_type": ShortName(r.EventType)},
 	})

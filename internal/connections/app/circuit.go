@@ -7,6 +7,8 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -59,7 +61,7 @@ func (s *Service) OpenCircuit(ctx context.Context, org ids.OrgID, gateway, id id
 		p := params(c, conn)
 		reason := QuarantineCircuitOpen
 		p.State, p.QuarantineReason = StateQuarantined, &reason
-		after, err := s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateQuarantined}}, "connection.quarantined",
+		after, err := s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateQuarantined}}, auditkind.ConnectionQuarantined,
 			map[string]string{"reason_code": reason, "unknown_outcomes": strconv.Itoa(int(unknown)), "outcomes": strconv.Itoa(int(total))})
 		if err != nil {
 			return err

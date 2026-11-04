@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -287,9 +289,9 @@ func (a *Access) SetUserState(ctx context.Context, id td.UserID, state td.Accoun
 			return notFound(err, ErrUserNotFound)
 		}
 		details := map[string]string{}
-		event := "access.user_enabled"
+		event := auditkind.AccessUserEnabled
 		if state == td.Disabled {
-			event = "access.user_disabled"
+			event = auditkind.AccessUserDisabled
 			reason := "USER_DISABLED"
 			n, err := q.RevokeUserSessions(ctx, &reason, c.Org, r.ID)
 			if err != nil {
@@ -402,7 +404,7 @@ func (a *Access) CreateInvitation(ctx context.Context, email string, roles []td.
 		if err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "access.invitation_created", "invitation", out.ID.UUID(),
+		return record(ctx, tx, c, auditkind.AccessInvitationCreated, "invitation", out.ID.UUID(),
 			map[string]string{"roles": joinRoles(roles)})
 	})
 	return out, tok, err
@@ -474,7 +476,7 @@ func (a *Access) RevokeInvitation(ctx context.Context, id td.InvitationID) (Invi
 			return err
 		}
 		out = invitationView(dbq.ListInvitationsRow(r))
-		return record(ctx, tx, c, "access.invitation_revoked", "invitation", r.ID, nil)
+		return record(ctx, tx, c, auditkind.AccessInvitationRevoked, "invitation", r.ID, nil)
 	})
 	return out, err
 }

@@ -21,6 +21,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -264,7 +266,7 @@ func (s *Service) Engage(ctx context.Context, su StepUp, reason string) (State, 
 			}
 			paused = itoa(int64(len(pausedIDs)))
 		}
-		if err := record(ctx, tx, c, "security.kill_switch_engaged", withReason(map[string]string{
+		if err := record(ctx, tx, c, auditkind.SecurityKillSwitchEngaged, withReason(map[string]string{
 			"epoch": itoa(r.Epoch), "key_id": su.Credential.String(), "connections": itoa(conns),
 			"provider_revocation": "not_supported", "automations_paused": paused,
 		}, reason)); err != nil {

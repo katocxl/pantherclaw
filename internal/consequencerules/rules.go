@@ -18,6 +18,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -277,7 +279,7 @@ func (s *Service) Propose(ctx context.Context, r defs.ConsequenceRule) (Version,
 			return err
 		}
 		out = Version{PcCustomerConsequenceRule: row, Rule: r}
-		if err := record(ctx, tx, c, "consequence_rule.proposed", row); err != nil {
+		if err := record(ctx, tx, c, auditkind.ConsequenceRuleProposed, row); err != nil {
 			return err
 		}
 		held, err = s.hold(ctx, tx, c, change{Action: actionActivate, ID: row.ID, RuleID: r.ID}, map[string]string{
@@ -391,7 +393,7 @@ func (s *Service) ApplyProtected(ctx context.Context, tx db.TenantTx, author ten
 			return ErrState
 		}
 		row.State, row.ApprovedBy = StateActive, &p
-		return record(ctx, tx, author, "consequence_rule.activated", row)
+		return record(ctx, tx, author, auditkind.ConsequenceRuleActivated, row)
 	case actionRetire:
 		rows, err := q.RetireActiveCustomerConsequenceRule(ctx, org, ch.RuleID)
 		if err != nil {
@@ -404,7 +406,7 @@ func (s *Service) ApplyProtected(ctx context.Context, tx db.TenantTx, author ten
 		if err != nil {
 			return err
 		}
-		return record(ctx, tx, author, "consequence_rule.retired", row)
+		return record(ctx, tx, author, auditkind.ConsequenceRuleRetired, row)
 	}
 	return ErrInvalid
 }

@@ -7,6 +7,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/agents/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -110,7 +112,7 @@ func (inv *Inventory) refuseDeviceScope(ctx context.Context, mode ScanMode, org,
 	}
 	err = inOrg(ctx, inv.pool, func(ctx context.Context, c tenancy.Caller, _ *dbq.Queries, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: "agents.scan_device_limit", Actor: c.Actor(), Outcome: audit.Denied,
+			Name: auditkind.AgentsScanDeviceLimit, Actor: c.Actor(), Outcome: audit.Denied,
 			Object: &audit.Object{Type: "scan_scope", ID: mode.Scope}, Details: map[string]string{"limit": limit},
 		})
 		return err

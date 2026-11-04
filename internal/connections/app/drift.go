@@ -6,6 +6,8 @@ package app
 import (
 	"context"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
@@ -131,7 +133,7 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 				details["run"] = run.String()
 			}
 			_, err := audit.Record(ctx, tx, audit.Event{
-				Name: "connection.drift_reported", Actor: c.Audit, Outcome: audit.Success,
+				Name: auditkind.ConnectionDriftReported, Actor: c.Audit, Outcome: audit.Success,
 				Object: &audit.Object{Type: "connection", ID: conn.ID.String()}, Details: details,
 			})
 			return err
@@ -210,7 +212,7 @@ func DriftQuarantinedEvent(actor evdomain.Actor, connection ids.UUID, pkg, versi
 		details["run"] = run.String()
 	}
 	return audit.Event{
-		Name: "package.transitioned", Actor: actor, Outcome: audit.Success,
+		Name: auditkind.PackageTransitioned, Actor: actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "package_version", ID: trust.Key(pkg, version)}, Details: details,
 	}
 }

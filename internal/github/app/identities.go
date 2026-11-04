@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
@@ -151,7 +153,7 @@ func (s *Service) Prove(ctx context.Context, token string, unlink bool) (Identit
 			}
 			if unlink {
 				out = existing
-				return s.changed(ctx, tx, c, "github.identity_unlinked", existing)
+				return s.changed(ctx, tx, c, auditkind.GithubIdentityUnlinked, existing)
 			}
 		}
 		out, err = q.InsertGitHubIdentity(ctx, dbq.InsertGitHubIdentityParams{
@@ -163,7 +165,7 @@ func (s *Service) Prove(ctx context.Context, token string, unlink bool) (Identit
 		if err := q.InsertGitHubIdentityHistory(ctx, c.Org, u.ID, c.Principal.ID); err != nil {
 			return err
 		}
-		return s.changed(ctx, tx, c, "github.identity_linked", out)
+		return s.changed(ctx, tx, c, auditkind.GithubIdentityLinked, out)
 	})
 	if db.IsUniqueViolation(err) {
 		err = ErrLinked
@@ -181,7 +183,7 @@ func (s *Service) Prove(ctx context.Context, token string, unlink bool) (Identit
 func (s *Service) refused(ctx context.Context, c tenancy.Caller, u GitHubUser, unlink bool, why error) error {
 	err := s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: "github.identity_link_refused", Actor: c.Actor(), Outcome: audit.Denied,
+			Name: auditkind.GithubIdentityLinkRefused, Actor: c.Actor(), Outcome: audit.Denied,
 			Object: &audit.Object{Type: "user", ID: c.Principal.ID.String()},
 			Details: map[string]string{
 				"github_login": u.Login, "github_user_id": strconv.FormatInt(u.ID, 10), "unlink": strconv.FormatBool(unlink),
@@ -217,7 +219,7 @@ func (s *Service) Unlink(ctx context.Context, id ids.UUID) error {
 		if _, err := q.DeleteGitHubIdentity(ctx, c.Org, id); err != nil {
 			return err
 		}
-		return s.changed(ctx, tx, c, "github.identity_unlinked", link)
+		return s.changed(ctx, tx, c, auditkind.GithubIdentityUnlinked, link)
 	})
 }
 

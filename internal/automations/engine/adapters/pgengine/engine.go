@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/katocxl/pantherclaw/internal/automations/automationctx"
@@ -199,7 +201,7 @@ func (e *Engine) Start(ctx context.Context, tx pgx.Tx, t autodomain.TriggerRef) 
 	}
 	actx := automationctx.With(ctx, automationctx.Ref{Automation: t.Automation, Version: t.Version, Execution: id, Trigger: t.ID})
 	if _, err := audit.Record(actx, ttx, audit.Event{
-		Name: "automation.execution_started", Actor: evdomain.Actor{Type: "service_account", ID: a.ServiceAccountID.String()},
+		Name: auditkind.AutomationExecutionStarted, Actor: evdomain.Actor{Type: "service_account", ID: a.ServiceAccountID.String()},
 		Outcome: audit.Success, Object: &audit.Object{Type: "automation_execution", ID: id.String()},
 		Details: automationctx.Annotate(actx, map[string]string{"mode": string(mode), "trigger_kind": string(t.Kind)}),
 	}); err != nil {
@@ -306,7 +308,7 @@ func (e *Engine) audit(ctx context.Context, tx db.TenantTx, x *engine.Exec, befo
 			outcome = audit.Failure
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "automation.step_finished", Actor: actor, Outcome: outcome, ReasonCode: a.Reason, Object: obj,
+			Name: auditkind.AutomationStepFinished, Actor: actor, Outcome: outcome, ReasonCode: a.Reason, Object: obj,
 			Details: automationctx.Annotate(ctx, map[string]string{
 				"step": a.StepID, "kind": a.Kind, "attempt": strconv.Itoa(a.Number), "state": string(a.State),
 				"effect": string(effectOr(a.Effect)), "compensation": strconv.FormatBool(a.Compensation),
@@ -321,7 +323,7 @@ func (e *Engine) audit(ctx context.Context, tx db.TenantTx, x *engine.Exec, befo
 			outcome = audit.Failure
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "automation.execution_finished", Actor: actor, Outcome: outcome, ReasonCode: x.Reason, Object: obj,
+			Name: auditkind.AutomationExecutionFinished, Actor: actor, Outcome: outcome, ReasonCode: x.Reason, Object: obj,
 			Details: automationctx.Annotate(ctx, map[string]string{"state": string(x.State), "mode": string(x.Mode)}),
 		}); err != nil {
 			return err
@@ -402,7 +404,7 @@ func (e *Engine) countError(ctx context.Context, org ids.OrgID, id ids.UUID, cau
 			Trigger: r.TriggerID,
 		})
 		if _, err := audit.Record(actx, tx, audit.Event{
-			Name: "automation.execution_finished", Actor: evdomain.Actor{Type: "service_account", ID: r.ServiceAccountID.String()},
+			Name: auditkind.AutomationExecutionFinished, Actor: evdomain.Actor{Type: "service_account", ID: r.ServiceAccountID.String()},
 			Outcome: audit.Failure, ReasonCode: ReasonEngineError, Object: &audit.Object{Type: "automation_execution", ID: id.String()},
 			Details: automationctx.Annotate(actx, map[string]string{"state": string(autodomain.ExecFailed), "mode": r.Mode}),
 		}); err != nil {

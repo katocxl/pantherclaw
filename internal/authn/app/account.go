@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -178,7 +180,7 @@ func (a *Account) RevokeMySession(ctx context.Context, id ids.UUID) error {
 			return nil // already ended
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.session_ended", Actor: c.Actor(), Outcome: audit.Success, ReasonCode: reason,
+			Name: auditkind.AuthnSessionEnded, Actor: c.Actor(), Outcome: audit.Success, ReasonCode: reason,
 			Object: &audit.Object{Type: kind, ID: id.String()},
 		})
 		return err
@@ -206,7 +208,7 @@ func (a *Account) RevokeUserSessions(ctx context.Context, user ids.UUID) (int, e
 		}
 		total = b + l
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "authn.sessions_revoked", Actor: c.Actor(), Outcome: audit.Success, ReasonCode: reason,
+			Name: auditkind.AuthnSessionsRevoked, Actor: c.Actor(), Outcome: audit.Success, ReasonCode: reason,
 			Object:  &audit.Object{Type: "user", ID: user.String()},
 			Details: map[string]string{"browser": strconv.FormatInt(b, 10), "cli": strconv.FormatInt(l, 10)},
 		}); err != nil {

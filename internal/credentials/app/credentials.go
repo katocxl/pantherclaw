@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -350,7 +352,7 @@ func (s *Service) put(ctx context.Context, tx db.TenantTx, c tenancy.Caller, in 
 			if replaced > 0 {
 				details["weakening"] = "sealed_replaced"
 			}
-			if err := record(ctx, tx, c, "connection.sealed_stored", conn.ID, details); err != nil {
+			if err := record(ctx, tx, c, auditkind.ConnectionSealedStored, conn.ID, details); err != nil {
 				return err
 			}
 			if replaced > 0 && s.notify != nil {
@@ -425,7 +427,7 @@ func (s *Service) RevokeCredential(ctx context.Context, connection ids.UUID, ver
 		if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "connection.sealed_revoked", conn.ID, map[string]string{"version": strconv.Itoa(int(version))})
+		return record(ctx, tx, c, auditkind.ConnectionSealedRevoked, conn.ID, map[string]string{"version": strconv.Itoa(int(version))})
 	})
 }
 

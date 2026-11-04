@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
@@ -196,7 +198,7 @@ func (s *Service) ReportInventory(ctx context.Context, org ids.OrgID, gateway id
 			if err := pgflags.ClearItem(ctx, tx, org, g.ID); err != nil {
 				return err
 			}
-			if err := record(ctx, tx, c, "connection.inventory_vanished", conn.ID, map[string]string{
+			if err := record(ctx, tx, c, auditkind.ConnectionInventoryVanished, conn.ID, map[string]string{
 				"item_id": g.ID.String(), "kind": g.Kind, "name": g.Name,
 			}); err != nil {
 				return err
@@ -245,7 +247,7 @@ func (s *Service) see(ctx context.Context, tx db.TenantTx, c actor, conn dbq.PcC
 				return ids.UUID{}, false, err
 			}
 		}
-		return row.ID, to == InventoryNew, record(ctx, tx, c, "connection.inventory_listed_again", conn.ID, map[string]string{
+		return row.ID, to == InventoryNew, record(ctx, tx, c, auditkind.ConnectionInventoryListedAgain, conn.ID, map[string]string{
 			"item_id": row.ID.String(), "kind": e.Kind, "name": e.Name, "digest": e.Digest, "state": to,
 		})
 	case row.State == InventoryNew && fills(row, e):
@@ -302,7 +304,7 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 			return ids.UUID{}, false, err
 		}
 	}
-	return id, state == InventoryNew, record(ctx, tx, c, "connection.inventory_discovered", conn.ID, details)
+	return id, state == InventoryNew, record(ctx, tx, c, auditkind.ConnectionInventoryDiscovered, conn.ID, details)
 }
 
 // openReview opens a NEW item's TOOL_REVIEW entry, with the checks' flags in
@@ -330,7 +332,7 @@ func cover(ctx context.Context, tx db.TenantTx, c actor, conn ids.UUID, row dbq.
 	if err := pgflags.ClearItem(ctx, tx, c.Org, row.ID); err != nil {
 		return err
 	}
-	return record(ctx, tx, c, "connection.inventory_covered", conn, map[string]string{
+	return record(ctx, tx, c, auditkind.ConnectionInventoryCovered, conn, map[string]string{
 		"item_id": row.ID.String(), "kind": row.Kind, "name": row.Name, "digest": row.Digest,
 	})
 }
@@ -495,7 +497,7 @@ func (s *Service) DismissInventory(ctx context.Context, id ids.UUID, reason stri
 		if err := pgflags.ClearItem(ctx, tx, c.Org, id); err != nil {
 			return err
 		}
-		if err := record(ctx, tx, c, "connection.inventory_dismissed", row.ConnectionID, map[string]string{
+		if err := record(ctx, tx, c, auditkind.ConnectionInventoryDismissed, row.ConnectionID, map[string]string{
 			"item_id": id.String(), "kind": row.Kind, "name": row.Name, "digest": row.Digest, "reason": reason,
 		}); err != nil {
 			return err
@@ -561,7 +563,7 @@ func (s *Service) DraftPackage(ctx context.Context, connection ids.UUID, items [
 			}
 		}
 		out = draft(conn, rows)
-		return record(ctx, tx, c, "connection.inventory_drafted", conn.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.ConnectionInventoryDrafted, conn.ID, map[string]string{
 			"items": strconv.Itoa(len(rows)), "package": draftName(conn.Name),
 		})
 	})

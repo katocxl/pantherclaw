@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -292,16 +294,16 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 	}
 	details["action"], details["epoch"], details["sharing_agents"] = a.ID.String(), strconv.FormatInt(epoch, 10), strconv.Itoa(len(p.Agents))
 	details["shared_connections"] = strconv.Itoa(len(p.Shared))
-	name := "response.credential_revoked"
+	name := auditkind.ResponseCredentialRevoked
 	if kind == rdomain.KindRotate {
-		name = "response.credential_rotated"
+		name = auditkind.ResponseCredentialRotated
 	}
 	if err := recordAction(ctx, tx, evActor, name, a.ID, details, r.Reason); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
 	if kind == rdomain.KindRevoke && p.Kind != credentialAgentHeld {
 		// The existing revoke path's own record.
-		if err := auditAs(ctx, tx, evActor, "connection.sealed_revoked", "connection", r.Connection.String(),
+		if err := auditAs(ctx, tx, evActor, auditkind.ConnectionSealedRevoked, "connection", r.Connection.String(),
 			map[string]string{"version": strconv.Itoa(int(r.Version))}); err != nil {
 			return reflexdomain.ContainResult{}, err
 		}

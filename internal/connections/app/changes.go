@@ -12,6 +12,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -96,7 +98,7 @@ func disableMovedProviders(ctx context.Context, tx db.TenantTx, q *dbq.Queries, 
 			details["gateway"] = p.GatewayID.String()
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "facts.provider_disabled", Actor: c.Audit, Outcome: audit.Success,
+			Name: auditkind.FactsProviderDisabled, Actor: c.Audit, Outcome: audit.Success,
 			Object: &audit.Object{Type: "fact_provider", ID: p.ID.String()}, Details: details,
 		}); err != nil {
 			return err
@@ -425,7 +427,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 					changes = append(changes, change{field: "base_url", from: deref(conn.BaseUrl), to: norm, weakens: true})
 				}
 			}
-			after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
+			after, err := s.apply(ctx, tx, c, conn, p, changes, auditkind.ConnectionUpdated, limits)
 			if err != nil {
 				return err
 			}
@@ -592,7 +594,7 @@ func (s *Service) writeRouteMode(ctx context.Context, tx db.TenantTx, c actor, c
 			return err
 		}
 		if err := s.after(ctx, tx, c, conn, after, []change{{field: "route_mode", from: from, to: mode, weakens: mode == ModeMonitor}},
-			"connection.route_mode_changed", map[string]string{"route": route}); err != nil {
+			auditkind.ConnectionRouteModeChanged, map[string]string{"route": route}); err != nil {
 			return err
 		}
 		conn = after
@@ -609,18 +611,18 @@ func (s *Service) Quarantine(ctx context.Context, id ids.UUID, reason string) (C
 	if n := utf8.RuneCountInString(reason); n < 1 || n > maxReason || !utf8.ValidString(reason) {
 		return Connection{}, ErrReason
 	}
-	return s.transition(ctx, id, []string{StateActive}, StateQuarantined, ptr("manual"), false, "connection.quarantined",
+	return s.transition(ctx, id, []string{StateActive}, StateQuarantined, ptr("manual"), false, auditkind.ConnectionQuarantined,
 		map[string]string{"reason": reason})
 }
 
 // Restore lifts a quarantine (weakens).
 func (s *Service) Restore(ctx context.Context, id ids.UUID) (Connection, error) {
-	return s.transition(ctx, id, []string{StateQuarantined}, StateActive, nil, true, "connection.restored", nil)
+	return s.transition(ctx, id, []string{StateQuarantined}, StateActive, nil, true, auditkind.ConnectionRestored, nil)
 }
 
 // Retire ends a connection and revokes its credentials (strengthens).
 func (s *Service) Retire(ctx context.Context, id ids.UUID) error {
-	_, err := s.transition(ctx, id, []string{StateActive, StateQuarantined}, StateRetired, nil, false, "connection.retired", nil)
+	_, err := s.transition(ctx, id, []string{StateActive, StateQuarantined}, StateRetired, nil, false, auditkind.ConnectionRetired, nil)
 	return err
 }
 

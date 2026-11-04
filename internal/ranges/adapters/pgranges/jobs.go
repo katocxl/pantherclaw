@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -51,7 +53,7 @@ func (a Abandoner) AbandonStale(ctx context.Context, org ids.OrgID) (int, error)
 				return err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "redteam.range_abandoned", Actor: sweeper, Outcome: audit.Success,
+				Name: auditkind.RedteamRangeAbandoned, Actor: sweeper, Outcome: audit.Success,
 				Object: &audit.Object{Type: "redteam_range", ID: r.ID.String()}, Details: map[string]string{"agent_id": r.RangeAgentID.String()},
 			}); err != nil {
 				return err

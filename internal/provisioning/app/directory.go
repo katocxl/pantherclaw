@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -138,7 +140,7 @@ func (s *Service) dropped(ctx context.Context, tx db.TenantTx, t token, objType 
 	if len(parts) == 0 {
 		return nil
 	}
-	return s.record(ctx, tx, t, "scim.parts_dropped", objType, obj, map[string]string{
+	return s.record(ctx, tx, t, auditkind.ScimPartsDropped, objType, obj, map[string]string{
 		"parts": strings.Join(parts, ","), "reason": "EDITION_REQUIRED",
 	})
 }
@@ -422,7 +424,7 @@ func (s *Service) CreateUser(ctx context.Context, pt ports.Token, in ports.UserI
 		}); err != nil {
 			return err
 		}
-		if err := s.record(ctx, tx, t, "scim.user_created", "user", id, map[string]string{"active": strconv.FormatBool(active)}); err != nil {
+		if err := s.record(ctx, tx, t, auditkind.ScimUserCreated, "user", id, map[string]string{"active": strconv.FormatBool(active)}); err != nil {
 			return err
 		}
 		r, err := q.LockDirectoryUser(ctx, t.org, t.Issuer, id)
@@ -533,7 +535,7 @@ func (s *Service) ChangeUser(ctx context.Context, pt ports.Token, id string, c p
 		}); err != nil {
 			return err
 		}
-		if err := s.record(ctx, tx, t, "scim.user_changed", "user", r.ID, details); err != nil {
+		if err := s.record(ctx, tx, t, auditkind.ScimUserChanged, "user", r.ID, details); err != nil {
 			return err
 		}
 		r, err = q.LockDirectoryUser(ctx, t.org, t.Issuer, r.ID)
@@ -572,7 +574,7 @@ func (s *Service) removeOnly(ctx context.Context, tx db.TenantTx, q *dbq.Queries
 		}); err != nil {
 			return err
 		}
-		if err := s.record(ctx, tx, t, "scim.user_changed", "user", r.ID, map[string]string{"active": "false"}); err != nil {
+		if err := s.record(ctx, tx, t, auditkind.ScimUserChanged, "user", r.ID, map[string]string{"active": "false"}); err != nil {
 			return err
 		}
 	}
@@ -620,7 +622,7 @@ func (s *Service) DeleteUser(ctx context.Context, pt ports.Token, id string) err
 		}); err != nil {
 			return err
 		}
-		return s.record(ctx, tx, t, "scim.user_deleted", "user", r.ID, map[string]string{"groups_left": strconv.Itoa(len(groups))})
+		return s.record(ctx, tx, t, auditkind.ScimUserDeleted, "user", r.ID, map[string]string{"groups_left": strconv.Itoa(len(groups))})
 	})
 	return s.refused(ctx, pt, err)
 }
@@ -667,7 +669,7 @@ func (s *Service) deprovision(ctx context.Context, tx db.TenantTx, q *dbq.Querie
 	if err != nil {
 		return err
 	}
-	return s.record(ctx, tx, t, "scim.user_deprovisioned", "user", user, map[string]string{
+	return s.record(ctx, tx, t, auditkind.ScimUserDeprovisioned, "user", user, map[string]string{
 		"cli_sessions_revoked": strconv.FormatInt(cli, 10), "browser_sessions_ended": strconv.FormatInt(browser, 10),
 		"api_keys_left_active": strconv.FormatInt(keys, 10),
 	})
@@ -709,7 +711,7 @@ func (s *Service) refused(ctx context.Context, pt ports.Token, err error) error 
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "scim.user_deprovision_refused", Actor: t.actor(), Outcome: audit.Denied, ReasonCode: "LAST_ORG_ADMIN",
+			Name: auditkind.ScimUserDeprovisionRefused, Actor: t.actor(), Outcome: audit.Denied, ReasonCode: "LAST_ORG_ADMIN",
 			Object: &audit.Object{Type: "scim_token", ID: t.id.String()}, Details: map[string]string{"issuer": trimDetail(t.Issuer)},
 		})
 		return err

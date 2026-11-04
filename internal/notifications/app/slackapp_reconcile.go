@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -209,7 +211,7 @@ func (s *Service) recheckSlackChannel(ctx context.Context, org ids.OrgID, c dbq.
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "notification.slack_channel_shared", Actor: evdomain.Actor{Type: "system", ID: "slack-reconciler"},
+			Name: auditkind.NotificationSlackChannelShared, Actor: evdomain.Actor{Type: "system", ID: "slack-reconciler"},
 			Outcome: audit.Success, ReasonCode: "SLACK_CHANNEL_SHARED",
 			Object:  &audit.Object{Type: "notification_channel", ID: c.ChannelRecordID.String()},
 			Details: map[string]string{"slack_channel": c.SlackChannel},
@@ -345,7 +347,7 @@ func (s *Service) slackCloseFailed(ctx context.Context, org ids.OrgID, cardID, c
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "notification.slack_card_orphaned", Actor: evdomain.Actor{Type: "system", ID: "slack-reconciler"},
+			Name: auditkind.NotificationSlackCardOrphaned, Actor: evdomain.Actor{Type: "system", ID: "slack-reconciler"},
 			Outcome: audit.Failure, ReasonCode: "SLACK_CARD_ORPHANED",
 			Object:  &audit.Object{Type: "notification_channel", ID: channel.String()},
 			Details: map[string]string{"card": cardID.String(), "code": out.code},

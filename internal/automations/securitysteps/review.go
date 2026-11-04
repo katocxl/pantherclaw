@@ -16,6 +16,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
@@ -817,7 +819,7 @@ func (p *PolicyStore) CreateDraft(ctx context.Context, tx pgx.Tx, org ids.OrgID,
 		return ids.UUID{}, 0, err
 	}
 	if _, err := audit.Record(ctx, ttx, audit.Event{
-		Name: "policy.version_created", Actor: author, Outcome: audit.Success,
+		Name: auditkind.PolicyVersionCreated, Actor: author, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "policy", ID: b.ID},
 		Details: map[string]string{"version_id": id.String(), "version": strconv.Itoa(int(next)), "state": "DRAFT"},
 	}); err != nil {
@@ -910,7 +912,7 @@ func (s *SimulationStore) Request(ctx context.Context, tx pgx.Tx, in SimulationR
 		return ids.UUID{}, err
 	}
 	if _, err := audit.Record(ctx, ttx, audit.Event{
-		Name: "policy.simulation_requested", Actor: in.Actor, Outcome: audit.Success,
+		Name: auditkind.PolicySimulationRequested, Actor: in.Actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "policy_simulation", ID: id.String()},
 		Details: map[string]string{
 			"version_id": in.Version.String(), "days": strconv.Itoa(in.Days),

@@ -10,6 +10,8 @@ import (
 	"encoding/json/v2"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -342,7 +344,7 @@ func write(ctx context.Context, tx db.TenantTx, c tenancy.Caller, from, to domai
 		return row, err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "mcp.catalog.mode_changed", Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "mcp_catalog", ID: tx.OrgID().String()},
+		Name: auditkind.McpCatalogModeChanged, Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "mcp_catalog", ID: tx.OrgID().String()},
 		Details: map[string]string{"mode_old": string(from), "mode_new": string(to), "reason": reason},
 	})
 	return row, err

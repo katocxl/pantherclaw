@@ -13,6 +13,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	"github.com/katocxl/pantherclaw/internal/a2a/a2astore"
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
@@ -96,7 +98,7 @@ func seedA2A(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID, gat
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "connection.a2a_pin_confirmed", Actor: devSeedActor, Outcome: audit.Success,
+			Name: auditkind.ConnectionA2aPinConfirmed, Actor: devSeedActor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "connection", ID: c.ID.String()}, Details: map[string]string{"pin_id": p.ID.String(), "card_digest": p.Digest()},
 		})
 		return err
@@ -165,7 +167,7 @@ func seedPeerAgent(ctx context.Context, tx db.TenantTx, org ids.OrgID, w devWork
 	kf.Identifier = pap.Instance{Org: org, Agent: a.ID, Instance: in.ID}.String()
 	kf.Server = server
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "dev.workload_seeded", Actor: devSeedActor, Outcome: audit.Success,
+		Name: auditkind.DevWorkloadSeeded, Actor: devSeedActor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "instance", ID: in.ID.String()}, Details: map[string]string{"agent_id": a.ID.String(), "role": "a2a peer"},
 	})
 	return devWorkload{Agent: a.ID, Instance: in.ID, Env: w.Env, Owner: w.Owner}, kf, err

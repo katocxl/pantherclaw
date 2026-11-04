@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"errors"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -21,13 +23,13 @@ import (
 
 // RegisterRestore installs only the reviewed scoped deletion handlers.
 func (s *Service) RegisterRestore(r *restore.Registry) error {
-	if err := r.RegisterScoped("org.deleted", s.reapplyOrg); err != nil {
+	if err := r.RegisterScoped(auditkind.OrgDeleted, s.reapplyOrg); err != nil {
 		return err
 	}
-	if err := r.RegisterScoped("org.deletion_started", s.reapplyOrg); err != nil {
+	if err := r.RegisterScoped(auditkind.OrgDeletionStarted, s.reapplyOrg); err != nil {
 		return err
 	}
-	for _, kind := range []string{"account.deleted", "account.deletion_started"} {
+	for _, kind := range []string{auditkind.AccountDeleted, auditkind.AccountDeletionStarted} {
 		if err := r.RegisterScoped(kind, func(ctx context.Context, _ *db.Pool, e restore.Event, actor evdomain.Actor) error {
 			if s.ReapplyAccount == nil {
 				return errors.New("datarequests: account replay unavailable")
@@ -37,7 +39,7 @@ func (s *Service) RegisterRestore(r *restore.Registry) error {
 				return err
 			}
 			digest := e.RecordDigest
-			if e.Kind == "account.deletion_started" {
+			if e.Kind == auditkind.AccountDeletionStarted {
 				digest = e.JournalDigest
 			}
 			return s.ReapplyAccount(ctx, id, digest, actor)
@@ -68,7 +70,7 @@ func (s *Service) reapplyOrg(ctx context.Context, _ *db.Pool, e restore.Event, a
 			return err
 		}
 		source := e.RecordDigest
-		if e.Kind == "org.deletion_started" {
+		if e.Kind == auditkind.OrgDeletionStarted {
 			source = e.JournalDigest
 		}
 		if len(source) != 64 {
@@ -141,17 +143,17 @@ func (s *Service) reapplyOrg(ctx context.Context, _ *db.Pool, e restore.Event, a
 // commit. The account owner must call it again when resuming a completed
 // journal so a crash between that commit and this ledger append is closed.
 func (s *Service) RecordDeletedAccount(ctx context.Context, account ids.UUID, recordDigest string, actor evdomain.Actor) error {
-	return s.recordAccountEvent(ctx, account, recordDigest, "account.deleted", "record_digest", actor)
+	return s.recordAccountEvent(ctx, account, recordDigest, auditkind.AccountDeleted, "record_digest", actor)
 }
 
 // RecordAccountDeletionIntent must complete before the account journal
 // enters irreversible erasure. Its dedupe row and audit event commit
 // together in the platform tenant, never in a caller's account transaction.
 func (s *Service) RecordAccountDeletionIntent(ctx context.Context, account ids.UUID, journalDigest string, actor evdomain.Actor) error {
-	if err := s.recordAccountEvent(ctx, account, journalDigest, "account.deletion_started", "journal_digest", actor); err != nil {
+	if err := s.recordAccountEvent(ctx, account, journalDigest, auditkind.AccountDeletionStarted, "journal_digest", actor); err != nil {
 		return err
 	}
-	acked, err := securityevent.IntentAcknowledged(ctx, s.Pool, "account.deletion_started", account, journalDigest)
+	acked, err := securityevent.IntentAcknowledged(ctx, s.Pool, auditkind.AccountDeletionStarted, account, journalDigest)
 	if err != nil {
 		return err
 	}

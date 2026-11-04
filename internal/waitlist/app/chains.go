@@ -8,6 +8,8 @@ import (
 	"encoding/json/v2"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -108,7 +110,7 @@ func (w *Writer) SetEscalationChain(ctx context.Context, team *ids.UUID, steps [
 			object = &audit.Object{Type: "team", ID: team.String()}
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "waitlist.escalation_chain_set", Actor: c.Actor(), Outcome: audit.Success, Object: object, Details: details,
+			Name: auditkind.WaitlistEscalationChainSet, Actor: c.Actor(), Outcome: audit.Success, Object: object, Details: details,
 		}); err != nil {
 			return err
 		}

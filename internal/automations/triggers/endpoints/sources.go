@@ -12,6 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/inbound"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
@@ -131,7 +133,7 @@ func (s *Service) CreateEventSource(ctx context.Context, in NewSource) (CreatedS
 		} else if err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "automation.event_source_created", "automation_event_source", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.AutomationEventSourceCreated, "automation_event_source", id, map[string]string{
 			"name": in.Name, "types": strings.Join(in.Types, ","), "rate_per_minute": fmt.Sprint(in.RatePerMinute),
 		}); err != nil {
 			return err
@@ -183,7 +185,7 @@ func (s *Service) ActivateEventSource(ctx context.Context, id ids.UUID, su *step
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "automation.event_source_activated", "automation_event_source", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.AutomationEventSourceActivated, "automation_event_source", id, map[string]string{
 			"name": src.Name, "security_key": su.Credential.String(),
 		}); err != nil {
 			return err
@@ -241,7 +243,7 @@ func (s *Service) RotateEventSourceSecret(ctx context.Context, id ids.UUID, su *
 		if n == 0 {
 			return ErrRotating
 		}
-		return s.audit(ctx, tx, c, "automation.event_source_secret_rotated", "automation_event_source", id,
+		return s.audit(ctx, tx, c, auditkind.AutomationEventSourceSecretRotated, "automation_event_source", id,
 			map[string]string{"security_key": su.Credential.String()})
 	})
 	if err != nil {
@@ -271,7 +273,7 @@ func (s *Service) DisableEventSource(ctx context.Context, id ids.UUID) (Source, 
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "automation.event_source_disabled", "automation_event_source", id,
+		if err := s.audit(ctx, tx, c, auditkind.AutomationEventSourceDisabled, "automation_event_source", id,
 			map[string]string{"from": src.State}); err != nil {
 			return err
 		}

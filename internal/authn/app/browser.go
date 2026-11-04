@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/accounts"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -435,7 +437,7 @@ func (b *Browser) openSession(ctx context.Context, org ids.OrgID, claims IDClaim
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.login", Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
+			Name: auditkind.AuthnLogin, Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "browser_session", ID: out.Session.String()},
 			Details: map[string]string{"method": "browser", "provider": providerName, "recent": boolString(recent)},
 		})
@@ -536,7 +538,7 @@ func (b *Browser) authenticate(ctx context.Context, cookie string, rotate bool) 
 			}
 			if reason == "REUSE" {
 				if _, err := audit.Record(ctx, tx, audit.Event{
-					Name: "authn.session_reuse", Actor: evdomain.Actor{Type: "system", ID: "session-reuse-detector"},
+					Name: auditkind.AuthnSessionReuse, Actor: evdomain.Actor{Type: "system", ID: "session-reuse-detector"},
 					Outcome: audit.Success, ReasonCode: reason, Object: &audit.Object{Type: "browser_session", ID: s.ID.String()},
 					Details: map[string]string{"user": s.UserID.String()},
 				}); err != nil {
@@ -707,7 +709,7 @@ func (b *Browser) end(ctx context.Context, s BrowserSession, id ids.UUID, reason
 			return nil // already ended
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.session_ended", Actor: s.Actor(), Outcome: audit.Success, ReasonCode: reason,
+			Name: auditkind.AuthnSessionEnded, Actor: s.Actor(), Outcome: audit.Success, ReasonCode: reason,
 			Object: &audit.Object{Type: "browser_session", ID: id.String()},
 		})
 		return err

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/app"
@@ -220,7 +222,7 @@ func (s *Service) EndSession(ctx context.Context, id ids.UUID) (dbq.PcSandboxSes
 		if out, err = s.end(ctx, q, sess, "ENDED", c.Principal.String(), actor(c)); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "sandbox.session_ended", sess.ID, map[string]string{"agent_id": a.ID.String()})
+		return record(ctx, tx, c, auditkind.SandboxSessionEnded, sess.ID, map[string]string{"agent_id": a.ID.String()})
 	})
 	return out, err
 }

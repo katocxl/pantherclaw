@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -262,7 +264,7 @@ func (r *Remover) batch(ctx context.Context, org ids.OrgID, s step, size int) (i
 			}
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.retention_removed", Actor: Actor, Outcome: audit.Success,
+			Name: auditkind.EvidenceRetentionRemoved, Actor: Actor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "retention_policy", ID: cur.ID.String()},
 			Details: map[string]string{
 				"category": string(s.category), "items": s.items, "count": strconv.Itoa(n),

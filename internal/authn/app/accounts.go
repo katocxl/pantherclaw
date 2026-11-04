@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/accounts"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -340,7 +342,7 @@ func (b *Browser) OpenOrgSession(ctx context.Context, org ids.OrgID, user, accou
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.login", Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
+			Name: auditkind.AuthnLogin, Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "browser_session", ID: out.Session.String()},
 			Details: map[string]string{"method": "browser_account", "provider": providerName, "recent": boolString(recent)},
 		})

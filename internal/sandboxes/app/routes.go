@@ -9,6 +9,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	cdomain "github.com/katocxl/pantherclaw/internal/campaigns/domain"
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -114,7 +116,7 @@ func (s *Service) ReportRoutes(ctx context.Context, session ids.UUID, routes []R
 				}
 			}
 		}
-		return record(ctx, tx, c, "sandbox.routes_reported", sess.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.SandboxRoutesReported, sess.ID, map[string]string{
 			"agent_id": sess.AgentID.String(), "routes": strconv.Itoa(len(routes)), "new_routes": strconv.Itoa(n),
 		})
 	})

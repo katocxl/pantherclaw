@@ -11,6 +11,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/budgets/adapters/pgbudgets"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
@@ -142,7 +144,7 @@ func (s *Store) ResolveOccurred(ctx context.Context, c tenancy.Caller, r app.Res
 		}
 		sum := sha256.Sum256([]byte(basis))
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "transaction.reconciliation_resolved", Actor: actor, Outcome: audit.Success, ReasonCode: "OCCURRED",
+			Name: auditkind.TransactionReconciliationResolved, Actor: actor, Outcome: audit.Success, ReasonCode: "OCCURRED",
 			Object: &audit.Object{Type: "reconciliation", ID: k.ID.String()},
 			Details: map[string]string{
 				"transaction": k.TransactionID.String(), "kind": k.Kind, "basis_sha256": hex.EncodeToString(sum[:]),
@@ -242,7 +244,7 @@ func (s *Store) RequestVerification(ctx context.Context, c tenancy.Caller, txn i
 			}
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "transaction.verification_requested", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.TransactionVerificationRequested, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "transaction", ID: txn.String()},
 			Details: map[string]string{"verification": out.String()},
 		})
@@ -296,7 +298,7 @@ func (s *Store) Link(ctx context.Context, c tenancy.Caller, l app.LinkRequest, s
 			return app.ErrLinkExists
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "transaction.linked", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.TransactionLinked, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "transaction", ID: l.To.String()},
 			Details: map[string]string{"from": l.From.String(), "kind": string(l.Kind)},
 		}); err != nil {

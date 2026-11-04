@@ -20,6 +20,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
@@ -189,7 +191,7 @@ func (s *Service) StartSession(ctx context.Context, in StartInput) (Started, err
 			return err
 		}
 		out = Started{Session: sess, Connections: in.Connections, EnrollmentToken: tok, Nonces: nonces, AgentHosts: hosts}
-		return record(ctx, tx, c, "sandbox.session_started", sess.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.SandboxSessionStarted, sess.ID, map[string]string{
 			"agent_id": a.ID.String(), "config_digest": in.ConfigDigest, "runtime": in.Runtime,
 		})
 	})

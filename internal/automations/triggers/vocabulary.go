@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
@@ -42,18 +44,18 @@ const (
 	VocabActionHeld         = "action.held"
 	VocabActionDenied       = "action.denied"
 	VocabEffectRecorded     = "effect.recorded"
-	VocabRunEnded           = "run.ended"
-	VocabGrantIssued        = "grant.issued"
-	VocabGrantRevoked       = "grant.revoked"
+	VocabRunEnded           = auditkind.RunEnded
+	VocabGrantIssued        = auditkind.GrantIssued
+	VocabGrantRevoked       = auditkind.GrantRevoked
 	VocabCoverageLost       = "coverage.lost"
 	VocabAlertRaised        = "alert.raised"
 	VocabAlertInferred      = "alert.inferred"
 	VocabIncidentOpened     = "incident.opened"
 	VocabCaseClosed         = "case.closed"
-	VocabAgentDiscovered    = "agent.discovered"
-	VocabDiscoveryChanged   = "agent.discovery_changed"
-	VocabDiscoveryVanished  = "agent.discovery_vanished"
-	VocabApprovalExpired    = "approval.expired"
+	VocabAgentDiscovered    = auditkind.AgentDiscovered
+	VocabDiscoveryChanged   = auditkind.AgentDiscoveryChanged
+	VocabDiscoveryVanished  = auditkind.AgentDiscoveryVanished
+	VocabApprovalExpired    = auditkind.ApprovalExpired
 	VocabAutomationFinished = "automation.finished"
 )
 
@@ -106,11 +108,11 @@ func Means(name string, e feed.Event, f Facts) bool {
 	case VocabEffectRecorded:
 		return e.Kind == kindEffect
 	case VocabRunEnded:
-		return e.Kind == "audit.run.ended"
+		return e.Kind == "audit."+auditkind.RunEnded
 	case VocabGrantIssued:
-		return e.Kind == "audit.grant.issued"
+		return e.Kind == "audit."+auditkind.GrantIssued
 	case VocabGrantRevoked:
-		return e.Kind == "audit.grant.revoked"
+		return e.Kind == "audit."+auditkind.GrantRevoked
 	case VocabCoverageLost:
 		if e.Kind == kindCoverageInv {
 			return true
@@ -130,15 +132,15 @@ func Means(name string, e feed.Event, f Facts) bool {
 	case VocabCaseClosed:
 		return e.Kind == kindCase && f.CaseClosed
 	case VocabAgentDiscovered:
-		return e.Kind == "audit.agent.discovered"
+		return e.Kind == "audit."+auditkind.AgentDiscovered
 	case VocabDiscoveryChanged:
-		return e.Kind == "audit.agent.discovery_changed"
+		return e.Kind == "audit."+auditkind.AgentDiscoveryChanged
 	case VocabDiscoveryVanished:
-		return e.Kind == "audit.agent.discovery_vanished"
+		return e.Kind == "audit."+auditkind.AgentDiscoveryVanished
 	case VocabApprovalExpired:
-		return e.Kind == "audit.approval.expired"
+		return e.Kind == "audit."+auditkind.ApprovalExpired
 	case VocabAutomationFinished:
-		return e.Kind == "audit.automation.execution_finished"
+		return e.Kind == "audit."+auditkind.AutomationExecutionFinished
 	}
 	return false
 }

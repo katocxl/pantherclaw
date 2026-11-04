@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -263,7 +265,7 @@ func (s *Service) CreateToken(ctx context.Context, in TokenInput) (Token, string
 			return err
 		}
 		t = tokenView(r)
-		if err := recordBy(ctx, tx, c, "scim.token_created", "scim_token", r.ID, map[string]string{
+		if err := recordBy(ctx, tx, c, auditkind.ScimTokenCreated, "scim_token", r.ID, map[string]string{
 			"name": r.Name, "issuer": trimDetail(r.Issuer), "subject_attribute": r.SubjectAttribute,
 		}); err != nil {
 			return err
@@ -308,7 +310,7 @@ func (s *Service) ApplyTokenActivate(ctx context.Context, tx db.TenantTx, author
 	if n != 1 {
 		return ErrState
 	}
-	if err := recordBy(ctx, tx, author, "scim.token_activated", "scim_token", id, nil); err != nil {
+	if err := recordBy(ctx, tx, author, auditkind.ScimTokenActivated, "scim_token", id, nil); err != nil {
 		return err
 	}
 	return s.applied(ctx, tx, author, ChangeTokenActivate)
@@ -362,7 +364,7 @@ func (s *Service) RevokeToken(ctx context.Context, id ids.UUID) (Token, error) {
 		if n != 1 {
 			return ErrState
 		}
-		if err := recordBy(ctx, tx, c, "scim.token_revoked", "scim_token", id, map[string]string{"previous_state": r.State}); err != nil {
+		if err := recordBy(ctx, tx, c, auditkind.ScimTokenRevoked, "scim_token", id, map[string]string{"previous_state": r.State}); err != nil {
 			return err
 		}
 		r, err = q.LockSCIMToken(ctx, c.Org, id)
@@ -550,7 +552,7 @@ func (s *Service) ApplySAMLPut(ctx context.Context, tx db.TenantTx, author tenan
 	if n != 1 {
 		return ErrState
 	}
-	if err := recordBy(ctx, tx, author, "saml.connection_put", "saml_connection", p.ID, map[string]string{
+	if err := recordBy(ctx, tx, author, auditkind.SamlConnectionPut, "saml_connection", p.ID, map[string]string{
 		"change": p.Change, "name": r.Name, "certificates": certPrints(p.Certificates),
 	}); err != nil {
 		return err
@@ -617,7 +619,7 @@ func (s *Service) ApplySAMLDisable(ctx context.Context, tx db.TenantTx, author t
 	if n != 1 {
 		return ErrState
 	}
-	if err := recordBy(ctx, tx, author, "saml.connection_disabled", "saml_connection", id, nil); err != nil {
+	if err := recordBy(ctx, tx, author, auditkind.SamlConnectionDisabled, "saml_connection", id, nil); err != nil {
 		return err
 	}
 	return s.applied(ctx, tx, author, ChangeSAMLDisable)

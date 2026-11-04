@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -50,7 +52,7 @@ func (s *Service) confirm(ctx context.Context, tx db.TenantTx, actor evdomain.Ac
 		return row, err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "agent.promotion_confirmed", Actor: actor, Outcome: audit.Success,
+		Name: auditkind.AgentPromotionConfirmed, Actor: actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "agent", ID: p.AgentID.String()},
 		Details: map[string]string{
 			"promotion": p.ID.String(), "environment": p.EnvironmentID.String(), "operation": p.Operation,
@@ -68,7 +70,7 @@ func (s *Service) expire(ctx context.Context, tx db.TenantTx, p dbq.PcAgentPromo
 		return err
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "agent.promotion_expired", Actor: system, Outcome: audit.Success,
+		Name: auditkind.AgentPromotionExpired, Actor: system, Outcome: audit.Success,
 		Object: &audit.Object{Type: "agent", ID: p.AgentID.String()},
 		Details: map[string]string{
 			"promotion": p.ID.String(), "environment": p.EnvironmentID.String(), "operation": p.Operation,

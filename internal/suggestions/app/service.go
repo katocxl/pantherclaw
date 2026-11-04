@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
@@ -236,7 +238,7 @@ func (s *Service) Dismiss(ctx context.Context, id ids.UUID, reason string) (dbq.
 			return err
 		}
 		_, err = audit.Record(ctx, x.tx, audit.Event{
-			Name: "suggestion.dismissed", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.SuggestionDismissed, Actor: actor, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "policy_suggestion", ID: id.String()},
 			Details: map[string]string{"finding": r.PostureFindingID.String(), "reason": reason},
 		})
@@ -289,7 +291,7 @@ func (s *Service) Draft(ctx context.Context, id ids.UUID) (dbq.PcPolicySuggestio
 			return err
 		}
 		_, err = audit.Record(ctx, x.tx, audit.Event{
-			Name: "suggestion.drafted", Actor: x.c.Actor(), Outcome: audit.Success,
+			Name: auditkind.SuggestionDrafted, Actor: x.c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "policy_suggestion", ID: id.String()},
 			Details: map[string]string{
 				"finding": r.PostureFindingID.String(), "policy_version_id": v.String(), "state": "DRAFT",

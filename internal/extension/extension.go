@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/provisioning/ports"
 )
@@ -146,17 +148,26 @@ var AuditKindPrefixes = []string{"billing.", "scim.", "saml."}
 
 // CoreAuditKinds are the kinds the core itself writes under those
 // prefixes. No extension may write one, so a ledger entry of such a kind is
-// always the core's (D528).
-var CoreAuditKinds = map[string]bool{
-	"billing.comp_granted": true, "billing.comp_revoked": true, "billing.checkout_recorded": true,
-	"billing.subscription_bound": true, "billing.subscription_duplicate": true, "billing.subscription_ended": true,
-	"billing.plan_event_ignored": true, "billing.plan_applied": true, "billing.lapse_reminder": true,
-	"scim.user_created": true, "scim.user_changed": true, "scim.user_deleted": true, "scim.user_deprovisioned": true,
-	"scim.user_deprovision_refused": true, "scim.parts_dropped": true,
-	"scim.group_created": true, "scim.group_changed": true, "scim.group_deleted": true,
-	"scim.group_role_mapping_added": true, "scim.group_role_mapping_removed": true,
-	"scim.token_created": true, "scim.token_activated": true, "scim.token_revoked": true,
-	"saml.connection_put": true, "saml.connection_disabled": true,
+// always the core's (D528). It is derived from auditkind, so it can't fall
+// behind the core (HR-664).
+var CoreAuditKinds = coreAuditKinds()
+
+// reservedKinds are kinds under AuditKindPrefixes that no extension may
+// write although no core audit entry has them: billing.lapse_reminder is
+// the core's notification template for a lapsing plan.
+var reservedKinds = []string{"billing.lapse_reminder"}
+
+func coreAuditKinds() map[string]bool {
+	out := map[string]bool{}
+	for _, k := range auditkind.All() {
+		if slices.ContainsFunc(AuditKindPrefixes, func(p string) bool { return strings.HasPrefix(k, p) }) {
+			out[k] = true
+		}
+	}
+	for _, k := range reservedKinds {
+		out[k] = true
+	}
+	return out
 }
 
 // ErrAuditKind refuses an audit kind outside the set's own prefixes, or one

@@ -11,6 +11,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -261,7 +263,7 @@ func (s *Service) failTaken(ctx context.Context, h dbq.PcHostedGateway) error {
 		if err != nil || n == 0 {
 			return err
 		}
-		return record(ctx, tx, systemActor, "hosted_gateway.failed", h.ID, map[string]string{"reason": reason})
+		return record(ctx, tx, systemActor, auditkind.HostedGatewayFailed, h.ID, map[string]string{"reason": reason})
 	})
 }
 
@@ -294,7 +296,7 @@ func (s *Service) provision(ctx context.Context, tx db.TenantTx, q *dbq.Queries,
 	} else if n != 1 {
 		return db.ErrLostRace
 	}
-	return record(ctx, tx, systemActor, "hosted_gateway.provisioned", h.ID, map[string]string{
+	return record(ctx, tx, systemActor, auditkind.HostedGatewayProvisioned, h.ID, map[string]string{
 		"gateway_id": g.ID.String(), "host_id": host.ID.String(), "enrollment_id": enrollment.String(),
 	})
 }
@@ -312,7 +314,7 @@ func (s *Service) reissue(ctx context.Context, tx db.TenantTx, q *dbq.Queries, h
 	}); err != nil || n != 1 {
 		return err
 	}
-	return record(ctx, tx, systemActor, "hosted_gateway.token_reissued", h.ID, map[string]string{"enrollment_id": enrollment.String()})
+	return record(ctx, tx, systemActor, auditkind.HostedGatewayTokenReissued, h.ID, map[string]string{"enrollment_id": enrollment.String()})
 }
 
 // mint creates a single-use enrollment token for the gateway, stored as

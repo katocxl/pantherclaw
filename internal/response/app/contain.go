@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	bdomain "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -258,7 +260,7 @@ func (s *Containment) contain(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	if o.skipReason != "" {
 		details["preview_skipped"] = "true"
 	}
-	if err := recordAction(ctx, tx, o.evActor, "response.contain", a.ID, details, c.Reason); err != nil {
+	if err := recordAction(ctx, tx, o.evActor, auditkind.ResponseContain, a.ID, details, c.Reason); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
 	return reflexdomain.ContainResult{ActionID: a.ID, Status: string(status)}, nil

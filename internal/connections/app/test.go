@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -143,7 +145,7 @@ func (s *Service) Test(ctx context.Context, id ids.UUID, kind string) (TestResul
 			return err
 		}
 		details["test_id"] = row.ID.String()
-		return record(ctx, tx, c, "connection.tested", id, details)
+		return record(ctx, tx, c, auditkind.ConnectionTested, id, details)
 	})
 	return out, err
 }

@@ -8,6 +8,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -64,7 +66,7 @@ func (s *Service) SendInvitation(ctx context.Context, org ids.OrgID, invitation 
 	}
 	return errors.Join(sendErr, s.pool.InTenantTx(context.WithoutCancel(ctx), org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: "notifications.invitation_sent", Actor: evdomain.Actor{Type: "system", ID: "notifications"}, Outcome: outcome,
+			Name: auditkind.NotificationsInvitationSent, Actor: evdomain.Actor{Type: "system", ID: "notifications"}, Outcome: outcome,
 			Object: &audit.Object{Type: "invitation", ID: invitation.String()},
 		})
 		return err

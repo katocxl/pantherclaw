@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/oidcrp"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -237,7 +239,7 @@ func (s *Admin) DisableIssuer(ctx context.Context, id ids.UUID) (dbq.PcOrgAssert
 		if row, err = dbq.New(tx).DisableAssertionIssuer(ctx, &by, c.Org, id); err != nil {
 			return notFound(err)
 		}
-		return s.removed(ctx, tx, c.Actor(), "idaccess.issuer_disabled", "assertion_issuer", id)
+		return s.removed(ctx, tx, c.Actor(), auditkind.IdaccessIssuerDisabled, "assertion_issuer", id)
 	})
 	return row, err
 }
@@ -314,7 +316,7 @@ func (s *Admin) RemoveClient(ctx context.Context, id ids.UUID) (dbq.PcOrgAsserti
 		if row, err = dbq.New(tx).RemoveAssertionClient(ctx, &by, c.Org, id); err != nil {
 			return notFound(err)
 		}
-		return s.removed(ctx, tx, c.Actor(), "idaccess.client_removed", "assertion_client", id)
+		return s.removed(ctx, tx, c.Actor(), auditkind.IdaccessClientRemoved, "assertion_client", id)
 	})
 	return row, err
 }
@@ -412,7 +414,7 @@ func (s *Admin) DisableMcpAccess(ctx context.Context) (McpAccess, error) {
 		if err := dbq.New(tx).BumpOrgGatewaysConfig(ctx, c.Org); err != nil {
 			return err
 		}
-		return s.removed(ctx, tx, c.Actor(), "idaccess.mcp_access_disabled", "org", c.Org.UUID())
+		return s.removed(ctx, tx, c.Actor(), auditkind.IdaccessMcpAccessDisabled, "org", c.Org.UUID())
 	})
 	return out, err
 }
@@ -604,7 +606,7 @@ func (s *Admin) RemoveMcpClient(ctx context.Context, id ids.UUID) (dbq.PcMcpClie
 		}); err != nil {
 			return err
 		}
-		return s.removed(ctx, tx, c.Actor(), "idaccess.mcp_client_removed", "mcp_client", id)
+		return s.removed(ctx, tx, c.Actor(), auditkind.IdaccessMcpClientRemoved, "mcp_client", id)
 	})
 	return row, err
 }
@@ -911,7 +913,7 @@ func closeMcpClient(ctx context.Context, tx db.TenantTx, author ids.UUID, payloa
 
 func lapsed(ctx context.Context, tx db.TenantTx, objType string, id ids.UUID) error {
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "idaccess.lapsed", Actor: lapseActor, Outcome: audit.Success, Object: &audit.Object{Type: objType, ID: id.String()},
+		Name: auditkind.IdaccessLapsed, Actor: lapseActor, Outcome: audit.Success, Object: &audit.Object{Type: objType, ID: id.String()},
 	})
 	return err
 }

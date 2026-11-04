@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -157,7 +159,7 @@ func (l *Links) RecordCheckout(ctx context.Context, orgID, provider, checkoutRef
 			details["superseded"] = "true"
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "billing.checkout_recorded", Actor: billingActor, Outcome: audit.Success,
+			Name: auditkind.BillingCheckoutRecorded, Actor: billingActor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "billing_link", ID: id.String()}, Details: details,
 		})
 		return err
@@ -238,9 +240,9 @@ func (l *Links) BindSubscription(ctx context.Context, provider, checkoutRef, sub
 		}); err != nil {
 			return err
 		}
-		name, outcome := "billing.subscription_bound", audit.Success
+		name, outcome := auditkind.BillingSubscriptionBound, audit.Success
 		if duplicate {
-			name, outcome = "billing.subscription_duplicate", audit.Denied
+			name, outcome = auditkind.BillingSubscriptionDuplicate, audit.Denied
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: name, Actor: billingActor, Outcome: outcome,
@@ -333,7 +335,7 @@ func (l *Links) EndSubscription(ctx context.Context, provider, subscriptionRef s
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "billing.subscription_ended", Actor: billingActor, Outcome: audit.Success,
+			Name: auditkind.BillingSubscriptionEnded, Actor: billingActor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "billing_link", ID: r.ID.String()}, Details: map[string]string{"provider": provider},
 		})
 		return err

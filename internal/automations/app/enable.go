@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/changes"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -317,9 +319,9 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 			return err
 		}
 	}
-	name := "automation.enabled"
+	name := auditkind.AutomationEnabled
 	if r.Kind == KindRollout {
-		name = "automation.rollout_widened"
+		name = auditkind.AutomationRolloutWidened
 	}
 	caller, err := tapp.CallerFrom(ctx)
 	if err != nil {
@@ -478,7 +480,7 @@ func (s *Service) RequestEnable(ctx context.Context, version ids.UUID, rollout a
 			return err
 		}
 		out = Enabled{Request: req, Required: req.Required}
-		return record(ctx, tx, c.Actor(), "automation.enable_requested", a.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationEnableRequested, a.ID, map[string]string{
 			"version": v.ID.String(), "rollout": string(rollout), "kind": kind, "change_request": req.ID.String(),
 		})
 	})
@@ -553,7 +555,7 @@ func (s *Service) NarrowRollout(ctx context.Context, automation ids.UUID, rollou
 			return err
 		}
 		out = automationView(r)
-		return record(ctx, tx, c.Actor(), "automation.rollout_narrowed", a.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationRolloutNarrowed, a.ID, map[string]string{
 			"from": string(cur), "to": ro, "cohort_agents": itoa(len(cohort)),
 		})
 	})

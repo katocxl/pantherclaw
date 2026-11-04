@@ -12,6 +12,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
@@ -75,7 +77,7 @@ func seedGateway(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID,
 		}
 		gw = g.ID
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "dev.gateway_seeded", Actor: devSeedActor, Outcome: audit.Success, Object: &audit.Object{Type: "gateway", ID: g.ID.String()},
+			Name: auditkind.DevGatewaySeeded, Actor: devSeedActor, Outcome: audit.Success, Object: &audit.Object{Type: "gateway", ID: g.ID.String()},
 		})
 		return err
 	})

@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	casesdomain "github.com/katocxl/pantherclaw/internal/cases/domain"
 	casesstore "github.com/katocxl/pantherclaw/internal/cases/store"
@@ -200,7 +202,7 @@ func (s *Service) CreateConfig(ctx context.Context, connection ids.UUID, project
 			return err
 		}
 		out = configOf(row)
-		return s.audit(ctx, tx, c.Actor(), "ticket.sync_configured", "ticket_sync_config", id, map[string]string{
+		return s.audit(ctx, tx, c.Actor(), auditkind.TicketSyncConfigured, "ticket_sync_config", id, map[string]string{
 			"connection": connection.String(), "project": projectKey,
 		})
 	})
@@ -248,7 +250,7 @@ func (s *Service) RotateSecret(ctx context.Context, id ids.UUID) ([]byte, error)
 		}); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c.Actor(), "ticket.sync_secret_rotated", "ticket_sync_config", id, nil)
+		return s.audit(ctx, tx, c.Actor(), auditkind.TicketSyncSecretRotated, "ticket_sync_config", id, nil)
 	})
 	if err != nil {
 		return nil, err
@@ -280,7 +282,7 @@ func (s *Service) SetPaused(ctx context.Context, id ids.UUID, paused bool) error
 		if err != nil || n == 0 {
 			return err
 		}
-		return s.audit(ctx, tx, c.Actor(), "ticket.sync_state_changed", "ticket_sync_config", id, map[string]string{"state": state})
+		return s.audit(ctx, tx, c.Actor(), auditkind.TicketSyncStateChanged, "ticket_sync_config", id, map[string]string{"state": state})
 	})
 }
 
@@ -373,7 +375,7 @@ func (s *Service) link(ctx context.Context, perm td.Permission, kase, incident *
 			return err
 		}
 		out = refOf(row)
-		return s.audit(ctx, tx, c.Actor(), "ticket.linked", "external_ref", row.ID, map[string]string{"key": key, "system": cfg.System})
+		return s.audit(ctx, tx, c.Actor(), auditkind.TicketLinked, "external_ref", row.ID, map[string]string{"key": key, "system": cfg.System})
 	})
 	return out, err
 }
@@ -498,7 +500,7 @@ func (s *Service) refused(ctx context.Context, org ids.OrgID, config ids.UUID) {
 	}
 	_ = s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: "ticket.webhook_refused", Actor: domain.Actor, Outcome: audit.Denied, ReasonCode: "BAD_SIGNATURE",
+			Name: auditkind.TicketWebhookRefused, Actor: domain.Actor, Outcome: audit.Denied, ReasonCode: "BAD_SIGNATURE",
 			Object: &audit.Object{Type: "ticket_sync_config", ID: config.String()},
 		})
 		return err
@@ -571,7 +573,7 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org
 
 // ignored audits a dropped change to a PantherClaw-owned field (HR-528).
 func (s *Service) ignored(ctx context.Context, tx db.TenantTx, ref dbq.PcExternalRef, v domain.Verdict) error {
-	return s.audit(ctx, tx, domain.Actor, "ticket.owned_field_ignored", "external_ref", ref.ID, map[string]string{
+	return s.audit(ctx, tx, domain.Actor, auditkind.TicketOwnedFieldIgnored, "external_ref", ref.ID, map[string]string{
 		"key": ref.ExternalKey, "system": ref.System, "field": string(v.Field), "action": string(v.Action),
 	})
 }

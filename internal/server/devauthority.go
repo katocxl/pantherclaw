@@ -15,6 +15,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
@@ -68,14 +70,14 @@ func seedPackages(ctx context.Context, pool *db.Pool, org ids.OrgID, signer *jws
 	im := &defsapp.Importer{Roots: trust.Roots{signer.KeyID(): signer.Public()}, Repo: &defspg.Store{Pool: pool}, Clock: clock.System{}}
 	for _, p := range pkgs {
 		ev := &audit.Event{
-			Name: "package.imported", Actor: devSeedActor, Outcome: audit.Success,
+			Name: auditkind.PackageImported, Actor: devSeedActor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "package_version", ID: trust.Key(p.Name, p.Version)},
 		}
 		if _, err := im.Import(ctx, org, p.Name, p.Version, doc, p.Raw, ev); err != nil {
 			return fmt.Errorf("dev seed: package %s: %w", p.Name, err)
 		}
 		act := &audit.Event{
-			Name: "package.transitioned", Actor: devSeedActor, Outcome: audit.Success,
+			Name: auditkind.PackageTransitioned, Actor: devSeedActor, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "package_version", ID: trust.Key(p.Name, p.Version)},
 			Details: map[string]string{"from": string(defs.StateReviewed), "to": string(defs.StateActive)},
 		}
@@ -124,7 +126,7 @@ func seedFacts(ctx context.Context, pool *db.Pool, org ids.OrgID, env credential
 		return key, err
 	}
 	ev := audit.Event{
-		Name: "facts.provider_registered", Actor: devSeedActor, Outcome: audit.Success,
+		Name: auditkind.FactsProviderRegistered, Actor: devSeedActor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "fact_provider", ID: p.ID.String()}, Details: map[string]string{"service_account": sa.String()},
 	}
 	if err := (&factspg.Store{Pool: pool}).CreateProvider(ctx, org, p, "operator:dev-seed", ev); err != nil {
@@ -267,7 +269,7 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 		return gdomain.Grant{}, fmt.Errorf("dev seed: grant: %w", err)
 	}
 	ev := audit.Event{
-		Name: "grant.issued", Actor: devSeedActor, Outcome: audit.Success,
+		Name: auditkind.GrantIssued, Actor: devSeedActor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "grant", ID: g.ID.String()},
 		Details: map[string]string{"agent": w.Agent.String(), "principal": g.Principal.String()},
 	}

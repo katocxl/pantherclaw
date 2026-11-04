@@ -14,8 +14,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	_ "time/tzdata" // schedules name IANA zones; validation must not depend on the host's zone files
 	"unicode/utf8"
+
+	_ "time/tzdata" // schedules name IANA zones; validation must not depend on the host's zone files
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -24,9 +27,9 @@ import (
 
 // Events is the closed platform-event vocabulary (D18).
 var Events = []string{
-	"action.decided", "action.held", "action.denied", "effect.recorded", "run.ended", "grant.issued", "grant.revoked",
-	"coverage.lost", "alert.raised", "incident.opened", "case.closed", "agent.discovered", "approval.expired",
-	"automation.finished", "agent.discovery_changed", "agent.discovery_vanished", EventAlertInferred,
+	"action.decided", "action.held", "action.denied", "effect.recorded", auditkind.RunEnded, auditkind.GrantIssued, auditkind.GrantRevoked,
+	"coverage.lost", "alert.raised", "incident.opened", "case.closed", auditkind.AgentDiscovered, auditkind.ApprovalExpired,
+	"automation.finished", auditkind.AgentDiscoveryChanged, auditkind.AgentDiscoveryVanished, EventAlertInferred,
 }
 
 // EventAlertInferred is a raised alert that rests on an inference or
@@ -43,11 +46,11 @@ const EventAutomationFinished = "automation.finished"
 // feed (D78); contain's REVOKE_GRANT revokes a grant (D91).
 var produces = map[string][]string{
 	KindLaunchRun: {
-		"run.ended", "grant.issued", "grant.revoked", "action.decided", "action.held", "action.denied",
-		"effect.recorded", "approval.expired",
+		auditkind.RunEnded, auditkind.GrantIssued, auditkind.GrantRevoked, "action.decided", "action.held", "action.denied",
+		"effect.recorded", auditkind.ApprovalExpired,
 	},
-	KindRevokeGrant: {"grant.revoked"},
-	KindContain:     {"grant.revoked"}, // REVOKE_GRANT (D91)
+	KindRevokeGrant: {auditkind.GrantRevoked},
+	KindContain:     {auditkind.GrantRevoked}, // REVOKE_GRANT (D91)
 }
 
 // Produces lists the platform events (D18) a step of kind can cause (D78);

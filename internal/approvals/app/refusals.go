@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -60,7 +62,7 @@ func (s *Service) recordRefusal(ctx context.Context, org ids.OrgID, user ids.UUI
 			}
 		}
 		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: "approval.response_refused", Actor: userActor(user), Outcome: audit.Denied, ReasonCode: r.reason,
+			Name: auditkind.ApprovalResponseRefused, Actor: userActor(user), Outcome: audit.Denied, ReasonCode: r.reason,
 			Object: &audit.Object{Type: "approval_request", ID: request.String()}, Details: details,
 		})
 		return err

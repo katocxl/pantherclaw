@@ -14,6 +14,8 @@ import (
 	"maps"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -61,7 +63,7 @@ type Engine struct {
 const (
 	FailurePackIntegrity   = "detection.pack_integrity"
 	FailureOverflow        = "detection.overflow"
-	FailureRuleDisabled    = "detection.rule_disabled"
+	FailureRuleDisabled    = auditkind.DetectionRuleDisabled
 	FailureCustomIntegrity = "detection.custom_rule_integrity"
 	FailureEditionLapsed   = "detection.edition_lapsed"
 )

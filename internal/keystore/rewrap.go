@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -127,6 +129,18 @@ func RewrapOrg(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org 
 	return res, nil
 }
 
+// rewrappedKind is the audit kind of a re-wrapped key of type objType
+// (HR-664). A type with no kind is refused before anything is written.
+func rewrappedKind(objType string) (string, error) {
+	switch objType {
+	case "dek":
+		return auditkind.DekRewrapped, nil
+	case "signing_key":
+		return auditkind.SigningKeyRewrapped, nil
+	}
+	return "", fmt.Errorf("keystore: re-wrap: no audit kind for %q", objType)
+}
+
 // rewrapOne verifies before it writes (HR-487). The write, as pc_keystore
 // (the only role with the two columns, D171), is a compare-and-swap on
 // both old columns, and the 00224 trigger refuses a change of one column
@@ -136,6 +150,10 @@ func RewrapOrg(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org 
 func rewrapOne(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org ids.OrgID, oldKEK string, oldWrapped, aad []byte,
 	objType, objID string, write func(*dbq.Queries, []byte, string) (int64, error),
 ) error {
+	kind, err := rewrappedKind(objType)
+	if err != nil {
+		return err
+	}
 	if inner, err := keys.KEKOf(oldWrapped); err != nil || !keys.SameKEK(oldKEK, inner) {
 		return fmt.Errorf("keystore: re-wrap %s %s: %w", objType, objID, keys.ErrUnwrap)
 	}
@@ -161,7 +179,7 @@ func rewrapOne(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org 
 	}
 	err = pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: objType + ".rewrapped", Actor: Actor, Outcome: audit.Success,
+			Name: kind, Actor: Actor, Outcome: audit.Success,
 			Object:  &audit.Object{Type: objType, ID: objID},
 			Details: map[string]string{"from_kek_id": oldKEK, "kek_id": kek},
 		})
@@ -201,7 +219,7 @@ func reportUnroutable(ctx context.Context, pool *db.Pool, org ids.OrgID, r KEKRo
 			}
 			out = append(out, id)
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "keys.kek_unroutable", Actor: Actor, Outcome: audit.Failure,
+				Name: auditkind.KeysKekUnroutable, Actor: Actor, Outcome: audit.Failure,
 				Object:  &audit.Object{Type: "kek", ID: id},
 				Details: map[string]string{"kek_id": id},
 			}); err != nil {

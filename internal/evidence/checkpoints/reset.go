@@ -13,6 +13,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -82,7 +84,7 @@ func (s *Service) Reset(ctx context.Context, org ids.OrgID, actor domain.Actor, 
 			details["failed_seq"] = strconv.FormatInt(out.Seq, 10)
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.integrity_reset", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.EvidenceIntegrityReset, Actor: actor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "evidence_log", ID: org.String()}, Details: details,
 		}); err != nil {
 			return err

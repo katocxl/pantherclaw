@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
@@ -178,7 +180,7 @@ func (a *Admin) Import(ctx context.Context, name, version, targets string, raw [
 		}
 	}
 	ev := &audit.Event{
-		Name: "package.imported", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.PackageImported, Actor: c.Actor(), Outcome: audit.Success,
 		Object: &audit.Object{Type: "package_version", ID: trust.Key(name, version)},
 	}
 	res, err := a.Importer.Import(ctx, c.Org, name, version, targets, raw, ev)
@@ -227,7 +229,7 @@ func (a *Admin) Transition(ctx context.Context, name, version string, to domain.
 		return VersionInfo{}, notFound(err)
 	}
 	ev := &audit.Event{
-		Name: "package.transitioned", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.PackageTransitioned, Actor: c.Actor(), Outcome: audit.Success,
 		Object:  &audit.Object{Type: "package_version", ID: trust.Key(name, version)},
 		Details: map[string]string{"from": string(from), "to": string(to)},
 	}
@@ -299,7 +301,7 @@ func (a *Admin) activateTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, n
 		}
 	}
 	ev := &audit.Event{
-		Name: "package.transitioned", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.PackageTransitioned, Actor: c.Actor(), Outcome: audit.Success,
 		Object:  &audit.Object{Type: "package_version", ID: trust.Key(name, version)},
 		Details: map[string]string{"from": string(from), "to": string(domain.StateActive)},
 	}

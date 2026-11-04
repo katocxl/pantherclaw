@@ -41,6 +41,21 @@ func TestExtensionAuditKinds(t *testing.T) {
 	}
 }
 
+// TestHR664_ExtensionKindShapeFromPrefixes: the extension kind pattern and
+// the refusal's message are built from extension.AuditKindPrefixes and
+// read exactly as they did when they were written by hand (HR-664).
+func TestHR664_ExtensionKindShapeFromPrefixes(t *testing.T) {
+	if got, want := extensionKind.String(), `^(billing|scim|saml)\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`; got != want {
+		t.Errorf("pattern %s, want %s", got, want)
+	}
+	if got, want := errExtensionAudit.Error(), "extension audit records need a billing., scim. or saml. kind and small, non-secret fields"; !strings.Contains(got, want) {
+		t.Errorf("message %q, want it to contain %q", got, want)
+	}
+	if got := extensionKindPattern([]string{"a.", "b.c."}); got != `^(a|b\.c)\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$` {
+		t.Errorf("pattern of a., b.c. = %s", got)
+	}
+}
+
 type kinds []string
 
 func (k *kinds) Record(_ context.Context, _, kind string, _ map[string]string) error {

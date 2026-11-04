@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
@@ -166,7 +168,7 @@ func (s *Service) SetTestCasesTx(ctx context.Context, tx db.TenantTx, versionID 
 			return err
 		}
 		missing = Missing(cases, irr)
-		return record(ctx, tx, c, "automation.tests_set", versionID, map[string]string{
+		return record(ctx, tx, c, auditkind.AutomationTestsSet, versionID, map[string]string{
 			"automation": lv.AutomationID.String(), "cases": strconv.Itoa(len(cases)),
 		})
 	}()
@@ -347,7 +349,7 @@ func (s *Service) RunTests(ctx context.Context, versionID ids.UUID) (TestRun, er
 		if out.Passed {
 			outcome = "passed"
 		}
-		return record(ctx, tx, c, "automation.tests_run", versionID, map[string]string{
+		return record(ctx, tx, c, auditkind.AutomationTestsRun, versionID, map[string]string{
 			"automation": lv.AutomationID.String(), "run": out.ID.String(), "result": outcome,
 			"cases": strconv.Itoa(len(res.Cases)),
 		})

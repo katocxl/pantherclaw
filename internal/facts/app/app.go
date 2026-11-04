@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/facts/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -104,7 +106,7 @@ func (s *Service) RegisterProvider(ctx context.Context, name string, serviceAcco
 		return domain.Provider{}, pcerr.Wrap(err, pcerr.InvalidArgument, "PROVIDER_INVALID", err.Error())
 	}
 	ev := audit.Event{
-		Name: "facts.provider_registered", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.FactsProviderRegistered, Actor: c.Actor(), Outcome: audit.Success,
 		Object:  &audit.Object{Type: "fact_provider", ID: p.ID.String()},
 		Details: map[string]string{"service_account": serviceAccount.String(), "facts": fmt.Sprint(len(decls))},
 	}
@@ -127,7 +129,7 @@ func (s *Service) DisableProvider(ctx context.Context, id ids.UUID) error {
 		return err
 	}
 	return s.Store.DisableProvider(ctx, c.Org, id, audit.Event{
-		Name: "facts.provider_disabled", Actor: c.Actor(),
+		Name: auditkind.FactsProviderDisabled, Actor: c.Actor(),
 		Outcome: audit.Success, Object: &audit.Object{Type: "fact_provider", ID: id.String()},
 	})
 }

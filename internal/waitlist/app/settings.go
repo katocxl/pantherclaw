@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -195,7 +197,7 @@ func (w *Writer) UpdateSettings(ctx context.Context, s Settings) (Settings, erro
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "waitlist.settings_updated", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.WaitlistSettingsUpdated, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "org", ID: c.Org.String()},
 			Details: map[string]string{"set": strconv.Itoa(len(changed)), "batch_currencies": strconv.Itoa(len(s.BatchCeilings))},
 		}); err != nil {

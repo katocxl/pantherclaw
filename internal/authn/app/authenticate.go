@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/authn/token"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -241,7 +243,7 @@ func orgActive(ctx context.Context, q *dbq.Queries, org ids.OrgID) error {
 
 // IPRefusedName is the audit event of an API key used from an address
 // outside its ranges (G0 M18 D153, HR-475).
-const IPRefusedName = "apikey.ip_refused"
+const IPRefusedName = auditkind.ApikeyIpRefused
 
 // ipRefusalAuditTimeout bounds the refusal's audit write, so a stalled
 // database cannot hang the refused request.

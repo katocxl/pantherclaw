@@ -12,6 +12,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/securityevent"
@@ -60,7 +62,7 @@ func cmdSecurityLog(ctx context.Context, args []string, stdout, stderr io.Writer
 			if err != nil {
 				return err
 			}
-			_, err = audit.Record(ctx, tx, audit.Event{Name: "security_log.acknowledged", Actor: domain.Actor{Type: "operator", ID: operatorName()}, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: org.String()}, Details: map[string]string{"through_seq": strconv.FormatInt(*through, 10), "count": strconv.FormatInt(count, 10)}})
+			_, err = audit.Record(ctx, tx, audit.Event{Name: auditkind.SecurityLogAcknowledged, Actor: domain.Actor{Type: "operator", ID: operatorName()}, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: org.String()}, Details: map[string]string{"through_seq": strconv.FormatInt(*through, 10), "count": strconv.FormatInt(count, 10)}})
 			return err
 		})
 		if err != nil {

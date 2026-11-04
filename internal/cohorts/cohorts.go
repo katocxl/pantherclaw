@@ -27,6 +27,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
+
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -312,7 +314,7 @@ func (s *Service) Create(ctx context.Context, in Input) (Cohort, error) {
 			return err
 		}
 		out = cohortOf(row, 0)
-		return s.audit(ctx, tx, c, "cohort.created", row.ID, map[string]string{"name": in.Name, "owner": in.Owner.String()})
+		return s.audit(ctx, tx, c, auditkind.CohortCreated, row.ID, map[string]string{"name": in.Name, "owner": in.Owner.String()})
 	})
 	return out, err
 }
@@ -356,7 +358,7 @@ func (s *Service) Update(ctx context.Context, id ids.UUID, in Input) (Cohort, er
 			return err
 		}
 		out = cohortOf(row, 0)
-		return s.audit(ctx, tx, c, "cohort.updated", id, map[string]string{"name": in.Name, "owner": in.Owner.String()})
+		return s.audit(ctx, tx, c, auditkind.CohortUpdated, id, map[string]string{"name": in.Name, "owner": in.Owner.String()})
 	})
 	return out, err
 }
@@ -382,7 +384,7 @@ func (s *Service) Delete(ctx context.Context, id ids.UUID) error {
 		if _, err := q.DeleteFleetCohort(ctx, c.Org, id); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "cohort.deleted", id, map[string]string{"name": row.Name})
+		return s.audit(ctx, tx, c, auditkind.CohortDeleted, id, map[string]string{"name": row.Name})
 	})
 }
 
@@ -516,9 +518,9 @@ func (s *Service) ChangeMembers(ctx context.Context, id ids.UUID, agents []ids.U
 		if err := c.Require(PermManage, scope); err != nil {
 			return err
 		}
-		name := "cohort.members_added"
+		name := auditkind.CohortMembersAdded
 		if remove {
-			name = "cohort.members_removed"
+			name = auditkind.CohortMembersRemoved
 		}
 		return s.audit(ctx, tx, c, name, id, map[string]string{"agents": fmt.Sprint(len(agents)), "changed": fmt.Sprint(n)})
 	})
@@ -558,7 +560,7 @@ func (s *Service) SetAgentTaskType(ctx context.Context, agent ids.UUID, taskType
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "agent.task_type_set", Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "agent", ID: agent.String()},
+			Name: auditkind.AgentTaskTypeSet, Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "agent", ID: agent.String()},
 			Details: map[string]string{"task_type": taskType},
 		})
 		return err
