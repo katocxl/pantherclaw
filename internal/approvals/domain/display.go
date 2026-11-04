@@ -403,6 +403,8 @@ func formatValue(v defs.Value, spec defs.ParamSpec) string {
 		return filterText(v.Filter)
 	case defs.TypeFloatArray:
 		return strconv.Itoa(len(v.Floats)) + " numbers"
+	case defs.TypeStringMap:
+		return strconv.Itoa(len(v.Map)) + " keys"
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeText:
 		return Clean("", v.Str, 0).Text
 	}

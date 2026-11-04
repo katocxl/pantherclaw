@@ -65,6 +65,7 @@ type ParamSpec struct {
 	Pattern    string    `json:"pattern,omitzero"`
 	MaxLength  int       `json:"max_length,omitzero"`
 	MaxItems   int       `json:"max_items,omitzero"`
+	MaxKeys    int       `json:"max_keys,omitzero"` // string_map
 	// Disclosure marks a parameter that can carry data out (HR-079, G0 M10
 	// D56): toward a public destination its value is limited to MaxBytes
 	// (0: DefaultDisclosureBytes) and MaxEntropy bits per byte (0:
@@ -108,6 +109,8 @@ func (p ParamSpec) validate(name string) error {
 		return invalid("%s: max_bytes must be 0..%d", name, MaxDisclosureBytes)
 	case p.MaxEntropy != "" && !validEntropy(p.MaxEntropy):
 		return invalid("%s: max_entropy must be a decimal above 0 and at most 8 bits per byte", name)
+	case (p.MaxKeys != 0) != (p.Type == TypeStringMap) || p.MaxKeys < 0 || p.MaxKeys > MaxStringMapKeys:
+		return invalid("%s: string_map params need max_keys 1..%d; other types take none (G0 M30 D922b)", name, MaxStringMapKeys)
 	case p.Type == TypeFloatArray && (p.MaxItems < 1 || p.MaxItems > MaxFloatItems):
 		return invalid("%s: float_array params need max_items 1..%d (G0 M30 D927)", name, MaxFloatItems)
 	case p.Type != TypeFloatArray && ((p.MaxItems != 0) != (p.Type == TypeIdentifierList) || p.MaxItems < 0 || p.MaxItems > maxListItems):
@@ -134,7 +137,7 @@ func (p ParamSpec) validate(name string) error {
 		if p.MaxLength > actionir.MaxPath {
 			return invalid("%s: max_length of a path is at most %d", name, actionir.MaxPath)
 		}
-	case TypeDecimal, TypeInteger, TypeBoolean, TypeText, TypeCommand, TypeContent, TypeFloatArray:
+	case TypeDecimal, TypeInteger, TypeBoolean, TypeText, TypeCommand, TypeContent, TypeFloatArray, TypeStringMap:
 	case TypeQueryFilter:
 		if p.MaxLength != 0 {
 			return invalid("%s: a query filter's limits are fixed (G0 M14 D9)", name)

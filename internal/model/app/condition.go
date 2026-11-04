@@ -228,7 +228,7 @@ func (f Param) literal(value, currency string) (string, bool) {
 	case defs.TypeIdentifier:
 		return render.CELQuote(value), true
 	case defs.TypeIdentifierList, defs.TypeText, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeQueryFilter,
-		defs.TypeFloatArray:
+		defs.TypeFloatArray, defs.TypeStringMap:
 		return "", false
 	}
 	return "", false

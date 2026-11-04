@@ -296,6 +296,8 @@ func (g *generator) defaultValue(name string, p defs.ParamSpec) (defs.Value, boo
 		return defs.Value{Type: p.Type, Filter: []defs.Predicate{}}, true
 	case defs.TypeFloatArray:
 		return defs.Value{Type: p.Type, Floats: []float64{0}}, true
+	case defs.TypeStringMap:
+		return defs.Value{Type: p.Type, Map: map[string]string{}}, true
 	}
 	return defs.Value{Type: p.Type, Str: cmpOr(first(g.lit.values[name]), "sample")}, true
 }
@@ -354,6 +356,8 @@ func (g *generator) paramVariants(name string, p defs.ParamSpec) []defs.Value {
 		out = append(out, defs.Value{Type: p.Type, Filter: []defs.Predicate{}})
 	case defs.TypeFloatArray:
 		out = append(out, defs.Value{Type: p.Type, Floats: []float64{0}})
+	case defs.TypeStringMap:
+		out = append(out, defs.Value{Type: p.Type, Map: map[string]string{}})
 	default:
 		for _, s := range append(append(slices.Clone(g.lit.values[name]), "outside-value"), g.lit.strs...) {
 			out = append(out, defs.Value{Type: p.Type, Str: s})

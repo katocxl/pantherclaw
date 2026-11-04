@@ -258,7 +258,7 @@ func compatible(declared domain.ParamSpec, f formField) bool {
 	case domain.TypeBoolean:
 		return f.Type == "boolean" && len(f.Enum) == 0
 	case domain.TypeMoney, domain.TypeIdentifierList, domain.TypeText, domain.TypeCommand, domain.TypePath, domain.TypeQueryFilter,
-		domain.TypeFloatArray:
+		domain.TypeFloatArray, domain.TypeStringMap:
 		// Never an elicitation field (domain.ElicitationTypes).
 	}
 	return false
@@ -463,7 +463,7 @@ func answerValue(t domain.ParamType, raw jsontext.Value) (domain.Value, error) {
 		}
 		v.Decimal, err = money.Parse(string(raw))
 	case domain.TypeMoney, domain.TypeIdentifierList, domain.TypeText, domain.TypeCommand, domain.TypePath, domain.TypeQueryFilter,
-		domain.TypeFloatArray:
+		domain.TypeFloatArray, domain.TypeStringMap:
 		return v, errAnswer
 	}
 	if err != nil {

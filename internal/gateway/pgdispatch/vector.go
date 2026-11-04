@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -39,18 +40,21 @@ var distanceOp = map[Distance]string{
 	DistanceInnerProduct: "<#>",
 }
 
-// Vector limits (D922).
+// Vector limits (D922, D922a, D922b).
 const (
-	MaxDimensions      = 16000
-	DefaultTopK        = 10
-	MaxTopK            = 100
-	MaxFilterKeys      = 16
-	MaxMetadataKeys    = 32
-	MaxMetadataValue   = 1 << 10
-	MaxVectorID        = 256
-	MaxVectorContent   = 32 << 10
-	maxMetadataKeyByte = 256
+	MaxDimensions    = 16000
+	DefaultTopK      = 10
+	MaxTopK          = 100
+	MaxFilterKeys    = 16
+	MaxMetadataKeys  = 32
+	MaxMetadataValue = 1 << 10
+	MaxVectorID      = 256
+	MaxVectorContent = 8 << 10
 )
+
+// metadataKeyRe is a metadata or filter key (D922b), as the string_map
+// param type reads it.
+var metadataKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,63}$`)
 
 // VectorTable is a vectorstore connection's table and its shape.
 type VectorTable struct {
@@ -302,8 +306,8 @@ func checkVectorID(id string) error {
 func checkMetadata(m map[string]string) error {
 	for _, k := range slices.Sorted(maps.Keys(m)) {
 		v := m[k]
-		if k == "" || !utf8.ValidString(k) || strings.ContainsRune(k, 0) || len(k) > maxMetadataKeyByte {
-			return queryErr("a metadata key must be valid text of 1..%d bytes", maxMetadataKeyByte)
+		if !metadataKeyRe.MatchString(k) {
+			return queryErr("metadata key %q is not a name", k)
 		}
 		if !utf8.ValidString(v) || strings.ContainsRune(v, 0) || len(v) > MaxMetadataValue {
 			return queryErr("metadata value of %q must be valid text of at most %d bytes", k, MaxMetadataValue)
