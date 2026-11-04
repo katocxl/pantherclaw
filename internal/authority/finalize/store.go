@@ -214,6 +214,10 @@ type Executed struct {
 	// TargetRef is the target's reference for what it created, when the
 	// gateway read one and it matches the verifier's read.
 	TargetRef string
+	// Credential is the credential the gateway reported opening, once the
+	// store found it is a version of the permit's connection's credential
+	// (HR-660); nil otherwise, and always nil for the sweeper.
+	Credential *CredentialUsed
 }
 
 // Signing is how the Authority signs what RecordExecution records: the
@@ -260,7 +264,10 @@ type Store interface {
 	// releases (claim RELEASED), unknown keeps both held (HR-003, F115).
 	// Delegated is refused (ErrNotCooperative) unless the transaction's
 	// channel and access mode are Delegable (hook, sdk; authzen through an
-	// agent_held or target_enforced connection). It records the attempt
+	// agent_held or target_enforced connection). A reported credential is
+	// refused (ErrCredentialNotOfConnection) unless pc.credentials holds
+	// that id and version for the permit's connection, in any state; a
+	// permit without a connection refuses any (HR-660). It records the attempt
 	// with its access mode and, in the same transaction, the execution
 	// receipt sign.Execution returns at the database time and, for an
 	// accepted or delegated write whose effect its definition cannot verify,
