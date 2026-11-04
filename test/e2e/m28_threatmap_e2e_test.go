@@ -37,6 +37,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/threatmap/adapters/pgthreatmap"
 	tmapp "github.com/katocxl/pantherclaw/internal/threatmap/app"
 )
@@ -259,6 +260,85 @@ func TestE2E_M28_ThreatMap(t *testing.T) {
 	if code, rep := p.verify(t, edited); code == 0 || !slices.Contains(statuses(rep, "pack.item"), bundle.Failed) {
 		t.Fatalf("an edited threat map verified: %d %+v", code, rep.Checks)
 	}
+
+	// 5. The ATT&CK Navigator layer names no score (ATLAS has no Navigator
+	// format, D720a), and the SOC agent's MCP tool answers for X.
+	layer := filepath.Join(t.TempDir(), "layer.json")
+	if code, out, errs := d.admin.pclaw(t, "threats", "export", "navigator", "--framework", "attack", "--out", layer); code != 0 {
+		t.Fatalf("threats export navigator: %d %s %s", code, out, errs)
+	}
+	lb, err := os.ReadFile(layer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc any
+	if err := json.Unmarshal(lb, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if k := m28Keys(doc, "score"); k != "" {
+		t.Errorf("the Navigator layer has a %q key", k)
+	}
+	if code, _, errs := d.admin.pclaw(t, "threats", "export", "navigator", "--framework", "atlas", "--out", layer+".atlas"); code == 0 ||
+		!strings.Contains(errs, "Navigator") {
+		t.Errorf("an ATLAS Navigator layer: %d %s", code, errs)
+	}
+	sa, key := s.m18Account(t, "m28-soc-"+ids.NewV7().String(), append(slices.Clone(selfMCPReadScopes), string(td.PermThreatMapRead)), nil)
+	s.m18BindOrg(t, sa, td.RoleInvestigator)
+	var mcpOut, mcpErr bytes.Buffer
+	line := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"technique_coverage","arguments":{"technique_id":"` + m28X + `"}}}` + "\n"
+	mcpEnv := func(name string) (string, bool) {
+		switch name {
+		case "PANTHERCLAW_API_KEY":
+			return key, true
+		case "PANTHERCLAW_SERVER":
+			return s.apiURL, true
+		}
+		return "", false
+	}
+	if code := pclaw.Run(ctx, []string{"mcp", "self"}, &mcpOut, &mcpErr, mcpEnv, pclaw.Options{Stdin: strings.NewReader(line)}); code != 0 {
+		t.Fatalf("pclaw mcp self: %d %s", code, mcpErr.String())
+	}
+	var answer struct {
+		Result struct {
+			IsError bool `json:"isError"`
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(mcpOut.Bytes()), &answer); err != nil {
+		t.Fatalf("technique_coverage answer %q: %v", mcpOut.String(), err)
+	}
+	text := ""
+	for _, c := range answer.Result.Content {
+		text += c.Text
+	}
+	if answer.Result.IsError || !strings.Contains(text, m28X) || !strings.Contains(text, "RULE_OFF") {
+		t.Fatalf("technique_coverage for %s: %s", m28X, mcpOut.String())
+	}
+}
+
+// m28Keys returns the first object member name in v that contains name,
+// ignoring case, or "".
+func m28Keys(v any, name string) string {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, e := range x {
+			if strings.Contains(strings.ToLower(k), name) {
+				return k
+			}
+			if f := m28Keys(e, name); f != "" {
+				return f
+			}
+		}
+	case []any:
+		for _, e := range x {
+			if f := m28Keys(e, name); f != "" {
+				return f
+			}
+		}
+	}
+	return ""
 }
 
 // m28FlipFirstTechnique returns the pack with the first technique of its
