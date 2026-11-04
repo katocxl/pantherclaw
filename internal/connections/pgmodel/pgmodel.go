@@ -49,7 +49,9 @@ func ToProto(m *capp.ModelConfig) *pb.ModelConfig {
 	if m == nil {
 		return nil
 	}
-	out := &pb.ModelConfig{MaxOutputTokens: m.MaxOutputTokens, AllowedServerTools: m.AllowedServerTools}
+	out := &pb.ModelConfig{
+		MaxOutputTokens: m.MaxOutputTokens, AllowedServerTools: m.AllowedServerTools, CapturePrompts: m.CapturePrompts,
+	}
 	if p := m.Price; p != nil {
 		out.Price = &pb.ModelPrice{
 			Currency: p.Currency, InputPerMillion: p.Input, OutputPerMillion: p.Output,
@@ -64,7 +66,10 @@ func FromProto(m *pb.ModelConfig) *capp.ModelConfig {
 	if m == nil {
 		return nil
 	}
-	out := &capp.ModelConfig{MaxOutputTokens: m.GetMaxOutputTokens(), AllowedServerTools: m.GetAllowedServerTools()}
+	out := &capp.ModelConfig{
+		MaxOutputTokens: m.GetMaxOutputTokens(), AllowedServerTools: m.GetAllowedServerTools(),
+		CapturePrompts: m.GetCapturePrompts(),
+	}
 	if p := m.GetPrice(); p != nil {
 		out.Price = &capp.ModelPrice{
 			Currency: p.GetCurrency(), Input: p.GetInputPerMillion(), Output: p.GetOutputPerMillion(),

@@ -308,6 +308,11 @@ message ModelConfig {
   // An optional price for estimates only (Team, HR-698); unset = no price.
   // PantherClaw ships no price list.
   ModelPrice price = 3;
+  // Prompt capture (Business, G0 M30 D945b): while on, a capture profile
+  // that covers this connection keeps its requests and replies for the
+  // profile's retention. Off by default; turning it on waits for a second
+  // person's security-key confirmation, turning it off applies at once.
+  bool capture_prompts = 4;
 }
 
 // ModelPrice is what the organization pays its provider per million tokens,

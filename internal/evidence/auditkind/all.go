@@ -316,6 +316,8 @@ var all = []string{
 	McpCatalogServerRevoked,
 	ModelCall,
 	ModelCallStarted,
+	ModelCaptureDisabled,
+	ModelCaptureEnabled,
 	ModelDraftingDisabled,
 	ModelDraftingEnabled,
 	ModelKeyCleared,

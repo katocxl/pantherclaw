@@ -63,6 +63,10 @@ type ModelConfig struct {
 	AllowedServerTools []string `json:"allowed_server_tools"`
 	// Price is for estimates only (Team); nil = no price.
 	Price *ModelPrice `json:"price,omitzero"`
+	// CapturePrompts keeps the connection's requests and replies as a
+	// capture profile that covers it asks (Business, G0 M30 D945b). Turning
+	// it on waits for a second person's security key; off applies at once.
+	CapturePrompts bool `json:"capture_prompts,omitzero"`
 }
 
 // ModelPrice is a price per million tokens, as decimal strings; empty cache
@@ -77,7 +81,7 @@ type ModelPrice struct {
 
 // Check returns the configuration with its defaults, tools sorted.
 func (m ModelConfig) Check() (ModelConfig, error) {
-	out := ModelConfig{MaxOutputTokens: orDefault(m.MaxOutputTokens, DefaultModelMaxOutputTokens)}
+	out := ModelConfig{MaxOutputTokens: orDefault(m.MaxOutputTokens, DefaultModelMaxOutputTokens), CapturePrompts: m.CapturePrompts}
 	if out.MaxOutputTokens < 1 || out.MaxOutputTokens > MaxModelMaxOutputTokens || len(m.AllowedServerTools) > maxModelServerTools {
 		return ModelConfig{}, ErrModelConfig
 	}
@@ -198,7 +202,7 @@ func loadModel(ctx context.Context, q *dbq.Queries, conn dbq.PcConnection) (*Mod
 
 // ModelConfigFromRow is a stored model configuration.
 func ModelConfigFromRow(row dbq.GetModelConnectionRow) *ModelConfig {
-	out := &ModelConfig{MaxOutputTokens: row.MaxOutputTokens, AllowedServerTools: row.AllowedServerTools}
+	out := &ModelConfig{MaxOutputTokens: row.MaxOutputTokens, AllowedServerTools: row.AllowedServerTools, CapturePrompts: row.CapturePrompts}
 	if row.PriceCurrency != nil && row.PriceInput != nil && row.PriceOutput != nil {
 		str := func(d *money.Decimal) string {
 			if d == nil {
@@ -219,6 +223,7 @@ func ModelConfigFromRow(row dbq.GetModelConnectionRow) *ModelConfig {
 func SaveModel(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID, m *ModelConfig) error {
 	p := dbq.PutModelConnectionParams{
 		OrgID: org, ConnectionID: conn, MaxOutputTokens: m.MaxOutputTokens, AllowedServerTools: m.AllowedServerTools,
+		CapturePrompts: m.CapturePrompts,
 	}
 	if p.AllowedServerTools == nil {
 		p.AllowedServerTools = []string{}
@@ -255,9 +260,12 @@ func SaveModel(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn ids.UUID
 
 // modelWeakens reports whether a new model configuration widens what the
 // connection lets through (HR-183): a higher max output tokens or a newly
-// allowed server tool. A price change alone is neither.
+// allowed server tool, or prompt capture turned on (G0 M30 D945b). A price change alone is neither.
 func modelWeakens(before, after *ModelConfig) bool {
 	if before == nil {
+		return true
+	}
+	if captureTurnsOn(before, after) {
 		return true
 	}
 	if after.MaxOutputTokens > before.MaxOutputTokens {
@@ -280,6 +288,9 @@ func modelSummary(m *ModelConfig) string {
 	s := "max_output_tokens=" + strconv.FormatInt(m.MaxOutputTokens, 10) + " server_tools=" + strings.Join(m.AllowedServerTools, "|")
 	if m.Price != nil {
 		s += " price=" + m.Price.Currency
+	}
+	if m.CapturePrompts {
+		s += " capture_prompts=on"
 	}
 	return s
 }

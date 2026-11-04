@@ -81,6 +81,10 @@ const (
 	SurfaceConnectionUpdate Surface = "connection.update"
 	SurfaceRouteMode        Surface = "connection.route_mode"
 	SurfaceExclusionCreate  Surface = "coverage.exclusion.create"
+	// SurfaceModelCapture turns prompt capture on for a model connection
+	// (G0 M30 D945b): always held for a second person, whatever the CUSTODY
+	// mode (AlwaysProtected). Turning it off applies directly.
+	SurfaceModelCapture Surface = "connection.model.capture"
 	// SurfaceConsequenceRule activates or retires a customer consequence
 	// rule (G0 M17 D107): always held for a second person, whatever the
 	// CONSEQUENCE_RULES mode (AlwaysProtected).
@@ -147,7 +151,7 @@ func (s Surface) Permission() td.Permission {
 		return td.PermCredentialSeal
 	case SurfaceCredentialRotate:
 		return td.PermCredentialSeal
-	case SurfaceConnectionUpdate, SurfaceRouteMode:
+	case SurfaceConnectionUpdate, SurfaceRouteMode, SurfaceModelCapture:
 		return td.PermConnectionManage
 	case SurfaceExclusionCreate:
 		return td.PermCoverageManage
@@ -174,14 +178,14 @@ func (s Surface) Permission() td.Permission {
 // AlwaysProtected reports whether every change of the surface waits for a
 // second person, in every mode of its category, and can never be applied
 // as an emergency (G0 M17 D107, HR-453; G0 M18 D155, HR-481; G0 M24 D223,
-// HR-586; G0 M26 D408, HR-623; HR-666).
+// HR-586; G0 M26 D408, HR-623; HR-666; G0 M30 D945b).
 func (s Surface) AlwaysProtected() bool {
 	return s == SurfaceConsequenceRule ||
 		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly ||
 		s == SurfaceCatalogMode || s == SurfaceContentSignalMode || s == SurfaceCustomRuleConfirm ||
 		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient ||
 		s == SurfaceSCIMTokenActivate || s == SurfaceSAMLConnectionPut || s == SurfaceSAMLDisable ||
-		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove
+		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove || s == SurfaceModelCapture
 }
 
 // Change domains and kinds of internal/changes (D6).

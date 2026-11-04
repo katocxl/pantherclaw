@@ -12,7 +12,9 @@
 // The answer is streamed back as it arrives, at most 16 MiB in 10 minutes;
 // an answer cut short breaks the agent's connection rather than read as
 // whole. Every refusal is in the provider's error shape, so SDKs show it.
-// Nothing here logs or keeps a prompt or a reply (D820, HR-695).
+// Nothing here logs a prompt or a reply (D820, HR-695); the reply is kept
+// only for a capture profile on a connection with prompt capture on (G0 M30
+// D945b).
 package modelconn
 
 import (
@@ -461,6 +463,10 @@ func (h *Handler) answer(w http.ResponseWriter, api modelapi.API, st *answerStat
 			if n > 0 {
 				p := buf[:n]
 				sum.Write(p)
+				ans.Size += int64(n)
+				if room := s.Keep - len(ans.Kept); room > 0 {
+					ans.Kept = append(ans.Kept, p[:min(room, n)]...) // G0 M30 D945b
+				}
 				if stream != nil {
 					_, _ = stream.Write(p)
 				} else {

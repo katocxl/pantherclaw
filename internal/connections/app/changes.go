@@ -398,6 +398,11 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			current.PublicURL = *in.A2APublicURL
 			peer = current
 		}
+		// Prompt capture on a model connection (G0 M30 D945b): turning it on
+		// waits on its own always-protected surface, and is recorded with
+		// turning it off once applied.
+		surface := protect.SurfaceConnectionUpdate
+		var modelBefore, modelAfter *ModelConfig
 		var kc *kindConfig
 		if in.Postgres != nil || peer != nil || in.Model != nil {
 			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer, in.Model)
@@ -418,6 +423,13 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 				if err != nil {
 					return err
 				}
+				if err := s.checkModelCapture(ctx, before, m); err != nil {
+					return err
+				}
+				if captureTurnsOn(before, m) {
+					surface = protect.SurfaceModelCapture
+				}
+				modelBefore, modelAfter = before, m
 				set(KindModel, modelSummary(before), modelSummary(m), modelWeakens(before, m))
 			} else {
 				set(conn.Kind, "current", "replaced", true)
@@ -460,6 +472,9 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			if err != nil {
 				return err
 			}
+			if err := recordModelCapture(ctx, tx, c, conn.ID, modelBefore, modelAfter); err != nil {
+				return err
+			}
 			if in.Connector != nil {
 				if _, err := putConnector(ctx, q, c, after, spec); err != nil {
 					return err
@@ -474,7 +489,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		if !slices.ContainsFunc(changes, func(ch change) bool { return ch.weakens }) {
 			return write(ctx)
 		}
-		held, err = s.protect.Hold(ctx, tx, c.Caller, custodyChange(protect.SurfaceConnectionUpdate, conn.ID, changes, in), write)
+		held, err = s.protect.Hold(ctx, tx, c.Caller, custodyChange(surface, conn.ID, changes, in), write)
 		return err
 	}()
 	return out, held, err
@@ -733,6 +748,9 @@ func (s *Service) WithProtect(g *protect.Gate) *Service {
 	if g != nil {
 		g.Register(protect.SurfaceConnectionUpdate, s.ApplyProtectedUpdate, s.ProtectedUpdateState)
 		g.Register(protect.SurfaceRouteMode, s.ApplyProtectedRouteMode, s.ProtectedRouteModeState)
+		// Prompt capture on a model connection re-runs the update it was
+		// filed with (G0 M30 D945b).
+		g.Register(protect.SurfaceModelCapture, s.ApplyProtectedUpdate, s.ProtectedUpdateState)
 	}
 	return s
 }

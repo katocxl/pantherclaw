@@ -2919,6 +2919,7 @@ type PcModelConnection struct {
 	PriceCacheRead     *money.Decimal
 	PriceCacheWrite    *money.Decimal
 	UpdatedAt          time.Time
+	CapturePrompts     bool
 }
 
 type PcModelDraft struct {

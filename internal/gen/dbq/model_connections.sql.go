@@ -16,12 +16,16 @@ import (
 )
 
 const countModelConnections = `-- name: CountModelConnections :one
-SELECT count(*)::integer FROM pc.connections
-WHERE org_id = $1 AND id = ANY ($2::uuid[]) AND kind = 'model'
+SELECT count(*)::integer FROM pc.connections c
+WHERE c.org_id = $1 AND c.id = ANY ($2::uuid[]) AND c.kind = 'model'
+  AND NOT EXISTS (
+    SELECT 1 FROM pc.model_connections m
+    WHERE m.org_id = c.org_id AND m.connection_id = c.id AND m.capture_prompts)
 `
 
-// How many of these connections are model connections, whose prompts and
-// replies are never captured (G0 M29 D820).
+// How many of these connections are model connections whose prompts and
+// replies are not captured (G0 M29 D820): every one but those with prompt
+// capture on (G0 M30 D945b).
 func (q *Queries) CountModelConnections(ctx context.Context, orgID ids.OrgID, connectionIds []ids.UUID) (int32, error) {
 	row := q.db.QueryRow(ctx, countModelConnections, orgID, connectionIds)
 	var column_1 int32
@@ -30,7 +34,8 @@ func (q *Queries) CountModelConnections(ctx context.Context, orgID ids.OrgID, co
 }
 
 const getModelConnection = `-- name: GetModelConnection :one
-SELECT max_output_tokens, allowed_server_tools, price_currency, price_input, price_output, price_cache_read, price_cache_write
+SELECT max_output_tokens, allowed_server_tools, price_currency, price_input, price_output, price_cache_read, price_cache_write,
+    capture_prompts
 FROM pc.model_connections WHERE org_id = $1 AND connection_id = $2
 `
 
@@ -42,6 +47,7 @@ type GetModelConnectionRow struct {
 	PriceOutput        *money.Decimal
 	PriceCacheRead     *money.Decimal
 	PriceCacheWrite    *money.Decimal
+	CapturePrompts     bool
 }
 
 func (q *Queries) GetModelConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (GetModelConnectionRow, error) {
@@ -55,6 +61,7 @@ func (q *Queries) GetModelConnection(ctx context.Context, orgID ids.OrgID, conne
 		&i.PriceOutput,
 		&i.PriceCacheRead,
 		&i.PriceCacheWrite,
+		&i.CapturePrompts,
 	)
 	return i, err
 }
@@ -62,14 +69,15 @@ func (q *Queries) GetModelConnection(ctx context.Context, orgID ids.OrgID, conne
 const putModelConnection = `-- name: PutModelConnection :exec
 
 INSERT INTO pc.model_connections (org_id, connection_id, max_output_tokens, allowed_server_tools, price_currency,
-    price_input, price_output, price_cache_read, price_cache_write)
+    price_input, price_output, price_cache_read, price_cache_write, capture_prompts)
 VALUES ($1, $2, $3, $4, $5,
     $6::numeric, $7::numeric, $8::numeric,
-    $9::numeric)
+    $9::numeric, $10)
 ON CONFLICT (org_id, connection_id) DO UPDATE
 SET max_output_tokens = EXCLUDED.max_output_tokens, allowed_server_tools = EXCLUDED.allowed_server_tools,
     price_currency = EXCLUDED.price_currency, price_input = EXCLUDED.price_input, price_output = EXCLUDED.price_output,
-    price_cache_read = EXCLUDED.price_cache_read, price_cache_write = EXCLUDED.price_cache_write, updated_at = now()
+    price_cache_read = EXCLUDED.price_cache_read, price_cache_write = EXCLUDED.price_cache_write,
+    capture_prompts = EXCLUDED.capture_prompts, updated_at = now()
 `
 
 type PutModelConnectionParams struct {
@@ -82,12 +90,14 @@ type PutModelConnectionParams struct {
 	PriceOutput        *money.Decimal
 	PriceCacheRead     *money.Decimal
 	PriceCacheWrite    *money.Decimal
+	CapturePrompts     bool
 }
 
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
-// A model connection's settings (G0 M29 D811), written in the transaction
-// that creates or changes the connection.
+// A model connection's settings (G0 M29 D811; capture_prompts G0 M30
+// D945b), written in the transaction that creates or changes the
+// connection.
 func (q *Queries) PutModelConnection(ctx context.Context, arg PutModelConnectionParams) error {
 	_, err := q.db.Exec(ctx, putModelConnection,
 		arg.OrgID,
@@ -99,6 +109,7 @@ func (q *Queries) PutModelConnection(ctx context.Context, arg PutModelConnection
 		arg.PriceOutput,
 		arg.PriceCacheRead,
 		arg.PriceCacheWrite,
+		arg.CapturePrompts,
 	)
 	return err
 }

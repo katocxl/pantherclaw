@@ -54406,6 +54406,11 @@
             "title": "price",
             "description": "An optional price for estimates only (Team, HR-698); unset = no price.\n PantherClaw ships no price list.",
             "$ref": "#/components/schemas/pantherclaw.v1.ModelPrice"
+          },
+          "capturePrompts": {
+            "type": "boolean",
+            "title": "capture_prompts",
+            "description": "Prompt capture (Business, G0 M30 D945b): while on, a capture profile\n that covers this connection keeps its requests and replies for the\n profile's retention. Off by default; turning it on waits for a second\n person's security-key confirmation, turning it off applies at once."
           }
         },
         "title": "ModelConfig",
@@ -54454,6 +54459,14 @@
                 "type": "null"
               }
             ]
+          },
+          "capturePrompts": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "capture_prompts",
+            "description": "Prompt capture (Business, G0 M30 D945b): while on, a capture profile\n that covers this connection keeps its requests and replies for the\n profile's retention. Off by default; turning it on waits for a second\n person's security-key confirmation, turning it off applies at once."
           }
         },
         "title": "ModelConfig",
