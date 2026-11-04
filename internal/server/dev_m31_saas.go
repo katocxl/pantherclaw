@@ -61,9 +61,11 @@ func (s devSaaS) seed(ctx context.Context, cfg *Config, pool *db.Pool, org ids.O
 	for _, t := range []struct {
 		url, name, pkg, scheme, seal string
 	}{
-		{*s.salesforce, "salesforce", pcsalesforce.Name, "Bearer",
+		{
+			*s.salesforce, "salesforce", pcsalesforce.Name, "Bearer",
 			"seal the connected app's client with pclaw seal --connection %s --from-file SECRET --oauth-client-id ID " +
-				"--oauth-token-url %s/services/oauth2/token --oauth-scope api"},
+				"--oauth-token-url %s/services/oauth2/token --oauth-scope api",
+		},
 		{*s.notion, "notion", pcnotion.Name, "Bearer", "seal an internal integration token with pclaw seal --connection %s --from-file TOKEN"},
 		{*s.linear, "linear", pclinear.Name, "", "seal a personal API key with pclaw seal --connection %s --from-file KEY"},
 	} {

@@ -164,8 +164,10 @@ func handshake(ctx context.Context, base *url.URL, kind string, cl Client) error
 // simulators jira, gitlab, teams and aws (D254), a campaign's model relay
 // (G0 M25 D313), and the M31 simulators salesforce, notion and linear (G0 M31
 // D960).
-var simKinds = []string{"payments", "mcp", "github", "stripe", "slack", "a2a", "jira", "gitlab", "teams", "aws", "model-relay",
-	"salesforce", "notion", "linear"}
+var simKinds = []string{
+	"payments", "mcp", "github", "stripe", "slack", "a2a", "jira", "gitlab", "teams", "aws", "model-relay",
+	"salesforce", "notion", "linear",
+}
 
 // ModelRelayKind is the handshake kind of a campaign's model relay.
 const ModelRelayKind = "model-relay"
