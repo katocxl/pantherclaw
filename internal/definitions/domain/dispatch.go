@@ -82,6 +82,10 @@ type HTTPDispatch struct {
 	// on exactly this ARN. Its references are the decision's target and the
 	// connection's own account, region and partition, never a param.
 	AWSResource string `json:"aws_resource,omitzero"`
+	// GraphQL, when set, is the fixed document of a GraphQL POST (G0 M31
+	// D950 c): the body is {"query": <document>, "variables": <the body
+	// mapping>}, so the agent supplies only the mapped values.
+	GraphQL *GraphQLDocument `json:"graphql,omitzero"`
 }
 
 // MCPDispatch is a call of one tool on an upstream (remote) MCP server, or
@@ -237,7 +241,27 @@ func (d *Definition) fields(at string, f map[string]string, where place, enc Enc
 		return invalid("%s: at most %d fields", at, maxTemplateFields)
 	}
 	keys := slices.Sorted(maps.Keys(f))
-	nested := where == inBody && enc != EncodingForm
+	if where == inBody && enc == EncodingRFC5322Raw {
+		// Flat mail fields, checked by validateMailDispatch (G0 M31 D950 d).
+		for _, k := range keys {
+			if err := d.reference(at+"."+k, f[k], where); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	jsonKeys := where == inBody && jsonBody(enc)
+	if jsonKeys {
+		// A JSON body's keys may index arrays and build one object per list
+		// item (G0 M31 D950 a, b).
+		if err := CheckJSONBodyKeys(keys); err != nil {
+			return invalid("%s: %v", at, err)
+		}
+		if err := d.checkJSONBodyRefs(at, f); err != nil {
+			return err
+		}
+	}
+	nested := where == inBody && enc != EncodingForm && !jsonKeys
 	if enc == EncodingForm || nested {
 		if err := CheckFormKeys(keys); err != nil {
 			return invalid("%s: %v", at, err)
@@ -248,7 +272,7 @@ func (d *Definition) fields(at string, f map[string]string, where place, enc Enc
 			if p, err := ParseFormKey(k); err != nil || (p.List && enc != EncodingAWSJSON) {
 				return invalid("%s: field name %q: a JSON body nests objects only, never a [] list", at, k)
 			}
-		} else if enc != EncodingForm && !fieldRe.MatchString(k) {
+		} else if enc != EncodingForm && (!jsonKeys || !strings.Contains(k, "[")) && !fieldRe.MatchString(k) {
 			return invalid("%s: field name %q", at, k)
 		}
 		if (f[k] == BoolTrue || f[k] == BoolFalse) && enc == EncodingForm {
@@ -370,8 +394,17 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 		if err := d.validateAWSDispatch(at, h); err != nil {
 			return err
 		}
+	case EncodingRFC5322Raw:
+		if err := d.validateMailDispatch(at, h); err != nil {
+			return err
+		}
 	default:
-		return invalid("%s.encoding must be json, form, aws-json or aws-query", at)
+		return invalid("%s.encoding must be json, form, aws-json, aws-query or rfc5322-raw", at)
+	}
+	if h.GraphQL != nil {
+		if err := validateGraphQL(at, h); err != nil {
+			return err
+		}
 	}
 	if err := d.fields(at+".body", h.Body, inBody, h.Encoding); err != nil {
 		return err
