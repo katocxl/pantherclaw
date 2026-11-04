@@ -414,6 +414,26 @@ func (q *Queries) ListOwnerBudgetAccounts(ctx context.Context, orgID ids.OrgID, 
 	return items, nil
 }
 
+const lockBudgetAccount = `-- name: LockBudgetAccount :exec
+SELECT 1 FROM pc.budget_accounts WHERE org_id = $1 AND id = $2 FOR NO KEY UPDATE
+`
+
+// LockBudgetAccount and LockCounter take a row as its reservation would,
+// writing nothing: a busy probe (ADR-0015).
+func (q *Queries) LockBudgetAccount(ctx context.Context, orgID ids.OrgID, iD ids.UUID) error {
+	_, err := q.db.Exec(ctx, lockBudgetAccount, orgID, iD)
+	return err
+}
+
+const lockCounter = `-- name: LockCounter :exec
+SELECT 1 FROM pc.counters WHERE org_id = $1 AND id = $2 FOR NO KEY UPDATE
+`
+
+func (q *Queries) LockCounter(ctx context.Context, orgID ids.OrgID, iD ids.UUID) error {
+	_, err := q.db.Exec(ctx, lockCounter, orgID, iD)
+	return err
+}
+
 const lockPendingReservations = `-- name: LockPendingReservations :many
 SELECT r.id, r.account_id, r.counter_id, r.amount, r.state, coalesce(a.rank, c.rank)::smallint AS rank
 FROM pc.reservations r
