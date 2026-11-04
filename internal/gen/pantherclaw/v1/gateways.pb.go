@@ -3183,8 +3183,13 @@ type ReportDriftRequest struct {
 	ObservedDescriptionTruncated bool `protobuf:"varint,6,opt,name=observed_description_truncated,json=observedDescriptionTruncated,proto3" json:"observed_description_truncated,omitempty"`
 	// SHA-256 of the whole observed description, "sha256:<hex>".
 	ObservedDescriptionSha256 string `protobuf:"bytes,7,opt,name=observed_description_sha256,json=observedDescriptionSha256,proto3" json:"observed_description_sha256,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// The transaction whose own call-time check found the drift; empty from
+	// the periodic check. The server takes the run from its own transaction
+	// row of this connection, never from the gateway, and processes the
+	// report without a run when there is no such row (HR-665).
+	TransactionId string `protobuf:"bytes,8,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ReportDriftRequest) Reset() {
@@ -3262,6 +3267,13 @@ func (x *ReportDriftRequest) GetObservedDescriptionTruncated() bool {
 func (x *ReportDriftRequest) GetObservedDescriptionSha256() string {
 	if x != nil {
 		return x.ObservedDescriptionSha256
+	}
+	return ""
+}
+
+func (x *ReportDriftRequest) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
 	}
 	return ""
 }
@@ -6398,7 +6410,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"totalCount\x123\n" +
 	"\x06reason\x18\x04 \x01(\tB\x1b\xbaH\x18r\x162\x14^(stripe_livemode)?$R\x06reason\"9\n" +
 	"\x15ReportCircuitResponse\x12 \n" +
-	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\x89\x04\n" +
+	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\xbd\x04\n" +
 	"\x12ReportDriftRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x121\n" +
 	"\x04tool\x18\x02 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x01\x18\x80\x012\x11^[A-Za-z0-9_.-]+$R\x04tool\x12E\n" +
@@ -6406,7 +6418,8 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x0fobserved_digest\x18\x04 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x0eobservedDigest\x12@\n" +
 	"\x14observed_description\x18\x05 \x01(\tB\b\xbaH\x05r\x03(\x80@H\x00R\x13observedDescription\x88\x01\x01\x12D\n" +
 	"\x1eobserved_description_truncated\x18\x06 \x01(\bR\x1cobservedDescriptionTruncated\x12_\n" +
-	"\x1bobserved_description_sha256\x18\a \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x19observedDescriptionSha256B\x17\n" +
+	"\x1bobserved_description_sha256\x18\a \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x19observedDescriptionSha256\x122\n" +
+	"\x0etransaction_id\x18\b \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\rtransactionIdB\x17\n" +
 	"\x15_observed_description\"7\n" +
 	"\x13ReportDriftResponse\x12 \n" +
 	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\xe3\x02\n" +

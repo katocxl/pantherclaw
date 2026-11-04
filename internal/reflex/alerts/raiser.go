@@ -219,7 +219,10 @@ func Write(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal, suppressi
 }
 
 // EntryBody is the canonical ledger body of an alert or live event: ids,
-// rule references and subjects only, at most 8 KiB (D6).
+// rule references, subjects and the kind of the event that raised it
+// (Signal.Facts["event_kind"], HR-665) only, at most 8 KiB (D6). The event
+// kind survives every cut, so an alert trigger can always tell what raised
+// the alert.
 func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 	type body struct {
 		ID          string                 `json:"id,omitzero"`
@@ -228,6 +231,7 @@ func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 		RuleVersion string                 `json:"rule_version,omitzero"`
 		RuleDigest  string                 `json:"rule_digest,omitzero"`
 		PackVersion string                 `json:"pack_version,omitzero"`
+		EventKind   string                 `json:"event_kind,omitzero"`
 		Severity    string                 `json:"severity"`
 		Attention   string                 `json:"attention"`
 		Basis       string                 `json:"basis"`
@@ -238,7 +242,7 @@ func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 	}
 	b := body{
 		Source: s.Source, Rule: s.RuleID, RuleVersion: s.RuleVersion, RuleDigest: s.RuleDigest, PackVersion: s.PackVersion,
-		Severity: string(s.Severity), Attention: string(s.Attention), Basis: string(s.Basis), State: state,
+		EventKind: s.Facts["event_kind"], Severity: string(s.Severity), Attention: string(s.Attention), Basis: string(s.Basis), State: state,
 		Subjects: nonNil(s.Subjects), Test: s.Test,
 	}
 	if !id.IsZero() {
@@ -259,7 +263,7 @@ func EntryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 			b.Subjects = b.Subjects[:len(b.Subjects)/2]
 		default:
 			out, _ := evdomain.CanonicalBody(body{
-				ID: b.ID, Source: b.Source, Rule: b.Rule, Severity: b.Severity,
+				ID: b.ID, Source: b.Source, Rule: b.Rule, EventKind: b.EventKind, Severity: b.Severity,
 				Attention: b.Attention, Basis: b.Basis, State: b.State, Subjects: []reflexdomain.Subject{}, Test: b.Test,
 			})
 			return out

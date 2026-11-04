@@ -421,6 +421,8 @@ type harness struct {
 	circuits  []string
 	// drifts records the gateway's drift reports (under circuitMu).
 	drifts []string
+	// driftTxns are the transactions the drift reports name, in order.
+	driftTxns []string
 	// reportFacts makes the gateway report GitHub facts, recorded in facts
 	// (under circuitMu).
 	reportFacts bool
@@ -578,6 +580,7 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 			h.circuitMu.Lock()
 			defer h.circuitMu.Unlock()
 			h.drifts = append(h.drifts, fmt.Sprintf("%s %s %s %s", conn, d.Tool, d.Expected, d.Observed))
+			h.driftTxns = append(h.driftTxns, d.Transaction)
 			return nil
 		},
 	}, cmp.Or(h.log, pclog.Discard()))

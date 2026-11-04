@@ -216,9 +216,7 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return err
 		},
 		ReportDrift: func(ctx context.Context, conn string, d dispatch.Drift) error {
-			req := &pb.ReportDriftRequest{ConnectionId: conn, Tool: d.Tool, ExpectedDigest: d.Expected, ObservedDigest: d.Observed}
-			req.ObservedDescription, req.ObservedDescriptionTruncated, req.ObservedDescriptionSha256 = driftDescription(d.Description)
-			_, err := ctl.Gateway.ReportDrift(ctx, req)
+			_, err := ctl.Gateway.ReportDrift(ctx, driftRequest(conn, d))
 			return err
 		},
 		ReportInventory: func(ctx context.Context, conn string, inv dispatch.Inventory) error {
@@ -432,6 +430,17 @@ func (g *Gateway) WaitReady(ctx context.Context, timeout time.Duration) error {
 // maxDriftDescription is the most of an observed tool description a drift
 // report carries (ReportDriftRequest.observed_description).
 const maxDriftDescription = 8192
+
+// driftRequest is the ReportDrift request of one drifted tool of conn. A
+// drift a call's own check found names that call's transaction; the server
+// takes the run from its own row of it, never from the gateway (HR-665).
+func driftRequest(conn string, d dispatch.Drift) *pb.ReportDriftRequest {
+	req := &pb.ReportDriftRequest{
+		ConnectionId: conn, Tool: d.Tool, ExpectedDigest: d.Expected, ObservedDigest: d.Observed, TransactionId: d.Transaction,
+	}
+	req.ObservedDescription, req.ObservedDescriptionTruncated, req.ObservedDescriptionSha256 = driftDescription(d.Description)
+	return req
+}
 
 // driftDescription bounds an observed description to whole UTF-8
 // characters within maxDriftDescription bytes (G0 M10 D47), and says
