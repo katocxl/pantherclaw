@@ -1,6 +1,6 @@
 {
   "RT-001": {
-    "digest": "3998ef667034227431fcbfe523fc163f8c76ea62f6ef31c211cad5031c259ed5",
+    "digest": "ca43abc8c4523ad8c134edf64a9000638331a576055a128964f5120b17d320a5",
     "tier": "community",
     "asi": [
       "ASI02"
@@ -16,7 +16,7 @@
     }
   },
   "RT-002": {
-    "digest": "400c13fc28478d30dadff3ea242beaf85800f93f3ba4a1f7335e0f711b87060f",
+    "digest": "3e8934758e65fb5d83fd45b34a66d6c1636efd6f47d9ecbfa40487df12651a13",
     "tier": "community",
     "asi": [
       "ASI02"
@@ -32,7 +32,7 @@
     }
   },
   "RT-003": {
-    "digest": "fe77c45460da3340ca2444160e9daf90d72aad8983b325228b74c61bc21c707a",
+    "digest": "cac797a516855810f81d316ba02a92ae7ae064ffa51103bdafad6a7c7a2989dd",
     "tier": "community",
     "asi": [
       "ASI02"
@@ -52,7 +52,7 @@
     }
   },
   "RT-004": {
-    "digest": "2bd2e735497f1fb3eaf36b25abac8870e237ea3d7fa09913f9aed3c447b86e07",
+    "digest": "87c83c597f1566cb0b3a50102fef901384fbc0fdc646ce39ee3ffdddc4220f09",
     "tier": "community",
     "asi": [
       "ASI03"
@@ -72,7 +72,7 @@
     }
   },
   "RT-005": {
-    "digest": "41a075b73c757ca0f8f1c3875ceaf8e9c59aa70174a94f6337c2f3025c27df94",
+    "digest": "818d4ab99e6d341593f0dee89e8f3f7f5d4b54b322053949aee7693820fb0147",
     "tier": "community",
     "asi": [
       "ASI03"
@@ -92,7 +92,7 @@
     }
   },
   "RT-006": {
-    "digest": "0c5914732c301f27cdb6f0b1f0a783a7a6e511ef3559a6541dbb7cb19feb3d14",
+    "digest": "60c59edec13637ef69bbfd12743a6bf9a66d2aa6201d781e6152c692133c7da6",
     "tier": "community",
     "asi": [
       "ASI03",
@@ -110,7 +110,7 @@
     }
   },
   "RT-007": {
-    "digest": "ce8ad46792cc0d942a61a80e29266be1967d77cdbcb5777fd1dab4f70bcde35a",
+    "digest": "3535dfb8e6ef1b386d514b229613bf98940efa4b758261e825706084342647a7",
     "tier": "community",
     "asi": [
       "ASI03",
@@ -128,7 +128,7 @@
     }
   },
   "RT-008": {
-    "digest": "721ccb79d3f97e88f5212ba0f2a5610efb9bbdc37b3dc8f25446d1344f5c7fbd",
+    "digest": "97bc47a39f9318d0f85b85a763e364a2c35f4e3746bc1054a4f20b19aae665c9",
     "tier": "community",
     "asi": [
       "ASI09"
@@ -144,7 +144,7 @@
     }
   },
   "RT-009": {
-    "digest": "04748f3ac155a2aab7b5fa266f0e3032aeea1a28e6fa867cb021994099b814a2",
+    "digest": "eca2baabd80cdf4bd610e9b1d1674e66d34d4721feda6b763b79f71ee3a5ea16",
     "tier": "community",
     "asi": [
       "ASI02"
@@ -164,7 +164,7 @@
     }
   },
   "RT-010": {
-    "digest": "3f25cf575342e8306ee8bf252a558b0674189b03839ff5dbfbc087109997737b",
+    "digest": "b655837a35cb1c8ec323dde29006b04b3a2fdbc1d7fa1e12edf609913cd2ebcc",
     "tier": "community",
     "asi": [
       "ASI02"
@@ -184,7 +184,7 @@
     }
   },
   "RT-011": {
-    "digest": "b3508c97798e7f8767f2cb701c5e838d7676ffc16a0121a972cce3e1a3dbdb4f",
+    "digest": "d2e478655c1d63296f81d2166e6e73b23f85c6dfb5b78e97388118d4753c4fbd",
     "tier": "community",
     "asi": [
       "ASI02"
@@ -204,7 +204,7 @@
     }
   },
   "RT-012": {
-    "digest": "2d22a4b9ce8296ca013f1de8492cf92451fd61783bcbc0f573506e038c6e73c8",
+    "digest": "f84b9d9252052c80b77fe81c5da075554341a9b62d86eaabcda9751bc1ebea3c",
     "tier": "community",
     "asi": [
       "ASI03"
@@ -224,7 +224,7 @@
     }
   },
   "RT-013": {
-    "digest": "6ba1cca78c89c1e3970e3c32a133c8502033d2aea7bbca031291984110409008",
+    "digest": "4c9908f08692eb27fb8de3927926fe8e9c89e9ff8ac854c29e0730f110a6db5e",
     "tier": "community",
     "asi": [
       "ASI03"
@@ -244,7 +244,7 @@
     }
   },
   "RT-014": {
-    "digest": "5bc9a4d0ab206367dfef7cf90185ab9da9a645c8d39e40e56c64001798d26d3a",
+    "digest": "cd05cdcbe927ac11c8683734581fc5b525385cd5ae43612e2da677beb893a226",
     "tier": "community",
     "asi": [
       "ASI05"
@@ -260,7 +260,7 @@
     }
   },
   "RT-015": {
-    "digest": "8dbcf4d274a82666b842f9c9e480087419dd1ffb24fb8071a6ed6209e236ea42",
+    "digest": "d010e3c334f80c8bbe6493c237e703ea735393b9dfcd7d0c7209f6ef9b5c26b8",
     "tier": "community",
     "asi": [
       "ASI05"
@@ -282,7 +282,7 @@
     }
   },
   "RT-016": {
-    "digest": "3ea72c4ed1c143925d6f28b496fbd9c773201f40a5873e947f364a2cfda0dfb3",
+    "digest": "7babe50ae6d2b2ba1d103049541927ecdc00a8adce0fc43251e0179c9190a315",
     "tier": "community",
     "asi": [
       "ASI08"
@@ -298,7 +298,7 @@
     }
   },
   "RT-017": {
-    "digest": "837ea8743d8dde6fb824616cbceaca529d68fa041abc1c66851e9542520da77d",
+    "digest": "11febb0c89d83cd6c8f9fd070ef2a1691cf001e29473cec6e25e9ade70b0bb01",
     "tier": "community",
     "asi": [
       "ASI02"
@@ -314,7 +314,7 @@
     }
   },
   "RT-018": {
-    "digest": "7a4189084e7f26f50e99e53718b39c3a563b2c03261459ab7e05998e063bec24",
+    "digest": "ba7fd739d6107d35488bc88ea971170e9f153670b201c986cc9a3f8f69d037fc",
     "tier": "community",
     "asi": [
       "ASI09"
@@ -330,7 +330,7 @@
     }
   },
   "RT-019": {
-    "digest": "664a97f228a4f2b657fc0e7e694d0db9f21bf627676fd6ff7bc06c1d5b643b94",
+    "digest": "ec6a4978a2dd6563dda8573dbe8a13fd9d99aec7facbb5e1219908faa0cf21fe",
     "tier": "community",
     "asi": [
       "ASI02"
@@ -346,27 +346,27 @@
     }
   },
   "RT-020": {
-    "digest": "14e40543e544f608549bcdbd51f2535339ed82535e923ddd8e1e2d2f7ed8b3ea",
+    "digest": "fd54f08dede1389843ab498a3630bd2850921aec0cc77607f3d0275c8a3ac5b4",
     "tier": "community",
     "techniques_none": "A functional run of PantherClaw's own allow path: read, branch, write and open a pull request."
   },
   "RT-021": {
-    "digest": "52fad630809c13f76f24c96e4d9707acf7d93cd5ac9f724d644b84bc0c6d19eb",
+    "digest": "f4ad8445446c13589656e3ace81006d294f9b478955eda474705693fb78875e3",
     "tier": "community",
     "techniques_none": "Tests PantherClaw's own recovery: an approved merge runs once and a retry is a duplicate."
   },
   "RT-022": {
-    "digest": "4dfe5f4c52178790b2dafd085afbd86a8fe5cddf0aa6063c0b3693067acaf683",
+    "digest": "832267014d1223d4b0f1ee9de5aaff6b20894c675caa8800cfb91dfcb0df2270",
     "tier": "community",
     "techniques_none": "Tests PantherClaw's own range isolation: a range run never reaches a real connection."
   },
   "RT-023": {
-    "digest": "e4e6aeac825df6d6cc84b6a97ed97f58ecb80e37fe30fb49fd1ea8fead65e8ce",
+    "digest": "c33c44d4b6cf49ad571f5d03e6a0c2fbade964c0d74e6b1b6ef5a21565ff567c",
     "tier": "community",
     "techniques_none": "Tests PantherClaw's own explanation: the merge decision receipt explains itself."
   },
   "RT-024": {
-    "digest": "060ea8607d3533dddeb1538916e9b8fb41019487e4abf2756b8302d59f764e57",
+    "digest": "82f66a8491cd5981edd4314d60d394ceebbb95c066ceb7c177be4558dc0180ae",
     "tier": "business",
     "asi": [
       "ASI03"
@@ -382,7 +382,7 @@
     }
   },
   "RT-025": {
-    "digest": "84f566e555acc3cef2fc5321dbfd5455d8a8e1a70b4eaf2b5f12dd94ffb78ab0",
+    "digest": "2444fb0bd05a8df6730db3cff2e98497a18d3ea48be4e02c048ac79faf272991",
     "tier": "business",
     "asi": [
       "ASI09"
@@ -398,7 +398,7 @@
     }
   },
   "RT-026": {
-    "digest": "6ef15f002b72b6c29c50a190ff27eee27e76ca624fb3d6414830b64c2e335d85",
+    "digest": "a125f91d96ba88f124070076e811047bfb218d133daca0b669aba5629f3016ac",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -418,7 +418,7 @@
     }
   },
   "RT-027": {
-    "digest": "6246f15437d482d524ff0e6c029041691f822dc0c139290dc72c457b1c7fcc12",
+    "digest": "1759ab52b6ebc01b9e763711d4dc58f8458172b29a466013f0190fffc95c27a6",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -438,7 +438,7 @@
     }
   },
   "RT-028": {
-    "digest": "c4b0e3c1543c7c639638e2816749bfa3bab427d390e73467cc91c83956bdd994",
+    "digest": "f12d4e50334353cf23e49db93dc34642d8f248a9b4775f2996f43041526c56be",
     "tier": "business",
     "asi": [
       "ASI04"
@@ -454,7 +454,7 @@
     }
   },
   "RT-029": {
-    "digest": "558d5e5237c0096ffad450f6293bb8569424bb65f3771916b09688603d4546d3",
+    "digest": "2008bbdcbbdf5fc03b881bf4a09dde571099c9d87d019f1354b9cbfa2bff6ed6",
     "tier": "business",
     "asi": [
       "ASI04"
@@ -470,7 +470,7 @@
     }
   },
   "RT-030": {
-    "digest": "0af1150db0b9db64f6a9143a47369ece5e7683eb1cf510f5734af224daa7be36",
+    "digest": "381f15f9a43c20b0c12f313b08bb5592f830b922cfa64f8421dac68d04612bb5",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -481,7 +481,7 @@
     "techniques_none": "Tests PantherClaw's own strict parsing: tool input another parser would read differently is refused."
   },
   "RT-031": {
-    "digest": "b19fe7b2d19ccf6414cfc736e4f80583253df65b60839ab02dd590806b8db40c",
+    "digest": "3cbbce887f68da37156026eb32591b11529d4aefa327b53d4c3789adf65bc8bc",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -497,7 +497,7 @@
     }
   },
   "RT-032": {
-    "digest": "28b28120e022a4f3360fa605f4c98d59c94c2b2531125fc57ccaee473d4fb0b6",
+    "digest": "09b246e2c9feb5d7f9f7d6e80515414e41439259480d3ad458fa89dbf5e0d68f",
     "tier": "business",
     "asi": [
       "ASI03"
@@ -517,7 +517,7 @@
     }
   },
   "RT-033": {
-    "digest": "2567c6c5d87367e1e016cda2e6e984fd4d48841fd4846958e7ca4ab684eb1dd2",
+    "digest": "291656415d9249370b53c3f557578d4b950ac358b7685701745bcd9e0f60a13e",
     "tier": "business",
     "asi": [
       "ASI03"
@@ -528,7 +528,7 @@
     "techniques_none": "Tests PantherClaw's own tenant isolation: ids of another organization's records are not found."
   },
   "RT-034": {
-    "digest": "639cda47b027f587d4dfb34fd226d46eda8b54104e11e6c8090cbeb31de6da17",
+    "digest": "2bc6e9b57729b30a1014767de54d6edacec202f5f190846b89748d1cd7573846",
     "tier": "business",
     "asi": [
       "ASI08",
@@ -541,7 +541,7 @@
     "techniques_none": "Tests PantherClaw's own containment: the kill switch refuses the next action within a second."
   },
   "RT-035": {
-    "digest": "d2a8d6c224523c2e83766564b010f3a85e1af3f301b0ab98569be262a70c093d",
+    "digest": "5fb4ece8a63ff18d64d2250594d18225bdae634f05028945f1ed947c71757a89",
     "tier": "business",
     "asi": [
       "ASI03",
@@ -554,7 +554,7 @@
     "techniques_none": "Tests PantherClaw's own revocation: a revoked grant refuses the next action."
   },
   "RT-036": {
-    "digest": "964724688ce87b3ee236112a49f11aaafbe0ef2366db326f18ec22f0d1204164",
+    "digest": "8c68e92b23d03fb43c570b16dadcff524f7a88136ce675988e1ce912a418ad43",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -574,7 +574,7 @@
     }
   },
   "RT-037": {
-    "digest": "5ffb62fb355bddce201ea19e0f343713a4e69a5eb5e064306886694e0aefd02d",
+    "digest": "03bb7958d12fd8e3178ffa3431b2604fcca13faa40404e43503952bd09f4adae",
     "tier": "business",
     "asi": [
       "ASI08"
@@ -585,17 +585,17 @@
     "techniques_none": "Tests PantherClaw's own recovery: a lost response is UNKNOWN and is not retried."
   },
   "RT-038": {
-    "digest": "568649882f22a1d84d5fcfa8007a169d7b3ef63a6559ee44bed1028e1f4708be",
+    "digest": "a4776880cda89f8091d96338218b66c82dc2773bf62c75461a7f2c82e5a9f360",
     "tier": "business",
     "techniques_none": "A functional run of PantherClaw's own allow path: a refund within limits."
   },
   "RT-039": {
-    "digest": "e80a62d92a9e0d457d2eae326efa384f0a73f8aaa8f167da246cef4c91cdc78b",
+    "digest": "f9cc9857f07c1ea41e03b9c36a7500a3198b7879bf5e6aa299b73079aacbf698",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own test/live separation: a live key in a test connection sends nothing."
   },
   "RT-040": {
-    "digest": "bd5269ab6de6542f269931c99372067e164c5e538a99e3af2d2dcb0cb82d090b",
+    "digest": "3dc9e92c462c43b260e9291a5ec9ad7a92bff8955823a0bcf19483ea3d74adae",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -615,7 +615,7 @@
     }
   },
   "RT-041": {
-    "digest": "f51ebed1aae8c0c4aa749b6d3417df243c543b9a7179e50380e0e69000c7c9b5",
+    "digest": "27a665498e9c7417508238d40823c5d34df3f6160a9704a9b37fcb926a8365e9",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -635,7 +635,7 @@
     }
   },
   "RT-042": {
-    "digest": "cedaa10bd9fd07bb12a4926dea41dec36ac4d882b1b0755d035c37c2456d4a99",
+    "digest": "312f5f976f5235dd7dbb2dcc3b37cba41dbe16f26f5e41852c4960be26a8159f",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -655,7 +655,7 @@
     }
   },
   "RT-043": {
-    "digest": "7d2102973b49f128f8d17644e0e6e988bfbb1c67e1b6c3b91cc7fec893b6b114",
+    "digest": "11c6248a530b5504d4050ebc65e4b99fb08409e64260fdead759a3d5e5b7c399",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -675,7 +675,7 @@
     }
   },
   "RT-044": {
-    "digest": "23b8c61010fc8bd111091c835c69fe0eabfc1177e29639ecd73bb218c593b072",
+    "digest": "be0cb0fc7d723008caf5f97e69be7fec8ad3f33fedf192f11949a84d6f4fc1ce",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -691,7 +691,7 @@
     }
   },
   "RT-045": {
-    "digest": "b5cdfdcbe5788a59ac6a16f7889ce0a565d12bb225c20877fa652cef2ea605a9",
+    "digest": "471ab34f6fa22296b0919086f727793e0ccc978a0ec25e3b5294890a9e9ae8fb",
     "tier": "business",
     "asi": [
       "ASI09"
@@ -711,7 +711,7 @@
     }
   },
   "RT-046": {
-    "digest": "8c7e907dd50462b90de1c74c9ae987f3faa56f61ae437bb37c9e8978b7e5ba72",
+    "digest": "17d8d0def65bd260afd6b811bc107904971f1af90567b1d936d469625a255afe",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -731,7 +731,7 @@
     }
   },
   "RT-047": {
-    "digest": "22eaaff646ebab90c94249df39c25773206e95b8099caf3f0ed70341c2ba2b5d",
+    "digest": "6edabfc3c0d5c68f9e84e764eda4a03487e2e04bb66a4b6079186f3261bdc3e2",
     "tier": "business",
     "asi": [
       "ASI03"
@@ -747,7 +747,7 @@
     }
   },
   "RT-048": {
-    "digest": "82cd90af002b28d91d41c985a1e8e5ff42e4ee93a54ca726fca9bd5d9e1954b9",
+    "digest": "665ce37881fa829213a77be299848049da4d16de5c1dcb837f09e6641600daa5",
     "tier": "business",
     "asi": [
       "ASI03"
@@ -767,7 +767,7 @@
     }
   },
   "RT-049": {
-    "digest": "6fd8d1ae64a1c1a8dda2770c6bd36ac5209e58ab187e73a4cce969a529d4f1ce",
+    "digest": "8baffe6558f32d7437d05229abed0f510128755ec62892022b12b22cbc22385e",
     "tier": "business",
     "asi": [
       "ASI07"
@@ -783,7 +783,7 @@
     }
   },
   "RT-050": {
-    "digest": "1aa8211e282837f2c5fd64888b8e67b4a7342ed5408792576038bdb3a011db1c",
+    "digest": "746e749f128c96f54ae05de3920c2a13632d8506f115e40b6307924c750b91d9",
     "tier": "business",
     "asi": [
       "ASI04",
@@ -801,7 +801,7 @@
     }
   },
   "RT-051": {
-    "digest": "9fbe73a0cdf2584903b2652767c7eea01a8a1907309116712dbe0cfcbdb0f8ac",
+    "digest": "794b0783056b182572787f44a0efb4128bcf37b91f0c6a4cf9de4157b7d413d0",
     "tier": "business",
     "asi": [
       "ASI07"
@@ -817,57 +817,57 @@
     }
   },
   "RT-060": {
-    "digest": "ba1774b6d07871c964a0a0b060b37cc57597793181b1755011d2ca7a320dd060",
+    "digest": "1990d8e4d472698bfb8a821485ee7002c08cf80fae4655dff7e92cc7f4474062",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own management plane: another site cannot ride a session cookie into the Connect API."
   },
   "RT-061": {
-    "digest": "1baca4dc55b008a4dc3829cc8887767445e52c15f8bf58ac5a8c7d9b8840456e",
+    "digest": "2f1625ba55a04a8f18fd732ff251b0e7214390e7fa4970b448bebfae5caf273a",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own management plane: another site cannot read the operations stream with a session cookie."
   },
   "RT-062": {
-    "digest": "1e026ce5bff549e2d3542c42a7bdd83ee118ced1bb9ba30d9938a7ce72302bfe",
+    "digest": "61a67ce27ebee960cb087fed1d13a4d4a3f29c9ef2e7f43fb3ad53021110923f",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own plan gate: a lapsed plan never stops decisions, reads or containment."
   },
   "RT-063": {
-    "digest": "fb5636e148b9335a981adab0159e217db6d68180bfa9913828c032e59938f4d7",
+    "digest": "a9aac41fe02b0f781af96495df7bcb7850fdb455ed25438829eb390622e8c535",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own billing: no API call, forged status or replayed event changes a plan."
   },
   "RT-064": {
-    "digest": "31aeaeaf2cfad4d954c2ddd279df5aac47a2aaa7fd5d845bd26512e8fc1eea66",
+    "digest": "6d1412329876f5f87b36287afd08888bd667cbf953c65ddc9ffb6df9234a5604",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own startup: a production server refuses a development billing seam."
   },
   "RT-065": {
-    "digest": "f1210a6abf0a546d6906c101ff0c3d97b02280b0b7983019789865012846ce44",
+    "digest": "da72aeb6a488c9475dfe16e31c7dddbb038d6224ed45266811e7001316ce4eb5",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own management plane: a flooding credential is rate-limited while decisions continue."
   },
   "RT-066": {
-    "digest": "fded60f4e894da12bc1473b822b8d56805e8642b505d9ef4916c93b7eb2f649a",
+    "digest": "5042a4e67c468bcc4ccd9f90338cd630b5a652e94120d81fe0aea1e480977c38",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own support access: support cannot approve its own request or reuse a revoked session."
   },
   "RT-067": {
-    "digest": "ca4df3b4630ec66a6ff117673568582c5a6ccf3dfaf79ca2cd1236499d84d21f",
+    "digest": "a0f7a3f6ec539421e86bcd01be2bc861b782cca90d9016f1f498f08a56bfbb5e",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own break glass: it needs a designated holder and that holder's fresh key."
   },
   "RT-068": {
-    "digest": "b749f69b55cf6079e8eedeb5f1ded382707e81136c434001db791fe70d75c28a",
+    "digest": "ef720e11ced1988cdc81811aa74af0e2bfaacd79fc1a8fa92502c4a5912537d8",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own recovery: a deleted org's gateway stops and its agents are refused."
   },
   "RT-069": {
-    "digest": "1c2520afb5a0f6595a5a5c71255d13b955837cbf90c89e0a273e396fc073b47f",
+    "digest": "dd5273980ecf93488fa05192abf9a111ad1594056f3217761614c047cf6a1898",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own export integrity: another org's, an expired or a tampered export is refused."
   },
   "RT-120": {
-    "digest": "e895897c1ddc6d82292238a1c0e92af9a5bc666d2c5ceab2e33820e0c98a30d0",
+    "digest": "34d8b9ea69d9726acc86f08411452ac37a71140f3d695c7fbddb4471377628ca",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -887,7 +887,7 @@
     }
   },
   "RT-121": {
-    "digest": "bb752505f1fccfe6a14b45b34730f37a83a040a43338b31c3144efe024d23df1",
+    "digest": "ac065f36292cadef3ff9660956676532ca91c7d611c22b567603b862c0940124",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -903,7 +903,7 @@
     }
   },
   "RT-122": {
-    "digest": "b94a750e32dafa3049c8d5994bbfb8e12bd795a1bc52ddd3c6aacdcb973ef0c9",
+    "digest": "dab4eae3855016514322912aa24a451133c81ccc979e29da351bdd89a432fb41",
     "tier": "business",
     "asi": [
       "ASI02"
@@ -914,7 +914,7 @@
     "techniques_none": "Tests PantherClaw's own ECS verifier: a deploy outside the connection role's account is refused, and ECS alone confirms a rollout."
   },
   "RT-150": {
-    "digest": "c936ab796ee843ec26b576ea57cecc196734ff10f68da9f54da3547193b8a839",
+    "digest": "c7de7dd8f6e59b460447a24bb8e69ff079e879e98f2b8e488e0cd34301fbde4c",
     "tier": "business",
     "attack": [
       "T1606"
@@ -924,7 +924,7 @@
     }
   },
   "RT-151": {
-    "digest": "8132820f3a55da858d73defe42e8906a0f4731f00f18f89c190170b9e7e57dc1",
+    "digest": "064565a8101b62c5edd6319818f5b799777b774c83d63a6420db87b76e525b70",
     "tier": "business",
     "atlas": [
       "AML.T0091.000"
@@ -938,7 +938,7 @@
     }
   },
   "RT-152": {
-    "digest": "6c542e7c4e295f68425d52f983602384eb163a62f2eb0fd3128b6bc2066931db",
+    "digest": "f33994dcdcc71cf7ee2593ccea8a3f46f6cd2e096a2c684583d6314b171325af",
     "tier": "business",
     "atlas": [
       "AML.T0091.000"
@@ -952,7 +952,7 @@
     }
   },
   "RT-153": {
-    "digest": "80baf8ced4a59609858b937aa62964965e9df04bf8dc1eaab8c8832ae654f00b",
+    "digest": "5e7d97abdc3ffa2b93f927a9f86cf0be657ce239ff52042e3f390627f2206fe2",
     "tier": "business",
     "atlas": [
       "AML.T0091.000"
@@ -966,7 +966,7 @@
     }
   },
   "RT-154": {
-    "digest": "e2646515f2df157472cf2793e64232c81118359c5e099f6e434223c70c52da43",
+    "digest": "563e80797a9768be5795d398be180d487614a897915fd816ce26802fbeceba13",
     "tier": "business",
     "atlas": [
       "AML.T0093",
@@ -978,7 +978,7 @@
     }
   },
   "RT-158": {
-    "digest": "ac7076d5a7e0b49386db7612a660d5a7eeab2af8eb4a7ddcb592c0be42fb3926",
+    "digest": "aeb613ec21dab6d709ed19bde8a81cac8ff449e05a73c9f68056338cf877ec22",
     "tier": "business",
     "atlas": [
       "AML.T0051.001"
@@ -992,7 +992,7 @@
     }
   },
   "RT-159": {
-    "digest": "159191b2cf42ed2d353ebdde46d1598be43ac8866e082ebdec3af1ee9ca19ba7",
+    "digest": "b373a05d41cfbd680c947d4a7c4002e4ec841590fae6f284342229d9275ce387",
     "tier": "business",
     "atlas": [
       "AML.T0051.001"
@@ -1006,17 +1006,17 @@
     }
   },
   "RT-160": {
-    "digest": "9cb66c696cf4edec063f7ed2bd0a5b11937f945595bf1fdaaaac630323561647",
+    "digest": "a766dfe493215771d064195d5809ac65631649cdf05cd405837709276eb09446",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own decision order: a content flag never turns a deny into a hold."
   },
   "RT-161": {
-    "digest": "b8f2682ce280cc957997a97643edb3575a911416236e30d6b4faf7aa40c19b0a",
+    "digest": "e081710bf1c3216f088306f16a489149ac2c5268692a9260273b22bfd1baee0e",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own content signal modes: WATCHING and OFF change no decision."
   },
   "RT-163": {
-    "digest": "2e53c7e8653f760470c5c603eeb09e84bf3a4caa3f2ee4079a98b2873975b062",
+    "digest": "7e775c712e48d5d969d6708897ae843dab2994691d0170926705d0f48037dc7e",
     "tier": "business",
     "atlas": [
       "AML.T0051.001",
@@ -1032,7 +1032,7 @@
     }
   },
   "RT-164": {
-    "digest": "42068030b37d690b1a21f81f015802978dcf77231c4a8449e46346286382dd7b",
+    "digest": "1a67293366eecbb9a52ab60351d4fd18f970af0c565ff270c43509805ff56fb1",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own permissions: a caller with no permission gets a refusal, not data."
   }

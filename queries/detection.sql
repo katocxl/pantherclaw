@@ -145,15 +145,20 @@ DELETE FROM pc.detection_sequences WHERE org_id = sqlc.arg(org_id) AND started_a
 -- Published custom rules with the digest their publication recorded: in
 -- detection_rule_versions (append-only, retention-safe) and in the ledger
 -- entry, bound to its kind and to the rule (HR-241, D59 L2). The ledger
--- digest is empty when retention removed the body.
+-- digest is empty when retention removed the body. The rule's open
+-- confirmation (HR-666) comes with its version and digest; the engine
+-- applies it only when both equal the running version's.
 SELECT r.id, r.rule_id, r.version, r.content, r.content_digest,
        coalesce(v.content_digest, ''::bytea)::bytea AS recorded_digest,
        (e.id IS NOT NULL)::bool AS ledger_present,
        (e.body_removed_at IS NOT NULL)::bool AS ledger_body_removed,
        coalesce(CASE WHEN e.body_removed_at IS NULL
-                     THEN convert_from(e.body, 'UTF8')::jsonb -> 'details' ->> 'content_digest' END, '')::text AS ledger_digest
+                     THEN convert_from(e.body, 'UTF8')::jsonb -> 'details' ->> 'content_digest' END, '')::text AS ledger_digest,
+       coalesce(c.version, 0)::int AS confirmed_version,
+       coalesce(c.content_digest, ''::bytea)::bytea AS confirmed_digest
 FROM pc.custom_detection_rules r
 LEFT JOIN pc.detection_rule_versions v ON v.org_id = r.org_id AND v.rule = r.id
+LEFT JOIN pc.custom_detection_rule_confirmations c ON c.org_id = r.org_id AND c.rule_id = r.rule_id AND c.ended_at IS NULL
 LEFT JOIN pc.ledger_entries e ON e.org_id = r.org_id AND e.id = r.ledger_entry_id
     AND e.kind = 'audit.detection.rule_published'
     AND (e.body_removed_at IS NOT NULL
@@ -215,3 +220,49 @@ VALUES (sqlc.arg(org_id), sqlc.arg(rule), sqlc.arg(rule_id), sqlc.arg(version), 
 -- name: LockCustomRulePublishing :exec
 -- Serialises an org's publishes so the 100-rule cap holds (D59 L3).
 SELECT pg_advisory_xact_lock(hashtextextended('detection.publish:' || sqlc.arg(org_id)::uuid::text, 0));
+
+-- name: InsertCustomRuleConfirmation :one
+INSERT INTO pc.custom_detection_rule_confirmations (org_id, id, rule_id, version, content_digest, protected_change_id, requested_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(rule_id), sqlc.arg(version), sqlc.arg(content_digest),
+        sqlc.arg(protected_change_id), sqlc.arg(requested_by))
+RETURNING *;
+
+-- name: OpenCustomRuleConfirmation :one
+-- A rule's open confirmation (HR-666), locked.
+SELECT * FROM pc.custom_detection_rule_confirmations
+WHERE org_id = sqlc.arg(org_id) AND rule_id = sqlc.arg(rule_id) AND ended_at IS NULL
+FOR UPDATE;
+
+-- name: OpenCustomRuleConfirmations :many
+SELECT * FROM pc.custom_detection_rule_confirmations
+WHERE org_id = sqlc.arg(org_id) AND ended_at IS NULL
+ORDER BY rule_id;
+
+-- name: EndCustomRuleConfirmations :many
+-- Ends a rule's open confirmation of the given versions (all when versions
+-- is empty): a new publish ('superseded'), a disable ('disabled') or a
+-- withdrawal ('withdrawn').
+UPDATE pc.custom_detection_rule_confirmations
+SET ended_at = now(), ended_reason = sqlc.arg(reason), ended_by = sqlc.arg(ended_by)
+WHERE org_id = sqlc.arg(org_id) AND rule_id = sqlc.arg(rule_id) AND ended_at IS NULL
+  AND (coalesce(cardinality(sqlc.arg(versions)::int[]), 0) = 0 OR version = ANY (sqlc.arg(versions)::int[]))
+RETURNING *;
+
+-- name: PendingCustomRuleConfirmationOf :one
+-- The pending protected change confirming a version of the rule (one per
+-- rule: a newer request replaces an older one).
+SELECT id FROM pc.protected_changes
+WHERE org_id = sqlc.arg(org_id) AND surface = 'detection.custom_rule.confirm' AND subject = sqlc.arg(rule_id) AND state = 'PENDING';
+
+-- name: PendingCustomRuleConfirmations :many
+-- The pending protected changes that would confirm a custom rule version.
+SELECT id, subject, coalesce((payload ->> 'version')::int, 0)::int AS version
+FROM pc.protected_changes
+WHERE org_id = sqlc.arg(org_id) AND surface = 'detection.custom_rule.confirm' AND state = 'PENDING'
+ORDER BY id;
+
+-- name: PublishedCustomRule :one
+-- The PUBLISHED version of a rule, locked.
+SELECT * FROM pc.custom_detection_rules
+WHERE org_id = sqlc.arg(org_id) AND rule_id = sqlc.arg(rule_id) AND state = 'PUBLISHED'
+FOR UPDATE;
