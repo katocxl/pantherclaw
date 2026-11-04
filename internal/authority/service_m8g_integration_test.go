@@ -38,6 +38,7 @@ func TestHR203_TheExecutionReceiptCarriesTheAccess(t *testing.T) {
 	}
 	record := func(a *authority.Access) *access {
 		t.Helper()
+		ctx := t.Context()
 		res := f.authorize(t, "10.00")
 		if _, err := f.svc.BeginDispatch(ctx, f.gw, res.PermitID, res.Epoch, authority.Outbound{}); err != nil {
 			t.Fatal(err)

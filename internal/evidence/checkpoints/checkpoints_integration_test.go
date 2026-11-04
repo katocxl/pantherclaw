@@ -298,7 +298,7 @@ type tileReader struct {
 }
 
 func (r tileReader) ReadTile(ctx context.Context, id merkle.TileID) ([]byte, error) {
-	b, err := r.q.ReadLedgerTile(ctx, r.org, int16(id.Level), int64(id.Index)) //nolint:gosec // G115: test sizes
+	b, err := r.q.ReadLedgerTile(ctx, r.org, int16(id.Level), int64(id.Index))
 	if err != nil || len(b) < id.Width*merkle.HashSize {
 		return nil, merkle.ErrTileNotFound
 	}

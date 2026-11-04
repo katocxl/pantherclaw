@@ -9,11 +9,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
-	"math/rand/v2"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -282,7 +283,11 @@ func freeAddr(t *testing.T) string {
 	t.Helper()
 	var lc net.ListenConfig
 	for range 1000 {
-		port := 20000 + rand.IntN(12000)
+		n, err := rand.Int(rand.Reader, big.NewInt(12000))
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := 20000 + int(n.Int64())
 		if _, taken := freePorts.LoadOrStore(port, true); taken {
 			continue
 		}

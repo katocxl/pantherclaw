@@ -102,6 +102,7 @@ func TestF354_ATargetVerifierTestIsJudgedOnTheVerifiersOwnAnswers(t *testing.T) 
 	}
 	run := func(answers map[string]string) (app.TestResult, string, []app.Check) {
 		t.Helper()
+		ctx := t.Context()
 		r, err := e.svc.Test(e.admin, tokened.ID, app.KindVerifierTest)
 		if err != nil || r.Kind != app.KindVerifierTest || r.Operation != "payments.account.read" || r.State != "PENDING" {
 			t.Fatalf("target_verifier test %+v %v", r, err)

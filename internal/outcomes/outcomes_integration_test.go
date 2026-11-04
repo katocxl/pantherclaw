@@ -374,26 +374,26 @@ func TestHR538_ACaseIsContainedOnlyThroughConfirmedContainment(t *testing.T) {
 		t.Fatalf("no containment needed: %+v", p)
 	}
 
-	real := f.openCase()
-	act := f.action(nil, &real.ID)
-	if _, err := f.cases.Append(ctx, real.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateContained}); err == nil {
+	realCase := f.openCase()
+	act := f.action(nil, &realCase.ID)
+	if _, err := f.cases.Append(ctx, realCase.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateContained}); err == nil {
 		t.Fatal("a case closed over a requested action")
 	}
 	f.d.AdminExec(t, "UPDATE pc.response_actions SET status = 'CONFIRMED', settled_at = now() WHERE org_id = $1 AND id = $2", f.org, act)
-	if _, err := f.cases.Append(ctx, real.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateContained}); err != nil {
+	if _, err := f.cases.Append(ctx, realCase.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateContained}); err != nil {
 		t.Fatal(err)
 	}
-	first := f.caseContainedAt(real.ID)
+	first := f.caseContainedAt(realCase.ID)
 	if first == nil {
 		t.Fatal("a confirmed close set no contained_at")
 	}
-	if _, err := f.cases.Append(ctx, real.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateOpen}); err != nil {
+	if _, err := f.cases.Append(ctx, realCase.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateOpen}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.cases.Append(ctx, real.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateContained}); err != nil {
+	if _, err := f.cases.Append(ctx, realCase.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateContained}); err != nil {
 		t.Fatal(err)
 	}
-	if again := f.caseContainedAt(real.ID); again == nil || !again.Equal(*first) {
+	if again := f.caseContainedAt(realCase.ID); again == nil || !again.Equal(*first) {
 		t.Fatalf("the first time moved: %v then %v", first, again)
 	}
 	// pc_app may not write the column.
@@ -428,7 +428,7 @@ func (f *fx) alertCase(test bool) ids.UUID {
 func TestHR538_AnActionOnATestAlertNeverCounts(t *testing.T) {
 	f := newFx(t)
 	f.collecting()
-	real, test := f.alertCase(false), f.alertCase(true)
+	realCase, test := f.alertCase(false), f.alertCase(true)
 
 	f.rollup()
 	p := f.read(f.auditor(), outcomes.MetricRequestedToConfirm, "")
@@ -436,7 +436,7 @@ func TestHR538_AnActionOnATestAlertNeverCounts(t *testing.T) {
 		t.Fatalf("only the real alert's request stands unconfirmed: %+v", p)
 	}
 
-	f.settle(real, "CONFIRMED")
+	f.settle(realCase, "CONFIRMED")
 	f.settle(test, "CONFIRMED")
 	f.rollup()
 	p = f.read(f.auditor(), outcomes.MetricRequestedToConfirm, "")
@@ -904,14 +904,14 @@ func (f *fx) automationExec(state string) ids.UUID {
 }
 
 // TestF774_CancelledKeepsItsOwnBucket: M6 and the hourly metric each report
-// cancelled executions as cancelled, in no other bucket. Per automation,
+// canceled executions as canceled, in no other bucket. Per automation,
 // every state has its own share, SHADOW and TEST runs excluded, and a person
 // reverting an automation's action counts only through its execution link.
 // Covers: F774
 func TestF774_CancelledKeepsItsOwnBucket(t *testing.T) {
 	f := newFx(t)
 	f.collecting()
-	f.automationExec("CANCELLED")
+	f.automationExec("CANCELLED") //nolint:misspell // stored state
 	failed := f.automationExec("FAILED")
 
 	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {

@@ -6,7 +6,6 @@
 package pgauthority_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
@@ -31,7 +30,6 @@ func TestHR206_AnUnknownConsequenceIsAuditedAsNotVerified(t *testing.T) {
 	g := w.heldRefunds([]string{"payments.refund.create", "payments.refund.get", "payments.payout.trigger"})
 	run := w.run(g.ID, ids.UUID{})
 	s := w.verifier()
-	ctx := context.Background()
 
 	confirmed := func(charge, ref, state string) ids.UUID {
 		t.Helper()
@@ -49,7 +47,7 @@ func TestHR206_AnUnknownConsequenceIsAuditedAsNotVerified(t *testing.T) {
 		l := w.lease(s, r.TransactionID)
 		fields := refundOf(charge, "succeeded", "30.00")
 		fields["/id"] = ref
-		if a, err := s.Report(ctx, w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: fields}); err != nil ||
+		if a, err := s.Report(t.Context(), w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: fields}); err != nil ||
 			a.State != txdomain.Confirmed {
 			t.Fatalf("%s: confirm %+v %v", charge, a, err)
 		}

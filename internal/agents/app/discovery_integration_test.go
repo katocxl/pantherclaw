@@ -153,7 +153,7 @@ func TestHR459_OnlyACompleteScanCountsAMiss(t *testing.T) {
 	if _, err := w.inv.SubmitScan(ci, "runner", []app.ScanFinding{server("a", "stdio")}, app.ScanMode{Complete: true}); !errors.Is(err, app.ErrScopeRequired) {
 		t.Errorf("a complete scan without a scope: %v", err)
 	}
-	if _, err := w.inv.SubmitScan(ci, "runner", []app.ScanFinding{server("a", "stdio")}, app.ScanMode{Scope: "bad‮scope", Complete: true}); !errors.Is(err, app.ErrScope) {
+	if _, err := w.inv.SubmitScan(ci, "runner", []app.ScanFinding{server("a", "stdio")}, app.ScanMode{Scope: "bad\u202escope", Complete: true}); !errors.Is(err, app.ErrScope) {
 		t.Errorf("a bidi scope: %v", err)
 	}
 	// A complete scan that dropped findings (the scope's open cap, G0 M24

@@ -91,6 +91,7 @@ func TestM17_IdentityDownsRefuseM17EntriesAndApplyAgain(t *testing.T) {
 		"five algorithms": {"github_actions", "", []string{"RS256", "RS384", "RS512", "PS256", "PS384"}, down210, down211},
 	} {
 		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
 			d := dbtest.New(t)
 			fx := newFixture(t, d.AppPool(t))
 			aud := row.aud

@@ -35,11 +35,11 @@ func (w *world) rangeAgent(t *testing.T) ids.UUID {
 // run and the caller names no part of it.
 func TestHR220_StartRunTakesSimulatedFromTheAgent(t *testing.T) {
 	w := newWorld(t)
-	real, rng := w.agent(t), w.rangeAgent(t)
+	realAgent, rng := w.agent(t), w.rangeAgent(t)
 	for _, c := range []struct {
 		agent ids.UUID
 		want  bool
-	}{{real, false}, {rng, true}} {
+	}{{realAgent, false}, {rng, true}} {
 		r, err := w.svc.StartRun(w.ownerCtx(), app.StartInput{AgentID: c.agent})
 		if err != nil || r.Simulated != c.want {
 			t.Fatalf("run of %s: simulated=%v, %v, want %v", c.agent, r.Simulated, err, c.want)
@@ -59,7 +59,7 @@ func TestHR220_StartRunTakesSimulatedFromTheAgent(t *testing.T) {
 // parent may start children only of range agents, whatever the instance.
 func TestHR220_SimulatedParentsStartOnlyRangeChildren(t *testing.T) {
 	w := newWorld(t)
-	real, realHelper, rng, rngHelper := w.agent(t), w.agent(t), w.rangeAgent(t), w.rangeAgent(t)
+	realAgent, realHelper, rng, rngHelper := w.agent(t), w.agent(t), w.rangeAgent(t), w.rangeAgent(t)
 	ctx := context.Background()
 
 	rInst := w.instance(t, rng, "ADMITTED")
@@ -79,8 +79,8 @@ func TestHR220_SimulatedParentsStartOnlyRangeChildren(t *testing.T) {
 
 	// A real parent: a real child stays real; a child of a range agent is
 	// simulated.
-	inst := w.instance(t, real, "ADMITTED")
-	realRoot, err := w.svc.StartRun(w.ownerCtx(), app.StartInput{AgentID: real, InstanceID: &inst.Instance, TTL: time.Hour})
+	inst := w.instance(t, realAgent, "ADMITTED")
+	realRoot, err := w.svc.StartRun(w.ownerCtx(), app.StartInput{AgentID: realAgent, InstanceID: &inst.Instance, TTL: time.Hour})
 	if err != nil || realRoot.Simulated {
 		t.Fatalf("real root: %+v, %v", realRoot, err)
 	}
@@ -98,7 +98,7 @@ func TestHR220_SimulatedParentsStartOnlyRangeChildren(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.svc.StartChildRun(ctx, app.ChildInput{Caller: rcInst, ParentRunID: deeper.ID, AgentID: real})
+	_, err = w.svc.StartChildRun(ctx, app.ChildInput{Caller: rcInst, ParentRunID: deeper.ID, AgentID: realAgent})
 	wantCode(t, "grandchild of a real agent", err, pcerr.FailedPrecondition, "SIMULATION_MISMATCH")
 }
 
@@ -107,12 +107,12 @@ func TestHR220_SimulatedParentsStartOnlyRangeChildren(t *testing.T) {
 // its parent's.
 func TestHR220_TransactionsTakeSimulatedFromTheirRun(t *testing.T) {
 	w := newWorld(t)
-	real, rng := w.agent(t), w.rangeAgent(t)
+	realAgent, rng := w.agent(t), w.rangeAgent(t)
 	ctx := context.Background()
 	for _, c := range []struct {
 		agent ids.UUID
 		want  bool
-	}{{real, false}, {rng, true}} {
+	}{{realAgent, false}, {rng, true}} {
 		r, err := w.svc.StartRun(w.ownerCtx(), app.StartInput{AgentID: c.agent})
 		if err != nil {
 			t.Fatal(err)

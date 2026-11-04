@@ -324,7 +324,7 @@ var (
 
 // TestHR648_AResultFlagLandsOnTheTreeAndCountsInWatching: at OFF nothing is
 // kept; a sub-run's flag lands on its tree's root; WATCHING counts by reason
-// and the settings show it; an alert is labelled inference and holds no value;
+// and the settings show it; an alert is labeled inference and holds no value;
 // and a scan that could not finish is one owned failure per reason.
 //
 // Covers: F939, F941

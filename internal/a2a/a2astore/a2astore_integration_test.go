@@ -279,16 +279,16 @@ func TestHR322_PinRowsNeverChange(t *testing.T) {
 func TestHR322_OnlyAPersonActivatesARealPin(t *testing.T) {
 	pool := dbtest.New(t).AppPool(t)
 	w := newWorld(t, pool, "https://peer.example/a2a")
-	real := ids.NewV7()
+	realConn := ids.NewV7()
 	var realPin, simPin ids.UUID
 	w.tx(t, func(ctx context.Context, q *dbq.Queries, tx db.TenantTx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, created_by, updated_by)
 			VALUES ($1, $2, 'real', 'a2a', $3, 'pc.a2a', 'https://peer.example/a2a', 'pantherclaw_held', 'test', 'user:proposer')`,
-			w.org, real, w.gateway); err != nil {
+			w.org, realConn, w.gateway); err != nil {
 			return err
 		}
 		var err error
-		if realPin, err = a2astore.Propose(ctx, q, w.org, real, pinned(`{"name":"real"}`), "user:x"); err != nil {
+		if realPin, err = a2astore.Propose(ctx, q, w.org, realConn, pinned(`{"name":"real"}`), "user:x"); err != nil {
 			return err
 		}
 		simPin, err = a2astore.Propose(ctx, q, w.org, w.conn, pinned(`{"name":"sim"}`), "user:x")
@@ -296,7 +296,7 @@ func TestHR322_OnlyAPersonActivatesARealPin(t *testing.T) {
 	})
 	for name, fn := range map[string]func(ctx context.Context, q *dbq.Queries, tx db.TenantTx) error{
 		"ActivateAsOperator": func(ctx context.Context, q *dbq.Queries, _ db.TenantTx) error {
-			_, err := a2astore.ActivateAsOperator(ctx, q, w.org, real, realPin, "test")
+			_, err := a2astore.ActivateAsOperator(ctx, q, w.org, realConn, realPin, "test")
 			return err
 		},
 		"raw update": func(ctx context.Context, _ *dbq.Queries, tx db.TenantTx) error {
@@ -311,7 +311,7 @@ func TestHR322_OnlyAPersonActivatesARealPin(t *testing.T) {
 		}
 	}
 	w.tx(t, func(ctx context.Context, q *dbq.Queries, tx db.TenantTx) error {
-		if p, err := a2astore.Get(ctx, q, w.org, real, a2astore.StateProposed); err != nil || p.ID != realPin {
+		if p, err := a2astore.Get(ctx, q, w.org, realConn, a2astore.StateProposed); err != nil || p.ID != realPin {
 			t.Fatalf("the real connection's proposal: %+v %v", p, err)
 		}
 		_, err := a2astore.ActivateAsOperator(ctx, q, w.org, w.conn, simPin, "test")

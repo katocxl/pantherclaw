@@ -59,7 +59,7 @@ func TestHR196_ABundleExportedFromARunningServerVerifiesOffline(t *testing.T) {
 
 	authorizeRefund := func(amount string) ids.UUID {
 		t.Helper()
-		nonce, err := ctl.Authority.GetNonce(ctx, &pantherclawv1.GetNonceRequest{})
+		nonce, err := ctl.Authority.GetNonce(t.Context(), &pantherclawv1.GetNonceRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -87,7 +87,7 @@ func TestHR196_ABundleExportedFromARunningServerVerifiesOffline(t *testing.T) {
 					WHERE r.transaction_id = $1 ORDER BY k.tree_size DESC LIMIT 1`, txn).Scan(&size, &note)
 			})
 			if err == nil {
-				return uint64(size), note //nolint:gosec // G115: tree_size > 0
+				return uint64(size), note
 			}
 			if !db.IsNoRows(err) {
 				t.Fatal(err)
@@ -149,7 +149,7 @@ func TestHR196_ABundleExportedFromARunningServerVerifiesOffline(t *testing.T) {
 
 	// A sequence range covers the org's audit events too: the auditor
 	// (audit.read at org scope) exports it; it verifies as well.
-	r, err := svc.ExportBundle(auditor, evapp.Selection{From: 1, To: int64(secondSize)}, 0) //nolint:gosec // G115: test sizes
+	r, err := svc.ExportBundle(auditor, evapp.Selection{From: 1, To: int64(secondSize)}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestHR196_ABundleExportedFromARunningServerVerifiesOffline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep := bundle.Verify(rb, bundle.Options{Trust: trust}); rep.Failed() || r.Entries != int(secondSize) { //nolint:gosec // G115
+	if rep := bundle.Verify(rb, bundle.Options{Trust: trust}); rep.Failed() || r.Entries != int(secondSize) {
 		t.Fatalf("range bundle of %d entries:\n%s", r.Entries, rep.Text())
 	}
 
@@ -199,7 +199,7 @@ func TestHR196_ABundleExportedFromARunningServerVerifiesOffline(t *testing.T) {
 	if _, err := svc.GetInclusionProof(auditor, 1, firstSize); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.GetInclusionProof(auditor, int64(secondSize), firstSize); !errors.Is(err, evapp.ErrNotInCheckpoint) { //nolint:gosec // G115
+	if _, err := svc.GetInclusionProof(auditor, int64(secondSize), firstSize); !errors.Is(err, evapp.ErrNotInCheckpoint) {
 		t.Fatalf("an entry after the checkpoint: %v", err)
 	}
 }
