@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
@@ -113,8 +114,8 @@ func holdHTTP(held bool, refuse func(path string) bool, next http.Handler) http.
 
 // Maintenance hold audit events, in the platform org's ledger.
 const (
-	holdOnEvent  = "platform.maintenance_hold_on"
-	holdOffEvent = "platform.maintenance_hold_off"
+	holdOnEvent  = auditkind.PlatformMaintenanceHoldOn
+	holdOffEvent = auditkind.PlatformMaintenanceHoldOff
 )
 
 // auditMaintenanceHold records platform.maintenance_hold_on at every start

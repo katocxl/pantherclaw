@@ -19,6 +19,7 @@
 package rollout
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"log/slog"
 	"regexp"
@@ -254,7 +255,7 @@ func (s *Service) CreateCohort(ctx context.Context, name string) (Cohort, error)
 		}
 		out = Cohort{PcPolicyCohort: row, Agents: []ids.UUID{}}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "policy.cohort_created", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.PolicyCohortCreated, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "policy_cohort", ID: row.ID.String()}, Details: map[string]string{"name": name},
 		})
 		return err
@@ -326,9 +327,9 @@ func (s *Service) ChangeCohort(ctx context.Context, name string, agents []ids.UU
 				return err
 			}
 		}
-		event := "policy.cohort_members_added"
+		event := auditkind.PolicyCohortMembersAdded
 		if remove {
-			event = "policy.cohort_members_removed"
+			event = auditkind.PolicyCohortMembersRemoved
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: event, Actor: c.Actor(), Outcome: audit.Success,
@@ -513,7 +514,7 @@ func (s *Service) StartGatedRollout(ctx context.Context, version ids.UUID, shado
 		if verifiedPercent != nil {
 			details["require_verified_percent"] = strconv.Itoa(int(*verifiedPercent))
 		}
-		return s.audit(ctx, tx, c, "policy.rollout_started", r.ID, details)
+		return s.audit(ctx, tx, c, auditkind.PolicyRolloutStarted, r.ID, details)
 	})
 	if err != nil {
 		return Rollout{}, err
@@ -635,7 +636,7 @@ func (s *Service) EnterPilot(ctx context.Context, tx db.TenantTx, actor evdomain
 		return err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "policy.rollout_pilot_started", Actor: actor, Outcome: audit.Success,
+		Name: auditkind.PolicyRolloutPilotStarted, Actor: actor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "policy_rollout", ID: rollout.String()},
 		Details: map[string]string{"version_id": r.VersionID.String(), "cohorts": strconv.Itoa(len(cohorts))},
 	})
@@ -694,7 +695,7 @@ func (s *Service) ExpandPilot(ctx context.Context, rollout ids.UUID, cohorts []s
 		if err := enforce(ctx, q, c.Org, rollout, added); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "policy.rollout_pilot_expanded", rollout, map[string]string{"cohorts": strconv.Itoa(len(cohorts))})
+		return s.audit(ctx, tx, c, auditkind.PolicyRolloutPilotExpanded, rollout, map[string]string{"cohorts": strconv.Itoa(len(cohorts))})
 	})
 	if err != nil {
 		return Rollout{}, err
@@ -735,7 +736,7 @@ func (s *Service) ExcludeTarget(ctx context.Context, rollout, agent ids.UUID, re
 		if err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "policy.rollout_target_excluded", rollout, map[string]string{
+		return s.audit(ctx, tx, c, auditkind.PolicyRolloutTargetExcluded, rollout, map[string]string{
 			"agent": agent.String(), "reason_length": strconv.Itoa(utf8.RuneCountInString(reason)),
 		})
 	})
@@ -814,7 +815,7 @@ func (s *Service) CancelRollout(ctx context.Context, rollout ids.UUID) (Rollout,
 		if err := cancel(ctx, tx, c.Actor(), r, voidRolloutCancelled); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "policy.rollout_cancelled", rollout, nil) //nolint:misspell // as the stage
+		return s.audit(ctx, tx, c, auditkind.PolicyRolloutCancelled, rollout, nil) //nolint:misspell // as the stage
 	})
 	if err != nil {
 		return Rollout{}, err
@@ -859,7 +860,7 @@ func Halt(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r dbq.PcPol
 		return err
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "policy.rollout_cancelled", Actor: actor, Outcome: audit.Success, ReasonCode: reason, //nolint:misspell // as the stage
+		Name: auditkind.PolicyRolloutCancelled, Actor: actor, Outcome: audit.Success, ReasonCode: reason, //nolint:misspell // as the stage
 		Object: &audit.Object{Type: "policy_rollout", ID: r.ID.String()},
 	})
 	return err
@@ -880,7 +881,7 @@ func voidRequests(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, kin
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "policy.change_voided", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.PolicyChangeVoided, Actor: actor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "policy_change_request", ID: id.String()}, Details: map[string]string{"reason": reason},
 		}); err != nil {
 			return err
@@ -922,7 +923,7 @@ func (s *Service) Published(ctx context.Context, tx db.TenantTx, org ids.OrgID, 
 				return err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "policy.rollout_cancelled", Actor: actor, Outcome: audit.Success, ReasonCode: voidBaseChanged, //nolint:misspell // as the stage
+				Name: auditkind.PolicyRolloutCancelled, Actor: actor, Outcome: audit.Success, ReasonCode: voidBaseChanged, //nolint:misspell // as the stage
 				Object: &audit.Object{Type: "policy_rollout", ID: r.ID.String()}, Details: map[string]string{"published_version_id": version.String()},
 			}); err != nil {
 				return err

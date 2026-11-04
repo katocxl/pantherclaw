@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -114,7 +115,7 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 			// HR-222: a simulator's drift changes nothing real: no epoch, no
 			// quarantine, no notification. The gateway still refuses locally.
 			_, err := audit.Record(ctx, tx, audit.Event{
-				Name: "connection.drift_reported", Actor: c.Audit, Outcome: audit.Success,
+				Name: auditkind.ConnectionDriftReported, Actor: c.Audit, Outcome: audit.Success,
 				Object: &audit.Object{Type: "connection", ID: conn.ID.String()},
 				Details: map[string]string{
 					"simulated": "true", "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
@@ -186,7 +187,7 @@ func DriftQuarantinedEvent(actor evdomain.Actor, connection ids.UUID, pkg, versi
 	tool, expected, observed, scan string,
 ) audit.Event {
 	return audit.Event{
-		Name: "package.transitioned", Actor: actor, Outcome: audit.Success,
+		Name: auditkind.PackageTransitioned, Actor: actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "package_version", ID: trust.Key(pkg, version)},
 		Details: map[string]string{
 			"from": string(from), "to": string(domain.StateQuarantined), "reason": ReasonUpstreamDrift,

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/jsontext"
 	"slices"
@@ -28,7 +29,7 @@ func (s *Service) Decline(ctx context.Context, id ids.UUID, reason, alternative,
 		return Request{}, ErrInvalidCode
 	}
 	return s.end(ctx, id, dbq.InsertApprovalResponseParams{Kind: "DECLINE", ReasonCode: &reason, AlternativeCode: optional(alternative), Note: note},
-		apdomain.EndDeclined, "approval.declined", reason)
+		apdomain.EndDeclined, auditkind.ApprovalDeclined, reason)
 }
 
 // end records a response that ends a waiting request: a decline or a
@@ -142,7 +143,7 @@ func (s *Service) RequestEvidence(ctx context.Context, id ids.UUID, question, no
 		if err := q.InsertApprovalResponse(ctx, resp); err != nil {
 			return err
 		}
-		if err := event(ctx, tx, "approval.evidence_requested", userActor(r.User), question, id, nil); err != nil {
+		if err := event(ctx, tx, auditkind.ApprovalEvidenceRequested, userActor(r.User), question, id, nil); err != nil {
 			return err
 		}
 		out, err = q.GetApprovalRequest(ctx, c.Org, id)
@@ -211,7 +212,7 @@ func (s *Service) ProposeNarrower(ctx context.Context, id ids.UUID, params []byt
 		return out, err
 	}
 	out.Request, err = s.end(ctx, id, dbq.InsertApprovalResponseParams{Kind: "PROPOSE_NARROWER", Note: note, ProposedParams: sim.Params},
-		apdomain.EndNarrowerProposed, "approval.narrower_proposed", apdomain.ReasonNarrowerProposed)
+		apdomain.EndNarrowerProposed, auditkind.ApprovalNarrowerProposed, apdomain.ReasonNarrowerProposed)
 	return out, err
 }
 
@@ -312,7 +313,7 @@ func (s *Service) evidence(ctx context.Context, org ids.OrgID, a Author, load fu
 		if _, err := q.EvidenceArrived(ctx, org, row.ID); err != nil {
 			return err
 		}
-		if err := event(ctx, tx, "approval.evidence_submitted", actor, "", row.ID,
+		if err := event(ctx, tx, auditkind.ApprovalEvidenceSubmitted, actor, "", row.ID,
 			map[string]string{"evidence": evidence.String()}); err != nil {
 			return err
 		}
@@ -399,7 +400,7 @@ func (s *Service) Approve(ctx context.Context, orgID ids.OrgID, r Responder, id 
 		}); err != nil {
 			return err
 		}
-		if err := event(ctx, tx, "approval.response", userActor(r.User), kind, id,
+		if err := event(ctx, tx, auditkind.ApprovalResponse, userActor(r.User), kind, id,
 			map[string]string{"requirement": reqs[idx].Kind + ":" + reqs[idx].Role + reqs[idx].Subject}); err != nil {
 			return err
 		}
@@ -413,7 +414,7 @@ func (s *Service) Approve(ctx context.Context, orgID ids.OrgID, r Responder, id 
 				if err := restored(ctx, q, orgID, l, r.User); err != nil {
 					return err
 				}
-				if err := event(ctx, tx, "approval.restoration_completed", userActor(r.User), "", id,
+				if err := event(ctx, tx, auditkind.ApprovalRestorationCompleted, userActor(r.User), "", id,
 					map[string]string{"agent": l.row.AgentID.String()}); err != nil {
 					return err
 				}
@@ -465,14 +466,14 @@ func approved(ctx context.Context, tx db.TenantTx, q *dbq.Queries, orgID ids.Org
 	if _, err := q.CloseRequestEntry(ctx, dbq.CloseRequestEntryParams{State: "APPROVED", DecidedBy: &system, Reason: "", OrgID: orgID, RequestID: l.row.ID}); err != nil {
 		return err
 	}
-	if err := event(ctx, tx, "approval.approved", userActor(rs[len(rs)-1].UserID), "", l.row.ID, nil); err != nil {
+	if err := event(ctx, tx, auditkind.ApprovalApproved, userActor(rs[len(rs)-1].UserID), "", l.row.ID, nil); err != nil {
 		return err
 	}
 	multi := slices.ContainsFunc(l.elig.Requirements, func(r apdomain.Requirement) bool { return r.Count >= 2 })
 	if !multi {
 		return nil
 	}
-	return event(ctx, tx, "approval.multi_person_completed", userActor(rs[len(rs)-1].UserID), "", l.row.ID, nil)
+	return event(ctx, tx, auditkind.ApprovalMultiPersonCompleted, userActor(rs[len(rs)-1].UserID), "", l.row.ID, nil)
 }
 
 // BeginApproval checks that a person may approve or step up now, before the

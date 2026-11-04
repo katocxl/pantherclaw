@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/subtle"
 	"encoding/base64"
@@ -192,7 +193,7 @@ func (s *Service) Admit(ctx context.Context, id ids.UUID, fingerprint string) (I
 			return err
 		}
 		out = instanceView(r)
-		return callerRecord(ctx, tx, c, "identity.instance_admitted", in.ID, map[string]string{"agent_id": a.ID.String()})
+		return callerRecord(ctx, tx, c, auditkind.IdentityInstanceAdmitted, in.ID, map[string]string{"agent_id": a.ID.String()})
 	})
 	return out, err
 }
@@ -287,9 +288,13 @@ func (s *Service) close(ctx context.Context, q *dbq.Queries, tx db.TenantTx, c t
 	}); err != nil {
 		return Instance{}, err
 	}
-	return instanceView(r), callerRecord(ctx, tx, c, "identity.instance_"+map[string]string{
-		"REJECTED": "rejected", "REVOKED": "revoked",
-	}[to], in.ID, map[string]string{"agent_id": a.ID.String()})
+	return instanceView(r), callerRecord(ctx, tx, c, instanceClosedKinds[to], in.ID, map[string]string{"agent_id": a.ID.String()})
+}
+
+// instanceClosedKinds are the audit kinds of an instance's closing states
+// (HR-664).
+var instanceClosedKinds = map[string]string{
+	"REJECTED": auditkind.IdentityInstanceRejected, "REVOKED": auditkind.IdentityInstanceRevoked,
 }
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }

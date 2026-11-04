@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"encoding/json/v2"
@@ -319,7 +320,7 @@ func (s *Service) ActivateTeamsApp(ctx context.Context, id ids.UUID, su stepup.S
 			if _, err := q.MarkTeamsAppChannelShared(ctx, c.Org, id); err != nil {
 				return err
 			}
-			return s.audit(ctx, tx, c, "notification.teams_app_refused_shared", id, nil)
+			return s.audit(ctx, tx, c, auditkind.NotificationTeamsAppRefusedShared, id, nil)
 		}); err != nil {
 			return ChannelView{}, err
 		}
@@ -346,7 +347,7 @@ func (s *Service) ActivateTeamsApp(ctx context.Context, id ids.UUID, su stepup.S
 			return err
 		}
 		out = channelView(row)
-		return s.audit(ctx, tx, c, "notification.teams_app_activated", id, map[string]string{
+		return s.audit(ctx, tx, c, auditkind.NotificationTeamsAppActivated, id, map[string]string{
 			"teams_channel": cfg.TeamsChannel, "tenant": cfg.TenantID.String(), "security_key": su.Credential.String(),
 		})
 	})
@@ -498,7 +499,7 @@ func (s *Service) pauseSharedTeams(ctx context.Context, org ids.OrgID, cfg dbq.G
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "notification.teams_channel_shared", Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
+			Name: auditkind.NotificationTeamsChannelShared, Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
 			Outcome: audit.Success, ReasonCode: "TEAMS_CHANNEL_SHARED",
 			Object:  &audit.Object{Type: "notification_channel", ID: cfg.ChannelRecordID.String()},
 			Details: map[string]string{"teams_channel": cfg.TeamsChannel},

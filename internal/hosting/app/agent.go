@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"time"
@@ -183,7 +184,7 @@ func (s *Service) PullToken(ctx context.Context, id HostIdentity, org ids.OrgID,
 			return ErrTokenGone
 		}
 		out = Token{Secret: pclog.NewSecret(string(plain)), GatewayAPIURL: s.gatewayAPIURL, CAFingerprint: ca.Fingerprint(s.ca.Certificate())}
-		return record(ctx, tx, hostActor(id.Host), "hosted_gateway.token_pulled", hosted, map[string]string{"host_id": id.Host.String()})
+		return record(ctx, tx, hostActor(id.Host), auditkind.HostedGatewayTokenPulled, hosted, map[string]string{"host_id": id.Host.String()})
 	})
 	return out, err
 }
@@ -273,7 +274,7 @@ func (s *Service) Stopped(ctx context.Context, id HostIdentity, org ids.OrgID, h
 		if n == 0 {
 			return ErrNotAssigned
 		}
-		return record(ctx, tx, hostActor(id.Host), "hosted_gateway.stopped", hosted, nil)
+		return record(ctx, tx, hostActor(id.Host), auditkind.HostedGatewayStopped, hosted, nil)
 	})
 }
 

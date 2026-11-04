@@ -4,6 +4,7 @@
 package assurance
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"fmt"
@@ -112,7 +113,7 @@ func (s *Service) StartSimulation(ctx context.Context, versionID ids.UUID, from,
 		if err := jobs.InsertTx(ctx, s.Jobs, tx, SimulateArgs{Org: c.Org, Simulation: simID}, nil); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "automation.simulation_started", versionID, map[string]string{
+		return record(ctx, tx, c, auditkind.AutomationSimulationStarted, versionID, map[string]string{
 			"automation": v.AutomationID.String(), "simulation": id.String(),
 			"from": from.UTC().Format(time.RFC3339), "to": to.UTC().Format(time.RFC3339),
 		})

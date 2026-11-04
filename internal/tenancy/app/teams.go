@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -44,7 +45,7 @@ func (h *Hierarchy) CreateTeam(ctx context.Context, bu td.BusinessUnitID, in New
 			return err
 		}
 		out = teamView(r)
-		return record(ctx, tx, c, "tenancy.team_created", "team", r.ID, map[string]string{"slug": r.Slug})
+		return record(ctx, tx, c, auditkind.TenancyTeamCreated, "team", r.ID, map[string]string{"slug": r.Slug})
 	})
 	return out, err
 }
@@ -108,7 +109,7 @@ func (h *Hierarchy) UpdateTeam(ctx context.Context, id td.TeamID, name, descript
 			return notFound(err, ErrArchived)
 		}
 		out = teamView(r)
-		return record(ctx, tx, c, "tenancy.team_updated", "team", r.ID, changed(name, description))
+		return record(ctx, tx, c, auditkind.TenancyTeamUpdated, "team", r.ID, changed(name, description))
 	})
 	return out, err
 }
@@ -137,7 +138,7 @@ func (h *Hierarchy) ArchiveTeam(ctx context.Context, id td.TeamID) (Team, error)
 			return notFound(err, ErrArchived)
 		}
 		out = teamView(r)
-		return record(ctx, tx, c, "tenancy.team_archived", "team", r.ID, nil)
+		return record(ctx, tx, c, auditkind.TenancyTeamArchived, "team", r.ID, nil)
 	})
 	return out, err
 }
@@ -169,7 +170,7 @@ func (h *Hierarchy) AddTeamMember(ctx context.Context, teamID td.TeamID, user td
 			return err
 		}
 		out = TeamMember{User: user, Email: u.Email, DisplayName: u.DisplayName, AddedAt: added}
-		return record(ctx, tx, c, "tenancy.team_member_added", "team", t.ID, map[string]string{"user": u.ID.String()})
+		return record(ctx, tx, c, auditkind.TenancyTeamMemberAdded, "team", t.ID, map[string]string{"user": u.ID.String()})
 	})
 	return out, err
 }
@@ -188,7 +189,7 @@ func (h *Hierarchy) RemoveTeamMember(ctx context.Context, teamID td.TeamID, user
 		if n == 0 {
 			return ErrMemberNotFound
 		}
-		return record(ctx, tx, c, "tenancy.team_member_removed", "team", t.ID, map[string]string{"user": user.String()})
+		return record(ctx, tx, c, auditkind.TenancyTeamMemberRemoved, "team", t.ID, map[string]string{"user": user.String()})
 	})
 }
 

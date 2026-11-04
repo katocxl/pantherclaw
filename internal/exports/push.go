@@ -4,6 +4,7 @@
 package exports
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -250,7 +251,7 @@ func (s *Service) Push(ctx context.Context, in PushRequest) (Receipt, error) {
 		}
 		if !classAllowed(d.DataClasses, in.Class, captures) {
 			refused = ErrClass
-			return s.pushAudit(ctx, tx, c.Actor(), audit.Denied, "export.push_refused", id, map[string]string{
+			return s.pushAudit(ctx, tx, c.Actor(), audit.Denied, auditkind.ExportPushRefused, id, map[string]string{
 				"destination": d.ID.String(), "class": in.Class, "captures": boolString(captures),
 			})
 		}
@@ -279,7 +280,7 @@ func (s *Service) Push(ctx context.Context, in PushRequest) (Receipt, error) {
 				return err
 			}
 		}
-		if err := s.pushAudit(ctx, tx, c.Actor(), audit.Success, "export.push_requested", id, map[string]string{
+		if err := s.pushAudit(ctx, tx, c.Actor(), audit.Success, auditkind.ExportPushRequested, id, map[string]string{
 			"destination": d.ID.String(), "class": in.Class, "host": hostOf(d.Target), "streamed": boolString(in.Stream),
 		}); err != nil {
 			return err
@@ -869,7 +870,7 @@ func (s *Service) settle(ctx context.Context, p *push, u *upload, res sent) erro
 		if err := q.RecordExportDelivered(ctx, p.org, p.destination); err != nil {
 			return err
 		}
-		return s.pushAudit(ctx, tx, Actor, audit.Success, "export.push_delivered", p.id, map[string]string{
+		return s.pushAudit(ctx, tx, Actor, audit.Success, auditkind.ExportPushDelivered, p.id, map[string]string{
 			"destination": p.destination.String(), "class": p.class, "object_key": p.key, "size_bytes": strconv.FormatInt(u.total, 10),
 			"sha256": hex.EncodeToString(sum), "parts": strconv.Itoa(parts),
 		})
@@ -902,7 +903,7 @@ func (s *Service) settleFailure(ctx context.Context, p *push, cause error, last 
 		if !last {
 			return nil
 		}
-		return s.pushAudit(ctx, tx, Actor, audit.Failure, "export.push_failed", p.id, map[string]string{
+		return s.pushAudit(ctx, tx, Actor, audit.Failure, auditkind.ExportPushFailed, p.id, map[string]string{
 			"destination": p.destination.String(), "class": p.class, "code": code,
 		})
 	})

@@ -4,6 +4,7 @@
 package pgengine
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"slices"
@@ -91,7 +92,7 @@ func (e *Engine) ClaimLaunch(ctx context.Context, org ids.OrgID, instance ids.UU
 		}
 		found = true
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "automation.launch_claimed", Actor: instanceActor(instance), Outcome: audit.Success,
+			Name: auditkind.AutomationLaunchClaimed, Actor: instanceActor(instance), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "automation_launch", ID: r.ID.String()},
 			Details: map[string]string{"execution": r.ExecutionID.String(), "run": r.RunID.String()},
 		}); err != nil {
@@ -131,7 +132,7 @@ func (e *Engine) CompleteLaunch(ctx context.Context, org ids.OrgID, instance, la
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "automation.launch_completed", Actor: instanceActor(instance), Outcome: audit.Success,
+			Name: auditkind.AutomationLaunchCompleted, Actor: instanceActor(instance), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "automation_launch", ID: launch.String()},
 			Details: map[string]string{"execution": r.ExecutionID.String(), "run": r.RunID.String(), "outcome": outcome},
 		}); err != nil {

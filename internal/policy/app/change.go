@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -320,7 +321,7 @@ func (c *Changes) Request(ctx context.Context, kind ChangeKind, subjectID, baseV
 			}); err != nil {
 				return err
 			}
-			if err := record(ctx, tx, caller, "policy.change_voided", cur.ID, map[string]string{"reason": VoidBaseChanged}); err != nil {
+			if err := record(ctx, tx, caller, auditkind.PolicyChangeVoided, cur.ID, map[string]string{"reason": VoidBaseChanged}); err != nil {
 				return err
 			}
 		default:
@@ -347,7 +348,7 @@ func (c *Changes) Request(ctx context.Context, kind ChangeKind, subjectID, baseV
 		if base != nil {
 			details["base_version"] = base.String()
 		}
-		if err := record(ctx, tx, caller, "policy.change_requested", id, details); err != nil {
+		if err := record(ctx, tx, caller, auditkind.PolicyChangeRequested, id, details); err != nil {
 			return err
 		}
 		if c.notify == nil {
@@ -627,7 +628,7 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 			}
 			n++
 		}
-		if err := record(ctx, tx, caller, "policy.change_confirmed", id, map[string]string{
+		if err := record(ctx, tx, caller, auditkind.PolicyChangeConfirmed, id, map[string]string{
 			"kind": string(req.Kind), "confirmations": strconv.Itoa(n), "required": strconv.Itoa(req.Required),
 			"security_key": a.Credential.String(), "ceremony": a.Ceremony.String(), "session": caller.Session.String(),
 		}); err != nil {
@@ -664,7 +665,7 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 		})); err != nil {
 			return err
 		}
-		return record(ctx, tx, caller, "policy.change_approved", id, map[string]string{
+		return record(ctx, tx, caller, auditkind.PolicyChangeApproved, id, map[string]string{
 			"kind": string(req.Kind), "subject": req.Subject.String(), "confirmations": strconv.Itoa(n),
 		})
 	})
@@ -697,7 +698,7 @@ func (c *Changes) void(ctx context.Context, tx db.TenantTx, q *dbq.Queries, call
 	})); err != nil {
 		return err
 	}
-	return record(ctx, tx, caller, "policy.change_voided", id, map[string]string{"reason": reason})
+	return record(ctx, tx, caller, auditkind.PolicyChangeVoided, id, map[string]string{"reason": reason})
 }
 
 // consumeCeremony consumes the caller's open BINDING ceremony for the
@@ -767,7 +768,7 @@ func (c *Changes) Decline(ctx context.Context, id ids.UUID, reason string) (Chan
 			return err
 		}
 		sum := sha256.Sum256([]byte(reason))
-		return record(ctx, tx, caller, "policy.change_declined", id, map[string]string{
+		return record(ctx, tx, caller, auditkind.PolicyChangeDeclined, id, map[string]string{
 			"kind": row.Kind, "reason_sha256": digest64(sum),
 		})
 	})

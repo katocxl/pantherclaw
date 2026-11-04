@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/json/v2"
@@ -179,7 +180,7 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 			details["dismissed_by"] = g.DismissedBy.String()
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "coverage.finding_resolved", Actor: Actor, Outcome: audit.Success,
+			Name: auditkind.CoverageFindingResolved, Actor: Actor, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "coverage_finding", ID: g.ID.String()},
 			Details: details,
 		}); err != nil {
@@ -266,7 +267,7 @@ func (s *Service) AcknowledgeFinding(ctx context.Context, id ids.UUID, reason st
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "coverage.finding_dismissed", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.CoverageFindingDismissed, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "coverage_finding", ID: out.ID.String()},
 			Details: auditReason(map[string]string{
 				"kind": out.Kind, "severity": out.Severity, "excess": truncate(strings.Join(out.Excess, ","), 512),

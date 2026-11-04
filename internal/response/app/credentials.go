@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"encoding/json/v2"
@@ -301,7 +302,7 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 	}
 	if kind == rdomain.KindRevoke && p.Kind != credentialAgentHeld {
 		// The existing revoke path's own record.
-		if err := auditAs(ctx, tx, evActor, "connection.sealed_revoked", "connection", r.Connection.String(),
+		if err := auditAs(ctx, tx, evActor, auditkind.ConnectionSealedRevoked, "connection", r.Connection.String(),
 			map[string]string{"version": strconv.Itoa(int(r.Version))}); err != nil {
 			return reflexdomain.ContainResult{}, err
 		}

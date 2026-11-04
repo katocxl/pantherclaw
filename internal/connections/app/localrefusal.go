@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/hex"
 	"slices"
@@ -43,8 +44,8 @@ type RefusalDetail struct {
 
 // refusals are the audit event and reason code of each refusal code.
 var refusals = map[string][2]string{
-	RefusalSecretInPayload:    {"connection.secret_in_payload_refused", "SECRET_IN_PAYLOAD"},
-	RefusalElicitationRefused: {"connection.elicitation_refused", "ELICITATION_REFUSED"},
+	RefusalSecretInPayload:    {auditkind.ConnectionSecretInPayloadRefused, "SECRET_IN_PAYLOAD"},
+	RefusalElicitationRefused: {auditkind.ConnectionElicitationRefused, "ELICITATION_REFUSED"},
 }
 
 // ReportLocalRefusal records that gateway refused an action through

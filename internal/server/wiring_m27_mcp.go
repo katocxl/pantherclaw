@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"log/slog"
 	"slices"
@@ -41,7 +42,7 @@ var (
 
 // selfMCPAuditName is the event of one read by the role, or by a caller
 // that sent the client header (HR-663): kind audit.self_mcp.read.
-const selfMCPAuditName = "self_mcp.read"
+const selfMCPAuditName = auditkind.SelfMcpRead
 
 // The header `pclaw mcp self` sends on every call (selfmcp.ClientHeader,
 // selfmcp.ClientValue; HR-663). It is the client's claim: it only adds a

@@ -4,6 +4,7 @@
 package triggers
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -236,7 +237,7 @@ func (a Activator) Resume(ctx context.Context, tx pgx.Tx, automation ids.UUID) (
 			}
 			if out.State.Started() {
 				replayed++
-				if err := a.s.audit(ctx, t, "automation.triggered", au.ID, r.ID, map[string]string{
+				if err := a.s.audit(ctx, t, auditkind.AutomationTriggered, au.ID, r.ID, map[string]string{
 					"version": au.Version.String(), "kind": r.Kind, "mode": string(ref.Mode), "replayed": "true",
 					"authenticity": r.Authenticity, "execution": out.Execution.String(),
 				}); err != nil {

@@ -4,6 +4,7 @@
 package pgtransactions
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -221,7 +222,7 @@ func (s *Store) Release(ctx context.Context, c tenancy.Caller, r app.ReleaseRequ
 		}
 		sum := sha256.Sum256([]byte(basis))
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "transaction.reconciliation_released", Actor: actor, Outcome: audit.Success, ReasonCode: "NOT_OCCURRED",
+			Name: auditkind.TransactionReconciliationReleased, Actor: actor, Outcome: audit.Success, ReasonCode: "NOT_OCCURRED",
 			Object: &audit.Object{Type: "reconciliation", ID: k.ID.String()},
 			Details: map[string]string{
 				"transaction": k.TransactionID.String(), "basis_sha256": hex.EncodeToString(sum[:]),

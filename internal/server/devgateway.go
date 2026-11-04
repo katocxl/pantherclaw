@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -75,7 +76,7 @@ func seedGateway(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID,
 		}
 		gw = g.ID
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "dev.gateway_seeded", Actor: devSeedActor, Outcome: audit.Success, Object: &audit.Object{Type: "gateway", ID: g.ID.String()},
+			Name: auditkind.DevGatewaySeeded, Actor: devSeedActor, Outcome: audit.Success, Object: &audit.Object{Type: "gateway", ID: g.ID.String()},
 		})
 		return err
 	})

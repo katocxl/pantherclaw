@@ -4,6 +4,7 @@
 package protect
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"maps"
 	"slices"
@@ -222,7 +223,7 @@ func (p *Publishers) MarkCompromised(ctx context.Context, user ids.UUID, since t
 			}
 			maps.Copy(details, more)
 		}
-		return p.record(ctx, tx, c, "publisher.compromised", out.ID, details)
+		return p.record(ctx, tx, c, auditkind.PublisherCompromised, out.ID, details)
 	})
 	return out, err
 }
@@ -427,7 +428,7 @@ func (p *Publishers) ReviewExposed(ctx context.Context, id ids.UUID, kind, item,
 		if inserted != 1 {
 			return ErrReviewed
 		}
-		return p.record(ctx, tx, c, "publisher.exposure_reviewed", id, map[string]string{
+		return p.record(ctx, tx, c, auditkind.PublisherExposureReviewed, id, map[string]string{
 			"item_kind": kind, "item": item, "decision": decision, "user": cp.UserID.String(),
 		})
 	})
@@ -512,7 +513,7 @@ func (p *Publishers) ClearCompromise(ctx context.Context, id ids.UUID) (ids.UUID
 		if err := one(q.SetCompromiseClearRequest(ctx, req, c.Org, id)); err != nil {
 			return err
 		}
-		return p.record(ctx, tx, c, "publisher.clear_requested", id, map[string]string{
+		return p.record(ctx, tx, c, auditkind.PublisherClearRequested, id, map[string]string{
 			"user": cp.UserID.String(), "change_request": req.String(),
 		})
 	})
@@ -563,7 +564,7 @@ func (p *Publishers) ApplyClear(ctx context.Context, tx db.TenantTx, request ids
 		by[i] = u.String()
 	}
 	actor := tenancy.Caller{Subject: td.Subject{Org: tx.OrgID(), Principal: td.PrincipalRef{Kind: td.KindUser, ID: confirmers[0]}}}
-	return p.record(ctx, tx, actor, "publisher.cleared", row.ID, map[string]string{
+	return p.record(ctx, tx, actor, auditkind.PublisherCleared, row.ID, map[string]string{
 		"user": row.UserID.String(), "confirmed_by": strings.Join(by, ","),
 	})
 }

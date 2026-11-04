@@ -8,6 +8,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 
 	bdomain "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -128,7 +129,7 @@ func (s *Service) Propose(ctx context.Context, p domain.Proposal) (dbq.PcMcpServ
 		} else if err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "mcp.catalog.server_proposed", out.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.McpCatalogServerProposed, out.ID, map[string]string{
 			"name": out.Name, "transport": out.Transport, "url_host": deref(out.UrlHost), "url_path_prefix": deref(out.UrlPathPrefix),
 			"image_digest": deref(out.ImageDigest), "package_ref": deref(out.PackageRef),
 		})
@@ -141,13 +142,13 @@ func (s *Service) Propose(ctx context.Context, p domain.Proposal) (dbq.PcMcpServ
 // while a control of its revocation is live and then a person's with a fresh
 // step-up (D224a).
 func (s *Service) Approve(ctx context.Context, id ids.UUID) (dbq.PcMcpServer, error) {
-	return s.decide(ctx, id, domain.StatusApproved, "mcp.catalog.server_approved", domain.StatusProposed, domain.StatusDenied, domain.StatusRevoked)
+	return s.decide(ctx, id, domain.StatusApproved, auditkind.McpCatalogServerApproved, domain.StatusProposed, domain.StatusDenied, domain.StatusRevoked)
 }
 
 // Deny moves a PROPOSED server to DENIED (catalog.manage). An approved server
 // leaves the catalog through a revoke, which stops what matches it.
 func (s *Service) Deny(ctx context.Context, id ids.UUID) (dbq.PcMcpServer, error) {
-	return s.decide(ctx, id, domain.StatusDenied, "mcp.catalog.server_denied", domain.StatusProposed)
+	return s.decide(ctx, id, domain.StatusDenied, auditkind.McpCatalogServerDenied, domain.StatusProposed)
 }
 
 func (s *Service) decide(ctx context.Context, id ids.UUID, to domain.Status, event string, from ...domain.Status) (dbq.PcMcpServer, error) {

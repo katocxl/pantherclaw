@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 
@@ -80,7 +81,7 @@ func (b *Bootstrap) CreateOrg(ctx context.Context, name, adminEmail string) (ids
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "tenancy.org_created", Actor: operator("org-create"), Outcome: audit.Success,
+			Name: auditkind.TenancyOrgCreated, Actor: operator("org-create"), Outcome: audit.Success,
 			Object: &audit.Object{Type: "org", ID: org.String()}, Details: map[string]string{"edition": string(ent.Edition)},
 		}); err != nil {
 			return err
@@ -130,7 +131,7 @@ func (b *Bootstrap) bootstrapInvitation(ctx context.Context, tx db.TenantTx, q *
 		return credential.Token{}, err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "access.bootstrap_invitation_created", Actor: operator(action), Outcome: audit.Success,
+		Name: auditkind.AccessBootstrapInvitationCreated, Actor: operator(action), Outcome: audit.Success,
 		Object:  &audit.Object{Type: "invitation", ID: inv.ID.String()},
 		Details: map[string]string{"email_bound": boolString(email != "")},
 	})

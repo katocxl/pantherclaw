@@ -4,6 +4,7 @@
 package pgcampaigns
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"fmt"
 	"log/slog"
@@ -48,7 +49,7 @@ func AbandonStale(ctx context.Context, pool *db.Pool, org ids.OrgID) (int, error
 				return err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "redteam.campaign_abandoned", Actor: sweeper, Outcome: audit.Success,
+				Name: auditkind.RedteamCampaignAbandoned, Actor: sweeper, Outcome: audit.Success,
 				Object: &audit.Object{Type: "redteam_campaign", ID: c.ID.String()}, Details: map[string]string{"agent_id": c.RangeAgentID.String()},
 			}); err != nil {
 				return err

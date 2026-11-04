@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/json/v2"
@@ -287,7 +288,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 			res.Created++
 			if !reopen.IsZero() {
 				res.Reopened++
-				if err := record(ctx, tx, c, "agents.discovery_reopened", prior.AgentID, map[string]string{
+				if err := record(ctx, tx, c, auditkind.AgentsDiscoveryReopened, prior.AgentID, map[string]string{
 					"discovery": reopen.String(), "kind": f.Kind, "source": source,
 				}); err != nil {
 					return err
@@ -312,7 +313,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 			details["complete"], details["missed"] = strconv.FormatBool(mode.Complete), strconv.Itoa(res.Missed)
 			details["scan"] = w.run.String()
 		}
-		return record(ctx, tx, c, "agents.scan_submitted", ids.UUID{}, details)
+		return record(ctx, tx, c, auditkind.AgentsScanSubmitted, ids.UUID{}, details)
 	})
 	if err != nil {
 		return ScanResult{}, err

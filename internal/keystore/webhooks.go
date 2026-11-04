@@ -4,6 +4,7 @@
 package keystore
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"encoding/json/v2"
@@ -343,7 +344,7 @@ func revokeExpired(ctx context.Context, tx db.TenantTx, q *dbq.Queries, rows []d
 			return n, err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "signing_key.revoked", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.SigningKeyRevoked, Actor: actor, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "signing_key", ID: r.Kid},
 			Details: map[string]string{"purpose": string(keys.PurposeWebhooks), "reason": "overlap_ended"},
 		}); err != nil {

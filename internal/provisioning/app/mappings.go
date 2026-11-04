@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"fmt"
@@ -173,7 +174,7 @@ func (s *Service) ApplyMappingAdd(ctx context.Context, tx db.TenantTx, author te
 	if err != nil {
 		return err
 	}
-	if err := recordBy(ctx, tx, author, "scim.group_role_mapping_added", "group_role_mapping", m.ID, map[string]string{
+	if err := recordBy(ctx, tx, author, auditkind.ScimGroupRoleMappingAdded, "group_role_mapping", m.ID, map[string]string{
 		"group_id": m.Group.String(), "role": string(m.Role), "scope_type": string(m.ScopeType),
 		"bindings_added": strconv.Itoa(added), "bindings_removed": strconv.Itoa(removed),
 	}); err != nil {
@@ -255,7 +256,7 @@ func (s *Service) ApplyMappingRemove(ctx context.Context, tx db.TenantTx, author
 	if err != nil {
 		return err
 	}
-	if err := recordBy(ctx, tx, author, "scim.group_role_mapping_removed", "group_role_mapping", id, map[string]string{
+	if err := recordBy(ctx, tx, author, auditkind.ScimGroupRoleMappingRemoved, "group_role_mapping", id, map[string]string{
 		"group_id": r.GroupID.String(), "role": r.Role, "scope_type": r.ScopeType,
 		"bindings_added": strconv.Itoa(added), "bindings_removed": strconv.Itoa(removed),
 	}); err != nil {

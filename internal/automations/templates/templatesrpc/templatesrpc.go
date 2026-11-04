@@ -9,6 +9,7 @@
 package templatesrpc
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -300,7 +301,7 @@ func (h *ProposalHandler) DecideProposal(ctx context.Context, req *pantherclawv1
 		}
 		out = proposalOf(p, e.AutomationID)
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "automation.proposal_decided", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.AutomationProposalDecided, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "automation_proposal", ID: p.ID.String()},
 			Details: map[string]string{
 				"automation": e.AutomationID.String(), "execution": p.ExecutionID.String(), "kind": p.Kind,

@@ -4,6 +4,7 @@
 package retention
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 	"time"
@@ -209,7 +210,7 @@ func (s *Service) SetPolicy(ctx context.Context, cat Category, days int) (Change
 		}
 		rev := Revision{ID: id, Category: cat, Number: next, Days: days, SetBy: &by, Created: r.CreatedAt, Effective: r.EffectiveFrom}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.retention_changed", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.EvidenceRetentionChanged, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "retention_policy", ID: id.String()},
 			Details: map[string]string{
 				"category": string(cat), "days": strconv.Itoa(days), "previous_days": strconv.Itoa(cur.Days),
@@ -357,7 +358,7 @@ func (s *Service) CreateHold(ctx context.Context, h HoldRequest) (Hold, error) {
 			details["start"], details["end"] = h.Start.UTC().Format(time.RFC3339), h.End.UTC().Format(time.RFC3339)
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.legal_hold_created", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.EvidenceLegalHoldCreated, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "legal_hold", ID: out.ID.String()}, Details: details,
 		})
 		return err
@@ -394,7 +395,7 @@ func (s *Service) ReleaseHold(ctx context.Context, id ids.UUID, reason string) (
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "evidence.legal_hold_released", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.EvidenceLegalHoldReleased, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "legal_hold", ID: id.String()}, Details: map[string]string{"scope": h.Scope},
 		}); err != nil {
 			return err

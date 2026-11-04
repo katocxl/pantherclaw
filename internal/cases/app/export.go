@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/hex"
 	"encoding/json/jsontext"
@@ -185,7 +186,7 @@ func (s *Service) Export(ctx context.Context, c ids.UUID) (Export, error) {
 		}
 		out.Document = v
 		ev, err := audit.Record(ctx, tx, audit.Event{
-			Name: "case.exported", Actor: caller.Actor(), Outcome: audit.Success,
+			Name: auditkind.CaseExported, Actor: caller.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "case", ID: c.String()},
 			Details: map[string]string{
 				"entries":   strconv.Itoa(len(doc.Entries)),

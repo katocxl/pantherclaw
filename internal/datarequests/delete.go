@@ -4,6 +4,7 @@
 package datarequests
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -122,7 +123,7 @@ func (s *Service) DeleteOrg(ctx context.Context, org ids.OrgID, id ids.UUID) err
 		return err
 	}
 	intentDigest := sha256.Sum256([]byte(signedIntent))
-	acked, err := securityevent.IntentAcknowledged(ctx, s.Pool, "org.deletion_started", org.UUID(), hex.EncodeToString(intentDigest[:]))
+	acked, err := securityevent.IntentAcknowledged(ctx, s.Pool, auditkind.OrgDeletionStarted, org.UUID(), hex.EncodeToString(intentDigest[:]))
 	if err != nil {
 		return err
 	}
@@ -215,7 +216,7 @@ func (s *Service) persistIntent(ctx context.Context, tx db.TenantTx, snap deleti
 		return nil
 	}
 	digest := sha256.Sum256([]byte(signed))
-	_, err = audit.Record(ctx, tx, audit.Event{Name: "org.deletion_started", Actor: evdomain.Actor{Type: "system", ID: "data.delete_org"}, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: org.String()}, Details: map[string]string{"request_id": id.String(), "journal_digest": hex.EncodeToString(digest[:])}})
+	_, err = audit.Record(ctx, tx, audit.Event{Name: auditkind.OrgDeletionStarted, Actor: evdomain.Actor{Type: "system", ID: "data.delete_org"}, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: org.String()}, Details: map[string]string{"request_id": id.String(), "journal_digest": hex.EncodeToString(digest[:])}})
 	return err
 }
 
@@ -473,6 +474,6 @@ func (s *Service) recordDeletion(ctx context.Context, tx db.TenantTx, snap delet
 		return err
 	}
 	digest := sha256.Sum256([]byte(signed))
-	_, err = audit.Record(ctx, tx, audit.Event{Name: "org.deleted", Actor: evdomain.Actor{Type: "system", ID: "data.delete_org"}, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: org.String()}, Details: map[string]string{"record_digest": hex.EncodeToString(digest[:])}})
+	_, err = audit.Record(ctx, tx, audit.Event{Name: auditkind.OrgDeleted, Actor: evdomain.Actor{Type: "system", ID: "data.delete_org"}, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: org.String()}, Details: map[string]string{"record_digest": hex.EncodeToString(digest[:])}})
 	return err
 }

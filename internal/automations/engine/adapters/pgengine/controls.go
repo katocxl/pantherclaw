@@ -4,6 +4,7 @@
 package pgengine
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 	"time"
@@ -159,7 +160,7 @@ func (e *Engine) CancelTx(ctx context.Context, tx db.TenantTx, executions []ids.
 		}
 		if n == 1 {
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "automation.execution_cancel_requested", Actor: actor, Outcome: audit.Success, ReasonCode: reason,
+				Name: auditkind.AutomationExecutionCancelRequested, Actor: actor, Outcome: audit.Success, ReasonCode: reason,
 				Object: &audit.Object{Type: "automation_execution", ID: id.String()}, Details: details,
 			}); err != nil {
 				return eff, err

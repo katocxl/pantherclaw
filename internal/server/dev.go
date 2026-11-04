@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"flag"
@@ -164,7 +165,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			return fmt.Errorf("dev seed: containment: %w", err)
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "dev.org_seeded", Actor: devSeedActor, Outcome: audit.Success,
+			Name: auditkind.DevOrgSeeded, Actor: devSeedActor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "org", ID: org.String()},
 		}); err != nil {
 			return err

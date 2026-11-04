@@ -4,6 +4,7 @@
 package accounts
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"regexp"
@@ -255,15 +256,15 @@ func (s *Signup) CreateOrg(ctx context.Context, in NewOrg) (CreatedOrg, error) {
 		actor := evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}
 		for _, ev := range []audit.Event{
 			{
-				Name: "tenancy.org_created", Object: &audit.Object{Type: "org", ID: org.String()},
+				Name: auditkind.TenancyOrgCreated, Object: &audit.Object{Type: "org", ID: org.String()},
 				Details: map[string]string{"via": "self_serve", "account": c.Account.String(), "slug": in.Slug},
 			},
 			{
-				Name: "access.user_created", Object: &audit.Object{Type: "user", ID: u.ID.String()},
+				Name: auditkind.AccessUserCreated, Object: &audit.Object{Type: "user", ID: u.ID.String()},
 				Details: map[string]string{"provider": c.Provider, "role": string(td.RoleOrgAdmin)},
 			},
 			{
-				Name: "tenancy.terms_accepted", Object: &audit.Object{Type: "org", ID: org.String()},
+				Name: auditkind.TenancyTermsAccepted, Object: &audit.Object{Type: "org", ID: org.String()},
 				Details: map[string]string{"terms_version": in.TermsVersion, "dpa_version": in.DPAVersion},
 			},
 		} {

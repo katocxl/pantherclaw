@@ -4,6 +4,7 @@
 package protect
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"time"
@@ -118,7 +119,7 @@ func (s *Service) SetCategoryMode(ctx context.Context, cat Category, mode Mode) 
 			}); err != nil {
 				return err
 			}
-			return record(ctx, tx, c, "protected_change.category_enabled", SubjectID(SurfaceSettings, string(cat)),
+			return record(ctx, tx, c, auditkind.ProtectedChangeCategoryEnabled, SubjectID(SurfaceSettings, string(cat)),
 				map[string]string{"category": string(cat)})
 		}
 		if s.Gate == nil {
@@ -283,7 +284,7 @@ func (s *Service) ApplyEmergency(ctx context.Context, request ids.UUID, su stepu
 				return err
 			}
 		}
-		return record(ctx, tx, c, "protected_change.emergency_applied", row.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.ProtectedChangeEmergencyApplied, row.ID, map[string]string{
 			"category": row.Category, "surface": row.Surface, "subject": row.Subject, "author": row.Author.String(),
 			"publisher": c.Principal.ID.String(), "review_request": review.String(),
 		})
@@ -360,7 +361,7 @@ func (s *Service) OpenEmergencyReview(ctx context.Context, id ids.UUID) (dbq.PcP
 			c.Actor()); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "protected_change.review_reopened", row.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.ProtectedChangeReviewReopened, row.ID, map[string]string{
 			"category": row.Category, "subject": row.Subject, "applied_by": uuidString(row.Publisher),
 			"review_request": review.String(),
 		})

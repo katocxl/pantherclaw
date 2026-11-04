@@ -4,6 +4,7 @@
 package pgtransactions
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"slices"
@@ -105,7 +106,7 @@ func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify agentsa
 		return app.Applied{}, err
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "github.scan_finished", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+		Name: auditkind.GithubScanFinished, Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "connection", ID: task.ConnectionID.String()},
 		Details: map[string]string{
 			"scan": task.RunID.String(), "state": state, "not_scanned": strconv.Itoa(len(notScanned)),

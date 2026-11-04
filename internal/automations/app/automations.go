@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strings"
 	"unicode/utf8"
@@ -72,7 +73,7 @@ func createAutomationTx(ctx context.Context, tx db.TenantTx, c tapp.Caller, name
 	if err != nil {
 		return Automation{}, err
 	}
-	return automationView(r), record(ctx, tx, c.Actor(), "automation.created", id, map[string]string{
+	return automationView(r), record(ctx, tx, c.Actor(), auditkind.AutomationCreated, id, map[string]string{
 		"name": name, "kind": string(kind), "owner": owner.String(), "service_account": sa.String(),
 	})
 }
@@ -225,7 +226,7 @@ func (s *Service) SetOwner(ctx context.Context, automation, owner ids.UUID) (Aut
 				}
 				voided = len(voidedIDs)
 			}
-			if err := record(ctx, tx, c.Actor(), "automation.owner_changed", a.ID, map[string]string{
+			if err := record(ctx, tx, c.Actor(), auditkind.AutomationOwnerChanged, a.ID, map[string]string{
 				"from": a.OwnerUserID.String(), "to": owner.String(), "voided_requests": itoa(voided),
 			}); err != nil {
 				return err

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -99,13 +100,13 @@ func (s *Service) submit(ctx context.Context, session ids.UUID, compact string, 
 			}
 		}
 		out = a
-		return record(ctx, tx, c, "sandbox.report_accepted", sess.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.SandboxReportAccepted, sess.ID, map[string]string{
 			"kind": a.Kind, "failed": strconv.Itoa(len(a.Failed)),
 		})
 	})
 	if r, ok := errors.AsType[rejected](err); ok {
 		_ = s.Pool.InTenantTx(context.WithoutCancel(ctx), c.Org, func(ctx context.Context, tx db.TenantTx) error {
-			return record(ctx, tx, c, "sandbox.report_rejected", session, map[string]string{"reason": r.reason})
+			return record(ctx, tx, c, auditkind.SandboxReportRejected, session, map[string]string{"reason": r.reason})
 		})
 		return Accepted{}, ErrReport
 	}

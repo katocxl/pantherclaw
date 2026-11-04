@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"time"
@@ -194,7 +195,7 @@ func (inv *Inventory) Create(ctx context.Context, d domain.Details) (Agent, erro
 		}); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.agent_created", r.ID, auditDetails(d))
+		return record(ctx, tx, c, auditkind.AgentsAgentCreated, r.ID, auditDetails(d))
 	})
 	return out, err
 }
@@ -380,7 +381,7 @@ func (inv *Inventory) Update(ctx context.Context, id ids.UUID, name, purpose *st
 		if err := RecordChange(ctx, q, c.Org, r.ID, domain.Change{Kind: domain.ChangeUpdated, Actor: actor(c), Details: fields}); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.agent_updated", r.ID, fields)
+		return record(ctx, tx, c, auditkind.AgentsAgentUpdated, r.ID, fields)
 	})
 	return out, err
 }
@@ -405,7 +406,7 @@ func updateRisk(ctx context.Context, tx db.TenantTx, q *dbq.Queries, c tenancy.C
 	if err := RecordChange(ctx, q, c.Org, id, domain.Change{Kind: domain.ChangeRiskUpdated, Actor: actor(c), Details: stated}); err != nil {
 		return dbq.PcAgent{}, err
 	}
-	return r, record(ctx, tx, c, "agents.risk_updated", id, stated)
+	return r, record(ctx, tx, c, auditkind.AgentsRiskUpdated, id, stated)
 }
 
 // maxCardTools is the most approved tools one card lists.
@@ -481,7 +482,7 @@ func (inv *Inventory) TransferOwnership(ctx context.Context, id, owner, backup i
 		}); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.ownership_transferred", r.ID, details)
+		return record(ctx, tx, c, auditkind.AgentsOwnershipTransferred, r.ID, details)
 	})
 	return out, err
 }

@@ -10,6 +10,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"regexp"
@@ -205,7 +206,7 @@ func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, 
 			return err
 		}
 		return tx.Audit(ctx, audit.Event{
-			Name: "redteam.range_started", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.RedteamRangeStarted, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "redteam_range", ID: out.ID.String()},
 			Details: map[string]string{"agent_id": a.ID.String(), "scenarios": strconv.Itoa(len(set)), "set_digest": out.SetDigest},
 		})
@@ -358,7 +359,7 @@ func (s *Service) RecordResult(ctx context.Context, in RecordInput) (domain.Resu
 			}
 		}
 		return tx.Audit(ctx, audit.Event{
-			Name: "redteam.result_recorded", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.RedteamResultRecorded, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "redteam_range", ID: rng.ID.String()},
 			Details: map[string]string{
 				"scenario_id": decl.ID, "verdict": string(verdict), "mismatched_steps": strconv.Itoa(mismatches),
@@ -496,7 +497,7 @@ func (s *Service) FinishRange(ctx context.Context, id ids.UUID) (Detail, error) 
 		rng.State, rng.Finished = domain.Finished, &now
 		out = Detail{Range: rng, Results: all, Counts: domain.Count(all)}
 		return tx.Audit(ctx, audit.Event{
-			Name: "redteam.range_finished", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.RedteamRangeFinished, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "redteam_range", ID: rng.ID.String()},
 			Details: map[string]string{
 				"pass": strconv.Itoa(out.Counts.Pass), "fail": strconv.Itoa(out.Counts.Fail), "error": strconv.Itoa(out.Counts.Error),

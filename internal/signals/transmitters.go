@@ -16,6 +16,7 @@
 package signals
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"log/slog"
@@ -265,7 +266,7 @@ func (s *Service) Create(ctx context.Context, in NewTransmitter) (Transmitter, e
 		} else if err != nil {
 			return err
 		}
-		if err := auditCaller(ctx, tx, c, "signals.transmitter_created", id, map[string]string{
+		if err := auditCaller(ctx, tx, c, auditkind.SignalsTransmitterCreated, id, map[string]string{
 			"name": in.Name, "issuer": in.Issuer, "jwks_uri": in.JWKSURI,
 		}); err != nil {
 			return err
@@ -305,7 +306,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (
 			}
 			return ErrState
 		}
-		if err := auditCaller(ctx, tx, c, "signals.transmitter_activated", id, map[string]string{"security_key": su.Credential.String()}); err != nil {
+		if err := auditCaller(ctx, tx, c, auditkind.SignalsTransmitterActivated, id, map[string]string{"security_key": su.Credential.String()}); err != nil {
 			return err
 		}
 		out, err = s.get(ctx, q, c.Org, id)
@@ -348,7 +349,7 @@ func (s *Service) SetState(ctx context.Context, id ids.UUID, state string) (Tran
 		if n == 0 {
 			return ErrState
 		}
-		if err := auditCaller(ctx, tx, c, "signals.transmitter_state_changed", id, map[string]string{"from": t.State, "to": state}); err != nil {
+		if err := auditCaller(ctx, tx, c, auditkind.SignalsTransmitterStateChanged, id, map[string]string{"from": t.State, "to": state}); err != nil {
 			return err
 		}
 		out, err = s.get(ctx, q, c.Org, id)

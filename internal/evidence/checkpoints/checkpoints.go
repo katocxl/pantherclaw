@@ -31,6 +31,7 @@
 package checkpoints
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/mldsa"
@@ -548,7 +549,7 @@ func (s *Service) report(ctx context.Context, org ids.OrgID, check string, ie *I
 			details["seq"] = strconv.FormatInt(ie.Seq, 10)
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "security.evidence_integrity_failed", Actor: Actor, Outcome: audit.Failure, ReasonCode: ie.Code,
+			Name: auditkind.SecurityEvidenceIntegrityFailed, Actor: Actor, Outcome: audit.Failure, ReasonCode: ie.Code,
 			Object: &audit.Object{Type: "evidence_log", ID: org.String()}, Details: details,
 		}); err != nil {
 			return err

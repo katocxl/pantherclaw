@@ -4,6 +4,7 @@
 package entitlements
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"slices"
@@ -162,7 +163,7 @@ func (s *Service) ApplyPlan(ctx context.Context, org ids.OrgID, snap Snapshot) e
 		}
 		if kind != "APPLIED" {
 			_, err := audit.Record(ctx, tx, audit.Event{
-				Name: "billing.plan_event_ignored", Actor: billingActor, Outcome: audit.Denied, ReasonCode: kind,
+				Name: auditkind.BillingPlanEventIgnored, Actor: billingActor, Outcome: audit.Denied, ReasonCode: kind,
 				Object: &audit.Object{Type: "org", ID: org.String()}, Details: details,
 			})
 			return err
@@ -193,7 +194,7 @@ func (s *Service) ApplyPlan(ctx context.Context, org ids.OrgID, snap Snapshot) e
 			details["previous_status"] = cur.Status
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "billing.plan_applied", Actor: billingActor, Outcome: audit.Success,
+			Name: auditkind.BillingPlanApplied, Actor: billingActor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "org", ID: org.String()}, Details: details,
 		})
 		return err

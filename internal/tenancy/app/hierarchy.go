@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strings"
 
@@ -166,7 +167,7 @@ func (h *Hierarchy) UpdateOrg(ctx context.Context, name string) (Org, error) {
 			return notFound(err, ErrArchived)
 		}
 		out = orgView(r)
-		return record(ctx, tx, c, "tenancy.org_updated", "org", c.Org.UUID(), map[string]string{"fields": "name"})
+		return record(ctx, tx, c, auditkind.TenancyOrgUpdated, "org", c.Org.UUID(), map[string]string{"fields": "name"})
 	})
 	return out, err
 }
@@ -198,7 +199,7 @@ func (h *Hierarchy) CreateBusinessUnit(ctx context.Context, in NewEntity) (Busin
 			return err
 		}
 		out = businessUnitView(r)
-		return record(ctx, tx, c, "tenancy.business_unit_created", "business_unit", r.ID, map[string]string{"slug": r.Slug})
+		return record(ctx, tx, c, auditkind.TenancyBusinessUnitCreated, "business_unit", r.ID, map[string]string{"slug": r.Slug})
 	})
 	return out, err
 }
@@ -261,7 +262,7 @@ func (h *Hierarchy) UpdateBusinessUnit(ctx context.Context, id td.BusinessUnitID
 			return notFound(err, ErrArchived)
 		}
 		out = businessUnitView(r)
-		return record(ctx, tx, c, "tenancy.business_unit_updated", "business_unit", r.ID, changed(name, description))
+		return record(ctx, tx, c, auditkind.TenancyBusinessUnitUpdated, "business_unit", r.ID, changed(name, description))
 	})
 	return out, err
 }
@@ -294,7 +295,7 @@ func (h *Hierarchy) ArchiveBusinessUnit(ctx context.Context, id td.BusinessUnitI
 			return notFound(err, ErrArchived)
 		}
 		out = businessUnitView(r)
-		return record(ctx, tx, c, "tenancy.business_unit_archived", "business_unit", r.ID, nil)
+		return record(ctx, tx, c, auditkind.TenancyBusinessUnitArchived, "business_unit", r.ID, nil)
 	})
 	return out, err
 }

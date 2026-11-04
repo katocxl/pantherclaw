@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"encoding/json/v2"
@@ -79,7 +80,7 @@ func (s *Service) CreateEnrollmentToken(ctx context.Context, agentID ids.UUID, t
 			return err
 		}
 		out = EnrollmentToken{ID: r.ID, Secret: tok, ExpiresAt: r.ExpiresAt}
-		return callerRecord(ctx, tx, c, "identity.enrollment_token_created", a.ID, map[string]string{"enrollment_id": r.ID.String()})
+		return callerRecord(ctx, tx, c, auditkind.IdentityEnrollmentTokenCreated, a.ID, map[string]string{"enrollment_id": r.ID.String()})
 	})
 	return out, err
 }
@@ -236,7 +237,7 @@ func (s *Service) auditReuse(ctx context.Context, org ids.OrgID, hash []byte) {
 		if err != nil {
 			return err
 		}
-		return recordAs(ctx, tx, evdomainSystem(), "security.enrollment_token_reused", "agent", et.AgentID,
+		return recordAs(ctx, tx, evdomainSystem(), auditkind.SecurityEnrollmentTokenReused, "agent", et.AgentID,
 			map[string]string{"enrollment_id": et.ID.String()})
 	})
 }
@@ -326,7 +327,7 @@ func (s *Service) insertInstance(ctx context.Context, q *dbq.Queries, tx db.Tena
 	}); err != nil {
 		return Enrolled{}, err
 	}
-	if err := recordAs(ctx, tx, instanceActor(id), "identity.instance_enrolled", "instance", id,
+	if err := recordAs(ctx, tx, instanceActor(id), auditkind.IdentityInstanceEnrolled, "instance", id,
 		map[string]string{"agent_id": a.ID.String(), "fingerprint": jkt, "enrolled_via": via}); err != nil {
 		return Enrolled{}, err
 	}
@@ -385,5 +386,5 @@ func autoAdmitted(ctx context.Context, q *dbq.Queries, tx db.TenantTx, org ids.O
 		return err
 	}
 	details["agent_id"] = a.ID.String()
-	return recordAs(ctx, tx, evdomainSystem(), "identity.instance_auto_admitted", "instance", id, details)
+	return recordAs(ctx, tx, evdomainSystem(), auditkind.IdentityInstanceAutoAdmitted, "instance", id, details)
 }

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -23,6 +24,12 @@ import (
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
+
+// issuerRevisionKinds are the audit kinds of a revision's state: proposed,
+// or active at once because it narrows (HR-664).
+var issuerRevisionKinds = map[string]string{
+	"PROPOSED": auditkind.IdentityIssuerProposed, "ACTIVE": auditkind.IdentityIssuerNarrowed,
+}
 
 // Errors of the issuer-entry use cases.
 var (
@@ -437,7 +444,7 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		if out, err = revisionView(r); err != nil {
 			return err
 		}
-		return recordAs(ctx, tx, c.Actor(), "identity.issuer_"+map[string]string{"PROPOSED": "proposed", "ACTIVE": "narrowed"}[state],
+		return recordAs(ctx, tx, c.Actor(), issuerRevisionKinds[state],
 			"issuer_entry", entryID, map[string]string{
 				"agent_id": a.ID.String(), "revision": strconv.Itoa(int(number)), "kind": string(in.Binding.kind()),
 				"widening": strings.Join(widening, "; "),
@@ -494,7 +501,7 @@ func (s *Service) ActivateIssuer(ctx context.Context, entryID ids.UUID, revision
 		if out, err = revisionView(r); err != nil {
 			return err
 		}
-		return recordAs(ctx, tx, c.Actor(), "identity.issuer_activated", "issuer_entry", entryID, map[string]string{
+		return recordAs(ctx, tx, c.Actor(), auditkind.IdentityIssuerActivated, "issuer_entry", entryID, map[string]string{
 			"revision": strconv.Itoa(revision), "widening": strings.Join(pr.Widening, "; "),
 			"confirmed_reusable_refs": strconv.FormatBool(confirmReusable),
 		})
@@ -509,7 +516,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, entryID ids.UUID, revision
 			return nil, "", ErrEntryState
 		}
 		return e.proposed, "WITHDRAWN", nil
-	}, "identity.issuer_withdrawn", "")
+	}, auditkind.IdentityIssuerWithdrawn, "")
 }
 
 // DisableIssuer disables an entry at once (narrowing needs no activation):
@@ -524,7 +531,7 @@ func (s *Service) DisableIssuer(ctx context.Context, entryID ids.UUID, reason st
 			return nil, "", ErrEntryState
 		}
 		return e.active, "DISABLED", nil
-	}, "identity.issuer_disabled", reason)
+	}, auditkind.IdentityIssuerDisabled, reason)
 }
 
 func (s *Service) closeIssuer(ctx context.Context, entryID ids.UUID, pick func(entry) (*dbq.PcTrustedIssuer, string, error), event, reason string) (Revision, error) {

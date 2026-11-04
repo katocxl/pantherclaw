@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"log/slog"
@@ -340,7 +341,7 @@ func (b *Browser) OpenOrgSession(ctx context.Context, org ids.OrgID, user, accou
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.login", Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
+			Name: auditkind.AuthnLogin, Actor: evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "browser_session", ID: out.Session.String()},
 			Details: map[string]string{"method": "browser_account", "provider": providerName, "recent": boolString(recent)},
 		})

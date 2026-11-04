@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -131,7 +132,7 @@ func (s *Service) RequestAutomationGateTx(ctx context.Context, tx pgx.Tx, g Auto
 	if _, err := pgwaitlist.OpenAutomationGate(ctx, ttx, g.Org, id, g.Automation, g.StepID, row.DeadlineAt, actor); err != nil {
 		return ids.UUID{}, 0, err
 	}
-	if err := event(ctx, ttx, "approval.gate_requested", actor, "", id, map[string]string{
+	if err := event(ctx, ttx, auditkind.ApprovalGateRequested, actor, "", id, map[string]string{
 		"automation": g.Automation.String(), "execution": g.Execution.String(), "step": g.StepID,
 	}); err != nil {
 		return ids.UUID{}, 0, err
@@ -252,7 +253,7 @@ func (s *Service) ConsumeAutomationGateTx(ctx context.Context, tx pgx.Tx, org id
 	if err != nil {
 		return err
 	}
-	return event(ctx, ttx, "approval.gate_consumed", evdomain.Actor{Type: "system", ID: "automation_engine"}, "", id, nil)
+	return event(ctx, ttx, auditkind.ApprovalGateConsumed, evdomain.Actor{Type: "system", ID: "automation_engine"}, "", id, nil)
 }
 
 // EndAutomationGateTx ends an open gate: EXPIRED at its deadline
@@ -278,7 +279,7 @@ func (s *Service) EndAutomationGateTx(ctx context.Context, tx pgx.Tx, org ids.Or
 	}); err != nil {
 		return err
 	}
-	if err := event(ctx, ttx, "approval.gate_ended", evdomain.Actor{Type: "system", ID: "automation_engine"}, reason, id, nil); err != nil {
+	if err := event(ctx, ttx, auditkind.ApprovalGateEnded, evdomain.Actor{Type: "system", ID: "automation_engine"}, reason, id, nil); err != nil {
 		return err
 	}
 	var params map[string]string

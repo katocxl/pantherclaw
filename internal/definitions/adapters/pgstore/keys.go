@@ -4,6 +4,7 @@
 package pgstore
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"errors"
@@ -152,7 +153,7 @@ func (s *Store) RevokeSigningKey(ctx context.Context, org ids.OrgID, kid string,
 			}
 			if ev != nil {
 				if err := record(ctx, tx, &audit.Event{
-					Name: "package.transitioned", Actor: ev.Actor, Outcome: audit.Success,
+					Name: auditkind.PackageTransitioned, Actor: ev.Actor, Outcome: audit.Success,
 					Object:  &audit.Object{Type: "package_version", ID: trust.Key(v.Name, v.Version)},
 					Details: map[string]string{"from": string(from), "to": string(to), "reason": "signing_key_compromised", "signing_key": kid},
 				}); err != nil {

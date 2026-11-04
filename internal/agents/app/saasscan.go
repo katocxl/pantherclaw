@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/json/v2"
@@ -171,7 +172,7 @@ func recordSaaS(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.Org
 		if !reopen.IsZero() {
 			res.Reopened++
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "agents.discovery_reopened", Actor: w.ledger, Outcome: audit.Success,
+				Name: auditkind.AgentsDiscoveryReopened, Actor: w.ledger, Outcome: audit.Success,
 				Object:  &audit.Object{Type: "discovery", ID: reopen.String()},
 				Details: map[string]string{"scan": w.run.String(), "kind": f.Kind, "previous_agent": prior.AgentID.String()},
 			}); err != nil {
@@ -298,7 +299,7 @@ func (inv *Inventory) ImportSaaS(ctx context.Context, r SaaSReport) (SaaSResult,
 		if err := FinishSaaSRun(ctx, q, c.Org, out.Run, "DONE", r.Counts, scanned, notScanned); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.saas_import_submitted", ids.UUID{}, map[string]string{
+		return record(ctx, tx, c, auditkind.AgentsSaasImportSubmitted, ids.UUID{}, map[string]string{
 			"scan": out.Run.String(), "source": r.Source, "created": strconv.Itoa(res.Created), "counted": strconv.Itoa(res.Counted),
 			"dropped": strconv.Itoa(res.Dropped), "reopened": strconv.Itoa(res.Reopened), "missed": strconv.Itoa(res.Missed),
 			"not_scanned": strconv.Itoa(len(notScanned)),
@@ -356,7 +357,7 @@ func (inv *Inventory) SubmitSaaSScan(ctx context.Context, org ids.OrgID, gateway
 		}
 		res.DroppedAttributes = dropped
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "agents.saas_scan_submitted", Actor: ledger, Outcome: audit.Success,
+			Name: auditkind.AgentsSaasScanSubmitted, Actor: ledger, Outcome: audit.Success,
 			Details: map[string]string{
 				"scan": scan.String(), "source": run.Source, "created": strconv.Itoa(res.Created), "counted": strconv.Itoa(res.Counted),
 				"dropped": strconv.Itoa(res.Dropped), "reopened": strconv.Itoa(res.Reopened),
@@ -419,7 +420,7 @@ func (inv *Inventory) SetExternalOwner(ctx context.Context, id, owner, backup id
 		if err := RecordChange(ctx, q, c.Org, id, domain.Change{Kind: domain.ChangeExternalOwnerSet, Actor: actor(c), Reason: reason, Details: details}); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.external_owner_set", id, details)
+		return record(ctx, tx, c, auditkind.AgentsExternalOwnerSet, id, details)
 	})
 	return out, err
 }

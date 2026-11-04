@@ -4,6 +4,7 @@
 package pgapprovals
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -140,7 +141,7 @@ func RecordHold(ctx context.Context, tx db.TenantTx, org ids.OrgID, h Hold) erro
 		if err := closeEntry(ctx, q, org, *h.Previous, entryCancelled, apdomain.EndBindingChanged); err != nil {
 			return err
 		}
-		if err := event(ctx, tx, "approval.superseded", h.Actor, audit.Success, apdomain.EndBindingChanged, *h.Previous,
+		if err := event(ctx, tx, auditkind.ApprovalSuperseded, h.Actor, audit.Success, apdomain.EndBindingChanged, *h.Previous,
 			map[string]string{"by": h.RequestID.String()}); err != nil {
 			return err
 		}
@@ -189,7 +190,7 @@ func RecordHold(ctx context.Context, tx db.TenantTx, org ids.OrgID, h Hold) erro
 	}); err != nil {
 		return err
 	}
-	if err := event(ctx, tx, "approval.requested", h.Actor, audit.Success, "", h.RequestID, map[string]string{
+	if err := event(ctx, tx, auditkind.ApprovalRequested, h.Actor, audit.Success, "", h.RequestID, map[string]string{
 		"transaction": h.TransactionID.String(), "binding": h.Binding.String(), "operation": h.Operation,
 	}); err != nil {
 		return err
@@ -207,7 +208,7 @@ func RecordHold(ctx context.Context, tx db.TenantTx, org ids.OrgID, h Hold) erro
 	} else if sim {
 		details["simulated"] = "true" // HR-222
 	}
-	return event(ctx, tx, "security.variant_suspected", h.Actor, audit.Denied, "VARIANT_SHOPPING", h.RequestID, details)
+	return event(ctx, tx, auditkind.SecurityVariantSuspected, h.Actor, audit.Denied, "VARIANT_SHOPPING", h.RequestID, details)
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -244,7 +245,7 @@ func Consume(ctx context.Context, tx db.TenantTx, org ids.OrgID, request ids.UUI
 	if err := release(ctx, q, org, row.GrantID, row.RunID); err != nil {
 		return err
 	}
-	return event(ctx, tx, "approval.consumed", actor, audit.Success, "", request, map[string]string{"permit": permit.String()})
+	return event(ctx, tx, auditkind.ApprovalConsumed, actor, audit.Success, "", request, map[string]string{"permit": permit.String()})
 }
 
 // Expire records that a request expired at use (HR-039): only a live
@@ -265,7 +266,7 @@ func Expire(ctx context.Context, tx db.TenantTx, org ids.OrgID, request ids.UUID
 	if err := closeEntry(ctx, q, org, request, "EXPIRED", apdomain.EndExpired); err != nil {
 		return err
 	}
-	return event(ctx, tx, "approval.expired", actor, audit.Denied, apdomain.EndExpired, request, nil)
+	return event(ctx, tx, auditkind.ApprovalExpired, actor, audit.Denied, apdomain.EndExpired, request, nil)
 }
 
 // Revalidate voids the responses of a request whose people are no longer
@@ -289,7 +290,7 @@ func Revalidate(ctx context.Context, tx db.TenantTx, org ids.OrgID, request ids.
 		if _, err := q.VoidResponse(ctx, &reason, org, c.ID); err != nil {
 			return err
 		}
-		if err := event(ctx, tx, "approval.response_voided", evdomain.Actor{Type: system, ID: system}, audit.Success, reason,
+		if err := event(ctx, tx, auditkind.ApprovalResponseVoided, evdomain.Actor{Type: system, ID: system}, audit.Success, reason,
 			request, map[string]string{"response": c.ID.String(), "user": c.Response.UserID.String()}); err != nil {
 			return err
 		}
@@ -344,5 +345,5 @@ func Invalidate(ctx context.Context, tx db.TenantTx, org ids.OrgID, request ids.
 	if err := closeEntry(ctx, q, org, request, entryCancelled, reason); err != nil {
 		return err
 	}
-	return event(ctx, tx, "approval.invalidated", evdomain.Actor{Type: system, ID: system}, audit.Success, reason, request, nil)
+	return event(ctx, tx, auditkind.ApprovalInvalidated, evdomain.Actor{Type: system, ID: system}, audit.Success, reason, request, nil)
 }

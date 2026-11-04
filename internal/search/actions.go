@@ -4,6 +4,7 @@
 package search
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -220,7 +221,7 @@ func (s *Service) ExportResults(ctx context.Context, src Source, format string) 
 			return err
 		}
 		e, err := audit.Record(ctx, tx, audit.Event{
-			Name: "search.exported", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.SearchExported, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "search", ID: sourceID(src)}, Details: exportDetails(sp, out),
 		})
 		out.AuditID = e.ID

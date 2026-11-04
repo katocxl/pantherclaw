@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -478,7 +479,7 @@ func (s *Service) RequestEnable(ctx context.Context, version ids.UUID, rollout a
 			return err
 		}
 		out = Enabled{Request: req, Required: req.Required}
-		return record(ctx, tx, c.Actor(), "automation.enable_requested", a.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationEnableRequested, a.ID, map[string]string{
 			"version": v.ID.String(), "rollout": string(rollout), "kind": kind, "change_request": req.ID.String(),
 		})
 	})
@@ -553,7 +554,7 @@ func (s *Service) NarrowRollout(ctx context.Context, automation ids.UUID, rollou
 			return err
 		}
 		out = automationView(r)
-		return record(ctx, tx, c.Actor(), "automation.rollout_narrowed", a.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.AutomationRolloutNarrowed, a.ID, map[string]string{
 			"from": string(cur), "to": ro, "cohort_agents": itoa(len(cohort)),
 		})
 	})

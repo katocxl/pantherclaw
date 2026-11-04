@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"fmt"
 	"log/slog"
@@ -49,7 +50,7 @@ func (s *Service) ExpireSessions(ctx context.Context, org ids.OrgID) (int, error
 				return err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "sandbox.session_expired", Actor: sweeper, Outcome: audit.Success,
+				Name: auditkind.SandboxSessionExpired, Actor: sweeper, Outcome: audit.Success,
 				Object: &audit.Object{Type: "sandbox_session", ID: sess.ID.String()}, Details: map[string]string{"agent_id": sess.AgentID.String()},
 			}); err != nil {
 				return err

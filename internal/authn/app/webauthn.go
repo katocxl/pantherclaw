@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -469,7 +470,7 @@ func (w *WebAuthn) FinishRegistration(ctx context.Context, s BrowserSession, cer
 		if err != nil {
 			return err
 		}
-		return w.changed(ctx, tx, s.Org, s.User(), "security.credential_registered", "authn.webauthn_registered", out.ID, name, s.Actor())
+		return w.changed(ctx, tx, s.Org, s.User(), "security.credential_registered", auditkind.AuthnWebauthnRegistered, out.ID, name, s.Actor())
 	})
 	return out, err
 }
@@ -593,7 +594,7 @@ func (w *WebAuthn) FinishStepUp(ctx context.Context, s BrowserSession, ceremony 
 			}
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.step_up", Actor: s.Actor(), Outcome: audit.Success,
+			Name: auditkind.AuthnStepUp, Actor: s.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "browser_session", ID: s.ID.String()},
 			Details: map[string]string{"webauthn_key": id.String()},
 		})
@@ -616,7 +617,7 @@ func (w *WebAuthn) suspend(ctx context.Context, tx db.TenantTx, q *dbq.Queries, 
 	w.log.WarnContext(ctx, "authn.webauthn_clone_suspected", slog.String("org", s.Org.String()), slog.String("webauthn_key", id.String()),
 		slog.Uint64("stored", uint64(stored)), slog.Uint64("received", uint64(received)))
 	*done = true
-	return w.changed(ctx, tx, s.Org, s.User(), "security.credential_suspended", "authn.webauthn_suspended", id, "",
+	return w.changed(ctx, tx, s.Org, s.User(), "security.credential_suspended", auditkind.AuthnWebauthnSuspended, id, "",
 		evdomain.Actor{Type: "system", ID: "counter-check"})
 }
 
@@ -663,7 +664,7 @@ func (w *WebAuthn) RenameCredential(ctx context.Context, s BrowserSession, id id
 			return ErrCredentialNotFound
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.webauthn_renamed", Actor: s.Actor(), Outcome: audit.Success,
+			Name: auditkind.AuthnWebauthnRenamed, Actor: s.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "webauthn_credential", ID: id.String()},
 		})
 		return err
@@ -699,5 +700,5 @@ func (w *WebAuthn) remove(ctx context.Context, tx db.TenantTx, q *dbq.Queries, o
 	if n == 0 {
 		return ErrCredentialNotFound // already removed
 	}
-	return w.changed(ctx, tx, org, user, "security.credential_removed", "authn.webauthn_removed", id, cur.Name, actor)
+	return w.changed(ctx, tx, org, user, "security.credential_removed", auditkind.AuthnWebauthnRemoved, id, cur.Name, actor)
 }

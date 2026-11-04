@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 	"time"
@@ -40,7 +41,7 @@ func (s *Service) ReportRevocationFailure(ctx context.Context, org ids.OrgID, ga
 			details["expires_at"] = expires.UTC().Format(time.RFC3339)
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "credential.revoke_failed", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Failure,
+			Name: auditkind.CredentialRevokeFailed, Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Failure,
 			Object: &audit.Object{Type: "connection", ID: id.String()}, Details: details,
 		})
 		return err

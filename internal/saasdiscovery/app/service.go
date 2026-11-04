@@ -7,6 +7,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"maps"
@@ -152,7 +153,7 @@ func (s *Service) Start(ctx context.Context, connection ids.UUID, source, tenant
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "saas.scan_started", Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: connection.String()},
+			Name: auditkind.SaasScanStarted, Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: connection.String()},
 			Details: map[string]string{"scan": run.String(), "source": source, "tenant": tenant},
 		})
 		return err

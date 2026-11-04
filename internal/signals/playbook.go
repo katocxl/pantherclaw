@@ -4,6 +4,7 @@
 package signals
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -243,7 +244,7 @@ func (s *Service) RequestPlaybookChange(ctx context.Context, kind string, events
 		} else if err != nil {
 			return err
 		}
-		if err := s.auditPlaybook(ctx, tx, c, "signals.playbook_requested", id, map[string]string{
+		if err := s.auditPlaybook(ctx, tx, c, auditkind.SignalsPlaybookRequested, id, map[string]string{
 			"kind": kind, "events": eventsDetail(events), "required": strconv.Itoa(int(required)),
 		}); err != nil {
 			return err
@@ -446,7 +447,7 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Playbo
 			return ErrSameKey
 		}
 		confirmations := len(req.Confirmations) + 1
-		if err := s.auditPlaybook(ctx, tx, c, "signals.playbook_confirmed", id, map[string]string{
+		if err := s.auditPlaybook(ctx, tx, c, auditkind.SignalsPlaybookConfirmed, id, map[string]string{
 			"kind": req.Kind, "confirmations": strconv.Itoa(confirmations), "required": strconv.Itoa(req.Required),
 			"security_key": a.Credential.String(),
 		}); err != nil {
@@ -494,9 +495,9 @@ func (s *Service) applyPlaybook(ctx context.Context, tx db.TenantTx, q *dbq.Quer
 		return false, err
 	}
 	if state == RequestVoided {
-		return true, s.auditPlaybook(ctx, tx, c, "signals.playbook_voided", req.ID, map[string]string{"reason": errPlaybookVoidKey})
+		return true, s.auditPlaybook(ctx, tx, c, auditkind.SignalsPlaybookVoided, req.ID, map[string]string{"reason": errPlaybookVoidKey})
 	}
-	if err := s.auditPlaybook(ctx, tx, c, "signals.playbook_changed", req.ID, map[string]string{
+	if err := s.auditPlaybook(ctx, tx, c, auditkind.SignalsPlaybookChanged, req.ID, map[string]string{
 		"kind": req.Kind, "events": eventsDetail(req.Events), "version": strconv.Itoa(req.BaseVersion + 1),
 	}); err != nil {
 		return false, err
@@ -565,7 +566,7 @@ func (s *Service) DeclinePlaybookRequest(ctx context.Context, id ids.UUID, reaso
 			}
 			return ErrRequestNotPending
 		}
-		if err := s.auditPlaybook(ctx, tx, c, "signals.playbook_declined", id, nil); err != nil {
+		if err := s.auditPlaybook(ctx, tx, c, auditkind.SignalsPlaybookDeclined, id, nil); err != nil {
 			return err
 		}
 		out, err = s.request(ctx, q, c.Org, id)

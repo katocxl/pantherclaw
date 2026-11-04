@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -143,7 +144,7 @@ func (s *Service) Test(ctx context.Context, id ids.UUID, kind string) (TestResul
 			return err
 		}
 		details["test_id"] = row.ID.String()
-		return record(ctx, tx, c, "connection.tested", id, details)
+		return record(ctx, tx, c, auditkind.ConnectionTested, id, details)
 	})
 	return out, err
 }

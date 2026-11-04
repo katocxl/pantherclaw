@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -303,7 +304,7 @@ func (e *Exchange) JWTBearer(ctx context.Context, form url.Values) (authnapp.Tok
 			Scope: strings.Join(choice.Operations, " "), RunID: run.ID.String(),
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "idaccess.token_issued", Actor: evdomain.Actor{Type: "instance", ID: inst.ID.String()}, Outcome: audit.Success,
+			Name: auditkind.IdaccessTokenIssued, Actor: evdomain.Actor{Type: "instance", ID: inst.ID.String()}, Outcome: audit.Success,
 			Object: &audit.Object{Type: "run", ID: run.ID.String()},
 			Details: map[string]string{
 				"grant": "jwt_bearer", "issuer": a.Issuer, "client": binding.ID.String(), "user": user.String(),

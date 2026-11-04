@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"slices"
@@ -86,7 +87,7 @@ func (inv *Inventory) Claim(ctx context.Context, id ids.UUID, d *domain.Details,
 		}); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.agent_claimed", r.ID, map[string]string{"agent_id": out.ID.String()})
+		return record(ctx, tx, c, auditkind.AgentsAgentClaimed, r.ID, map[string]string{"agent_id": out.ID.String()})
 	})
 	return out, err
 }
@@ -189,7 +190,7 @@ func (inv *Inventory) Suspend(ctx context.Context, id ids.UUID, reason string) (
 		if err := RecordChange(ctx, q, c.Org, r.ID, domain.Change{Kind: domain.ChangeSuspended, Actor: actor(c), Reason: reason}); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.agent_suspended", r.ID, nil)
+		return record(ctx, tx, c, auditkind.AgentsAgentSuspended, r.ID, nil)
 	})
 	return out, err
 }
@@ -273,7 +274,7 @@ func (inv *Inventory) Retire(ctx context.Context, id ids.UUID, reason string) (A
 		if err := RecordChange(ctx, q, c.Org, r.ID, domain.Change{Kind: domain.ChangeRetired, Actor: actor(c), Reason: reason, Details: counts}); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.agent_retired", r.ID, counts)
+		return record(ctx, tx, c, auditkind.AgentsAgentRetired, r.ID, counts)
 	})
 	return out, err
 }

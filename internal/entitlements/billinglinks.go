@@ -4,6 +4,7 @@
 package entitlements
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
@@ -157,7 +158,7 @@ func (l *Links) RecordCheckout(ctx context.Context, orgID, provider, checkoutRef
 			details["superseded"] = "true"
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "billing.checkout_recorded", Actor: billingActor, Outcome: audit.Success,
+			Name: auditkind.BillingCheckoutRecorded, Actor: billingActor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "billing_link", ID: id.String()}, Details: details,
 		})
 		return err
@@ -333,7 +334,7 @@ func (l *Links) EndSubscription(ctx context.Context, provider, subscriptionRef s
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "billing.subscription_ended", Actor: billingActor, Outcome: audit.Success,
+			Name: auditkind.BillingSubscriptionEnded, Actor: billingActor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "billing_link", ID: r.ID.String()}, Details: map[string]string{"provider": provider},
 		})
 		return err

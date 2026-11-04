@@ -4,6 +4,7 @@
 package triggers
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"slices"
 	"strings"
 
@@ -42,18 +43,18 @@ const (
 	VocabActionHeld         = "action.held"
 	VocabActionDenied       = "action.denied"
 	VocabEffectRecorded     = "effect.recorded"
-	VocabRunEnded           = "run.ended"
-	VocabGrantIssued        = "grant.issued"
-	VocabGrantRevoked       = "grant.revoked"
+	VocabRunEnded           = auditkind.RunEnded
+	VocabGrantIssued        = auditkind.GrantIssued
+	VocabGrantRevoked       = auditkind.GrantRevoked
 	VocabCoverageLost       = "coverage.lost"
 	VocabAlertRaised        = "alert.raised"
 	VocabAlertInferred      = "alert.inferred"
 	VocabIncidentOpened     = "incident.opened"
 	VocabCaseClosed         = "case.closed"
-	VocabAgentDiscovered    = "agent.discovered"
-	VocabDiscoveryChanged   = "agent.discovery_changed"
-	VocabDiscoveryVanished  = "agent.discovery_vanished"
-	VocabApprovalExpired    = "approval.expired"
+	VocabAgentDiscovered    = auditkind.AgentDiscovered
+	VocabDiscoveryChanged   = auditkind.AgentDiscoveryChanged
+	VocabDiscoveryVanished  = auditkind.AgentDiscoveryVanished
+	VocabApprovalExpired    = auditkind.ApprovalExpired
 	VocabAutomationFinished = "automation.finished"
 )
 

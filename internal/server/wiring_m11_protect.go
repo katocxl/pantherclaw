@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 	"strings"
@@ -217,7 +218,7 @@ func policyOnCompromise(ctx context.Context, tx db.TenantTx, user ids.UUID, _ ti
 			return nil, err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "policy.change_voided", Actor: by.Actor(), Outcome: audit.Success,
+			Name: auditkind.PolicyChangeVoided, Actor: by.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "policy_change_request", ID: id.String()}, Details: map[string]string{"reason": reason},
 		}); err != nil {
 			return nil, err

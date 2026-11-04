@@ -14,6 +14,7 @@
 package extension
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
@@ -148,15 +149,15 @@ var AuditKindPrefixes = []string{"billing.", "scim.", "saml."}
 // prefixes. No extension may write one, so a ledger entry of such a kind is
 // always the core's (D528).
 var CoreAuditKinds = map[string]bool{
-	"billing.comp_granted": true, "billing.comp_revoked": true, "billing.checkout_recorded": true,
-	"billing.subscription_bound": true, "billing.subscription_duplicate": true, "billing.subscription_ended": true,
-	"billing.plan_event_ignored": true, "billing.plan_applied": true, "billing.lapse_reminder": true,
-	"scim.user_created": true, "scim.user_changed": true, "scim.user_deleted": true, "scim.user_deprovisioned": true,
-	"scim.user_deprovision_refused": true, "scim.parts_dropped": true,
-	"scim.group_created": true, "scim.group_changed": true, "scim.group_deleted": true,
-	"scim.group_role_mapping_added": true, "scim.group_role_mapping_removed": true,
-	"scim.token_created": true, "scim.token_activated": true, "scim.token_revoked": true,
-	"saml.connection_put": true, "saml.connection_disabled": true,
+	auditkind.BillingCompGranted: true, auditkind.BillingCompRevoked: true, auditkind.BillingCheckoutRecorded: true,
+	"billing.subscription_bound": true, "billing.subscription_duplicate": true, auditkind.BillingSubscriptionEnded: true,
+	auditkind.BillingPlanEventIgnored: true, auditkind.BillingPlanApplied: true, "billing.lapse_reminder": true,
+	auditkind.ScimUserCreated: true, auditkind.ScimUserChanged: true, auditkind.ScimUserDeleted: true, auditkind.ScimUserDeprovisioned: true,
+	auditkind.ScimUserDeprovisionRefused: true, auditkind.ScimPartsDropped: true,
+	auditkind.ScimGroupCreated: true, auditkind.ScimGroupChanged: true, auditkind.ScimGroupDeleted: true,
+	auditkind.ScimGroupRoleMappingAdded: true, auditkind.ScimGroupRoleMappingRemoved: true,
+	auditkind.ScimTokenCreated: true, auditkind.ScimTokenActivated: true, auditkind.ScimTokenRevoked: true,
+	auditkind.SamlConnectionPut: true, auditkind.SamlConnectionDisabled: true,
 }
 
 // ErrAuditKind refuses an audit kind outside the set's own prefixes, or one

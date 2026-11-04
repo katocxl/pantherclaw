@@ -8,6 +8,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"regexp"
@@ -247,7 +248,7 @@ func (s *Service) StartCampaign(ctx context.Context, in StartInput) (domain.Camp
 			return err
 		}
 		return tx.Audit(ctx, audit.Event{
-			Name: "redteam.campaign_started", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.RedteamCampaignStarted, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "redteam_campaign", ID: out.ID.String()},
 			Details: map[string]string{
 				"agent_id": a.ID.String(), "campaigns": strings.Join(names, ","), "image_digest": in.ImageDigest, "model_host": in.ModelHost,
@@ -385,7 +386,7 @@ func (s *Service) StartCampaignStep(ctx context.Context, id ids.UUID, scenario s
 			return ErrNotRunning
 		}
 		return tx.Audit(ctx, audit.Event{
-			Name: "redteam.campaign_step_started", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.RedteamCampaignStepStarted, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "redteam_campaign", ID: cp.ID.String()},
 			Details: map[string]string{"scenario_id": scenario},
 		})
@@ -459,7 +460,7 @@ func (s *Service) FinishCampaign(ctx context.Context, id ids.UUID, runs []RunRep
 		}
 		out = Detail{Campaign: cp, Steps: steps, Counts: domain.Count(steps)}
 		return tx.Audit(ctx, audit.Event{
-			Name: "redteam.campaign_finished", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.RedteamCampaignFinished, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "redteam_campaign", ID: cp.ID.String()},
 			Details: map[string]string{
 				"held": strconv.Itoa(out.Counts.Held), "denied": strconv.Itoa(out.Counts.Denied), "not_routed_reported": strconv.Itoa(out.Counts.NotRoutedReported),

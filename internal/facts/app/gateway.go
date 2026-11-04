@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
@@ -64,7 +65,7 @@ func (s *Service) RegisterGatewayProvider(ctx context.Context, name string, gate
 		return domain.Provider{}, pcerr.Wrap(err, pcerr.InvalidArgument, "PROVIDER_INVALID", err.Error())
 	}
 	ev := audit.Event{
-		Name: "facts.provider_registered", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.FactsProviderRegistered, Actor: c.Actor(), Outcome: audit.Success,
 		Object:  &audit.Object{Type: "fact_provider", ID: p.ID.String()},
 		Details: map[string]string{"gateway": gateway.String(), "connection": connection.String(), "facts": fmt.Sprint(len(decls))},
 	}

@@ -4,6 +4,7 @@
 package a2astore
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"encoding/hex"
@@ -204,7 +205,7 @@ func (s *Pins) Confirm(ctx context.Context, conn, pin ids.UUID, su *stepup.StepU
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "connection.a2a_pin_confirmed", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.ConnectionA2aPinConfirmed, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "connection", ID: conn.String()},
 			Details: map[string]string{
 				"pin_id": pin.String(), "card_digest": out.Digest(), "previous_card_digest": previous,

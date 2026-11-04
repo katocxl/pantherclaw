@@ -4,6 +4,7 @@
 package exports
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -85,7 +86,7 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) error {
 			if _, err := q.MarkExportRemovedHere(ctx, org, id); err != nil {
 				return err
 			}
-			if err := s.pushAudit(ctx, tx, Actor, audit.Success, "export.artifact_removed_here", id, nil); err != nil {
+			if err := s.pushAudit(ctx, tx, Actor, audit.Success, auditkind.ExportArtifactRemovedHere, id, nil); err != nil {
 				return err
 			}
 		}
@@ -162,7 +163,7 @@ func (s *Service) sendNotice(ctx context.Context, org ids.OrgID, id ids.UUID) er
 			if _, err := q.SetExportNoticeUndeliverable(ctx, org, id); err != nil {
 				return err
 			}
-			return s.pushAudit(ctx, tx, Actor, audit.Failure, "export.removal_notice_undeliverable", id, map[string]string{"destination": r.DestinationID.String()})
+			return s.pushAudit(ctx, tx, Actor, audit.Failure, auditkind.ExportRemovalNoticeUndeliverable, id, map[string]string{"destination": r.DestinationID.String()})
 		})
 	default:
 		return nil
@@ -194,7 +195,7 @@ func (s *Service) sendNotice(ctx context.Context, org ids.OrgID, id ids.UUID) er
 		if n == 0 {
 			return db.ErrLostRace
 		}
-		return s.pushAudit(ctx, tx, Actor, audit.Success, "export.removal_notice_sent", id, map[string]string{
+		return s.pushAudit(ctx, tx, Actor, audit.Success, auditkind.ExportRemovalNoticeSent, id, map[string]string{
 			"destination": r.DestinationID.String(), "object_key": key, "sha256": hex.EncodeToString(sum[:]),
 		})
 	})

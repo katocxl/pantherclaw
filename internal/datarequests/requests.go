@@ -4,6 +4,7 @@
 package datarequests
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"slices"
@@ -147,7 +148,7 @@ func (s *Service) CreateExportPage(ctx context.Context) (dbq.PcDataRequest, erro
 		if err := enqueue(ctx, s.Jobs, tx, c.Org, id, false, time.Time{}); err != nil {
 			return err
 		}
-		if err := requestAudit(ctx, tx, c, "data.export_requested", id); err != nil {
+		if err := requestAudit(ctx, tx, c, auditkind.DataExportRequested, id); err != nil {
 			return err
 		}
 		out, err = q.GetDataRequest(ctx, c.Org, id)
@@ -209,7 +210,7 @@ func (s *Service) RequestDeletionPage(ctx context.Context) (dbq.PcDataRequest, e
 		if err := s.notice(ctx, tx, admins, "data.deletion_requested", id.String()); err != nil {
 			return err
 		}
-		if err := requestAudit(ctx, tx, c, "data.deletion_requested", id); err != nil {
+		if err := requestAudit(ctx, tx, c, auditkind.DataDeletionRequested, id); err != nil {
 			return err
 		}
 		out, err = q.GetDataRequest(ctx, c.Org, id)
@@ -284,7 +285,7 @@ func (s *Service) Cancel(ctx context.Context, id ids.UUID) (dbq.PcDataRequest, e
 		if err := s.noticeCancellation(ctx, tx, q, id); err != nil {
 			return err
 		}
-		if err := requestAudit(ctx, tx, c, "data.deletion_canceled", id); err != nil {
+		if err := requestAudit(ctx, tx, c, auditkind.DataDeletionCanceled, id); err != nil {
 			return err
 		}
 		out, err = q.GetDataRequest(ctx, c.Org, id)
@@ -349,7 +350,7 @@ func (s *Service) Download(ctx context.Context, id ids.UUID, part int32) (dbq.Ge
 		if err != nil {
 			return err
 		}
-		return requestAudit(ctx, tx, c, "data.export_downloaded", id)
+		return requestAudit(ctx, tx, c, auditkind.DataExportDownloaded, id)
 	})
 	return out, err
 }
@@ -373,7 +374,7 @@ func (s *Service) DeletionRecord(ctx context.Context, org ids.OrgID) (dbq.PcDele
 			return ErrNotFound
 		}
 		out = r
-		_, err = audit.Record(ctx, tx, audit.Event{Name: "data.deletion_record_read", Actor: evdomain.Actor{Type: "account", ID: c.Account.String()}, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: org.String()}})
+		_, err = audit.Record(ctx, tx, audit.Event{Name: auditkind.DataDeletionRecordRead, Actor: evdomain.Actor{Type: "account", ID: c.Account.String()}, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: org.String()}})
 		return err
 	})
 	return out, err

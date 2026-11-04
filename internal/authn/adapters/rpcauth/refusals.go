@@ -4,6 +4,7 @@
 package rpcauth
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"log/slog"
 	"time"
@@ -17,7 +18,7 @@ import (
 )
 
 // RefusalName is the audit event of a human-only refusal (G0 M10 D67).
-const RefusalName = "rpc.human_only_refused"
+const RefusalName = auditkind.RpcHumanOnlyRefused
 
 // RefusalAuditTimeout bounds the audit write of a refusal, so a stalled
 // database cannot hang the refused call (G0 M10 D75).

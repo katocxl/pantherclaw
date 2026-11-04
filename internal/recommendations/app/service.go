@@ -11,11 +11,13 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
@@ -312,9 +314,19 @@ func (s *Service) Undismiss(ctx context.Context, id domain.ID) error {
 	})
 }
 
+// changeKinds are the audit kinds of a recommendation's changes (HR-664).
+var changeKinds = map[string]string{
+	"dismissed":   auditkind.RecommendationDismissed,
+	"undismissed": auditkind.RecommendationUndismissed,
+}
+
 // recordChange writes the ledger entry and the audit event of a change.
 func recordChange(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, id domain.ID, event, reason string) error {
-	b, err := evdomain.CanonicalBody(map[string]string{"recommendation": string(id), "event": event})
+	name, ok := changeKinds[event]
+	if !ok {
+		return fmt.Errorf("recommendations: no audit kind for change %q", event)
+	}
+	b, err :=evdomain.CanonicalBody(map[string]string{"recommendation": string(id), "event": event})
 	if err != nil {
 		return err
 	}
@@ -326,7 +338,7 @@ func recordChange(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, id 
 		details["reason"] = excerpt(reason)
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "recommendation." + event, Actor: actor, Outcome: audit.Success,
+		Name: name, Actor: actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "recommendation", ID: string(id)}, Details: details,
 	})
 	return err

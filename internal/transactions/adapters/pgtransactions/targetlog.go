@@ -4,6 +4,7 @@
 package pgtransactions
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -232,7 +233,7 @@ func unreceipted(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.Or
 		return false, err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "security.effect_without_receipt", Actor: evdomain.Actor{Type: "system", ID: "target_log"}, Outcome: audit.Failure,
+		Name: auditkind.SecurityEffectWithoutReceipt, Actor: evdomain.Actor{Type: "system", ID: "target_log"}, Outcome: audit.Failure,
 		ReasonCode: "EFFECT_WITHOUT_RECEIPT", Object: &audit.Object{Type: "connection", ID: task.ConnectionID.String()},
 		Details: map[string]string{"operation": effectOf, "object_ref": it.ObjectRef},
 	})

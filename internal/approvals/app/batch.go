@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"slices"
 	"strconv"
@@ -105,13 +106,13 @@ func (s *Service) DeclineBatch(ctx context.Context, requests []ids.UUID, reason,
 		for _, id := range sorted {
 			row, err := s.endIn(ctx, tx, c, r, id, dbq.InsertApprovalResponseParams{
 				Kind: "DECLINE", ReasonCode: &reason, Note: note, BatchID: &batch,
-			}, apdomain.EndDeclined, "approval.declined", reason)
+			}, apdomain.EndDeclined, auditkind.ApprovalDeclined, reason)
 			if err != nil {
 				return err
 			}
 			out = append(out, row)
 		}
-		return event(ctx, tx, "approval.batch_declined", userActor(r.User), reason, batch,
+		return event(ctx, tx, auditkind.ApprovalBatchDeclined, userActor(r.User), reason, batch,
 			map[string]string{"requests": strconv.Itoa(len(sorted)), "operation": operation})
 	})
 	if err != nil {

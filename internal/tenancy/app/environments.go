@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -96,7 +97,7 @@ func (h *Hierarchy) CreateEnvironment(ctx context.Context, teamID td.TeamID, kin
 			return err
 		}
 		out = environmentView(r)
-		return record(ctx, tx, c, "tenancy.environment_created", "environment", r.ID,
+		return record(ctx, tx, c, auditkind.TenancyEnvironmentCreated, "environment", r.ID,
 			map[string]string{"slug": r.Slug, "kind": r.Kind})
 	})
 	return out, err
@@ -157,7 +158,7 @@ func (h *Hierarchy) UpdateEnvironment(ctx context.Context, id td.EnvironmentID, 
 			return notFound(err, ErrArchived)
 		}
 		out = environmentView(r)
-		return record(ctx, tx, c, "tenancy.environment_updated", "environment", r.ID, changed(name, description))
+		return record(ctx, tx, c, auditkind.TenancyEnvironmentUpdated, "environment", r.ID, changed(name, description))
 	})
 	return out, err
 }
@@ -175,7 +176,7 @@ func (h *Hierarchy) ArchiveEnvironment(ctx context.Context, id td.EnvironmentID)
 			return notFound(err, ErrArchived)
 		}
 		out = environmentView(r)
-		return record(ctx, tx, c, "tenancy.environment_archived", "environment", r.ID, nil)
+		return record(ctx, tx, c, auditkind.TenancyEnvironmentArchived, "environment", r.ID, nil)
 	})
 	return out, err
 }

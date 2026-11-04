@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"net/netip"
 	"slices"
@@ -183,7 +184,7 @@ func (s *ServiceAccounts) Create(ctx context.Context, name, description string) 
 			return err
 		}
 		out = serviceAccountView(c.Org, r)
-		return record(ctx, tx, c, "access.service_account_created", "service_account", r.ID, map[string]string{"name": name})
+		return record(ctx, tx, c, auditkind.AccessServiceAccountCreated, "service_account", r.ID, map[string]string{"name": name})
 	})
 	return out, err
 }
@@ -244,7 +245,7 @@ func (s *ServiceAccounts) Update(ctx context.Context, id td.ServiceAccountID, de
 			return notFound(err, ErrServiceAccountNotFound)
 		}
 		out = serviceAccountView(c.Org, r)
-		return record(ctx, tx, c, "access.service_account_updated", "service_account", r.ID, changed(nil, description))
+		return record(ctx, tx, c, auditkind.AccessServiceAccountUpdated, "service_account", r.ID, changed(nil, description))
 	})
 	return out, err
 }
@@ -313,7 +314,7 @@ func (s *ServiceAccounts) AddKey(ctx context.Context, id td.ServiceAccountID, al
 			return err
 		}
 		out = keyView(dbq.ListServiceAccountKeysRow(r))
-		return record(ctx, tx, c, "access.service_account_key_added", "service_account", sa.ID,
+		return record(ctx, tx, c, auditkind.AccessServiceAccountKeyAdded, "service_account", sa.ID,
 			map[string]string{"key": r.ID.String(), "kid": r.Kid, "alg": r.Alg})
 	})
 	return out, err
@@ -364,7 +365,7 @@ func (s *ServiceAccounts) RevokeKey(ctx context.Context, id td.ServiceAccountID,
 			return err
 		}
 		out = keyView(dbq.ListServiceAccountKeysRow(r))
-		return record(ctx, tx, c, "access.service_account_key_revoked", "service_account", r.ServiceAccountID,
+		return record(ctx, tx, c, auditkind.AccessServiceAccountKeyRevoked, "service_account", r.ServiceAccountID,
 			map[string]string{"key": r.ID.String(), "kid": r.Kid})
 	})
 	return out, err
@@ -449,7 +450,7 @@ func (s *ServiceAccounts) CreateLimitedAPIKey(ctx context.Context, id td.Service
 			return err
 		}
 		out = apiKeyView(dbq.ListAPIKeysRow(r))
-		return record(ctx, tx, c, "access.api_key_created", "api_key", r.ID,
+		return record(ctx, tx, c, auditkind.AccessApiKeyCreated, "api_key", r.ID,
 			map[string]string{"service_account": sa.ID.String(), "name": name, "scopes": strings.Join(ss, ","), "allowed_cidrs": joinCIDRs(cidrs)})
 	})
 	return out, tok, err
@@ -496,7 +497,7 @@ func (s *ServiceAccounts) RevokeAPIKey(ctx context.Context, id ids.UUID) (APIKey
 			return err
 		}
 		out = apiKeyView(dbq.ListAPIKeysRow(r))
-		return record(ctx, tx, c, "access.api_key_revoked", "api_key", r.ID, nil)
+		return record(ctx, tx, c, auditkind.AccessApiKeyRevoked, "api_key", r.ID, nil)
 	})
 	return out, err
 }

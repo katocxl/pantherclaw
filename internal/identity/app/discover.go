@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"strings"
@@ -171,7 +172,7 @@ func (s *Service) insertDiscovery(ctx context.Context, q *dbq.Queries, tx db.Ten
 	}); err != nil {
 		return ids.UUID{}, err
 	}
-	return d.ID, recordAs(ctx, tx, evdomain.Actor{Type: "gateway", ID: observed["gateway"]}, "identity.workload_discovered",
+	return d.ID, recordAs(ctx, tx, evdomain.Actor{Type: "gateway", ID: observed["gateway"]}, auditkind.IdentityWorkloadDiscovered,
 		"agent", agent.ID, map[string]string{"discovery_id": d.ID.String(), "fingerprint": jkt})
 }
 
@@ -182,7 +183,7 @@ func (s *Service) auditFlood(ctx context.Context, org ids.OrgID, gw string) {
 		return
 	}
 	_ = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		return recordAs(ctx, tx, evdomain.Actor{Type: "gateway", ID: gw}, "security.discovery_flood", "org", org.UUID(),
+		return recordAs(ctx, tx, evdomain.Actor{Type: "gateway", ID: gw}, auditkind.SecurityDiscoveryFlood, "org", org.UUID(),
 			map[string]string{"gateway": gw})
 	})
 }

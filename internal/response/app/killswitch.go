@@ -16,6 +16,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 	"time"
@@ -264,7 +265,7 @@ func (s *Service) Engage(ctx context.Context, su StepUp, reason string) (State, 
 			}
 			paused = itoa(int64(len(pausedIDs)))
 		}
-		if err := record(ctx, tx, c, "security.kill_switch_engaged", withReason(map[string]string{
+		if err := record(ctx, tx, c, auditkind.SecurityKillSwitchEngaged, withReason(map[string]string{
 			"epoch": itoa(r.Epoch), "key_id": su.Credential.String(), "connections": itoa(conns),
 			"provider_revocation": "not_supported", "automations_paused": paused,
 		}, reason)); err != nil {

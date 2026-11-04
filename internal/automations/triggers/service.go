@@ -17,6 +17,7 @@
 package triggers
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -520,7 +521,7 @@ func (s *Service) after(ctx context.Context, tx db.TenantTx, c Candidate, lin Li
 	a := c.Automation
 	switch out.State { //nolint:exhaustive // other refusals are quiet (D16)
 	case StateAccepted, StateShadow:
-		return s.audit(ctx, tx, "automation.triggered", a.ID, out.Trigger, map[string]string{
+		return s.audit(ctx, tx, auditkind.AutomationTriggered, a.ID, out.Trigger, map[string]string{
 			"version": a.Version.String(), "kind": string(c.Kind), "mode": modeOf(out.State, c.Mode),
 			"authenticity": string(c.Authenticity), "execution": out.Execution.String(), "depth": fmt.Sprint(lin.Depth),
 		})
@@ -588,7 +589,7 @@ func (s *Service) loop(ctx context.Context, tx db.TenantTx, c Candidate, lin Lin
 	}); err != nil {
 		return err
 	}
-	return s.audit(ctx, tx, "automation.trigger_refused", a.ID, out.Trigger, map[string]string{
+	return s.audit(ctx, tx, auditkind.AutomationTriggerRefused, a.ID, out.Trigger, map[string]string{
 		"state": string(out.State), "reason": out.Reason, "root": root.String(), "depth": fmt.Sprint(lin.Depth),
 	})
 }
@@ -613,7 +614,7 @@ func (s *Service) limit(ctx context.Context, tx db.TenantTx, c Candidate, out Ou
 	}); err != nil {
 		return err
 	}
-	return s.audit(ctx, tx, "automation.trigger_refused", a.ID, out.Trigger, map[string]string{
+	return s.audit(ctx, tx, auditkind.AutomationTriggerRefused, a.ID, out.Trigger, map[string]string{
 		"state": string(out.State), "reason": out.Reason, "hour": hour.Format(time.RFC3339),
 	})
 }

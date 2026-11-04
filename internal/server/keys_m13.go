@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"flag"
@@ -223,7 +224,7 @@ func bumpEpochAfterRestore(ctx context.Context, pool *db.Pool, org ids.OrgID, ac
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "containment.epoch_bumped_after_restore", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.ContainmentEpochBumpedAfterRestore, Actor: actor, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "org", ID: org.String()},
 			Details: map[string]string{"from": from, "to": strconv.FormatInt(to, 10)},
 		})

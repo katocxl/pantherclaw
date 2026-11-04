@@ -4,6 +4,7 @@
 package entitlements
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 	"strings"
@@ -89,7 +90,7 @@ func (s *Service) GrantComp(ctx context.Context, org ids.OrgID, g CompGrant) err
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "billing.comp_granted", Actor: evdomain.Actor{Type: "operator", ID: g.Operator}, Outcome: audit.Success,
+			Name: auditkind.BillingCompGranted, Actor: evdomain.Actor{Type: "operator", ID: g.Operator}, Outcome: audit.Success,
 			Object: &audit.Object{Type: "org", ID: org.String()},
 			Details: map[string]string{
 				"plan_id": g.PlanID, "edition": g.Edition, "until": until.Format(time.RFC3339), "reason": reason,
@@ -124,7 +125,7 @@ func (s *Service) RevokeComp(ctx context.Context, org ids.OrgID, reason, operato
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "billing.comp_revoked", Actor: evdomain.Actor{Type: "operator", ID: operator}, Outcome: audit.Success,
+			Name: auditkind.BillingCompRevoked, Actor: evdomain.Actor{Type: "operator", ID: operator}, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "org", ID: org.String()},
 			Details: map[string]string{"reason": reason, "version": strconv.FormatInt(version, 10)},
 		})

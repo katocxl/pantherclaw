@@ -22,6 +22,7 @@
 package simulation
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 	"time"
@@ -330,7 +331,7 @@ func (s *Service) Simulate(ctx context.Context, in Request) (Simulation, error) 
 			return err
 		}
 		return tx.Audit(ctx, audit.Event{
-			Name: "policy.simulation_requested", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.PolicySimulationRequested, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "policy_simulation", ID: out.ID.String()}, Details: details,
 		})
 	})
@@ -425,7 +426,7 @@ func (s *Service) Cancel(ctx context.Context, id ids.UUID) (Simulation, error) {
 			return ErrFinished
 		}
 		return tx.Audit(ctx, audit.Event{
-			Name: "policy.simulation_canceled", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.PolicySimulationCanceled, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "policy_simulation", ID: id.String()},
 			Details: map[string]string{"evaluated": strconv.Itoa(out.Evaluated)},
 		})

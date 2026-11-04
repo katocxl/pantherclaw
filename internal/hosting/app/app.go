@@ -14,6 +14,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 
@@ -151,7 +152,7 @@ func (s *Service) Request(ctx context.Context, slug string, asked profile.Limits
 			return err
 		}
 		out = h
-		return record(ctx, tx, c.Actor(), "hosted_gateway.requested", h.ID, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.HostedGatewayRequested, h.ID, map[string]string{
 			"slug": slug, "milli_cpus": strconv.Itoa(l.MilliCPUs), "memory_mib": strconv.Itoa(l.MemoryMiB), "pids": strconv.Itoa(l.PIDs),
 		})
 	})
@@ -236,7 +237,7 @@ func (s *Service) Deprovision(ctx context.Context, id ids.UUID, reason string) (
 		} else if err != nil {
 			return err
 		}
-		return record(ctx, tx, c.Actor(), "hosted_gateway.deprovisioned", id, map[string]string{
+		return record(ctx, tx, c.Actor(), auditkind.HostedGatewayDeprovisioned, id, map[string]string{
 			"state": out.State, "gateway_revoked": strconv.FormatBool(revoked),
 		})
 	})

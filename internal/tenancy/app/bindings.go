@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"log/slog"
 	"strconv"
@@ -130,7 +131,7 @@ func (a *Access) CreateRoleBinding(ctx context.Context, role td.RoleName, princi
 			a.log.WarnContext(ctx, "access.self_grant", slog.String("role", string(role)),
 				slog.String("principal", principal.String()))
 		}
-		return record(ctx, tx, c, "access.role_bound", "role_binding", r.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.AccessRoleBound, "role_binding", r.ID, map[string]string{
 			"role": string(role), "principal": principal.String(), "scope_type": string(scope.Type),
 			"scope": scope.ID.String(), "self_grant": strconv.FormatBool(self),
 		})
@@ -236,7 +237,7 @@ func (a *Access) DeleteRoleBinding(ctx context.Context, id td.RoleBindingID) err
 			return err
 		}
 		p := bindingPrincipal(r)
-		return record(ctx, tx, c, "access.role_unbound", "role_binding", r.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.AccessRoleUnbound, "role_binding", r.ID, map[string]string{
 			"role": r.Role, "principal": p.String(), "scope_type": r.ScopeType,
 			"self_grant": strconv.FormatBool(td.SelfGrant(c.Principal, p)),
 		})

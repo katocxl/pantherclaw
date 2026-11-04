@@ -17,6 +17,7 @@
 package changes
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"cmp"
 	"context"
@@ -362,7 +363,7 @@ func (s *Service) RequestTx(ctx context.Context, tx db.TenantTx, caller tapp.Cal
 	}); err != nil {
 		return Request{}, err
 	}
-	if err := record(ctx, tx, caller.Actor(), "change.requested", req, map[string]string{
+	if err := record(ctx, tx, caller.Actor(), auditkind.ChangeRequested, req, map[string]string{
 		"required": strconv.Itoa(req.Required), "binding": digest64(binding[:]), "content_digest": digest64(req.ContentDigest[:]),
 	}); err != nil {
 		return Request{}, err
@@ -378,7 +379,7 @@ func (s *Service) expire(ctx context.Context, tx db.TenantTx, q *dbq.Queries, ac
 		return err
 	}
 	for _, r := range rows {
-		if err := record(ctx, tx, actor, "change.expired", Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind}, nil); err != nil {
+		if err := record(ctx, tx, actor, auditkind.ChangeExpired, Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind}, nil); err != nil {
 			return err
 		}
 		if err := s.closed(ctx, tx, q, r.ID, r.Domain, r.Kind, StateExpired); err != nil {
@@ -415,7 +416,7 @@ func (s *Service) Void(ctx context.Context, tx db.TenantTx, actor tapp.Caller, d
 	}
 	out := make([]ids.UUID, 0, len(rows))
 	for _, r := range rows {
-		if err := record(ctx, tx, actor.Actor(), "change.voided", Request{ID: r.ID, Domain: domain, Kind: r.Kind, Subject: subject},
+		if err := record(ctx, tx, actor.Actor(), auditkind.ChangeVoided, Request{ID: r.ID, Domain: domain, Kind: r.Kind, Subject: subject},
 			map[string]string{"reason": reason}); err != nil {
 			return nil, err
 		}
@@ -439,7 +440,7 @@ func (s *Service) VoidByPerson(ctx context.Context, tx db.TenantTx, actor tapp.C
 	}
 	out := make([]ids.UUID, 0, len(rows))
 	for _, r := range rows {
-		if err := record(ctx, tx, actor.Actor(), "change.voided", Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind},
+		if err := record(ctx, tx, actor.Actor(), auditkind.ChangeVoided, Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind},
 			map[string]string{"reason": reason}); err != nil {
 			return nil, err
 		}
@@ -763,7 +764,7 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Reques
 			}
 		}
 		confirmers = append(confirmers, caller.Principal.ID)
-		if err := record(ctx, tx, caller.Actor(), "change.confirmed", req, map[string]string{
+		if err := record(ctx, tx, caller.Actor(), auditkind.ChangeConfirmed, req, map[string]string{
 			"confirmations": strconv.Itoa(len(req.Confirmations) + 1), "counted": strconv.Itoa(len(confirmers)),
 			"required": strconv.Itoa(req.Required), "security_key": a.Credential.String(), "ceremony": a.Ceremony.String(),
 			"session": caller.Session.String(),
@@ -814,13 +815,13 @@ func (s *Service) decide(ctx context.Context, tx db.TenantTx, q *dbq.Queries, ca
 		return db.ErrLostRace
 	}
 	details := map[string]string{}
-	name := "change.approved"
+	name := auditkind.ChangeApproved
 	switch state {
 	case StateVoided:
-		name, details["reason"] = "change.voided", reason
+		name, details["reason"] = auditkind.ChangeVoided, reason
 	case StateDeclined:
 		sum := sha256.Sum256([]byte(reason))
-		name, details["reason_sha256"] = "change.declined", digest64(sum[:])
+		name, details["reason_sha256"] = auditkind.ChangeDeclined, digest64(sum[:])
 	case StateApproved:
 		details["confirmations"] = strconv.Itoa(len(r.Confirmations))
 	}

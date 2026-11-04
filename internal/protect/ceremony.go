@@ -4,6 +4,7 @@
 package protect
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"log/slog"
 	"regexp"
@@ -162,7 +163,7 @@ func (g *Gate) Closed(ctx context.Context, tx db.TenantTx, request ids.UUID, sta
 			g.log().ErrorContext(ctx, "protect.closer_failed", slog.String("org", tx.OrgID().String()),
 				slog.String("protected_change", row.ID.String()), slog.String("surface", row.Surface), pclog.Err(cerr))
 			_, err := audit.Record(ctx, tx, audit.Event{
-				Name: "protect.closer_failed", Actor: reviewActor, Outcome: audit.Failure,
+				Name: auditkind.ProtectCloserFailed, Actor: reviewActor, Outcome: audit.Failure,
 				Object:  &audit.Object{Type: "protected_change", ID: row.ID.String()},
 				Details: map[string]string{"surface": row.Surface, "state": state},
 			})
@@ -198,7 +199,7 @@ var reviewActor = evdomain.Actor{Type: "system", ID: "protect"}
 
 // KindReviewExpired is the owned failure of an emergency change whose
 // review ended unconfirmed (D98 L3, D116 U2).
-const KindReviewExpired = "protected_change.review_expired"
+const KindReviewExpired = auditkind.ProtectedChangeReviewExpired
 
 // Why an emergency review ended unconfirmed (D116 U2).
 var reviewEndReasons = map[string]string{
@@ -227,7 +228,7 @@ func (g *Gate) ReviewClosed(ctx context.Context, tx db.TenantTx, request ids.UUI
 	}
 	publisher := uuidString(row.Publisher)
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "protected_change.review_expired", Actor: reviewActor, Outcome: audit.Success,
+		Name: auditkind.ProtectedChangeReviewExpired, Actor: reviewActor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "protected_change", ID: row.ID.String()},
 		Details: map[string]string{
 			"category": row.Category, "subject": row.Subject, "applied_by": publisher, "review_request": request.String(),

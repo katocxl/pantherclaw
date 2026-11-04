@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -104,7 +105,7 @@ func (s *Detections) RequestCustomRuleConfirmation(ctx context.Context, ruleID s
 		if held == nil {
 			return protect.ErrUnavailable // never applied without a second person
 		}
-		return detectionAudit(ctx, tx, c, "detection.custom_rule.confirmation_requested", row, map[string]string{
+		return detectionAudit(ctx, tx, c, auditkind.DetectionCustomRuleConfirmationRequested, row, map[string]string{
 			"protected_change": held.Change.String(), "change_request": held.Request.String(), "reason": reason,
 		})
 	})
@@ -164,7 +165,7 @@ func (s *Detections) ApplyConfirmation(ctx context.Context, tx db.TenantTx, auth
 		return err
 	}
 	confirmer := tenancy.Caller{Subject: td.Subject{Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: publisher}}}
-	return detectionAudit(ctx, tx, confirmer, "detection.custom_rule.confirmed", row, map[string]string{
+	return detectionAudit(ctx, tx, confirmer, auditkind.DetectionCustomRuleConfirmed, row, map[string]string{
 		"confirmation": cf.ID.String(), "protected_change": change.String(), "requested_by": cf.RequestedBy, "reason": p.Reason,
 	})
 }
@@ -210,7 +211,7 @@ func (s *Detections) WithdrawCustomRuleConfirmation(ctx context.Context, ruleID,
 			return ErrNotFound
 		}
 		cf := ended[0]
-		return confirmationAudit(ctx, tx, c, "detection.custom_rule.confirmation_withdrawn", cf, map[string]string{
+		return confirmationAudit(ctx, tx, c, auditkind.DetectionCustomRuleConfirmationWithdrawn, cf, map[string]string{
 			"confirmation": cf.ID.String(), "reason": reason,
 		})
 	})

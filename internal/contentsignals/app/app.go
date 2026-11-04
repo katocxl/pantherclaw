@@ -6,6 +6,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"unicode/utf8"
@@ -231,7 +232,7 @@ func write(ctx context.Context, tx db.TenantTx, c tenancy.Caller, from, to domai
 		return err
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "content.signals.mode_changed", Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "content_signals", ID: tx.OrgID().String()},
+		Name: auditkind.ContentSignalsModeChanged, Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "content_signals", ID: tx.OrgID().String()},
 		Details: map[string]string{"mode_old": string(from), "mode_new": string(to), "reason": reason},
 	})
 	return err

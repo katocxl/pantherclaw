@@ -10,6 +10,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -189,7 +190,7 @@ func (s *Service) StartSession(ctx context.Context, in StartInput) (Started, err
 			return err
 		}
 		out = Started{Session: sess, Connections: in.Connections, EnrollmentToken: tok, Nonces: nonces, AgentHosts: hosts}
-		return record(ctx, tx, c, "sandbox.session_started", sess.ID, map[string]string{
+		return record(ctx, tx, c, auditkind.SandboxSessionStarted, sess.ID, map[string]string{
 			"agent_id": a.ID.String(), "config_digest": in.ConfigDigest, "runtime": in.Runtime,
 		})
 	})

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"time"
 
@@ -53,7 +54,7 @@ func (s *Service) ProposeRestore(ctx context.Context, su StepUp, reason string) 
 			return err
 		}
 		out = Restore{ID: r.ID, ProposedBy: r.ProposedBy, Reason: r.Reason, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt}
-		if err := record(ctx, tx, c, "security.kill_switch_restore_proposed", withReason(map[string]string{
+		if err := record(ctx, tx, c, auditkind.SecurityKillSwitchRestoreProposed, withReason(map[string]string{
 			"proposal_id": r.ID.String(), "epoch": itoa(st.Epoch), "key_id": su.Credential.String(),
 		}, reason)); err != nil {
 			return err
@@ -108,7 +109,7 @@ func (s *Service) ConfirmRestore(ctx context.Context, su StepUp, id ids.UUID) (S
 		} else if n != 1 {
 			return ErrRestoreGone
 		}
-		if err := record(ctx, tx, c, "security.kill_switch_restored", map[string]string{
+		if err := record(ctx, tx, c, auditkind.SecurityKillSwitchRestored, map[string]string{
 			"proposal_id": id.String(), "epoch": itoa(epoch), "proposed_by": r.ProposedBy.String(), "key_id": su.Credential.String(),
 		}); err != nil {
 			return err
@@ -148,7 +149,7 @@ func (s *Service) CancelRestore(ctx context.Context, id ids.UUID) error {
 		if _, err := q.CancelRestore(ctx, &decider, c.Org, id); err != nil {
 			return err
 		}
-		if err := record(ctx, tx, c, "security.kill_switch_restore_canceled", map[string]string{"proposal_id": id.String()}); err != nil {
+		if err := record(ctx, tx, c, auditkind.SecurityKillSwitchRestoreCanceled, map[string]string{"proposal_id": id.String()}); err != nil {
 			return err
 		}
 		return s.notifyOrg(ctx, tx, c, "security.kill_switch_restore_canceled")

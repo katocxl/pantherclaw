@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"encoding/json/v2"
@@ -233,7 +234,7 @@ func (s *Service) ApproveBatch(ctx context.Context, orgID ids.OrgID, r Responder
 			}); err != nil {
 				return err
 			}
-			if err := event(ctx, tx, "approval.response", userActor(r.User), "APPROVE", l.row.ID,
+			if err := event(ctx, tx, auditkind.ApprovalResponse, userActor(r.User), "APPROVE", l.row.ID,
 				map[string]string{"batch": batch.String()}); err != nil {
 				return err
 			}
@@ -254,7 +255,7 @@ func (s *Service) ApproveBatch(ctx context.Context, orgID ids.OrgID, r Responder
 		if n, err := q.CompleteApprovalBatch(ctx, orgID, batch); err != nil || n == 0 {
 			return orNotWaiting(err)
 		}
-		return event(ctx, tx, "approval.batch_approved", userActor(r.User), "", batch,
+		return event(ctx, tx, auditkind.ApprovalBatchApproved, userActor(r.User), "", batch,
 			map[string]string{"requests": strconv.Itoa(len(items))})
 	})
 	return out, s.recordRefusal(ctx, orgID, r.User, err)

@@ -4,6 +4,7 @@
 package support
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"log/slog"
@@ -122,7 +123,7 @@ func (s *Service) Open(ctx context.Context, st Staff, org ids.OrgID, request ids
 		}
 		out.Session, out.Grant, out.ExpiresAt = sess.ID, g.ID, sess.ExpiresAt
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "support.session_opened", Actor: staffActor(m.Account), Outcome: audit.Success,
+			Name: auditkind.SupportSessionOpened, Actor: staffActor(m.Account), Outcome: audit.Success,
 			Object: &audit.Object{Type: "support_session", ID: sess.ID.String()},
 			Details: map[string]string{
 				"grant": g.ID.String(), "request": request.String(), "scope": g.Scope, "staff_org": m.StaffOrg.String(),
@@ -208,7 +209,7 @@ func (s *Service) Authenticate(ctx context.Context, cookie, procedure string) (t
 			Credential: tapp.CredSupportSession, Session: r.ID, SupportGrant: r.GrantID,
 		}
 		if _, err := audit.Record(audit.WithAuthKind(ctx, string(tapp.CredSupportSession)), tx, audit.Event{
-			Name: "support.call", Actor: staffActor(r.AccountID), Outcome: audit.Success,
+			Name: auditkind.SupportCall, Actor: staffActor(r.AccountID), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "support_session", ID: r.ID.String()},
 			Details: map[string]string{"procedure": trim(procedure, 200), "grant": r.GrantID.String()},
 		}); err != nil {
@@ -283,7 +284,7 @@ func (s *Service) Logout(ctx context.Context, cookie string) error {
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "support.session_ended", Actor: staffActor(r.AccountID), Outcome: audit.Success, ReasonCode: code,
+			Name: auditkind.SupportSessionEnded, Actor: staffActor(r.AccountID), Outcome: audit.Success, ReasonCode: code,
 			Object: &audit.Object{Type: "support_session", ID: r.ID.String()}, Details: map[string]string{"grant": r.GrantID.String()},
 		})
 		return err

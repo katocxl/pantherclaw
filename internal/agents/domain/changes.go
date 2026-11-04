@@ -4,6 +4,7 @@
 package domain
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"fmt"
 	"regexp"
 	"unicode/utf8"
@@ -16,7 +17,7 @@ type ChangeKind string
 // coverage); the schema accepts any dotted lowercase name.
 const (
 	ChangeCreated              ChangeKind = "agent.created"
-	ChangeDiscovered           ChangeKind = "agent.discovered"
+	ChangeDiscovered           ChangeKind = auditkind.AgentDiscovered
 	ChangeClaimed              ChangeKind = "agent.claimed"
 	ChangeMerged               ChangeKind = "agent.merged"
 	ChangeUpdated              ChangeKind = "agent.updated"
@@ -41,9 +42,9 @@ const (
 // that vanished or changed is only recorded and announced: neither changes
 // the agent's state or authority (HR-458, G3).
 const (
-	ChangeDiscoveryVanished   ChangeKind = "agent.discovery_vanished"
-	ChangeDiscoveryReappeared ChangeKind = "agent.discovery_reappeared"
-	ChangeDiscoveryChanged    ChangeKind = "agent.discovery_changed"
+	ChangeDiscoveryVanished   ChangeKind = auditkind.AgentDiscoveryVanished
+	ChangeDiscoveryReappeared ChangeKind = auditkind.AgentDiscoveryReappeared
+	ChangeDiscoveryChanged    ChangeKind = auditkind.AgentDiscoveryChanged
 )
 
 // ChangeRiskUpdated records a change of the fields people state about an

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -265,7 +266,7 @@ func loopback(redirect string) bool {
 func (f *CodeFlow) documentChanged(ctx context.Context, org ids.OrgID, client dbq.PcMcpClient, live ports.ClientMetadata, redirect string) {
 	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "idaccess.client_document_changed", Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Denied,
+			Name: auditkind.IdaccessClientDocumentChanged, Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Denied,
 			Object:  &audit.Object{Type: "mcp_client", ID: client.ID.String()},
 			Details: map[string]string{"client_url": client.ClientUrl, "redirect_uri": redirect},
 		}); err != nil {
@@ -362,7 +363,7 @@ func (f *CodeFlow) Approve(ctx context.Context, o ids.OrgID, user ids.UUID, q ur
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "idaccess.consent_given", Actor: evdomain.Actor{Type: "user", ID: user.String()}, Outcome: audit.Success,
+			Name: auditkind.IdaccessConsentGiven, Actor: evdomain.Actor{Type: "user", ID: user.String()}, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "mcp_client", ID: client.ID.String()},
 			Details: map[string]string{"client_url": c.ClientURL, "agent": c.Agent.String(), "resource": c.Resource},
 		})
@@ -471,7 +472,7 @@ func (f *CodeFlow) spendCode(ctx context.Context, org ids.OrgID, code string) (d
 			details["run"] = run.String()
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "idaccess.code_reuse", Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Denied,
+			Name: auditkind.IdaccessCodeReuse, Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Denied,
 			ReasonCode: "AUTHORIZATION_CODE_REUSED", Object: &audit.Object{Type: "mcp_client", ID: mark.ClientID.String()}, Details: details,
 		}); err != nil {
 			return err
@@ -572,7 +573,7 @@ func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		return err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "idaccess.token_issued", Actor: evdomain.Actor{Type: "user", ID: row.UserID.String()}, Outcome: audit.Success,
+		Name: auditkind.IdaccessTokenIssued, Actor: evdomain.Actor{Type: "user", ID: row.UserID.String()}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "run", ID: run.ID.String()},
 		Details: map[string]string{
 			"grant": "authorization_code", "client": client.ID.String(), "resource": row.Resource, "grant_id": choice.Grant.String(),
@@ -676,7 +677,7 @@ func (f *CodeFlow) Refresh(ctx context.Context, form url.Values) (authnapp.Token
 				return err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "idaccess.refresh_reuse", Actor: evdomain.Actor{Type: "system", ID: "pantherclaw"}, Outcome: audit.Failure,
+				Name: auditkind.IdaccessRefreshReuse, Actor: evdomain.Actor{Type: "system", ID: "pantherclaw"}, Outcome: audit.Failure,
 				ReasonCode: "REFRESH_TOKEN_REUSED", Object: &audit.Object{Type: "run", ID: row.RunID.String()},
 				Details: map[string]string{"client": client.ID.String(), "family": row.FamilyID.String()},
 			}); err != nil {
@@ -742,7 +743,7 @@ func endRun(ctx context.Context, tx db.TenantTx, org ids.OrgID, run ids.UUID, re
 		return err
 	}
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "run.ended", Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Success,
+		Name: auditkind.RunEnded, Actor: evdomain.Actor{Type: "system", ID: "idaccess"}, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "run", ID: run.String()},
 		Details: map[string]string{"reason": reason, "children_revoked": strconv.Itoa(len(rows) - 1)},
 	})

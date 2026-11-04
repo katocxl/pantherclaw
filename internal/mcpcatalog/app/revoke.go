@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -232,7 +233,7 @@ func (s *Service) RevokeServer(ctx context.Context, id ids.UUID, digest []byte, 
 			return err
 		}
 		out = RevokeResult{Preview: p, Action: added.Action, Controls: added.Controls, Plans: added.Plans}
-		return record(ctx, tx, c, "mcp.catalog.server_revoked", id, map[string]string{
+		return record(ctx, tx, c, auditkind.McpCatalogServerRevoked, id, map[string]string{
 			"name": server.Name, "status_old": server.Status, "status_new": string(domain.StatusRevoked), "reason": reason,
 			"transport": server.Transport, "package_ref": deref(server.PackageRef), "url_host": deref(server.UrlHost),
 			"url_path_prefix": deref(server.UrlPathPrefix), "image_digest": deref(server.ImageDigest),
@@ -299,7 +300,7 @@ func quarantine(ctx context.Context, tx db.TenantTx, versions Versions, found []
 	}
 	for _, v := range found {
 		if err := versions.TransitionTx(ctx, tx, v.Package, v.Version, ddomain.State(v.State), ddomain.StateQuarantined, &audit.Event{
-			Name: "package.transitioned", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.PackageTransitioned, Actor: actor, Outcome: audit.Success,
 			Object:  &audit.Object{Type: "package_version", ID: v.Package + "@" + v.Version},
 			Details: map[string]string{"from": v.State, "to": string(ddomain.StateQuarantined), "mcp_server": server.String()},
 		}); err != nil {

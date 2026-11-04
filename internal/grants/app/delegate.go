@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
@@ -156,7 +157,7 @@ func (s *Service) refuseDelegation(ctx context.Context, w Workload, parent domai
 // instance delegated child from parent (at its revision) to the child run.
 func DelegatedEvent(instance, child, parent ids.UUID, parentRevision int, childRun ids.UUID) audit.Event {
 	return audit.Event{
-		Name: "grant.delegated", Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
+		Name: auditkind.GrantDelegated, Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
 		Outcome: audit.Success, Object: &audit.Object{Type: "grant", ID: child.String()},
 		Details: map[string]string{
 			"parent": parent.String(), "parent_revision": fmt.Sprint(parentRevision), "child_run": childRun.String(),
@@ -169,7 +170,7 @@ func DelegatedEvent(instance, child, parent ids.UUID, parentRevision int, childR
 // grant holds; the object is that parent grant.
 func DelegateRefusedEvent(instance, parent, child ids.UUID) audit.Event {
 	return audit.Event{
-		Name: "grant.delegate_refused", Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
+		Name: auditkind.GrantDelegateRefused, Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: instance.String()},
 		Outcome: audit.Denied, ReasonCode: "DELEGATION_EXCEEDS_PARENT", Object: &audit.Object{Type: "grant", ID: parent.String()},
 		Details: map[string]string{"agent": child.String(), "parent": parent.String(), "attempted": "grant.delegate"},
 	}

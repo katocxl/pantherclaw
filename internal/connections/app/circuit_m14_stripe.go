@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -47,7 +48,7 @@ func (s *Service) OpenCircuitFor(ctx context.Context, org ids.OrgID, gateway, id
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "security.stripe_livemode", Actor: c.Audit, Outcome: audit.Denied, ReasonCode: "STRIPE_LIVEMODE",
+			Name: auditkind.SecurityStripeLivemode, Actor: c.Audit, Outcome: audit.Denied, ReasonCode: "STRIPE_LIVEMODE",
 			Object:  &audit.Object{Type: "connection", ID: id.String()},
 			Details: map[string]string{"gateway": gateway.String(), "connection": conn.Name},
 		}); err != nil {
@@ -59,7 +60,7 @@ func (s *Service) OpenCircuitFor(ctx context.Context, org ids.OrgID, gateway, id
 		p := params(c, conn)
 		r := reason
 		p.State, p.QuarantineReason = StateQuarantined, &r
-		after, err := s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateQuarantined}}, "connection.quarantined",
+		after, err := s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateQuarantined}}, auditkind.ConnectionQuarantined,
 			map[string]string{"reason_code": reason})
 		if err != nil {
 			return err

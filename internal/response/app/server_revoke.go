@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"slices"
 	"strconv"
@@ -76,7 +77,7 @@ func (s *Containment) ContainServerIn(ctx context.Context, tx db.TenantTx, r Ser
 	// One record per control, each naming it: the security log and a restore
 	// read a control from its own record (M13, D264).
 	for i, control := range controls {
-		if err := recordAction(ctx, tx, evActor, "response.contain", a.ID, map[string]string{
+		if err := recordAction(ctx, tx, evActor, auditkind.ResponseContain, a.ID, map[string]string{
 			"action": a.ID.String(), "control_id": control.String(), "scope_type": rdomain.ScopeConnection, "scope": r.Connections[i].String(),
 			"control": rdomain.DenyAll, "epoch": strconv.FormatInt(added.Epoch, 10), "source": source, "server": r.Server.String(),
 		}, r.Reason); err != nil {

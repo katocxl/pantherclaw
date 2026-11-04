@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"regexp"
@@ -139,7 +140,7 @@ func (s *Service) createExclusion(ctx context.Context, tx db.TenantTx, c tenancy
 		if err != nil {
 			return err
 		}
-		if err := s.excluded(ctx, tx, c, out, "coverage.exclusion_created"); err != nil {
+		if err := s.excluded(ctx, tx, c, out, auditkind.CoverageExclusionCreated); err != nil {
 			return err
 		}
 		return s.notifyExcluded(ctx, tx, c, out, r.ExpiresInDays)
@@ -246,7 +247,7 @@ func (s *Service) RevokeExclusion(ctx context.Context, id ids.UUID) (dbq.PcCover
 		} else if err != nil {
 			return err
 		}
-		return s.excluded(ctx, tx, c, out, "coverage.exclusion_revoked")
+		return s.excluded(ctx, tx, c, out, auditkind.CoverageExclusionRevoked)
 	})
 	return out, err
 }

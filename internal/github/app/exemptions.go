@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"regexp"
 	"strconv"
@@ -83,7 +84,7 @@ func (s *Service) Exempt(ctx context.Context, githubID int64, login, reason stri
 		if err != nil {
 			return err
 		}
-		return s.exemptionChanged(ctx, tx, c, "github.account_exempted", out)
+		return s.exemptionChanged(ctx, tx, c, auditkind.GithubAccountExempted, out)
 	})
 	if db.IsUniqueViolation(err) {
 		return Exemption{}, ErrExempted
@@ -105,7 +106,7 @@ func (s *Service) RemoveExemption(ctx context.Context, githubID int64) error {
 		} else if err != nil {
 			return err
 		}
-		return s.exemptionChanged(ctx, tx, c, "github.exemption_removed", gone)
+		return s.exemptionChanged(ctx, tx, c, auditkind.GithubExemptionRemoved, gone)
 	})
 }
 

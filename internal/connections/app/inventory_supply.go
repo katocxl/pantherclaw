@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"slices"
 	"unicode/utf8"
@@ -137,7 +138,7 @@ func (s *Service) AddInventoryNote(ctx context.Context, id ids.UUID, note string
 		})); err != nil {
 			return err
 		}
-		if err := record(ctx, tx, c, "connection.inventory_note_added", row.ConnectionID, map[string]string{
+		if err := record(ctx, tx, c, auditkind.ConnectionInventoryNoteAdded, row.ConnectionID, map[string]string{
 			"item_id": id.String(), "kind": row.Kind, "name": row.Name, "digest": row.Digest,
 		}); err != nil {
 			return err

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"errors"
@@ -207,7 +208,7 @@ func (a *Admin) RegisterKey(ctx context.Context, name string, jwk []byte) (Signi
 		return SigningKey{}, pcerr.Wrap(err, pcerr.InvalidArgument, "SIGNING_KEY_INVALID", strings.TrimPrefix(err.Error(), trust.ErrUntrusted.Error()+": "))
 	}
 	ev := &audit.Event{
-		Name: "package.signing_key.registered", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.PackageSigningKeyRegistered, Actor: c.Actor(), Outcome: audit.Success,
 		Object: &audit.Object{Type: "package_signing_key", ID: kid}, Details: map[string]string{"name": name},
 	}
 	k := SigningKey{ID: ids.NewV7(), KID: kid, Name: name, Public: pub, State: KeyActive, CreatedBy: c.Principal.String()}
@@ -249,7 +250,7 @@ func (a *Admin) RevokeKey(ctx context.Context, kid string, reason RevokeReason) 
 		return SigningKey{}, nil, errKeyRevoked
 	}
 	ev := &audit.Event{
-		Name: "package.signing_key.revoked", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.PackageSigningKeyRevoked, Actor: c.Actor(), Outcome: audit.Success,
 		Object: &audit.Object{Type: "package_signing_key", ID: kid}, Details: map[string]string{"reason": string(reason)},
 	}
 	moved, err := keys.RevokeSigningKey(ctx, c.Org, kid, reason, c.Principal.String(), ev)

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 
@@ -67,7 +68,7 @@ func (s *Service) IssueServerCertificate(ctx context.Context, id ca.Identity, pu
 		return ServerCertificate{}, err
 	}
 	err = s.pool.InTenantTx(ctx, id.Org, func(ctx context.Context, tx db.TenantTx) error {
-		return record(ctx, tx, gatewayActor(id), "hosted_gateway.server_certificate_issued", h.ID, map[string]string{
+		return record(ctx, tx, gatewayActor(id), auditkind.HostedGatewayServerCertificateIssued, h.ID, map[string]string{
 			"hostname": name, "key_thumbprint": iss.Thumbprint, "not_after": iss.NotAfter.UTC().Format("2006-01-02T15:04:05Z"),
 		})
 	})

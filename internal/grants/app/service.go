@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
@@ -150,7 +151,7 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 	if err := g.ValidateIssue(domain.IssueContext{Now: now, Envelopes: envs, Lookup: lookup}); err != nil {
 		return domain.Grant{}, apiError(err)
 	}
-	ev := grantEvent(c.Actor(), "grant.issued", g, map[string]string{
+	ev := grantEvent(c.Actor(), auditkind.GrantIssued, g, map[string]string{
 		"agent": g.AgentID.String(), "principal": g.Principal.String(), "expires_at": g.ExpiresAt.UTC().Format(time.RFC3339),
 	})
 	if err := s.Repo.Issue(ctx, c.Org, &g, ev); err != nil {
@@ -240,7 +241,7 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	if err := next.ValidateIssue(ic); err != nil {
 		return domain.Grant{}, domain.Revision{}, apiError(err)
 	}
-	ev := grantEvent(c.Actor(), "grant.revised", next, map[string]string{
+	ev := grantEvent(c.Actor(), auditkind.GrantRevised, next, map[string]string{
 		"revision": strconv.Itoa(next.Revision), "widens": strconv.FormatBool(rev.Widens), "change": rev.Detail,
 	})
 	if !req.AccessRequest.IsZero() {
@@ -278,7 +279,7 @@ func (s *Service) Revoke(ctx context.Context, id domain.GrantID, reason string) 
 			return nil, err
 		}
 	}
-	ev := grantEvent(c.Actor(), "grant.revoked", g, map[string]string{"reason": reason})
+	ev := grantEvent(c.Actor(), auditkind.GrantRevoked, g, map[string]string{"reason": reason})
 	revoked, err := s.Repo.Revoke(ctx, c.Org, id, ev)
 	return revoked, apiError(err)
 }
@@ -466,7 +467,7 @@ func IssueRefusedEvent(actor evdomain.Actor, op string, agent, grant ids.UUID) a
 		obj = &audit.Object{Type: "grant", ID: grant.String()}
 	}
 	return audit.Event{
-		Name: "grant.issue_refused", Actor: actor, Outcome: audit.Denied, ReasonCode: "HUMAN_ONLY", Object: obj,
+		Name: auditkind.GrantIssueRefused, Actor: actor, Outcome: audit.Denied, ReasonCode: "HUMAN_ONLY", Object: obj,
 		Details: details,
 	}
 }

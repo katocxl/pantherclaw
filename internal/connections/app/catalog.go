@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -103,7 +104,7 @@ func (s *Service) QuarantineForCatalogTx(ctx context.Context, tx db.TenantTx, ca
 	reason := QuarantineCatalogNotApproved
 	p := params(c, conn)
 	p.State, p.QuarantineReason = StateQuarantined, &reason
-	after, err := s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateQuarantined}}, "connection.quarantined",
+	after, err := s.apply(ctx, tx, c, conn, p, []change{{field: "state", from: conn.State, to: StateQuarantined}}, auditkind.ConnectionQuarantined,
 		map[string]string{"reason_code": reason})
 	if err != nil {
 		return false, err

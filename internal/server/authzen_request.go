@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -400,7 +401,7 @@ func (e *authzenEndpoint) decidedVia(ctx context.Context, p point, txn ids.UUID)
 			return errors.New("authzen: the transaction was asked for by another enforcement point")
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authzen.decision_requested", Outcome: audit.Success,
+			Name: auditkind.AuthzenDecisionRequested, Outcome: audit.Success,
 			Actor:   evdomain.Actor{Type: string(td.KindServiceAccount), ID: p.Subject.String()},
 			Object:  &audit.Object{Type: "transaction", ID: txn.String()},
 			Details: map[string]string{"enforcement_point_id": p.ID.String(), "enforcement_point": p.Name},

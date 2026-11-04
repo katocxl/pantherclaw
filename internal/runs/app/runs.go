@@ -12,6 +12,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -643,14 +644,14 @@ func recordStart(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r Ru
 		details["parent_run_id"] = r.ParentRunID.String()
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "run.started", Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()}, Details: details,
+		Name: auditkind.RunStarted, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()}, Details: details,
 	})
 	return err
 }
 
 func recordEnd(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r Run, children int) error {
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "run.ended", Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()},
+		Name: auditkind.RunEnded, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()},
 		Details: map[string]string{
 			"agent_id": r.AgentID.String(), "reason": r.EndReason, "children_revoked": strconv.Itoa(children),
 		},

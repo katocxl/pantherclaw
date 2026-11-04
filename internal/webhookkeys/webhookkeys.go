@@ -7,6 +7,7 @@
 package webhookkeys
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"time"
@@ -89,7 +90,7 @@ func (s *Service) Rotate(ctx context.Context) (keystore.WebhookKey, string, erro
 			return ErrStepUp
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "webhook_key.rotated", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.WebhookKeyRotated, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "signing_key", ID: newKID},
 			Details: map[string]string{"retiring_kid": retiring, "security_key": su.CredentialID.String()},
 		})

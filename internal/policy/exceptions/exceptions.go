@@ -13,6 +13,7 @@
 package exceptions
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -283,7 +284,7 @@ func (s *Service) RequestException(ctx context.Context, r Request) (Exception, C
 		if err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c.Actor(), out, "policy.exception_requested", nil)
+		return s.audit(ctx, tx, c.Actor(), out, auditkind.PolicyExceptionRequested, nil)
 	})
 	if err != nil {
 		return out, cr, err
@@ -383,7 +384,7 @@ func (s *Service) Activate(ctx context.Context, tx db.TenantTx, org ids.OrgID, i
 	} else if err != nil {
 		return x, err
 	}
-	if err := s.audit(ctx, tx, system, x, "policy.exception_activated", map[string]string{
+	if err := s.audit(ctx, tx, system, x, auditkind.PolicyExceptionActivated, map[string]string{
 		"expires": x.ExpiresAt.UTC().Format(time.RFC3339),
 	}); err != nil {
 		return x, err
@@ -437,7 +438,7 @@ func (s *Service) Decline(ctx context.Context, tx db.TenantTx, org ids.OrgID, id
 	} else if err != nil {
 		return x, err
 	}
-	return x, s.audit(ctx, tx, system, x, "policy.exception_declined", nil)
+	return x, s.audit(ctx, tx, system, x, auditkind.PolicyExceptionDeclined, nil)
 }
 
 // RevokeException ends a pending or active exception at once (a person
@@ -465,7 +466,7 @@ func (s *Service) RevokeException(ctx context.Context, id ids.UUID, reason strin
 		} else if err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c.Actor(), out, "policy.exception_revoked", nil)
+		return s.audit(ctx, tx, c.Actor(), out, auditkind.PolicyExceptionRevoked, nil)
 	})
 	return out, err
 }

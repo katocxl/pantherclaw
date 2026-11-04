@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -247,7 +248,7 @@ func (v *Versions) CreateExpectingWith(ctx context.Context, raw []byte, expected
 		return VersionInfo{}, err
 	}
 	ev := &audit.Event{
-		Name: "policy.version_created", Actor: c.Actor(), Outcome: audit.Success,
+		Name: auditkind.PolicyVersionCreated, Actor: c.Actor(), Outcome: audit.Success,
 		Object: &audit.Object{Type: "policy", ID: b.ID}, Details: details,
 	}
 	id, _, err := v.Store.CreateVersion(ctx, c.Org, b, c.Principal.String(), ev)

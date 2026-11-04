@@ -11,6 +11,7 @@
 package keystore
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"errors"
@@ -155,7 +156,7 @@ func createSigningKey(ctx context.Context, tx db.TenantTx, kp keys.KeyProvider, 
 		return "", fmt.Errorf("keystore: insert signing key: %w", err)
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "signing_key.created", Actor: actor, Outcome: audit.Success,
+		Name: auditkind.SigningKeyCreated, Actor: actor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "signing_key", ID: kid},
 		Details: map[string]string{"purpose": string(p), "algorithm": string(p.Algorithm()), "kek_id": kp.CurrentKEK()},
 	}); err != nil {
@@ -233,7 +234,7 @@ func rotateIn(ctx context.Context, tx db.TenantTx, q *dbq.Queries, kp keys.KeyPr
 				return "", err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "signing_key.retiring", Actor: actor, Outcome: audit.Success,
+				Name: auditkind.SigningKeyRetiring, Actor: actor, Outcome: audit.Success,
 				Object: &audit.Object{Type: "signing_key", ID: r.Kid}, Details: map[string]string{"purpose": r.Purpose},
 			}); err != nil {
 				return "", err
@@ -283,7 +284,7 @@ func ReplaceSigningKey(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, 
 				return err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: "signing_key.revoked", Actor: actor, Outcome: audit.Success,
+				Name: auditkind.SigningKeyRevoked, Actor: actor, Outcome: audit.Success,
 				Object: &audit.Object{Type: "signing_key", ID: r.Kid}, Details: map[string]string{"purpose": r.Purpose, "reason": "replaced"},
 			}); err != nil {
 				return err
@@ -319,7 +320,7 @@ func RevokeSigningKey(ctx context.Context, pool *db.Pool, kid string, actor doma
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "signing_key.revoked", Actor: actor, Outcome: audit.Success,
+			Name: auditkind.SigningKeyRevoked, Actor: actor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "signing_key", ID: kid},
 		})
 		return err

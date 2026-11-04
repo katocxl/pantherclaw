@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -173,7 +174,7 @@ func (s *Service) ProposeSlackLink(ctx context.Context) (ChatLink, error) {
 			return err
 		}
 		link = chatLinkOf(row)
-		return s.linkAudit(ctx, tx, c, "notification.chat_link_proposed", row)
+		return s.linkAudit(ctx, tx, c, auditkind.NotificationChatLinkProposed, row)
 	})
 	return link, err
 }
@@ -204,16 +205,16 @@ func (s *Service) emailVerified(ctx context.Context, account *ids.UUID, email st
 //
 // permission: authenticated (a person confirms their own link)
 func (s *Service) ConfirmChatLink(ctx context.Context, id ids.UUID) (ChatLink, error) {
-	return s.moveLink(ctx, id, LinkProposed, LinkConfirmed, "notification.chat_link_confirmed")
+	return s.moveLink(ctx, id, LinkProposed, LinkConfirmed, auditkind.NotificationChatLinkConfirmed)
 }
 
 // RevokeChatLink revokes the caller's own link, proposed or confirmed.
 //
 // permission: authenticated (a person revokes their own link)
 func (s *Service) RevokeChatLink(ctx context.Context, id ids.UUID) (ChatLink, error) {
-	link, err := s.moveLink(ctx, id, LinkConfirmed, LinkRevoked, "notification.chat_link_revoked")
+	link, err := s.moveLink(ctx, id, LinkConfirmed, LinkRevoked, auditkind.NotificationChatLinkRevoked)
 	if errors.Is(err, ErrSlackLinkState) {
-		return s.moveLink(ctx, id, LinkProposed, LinkRevoked, "notification.chat_link_revoked")
+		return s.moveLink(ctx, id, LinkProposed, LinkRevoked, auditkind.NotificationChatLinkRevoked)
 	}
 	return link, err
 }
@@ -591,7 +592,7 @@ func (s *Service) staleLink(ctx context.Context, org ids.OrgID, l dbq.ConfirmedS
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "notification.chat_link_stale", Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
+			Name: auditkind.NotificationChatLinkStale, Actor: evdomain.Actor{Type: "system", ID: "notification-health"},
 			Outcome: audit.Success, ReasonCode: reason, Object: &audit.Object{Type: "chat_identity_link", ID: l.ID.String()},
 			Details: map[string]string{"provider": "slack", "slack_user": l.ExternalUserID, "user": l.UserID.String()},
 		})

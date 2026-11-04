@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
@@ -348,7 +349,7 @@ func (v *Versions) gate(ctx context.Context, p publisher, id ids.UUID, expected 
 	out.Diff = domain.Compare(published, b)
 	if !out.Diff.Loosens() {
 		ev := &audit.Event{
-			Name: "policy.published", Actor: p.actor, Outcome: audit.Success,
+			Name: auditkind.PolicyPublished, Actor: p.actor, Outcome: audit.Success,
 			Object: &audit.Object{Type: "policy", ID: info.BundleID},
 		}
 		if err := v.Store.PublishTested(ctx, p.org, PublishRequest{
@@ -491,7 +492,7 @@ func (v *Versions) Rollback(ctx context.Context, to ids.UUID, expected *ids.UUID
 		return PublishOutcome{}, err
 	}
 	ev := &audit.Event{
-		Name: "policy.version_created", Actor: p.actor, Outcome: audit.Success, ReasonCode: "ROLLBACK",
+		Name: auditkind.PolicyVersionCreated, Actor: p.actor, Outcome: audit.Success, ReasonCode: "ROLLBACK",
 		Object: &audit.Object{Type: "policy", ID: next.ID},
 	}
 	id, _, err := v.Store.CreateVersion(ctx, p.org, next, p.id, ev)
@@ -521,7 +522,7 @@ func (v *Versions) Seed(ctx context.Context, org ids.OrgID, b *domain.Bundle, ac
 		return ids.UUID{}, err
 	}
 	id, _, err := v.Store.CreateVersion(ctx, org, b, actor.ID, &audit.Event{
-		Name: "policy.version_created", Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "policy", ID: b.ID},
+		Name: auditkind.PolicyVersionCreated, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "policy", ID: b.ID},
 	})
 	if err != nil {
 		return ids.UUID{}, err
@@ -611,7 +612,7 @@ func (v *Versions) ApplyPublish(ctx context.Context, tx db.TenantTx, req ChangeR
 		return err
 	}
 	ev := &audit.Event{
-		Name: "policy.published", Actor: caller.Actor(), Outcome: audit.Success,
+		Name: auditkind.PolicyPublished, Actor: caller.Actor(), Outcome: audit.Success,
 		Object:  &audit.Object{Type: "policy", ID: info.BundleID},
 		Details: map[string]string{"change_request": req.ID.String(), "requested_by": req.RequestedBy},
 	}

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"regexp"
@@ -195,7 +196,7 @@ func (w *Writer) UpdateSettings(ctx context.Context, s Settings) (Settings, erro
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "waitlist.settings_updated", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.WaitlistSettingsUpdated, Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "org", ID: c.Org.String()},
 			Details: map[string]string{"set": strconv.Itoa(len(changed)), "batch_currencies": strconv.Itoa(len(s.BatchCeilings))},
 		}); err != nil {

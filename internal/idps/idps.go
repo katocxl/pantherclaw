@@ -18,6 +18,7 @@
 package idps
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -208,7 +209,7 @@ func (s *Store) Create(ctx context.Context, tx db.TenantTx, by evdomain.Actor, a
 		return Provider{}, err
 	}
 	p := Provider(row)
-	return p, record(ctx, tx, by, "identity_provider.created", p)
+	return p, record(ctx, tx, by, auditkind.IdentityProviderCreated, p)
 }
 
 // Change is a stored change to a provider: Put applies it. SealedSecret
@@ -269,7 +270,7 @@ func (s *Store) Put(ctx context.Context, tx db.TenantTx, by evdomain.Actor, auth
 	if err != nil {
 		return err
 	}
-	return record(ctx, tx, by, "identity_provider.activated", p, "client_auth_changed", fmt.Sprint(c.SealedSecret != nil))
+	return record(ctx, tx, by, auditkind.IdentityProviderActivated, p, "client_auth_changed", fmt.Sprint(c.SealedSecret != nil))
 }
 
 // Disable turns provider id off, unless that leaves no active org admin a
@@ -304,7 +305,7 @@ func (s *Store) Disable(ctx context.Context, tx db.TenantTx, by evdomain.Actor, 
 	if err != nil {
 		return err
 	}
-	return record(ctx, tx, by, "identity_provider.disabled", p)
+	return record(ctx, tx, by, auditkind.IdentityProviderDisabled, p)
 }
 
 // SetOwnOnly sets whether the org signs in with its own providers alone.
@@ -323,7 +324,7 @@ func (s *Store) SetOwnOnly(ctx context.Context, tx db.TenantTx, by evdomain.Acto
 		return err
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: "identity_provider.own_only_set", Actor: by, Outcome: audit.Success,
+		Name: auditkind.IdentityProviderOwnOnlySet, Actor: by, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "org", ID: org.String()},
 		Details: map[string]string{"own_providers_only": fmt.Sprint(on)},
 	})
@@ -422,7 +423,7 @@ func (s *Store) Lapse(ctx context.Context, tx db.TenantTx, author, id ids.UUID) 
 	if err != nil {
 		return err
 	}
-	return record(ctx, tx, evdomain.Actor{Type: "system", ID: "idps"}, "identity_provider.lapsed", p)
+	return record(ctx, tx, evdomain.Actor{Type: "system", ID: "idps"}, auditkind.IdentityProviderLapsed, p)
 }
 
 // ClosePut runs when a filed put is declined or expires (a protect.Closer,

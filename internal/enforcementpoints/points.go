@@ -19,6 +19,7 @@
 package enforcementpoints
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"regexp"
 	"slices"
@@ -252,7 +253,7 @@ func (s *Service) Create(ctx context.Context, in NewPoint) (Point, error) {
 		} else if err != nil {
 			return err
 		}
-		if err := record(ctx, tx, c, "authzen.enforcement_point_created", id, map[string]string{
+		if err := record(ctx, tx, c, auditkind.AuthzenEnforcementPointCreated, id, map[string]string{
 			"name": in.Name, "service_account_id": in.ServiceAccount.String(), "proposed_connections": joined(conns),
 		}); err != nil {
 			return err
@@ -316,7 +317,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su *stepup.StepUp) 
 		if n == 0 {
 			return ErrState
 		}
-		if err := record(ctx, tx, c, "authzen.enforcement_point_activated", id, map[string]string{
+		if err := record(ctx, tx, c, auditkind.AuthzenEnforcementPointActivated, id, map[string]string{
 			"connections": joined(p.ProposedConnections), "previous_connections": joined(p.ConnectionIds),
 			"security_key": su.Credential.String(),
 		}); err != nil {
@@ -359,7 +360,7 @@ func (s *Service) UpdateConnections(ctx context.Context, id ids.UUID, conns []id
 			if _, err := q.ProposeEnforcementPointConnections(ctx, nil, c.Org, id); err != nil {
 				return err
 			}
-			if err := record(ctx, tx, c, "authzen.enforcement_point_narrowed", id, map[string]string{
+			if err := record(ctx, tx, c, auditkind.AuthzenEnforcementPointNarrowed, id, map[string]string{
 				"connections": joined(set), "previous_connections": joined(p.ConnectionIds),
 			}); err != nil {
 				return err
@@ -371,7 +372,7 @@ func (s *Service) UpdateConnections(ctx context.Context, id ids.UUID, conns []id
 			if _, err := q.ProposeEnforcementPointConnections(ctx, set, c.Org, id); err != nil {
 				return err
 			}
-			if err := record(ctx, tx, c, "authzen.enforcement_point_proposed", id, map[string]string{
+			if err := record(ctx, tx, c, auditkind.AuthzenEnforcementPointProposed, id, map[string]string{
 				"proposed_connections": joined(set), "connections": joined(p.ConnectionIds),
 			}); err != nil {
 				return err
@@ -406,7 +407,7 @@ func (s *Service) Disable(ctx context.Context, id ids.UUID) (Point, error) {
 			}
 			return ErrState
 		}
-		if err := record(ctx, tx, c, "authzen.enforcement_point_disabled", id, nil); err != nil {
+		if err := record(ctx, tx, c, auditkind.AuthzenEnforcementPointDisabled, id, nil); err != nil {
 			return err
 		}
 		out, err = get(ctx, q, c.Org, id)

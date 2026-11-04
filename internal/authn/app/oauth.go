@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"log/slog"
@@ -154,7 +155,7 @@ func (o *OAuth) ClientCredentials(ctx context.Context, clientID, assertionType, 
 		}
 		out = TokenResponse{AccessToken: at, TokenType: "Bearer", ExpiresIn: int(token.TTL.Seconds())}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "authn.token_issued", Actor: evdomain.Actor{Type: string(td.KindServiceAccount), ID: sa.String()},
+			Name: auditkind.AuthnTokenIssued, Actor: evdomain.Actor{Type: string(td.KindServiceAccount), ID: sa.String()},
 			Outcome: audit.Success, Object: &audit.Object{Type: "service_account", ID: sa.String()},
 			Details: map[string]string{"grant": "client_credentials", "key": k.ID.String()},
 		})

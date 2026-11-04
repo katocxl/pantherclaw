@@ -6,6 +6,7 @@
 package restore
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bufio"
 	"context"
 	"encoding/json/v2"
@@ -76,7 +77,7 @@ func (r *Registry) RegisterScoped(kind string, h ScopedHandler) error {
 }
 
 func deletion(kind string) bool {
-	return kind == "org.deleted" || kind == "account.deleted" || kind == "org.deletion_started" || kind == "account.deletion_started"
+	return kind == auditkind.OrgDeleted || kind == auditkind.AccountDeleted || kind == auditkind.OrgDeletionStarted || kind == auditkind.AccountDeletionStarted
 }
 
 // Parse validates the entire bounded input before any state changes. Input
@@ -248,6 +249,6 @@ func Audit(ctx context.Context, tx db.TenantTx, entries []Event, operator domain
 		details["local_material"] = strconv.Itoa(local)
 		details["no_local_material"] = strconv.Itoa(noLocal)
 	}
-	_, err := audit.Record(ctx, tx, audit.Event{Name: "restore.reapplied", Actor: operator, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: tx.OrgID().String()}, Details: details})
+	_, err := audit.Record(ctx, tx, audit.Event{Name: auditkind.RestoreReapplied, Actor: operator, Outcome: audit.Success, Object: &audit.Object{Type: "org", ID: tx.OrgID().String()}, Details: details})
 	return err
 }

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -151,7 +152,7 @@ func (s *Service) open(ctx context.Context, perm td.Permission, kase, incident *
 		}); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c.Actor(), "ticket.open_requested", "ticket_outbound", out, map[string]string{"project": cfg.ProjectKey})
+		return s.audit(ctx, tx, c.Actor(), auditkind.TicketOpenRequested, "ticket_outbound", out, map[string]string{"project": cfg.ProjectKey})
 	})
 	switch {
 	case errors.Is(err, errWaiting):
@@ -177,7 +178,7 @@ func (s *Service) EndUnreported(ctx context.Context, tx db.TenantTx, org ids.Org
 		return err
 	}
 	for _, id := range ended {
-		if err := s.audit(ctx, tx, domain.Actor, "ticket.sync_failed", "ticket_outbound", id, map[string]string{"code": "not_reported"}); err != nil {
+		if err := s.audit(ctx, tx, domain.Actor, auditkind.TicketSyncFailed, "ticket_outbound", id, map[string]string{"code": "not_reported"}); err != nil {
 			return err
 		}
 	}
@@ -224,7 +225,7 @@ func (s *Service) ReportTicketSync(ctx context.Context, tx db.TenantTx, org ids.
 	}
 	actor := domain.Actor
 	if state != "DONE" {
-		return true, s.audit(ctx, tx, actor, "ticket.sync_failed", "ticket_outbound", l.OutboundID, map[string]string{
+		return true, s.audit(ctx, tx, actor, auditkind.TicketSyncFailed, "ticket_outbound", l.OutboundID, map[string]string{
 			"operation": l.Operation, "code": code,
 		})
 	}
@@ -239,7 +240,7 @@ func (s *Service) ReportTicketSync(ctx context.Context, tx db.TenantTx, org ids.
 		})
 		if db.IsUniqueViolation(err) {
 			// Linked by hand meanwhile: the new ticket is recorded, not linked.
-			return true, s.audit(ctx, tx, actor, "ticket.created_unlinked", "ticket_outbound", l.OutboundID, map[string]string{"key": key})
+			return true, s.audit(ctx, tx, actor, auditkind.TicketCreatedUnlinked, "ticket_outbound", l.OutboundID, map[string]string{"key": key})
 		} else if err != nil {
 			return true, err
 		}
@@ -250,7 +251,7 @@ func (s *Service) ReportTicketSync(ctx context.Context, tx db.TenantTx, org ids.
 				return true, err
 			}
 		}
-		return true, s.audit(ctx, tx, actor, "ticket.created", "external_ref", ref.ID, map[string]string{"key": key, "system": l.System})
+		return true, s.audit(ctx, tx, actor, auditkind.TicketCreated, "external_ref", ref.ID, map[string]string{"key": key, "system": l.System})
 	}
 	return true, nil
 }

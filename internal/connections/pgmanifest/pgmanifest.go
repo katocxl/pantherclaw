@@ -10,6 +10,7 @@
 package pgmanifest
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -403,7 +404,7 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, digest string, su *s
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "connection.postgres_manifest_confirmed", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.ConnectionPostgresManifestConfirmed, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "connection", ID: id.String()},
 			Details: map[string]string{
 				"digest": digest, "previous_digest": hex.EncodeToString(row.Digest), "widening": strings.Join(widening, "; "),

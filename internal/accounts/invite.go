@@ -4,6 +4,7 @@
 package accounts
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"strings"
@@ -145,9 +146,9 @@ func (iv *Invitations) AcceptHash(ctx context.Context, account ids.UUID, org ids
 		out = Accepted{Org: org, User: u.ID}
 		actor := evdomain.Actor{Type: string(td.KindUser), ID: u.ID.String()}
 		for _, ev := range []audit.Event{
-			{Name: "access.user_created", Object: &audit.Object{Type: "user", ID: u.ID.String()}, Details: map[string]string{"via": "browser"}},
+			{Name: auditkind.AccessUserCreated, Object: &audit.Object{Type: "user", ID: u.ID.String()}, Details: map[string]string{"via": "browser"}},
 			{
-				Name: "access.invitation_accepted", Object: &audit.Object{Type: "invitation", ID: inv.ID.String()},
+				Name: auditkind.AccessInvitationAccepted, Object: &audit.Object{Type: "invitation", ID: inv.ID.String()},
 				Details: map[string]string{"kind": inv.Kind, "roles": strings.Join(inv.Roles, ","), "via": "browser"},
 			},
 		} {
@@ -184,7 +185,7 @@ func (iv *Invitations) AcceptHash(ctx context.Context, account ids.UUID, org ids
 func (iv *Invitations) recordMismatch(ctx context.Context, org ids.OrgID, inv, account ids.UUID) {
 	_ = iv.store.pool.InTenantTx(context.WithoutCancel(ctx), org, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := audit.Record(ctx, tx, audit.Event{
-			Name: "access.invitation_refused", Actor: evdomain.Actor{Type: "account", ID: account.String()},
+			Name: auditkind.AccessInvitationRefused, Actor: evdomain.Actor{Type: "account", ID: account.String()},
 			Outcome: audit.Denied, ReasonCode: "INVITATION_EMAIL_MISMATCH",
 			Object: &audit.Object{Type: "invitation", ID: inv.String()},
 		})

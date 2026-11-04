@@ -29,6 +29,7 @@
 package externalchecks
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/x509"
 	"errors"
@@ -334,7 +335,7 @@ func (s *Service) Create(ctx context.Context, in NewCheck) (Check, error) {
 		} else if err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "policy.external_check_created", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.PolicyExternalCheckCreated, id, map[string]string{
 			"name": in.Name, "host": hostOf(in.Endpoint), "operations": strings.Join(in.Operations, ","),
 			"timeout_ms": strconv.Itoa(in.TimeoutMs), "custom_ca": boolString(in.CAPEM != ""),
 		}); err != nil {
@@ -389,7 +390,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su *stepup.StepUp) 
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "policy.external_check_activated", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.PolicyExternalCheckActivated, id, map[string]string{
 			"name": ch.Name, "host": hostOf(ch.Endpoint), "security_key": su.Credential.String(),
 		}); err != nil {
 			return err
@@ -424,7 +425,7 @@ func (s *Service) Disable(ctx context.Context, id ids.UUID) (Check, error) {
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "policy.external_check_disabled", id, map[string]string{"name": ch.Name, "from": ch.State}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.PolicyExternalCheckDisabled, id, map[string]string{"name": ch.Name, "from": ch.State}); err != nil {
 			return err
 		}
 		out, err = get(ctx, q, c.Org, id)
@@ -573,7 +574,7 @@ func (s *Service) Test(ctx context.Context, id ids.UUID, operation string) (Answ
 	}
 	ans := s.asker.ask(ctx, c.Org, ch, body)
 	if err := s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		return s.audit(ctx, tx, c, "policy.external_check_tested", id, map[string]string{
+		return s.audit(ctx, tx, c, auditkind.PolicyExternalCheckTested, id, map[string]string{
 			"name": ch.Name, "decision": ans.Decision, "error_code": ans.Unavailable,
 		})
 	}); err != nil {
@@ -598,7 +599,7 @@ func (s *Service) notAllowed(ctx context.Context, org ids.OrgID, c Check) {
 	}
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "policy.external_check_endpoint_not_allowed", Actor: evdomain.Actor{Type: "system", ID: "external_checks"}, Outcome: audit.Failure,
+			Name: auditkind.PolicyExternalCheckEndpointNotAllowed, Actor: evdomain.Actor{Type: "system", ID: "external_checks"}, Outcome: audit.Failure,
 			Object: &audit.Object{Type: "external_policy_check", ID: c.ID.String()}, Details: map[string]string{"name": c.Name, "host": hostOf(c.Endpoint)},
 		}); err != nil {
 			return err

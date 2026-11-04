@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -277,7 +278,7 @@ func (s *Detections) CreateCustomRule(ctx context.Context, content string) (Rule
 			return err
 		}
 		out = Rule{Rule: cr.Rule, Digest: cr.Digest, Custom: &row, Licensed: true}
-		return detectionAudit(ctx, tx, c, "detection.rule_created", row, nil)
+		return detectionAudit(ctx, tx, c, auditkind.DetectionRuleCreated, row, nil)
 	})
 	return out, err
 }
@@ -390,7 +391,7 @@ func (s *Detections) PublishCustomRule(ctx context.Context, id ids.UUID) (Rule, 
 			return err
 		}
 		entry, err := audit.Record(ctx, tx, audit.Event{
-			Name: "detection.rule_published", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.DetectionRulePublished, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "detection_rule", ID: row.RuleID}, Details: details,
 		})
 		if err != nil {
@@ -454,7 +455,7 @@ func (s *Detections) DisableCustomRule(ctx context.Context, id ids.UUID, reason 
 		}
 		r, _ := rules.Parse([]byte(row.Content))
 		out = Rule{Rule: r, Digest: hex.EncodeToString(row.ContentDigest), Custom: &row}
-		return detectionAudit(ctx, tx, c, "detection.rule_disabled", row, details)
+		return detectionAudit(ctx, tx, c, auditkind.DetectionRuleDisabled, row, details)
 	})
 	return out, err
 }
@@ -473,7 +474,7 @@ func (s *Detections) EnableRule(ctx context.Context, ruleID string) (bool, error
 		}
 		enabled = true
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "detection.rule_enabled", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.DetectionRuleEnabled, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "detection_rule", ID: ruleID},
 		})
 		return err

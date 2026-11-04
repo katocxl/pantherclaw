@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/jsontext"
 	"fmt"
@@ -117,7 +118,7 @@ func seedStripeFacts(ctx context.Context, pool *db.Pool, org ids.OrgID, gateway,
 		ID: ids.NewV7(), Org: org, Name: "stripe.gateway", GatewayID: gateway, ConnectionID: conn, State: fdomain.ProviderActive, Facts: decls,
 	}
 	ev := audit.Event{
-		Name: "facts.provider_registered", Actor: devSeedActor, Outcome: audit.Success,
+		Name: auditkind.FactsProviderRegistered, Actor: devSeedActor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "fact_provider", ID: p.ID.String()},
 		Details: map[string]string{"gateway": gateway.String(), "connection": conn.String(), "facts": fmt.Sprint(len(decls))},
 	}

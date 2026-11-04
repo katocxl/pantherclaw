@@ -13,6 +13,7 @@
 package injection
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -30,7 +31,7 @@ import (
 
 // AuditName is the audit event a hit writes (the pc.tools.description_injection
 // rule reads it).
-const AuditName = "connection.tool_description_flagged"
+const AuditName = auditkind.ConnectionToolDescriptionFlagged
 
 // Scan outcomes recorded beside a drift report (D47). ScanClean means these
 // patterns found nothing: no known flags, never safe (G0 M24 D213, F801).

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 
@@ -78,7 +79,7 @@ func (s *Service) setFieldOwner(ctx context.Context, tx db.TenantTx, c tenancy.C
 		}); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c.Actor(), "ticket.field_owner_changed", "ticket_field", protect.SubjectID(protect.SurfaceTicketFieldOwner, "field:"+string(field)), map[string]string{
+		return s.audit(ctx, tx, c.Actor(), auditkind.TicketFieldOwnerChanged, "ticket_field", protect.SubjectID(protect.SurfaceTicketFieldOwner, "field:"+string(field)), map[string]string{
 			"field": string(field), "from": string(from), "to": string(owner),
 		})
 	}

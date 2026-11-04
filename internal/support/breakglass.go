@@ -4,6 +4,7 @@
 package support
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"strings"
@@ -162,7 +163,7 @@ func (s *Service) SetHolders(ctx context.Context, in []Designation) ([]Holder, e
 				return err
 			}
 		}
-		if _, err := audit.Record(ctx, tx, audit.Event{Name: "breakglass.holders_changed", Actor: c.Actor(), Outcome: audit.Success}); err != nil {
+		if _, err := audit.Record(ctx, tx, audit.Event{Name: auditkind.BreakglassHoldersChanged, Actor: c.Actor(), Outcome: audit.Success}); err != nil {
 			return err
 		}
 		rows, err := q.ListBreakGlassHolders(ctx, c.Org)
@@ -272,7 +273,7 @@ func (s *Service) ActivateBreakGlass(ctx context.Context, reason string, minutes
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "breakglass.activated", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.BreakglassActivated, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "breakglass_activation", ID: a.ID.String()}, Details: map[string]string{"role": h.Role, "reason": trim(reason, 512), "until": a.ExpiresAt.UTC().Format(time.RFC3339), "webauthn_key": su.Credential.String()},
 		}); err != nil {
 			return err
@@ -451,7 +452,7 @@ func (s *Service) BreakGlassCall(ctx context.Context, c tapp.Caller, procedure s
 			return nil
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: "breakglass.call", Actor: c.Actor(), Outcome: audit.Success,
+			Name: auditkind.BreakglassCall, Actor: c.Actor(), Outcome: audit.Success,
 			Object: &audit.Object{Type: "breakglass_activation", ID: a.ID.String()}, Details: map[string]string{"activation": a.ID.String(), "procedure": trim(procedure, 200)},
 		}); err != nil {
 			return err

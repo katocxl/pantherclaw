@@ -4,6 +4,7 @@
 package keystore
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
@@ -103,7 +104,7 @@ func (s *DEKStore) create(ctx context.Context, tx db.TenantTx, purpose string) (
 		return 0, pclog.Secret[[]byte]{}, fmt.Errorf("keystore: insert DEK: %w", err)
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "dek.created", Actor: Actor, Outcome: audit.Success,
+		Name: auditkind.DekCreated, Actor: Actor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "dek", ID: purpose + "/" + strconv.FormatUint(uint64(version), 10)},
 		Details: map[string]string{"purpose": purpose, "kek_id": s.kp.CurrentKEK()},
 	}); err != nil {

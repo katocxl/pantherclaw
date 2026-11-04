@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/json/v2"
@@ -112,7 +113,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 			if !reopen.IsZero() {
 				res.Reopened++
 				if _, err := audit.Record(ctx, tx, audit.Event{
-					Name: "agents.discovery_reopened", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+					Name: auditkind.AgentsDiscoveryReopened, Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
 					Object:  &audit.Object{Type: "discovery", ID: reopen.String()},
 					Details: map[string]string{"scan": scan.String(), "kind": f.Kind, "previous_agent": prior.AgentID.String()},
 				}); err != nil {
@@ -121,7 +122,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 			}
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "agents.github_scan_submitted", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+			Name: auditkind.AgentsGithubScanSubmitted, Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
 			Details: map[string]string{
 				"scan": scan.String(), "created": strconv.Itoa(res.Created), "counted": strconv.Itoa(res.Counted), "dropped": strconv.Itoa(res.Dropped),
 				"reopened": strconv.Itoa(res.Reopened),

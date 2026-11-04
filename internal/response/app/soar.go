@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"strconv"
@@ -177,7 +178,7 @@ func (s *Containment) rateLimited(ctx context.Context, tx db.TenantTx, evActor e
 		return err
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "response.soar_rate_limited", Actor: evActor, Outcome: audit.Denied, ReasonCode: ReasonRateLimited,
+		Name: auditkind.ResponseSoarRateLimited, Actor: evActor, Outcome: audit.Denied, ReasonCode: ReasonRateLimited,
 		Object:  &audit.Object{Type: c.ScopeType, ID: c.ScopeID},
 		Details: map[string]string{"control": c.Control, "limit": strconv.Itoa(SOARWidePerHour)},
 	}); err != nil {

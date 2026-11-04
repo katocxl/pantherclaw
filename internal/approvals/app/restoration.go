@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"time"
@@ -106,7 +107,7 @@ func (s *Service) RequestRestoration(ctx context.Context, agent ids.UUID, reason
 		if err != nil {
 			return err
 		}
-		if err := event(ctx, tx, "approval.restoration_requested", userActor(user), "", id,
+		if err := event(ctx, tx, auditkind.ApprovalRestorationRequested, userActor(user), "", id,
 			map[string]string{"agent": agent.String()}); err != nil {
 			return err
 		}

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -106,7 +107,7 @@ func (s *Service) Enroll(ctx context.Context, token string, csr []byte) (Enrolle
 			return err
 		}
 		out = Enrolled{Certificate: iss.DER, CACertificate: s.ca.Certificate(), Gateway: g.ID, Org: org, GatewayAPIURL: s.gatewayAPIURL}
-		return record(ctx, tx, gatewayActor(id), "gateway.enrolled", g.ID, map[string]string{
+		return record(ctx, tx, gatewayActor(id), auditkind.GatewayEnrolled, g.ID, map[string]string{
 			"certificate_id": id.Cert.String(), "key_thumbprint": iss.Thumbprint, "enrollment_id": t.ID.String(),
 		})
 	})
@@ -127,7 +128,7 @@ func (s *Service) auditReuse(ctx context.Context, org ids.OrgID, hash []byte) {
 			return err
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "security.gateway_enrollment_reused", Actor: systemActor, Outcome: audit.Denied, ReasonCode: "ENROLLMENT_REUSED",
+			Name: auditkind.SecurityGatewayEnrollmentReused, Actor: systemActor, Outcome: audit.Denied, ReasonCode: "ENROLLMENT_REUSED",
 			Object: &audit.Object{Type: "gateway", ID: t.GatewayID.String()}, Details: map[string]string{"enrollment_id": t.ID.String()},
 		})
 		return err
@@ -177,7 +178,7 @@ func (s *Service) Renew(ctx context.Context, id Identity, csr []byte) (Enrolled,
 			return ErrRenewal
 		}
 		out = Enrolled{Certificate: iss.DER, CACertificate: s.ca.Certificate(), Gateway: id.Gateway, Org: id.Org, GatewayAPIURL: s.gatewayAPIURL}
-		return record(ctx, tx, gatewayActor(id), "gateway.renewed", id.Gateway, map[string]string{
+		return record(ctx, tx, gatewayActor(id), auditkind.GatewayRenewed, id.Gateway, map[string]string{
 			"certificate_id": next.Cert.String(), "previous_id": old.ID.String(), "key_thumbprint": iss.Thumbprint,
 		})
 	})
@@ -228,7 +229,7 @@ func (s *Service) RegisterBrokerKey(ctx context.Context, id Identity, public []b
 			return err
 		}
 		out = k
-		return record(ctx, tx, gatewayActor(id), "gateway.broker_key_registered", id.Gateway, map[string]string{
+		return record(ctx, tx, gatewayActor(id), auditkind.GatewayBrokerKeyRegistered, id.Gateway, map[string]string{
 			"fingerprint": fp, "version": strconv.Itoa(int(k.Version)), "certificate_id": id.Cert.String(),
 		})
 	})

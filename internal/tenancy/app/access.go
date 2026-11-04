@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"log/slog"
 	"slices"
@@ -402,7 +403,7 @@ func (a *Access) CreateInvitation(ctx context.Context, email string, roles []td.
 		if err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "access.invitation_created", "invitation", out.ID.UUID(),
+		return record(ctx, tx, c, auditkind.AccessInvitationCreated, "invitation", out.ID.UUID(),
 			map[string]string{"roles": joinRoles(roles)})
 	})
 	return out, tok, err
@@ -474,7 +475,7 @@ func (a *Access) RevokeInvitation(ctx context.Context, id td.InvitationID) (Invi
 			return err
 		}
 		out = invitationView(dbq.ListInvitationsRow(r))
-		return record(ctx, tx, c, "access.invitation_revoked", "invitation", r.ID, nil)
+		return record(ctx, tx, c, auditkind.AccessInvitationRevoked, "invitation", r.ID, nil)
 	})
 	return out, err
 }

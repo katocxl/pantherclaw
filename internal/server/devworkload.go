@@ -4,6 +4,7 @@
 package server
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -108,7 +109,7 @@ func seedWorkload(ctx context.Context, tx db.TenantTx, org ids.OrgID, server str
 	kf.Identifier = pap.Instance{Org: org, Agent: a.ID, Instance: in.ID}.String()
 	kf.Server = server
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "dev.workload_seeded", Actor: devSeedActor, Outcome: audit.Success,
+		Name: auditkind.DevWorkloadSeeded, Actor: devSeedActor, Outcome: audit.Success,
 		Object:  &audit.Object{Type: "instance", ID: in.ID.String()},
 		Details: map[string]string{"agent_id": a.ID.String()},
 	})
@@ -134,7 +135,7 @@ func seedRun(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload, g
 		}
 		run = r.ID
 		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "run.started", Actor: devSeedActor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()},
+			Name: auditkind.RunStarted, Actor: devSeedActor, Outcome: audit.Success, Object: &audit.Object{Type: "run", ID: r.ID.String()},
 			Details: map[string]string{"agent_id": w.Agent.String(), "grant_id": grant.String()},
 		})
 		return err

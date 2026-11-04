@@ -4,6 +4,7 @@
 package pgtransactions
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"slices"
 	"strconv"
@@ -81,7 +82,7 @@ func saasScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, notify agents
 		return app.Applied{}, err
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
-		Name: "saas.scan_finished", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+		Name: auditkind.SaasScanFinished, Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
 		Details: map[string]string{
 			"scan": task.RunID.String(), "source": task.Source, "state": state, "not_scanned": strconv.Itoa(len(notScanned)),
 		},

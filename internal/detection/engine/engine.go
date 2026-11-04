@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -61,7 +62,7 @@ type Engine struct {
 const (
 	FailurePackIntegrity   = "detection.pack_integrity"
 	FailureOverflow        = "detection.overflow"
-	FailureRuleDisabled    = "detection.rule_disabled"
+	FailureRuleDisabled    = auditkind.DetectionRuleDisabled
 	FailureCustomIntegrity = "detection.custom_rule_integrity"
 	FailureEditionLapsed   = "detection.edition_lapsed"
 )

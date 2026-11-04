@@ -25,6 +25,7 @@
 package siem
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/x509"
 	"errors"
@@ -388,7 +389,7 @@ func (s *Service) Create(ctx context.Context, in NewDestination) (Created, error
 		} else if err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "siem.destination_created", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.SiemDestinationCreated, id, map[string]string{
 			"name": in.Name, "host": hostOf(in.URL), "internal": boolString(in.Internal), "data_classes": joinClasses(in.DataClasses),
 		}); err != nil {
 			return err
@@ -449,7 +450,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (
 		if err := q.InsertSIEMCursor(ctx, c.Org, id, head); err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "siem.destination_activated", id, map[string]string{
+		if err := s.audit(ctx, tx, c, auditkind.SiemDestinationActivated, id, map[string]string{
 			"host": hostOf(d.URL), "internal": boolString(d.Internal), "security_key": su.Credential.String(),
 		}); err != nil {
 			return err
@@ -494,7 +495,7 @@ func (s *Service) SetState(ctx context.Context, id ids.UUID, state string) (Dest
 		if n == 0 {
 			return ErrState
 		}
-		if err := s.audit(ctx, tx, c, "siem.destination_state_changed", id, map[string]string{"from": d.State, "to": state}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.SiemDestinationStateChanged, id, map[string]string{"from": d.State, "to": state}); err != nil {
 			return err
 		}
 		out, err = get(ctx, q, c.Org, id)
@@ -553,7 +554,7 @@ func (s *Service) RotateSecret(ctx context.Context, id ids.UUID) (string, error)
 		if n == 0 {
 			return ErrState
 		}
-		return s.audit(ctx, tx, c, "siem.destination_secret_rotated", id, nil)
+		return s.audit(ctx, tx, c, auditkind.SiemDestinationSecretRotated, id, nil)
 	})
 	if err != nil {
 		return "", err
@@ -586,7 +587,7 @@ func (s *Service) RetryDestination(ctx context.Context, id ids.UUID) (Destinatio
 		if n == 0 {
 			return ErrNothingWaiting
 		}
-		if err := s.audit(ctx, tx, c, "siem.destination_retried", id, map[string]string{"cursor_seq": strconv.FormatInt(d.CursorSeq, 10)}); err != nil {
+		if err := s.audit(ctx, tx, c, auditkind.SiemDestinationRetried, id, map[string]string{"cursor_seq": strconv.FormatInt(d.CursorSeq, 10)}); err != nil {
 			return err
 		}
 		out, err = get(ctx, q, c.Org, id)
