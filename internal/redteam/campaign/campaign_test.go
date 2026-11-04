@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -84,6 +85,95 @@ func TestHR608_TheLibraryCampaignsLoad(t *testing.T) {
 	}
 	if len(set) != 10 || len(seen) != len(campaign.Techniques) {
 		t.Fatalf("%d campaigns over %d techniques", len(set), len(seen))
+	}
+}
+
+// TestHR661_TheCampaignDigestCoversOnlyWhatRuns: changing a field that only
+// describes the campaign keeps the digest; changing apiVersion, task or any
+// member of a plant, an attempt or a script step changes it. Every member of
+// File, Plant, Attempt and Step is in one list or the other, so a new member
+// cannot ship without a decision.
+func TestHR661_TheCampaignDigestCoversOnlyWhatRuns(t *testing.T) {
+	base := func() *campaign.File {
+		f, err := campaign.Parse([]byte(good))
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Threats, f.ASI, f.Rules = []string{"T-262"}, []string{"ASI01"}, []string{"HR-608"}
+		f.Script[0].Body = `{"merge_method":"squash"}`
+		return f
+	}
+	leftOut := map[string]func(*campaign.File){
+		"ID":        func(f *campaign.File) { f.ID = "RT-141" },
+		"Title":     func(f *campaign.File) { f.Title = "u" },
+		"Technique": func(f *campaign.File) { f.Technique = "injected_readme" },
+		"Tier":      func(f *campaign.File) { f.Tier = "business" },
+		"Threats":   func(f *campaign.File) { f.Threats = append(f.Threats, "T-263") },
+		"ASI":       func(f *campaign.File) { f.ASI = append(f.ASI, "ASI02") },
+		"Rules":     func(f *campaign.File) { f.Rules = append(f.Rules, "HR-609") },
+		// G0 M28 D714c L2: technique tags are metadata, never the digest.
+		"ATLAS":  func(f *campaign.File) { f.ATLAS = append(f.ATLAS, "AML.T0053") },
+		"ATTACK": func(f *campaign.File) { f.ATTACK = append(f.ATTACK, "T1213") },
+		"TechniqueWhy": func(f *campaign.File) {
+			f.TechniqueWhy = map[string]string{"T1213": "Data from information repositories (T1213): why."}
+		},
+		"TechniquesNone": func(f *campaign.File) { f.TechniquesNone = "Tests PantherClaw itself." },
+	}
+	kept := map[string]func(*campaign.File){
+		"APIVersion":          func(f *campaign.File) { f.APIVersion = "pantherclaw.campaign/v2" },
+		"Task":                func(f *campaign.File) { f.Task += " today" },
+		"Plants":              func(f *campaign.File) { f.Plants = append(f.Plants, f.Plants[0]) },
+		"Plants.Path":         func(f *campaign.File) { f.Plants[0].Path = "README.md" },
+		"Plants.Content":      func(f *campaign.File) { f.Plants[0].Content += "!" },
+		"Attempts":            func(f *campaign.File) { f.Attempts = append(f.Attempts, f.Attempts[0]) },
+		"Attempts.ID":         func(f *campaign.File) { f.Attempts[0].ID = "merge-2" },
+		"Attempts.Boundary":   func(f *campaign.File) { f.Attempts[0].Boundary = "HR-202" },
+		"Attempts.Expected":   func(f *campaign.File) { f.Attempts[0].Expected = "DENIED" },
+		"Attempts.Operation":  func(f *campaign.File) { f.Attempts[0].Operation = "github.push" },
+		"Attempts.RouteHost":  func(f *campaign.File) { f.Attempts[0].RouteHost = "api.github.com" },
+		"Attempts.Credential": func(f *campaign.File) { f.Attempts[0].Credential = true },
+		"Script":              func(f *campaign.File) { f.Script = append(f.Script, f.Script[0]) },
+		"Script.Attempt":      func(f *campaign.File) { f.Script[0].Attempt = "other" },
+		"Script.Method":       func(f *campaign.File) { f.Script[0].Method = "POST" },
+		"Script.URL":          func(f *campaign.File) { f.Script[0].URL += "?x=1" },
+		"Script.Body":         func(f *campaign.File) { f.Script[0].Body = `{"merge_method":"merge"}` },
+		"Script.Headers":      func(f *campaign.File) { f.Script[0].Headers["Accept"] = "application/json" },
+	}
+	members := func(prefix string, typ reflect.Type) []string {
+		var out []string
+		for f := range typ.Fields() {
+			out = append(out, prefix+f.Name)
+		}
+		return out
+	}
+	all := members("", reflect.TypeFor[campaign.File]())
+	all = append(all, members("Plants.", reflect.TypeFor[campaign.Plant]())...)
+	all = append(all, members("Attempts.", reflect.TypeOf(campaign.File{}.Attempts).Elem())...)
+	all = append(all, members("Script.", reflect.TypeFor[campaign.Step]())...)
+	for _, m := range all {
+		_, out := leftOut[m]
+		_, in := kept[m]
+		if out == in {
+			t.Errorf("%s: in neither or both lists; decide whether it runs (ADR-0051)", m)
+		}
+	}
+	want, err := campaign.Digest(base())
+	if err != nil || len(want) != 64 {
+		t.Fatalf("digest %q: %v", want, err)
+	}
+	for name, edit := range leftOut {
+		f := base()
+		edit(f)
+		if got, _ := campaign.Digest(f); got != want {
+			t.Errorf("%s only describes the campaign but changed the digest", name)
+		}
+	}
+	for name, edit := range kept {
+		f := base()
+		edit(f)
+		if got, _ := campaign.Digest(f); got == want {
+			t.Errorf("%s runs but kept the digest", name)
+		}
 	}
 }
 

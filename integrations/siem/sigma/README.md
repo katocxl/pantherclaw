@@ -16,7 +16,7 @@ Sigma doesn't ingest anything. The rules expect each OCSF event stored as its ow
 
 PantherClaw posts batches: `{"type":"pantherclaw.ocsf.batch","data":{…,"events":[…]}}`. Splitting `data.events` into those records is the job of your SIEM's ingest. The Splunk and Elastic packs show one way, and the Sentinel and Wazuh packs say where their SIEMs can't. If your pipeline nests the event under a prefix, map the fields in your Sigma processing pipeline.
 
-**The webhook signature is not verified** by any converted rule, and Sigma never sees it. A verifying forwarder that ships with PantherClaw is a later piece.
+**The webhook signature is not verified** by any converted rule, and Sigma never sees it. `pclaw siem forward` verifies it before it writes the events to a file ([runbook](../../../docs/runbooks/siem-forwarder.md)).
 
 ## What was not checked
 

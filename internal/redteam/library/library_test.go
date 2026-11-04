@@ -17,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/detection/rules"
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
 	"github.com/katocxl/pantherclaw/internal/redteam/campaign"
+	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
 	"github.com/katocxl/pantherclaw/internal/redteam/library"
 )
 
@@ -93,6 +94,57 @@ func TestD304_TagsAreKnownRisks(t *testing.T) {
 }
 
 const campaignDir = "../../../redteam/campaigns"
+
+// TestT283_ARetaggedFileKeepsTheLibraryDigestAndAnEditedOneLosesIt: a
+// shipped scenario or campaign with other tags or wording still matches the
+// library's digest, so earlier results stay mapped; one that runs something
+// else no longer does, so the server refuses it as not the library's
+// (HR-467, HR-608, ADR-0051).
+func TestT283_ARetaggedFileKeepsTheLibraryDigestAndAnEditedOneLosesIt(t *testing.T) {
+	set, err := app.LoadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range set {
+		e, ok := library.Lookup(l.Scenario.ID)
+		if !ok || e.Digest != l.Digest {
+			t.Fatalf("%s: not the library's digest: run task range:library", l.Scenario.ID)
+		}
+		s := l.Scenario
+		s.Title, s.Threats, s.Rules, s.ASI, s.ASIWhy = s.Title+" (reworded)", append(slices.Clone(s.Threats), "T-283"), nil, []string{"ASI10"}, nil
+		if d, _ := rtdomain.Digest(&s); d != e.Digest {
+			t.Errorf("%s: a retagged scenario lost the library's digest", s.ID)
+		}
+		s.Steps = slices.Clone(s.Steps)
+		s.Steps[len(s.Steps)-1].ID += "x"
+		if d, _ := rtdomain.Digest(&s); d == e.Digest {
+			t.Errorf("%s: an edited step kept the library's digest", s.ID)
+		}
+	}
+	campaigns, err := campaign.LoadDir(campaignDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range campaigns {
+		e, ok := library.Campaign(l.File.ID)
+		if !ok || e.Digest != l.Digest {
+			t.Fatalf("%s: not the library's digest: run task range:library", l.File.ID)
+		}
+		f := l.File
+		f.Title, f.Technique, f.Threats, f.ASI, f.Rules = f.Title+" (reworded)", "fake_approver", nil, []string{"ASI10"}, nil
+		if d, _ := campaign.Digest(&f); d != e.Digest {
+			t.Errorf("%s: a retagged campaign lost the library's digest", f.ID)
+		}
+		f.Attempts = slices.Clone(f.Attempts)
+		f.Attempts[0].Boundary = "HR-001"
+		if d, _ := campaign.Digest(&f); d == e.Digest {
+			t.Errorf("%s: an edited attempt kept the library's digest", f.ID)
+		}
+	}
+	if len(set) < 30 || len(campaigns) != 10 {
+		t.Fatalf("%d scenarios and %d campaigns", len(set), len(campaigns))
+	}
+}
 
 // TestLibrary_MatchesTheShippedCampaigns: the embedded campaigns are exactly
 // the id, digest, tier and attempts of every shipped campaign file (G0 M25
