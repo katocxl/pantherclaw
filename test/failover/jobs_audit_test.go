@@ -123,6 +123,8 @@ var twoWorkerAudit = map[string]string{
 	"signals.janitor_org":                        "unique",
 	"suggestions.generate":                       "unique",
 	"support.breakglass_sweep":                   "lock: UPDATE where ended_at IS NULL RETURNING",
+	"threatmap.snapshot":                         "fan-out",
+	"threatmap.snapshot_org":                     "unique; the day's snapshot row upserts per org, scope and framework",
 	"transactions.target_logs_dispatch":          "fan-out",
 	"transactions.target_logs_org":               "unique",
 	"transactions.verifications_expire_dispatch": "fan-out",
