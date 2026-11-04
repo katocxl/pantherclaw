@@ -15,8 +15,8 @@
 #
 # The agent reaches nothing but the edge on 127.0.0.1:3128 and trusts the
 # edge's per-session CA from /pc-edge/ca.crt. The namespace's NetworkPolicy
-# lets the pod reach only the gateway, with no DNS, so the gateway's
-# hostname is pinned with hostAliases to gateway.service.clusterIP.
+# lets the pod reach only the gateway and the API, with no DNS, so both
+# hostnames are pinned with hostAliases to their fixed Service addresses.
 apiVersion: v1
 kind: Pod
 metadata:
@@ -36,6 +36,9 @@ spec:
   hostAliases:
     - ip: "10.96.200.10"  # REPLACE: gateway.service.clusterIP
       hostnames: ["pantherclaw-gateway.pantherclaw.internal"]  # gateway.hostname
+    # The edge enrolls, renews its token and starts the pod's run at the API.
+    - ip: "10.96.200.11"  # REPLACE: api.service.clusterIP
+      hostnames: ["pantherclaw-api.pantherclaw.internal"]  # api.service.agentHostname
   initContainers:
     - name: pantherclaw-edge
       image: ghcr.io/katocxl/pantherclaw-edge@sha256:REPLACE  # an admission.edgeImageDigests entry

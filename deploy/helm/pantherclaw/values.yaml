@@ -39,6 +39,12 @@ api:
   service:
     type: ClusterIP
     port: 8080
+    # A fixed address in the cluster's Service range: the edges of agent
+    # pods reach the API there through hostAliases, with no DNS. Required
+    # when agentNamespaces is set (G0 M32 D965a).
+    clusterIP: ""
+    # The hostname the edges call; api.tls's certificate must name it.
+    agentHostname: pantherclaw-api.pantherclaw.internal
   # TLS on the API listener from a kubernetes.io/tls Secret. Without it the
   # listener is plain HTTP for a TLS-terminating ingress or mesh
   # (http.plaintext_behind_proxy); name the proxies' addresses below.
@@ -161,6 +167,9 @@ agentNamespaces: []
 #   org: 00000000-0000-0000-0000-000000000000
 #   # NetworkPolicy ingress peers; empty: no ingress.
 #   ingressFrom: []
+#   # For a server outside this cluster: the CIDRs its API is at. The API
+#   # egress rule then names them instead of the api pods (D965a).
+#   apiEgressCIDRs: []
 #   # The edge's hosts map (agent host -> connection), rendered into the
 #   # namespace's pantherclaw-edge ConfigMap (D966).
 #   hosts: {api.github.com: github}
@@ -174,6 +183,15 @@ probe:
   edgeImage:
     repository: ghcr.io/katocxl/pantherclaw-edge
     digest: ""
+  # The canary in the release namespace (G0 M32 D970a): the probe expects
+  # it not to answer from an agent pod. It listens on TCP 8080.
+  canary:
+    # A fixed address in the Service range (the probe's PC_CANARY_IP).
+    clusterIP: ""
+    image:
+      repository: ""
+      digest: ""
+    args: []
 
 database:
   host: postgres.example.internal

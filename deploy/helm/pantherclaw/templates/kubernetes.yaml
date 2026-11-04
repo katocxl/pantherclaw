@@ -51,6 +51,11 @@ data:
 {{- fail "agentNamespaces needs gateway.enabled (G0 M32 D965)" }}
 {{- end }}
 {{- $clusterIP := required "gateway.service.clusterIP is required when agentNamespaces is set (G0 M32 D965)" $v.gateway.service.clusterIP }}
+{{- $_ := required "api.service.clusterIP is required when agentNamespaces is set (G0 M32 D965a)" $v.api.service.clusterIP }}
+{{- $_ := required "probe.canary.clusterIP is required when agentNamespaces is set (G0 M32 D970a)" $v.probe.canary.clusterIP }}
+{{- if not $v.api.tls.existingSecret }}
+{{- fail "agentNamespaces needs api.tls.existingSecret: the edges call the API over TLS at api.service.agentHostname (G0 M32 D965a)" }}
+{{- end }}
 {{- $clusterName := required "admission.cluster is required when agentNamespaces is set" $v.admission.cluster }}
 {{- $cluster := dict }}
 {{- range $v.identity.kubernetesClusters }}
@@ -97,6 +102,29 @@ spec:
       ports:
         - port: {{ $v.gateway.port }}
           protocol: TCP
+    # The edge enrolls, renews and starts runs at the API (D965a): the api
+    # pods, or a server outside the cluster by its CIDRs.
+    {{- if $ns.apiEgressCIDRs }}
+    - to:
+        {{- range $ns.apiEgressCIDRs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - port: {{ $v.api.service.port }}
+          protocol: TCP
+    {{- else }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: api
+      ports:
+        - port: 8080
+          protocol: TCP
+    {{- end }}
 ---
 # The reviewer reads this namespace's pods and NetworkPolicies (D969).
 apiVersion: rbac.authorization.k8s.io/v1
@@ -141,11 +169,7 @@ metadata:
     {{- include "pantherclaw.labels" $ | nindent 4 }}
 data:
   edge.json: |
-    {{- $edge := dict "format" "pantherclaw.edge/v1" "mode" "kubernetes" "listen" "127.0.0.1:3128"
-          "gateway_url" (include "pantherclaw.agentGatewayURL" $) "hosts" (required "agentNamespaces[].hosts is required" $ns.hosts)
-          "kube_token_file" "/var/run/pantherclaw/edge/token" "api_url" $v.publicURL "ca_dir" "/pc-edge" }}
-    {{- with $v.gateway.tlsCAPin }}{{- $_ := set $edge "gateway_ca_pin" . }}{{- end }}
-    {{- toPrettyJson $edge | nindent 4 }}
+    {{- include "pantherclaw.edgeConfig" (dict "root" $ "hosts" (required "agentNamespaces[].hosts is required" $ns.hosts)) | nindent 4 }}
 ---
 # The probe's service account: it holds no token of its own; the edge
 # mounts a projected one (D970).
@@ -160,48 +184,97 @@ automountServiceAccountToken: false
 ---
 # The daily containment probe (D969, D970): an agent pod whose app
 # container is the probe.
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: pantherclaw-probe
-  namespace: {{ $ns.name }}
-  labels:
-    {{- include "pantherclaw.labels" $ | nindent 4 }}
-spec:
-  schedule: {{ $v.probe.schedule | quote }}
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 1
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    spec:
-      backoffLimit: 0
-      activeDeadlineSeconds: 900
-      template:
-        metadata:
-          labels:
-            app.kubernetes.io/name: pantherclaw-probe
-            app.kubernetes.io/instance: {{ $.Release.Name }}
-        spec:
-          {{- include "pantherclaw.agentPodSpec" (dict "root" $ "clusterIP" $clusterIP "serviceAccount" "pantherclaw-probe" "org" $org) | nindent 10 }}
-          restartPolicy: Never
-          containers:
-            - name: probe
-              image: {{ include "pantherclaw.probeImage" $ }}
-              imagePullPolicy: IfNotPresent
-              args: ["--profile", "kubernetes"]
-              env:
-                {{- include "pantherclaw.agentEnv" $ | nindent 16 }}
-                - name: PC_HOST_IP
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: status.hostIP
-              securityContext:
-                {{- toYaml $v.securityContext | nindent 16 }}
-              volumeMounts:
-                - name: pc-edge
-                  mountPath: /pc-edge
-                  readOnly: true
+{{- include "pantherclaw.probeCronJob" (dict "root" $ "name" "pantherclaw-probe" "namespace" $ns.name "clusterIP" $clusterIP
+      "serviceAccount" "pantherclaw-probe" "org" $org "args" (list "--profile" "kubernetes")) }}
 {{- end }}
+{{- $first := first $v.agentNamespaces }}
+---
+# The control twin (D970, D970a) runs in the release namespace, which is
+# not protected: the same pod shape, with its own service account and
+# issuer entry. Its edge configuration is the first agent namespace's.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pantherclaw-edge
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+data:
+  edge.json: |
+    {{- include "pantherclaw.edgeConfig" (dict "root" $ "hosts" $first.hosts) | nindent 4 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pantherclaw-probe-control
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+{{- include "pantherclaw.probeCronJob" (dict "root" $ "name" "pantherclaw-probe-control" "namespace" .Release.Namespace "clusterIP" $clusterIP
+      "serviceAccount" "pantherclaw-probe-control" "org" $first.org "args" (list "--profile" "kubernetes" "--kind" "control")) }}
+---
+# The canary (D970a): what the probe must not reach from an agent pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pantherclaw-canary
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pantherclaw.selector" (dict "root" . "component" "canary") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pantherclaw.labels" . | nindent 8 }}
+        app.kubernetes.io/component: canary
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml $v.podSecurityContext | nindent 8 }}
+      containers:
+        - name: canary
+          image: {{ printf "%s@%s" (required "probe.canary.image.repository is required when agentNamespaces is set" $v.probe.canary.image.repository) (required "probe.canary.image.digest is required when agentNamespaces is set" $v.probe.canary.image.digest) }}
+          imagePullPolicy: IfNotPresent
+          {{- with $v.probe.canary.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: canary
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            {{- toYaml $v.securityContext | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pantherclaw-canary
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canary
+spec:
+  type: ClusterIP
+  clusterIP: {{ $v.probe.canary.clusterIP }}
+  selector:
+    {{- include "pantherclaw.selector" (dict "root" . "component" "canary") | nindent 4 }}
+  ports:
+    - name: canary
+      port: 8080
+      targetPort: canary
+      protocol: TCP
 {{- range $org := $orgs }}
 ---
 # Admission for the org's protected namespaces (D967, D969): fails closed.

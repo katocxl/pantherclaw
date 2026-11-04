@@ -153,6 +153,81 @@ and the webhook path hold the same value.
 {{- printf "%s@%s" .Values.probe.image.repository (required "probe.image.digest or admission.probeImageDigests is required" $d) -}}
 {{- end -}}
 
+{{/* G0 M32 D965a: the API URL the edges of agent pods call. */}}
+{{- define "pantherclaw.agentAPIURL" -}}
+{{- printf "https://%s:%d" .Values.api.service.agentHostname (int .Values.api.service.port) -}}
+{{- end -}}
+
+{{/*
+G0 M32 D966, D970a: the edge configuration of a namespace (dict "root" $
+"hosts" MAP), pantherclaw.edge/v1 in kubernetes mode.
+*/}}
+{{- define "pantherclaw.edgeConfig" -}}
+{{- $v := .root.Values -}}
+{{- $edge := dict "format" "pantherclaw.edge/v1" "mode" "kubernetes" "listen" "127.0.0.1:3128"
+      "gateway_url" (include "pantherclaw.agentGatewayURL" .root) "hosts" .hosts
+      "kube_token_file" "/var/run/pantherclaw/edge/token" "api_url" (include "pantherclaw.agentAPIURL" .root) "ca_dir" "/pc-edge" -}}
+{{- with $v.gateway.tlsCAPin }}{{- $_ := set $edge "gateway_ca_pin" . }}{{- end -}}
+{{- toPrettyJson $edge -}}
+{{- end -}}
+
+{{/*
+G0 M32 D969, D970, D970a: a daily probe CronJob (dict "root" $ "name" NAME
+"namespace" NS "clusterIP" GATEWAY_IP "serviceAccount" SA "org" ORG "args" LIST):
+an agent pod whose app container is the probe.
+*/}}
+{{- define "pantherclaw.probeCronJob" -}}
+{{- $v := .root.Values }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+  labels:
+    {{- include "pantherclaw.labels" .root | nindent 4 }}
+spec:
+  schedule: {{ $v.probe.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ .name }}
+            app.kubernetes.io/instance: {{ .root.Release.Name }}
+        spec:
+          {{- include "pantherclaw.agentPodSpec" (dict "root" .root "clusterIP" .clusterIP "serviceAccount" .serviceAccount "org" .org) | nindent 10 }}
+          restartPolicy: Never
+          containers:
+            - name: probe
+              image: {{ include "pantherclaw.probeImage" .root }}
+              imagePullPolicy: IfNotPresent
+              args: {{ toJson .args }}
+              env:
+                {{- include "pantherclaw.agentEnv" .root | nindent 16 }}
+                {{- include "pantherclaw.probeEnv" .root | nindent 16 }}
+              securityContext:
+                {{- toYaml $v.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: pc-edge
+                  mountPath: /pc-edge
+                  readOnly: true
+{{- end -}}
+
+{{/* G0 M32 D970a: the probe's environment. */}}
+{{- define "pantherclaw.probeEnv" -}}
+- name: PC_HOST_IP
+  valueFrom:
+    fieldRef:
+      fieldPath: status.hostIP
+- name: PC_CANARY_IP
+  value: {{ .Values.probe.canary.clusterIP | quote }}
+{{- end -}}
+
 {{/* G0 M32 D966, D969: the gateway URL agent pods call. */}}
 {{- define "pantherclaw.agentGatewayURL" -}}
 {{- printf "https://%s:%d" .Values.gateway.hostname (int .Values.gateway.port) -}}
@@ -180,6 +255,8 @@ securityContext:
 hostAliases:
   - ip: {{ .clusterIP | quote }}
     hostnames: [{{ $v.gateway.hostname | quote }}]
+  - ip: {{ $v.api.service.clusterIP | quote }}
+    hostnames: [{{ $v.api.service.agentHostname | quote }}]
 initContainers:
   - name: pantherclaw-edge
     image: {{ include "pantherclaw.edgeImage" .root }}

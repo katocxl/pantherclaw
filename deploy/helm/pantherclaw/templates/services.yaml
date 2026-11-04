@@ -20,6 +20,9 @@ metadata:
     app.kubernetes.io/component: api
 spec:
   type: {{ .Values.api.service.type }}
+  {{- with .Values.api.service.clusterIP }}
+  clusterIP: {{ . }}
+  {{- end }}
   selector:
     {{- include "pantherclaw.selector" (dict "root" . "component" "api") | nindent 4 }}
   ports:
