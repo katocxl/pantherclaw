@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/detection/engine"
 	"github.com/katocxl/pantherclaw/internal/detection/pack"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -332,7 +333,7 @@ func (f *fx) laneLostAlerts() int {
 }
 
 func (f *fx) laneLostEvents() int {
-	return f.count("SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.threatmap.lane_lost'", f.org)
+	return f.count("SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit."+auditkind.ThreatmapLaneLost+"'", f.org)
 }
 
 // TestHR687_TurningARuleOffRaisesOneAlertPerDroppedLane: a live built-in

@@ -16,6 +16,7 @@ import (
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -36,10 +37,6 @@ const (
 
 // SnapshotActor is the system actor of the snapshot's audit events.
 var SnapshotActor = evdomain.Actor{Type: "system", ID: "threatmap-snapshot"}
-
-// LaneLost is the audit event of a dropped lane (D719); its ledger kind is
-// audit.threatmap.lane_lost, which pc.threatmap.lane_lost reads.
-const LaneLost = "threatmap.lane_lost"
 
 // Snapshotter takes an org's daily threat map snapshots (D719).
 type Snapshotter struct {
@@ -136,7 +133,7 @@ func (s *Snapshotter) snapshot(ctx context.Context, tx db.TenantTx, org ids.OrgI
 	for _, d := range drops {
 		t, _ := m.Technique(d.TechniqueID)
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: LaneLost, Actor: SnapshotActor, Outcome: audit.Success,
+			Name: auditkind.ThreatmapLaneLost, Actor: SnapshotActor, Outcome: audit.Success,
 			// One lane of one technique on one day: the rule groups by it, so
 			// a day's drop raises one alert (D719a).
 			Object: &audit.Object{Type: "threat_lane", ID: strings.Join([]string{string(f), sc.Key(), d.TechniqueID, string(d.Lane), day}, ":")},

@@ -26,6 +26,7 @@ import (
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/detection/engine"
 	dpack "github.com/katocxl/pantherclaw/internal/detection/pack"
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
@@ -184,7 +185,7 @@ func TestE2E_M28_ThreatMap(t *testing.T) {
 		x.GetCell().GetStatus() == pb.ThreatStatus_THREAT_STATUS_EVIDENCED {
 		t.Fatalf("X with its rule off: %v", x)
 	}
-	const lost = `SELECT count(*)::text FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.threatmap.lane_lost'`
+	const lost = `SELECT count(*)::text FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.` + auditkind.ThreatmapLaneLost + `'`
 	const lostX = lost + ` AND convert_from(body, 'UTF8') LIKE '%` + m28X + `%' AND convert_from(body, 'UTF8') LIKE '%DETECT%'`
 	const raised = `SELECT count(*)::text FROM pc.alerts WHERE org_id = $1 AND rule_id = '` + m28LaneHit + `'`
 	before := count(lost, s.org.String())
