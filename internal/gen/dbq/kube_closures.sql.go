@@ -15,6 +15,43 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const consumeKubeClosureNonce = `-- name: ConsumeKubeClosureNonce :one
+UPDATE pc.kube_closure_nonces SET used_at = now()
+WHERE org_id = $1 AND nonce = $2 AND used_at IS NULL AND expires_at > now()
+  AND instance_id = $3 AND namespace = $4
+RETURNING org_id, nonce, cluster, namespace, instance_id, issued_at, used_at, expires_at
+`
+
+type ConsumeKubeClosureNonceParams struct {
+	OrgID      ids.OrgID
+	Nonce      []byte
+	InstanceID ids.UUID
+	Namespace  string
+}
+
+// Consumes a nonce: the row comes back only when it was unused, is
+// unexpired, and names the same instance and namespace.
+func (q *Queries) ConsumeKubeClosureNonce(ctx context.Context, arg ConsumeKubeClosureNonceParams) (PcKubeClosureNonce, error) {
+	row := q.db.QueryRow(ctx, consumeKubeClosureNonce,
+		arg.OrgID,
+		arg.Nonce,
+		arg.InstanceID,
+		arg.Namespace,
+	)
+	var i PcKubeClosureNonce
+	err := row.Scan(
+		&i.OrgID,
+		&i.Nonce,
+		&i.Cluster,
+		&i.Namespace,
+		&i.InstanceID,
+		&i.IssuedAt,
+		&i.UsedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getKubeClosure = `-- name: GetKubeClosure :one
 SELECT org_id, id, cluster, namespace, instance_id, kind, report_digest, result, evaluated_at, expires_at FROM pc.kube_closures WHERE org_id = $1 AND id = $2
 `
@@ -88,6 +125,45 @@ func (q *Queries) InsertKubeClosure(ctx context.Context, arg InsertKubeClosurePa
 		&i.ReportDigest,
 		&i.Result,
 		&i.EvaluatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const issueKubeClosureNonce = `-- name: IssueKubeClosureNonce :one
+INSERT INTO pc.kube_closure_nonces (org_id, nonce, cluster, namespace, instance_id, issued_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, now(),
+    now() + interval '15 minutes')
+RETURNING org_id, nonce, cluster, namespace, instance_id, issued_at, used_at, expires_at
+`
+
+type IssueKubeClosureNonceParams struct {
+	OrgID      ids.OrgID
+	Nonce      []byte
+	Cluster    string
+	Namespace  string
+	InstanceID ids.UUID
+}
+
+// A single-use closure nonce for one instance and namespace, valid 15
+// minutes (migration 00365).
+func (q *Queries) IssueKubeClosureNonce(ctx context.Context, arg IssueKubeClosureNonceParams) (PcKubeClosureNonce, error) {
+	row := q.db.QueryRow(ctx, issueKubeClosureNonce,
+		arg.OrgID,
+		arg.Nonce,
+		arg.Cluster,
+		arg.Namespace,
+		arg.InstanceID,
+	)
+	var i PcKubeClosureNonce
+	err := row.Scan(
+		&i.OrgID,
+		&i.Nonce,
+		&i.Cluster,
+		&i.Namespace,
+		&i.InstanceID,
+		&i.IssuedAt,
+		&i.UsedAt,
 		&i.ExpiresAt,
 	)
 	return i, err

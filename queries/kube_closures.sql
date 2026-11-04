@@ -23,3 +23,19 @@ WHERE org_id = sqlc.arg(org_id) AND cluster = sqlc.arg(cluster) AND namespace = 
   AND kind = sqlc.arg(kind) AND expires_at > now()
 ORDER BY evaluated_at DESC
 LIMIT 1;
+
+-- A single-use closure nonce for one instance and namespace, valid 15
+-- minutes (migration 00365).
+-- name: IssueKubeClosureNonce :one
+INSERT INTO pc.kube_closure_nonces (org_id, nonce, cluster, namespace, instance_id, issued_at, expires_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(nonce), sqlc.arg(cluster), sqlc.arg(namespace), sqlc.arg(instance_id), now(),
+    now() + interval '15 minutes')
+RETURNING *;
+
+-- Consumes a nonce: the row comes back only when it was unused, is
+-- unexpired, and names the same instance and namespace.
+-- name: ConsumeKubeClosureNonce :one
+UPDATE pc.kube_closure_nonces SET used_at = now()
+WHERE org_id = sqlc.arg(org_id) AND nonce = sqlc.arg(nonce) AND used_at IS NULL AND expires_at > now()
+  AND instance_id = sqlc.arg(instance_id) AND namespace = sqlc.arg(namespace)
+RETURNING *;
