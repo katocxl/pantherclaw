@@ -28,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
+	"github.com/katocxl/pantherclaw/internal/threatmap/mapping"
 )
 
 // Bounds of one org's rollup.
@@ -496,7 +497,10 @@ func signal(org ids.OrgID, origin bdomain.Origin, d found) reflexdomain.Signal {
 	if len(value) > reflexdomain.MaxFactValue {
 		value = value[:reflexdomain.MaxFactValue]
 	}
+	// The kind's techniques label the alert (G0 M28 D718).
+	m := mapping.Kinds["behavior."+string(d.Kind)]
 	return reflexdomain.Signal{
+		ATLAS: slices.Clone(m.ATLAS), ATTACK: slices.Clone(m.ATTACK),
 		Org: org, Source: reflexdomain.SourceBehavior, RuleID: rule, RuleVersion: bdomain.Method,
 		RuleDigest: "sha256:" + hex.EncodeToString(digest[:]),
 		Title:      title(origin, d.Kind), Summary: d.Text + ". " + bdomain.Label,

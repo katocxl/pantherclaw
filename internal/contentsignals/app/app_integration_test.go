@@ -30,6 +30,7 @@ import (
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+	"github.com/katocxl/pantherclaw/internal/threatmap/mapping"
 )
 
 type requests struct {
@@ -361,6 +362,11 @@ func TestHR648_AResultFlagLandsOnTheTreeAndCountsInWatching(t *testing.T) {
 	}
 	if len(a.got) != 1 || a.got[0].Basis != reflexdomain.BasisInferred || !strings.Contains(a.got[0].Title, "inference") {
 		t.Fatalf("alerts %+v", a.got)
+	}
+	// The kind's techniques label the alert (G0 M28 D718, HR-684, F964).
+	if m := mapping.Kinds["content."+domain.KindInjectionPhrase]; len(m.ATLAS) == 0 ||
+		!slices.Equal(a.got[0].ATLAS, m.ATLAS) || !slices.Equal(a.got[0].ATTACK, m.ATTACK) {
+		t.Fatalf("alert techniques %v %v", a.got[0].ATLAS, a.got[0].ATTACK)
 	}
 	if len(f.got) != 2 || f.got[0].DedupeKey != f.got[1].DedupeKey {
 		t.Fatalf("failures %+v", f.got)
