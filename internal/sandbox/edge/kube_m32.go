@@ -50,6 +50,21 @@ const NamespaceEnv = "PC_NAMESPACE"
 // caFile is the session CA certificate's name in the shared CA directory.
 const caFile = "ca.crt"
 
+// The pod CA lives as long as the pod may (its key only in memory): 30 days
+// by default, at most 90 (G0 M32 D966).
+const (
+	kubeCAValidityDefault = 30 * 24 * time.Hour
+	kubeCAValidityMax     = 90 * 24 * time.Hour
+)
+
+// kubeCAValidity is the configured CA validity, or the default.
+func kubeCAValidity(c Config) time.Duration {
+	if c.CAValiditySeconds == 0 {
+		return kubeCAValidityDefault
+	}
+	return time.Duration(c.CAValiditySeconds) * time.Second
+}
+
 // Run-start backoff after a refusal or failure (D973: serve nothing
 // meanwhile).
 const (
@@ -68,6 +83,8 @@ func checkKubernetesConfig(c Config) error {
 		return errors.New("edge: a kubernetes edge needs gateway_url, hosts, kube_token_file, api_url and ca_dir")
 	case !filepath.IsAbs(c.CADir) && !strings.HasPrefix(c.CADir, "/"):
 		return errors.New("edge: ca_dir must be an absolute path")
+	case c.CAValiditySeconds < 0 || time.Duration(c.CAValiditySeconds)*time.Second > kubeCAValidityMax:
+		return errors.New("edge: a kubernetes edge's ca_validity_seconds is at most 90 days")
 	}
 	if _, err := loopbackAddr(c.Listen); err != nil {
 		return err
@@ -433,7 +450,7 @@ func runKubernetes(ctx context.Context, c Config, out io.Writer, log *slog.Logge
 	e, err := New(Options{
 		GatewayURL: c.GatewayURL, GatewayAddr: c.GatewayAddr, GatewayCAPin: c.GatewayCAPin, Hosts: c.Hosts,
 		RunSource: runs.Current, RunEnded: runs.Ended, Key: w.key, Token: w.Token,
-		CAValidity: time.Duration(c.CAValiditySeconds) * time.Second, Log: log,
+		CAValidity: kubeCAValidity(c), Log: log,
 	})
 	if err != nil {
 		return err

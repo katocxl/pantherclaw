@@ -123,7 +123,6 @@ spec:
             sizeLimit: 1Mi
         - name: token
           projected:
-            defaultMode: 0440
             sources:
               - serviceAccountToken:
                   path: token

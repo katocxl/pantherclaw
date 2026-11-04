@@ -10,6 +10,8 @@ Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 {{- range .Values.oidc.providers }}
 {{- $keys = append $keys (dict "volume" (printf "oidc-%s" .name) "key" "client-secret" "as" (printf "oidc-%s" .name)) }}
 {{- end }}
+{{- /* G0 M32 D969b: the webhook secrets and the admission certificate, staged. */}}
+{{- $keys = concat $keys (include "pantherclaw.kubeStagedKeys" . | fromJsonArray) }}
 {{- $scheme := ternary "HTTPS" "HTTP" (ne .Values.api.tls.existingSecret "") }}
 apiVersion: apps/v1
 kind: Deployment
@@ -30,6 +32,9 @@ spec:
         app.kubernetes.io/component: api
       annotations:
         checksum/config: {{ include "pantherclaw.serverConfig" (dict "root" . "role" "api") | sha256sum }}
+        {{- if .Values.identity.kubernetesClusters }}
+        checksum/admission-webhook: {{ include "pantherclaw.webhookChecksum" . }}
+        {{- end }}
     spec:
       serviceAccountName: {{ include "pantherclaw.fullname" . }}
       automountServiceAccountToken: false

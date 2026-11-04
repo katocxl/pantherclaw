@@ -127,6 +127,8 @@ gateway:
   # The edge pins the CA of the agent-facing certificate ("sha256:<hex>");
   # empty: the edge image's system roots.
   tlsCAPin: ""
+  # At most 3600: the server accepts a projected token of at most an hour,
+  # once (G0 M32 D968a).
   tokenExpirationSeconds: 3600
   resources:
     requests: {cpu: 100m, memory: 128Mi}
@@ -152,10 +154,11 @@ admission:
   edgeImageDigests: []
   probeImageDigests: []
   # The webhook secret in the webhook path is generated into a Secret the
-  # chart owns (kept on uninstall) and reused on upgrade. A GitOps re-render
-  # (helm template) generates a new one: pods in protected namespaces may
-  # then be denied for up to about 2 minutes until the Secret syncs to the
-  # server (failing closed, FQ32-1).
+  # chart owns (kept on uninstall) and reused on upgrade; the API stages it
+  # (0400) at start. A GitOps re-render (helm template) generates a new one
+  # and rolls the API pods (checksum/admission-webhook): until the new pods
+  # are ready, pods in protected namespaces may be denied (failing closed,
+  # FQ32-1).
 
 # Agent namespaces (G0 M32 D965, D969). For each one the chart renders the
 # agent NetworkPolicy (egress only to the gateway, no DNS), the reviewer's

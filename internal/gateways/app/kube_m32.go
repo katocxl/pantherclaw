@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"regexp"
@@ -239,6 +240,23 @@ func peekKubeToken(token string) (ids.OrgID, string, string, error) {
 	return org, c.Kube.Namespace, c.Kube.ServiceAccount.Name, nil
 }
 
+// kubeReplayIssuer prefixes the cluster in pc.auth_replay's issuer for a
+// gateway's projected tokens (D968a).
+const kubeReplayIssuer = "kubernetes-gateway:"
+
+// kubeWindow reads the validity window and jti of a projected token.
+func kubeWindow(token string) (issuers.Window, error) {
+	parts := strings.Split(token, ".")
+	if len(token) > maxKubeToken || len(parts) != 3 {
+		return issuers.Window{}, errors.New("not a compact JWS")
+	}
+	payload, err := base64.RawURLEncoding.Strict().DecodeString(parts[1])
+	if err != nil {
+		return issuers.Window{}, err
+	}
+	return issuers.ParseWindow(payload)
+}
+
 // kubeCandidate is the one gateway a token may enroll.
 type kubeCandidate struct {
 	cluster string
@@ -274,6 +292,14 @@ func (s *Service) EnrollKubernetes(ctx context.Context, token string, csr []byte
 	if err != nil {
 		return Enrolled{}, err
 	}
+	// TokenReview authenticated this exact token, so its times and jti are
+	// the cluster's; it lives at most an hour and is used once (D968a, as
+	// HR-143 for workloads).
+	w, err := kubeWindow(token)
+	if err != nil || w.Check(s.clk.Now()) != nil {
+		return Enrolled{}, ErrEnrollment
+	}
+	replay := issuers.ReplayKey(w.JTI, token)
 	var out Enrolled
 	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -293,6 +319,14 @@ func (s *Service) EnrollKubernetes(ctx context.Context, token string, csr []byte
 		if hosted, err := q.IsHostedGateway(ctx, org, g.ID); err != nil {
 			return err
 		} else if hosted {
+			return ErrEnrollment
+		}
+		// D968a: single use; a reused token enrolls nothing.
+		if n, err := q.InsertAuthReplay(ctx, dbq.InsertAuthReplayParams{
+			OrgID: org, Issuer: kubeReplayIssuer + cand.cluster, Jti: hex.EncodeToString(replay[:]), ExpiresAt: w.ExpiresAt,
+		}); err != nil {
+			return err
+		} else if n != 1 {
 			return ErrEnrollment
 		}
 		id := Identity{Org: org, Gateway: g.ID, Cert: ids.NewV7()}

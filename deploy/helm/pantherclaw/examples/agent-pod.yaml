@@ -96,7 +96,6 @@ spec:
         name: pantherclaw-edge
     - name: edge-token
       projected:
-        defaultMode: 0440
         sources:
           - serviceAccountToken:
               path: token

@@ -88,14 +88,15 @@ stage-secrets init container (G0 M13 D42).
       "ca_file" (printf "%s/ca.crt" (include "pantherclaw.kubeDir" .)) "token_file" (printf "%s/token" (include "pantherclaw.kubeDir" .))
       "allowed_prefixes" (required "identity.kubernetesClusters[].allowedPrefixes is required" .allowedPrefixes)
       "orgs" (required "identity.kubernetesClusters[].orgs is required" .orgs)
-      "webhook_secret_file" (printf "%s/%s" (include "pantherclaw.webhookDir" .) .name)) -}}
+      ) -}}
+{{- if eq $role "api" -}}{{- $_ := set (last $clusters) "webhook_secret_file" (printf "%s/webhook-%s" $s .name) -}}{{- end -}}
 {{- end -}}
 {{- $_ := set $cfg "identity" (dict "kubernetes_clusters" $clusters) -}}
 {{- end -}}
 {{- /* G0 M32 D967, D969: the admission listener, on the API only. */ -}}
 {{- if and $v.admission.enabled (ne .role "worker") (ne .role "migrate") -}}
 {{- $_ := set $cfg "admission" (dict "listen" (printf "0.0.0.0:%d" (int $v.admission.port))
-      "tls_cert_file" "/etc/pantherclaw/admission-tls/tls.crt" "tls_key_file" "/etc/pantherclaw/admission-tls/tls.key"
+      "tls_cert_file" (printf "%s/admission-tls.crt" $s) "tls_key_file" (printf "%s/admission-tls.key" $s)
       "edge_image_digests" $v.admission.edgeImageDigests "probe_image_digests" $v.admission.probeImageDigests) -}}
 {{- end -}}
 {{- toPrettyJson $cfg -}}
@@ -103,9 +104,6 @@ stage-secrets init container (G0 M13 D42).
 
 {{/* G0 M32 D969: where the server's projected reviewer token and the cluster CA are mounted. */}}
 {{- define "pantherclaw.kubeDir" -}}/var/run/pantherclaw/kube{{- end -}}
-
-{{/* G0 M32 D969a: where the webhook Secret is mounted (one key per cluster). */}}
-{{- define "pantherclaw.webhookDir" -}}/etc/pantherclaw/webhook{{- end -}}
 
 {{/* The webhook Secret's name. */}}
 {{- define "pantherclaw.webhookSecretName" -}}{{ include "pantherclaw.fullname" . }}-webhook{{- end -}}
@@ -291,7 +289,6 @@ volumes:
       name: pantherclaw-edge
   - name: edge-token
     projected:
-      defaultMode: 0440
       sources:
         - serviceAccountToken:
             path: token
@@ -315,10 +312,11 @@ volumes:
 
 {{/*
 G0 M32 D969: the server's mounts for Kubernetes (dict "root" $ "role" "api|worker"):
-its projected reviewer token with the cluster CA, the webhook Secret (read
-again while the server runs, D967) and, on the API, the admission
-certificate (reloaded by CertReloader). They are mounted, not staged, so a
-rotation reaches the running server (D969a).
+its projected reviewer token with the cluster CA. The kubelet writes a
+projected token 0600 and owned by the pod's runAsUser, as secret files must
+be (config.ReadSecretFile). The webhook secrets and the admission
+certificate are staged like every other secret (D42, D969b): see
+pantherclaw.kubeStagedKeys.
 */}}
 {{- define "pantherclaw.kubeMounts" -}}
 {{- $v := .root.Values -}}
@@ -326,15 +324,36 @@ rotation reaches the running server (D969a).
 - name: kube
   mountPath: {{ include "pantherclaw.kubeDir" . }}
   readOnly: true
-- name: webhook
-  mountPath: {{ include "pantherclaw.webhookDir" . }}
-  readOnly: true
 {{- end }}
-{{- if and $v.admission.enabled (eq .role "api") }}
-- name: admission-tls
-  mountPath: /etc/pantherclaw/admission-tls
-  readOnly: true
-{{- end }}
+{{- end -}}
+
+{{/*
+G0 M32 D969b: the API's staged Kubernetes secrets, as stage-secrets keys
+(list of dict "volume" "key" "as"): each cluster's webhook secret as
+webhook-<cluster>, and the admission certificate pair as admission-tls.crt
+and admission-tls.key, like api.tls. A changed value rolls the API pods
+(checksum/admission-webhook).
+*/}}
+{{- define "pantherclaw.kubeStagedKeys" -}}
+{{- $v := .Values -}}
+{{- $keys := list -}}
+{{- range $v.identity.kubernetesClusters -}}
+{{- $keys = append $keys (dict "volume" "webhook" "key" .name "as" (printf "webhook-%s" .name)) -}}
+{{- end -}}
+{{- if $v.admission.enabled -}}
+{{- $keys = append $keys (dict "volume" "admission-tls" "key" "tls.crt" "as" "admission-tls.crt") -}}
+{{- $keys = append $keys (dict "volume" "admission-tls" "key" "tls.key" "as" "admission-tls.key") -}}
+{{- end -}}
+{{- toJson $keys -}}
+{{- end -}}
+
+{{/* G0 M32 D969b: the sha256 of every rendered webhook secret value, so a new value rolls the API pods. */}}
+{{- define "pantherclaw.webhookChecksum" -}}
+{{- $vals := list -}}
+{{- range .Values.identity.kubernetesClusters -}}
+{{- $vals = append $vals (printf "%s=%s" .name (include "pantherclaw.webhookSecret" (dict "root" $ "cluster" .name))) -}}
+{{- end -}}
+{{- join "\n" $vals | sha256sum -}}
 {{- end -}}
 
 {{- define "pantherclaw.kubeVolumes" -}}
@@ -342,7 +361,6 @@ rotation reaches the running server (D969a).
 {{- if $v.identity.kubernetesClusters }}
 - name: kube
   projected:
-    defaultMode: 0440
     sources:
       - serviceAccountToken:
           path: token
@@ -352,16 +370,16 @@ rotation reaches the running server (D969a).
           items:
             - key: ca.crt
               path: ca.crt
+{{- if eq .role "api" }}
 - name: webhook
   secret:
     secretName: {{ include "pantherclaw.webhookSecretName" .root }}
-    defaultMode: 0440
+{{- end }}
 {{- end }}
 {{- if and $v.admission.enabled (eq .role "api") }}
 - name: admission-tls
   secret:
     secretName: {{ required "admission.tls.existingSecret is required when admission.enabled" $v.admission.tls.existingSecret }}
-    defaultMode: 0440
 {{- end }}
 {{- end -}}
 
