@@ -33,13 +33,17 @@ package pipeline
 // 7: step 6 reads the org's content signal mode and the run tree's flags,
 // and step 7 holds on them (G0 M27 D507, D512), which a recording before it
 // does not hold.
-const Version = 7
+//
+// 8: step 7 reads the org's owned accounts and holds an action that
+// shares to the public or to an account the org does not own (G0 M30 D935,
+// D935a), which a recording before it does not hold.
+const Version = 8
 
 // Replays reports whether this code replays inputs recorded by pipeline
-// version v (G0 M16 D95, G0 M17 D133, D134): this version, and versions 4
-// 5 and 6, each in its own mode (Pipeline.ReplayOf), so a recording decides
+// version v (G0 M16 D95, G0 M17 D133, D134): this version, and versions 4,
+// 5, 6 and 7, each in its own mode (Pipeline.ReplayOf), so a recording decides
 // as it did. Others are incomplete (F507).
-func Replays(v int) bool { return v == 4 || v == 5 || v == 6 || v == Version }
+func Replays(v int) bool { return v == 4 || v == 5 || v == 6 || v == 7 || v == Version }
 
 // at reports whether the evaluation runs at least version v: always, except
 // when it replays a recording made under an earlier one.

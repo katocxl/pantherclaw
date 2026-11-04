@@ -115,6 +115,9 @@ type Reads struct {
 	// (pipeline 6, G0 M17 D106); earlier recordings have none.
 	CustomerRules   *CustomerRules    `json:"customer_rules,omitzero"`
 	RunConsequences []RunConsequences `json:"run_consequences,omitzero"`
+	// OwnedAccounts are the reads of the org's owned accounts, one per kind
+	// (pipeline 8, G0 M30 D935a); earlier recordings have none.
+	OwnedAccounts []OwnedAccounts `json:"owned_accounts,omitzero"`
 }
 
 // Containment is the org's containment state and the database time: the
@@ -554,4 +557,12 @@ type Content struct {
 	Mode  string   `json:"mode,omitzero"`
 	Kinds []string `json:"kinds,omitzero"`
 	Err   string   `json:"err,omitzero"`
+}
+
+// OwnedAccounts is one read of the org's owned accounts of a kind (G0 M30
+// D935a): the listed values the share step compared against.
+type OwnedAccounts struct {
+	Kind   string   `json:"kind"`
+	Values []string `json:"values,omitzero"`
+	Err    string   `json:"err,omitzero"`
 }

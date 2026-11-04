@@ -890,6 +890,9 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	p.policyRules(ctx, s)
 	p.external(ctx, s) // G0 M16 D81 (external.go)
 	s.disclosure()
+	if p.at(8) {
+		p.shares(ctx, s) // G0 M30 D935, D935a (shares.go)
+	}
 	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	s.contentHold()         // G0 M27 D507, D512 (content.go)
 	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)

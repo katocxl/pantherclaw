@@ -551,3 +551,20 @@ func (r *Reader) ContentSignals(_ context.Context, org ids.OrgID, run ids.UUID) 
 	}
 	return pipeline.ContentState{Mode: x.Mode, Kinds: x.Kinds}, nil
 }
+
+// OwnedAccounts implements pipeline.OwnedAccounts. Only a recording of
+// pipeline version 8 or later replays this read (G0 M30 D935a).
+func (r *Reader) OwnedAccounts(_ context.Context, org ids.OrgID, kind string) ([]string, error) {
+	if err := r.otherOrg(org, "owned accounts", pipeline.StepFacts); err != nil {
+		return nil, err
+	}
+	i := slices.IndexFunc(r.rec.Reads.OwnedAccounts, func(x OwnedAccounts) bool { return x.Kind == kind })
+	if i < 0 {
+		return nil, r.gap("owned accounts", pipeline.StepFacts, "the org's owned accounts of kind "+kind+" were not read")
+	}
+	x := r.rec.Reads.OwnedAccounts[i]
+	if x.Err != "" {
+		return nil, errors.New("recording: the owned accounts could not be read")
+	}
+	return slices.Clone(x.Values), nil
+}

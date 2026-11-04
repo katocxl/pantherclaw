@@ -314,3 +314,20 @@ func (r *Recorder) ContentSignals(ctx context.Context, org ids.OrgID, run ids.UU
 	})
 	return st, err
 }
+
+// OwnedAccounts implements pipeline.OwnedAccounts (G0 M30 D935a). A wrapped
+// reader without the port owns nothing, as the pipeline treats one.
+func (r *Recorder) OwnedAccounts(ctx context.Context, org ids.OrgID, kind string) ([]string, error) {
+	var (
+		list []string
+		err  error
+	)
+	if port, ok := r.r.(pipeline.OwnedAccounts); ok {
+		list, err = port.OwnedAccounts(ctx, org, kind)
+	}
+	r.keep(func(x *Reads) error {
+		x.OwnedAccounts = append(x.OwnedAccounts, OwnedAccounts{Kind: kind, Values: slices.Clone(list), Err: errKind(err)})
+		return nil
+	})
+	return list, err
+}
