@@ -207,7 +207,11 @@ func (s *stack) m20Webhook(t *testing.T, kp keys.KeyProvider) {
 // m20JWKS fetches an org's JWKS from the running server.
 func (s *stack) m20JWKS(t *testing.T, url string) []ed25519.PublicKey {
 	t.Helper()
-	res, err := http.Get(url) //nolint:gosec,noctx // G107: the test server's own address
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -625,7 +629,7 @@ func (s *stack) m20JiraDone(t *testing.T, kp keys.KeyProvider) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(tsdomain.JiraDeliveryHeader, "m20-exit-1")
 	req.Header.Set(tsdomain.JiraSignatureHeader, tsdomain.SignJira(secret, body))
-	res, err := http.DefaultClient.Do(req) //nolint:gosec // G704: the test server's own address
+	res, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

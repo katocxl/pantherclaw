@@ -198,7 +198,7 @@ func (a *autoStack) signedEvent(t *testing.T, source ids.UUID, secret, msgID, bo
 	req.Header.Set(inbound.HeaderID, msgID)
 	req.Header.Set(inbound.HeaderTimestamp, strconv.FormatInt(now.Unix(), 10))
 	req.Header.Set(inbound.HeaderSignature, ndomain.Sign(key, msgID, now.Unix(), []byte(body)))
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,16 @@ version: "2"
 run:
   timeout: 5m
   tests: true
+  # Test files behind the custom build tags are linted too. One file stays
+  # unlinted: test/e2e/range_nosandbox_test.go builds only with integration
+  # and without sandbox, so these tags leave it out; it is not excluded, and
+  # its sandbox counterpart is linted.
+  build-tags:
+    - integration
+    - sandbox
+    - stripe_live
+    - github_live
+    - failover
 
 linters:
   default: standard # errcheck, govet, ineffassign, staticcheck, unused

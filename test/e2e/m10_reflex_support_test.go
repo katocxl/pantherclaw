@@ -460,7 +460,7 @@ func (r *reflexStack) live(t *testing.T) (int64, func(kind string) sseFrame) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := r.openStream(ctx, t, "", map[string]string{"Authorization": "Bearer " + r.bearer})
+	res := r.openStream(ctx, t, "", map[string]string{"Authorization": "Bearer " + r.bearer}) //nolint:bodyclose // the reader goroutine below closes it
 	if res.StatusCode != http.StatusOK {
 		_ = res.Body.Close()
 		t.Fatalf("live stream: %d", res.StatusCode)

@@ -127,7 +127,7 @@ func TestHR665_ACallsDriftNamesTheServersOwnRun(t *testing.T) {
 		e.pin(t, upstreamPackage, "1.0.0", mcpPayments(t))
 		c := e.upstreamMCP(t, "upstream-sim", true)
 		_, run := e.agentRun(t, "coder")
-		if q, err := e.svc.ReportDriftDescribed(ctx, e.org, e.gateway, c.ID, "get_refund", upstreamDigest, observed,
+		if q, err := e.svc.ReportDriftDescribed(t.Context(), e.org, e.gateway, c.ID, "get_refund", upstreamDigest, observed,
 			app.ObservedDescription{Transaction: e.txnOf(t, c.ID, run)}); err != nil || q {
 			t.Fatalf("simulated drift: quarantined=%v, %v", q, err)
 		}

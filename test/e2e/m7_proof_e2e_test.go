@@ -121,11 +121,11 @@ func (o offline) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // verify runs `pclaw verify FILE --trust … --json` with flags, offline, and
 // returns its exit code and report.
-func (p *proof) verify(t *testing.T, file string, flags ...string) (int, *bundle.Report) {
+func (p *proof) verify(t *testing.T, ctx context.Context, file string, flags ...string) (int, *bundle.Report) {
 	t.Helper()
 	args := append([]string{"verify", file, "--trust", p.trust, "--json"}, flags...)
 	var out, errb bytes.Buffer
-	code := pclaw.Run(context.Background(), args, &out, &errb, noEnv, pclaw.Options{HTTPClient: &http.Client{Transport: offline{t}}})
+	code := pclaw.Run(ctx, args, &out, &errb, noEnv, pclaw.Options{HTTPClient: &http.Client{Transport: offline{t}}})
 	var r bundle.Report
 	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
 		t.Fatalf("pclaw %v: %d %q %q", args, code, out.String(), errb.String())
@@ -198,7 +198,7 @@ func (p *proof) checkpointed(t *testing.T, txns ...ids.UUID) (uint64, []byte) {
 				ORDER BY k.tree_size DESC LIMIT 1`, list).Scan(&size, &n)
 		})
 		if err == nil {
-			return uint64(size), n //nolint:gosec // G115: tree_size > 0
+			return uint64(size), n
 		}
 		if !db.IsNoRows(err) {
 			t.Fatal(err)
@@ -310,7 +310,7 @@ func TestE2E_M7_VerifyBundleOffline(t *testing.T) {
 	if !x.Anchored || x.Receipts < 3 || x.Entries < 3 {
 		t.Fatalf("export: %d receipts, %d entries, anchored %v", x.Receipts, x.Entries, x.Anchored)
 	}
-	code, r := p.verify(t, file, "--sigstore-trusted-root", sigstore)
+	code, r := p.verify(t, t.Context(), file, "--sigstore-trusted-root", sigstore)
 	if code != 0 {
 		t.Fatalf("pclaw verify exit %d:\n%+v", code, r.Checks)
 	}
@@ -336,7 +336,7 @@ func TestE2E_M7_VerifyBundleOffline(t *testing.T) {
 
 	// Without the Sigstore trusted root nothing about the log can be
 	// checked: not available, and the rest still passes.
-	code, r = p.verify(t, file)
+	code, r = p.verify(t, t.Context(), file)
 	if code != 0 || !all(r, "anchor.log", bundle.NotAvailable) || !all(r, "anchor.timestamp", bundle.NotAvailable) ||
 		!all(r, "anchor.leaf", bundle.Passed) {
 		t.Fatalf("without the trusted root: exit %d\n%+v", code, r.Checks)
@@ -416,7 +416,7 @@ func (p *proof) resign(t *testing.T, honest *bundle.Bundle, seq int64, from uint
 		return out
 	}
 	for _, e := range entries {
-		proofOf, err := merkle.InclusionProof(ctx, tiles, uint64(e.Seq)-1, size) //nolint:gosec // G115: seq ≥ 1
+		proofOf, err := merkle.InclusionProof(ctx, tiles, uint64(e.Seq)-1, size)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -500,8 +500,8 @@ func TestE2E_M7_TamperDetected(t *testing.T) {
 
 	// The honest ledger verifies, with the saved checkpoint as a witness and
 	// with its anchored root.
-	honestFile, x := p.export(t, auditor, "honest.json", evapp.Selection{From: 1, To: int64(size)}, savedSize) //nolint:gosec // G115
-	code, r := p.verify(t, honestFile, "--previous", savedFile, "--sigstore-trusted-root", sigstore)
+	honestFile, x := p.export(t, auditor, "honest.json", evapp.Selection{From: 1, To: int64(size)}, savedSize)
+	code, r := p.verify(t, t.Context(), honestFile, "--previous", savedFile, "--sigstore-trusted-root", sigstore)
 	if code != 0 || !all(r, "witness.previous", bundle.Passed) || !all(r, "anchor.log", bundle.Passed) || !x.Anchored {
 		t.Fatalf("the honest ledger: exit %d\n%+v", code, r.Checks)
 	}
@@ -519,17 +519,17 @@ func TestE2E_M7_TamperDetected(t *testing.T) {
 	// real key.
 	seqs := p.receiptSeqs(t, first)
 	anchored := honest.Anchor.Checkpoint
-	if seqs["decision_receipts"] < 1 || uint64(seqs["decision_receipts"]) > savedSize || anchored < savedSize { //nolint:gosec // G115
+	if seqs["decision_receipts"] < 1 || uint64(seqs["decision_receipts"]) > savedSize || anchored < savedSize {
 		t.Fatalf("decision at seq %d, saved %d, anchored %d", seqs["decision_receipts"], savedSize, anchored)
 	}
 	forged, forgersProof := p.resign(t, honest, seqs["decision_receipts"], anchored)
 	forgedFile := writeFile(t, p.dir, "forged.json", bundletestEncode(t, forged))
-	code, r = p.verify(t, forgedFile, "--sigstore-trusted-root", sigstore)
+	code, r = p.verify(t, t.Context(), forgedFile, "--sigstore-trusted-root", sigstore)
 	if code != 0 || !all(r, "witness.previous", bundle.NotAvailable) || !all(r, "anchor", bundle.NotAvailable) ||
 		!all(r, "checkpoint.signature", bundle.Passed) {
 		t.Fatalf("on its own the re-signed history should pass (that is what witnesses are for): exit %d\n%+v", code, r.Checks)
 	}
-	code, r = p.verify(t, forgedFile, "--previous", savedFile)
+	code, r = p.verify(t, t.Context(), forgedFile, "--previous", savedFile)
 	if code != 1 || !all(r, "witness.previous", bundle.Failed) {
 		t.Fatalf("against the saved checkpoint: exit %d\n%+v", code, r.Checks)
 	}
@@ -540,12 +540,12 @@ func TestE2E_M7_TamperDetected(t *testing.T) {
 	withAnchor.Anchor = honest.Anchor
 	withAnchor.Checkpoints = []string{noteOf(t, honest, anchored), forged.Checkpoints[0]}
 	withAnchor.Consistency = []bundle.Consistency{forgersProof}
-	code, r = p.verify(t, writeFile(t, p.dir, "forged-anchor.json", bundletestEncode(t, &withAnchor)), "--sigstore-trusted-root", sigstore)
+	code, r = p.verify(t, t.Context(), writeFile(t, p.dir, "forged-anchor.json", bundletestEncode(t, &withAnchor)), "--sigstore-trusted-root", sigstore)
 	if code != 1 || !all(r, "anchor.leaf", bundle.Passed) || !all(r, "anchor.log", bundle.Passed) || !some(r, "checkpoint.consistency", bundle.Failed) {
 		t.Fatalf("against the anchored root: exit %d\n%+v", code, r.Checks)
 	}
 	withAnchor.Checkpoints, withAnchor.Consistency = forged.Checkpoints, nil
-	code, r = p.verify(t, writeFile(t, p.dir, "forged-anchor-only.json", bundletestEncode(t, &withAnchor)), "--sigstore-trusted-root", sigstore)
+	code, r = p.verify(t, t.Context(), writeFile(t, p.dir, "forged-anchor-only.json", bundletestEncode(t, &withAnchor)), "--sigstore-trusted-root", sigstore)
 	if code != 1 || !some(r, "anchor.leaf", bundle.Failed) {
 		t.Fatalf("an anchor without its checkpoint: exit %d\n%+v", code, r.Checks)
 	}
@@ -558,7 +558,7 @@ func TestE2E_M7_TamperDetected(t *testing.T) {
 		WHERE c.org_id = $1 AND c.seq = $2`, []any{s.org, execSeq}, &entry, &original)
 	s.db.AdminExec(t, "UPDATE pc.ledger_entries SET body = $3 WHERE org_id = $1 AND id = $2", s.org, entry, []byte(`{"outcome":"failed"}`))
 	edited, _ := p.export(t, auditor, "edited.json", evapp.Selection{Transactions: []ids.UUID{second}}, 0)
-	code, r = p.verify(t, edited)
+	code, r = p.verify(t, t.Context(), edited)
 	if code != 1 || !slices.ContainsFunc(r.Checks, func(c bundle.Check) bool {
 		return c.Name == "entry.link" && c.Status == bundle.Failed && c.Subject == "seq "+strconv.FormatInt(execSeq, 10)
 	}) {
@@ -586,7 +586,7 @@ func TestE2E_M7_TamperDetected(t *testing.T) {
 	s.db.AdminExec(t, "DELETE FROM pc.ledger_chain WHERE org_id = $1 AND seq = $2", s.org, seqs["decision_receipts"])
 	p.integrity(t, "FAILED CHAIN_LINK "+strconv.FormatInt(seqs["decision_receipts"], 10))
 	cut, _ := p.export(t, auditor, "cut.json", evapp.Selection{Transactions: []ids.UUID{first}}, 0)
-	_, r = p.verify(t, cut)
+	_, r = p.verify(t, t.Context(), cut)
 	if !slices.ContainsFunc(r.Checks, func(c bundle.Check) bool {
 		return c.Name == "receipt.ledger" && c.Status == bundle.NotAvailable && strings.HasPrefix(c.Subject, "pap-decision")
 	}) {
@@ -801,7 +801,7 @@ func TestE2E_M7_EvidencePack(t *testing.T) {
 	}
 
 	file := writeFile(t, p.dir, "pack.zip", d.Content)
-	code, rep := p.verify(t, file)
+	code, rep := p.verify(t, t.Context(), file)
 	if code != 0 || !all(rep, "pack.signature", bundle.Passed) || !all(rep, "pack.gap", bundle.NotAvailable) ||
 		len(statuses(rep, "pack.gap")) != len(m.Gaps) || !some(rep, "receipt.signature", bundle.Passed) {
 		t.Fatalf("pclaw verify of the pack: exit %d\n%+v", code, rep.Checks)
@@ -826,7 +826,7 @@ func TestE2E_M7_EvidencePack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if code, rep := p.verify(t, writeFile(t, p.dir, "changed.zip", changed)); code != 1 {
+	if code, rep := p.verify(t, t.Context(), writeFile(t, p.dir, "changed.zip", changed)); code != 1 {
 		t.Fatalf("a changed pack: exit %d\n%+v", code, rep.Checks)
 	}
 }

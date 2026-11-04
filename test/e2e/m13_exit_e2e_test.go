@@ -485,7 +485,7 @@ func TestE2E_M13_StagingJourney(t *testing.T) {
 	if keyFile == "" {
 		t.Fatal("PC_E2E_STAGING_API_KEY_FILE is required with PC_E2E_STAGING_URL")
 	}
-	key, err := os.ReadFile(keyFile) //nolint:gosec // G304: the operator names the file
+	key, err := os.ReadFile(keyFile)
 	if err != nil {
 		t.Fatal(err)
 	}

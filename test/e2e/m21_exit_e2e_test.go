@@ -89,7 +89,7 @@ func (s *stack) m21Server(t *testing.T, p idp) {
 			t.Fatal(err)
 		}
 		r.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(r)
+		resp, err := (&http.Client{}).Do(r)
 		if err != nil {
 			t.Fatal(err)
 		}

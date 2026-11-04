@@ -287,7 +287,7 @@ func (s *stack) learns(t *testing.T, since time.Time, want error) func() {
 				return
 			}
 			if began > time.Second {
-				done <- fmt.Errorf("the gateway's own view %s after the change: %v, want %v", began, err, want)
+				done <- fmt.Errorf("the gateway's own view %s after the change: %s, want %s", began, fmt.Sprint(err), fmt.Sprint(want))
 				return
 			}
 			time.Sleep(5 * time.Millisecond)
