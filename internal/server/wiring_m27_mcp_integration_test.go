@@ -38,28 +38,37 @@ func TestIntHR657_ReadIsInTheOrgsLedger(t *testing.T) {
 
 // TestIntHR657_TechniqueCoverageReadIsInTheOrgsLedger: technique_coverage's
 // read is recorded like the others, naming the technique id, its framework,
-// the agent asked about and its basis (G0 M28 D726, HR-663). Covers: F948, HR-657
+// the agent asked about and its basis (G0 M28 D726, HR-663). The framework is
+// the catalogue's canonical id, from the request or else the id's form
+// (D726a). Covers: F948, HR-657
 func TestIntHR657_TechniqueCoverageReadIsInTheOrgsLedger(t *testing.T) {
 	d := dbtest.New(t)
 	c := investigatorCaller()
 	d.AdminExec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'self-mcp')", c.Org)
 	g := &selfMCPGate{editions: fixedEditions(billing.Team), record: poolRecorder(d.AppPool(t))}
-	agent := ids.NewV7().String()
-	req := &pb.GetThreatTechniqueRequest{
-		Framework: pb.ThreatFramework_THREAT_FRAMEWORK_ATTACK_ENTERPRISE, TechniqueId: "T1552.001", AgentId: agent,
-	}
-	s := &fakeStream{request: req}
-	if _, err := served(g, c, pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, "", s,
-		handler(&pb.GetThreatTechniqueRequest{}, nil)); err != nil {
-		t.Fatal(err)
-	}
-	var n int
-	d.AdminQueryRow(t, `SELECT count(*)::int FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.self_mcp.read'
-		AND position(convert_to($2::text, 'UTF8') IN body) > 0 AND position(convert_to('T1552.001', 'UTF8') IN body) > 0
-		AND position(convert_to('attack_enterprise', 'UTF8') IN body) > 0
-		AND position(convert_to('"basis":"role"', 'UTF8') IN body) > 0`, []any{c.Org, agent}, &n)
-	if n != 1 || len(s.sent) != 1 {
-		t.Errorf("records %d, sent %d", n, len(s.sent))
+	for _, tc := range []struct {
+		framework pb.ThreatFramework
+		id, want  string
+	}{
+		{pb.ThreatFramework_THREAT_FRAMEWORK_ATTACK_ENTERPRISE, "T1552.001", "attack-enterprise"},
+		{pb.ThreatFramework_THREAT_FRAMEWORK_ATLAS, "AML.T0051", "atlas"},
+		{pb.ThreatFramework_THREAT_FRAMEWORK_UNSPECIFIED, "AML.T0053", "atlas"},
+	} {
+		agent := ids.NewV7().String()
+		s := &fakeStream{request: &pb.GetThreatTechniqueRequest{Framework: tc.framework, TechniqueId: tc.id, AgentId: agent}}
+		if _, err := served(g, c, pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, "", s,
+			handler(&pb.GetThreatTechniqueRequest{}, nil)); err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		d.AdminQueryRow(t, `SELECT count(*)::int FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.self_mcp.read'
+			AND position(convert_to($2::text, 'UTF8') IN body) > 0 AND position(convert_to($3::text, 'UTF8') IN body) > 0
+			AND position(convert_to($4::text, 'UTF8') IN body) > 0
+			AND position(convert_to('"basis":"role"', 'UTF8') IN body) > 0`,
+			[]any{c.Org, agent, `"technique_id":"` + tc.id + `"`, `"framework":"` + tc.want + `"`}, &n)
+		if n != 1 || len(s.sent) != 1 {
+			t.Errorf("%s: records %d with framework %q, sent %d", tc.id, n, tc.want, len(s.sent))
+		}
 	}
 }
 
