@@ -183,7 +183,9 @@ func ruleStates(ctx context.Context, q *dbq.Queries, org ids.OrgID, now time.Tim
 	}
 	for _, s := range states {
 		r := builtin(s.RuleID)
-		r.Disabled = r.Disabled || s.Disabled
+		if s.DisabledAt != nil {
+			r.Disabled, r.DisabledAt = true, *s.DisabledAt
+		}
 		if s.LastInputAt != nil {
 			r.LastInputAt = *s.LastInputAt
 		}

@@ -526,14 +526,14 @@ func (q *Queries) ThreatMapRoutes(ctx context.Context, orgID ids.OrgID) ([]Threa
 }
 
 const threatMapRuleStates = `-- name: ThreatMapRuleStates :many
-SELECT rule_id, (disabled_at IS NOT NULL)::boolean AS disabled, last_input_at
+SELECT rule_id, disabled_at, last_input_at
 FROM pc.detection_rule_state
 WHERE org_id = $1
 `
 
 type ThreatMapRuleStatesRow struct {
 	RuleID      string
-	Disabled    bool
+	DisabledAt  *time.Time
 	LastInputAt *time.Time
 }
 
@@ -546,7 +546,7 @@ func (q *Queries) ThreatMapRuleStates(ctx context.Context, orgID ids.OrgID) ([]T
 	items := []ThreatMapRuleStatesRow{}
 	for rows.Next() {
 		var i ThreatMapRuleStatesRow
-		if err := rows.Scan(&i.RuleID, &i.Disabled, &i.LastInputAt); err != nil {
+		if err := rows.Scan(&i.RuleID, &i.DisabledAt, &i.LastInputAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

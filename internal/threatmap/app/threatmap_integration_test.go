@@ -25,6 +25,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
+	pvports "github.com/katocxl/pantherclaw/internal/postureview/ports"
 	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -445,4 +447,32 @@ func liveCandidate(t *testing.T) string {
 		t.Fatal("no built-in rule alone maps two matrix techniques")
 	}
 	return best
+}
+
+// TestHR680_PostureSinceIsWhenTheRuleWentOff: a rule turned off 20 days ago
+// is a posture finding since its disabled_at, the same on every read, not
+// since the read (G0 M28 D724a).
+// Covers: F960, HR-680
+func TestHR680_PostureSinceIsWhenTheRuleWentOff(t *testing.T) {
+	f := newFx(t)
+	rule := liveCandidate(t)
+	offAt := time.Now().UTC().Add(-20 * 24 * time.Hour).Truncate(time.Microsecond)
+	f.d.AdminExec(t, `INSERT INTO pc.detection_rule_state (org_id, rule_id, disabled_at, disabled_reason) VALUES ($1, $2, $3, 'test')
+		ON CONFLICT (org_id, rule_id) DO UPDATE SET disabled_at = EXCLUDED.disabled_at, disabled_reason = EXCLUDED.disabled_reason`, f.org, rule, offAt)
+	all := pvports.Reach{All: true, Org: true}
+	for _, read := range []time.Duration{0, 3 * time.Hour} {
+		s := f.svc(billing.Business)
+		s.Now = func() time.Time { return time.Now().Add(read) }
+		fs, _, err := (&tmapp.Source{Svc: s}).Findings(context.Background(), pvports.Viewer{Org: f.org, Posture: all}, pvdomain.Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		i := slices.IndexFunc(fs, func(x pvdomain.Finding) bool { return x.SourceID == "detection_rule:"+rule })
+		if i < 0 {
+			t.Fatalf("read +%s: no finding for %s in %+v", read, rule, fs)
+		}
+		if fs[i].Kind != tmapp.KindRuleOff || !fs[i].Since.Equal(offAt) {
+			t.Errorf("read +%s: %s since %s, want %s", read, fs[i].Kind, fs[i].Since, offAt)
+		}
+	}
 }

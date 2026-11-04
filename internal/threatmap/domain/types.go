@@ -199,6 +199,9 @@ type Rule struct {
 	Published bool `json:"published"`
 	// Disabled is detection_rule_state.disabled_at set.
 	Disabled bool `json:"disabled,omitzero"`
+	// DisabledAt is when it was turned off: the evaluator does not read it;
+	// the posture queue dates a rule_off finding by it (G0 M28 D724a).
+	DisabledAt time.Time `json:"disabled_at,omitzero"`
 	// Suppressed is an active org-wide suppression of the rule.
 	Suppressed  bool      `json:"suppressed,omitzero"`
 	LastInputAt time.Time `json:"last_input_at,omitzero"`
