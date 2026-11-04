@@ -363,7 +363,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 
 ### MITRE techniques by abuse case
 
-The MITRE ATLAS and ATT&CK Enterprise techniques each abuse case covers are listed apart from the abuse-case tables, in the section "Techniques by abuse case" of [MITRE_MAPPING.md](MITRE_MAPPING.md). That table is generated from the code: a row is an abuse case that at least one library range scenario cites, with the techniques those scenarios are mapped to. Abuse cases no library scenario tests are not listed.
+The MITRE ATLAS and ATT&CK Enterprise techniques each abuse case covers are listed apart from the abuse-case tables, in the section "Techniques by abuse case" of [MITRE_MAPPING.md](MITRE_MAPPING.md). That table is generated from the code: a row is an abuse case that at least one library range scenario cites, with the techniques those scenarios are mapped to. Abuse cases no library scenario tests, or whose scenarios map to no MITRE technique, are not listed.
 
 ## 8. Residual risks (accepted, owner: founder, reviewed quarterly)
 

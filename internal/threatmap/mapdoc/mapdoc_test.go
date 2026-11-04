@@ -9,6 +9,8 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -111,6 +113,39 @@ func TestRenderListsEveryMatrixTechnique(t *testing.T) {
 	}
 	if !strings.Contains(text, "> "+theStatement+"\n") {
 		t.Error("the statement is missing")
+	}
+}
+
+// banned are the words no threat-map text may use (G0 M28 wording rule),
+// matched case-insensitively on word boundaries, and a digit followed by %.
+var banned = regexp.MustCompile(`(?i)\b(protected|protects|protection|compliant|certified|secure|safe|score|percent|blocked|clean|none found)\b|[0-9]\s*%`)
+
+// TestHR681_MappingDocUsesNoBannedWord: apart from the fixed statement and
+// MITRE's own technique and tactic names, the page uses no banned word and
+// no percentage.
+// Covers: HR-681, F974
+func TestHR681_MappingDocUsesNoBannedWord(t *testing.T) {
+	text := string(mapdoc.Render(mapset.Load(), threats(t)))
+	text = strings.ReplaceAll(text, theStatement, "")
+	var names []string
+	for _, f := range catalog.Frameworks() {
+		c := catalog.Load(f)
+		for _, ta := range c.Tactics {
+			names = append(names, ta.Name)
+		}
+		for _, tech := range c.Techniques {
+			names = append(names, tech.Name)
+		}
+	}
+	// Longest first, so a name inside a longer one is not cut out first.
+	slices.SortFunc(names, func(a, b string) int { return len(b) - len(a) })
+	for _, n := range names {
+		if n != "" {
+			text = strings.ReplaceAll(text, n, "")
+		}
+	}
+	for _, m := range banned.FindAllString(text, -1) {
+		t.Errorf("banned wording %q in MITRE_MAPPING.md", m)
 	}
 }
 
