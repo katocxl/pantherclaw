@@ -26,7 +26,7 @@ import (
 var (
 	// errInvestigatorReads refuses the Investigator role outside its reads.
 	errInvestigatorReads = pcerr.New(pcerr.PermissionDenied, "INVESTIGATOR_READS_ONLY",
-		"the Investigator role reads what happened, run timelines, search and breach radius, and nothing else")
+		"the Investigator role reads what happened, run timelines, search, breach radius and technique coverage, and nothing else")
 	// errSelfMCPEdition: the org's plan has no SelfMCP.
 	errSelfMCPEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
 		"reading through PantherClaw's own MCP server needs the Team edition or above")
@@ -245,6 +245,11 @@ func selfMCPEvent(c tapp.Caller, procedure string, request any, outcome audit.Ou
 	case *pb.SearchRequest:
 		ev.Details["entity"] = r.GetQuery().GetEntity()
 		ev.Details["page_size"] = strconv.Itoa(int(r.GetPageSize()))
+	case *pb.GetThreatTechniqueRequest:
+		// The technique is a validated id, never free text (G0 M28 D726).
+		object("agent", r.GetAgentId())
+		ev.Details["technique_id"] = r.GetTechniqueId()
+		ev.Details["framework"] = strings.ToLower(strings.TrimPrefix(r.GetFramework().String(), "THREAT_FRAMEWORK_"))
 	}
 	return ev
 }

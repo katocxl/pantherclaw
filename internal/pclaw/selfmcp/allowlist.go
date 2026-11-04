@@ -3,7 +3,7 @@
 
 // Package selfmcp is PantherClaw's own read-only MCP server (G0 M27 D510,
 // H9): `pclaw mcp self` speaks MCP on stdio so a customer's SOC agent can
-// investigate. It has four tools, each one read procedure. It is not an
+// investigate. It has five tools, each one read procedure. It is not an
 // assistant: it calls no model and nothing here sends a record to one
 // (HR-542).
 package selfmcp
@@ -24,6 +24,7 @@ var procedures = []string{
 	pantherclawv1connect.InvestigationServiceGetRunTimelineProcedure,
 	pantherclawv1connect.SearchServiceSearchProcedure,
 	pantherclawv1connect.GraphServiceGetGraphProcedure,
+	pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, // G0 M28 D726
 }
 
 // Procedures returns the allow-list.

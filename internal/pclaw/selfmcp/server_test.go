@@ -36,6 +36,13 @@ type fakeBackend struct {
 	graph     *pb.GetGraphResponse
 	lastQuery *pb.SearchRequest
 	lastGraph *pb.GetGraphRequest
+	technique *pb.GetThreatTechniqueResponse
+	lastTech  *pb.GetThreatTechniqueRequest
+}
+
+func (f *fakeBackend) GetThreatTechnique(_ context.Context, q *pb.GetThreatTechniqueRequest) (*pb.GetThreatTechniqueResponse, error) {
+	f.calls, f.lastTech = append(f.calls, "GetThreatTechnique"), q
+	return f.technique, f.err
 }
 
 func (f *fakeBackend) WhatHappened(_ context.Context, _ *pb.WhatHappenedRequest) (*pb.WhatHappenedResponse, error) {
@@ -107,10 +114,10 @@ func callLine(t *testing.T, name string, args any) string {
 
 func uuid() string { return ids.NewV7().String() }
 
-// TestF947_ToolsListIsTheFourReads: the tools are these, each marked read
+// TestF947_ToolsListIsTheFiveReads: the tools are these, each marked read
 // only, with a closed input schema.
 // Covers: F947
-func TestF947_ToolsListIsTheFourReads(t *testing.T) {
+func TestF947_ToolsListIsTheFiveReads(t *testing.T) {
 	as, _ := serve(t, &fakeBackend{}, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	var names []string
 	for _, x := range as[0].Result.Tools {
@@ -123,13 +130,13 @@ func TestF947_ToolsListIsTheFourReads(t *testing.T) {
 			t.Errorf("%s: an open schema", x["name"])
 		}
 	}
-	if want := []string{"search", "explain_decision", "run_timeline", "breach_radius"}; !slices.Equal(names, want) {
+	if want := []string{"search", "explain_decision", "run_timeline", "breach_radius", "technique_coverage"}; !slices.Equal(names, want) {
 		t.Errorf("tools %v", names)
 	}
 }
 
 // TestHR656_EveryToolIsOnTheAllowList: each tool names one listed procedure
-// and all four are used, so a fifth tool or read fails here first.
+// and all five are used, so a sixth tool or read fails here first.
 // Covers: F947
 func TestHR656_EveryToolIsOnTheAllowList(t *testing.T) {
 	var got []string
@@ -142,16 +149,16 @@ func TestHR656_EveryToolIsOnTheAllowList(t *testing.T) {
 	}
 }
 
-// TestHR656_BackendHasOnlyTheFourReads: the interface the tools hold has no
+// TestHR656_BackendHasOnlyTheFiveReads: the interface the tools hold has no
 // other method, so a tool cannot reach another procedure.
 // Covers: F947
-func TestHR656_BackendHasOnlyTheFourReads(t *testing.T) {
+func TestHR656_BackendHasOnlyTheFiveReads(t *testing.T) {
 	typ := reflect.TypeFor[Backend]()
 	var got []string
 	for m := range typ.Methods() {
 		got = append(got, m.Name)
 	}
-	if want := []string{"GetGraph", "GetRunTimeline", "Search", "WhatHappened"}; !slices.Equal(got, want) {
+	if want := []string{"GetGraph", "GetRunTimeline", "GetThreatTechnique", "Search", "WhatHappened"}; !slices.Equal(got, want) {
 		t.Errorf("Backend has %v", got)
 	}
 }
@@ -245,6 +252,13 @@ func TestHR659_InputLimits(t *testing.T) {
 		// G0 M28 D726: a technique id, for alerts and incidents only.
 		"technique shape":  {"search", map[string]any{"entity": "alerts", "technique": canary}},
 		"technique entity": {"search", map[string]any{"entity": "runs", "technique": "T1078"}},
+		// G0 M28 D726: technique_coverage takes one id, its framework and an agent.
+		"coverage id":        {"technique_coverage", map[string]any{"technique_id": canary}},
+		"coverage no id":     {"technique_coverage", map[string]any{}},
+		"coverage framework": {"technique_coverage", map[string]any{"technique_id": "T1078", "framework": "atlas"}},
+		"coverage unknown":   {"technique_coverage", map[string]any{"technique_id": "T1078", "framework": canary}},
+		"coverage agent":     {"technique_coverage", map[string]any{"technique_id": "AML.T0051", "agent_id": canary}},
+		"coverage member":    {"technique_coverage", map[string]any{"technique_id": "T1078", canary: 1}},
 	}
 	for _, name := range slices.Sorted(maps.Keys(cases)) {
 		c := cases[name]
@@ -453,21 +467,23 @@ func cleanAfterDecoding(t *testing.T, name string, b []byte) {
 	}
 }
 
-// TestHR658_EveryToolLabels: the four tools take one path out.
+// TestHR658_EveryToolLabels: the five tools take one path out.
 // Covers: F949
 func TestHR658_EveryToolLabels(t *testing.T) {
 	f := &fakeBackend{
 		whatHappn: &pb.WhatHappenedResponse{Operation: poison}, timeline: &pb.GetRunTimelineResponse{State: poison},
-		search: &pb.SearchResponse{Result: &pb.SearchResult{Items: []*pb.SearchItem{{Label: poison, Fields: map[string]string{poison: poison}}}}},
-		graph:  &pb.GetGraphResponse{Nodes: []*pb.GraphNode{{Label: poison}}},
+		search:    &pb.SearchResponse{Result: &pb.SearchResult{Items: []*pb.SearchItem{{Label: poison, Fields: map[string]string{poison: poison}}}}},
+		graph:     &pb.GetGraphResponse{Nodes: []*pb.GraphNode{{Label: poison}}},
+		technique: &pb.GetThreatTechniqueResponse{Technique: &pb.ThreatTechniqueDetail{UnaddressedWhy: poison}},
 	}
 	as, _ := serve(t, f,
 		callLine(t, "explain_decision", map[string]any{"transaction_id": uuid()}),
 		callLine(t, "run_timeline", map[string]any{"run_id": uuid()}),
 		callLine(t, "search", map[string]any{"entity": "agents"}),
 		callLine(t, "breach_radius", map[string]any{"scope_type": "agent", "scope_id": uuid()}),
+		callLine(t, "technique_coverage", map[string]any{"technique_id": "T1078"}),
 	)
-	names := []string{"explain_decision", "run_timeline", "search", "breach_radius"}
+	names := []string{"explain_decision", "run_timeline", "search", "breach_radius", "technique_coverage"}
 	if len(as) != len(names) {
 		t.Fatalf("%d answers", len(as))
 	}

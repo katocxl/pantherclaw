@@ -35,3 +35,28 @@ func TestIntHR657_ReadIsInTheOrgsLedger(t *testing.T) {
 		t.Errorf("records %d, sent %d", n, len(s.sent))
 	}
 }
+
+// TestIntHR657_TechniqueCoverageReadIsInTheOrgsLedger: technique_coverage's
+// read is recorded like the others, naming the technique id, its framework
+// and the agent asked about (G0 M28 D726). Covers: F948, HR-657
+func TestIntHR657_TechniqueCoverageReadIsInTheOrgsLedger(t *testing.T) {
+	d := dbtest.New(t)
+	c := investigatorCaller()
+	d.AdminExec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'self-mcp')", c.Org)
+	g := &selfMCPGate{editions: fixedEditions(billing.Team), record: poolRecorder(d.AppPool(t))}
+	agent := ids.NewV7().String()
+	req := &pb.GetThreatTechniqueRequest{
+		Framework: pb.ThreatFramework_THREAT_FRAMEWORK_ATTACK_ENTERPRISE, TechniqueId: "T1552.001", AgentId: agent,
+	}
+	s := &fakeStream{request: req}
+	if err := call(g, c, pantherclawv1connect.ThreatMapServiceGetThreatTechniqueProcedure, s, &pb.GetThreatTechniqueRequest{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	d.AdminQueryRow(t, `SELECT count(*)::int FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.self_mcp.read'
+		AND position(convert_to($2::text, 'UTF8') IN body) > 0 AND position(convert_to('T1552.001', 'UTF8') IN body) > 0
+		AND position(convert_to('attack_enterprise', 'UTF8') IN body) > 0`, []any{c.Org, agent}, &n)
+	if n != 1 || len(s.sent) != 1 {
+		t.Errorf("records %d, sent %d", n, len(s.sent))
+	}
+}
