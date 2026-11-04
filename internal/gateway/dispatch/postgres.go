@@ -210,6 +210,14 @@ var errNoPostgresConfig = errors.New("dispatch: the connection has no postgres c
 // pgQuery builds the statement of a postgres read from the permitted
 // action: the target and the typed params only (HR-307).
 func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, scope *dataScope, partitioned func(table string) bool) (pgPlan, error) {
+	return pgQueryIn(pc, def, a, scope, partitioned, pgdispatch.DialectPostgres)
+}
+
+// pgQueryIn is pgQuery in a dialect: a snowflake connection's reads are
+// built the same way (G0 M31 D962).
+func pgQueryIn(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, scope *dataScope, partitioned func(table string) bool,
+	dialect pgdispatch.Dialect,
+) (pgPlan, error) {
 	if pc == nil {
 		return pgPlan{}, errNoPostgresConfig
 	}
@@ -251,6 +259,7 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, s
 		}
 		plan.statement, err = pgdispatch.BuildRows(m, pgdispatch.Rows{
 			Table: a.Target.ID, Columns: vals["columns"].List, Filters: filters, OrderBy: order, Limit: limit, Access: plan.access, Scope: records,
+			Dialect: dialect,
 		})
 	case "aggregate":
 		var measures []pgdispatch.Measure
@@ -263,6 +272,7 @@ func pgQuery(pc *pb.PostgresConfig, def *defs.Definition, a actionir.ActionIR, s
 		}
 		plan.statement, err = pgdispatch.BuildAggregate(m, pgdispatch.Aggregate{
 			Table: a.Target.ID, GroupBy: vals["group_by"].List, Measures: measures, Filters: filters, Limit: limit, Access: plan.access, Scope: records,
+			Dialect: dialect,
 		})
 	case "tables":
 		if a.Target.ID != pc.GetDatabase() {

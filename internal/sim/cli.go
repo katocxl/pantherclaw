@@ -50,6 +50,10 @@ Usage:
   pantherclaw-sim google [--addr 127.0.0.1:9104] [--service-account-file FILE] [--rate-limit 0] [--invalid-grant] [--not-found]
   pantherclaw-sim m365 [--addr 127.0.0.1:9105] [--client-file FILE] [--rate-limit 0] [--invalid-client] [--not-found]
   pantherclaw-sim model [--addr 127.0.0.1:9103] [--key KEY] [--stream-delay 0s] [--status 0]
+  pantherclaw-sim salesforce [--addr 127.0.0.1:9106] [--client-file FILE] [--invalid-client] [--expire-tokens] [--rate-limit 0]
+  pantherclaw-sim notion [--addr 127.0.0.1:9107] [--token-file FILE] [--rate-limit 0] [--unauthorized]
+  pantherclaw-sim linear [--addr 127.0.0.1:9108] [--key-file FILE] [--rate-limit 0] [--unauthorized]
+  pantherclaw-sim snowflake [--addr 127.0.0.1:9109] [--public-key-file FILE] [--async 0] [--rate-limit 0] [--unauthorized]
   pantherclaw-sim aws --secret-file FILE [--addr 127.0.0.1:9099] [--external-id ID] [--role-actions *] [--throttle 0] [--deny-assume-role]
                       [--long-sessions]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
@@ -82,6 +86,10 @@ var defaultAddrs = map[string]string{
 	"google":             "127.0.0.1:9104",
 	"m365":               "127.0.0.1:9105",
 	"model":              "127.0.0.1:9103",
+	"salesforce":         "127.0.0.1:9106",
+	"notion":             "127.0.0.1:9107",
+	"linear":             "127.0.0.1:9108",
+	"snowflake":          "127.0.0.1:9109",
 	"openapi":            "127.0.0.1:9112", // G0 M31 D954
 	"canary":             "127.0.0.1:18433",
 }
@@ -127,6 +135,14 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runModel(ctx, args[1:], stderr)
 	case "aws":
 		err = runAWS(ctx, args[1:], stderr)
+	case "salesforce":
+		err = runSalesforce(ctx, args[1:], stderr)
+	case "notion":
+		err = runNotion(ctx, args[1:], stderr)
+	case "linear":
+		err = runLinear(ctx, args[1:], stderr)
+	case "snowflake":
+		err = runSnowflake(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	case "a2a":

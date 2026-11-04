@@ -64,6 +64,10 @@ type UpdateInput struct {
 	// D922, D925a): its endpoint must stay as it is; a new writer or
 	// another table weakens.
 	Vectorstore *VectorstoreConfig `json:",omitzero"`
+	// Snowflake replaces a snowflake connection's manifest (G0 M31 D962):
+	// its account, warehouse, database and schema must stay as they are; a
+	// widening change waits for confirmation.
+	Snowflake *SnowflakeConfig `json:",omitzero"`
 }
 
 // change is one changed field with its old and new values and whether it
@@ -314,7 +318,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 				if p.AccessMode != AccessHeld {
 					return ErrShape
 				}
-				nb, nh, err = s.modelShape(base, hosts, conn.Simulated, deref(conn.CredentialScheme), deref(conn.CredentialHeader))
+				nb, nh, err = s.modelShape(conn.Package, base, hosts, conn.Simulated, deref(conn.CredentialScheme), deref(conn.CredentialHeader))
 			} else {
 				nb, nh, err = s.shape(conn.Kind, base, hosts, p.AccessMode, deref(conn.CredentialHeader), deref(conn.CredentialScheme))
 			}
@@ -385,7 +389,7 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		}
 		peer := in.A2A
 		if in.A2APublicURL != nil {
-			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil || in.Model != nil || in.Vectorstore != nil {
+			if conn.Kind != KindA2A || in.A2A != nil || in.Postgres != nil || in.Model != nil || in.Vectorstore != nil || in.Snowflake != nil {
 				return ErrShape
 			}
 			current, _, err := s.currentA2A(ctx, tx, c.Org, conn.ID)
@@ -408,8 +412,8 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		surface := protect.SurfaceConnectionUpdate
 		var modelBefore, modelAfter *ModelConfig
 		var kc *kindConfig
-		if in.Postgres != nil || peer != nil || in.Model != nil || in.Vectorstore != nil {
-			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer, in.Model, in.Vectorstore)
+		if in.Postgres != nil || peer != nil || in.Model != nil || in.Vectorstore != nil || in.Snowflake != nil {
+			cfg, err := checkKindConfig(conn.Kind, conn.Simulated, in.Postgres, peer, in.Model, in.Vectorstore, in.Snowflake)
 			if err != nil {
 				return err
 			}
@@ -445,6 +449,17 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 					return ErrVectorstoreEndpointImmutable
 				}
 				set(KindVectorstore, vectorstoreSummary(before), vectorstoreSummary(v), vectorstoreWeakens(before, v))
+			} else if sf, isSnowflake := cfg.(*SnowflakeConfig); isSnowflake {
+				// G0 M31 D962: the account, warehouse, database and schema are
+				// fixed; the store proposes a widening manifest.
+				before, err := loadSnowflake(ctx, q, conn)
+				if err != nil {
+					return err
+				}
+				if before != nil && !before.SameEndpoint(*sf) {
+					return ErrSnowflakeEndpointImmutable
+				}
+				set(conn.Kind, "current", "replaced", true)
 			} else {
 				set(conn.Kind, "current", "replaced", true)
 			}

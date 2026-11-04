@@ -216,6 +216,16 @@ func declareKind(out *Capabilities, c Connection) {
 		// G0 M14 D16, D100.
 		out.Enforcement = Support{Supported, "The gateway builds every query itself from the reviewed manifest: " +
 			"parameterized, in a read-only transaction, with a row cap and a statement timeout (HR-307, HR-308)."}
+	case KindSnowflake:
+		// G0 M31 D962.
+		out.Enforcement = Support{Supported, "The gateway builds every query itself from the reviewed manifest, " +
+			"parameterized, with a row cap and a statement timeout, and sends it over the Snowflake SQL API with a key-pair " +
+			"JWT it signs for that call (HR-307, HR-726)."}
+		out.Limits = append(out.Limits, Limit{
+			"ROLE_NOT_CHECKED",
+			"The gateway does not check that the Snowflake user's role is read-only: grant it SELECT on the manifest's " +
+				"tables only.",
+		})
 	case KindVectorstore:
 		// G0 M30 D922-D924.
 		out.Enforcement = Support{Supported, "The gateway builds every statement itself against the connection's one table, " +

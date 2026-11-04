@@ -154,7 +154,12 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, cfg *control.Con
 		if maxOut <= 0 {
 			maxOut = DefaultMaxOutputTokens
 		}
-		if req, err = modelapi.Parse(rt.api, body, maxOut); err != nil {
+		if rt.api.ModelInPath() {
+			req, err = modelapi.ParsePath(rt.api, rt.id, body, maxOut) // G0 M31 D961
+		} else {
+			req, err = modelapi.Parse(rt.api, body, maxOut)
+		}
+		if err != nil {
 			code := cmpOr(modelapi.Code(err), CodeInvalidRequest)
 			if code == CodeBodyTooLarge {
 				refuse(w, api, http.StatusRequestEntityTooLarge, "request_too_large", fail(code))
@@ -254,9 +259,14 @@ func match(conn *control.Connection, method, rest string) (route, bool) {
 				continue
 			}
 			rt := route{def: d, api: modelapi.API(d.Dispatch.Model.API), route: m.Route, suffix: d.Dispatch.Model.Path}
-			if prefix, isOne := strings.CutSuffix(m.Path, "/{id}"); isOne {
-				esc, found := strings.CutPrefix(rest, base+prefix+"/")
-				if !found || esc == "" || strings.Contains(esc, "/") {
+			// A read of one model ends in /{id}; an API that names its
+			// model in the path has {id} inside it, such as
+			// /model/{id}/converse or /{id}:rawPredict (G0 M31 D961).
+			if i := strings.Index(m.Path, defs.ModelIDRef); i >= 0 {
+				prefix, suffix := m.Path[:i], m.Path[i+len(defs.ModelIDRef):]
+				after, found := strings.CutPrefix(rest, base+prefix)
+				esc, found2 := strings.CutSuffix(after, suffix)
+				if !found || !found2 || esc == "" || strings.Contains(esc, "/") {
 					continue
 				}
 				id, err := url.PathUnescape(esc)
@@ -283,6 +293,9 @@ func allowedQuery(api modelapi.API, raw string) (string, bool) {
 	if raw == "" {
 		return "", true
 	}
+	if api.ModelInPath() {
+		return "", false // Vertex and Bedrock calls take no query (G0 M31 D961)
+	}
 	q, err := url.ParseQuery(raw)
 	if err != nil {
 		return "", false
@@ -307,7 +320,11 @@ func allowedQuery(api modelapi.API, raw string) (string, bool) {
 // (and the model a read of one names) and the allowed query (D812).
 func outboundURL(conn *control.Connection, rt route, query string) (*url.URL, error) {
 	target := strings.TrimSuffix(conn.GetBaseUrl(), "/") + rt.suffix
-	if rt.id != "" {
+	switch {
+	case strings.Contains(rt.suffix, defs.ModelIDRef):
+		// The model in the path (G0 M31 D961), one escaped segment.
+		target = strings.TrimSuffix(conn.GetBaseUrl(), "/") + strings.Replace(rt.suffix, defs.ModelIDRef, url.PathEscape(rt.id), 1)
+	case rt.id != "":
 		target += "/" + url.PathEscape(rt.id)
 	}
 	if query != "" {
@@ -388,7 +405,7 @@ func requestHeaders(api modelapi.API, in http.Header, hasBody bool) http.Header 
 		h.Set("Content-Type", "application/json")
 	}
 	accept := "application/json"
-	if a := in.Get("Accept"); a == "application/json" || a == "text/event-stream" {
+	if a := in.Get("Accept"); a == "application/json" || a == "text/event-stream" || (api.Bedrock() && a == eventStreamType) {
 		accept = a
 	}
 	h.Set("Accept", accept)
@@ -397,14 +414,21 @@ func requestHeaders(api modelapi.API, in http.Header, hasBody bool) http.Header 
 			h.Set(name, v)
 		}
 	}
-	if api.Anthropic() {
+	switch {
+	case api.Bedrock():
+		// Converse takes no version or beta header (G0 M31 D961).
+	case api.ModelInPath() && api.Anthropic():
+		// Vertex AI reads the version from the body's anthropic_version
+		// (G0 M31 D961).
+		beta("Anthropic-Beta")
+	case api.Anthropic():
 		v := in.Get("Anthropic-Version")
 		if !anthropicVersion.MatchString(v) {
 			v = defaultAnthropicVersion
 		}
 		h.Set("Anthropic-Version", v)
 		beta("Anthropic-Beta")
-	} else {
+	default:
 		beta("OpenAI-Beta")
 	}
 	h.Set("User-Agent", "pantherclaw-gateway/"+version.Get().Version)
@@ -447,10 +471,7 @@ func (h *Handler) answer(w http.ResponseWriter, api modelapi.API, st *answerStat
 		st.started = true
 		w.WriteHeader(res.StatusCode)
 		mt, _, _ := mime.ParseMediaType(res.Header.Get("Content-Type"))
-		var stream *modelapi.Stream
-		if mt == "text/event-stream" {
-			stream = modelapi.NewStream(api)
-		}
+		stream := streamOf(api, mt)
 		sum := sha256.New()
 		var whole bytes.Buffer
 		red := &redactor{w: w, secret: s.Secret}
@@ -723,6 +744,14 @@ func refuse(w http.ResponseWriter, api modelapi.API, status int, typ string, f r
 	msg += ")"
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	if api.Bedrock() {
+		// Bedrock's shape: the error type in a header, the message in the
+		// body (G0 M31 D961).
+		w.Header().Set("X-Amzn-Errortype", bedrockErrorType(status))
+		w.WriteHeader(status)
+		_ = json.MarshalWrite(w, bedrockError{Message: msg, PantherClaw: expl})
+		return
+	}
 	w.WriteHeader(status)
 	if api.Anthropic() {
 		var out anthropicError

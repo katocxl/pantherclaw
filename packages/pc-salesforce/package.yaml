@@ -1,0 +1,183 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that work in Salesforce (G0 M31 D960).
+# It reaches the Salesforce REST API (v61.0) of one org, at
+# <instance>.my.salesforce.com, through an http connection whose credential
+# is of kind oauth_client: PantherClaw holds the connected app's client
+# secret and mints an access token for every dispatch at the org's own
+# token endpoint, https://<instance>.my.salesforce.com/services/oauth2/token
+# (D951); the token, never the secret, is placed on the request, and the
+# agent holds neither. Sealing refuses a token endpoint on any other host.
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.salesforce
+version: 1.0.0
+publisher: pantherclaw
+summary: Read Salesforce records and run Salesforce reports
+
+definitions:
+  - operation: salesforce.record.get
+    summary: Read one Salesforce record
+    access: read
+    target:
+      type: salesforce_record
+      id_pattern: '^[A-Za-z0-9]{15,18}$'
+      account: none
+    params:
+      sobject:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z][A-Za-z0-9_]{0,79}$'
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    # A record's fields are customer data: every field of the answer is
+    # classed pii (G0 M31 D960a).
+    response:
+      format: json
+      fields:
+        - path: '*'
+          class: pii
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: http
+        method: GET
+        path: /services/data/v61.0/sobjects/{sobject}/{id}
+        route: salesforce-record-get
+        extract:
+          target_id: path.id
+          params:
+            sobject: path.sobject
+      - channel: mcp
+        tool: salesforce_get_record
+        route: salesforce-record-get
+        description: >-
+          Read one Salesforce record by its object type, such as Account or
+          Invoice__c, and its 15- or 18-character record id.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [sobject, id]
+          properties:
+            sobject:
+              type: string
+              description: The object type, such as Account
+              pattern: '^[A-Za-z][A-Za-z0-9_]{0,79}$'
+            id:
+              type: string
+              description: The record id
+              pattern: '^[A-Za-z0-9]{15,18}$'
+        extract:
+          target_id: input.id
+          params:
+            sobject: input.sobject
+    dispatch:
+      http:
+        method: GET
+        path: /services/data/v61.0/sobjects/{params.sobject}/{target.id}
+
+  - operation: salesforce.report.run
+    summary: Run a Salesforce report
+    access: read
+    target:
+      type: salesforce_report
+      id_pattern: '^00O[A-Za-z0-9]{12}([A-Za-z0-9]{3})?$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    # A report's rows carry record values: every field of the answer is
+    # classed pii (G0 M31 D960a).
+    response:
+      format: json
+      fields:
+        - path: '*'
+          class: pii
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: http
+        method: GET
+        path: /services/data/v61.0/analytics/reports/{report}
+        route: salesforce-report-run
+        extract:
+          target_id: path.report
+          params: {}
+      - channel: mcp
+        tool: salesforce_run_report
+        route: salesforce-report-run
+        description: >-
+          Run a Salesforce report by its id, which starts with 00O, and
+          read its results.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [report_id]
+          properties:
+            report_id:
+              type: string
+              description: The report id
+              pattern: '^00O[A-Za-z0-9]{12}([A-Za-z0-9]{3})?$'
+        extract:
+          target_id: input.report_id
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /services/data/v61.0/analytics/reports/{target.id}
+
+  # The connection test (C2): a harmless read that needs no input, the
+  # org's API limits.
+  - operation: salesforce.limits.read
+    summary: Read the Salesforce org's API limits
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      http:
+        method: GET
+        path: /services/data/v61.0/limits
+
+# What the package covers: no environment, records scoped by record and
+# report.
+coverage:
+  environment:
+    source: none
+  record_scope: [salesforce_record, salesforce_report]
+  channels: [http, mcp]

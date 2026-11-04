@@ -188,6 +188,10 @@ const (
 	PackageGmail           = "pc.gmail"
 	PackageGoogleWorkspace = "pc.google-workspace"
 	PackageM365            = "pc.m365"
+	// The M31 software-as-a-service packages (G0 M31 D960).
+	PackageSalesforce = "pc.salesforce"
+	PackageNotion     = "pc.notion"
+	PackageLinear     = "pc.linear"
 )
 
 // Procedures that list evidence.

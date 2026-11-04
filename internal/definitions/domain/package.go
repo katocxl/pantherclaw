@@ -239,7 +239,7 @@ func (d *Definition) validateMapping(i int) error {
 		}
 	case ChannelHTTP:
 		root := m.Path == RootPath && m.Encoding.AWS() // an AWS protocol posts to the root (D254)
-		if m.Tool != "" || !slices.Contains(methods, m.Method) || (!root && !pathRe.MatchString(m.Path)) || len(m.Path) > 512 {
+		if m.Tool != "" || !slices.Contains(methods, m.Method) || (!root && !pathRe.MatchString(m.Path) && !d.modelMappingPath(m.Path)) || len(m.Path) > 512 {
 			return invalid("%s: an http mapping names a method %v and a path template", at, methods)
 		}
 		for seg := range strings.SplitSeq(m.Path[1:], "/") {

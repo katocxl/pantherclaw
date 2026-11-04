@@ -90,6 +90,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	m365URL := fs.String("m365-url", "", "with --gateway-out: also seed pc.m365 and the connection \"m365\" to this Microsoft Graph base (pantherclaw-sim m365: http://127.0.0.1:9105)")
 	modelURL := fs.String("model-url", "", "with --gateway-out: also seed pc.anthropic, pc.openai and the simulated model connections \"anthropic\" and \"openai\" "+
 		"to this fake model (pantherclaw-sim model: "+devSimModelURL+"), held by the gateway (G0 M29 D811)")
+	saas := devSaaSFlags(fs)
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -134,7 +135,8 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 	}
 	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "" ||
-		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "") && *gatewayOut == "" {
+		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "" || saas.any()) &&
+		*gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
 	if *a2aURL != "" && (*workloadOut == "" || *a2aPeerOut == "") {
@@ -224,6 +226,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if *m365URL != "" {
 		pkgs = append(pkgs, devPackage{pcm365.Name, pcm365.Version, pcm365.Package})
 	}
+	pkgs = append(pkgs, saas.packages()...)
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
 	}
@@ -341,6 +344,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			_, _ = fmt.Fprintf(stdout, "seeded m365 connection %s (%s) to %s; seal the app's client secret with "+
 				"pclaw seal --connection %s --from-file SECRET --oauth-token-url %s/TENANT_ID/oauth2/v2.0/token --oauth-client-id ID "+
 				"--oauth-scope https://graph.microsoft.com/.default\n", c.ID, c.Name, *m365URL, c.ID, *m365URL)
+		}
+		if err := saas.seed(ctx, cfg, pool, org, gw, stdout); err != nil {
+			return err
 		}
 		if *a2aURL != "" {
 			if err := seedA2A(ctx, cfg, pool, org, gw, w, *a2aURL, *a2aPeerOut, stdout); err != nil {

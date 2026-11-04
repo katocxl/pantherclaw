@@ -636,6 +636,9 @@ message GatewayConnection {
   // A vectorstore connection's settings (G0 M30 D922): its database, its
   // table and the agents that may write without a person.
   VectorstoreConfig vectorstore = 28;
+  // A snowflake connection's confirmed configuration and manifest (G0 M31
+  // D962); unset until a first one is confirmed, and nothing is sent.
+  SnowflakeConfig snowflake = 29;
 }
 
 // RouteModeSetting is one route's mode.

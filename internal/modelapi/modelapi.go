@@ -46,28 +46,55 @@ const (
 	OpenAIChat           API = "openai.chat"
 	OpenAIResponses      API = "openai.responses"
 	OpenAIModels         API = "openai.models"
+	// Anthropic models on Google Vertex AI (G0 M31 D961): the Messages
+	// format with the model in the path, not the body.
+	VertexRawPredict API = "vertex.anthropic.raw_predict"
+	VertexStream     API = "vertex.anthropic.stream_raw_predict"
+	// Amazon Bedrock Converse (G0 M31 D961): its own format, the model in
+	// the path, the stream an AWS event stream.
+	BedrockConverse API = "bedrock.converse"
+	BedrockStream   API = "bedrock.converse_stream"
 )
 
 // APIs lists every API.
-var APIs = []API{AnthropicMessages, AnthropicCountTokens, AnthropicModels, OpenAIChat, OpenAIResponses, OpenAIModels}
+var APIs = []API{
+	AnthropicMessages, AnthropicCountTokens, AnthropicModels, OpenAIChat, OpenAIResponses, OpenAIModels,
+	VertexRawPredict, VertexStream, BedrockConverse, BedrockStream,
+}
 
 // Read reports whether a lists or reads models: a GET with no body.
 func (a API) Read() bool { return a == AnthropicModels || a == OpenAIModels }
 
-// Anthropic reports whether a is one of Anthropic's APIs.
-func (a API) Anthropic() bool { return strings.HasPrefix(string(a), "anthropic.") }
+// Anthropic reports whether a's body, answers and refusals are Anthropic's
+// Messages shapes: Anthropic's own APIs and Anthropic models on Vertex AI.
+func (a API) Anthropic() bool {
+	return strings.HasPrefix(string(a), "anthropic.") || strings.HasPrefix(string(a), "vertex.anthropic.")
+}
+
+// Bedrock reports whether a is a Bedrock Converse API.
+func (a API) Bedrock() bool { return a == BedrockConverse || a == BedrockStream }
+
+// ModelInPath reports whether a names its model in the request path, not
+// the body (G0 M31 D961).
+func (a API) ModelInPath() bool { return a == VertexRawPredict || a == VertexStream || a.Bedrock() }
+
+// StreamPath reports whether a's path asks for an event stream whatever the
+// body says.
+func (a API) StreamPath() bool { return a == VertexStream || a == BedrockStream }
 
 // MaxTokensField is the request member that holds a's max output tokens
 // (the one the gateway inserts when it is absent); empty for an API without
-// one.
+// one. Bedrock's is maxTokens inside inferenceConfig.
 func (a API) MaxTokensField() string {
 	switch a {
-	case AnthropicMessages:
+	case AnthropicMessages, VertexRawPredict, VertexStream:
 		return "max_tokens"
 	case OpenAIChat:
 		return "max_completion_tokens"
 	case OpenAIResponses:
 		return "max_output_tokens"
+	case BedrockConverse, BedrockStream:
+		return bedrockMaxTokens
 	case AnthropicCountTokens, AnthropicModels, OpenAIModels:
 	}
 	return ""
@@ -158,7 +185,7 @@ func (r *Request) InputBytes() int64 { return int64(len(r.Body)) }
 // body's bytes, rounded up; 0 for token counting and reads.
 func (r *Request) ReservedTokens() int64 {
 	switch r.API {
-	case AnthropicMessages, OpenAIResponses:
+	case AnthropicMessages, OpenAIResponses, VertexRawPredict, VertexStream, BedrockConverse, BedrockStream:
 		return r.MaxTokens + (r.InputBytes()+2)/3
 	case OpenAIChat:
 		return r.MaxTokens*r.Choices + (r.InputBytes()+2)/3
@@ -185,6 +212,26 @@ func CheckModelID(id string) error {
 // defaultMaxTokens (1..MaxTokens) under api's max-tokens field when the
 // request has none. A read API has no body: Parse refuses it.
 func Parse(api API, body []byte, defaultMaxTokens int64) (*Request, error) {
+	if api.ModelInPath() {
+		return nil, fmt.Errorf("modelapi: %q names its model in the path: use ParsePath", api)
+	}
+	return parse(api, "", body, defaultMaxTokens)
+}
+
+// ParsePath is Parse for an API that names its model in the request path
+// (G0 M31 D961): model is the path's model id. A body that also names a
+// model must name the same one.
+func ParsePath(api API, model string, body []byte, defaultMaxTokens int64) (*Request, error) {
+	if !api.ModelInPath() {
+		return nil, fmt.Errorf("modelapi: %q names its model in the body: use Parse", api)
+	}
+	if err := CheckModelID(model); err != nil {
+		return nil, err
+	}
+	return parse(api, model, body, defaultMaxTokens)
+}
+
+func parse(api API, pathModel string, body []byte, defaultMaxTokens int64) (*Request, error) {
 	if !slices.Contains(APIs, api) || api.Read() {
 		return nil, fmt.Errorf("modelapi: %q has no request body", api)
 	}
@@ -194,7 +241,7 @@ func Parse(api API, body []byte, defaultMaxTokens int64) (*Request, error) {
 	if len(body) > MaxBody {
 		return nil, fail(CodeTooLarge, "the body is over %d bytes", MaxBody)
 	}
-	r := &Request{API: api, Choices: 1}
+	r := &Request{API: api, Choices: 1, Model: pathModel}
 	out, top, err := r.walk(body)
 	if err != nil {
 		return nil, err
@@ -202,7 +249,13 @@ func Parse(api API, body []byte, defaultMaxTokens int64) (*Request, error) {
 	if err := r.extract(top); err != nil {
 		return nil, err
 	}
-	if field := api.MaxTokensField(); field != "" && r.MaxTokens == 0 {
+	if api.Bedrock() && r.MaxTokens == 0 {
+		// Bedrock's field is nested in inferenceConfig (G0 M31 D961).
+		if out, err = insertBedrockMaxTokens(out, defaultMaxTokens); err != nil {
+			return nil, err
+		}
+		r.MaxTokens, r.Inserted = defaultMaxTokens, true
+	} else if field := api.MaxTokensField(); field != "" && r.MaxTokens == 0 {
 		// The only edit (D812): the connection's max tokens, under this
 		// API's field, as the last member of the object.
 		member := strconv.Quote(field) + ":" + strconv.FormatInt(defaultMaxTokens, 10)
@@ -269,21 +322,39 @@ func (r *Request) walk(body []byte) ([]byte, map[string]jsontext.Value, error) {
 
 // extract reads the metadata the decision is made on (D813).
 func (r *Request) extract(top map[string]jsontext.Value) error {
-	model, ok := top["model"]
-	if !ok {
-		return fail(CodeInvalidRequest, "model is required")
+	if r.API.ModelInPath() {
+		// The path names the model (G0 M31 D961); a body that names one
+		// too must name the same, so policy never decides on another.
+		if v, ok := top["model"]; ok && v.Kind() != 'n' {
+			var m string
+			if v.Kind() != '"' || json.Unmarshal(v, &m) != nil || m != r.Model {
+				return fail(CodeInvalidRequest, "the body's model differs from the path's")
+			}
+		}
+	} else {
+		model, ok := top["model"]
+		if !ok {
+			return fail(CodeInvalidRequest, "model is required")
+		}
+		if model.Kind() != '"' || json.Unmarshal(model, &r.Model) != nil {
+			return fail(CodeInvalidRequest, "model must be a string")
+		}
+		if err := CheckModelID(r.Model); err != nil {
+			return err
+		}
 	}
-	if model.Kind() != '"' || json.Unmarshal(model, &r.Model) != nil {
-		return fail(CodeInvalidRequest, "model must be a string")
-	}
-	if err := CheckModelID(r.Model); err != nil {
-		return err
+	if r.API.Bedrock() {
+		// Converse has its own fields (G0 M31 D961).
+		return r.extractBedrock(top)
 	}
 	if v, ok := top["stream"]; ok {
 		if k := v.Kind(); k != 't' && k != 'f' {
 			return fail(CodeInvalidRequest, "stream must be a boolean")
 		}
 		r.Stream = v.Kind() == 't'
+	}
+	if r.API.StreamPath() {
+		r.Stream = true
 	}
 	if err := r.maxTokens(top); err != nil {
 		return err

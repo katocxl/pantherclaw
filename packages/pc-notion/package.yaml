@@ -1,0 +1,356 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that work in Notion (G0 M31 D960). It
+# reaches the Notion API at api.notion.com through an http connection whose
+# credential PantherClaw holds: an internal integration's token, sent as a
+# bearer token and checked against credential_pattern before any byte is
+# sent (HR-301). The agent never holds the token. Every request carries the
+# fixed header Notion-Version: 2022-06-28, the API version these mappings
+# were reviewed against (D950).
+#
+# What an agent writes into Notion is type content: sent exactly as
+# written, so it is material, bound by the permit and any approval, and
+# visible to policy; text params are never dispatched from a template
+# (HR-023). An integration reaches only the pages a person shared with it.
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.notion
+version: 1.0.0
+publisher: pantherclaw
+summary: Read and search Notion pages, create pages and append paragraphs
+
+definitions:
+  - operation: notion.page.get
+    summary: Read a Notion page's properties
+    access: read
+    target:
+      type: notion_page
+      id_pattern: '^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: http
+        method: GET
+        path: /v1/pages/{page}
+        route: notion-page-get
+        extract:
+          target_id: path.page
+          params: {}
+      - channel: mcp
+        tool: notion_get_page
+        route: notion-page-get
+        description: >-
+          Read a Notion page's properties, such as its title, by the page id.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [page_id]
+          properties:
+            page_id:
+              type: string
+              description: The page id, a UUID with or without dashes
+              pattern: '^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+        extract:
+          target_id: input.page_id
+          params: {}
+    dispatch:
+      credential_pattern: '^(secret_|ntn_)[A-Za-z0-9]{40,60}$'
+      http:
+        method: GET
+        path: /v1/pages/{target.id}
+        headers:
+          Notion-Version: '2022-06-28'
+
+  - operation: notion.search
+    summary: Search the Notion pages shared with the integration by title
+    access: read
+    target:
+      type: notion_workspace
+      id_pattern: '^workspace$'
+      account: none
+    params:
+      query:
+        type: content
+        material: true
+        max_length: 512
+      page_size:
+        type: integer
+        unit: items
+        min: '1'
+        max: '100'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/search
+        route: notion-search
+        extract:
+          target_id: "'workspace'"
+          params:
+            query: input.?query
+            page_size: input.?page_size
+      - channel: mcp
+        tool: notion_search
+        route: notion-search
+        description: >-
+          Search the Notion pages shared with the integration by title. An
+          empty query lists them all, at most page_size (1 to 100) at once.
+        input_schema:
+          type: object
+          additionalProperties: false
+          properties:
+            query:
+              type: string
+              description: Text the page title holds
+              maxLength: 512
+            page_size:
+              type: integer
+              description: How many results to return, 1 to 100
+              minimum: 1
+              maximum: 100
+        extract:
+          target_id: "'workspace'"
+          params:
+            query: input.?query
+            page_size: input.?page_size
+    dispatch:
+      credential_pattern: '^(secret_|ntn_)[A-Za-z0-9]{40,60}$'
+      http:
+        method: POST
+        path: /v1/search
+        headers:
+          Notion-Version: '2022-06-28'
+        body:
+          query: params.query
+          page_size: params.page_size
+
+  - operation: notion.page.create
+    summary: Create a Notion page with a title and one paragraph under a parent page
+    access: write
+    target:
+      type: notion_page
+      id_pattern: '^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+      account: none
+    params:
+      title:
+        type: content
+        material: true
+        required: true
+        max_length: 2000
+      text:
+        type: content
+        material: true
+        required: true
+        max_length: 2000
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: page.create
+        description: Creates a page that everyone who can read the parent page can read
+    reversibility: compensatable
+    dedupe_key: [target.id, params.title]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Create a Notion page under page {target.id}
+      fields:
+        - target.id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/pages
+        route: notion-page-create
+        extract:
+          target_id: input.parent.page_id
+          params:
+            title: input.properties.title.title[0].text.content
+            text: input.children[0].paragraph.rich_text[0].text.content
+      - channel: mcp
+        tool: notion_create_page
+        route: notion-page-create
+        description: >-
+          Create a Notion page under a parent page, by the parent's page id,
+          with a title and one paragraph of plain text, each at most 2000
+          characters.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [parent_page_id, title, text]
+          properties:
+            parent_page_id:
+              type: string
+              description: The parent page id, a UUID with or without dashes
+              pattern: '^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+            title:
+              type: string
+              description: The new page's title
+              maxLength: 2000
+            text:
+              type: string
+              description: The new page's paragraph, plain text
+              maxLength: 2000
+        extract:
+          target_id: input.parent_page_id
+          params:
+            title: input.title
+            text: input.text
+    dispatch:
+      credential_pattern: '^(secret_|ntn_)[A-Za-z0-9]{40,60}$'
+      http:
+        method: POST
+        path: /v1/pages
+        headers:
+          Notion-Version: '2022-06-28'
+        # One title and one paragraph, by numeric indices (D950).
+        body:
+          parent[page_id]: target.id
+          properties[title][title][0][type]: literal.text
+          properties[title][title][0][text][content]: params.title
+          children[0][object]: literal.block
+          children[0][type]: literal.paragraph
+          children[0][paragraph][rich_text][0][type]: literal.text
+          children[0][paragraph][rich_text][0][text][content]: params.text
+
+  - operation: notion.block.append
+    summary: Append a paragraph to a Notion page or block
+    access: write
+    target:
+      type: notion_block
+      id_pattern: '^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+      account: none
+    params:
+      text:
+        type: content
+        material: true
+        required: true
+        max_length: 2000
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: block.append
+        description: Adds a paragraph that everyone who can read the page can read
+    reversibility: compensatable
+    dedupe_key: [target.id, params.text]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Append a paragraph to Notion block {target.id}
+      fields:
+        - target.id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: http
+        method: PATCH
+        path: /v1/blocks/{block}/children
+        route: notion-block-append
+        extract:
+          target_id: path.block
+          params:
+            text: input.children[0].paragraph.rich_text[0].text.content
+      - channel: mcp
+        tool: notion_append_paragraph
+        route: notion-block-append
+        description: >-
+          Append one paragraph of plain text, at most 2000 characters, to a
+          Notion page or block by its id.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [block_id, text]
+          properties:
+            block_id:
+              type: string
+              description: The page or block id, a UUID with or without dashes
+              pattern: '^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+            text:
+              type: string
+              description: The paragraph, plain text
+              maxLength: 2000
+        extract:
+          target_id: input.block_id
+          params:
+            text: input.text
+    dispatch:
+      credential_pattern: '^(secret_|ntn_)[A-Za-z0-9]{40,60}$'
+      http:
+        method: PATCH
+        path: /v1/blocks/{target.id}/children
+        headers:
+          Notion-Version: '2022-06-28'
+        body:
+          children[0][object]: literal.block
+          children[0][type]: literal.paragraph
+          children[0][paragraph][rich_text][0][type]: literal.text
+          children[0][paragraph][rich_text][0][text][content]: params.text
+
+  # The connection test (C2): a harmless read that needs no input, the
+  # integration's own bot user.
+  - operation: notion.user.me
+    summary: Read the Notion integration's bot user
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      credential_pattern: '^(secret_|ntn_)[A-Za-z0-9]{40,60}$'
+      http:
+        method: GET
+        path: /v1/users/me
+        headers:
+          Notion-Version: '2022-06-28'
+
+# What the package covers: no environment, records scoped by page, block and
+# workspace.
+coverage:
+  environment:
+    source: none
+  record_scope: [notion_page, notion_block, notion_workspace]
+  channels: [http, mcp]

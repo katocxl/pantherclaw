@@ -38,7 +38,8 @@ func init() {
 		usage: "seal --connection ID --from-file FILE|- [--fingerprint sha256:HEX] [--github-app ID --installation N --account LOGIN]\n" +
 			"  [--oauth-token-url URL --oauth-client-id ID --oauth-scope SCOPE]\n" +
 			"  [--aws-access-key-id ID --aws-role-arn ARN [--aws-external-id ID] --aws-sts-url URL --aws-sts-region R --aws-region R --aws-service S]\n" +
-			"  | seal --connection ID --google-service-account KEY.json [--subject EMAIL] --scope URL [--scope URL ...] [--fingerprint sha256:HEX]",
+			"  | seal --connection ID --google-service-account KEY.json [--subject EMAIL] --scope URL [--scope URL ...] [--fingerprint sha256:HEX]\n" +
+			"  | seal --connection ID --snowflake-account ACCOUNT --snowflake-user USER --from-file KEY.p8 [--fingerprint sha256:HEX]",
 		run: seal,
 	}
 	commands["credential list"] = rpc("credential list CONNECTION", 1, func(*flag.FlagSet) call {
@@ -129,12 +130,19 @@ func seal(ctx context.Context, a *app, args []string) error {
 	subject := fs.String("subject", "", "with --google-service-account: the user the account acts as (domain-wide delegation)")
 	var googleScopes list
 	fs.Var(&googleScopes, "scope", "with --google-service-account: a scope, https://www.googleapis.com/auth/…; repeat for each (at most 8)")
+	sfAccount := fs.String("snowflake-account", "", "seal a Snowflake key pair: the account identifier; --from-file is then the user's unencrypted RSA private key (PEM)")
+	sfUser := fs.String("snowflake-user", "", "with --snowflake-account: the Snowflake user the key belongs to")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	isOAuth := *tokenURL != "" || *clientID != "" || *scope != ""
 	isAWS := *accessKey != "" || *roleARN != "" || *externalID != "" || *stsURL != "" || *stsRegion != "" || *region != "" || *service != ""
 	isGoogle := *googleKey != "" || *subject != "" || len(googleScopes) > 0
+	isSnowflake := *sfAccount != "" || *sfUser != ""
+	if isSnowflake && (*sfAccount == "" || *sfUser == "" || *app != "" || isOAuth || isAWS || isGoogle) {
+		// G0 M31 D962.
+		return errUsage
+	}
 	if isGoogle {
 		// G0 M31 D952: the key file is the credential.
 		if *googleKey == "" || len(googleScopes) == 0 || *from != "" || *app != "" || isOAuth || isAWS {
@@ -182,7 +190,7 @@ func seal(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if *app == "" && !isGoogle && privateKey {
+	if *app == "" && !isGoogle && !isSnowflake && privateKey {
 		// A static credential goes to the target in a header: a private key
 		// must never be one.
 		clear(secret)
@@ -201,6 +209,11 @@ func seal(ctx context.Context, a *app, args []string) error {
 			return err
 		}
 		kind = domain.KindGoogleServiceAccount
+	case isSnowflake:
+		if secret, err = sealSnowflakeKeypair(k, *sfAccount, *sfUser, secret); err != nil {
+			return err
+		}
+		kind = domain.KindSnowflakeKeypair
 	case isOAuth:
 		if secret, err = sealOAuthClient(k, *tokenURL, *clientID, *scope, secret); err != nil {
 			return err
@@ -313,6 +326,23 @@ func sealGoogleServiceAccount(k *pb.GetSealingKeyResponse, subject string, scope
 	if err != nil || !bound(k, u) {
 		clear(plain)
 		return nil, errors.New("the token endpoint's host is not one this connection binds; add it to the connection's allowed hosts first; nothing was sealed")
+	}
+	return plain, nil
+}
+
+// sealSnowflakeKeypair turns a Snowflake user's private key into the
+// content of a key-pair credential (G0 M31 D962) and clears the key. The
+// gateway places the JWTs it signs as Authorization: Bearer, so the
+// connection must already use that header and scheme.
+func sealSnowflakeKeypair(k *pb.GetSealingKeyResponse, account, user string, key []byte) ([]byte, error) {
+	defer clear(key)
+	if k.GetHeader() != domain.SnowflakeKeypairHeader || k.GetScheme() != domain.SnowflakeKeypairScheme {
+		return nil, errors.New("a Snowflake key-pair JWT goes in Authorization: Bearer; set the connection's credential header and scheme to that first; nothing was sealed")
+	}
+	plain, err := domain.SnowflakeKeypair{V: 1, Account: account, User: user, PrivateKey: key}.Encode()
+	if err != nil {
+		return nil, errors.New("--snowflake-account needs an account identifier, --snowflake-user, and the user's unencrypted RSA private key " +
+			"(at least 2048 bits, PEM) in --from-file; nothing was sealed")
 	}
 	return plain, nil
 }

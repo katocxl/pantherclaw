@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for Amazon Bedrock Converse over a model connection
+# (G0 M31 D961; follows pc.anthropic, G0 M29 D811, D813, D813a; HR-690,
+# HR-691, HR-696, HR-727).
+#
+# The connection is kind model, its base URL the Bedrock runtime endpoint,
+# such as https://bedrock-runtime.us-east-1.amazonaws.com (pantherclaw-sim
+# model at http://127.0.0.1:9103/bedrock in development and tests). Its
+# credential is aws_sigv4 sealed for the service bedrock: each call is
+# signed with a session assumed for that call alone and narrowed to one
+# action on the one foundation model the path names (HR-525): InvokeModel
+# for Converse, InvokeModelWithResponseStream for ConverseStream. The
+# connection's allowed hosts name the STS host beside the runtime's. The
+# agent never holds a key.
+#
+# The body is Converse's own format (bedrock_converse), the model in the
+# path. The gateway strictly parses it, decides on its metadata and the
+# sha256 of the re-encoded body, and forwards exactly that body (HR-691);
+# its only edit is adding inferenceConfig.maxTokens when the request has
+# none. ConverseStream answers an AWS event stream, whose metadata event
+# carries the usage.
+#
+# server_tools lists the provider-side tool entries a request names: a
+# toolConfig.tools[] entry other than toolSpec (a tool the agent runs) and
+# cachePoint, and provider-side Anthropic tools passed in
+# additionalModelRequestFields.tools. Each is refused unless an admin
+# allowed it (HR-696). An unknown entry counts as provider-side.
+#
+# Model calls have no dedupe key (D813a).
+format: 1
+name: pc.bedrock
+version: 1.0.0
+publisher: pantherclaw
+summary: Amazon Bedrock Converse and ConverseStream through a model connection
+
+definitions:
+  - operation: bedrock.converse.create
+    summary: Ask a Bedrock model for a reply (Converse)
+    access: write
+    target:
+      type: model
+      id_pattern: '^[a-z0-9-]{1,32}\.[A-Za-z0-9._:-]{1,200}$'
+      account: none
+    params:
+      model:
+        type: identifier
+        material: true
+        required: true
+        max_length: 256
+      max_tokens:
+        type: integer
+        material: true
+        required: true
+        unit: count
+        min: "1"
+        max: "1000000"
+      stream:
+        type: boolean
+        material: true
+        required: true
+      input_bytes:
+        type: integer
+        material: true
+        required: true
+        unit: bytes
+        min: "0"
+        max: "16777216"
+      server_tools:
+        type: identifier_list
+        material: true
+        max_items: 32
+        pattern: '^[A-Za-z][A-Za-z0-9_.-]{0,63}$'
+      body_sha256:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+    effects:
+      - kind: model.inference
+        description: The provider generates a reply and bills the tokens it uses
+    reversibility: reversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Send a request to the Bedrock model {params.model}
+      fields: [params.model, params.max_tokens, params.stream, params.input_bytes, params.server_tools]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      model:
+        api: bedrock.converse
+        path: /model/{id}/converse
+        aws_action: InvokeModel
+        aws_resource: 'arn:{aws.partition}:bedrock:{aws.region}::foundation-model/{target.id}'
+    mappings:
+      - channel: http
+        method: POST
+        path: /model/{id}/converse
+        route: bedrock-converse
+
+  - operation: bedrock.converse.stream
+    summary: Ask a Bedrock model for a streamed reply (ConverseStream)
+    access: write
+    target:
+      type: model
+      id_pattern: '^[a-z0-9-]{1,32}\.[A-Za-z0-9._:-]{1,200}$'
+      account: none
+    params:
+      model:
+        type: identifier
+        material: true
+        required: true
+        max_length: 256
+      max_tokens:
+        type: integer
+        material: true
+        required: true
+        unit: count
+        min: "1"
+        max: "1000000"
+      stream:
+        type: boolean
+        material: true
+        required: true
+      input_bytes:
+        type: integer
+        material: true
+        required: true
+        unit: bytes
+        min: "0"
+        max: "16777216"
+      server_tools:
+        type: identifier_list
+        material: true
+        max_items: 32
+        pattern: '^[A-Za-z][A-Za-z0-9_.-]{0,63}$'
+      body_sha256:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+    effects:
+      - kind: model.inference
+        description: The provider generates a reply and bills the tokens it uses
+    reversibility: reversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Send a streamed request to the Bedrock model {params.model}
+      fields: [params.model, params.max_tokens, params.stream, params.input_bytes, params.server_tools]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      model:
+        api: bedrock.converse_stream
+        path: /model/{id}/converse-stream
+        aws_action: InvokeModelWithResponseStream
+        aws_resource: 'arn:{aws.partition}:bedrock:{aws.region}::foundation-model/{target.id}'
+    mappings:
+      - channel: http
+        method: POST
+        path: /model/{id}/converse-stream
+        route: bedrock-converse-stream

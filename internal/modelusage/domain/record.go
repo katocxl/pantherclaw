@@ -19,6 +19,11 @@ var UsageOperations = map[string]bool{
 	"anthropic.messages.count_tokens": true,
 	"openai.chat.create":              true,
 	"openai.responses.create":         true,
+	// Anthropic models on Vertex AI and Bedrock Converse (G0 M31 D961).
+	"vertex.messages.create":  true,
+	"vertex.messages.stream":  true,
+	"bedrock.converse.create": true,
+	"bedrock.converse.stream": true,
 }
 
 // Record is one model call's usage row (D825), written in the transaction
