@@ -511,14 +511,14 @@ func TestF048_AnOrgScanRecordsTheInstallationItRead(t *testing.T) {
 		if _, err := team.Start(admin, conn); err != nil {
 			t.Fatal(err)
 		}
-		leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+		leases, err := store.Claim(admin, e.org, gateway, 4, 30*time.Second)
 		if err != nil || len(leases) != 1 {
 			t.Fatalf("leases %+v %v", leases, err)
 		}
 		if meanwhile != nil {
 			meanwhile()
 		}
-		if _, err := store.Report(context.Background(), e.org, gateway, tapp.Report{
+		if _, err := store.Report(admin, e.org, gateway, tapp.Report{
 			Task: leases[0].Task, Secret: leases[0].Secret, HTTPStatus: 200, Found: true, Complete: true,
 			Fields: map[string]string{"/counts/repositories": "1"}, Installation: in,
 		}, nil); err != nil {

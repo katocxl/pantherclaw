@@ -12,7 +12,7 @@ import (
 )
 
 // These tests check the schema's second line of defense for M8 track G
-// (migration 00081): GitHub facts, identities and the organisation scan.
+// (migration 00081): GitHub facts, identities and the organization scan.
 // The application enforces the same rules first. Names are prefixed m8g so
 // that they never collide with other milestones' schema tests here.
 

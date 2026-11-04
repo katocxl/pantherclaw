@@ -374,7 +374,7 @@ func TestHR520_TheOldKeyIsRevokedOnlyWhenGitHubRefusesIt(t *testing.T) {
 
 // TestT224_RotationLockoutAndRollbackAbuse: a rotation needs the current
 // preview; while one is open no other credential is stored, nor a second
-// rotation opened; a test lease whose rotation moved on is cancelled
+// rotation opened; a test lease whose rotation moved on is canceled
 // rather than handed out; a report under another lease is refused; and a
 // candidate for another installation is refused.
 // Covers: F424
@@ -410,7 +410,7 @@ func TestT224_RotationLockoutAndRollbackAbuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := e.lease(t, e.gateway); ok {
-		t.Fatal("a cancelled rotation's test was leased")
+		t.Fatal("a canceled rotation's test was leased")
 	}
 	r = e.sealed(t)
 	if _, err := e.svc.TestRotation(e.person, r.ID); err != nil {

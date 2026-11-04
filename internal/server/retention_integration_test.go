@@ -54,7 +54,7 @@ func TestHR198_RemovedReceiptsStillVerifyOffline(t *testing.T) {
 	}
 	authorizeRefund := func(amount string) ids.UUID {
 		t.Helper()
-		nonce, err := ctl.Authority.GetNonce(ctx, &pantherclawv1.GetNonceRequest{})
+		nonce, err := ctl.Authority.GetNonce(t.Context(), &pantherclawv1.GetNonceRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -270,8 +270,8 @@ func (g gates) ConsumeGate(ctx context.Context, tx pgx.Tx, org ids.OrgID, id ids
 }
 
 // TestHR283_CancelStopsAtTheBoundaryAndReportsItsVerifiedEffect (D28):
-// cancelling a waiting execution ends it in one transaction; its grant is
-// revoked, its run ended and its launch cancelled, and the effect lists
+// canceling a waiting execution ends it in one transaction; its grant is
+// revoked, its run ended and its launch canceled, and the effect lists
 // exactly those; the launch it already made is reported as a change, never
 // undone.
 func TestHR283_CancelStopsAtTheBoundaryAndReportsItsVerifiedEffect(t *testing.T) {
@@ -307,7 +307,7 @@ func TestHR283_CancelStopsAtTheBoundaryAndReportsItsVerifiedEffect(t *testing.T)
 	if sum.Result == nil || len(sum.Result.Changed) != 1 || sum.Result.Changed[0] != "launch" {
 		t.Errorf("result %+v", sum.Result)
 	}
-	// A cancelled execution stays as it is.
+	// A canceled execution stays as it is.
 	if _, eff, err := f.e.CancelExecution(f.manager(), exec, ""); err != nil || len(eff.Grants) != 0 {
 		t.Errorf("a second cancel: %+v %v", eff, err)
 	}
@@ -586,7 +586,7 @@ func (f *efx) activeDestination(t *testing.T, dest ids.UUID, purpose string) {
 		VALUES ($1, $2, 'runner', 'https://runner.example.com/hook', ARRAY[$5], $3, $4)`,
 		f.Org, dest, bytes.Repeat([]byte{9}, 32), f.User, purpose)
 	cred := ids.NewV7()
-	key := append(cred[:], bytes.Repeat([]byte{5}, 16)...)
+	key := slices.Concat(cred[:], bytes.Repeat([]byte{5}, 16))
 	f.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
 		backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
 		f.Org, cred, f.User, key[:16], key)
@@ -599,7 +599,7 @@ func (f *efx) activeDestination(t *testing.T, dest ids.UUID, purpose string) {
 func (f *efx) operator(t *testing.T) {
 	t.Helper()
 	op := ids.NewV7()
-	key := append(op[:], bytes.Repeat([]byte{6}, 16)...)
+	key := slices.Concat(op[:], bytes.Repeat([]byte{6}, 16))
 	f.Exec(t, `INSERT INTO pc.users (org_id, id, issuer, subject, created_at) VALUES ($1, $2, 'https://idp.test', 'olga',
 		now() - interval '30 days')`, f.Org, op)
 	f.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,

@@ -129,11 +129,12 @@ func TestHR394_AccountDeletionLastAdminRollbackAndRace(t *testing.T) {
 	close(results)
 	success, refused := 0, 0
 	for err := range results {
-		if err == nil {
+		switch {
+		case err == nil:
 			success++
-		} else if errors.Is(err, accounts.ErrLastAdmin) {
+		case errors.Is(err, accounts.ErrLastAdmin):
 			refused++
-		} else {
+		default:
 			t.Fatal(err)
 		}
 	}

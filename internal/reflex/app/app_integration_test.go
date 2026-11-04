@@ -53,16 +53,15 @@ func (n *notifier) count(typ string) int {
 }
 
 type fixture struct {
-	p          *db.Pool
-	org        ids.OrgID
-	alice      ids.UUID
-	agentA     ids.UUID
-	agentB     ids.UUID
-	n          *notifier
-	hooks      *reflexapp.Hooks
-	raiser     *alerts.Raiser
-	svc        *reflexapp.Incidents
-	teamA, env ids.UUID
+	p      *db.Pool
+	org    ids.OrgID
+	alice  ids.UUID
+	agentA ids.UUID
+	agentB ids.UUID
+	n      *notifier
+	hooks  *reflexapp.Hooks
+	raiser *alerts.Raiser
+	svc    *reflexapp.Incidents
 }
 
 func newFixture(t *testing.T, edition billing.Edition) *fixture {
