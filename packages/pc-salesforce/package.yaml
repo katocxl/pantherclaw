@@ -105,6 +105,13 @@ definitions:
     retry:
       safe: true
       on_unknown: fail
+    # A report's rows carry record values: every field of the answer is
+    # classed pii (G0 M31 D960a).
+    response:
+      format: json
+      fields:
+        - path: '*'
+          class: pii
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]
