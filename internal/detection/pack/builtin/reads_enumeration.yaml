@@ -12,14 +12,14 @@ description: >-
 severity: MEDIUM
 attention: ALERT
 basis: INFERRED
-atlas: [AML.T0075]
+atlas: [AML.T0075, AML.T0126]
 attack: [T1119, T1530]
 edition: business
 on: [receipt.decision]
 match: >-
   event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"]
   && (event.attrs.?access.orValue("") == "read"
-  || event.operation.matches("\.(read|get|list|search|download|export|fetch|clone)(\.|$)"))
+  || event.operation.matches("\\.(read|get|list|search|download|export|fetch|clone)(\\.|$)"))
 window:
   duration: 10m
   group_by: [subjects.run]

@@ -20,7 +20,6 @@ var Unaddressed = []UnaddressedEntry{
 	{ID: "AML.T0061", Why: "LLM prompt self-replication (AML.T0061): PantherClaw does not inspect model output for prompts that copy themselves."},
 	{ID: "AML.T0067", Why: "LLM trusted output components manipulation (AML.T0067): citations and labels in a model's answer have no PantherClaw control."},
 	{ID: "AML.T0069", Why: "Discover LLM system information (AML.T0069): asking the model about its system prompt never reaches a PantherClaw decision."},
-	{ID: "AML.T0075", Why: "Enterprise resource discovery (AML.T0075): granted reads that enumerate resources look like ordinary use; no control tells them apart."},
 	{ID: "AML.T0077", Why: "LLM response rendering (AML.T0077): rendering of model output in a client has no PantherClaw control."},
 	{ID: "AML.T0080", Why: "AI agent context poisoning (AML.T0080): an agent's memory and context are not read by PantherClaw."},
 	{ID: "AML.T0082", Why: "RAG credential harvesting (AML.T0082): credentials retrieved from an index never pass a PantherClaw decision."},
@@ -40,10 +39,8 @@ var Unaddressed = []UnaddressedEntry{
 	{ID: "AML.T0136", Why: "Exfiltration via AI user interface (AML.T0136): disclosure in an assistant's own answers has no PantherClaw control."},
 	{ID: "AML.T0143", Why: "LLM prompt propagation (AML.T0143): instructions carried onward between stores and agents have no control of their own yet."},
 	// ATT&CK
-	{ID: "T1020", Why: "Automated exfiltration (T1020): automation that sends data on a schedule apart from an agent's tools has no PantherClaw control."},
 	{ID: "T1080", Why: "Taint shared content (T1080): granted writes to a shared repository are allowed; PantherClaw does not judge their content."},
 	{ID: "T1528", Why: "Steal application access token (T1528): theft of a token happens where it is stored; PantherClaw acts only on its later use."},
-	{ID: "T1530", Why: "Data from cloud storage (T1530): no control tells cloud storage collection apart from granted reads yet."},
 	{ID: "T1651", Why: "Cloud administration command (T1651): commands run through a cloud's own management service have no PantherClaw control yet."},
 	{ID: "T1696", Why: "Anti-automation evasion (T1696): an agent solving automation checks in its own browser makes no PantherClaw call."},
 	{ID: "T1699", Why: "Direct prompt injection (T1699): it happens in the model's conversation; PantherClaw decides on the actions that follow."},

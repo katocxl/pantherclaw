@@ -1160,9 +1160,14 @@ type ModelConfig struct {
 	AllowedServerTools []string `protobuf:"bytes,2,rep,name=allowed_server_tools,json=allowedServerTools,proto3" json:"allowed_server_tools,omitempty"`
 	// An optional price for estimates only (Team, HR-698); unset = no price.
 	// PantherClaw ships no price list.
-	Price         *ModelPrice `protobuf:"bytes,3,opt,name=price,proto3" json:"price,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Price *ModelPrice `protobuf:"bytes,3,opt,name=price,proto3" json:"price,omitempty"`
+	// Prompt capture (Business, G0 M30 D945b): while on, a capture profile
+	// that covers this connection keeps its requests and replies for the
+	// profile's retention. Off by default; turning it on waits for a second
+	// person's security-key confirmation, turning it off applies at once.
+	CapturePrompts bool `protobuf:"varint,4,opt,name=capture_prompts,json=capturePrompts,proto3" json:"capture_prompts,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ModelConfig) Reset() {
@@ -1214,6 +1219,13 @@ func (x *ModelConfig) GetPrice() *ModelPrice {
 		return x.Price
 	}
 	return nil
+}
+
+func (x *ModelConfig) GetCapturePrompts() bool {
+	if x != nil {
+		return x.CapturePrompts
+	}
+	return false
 }
 
 // ModelPrice is what the organization pays its provider per million tokens,
@@ -6073,11 +6085,12 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\xbaH\a\x1a\x05\x18\x80}(\x01R\n" +
 	"dimensions\x12<\n" +
 	"\bdistance\x18\v \x01(\tB \xbaH\x1dr\x1bR\x06cosineR\x02l2R\rinner_productR\bdistance\x12;\n" +
-	"\x10writer_agent_ids\x18\f \x03(\tB\x11\xbaH\x0e\x92\x01\v\x10@\x18\x01\"\x05r\x03\xb0\x01\x01R\x0ewriterAgentIds\"\xd4\x01\n" +
+	"\x10writer_agent_ids\x18\f \x03(\tB\x11\xbaH\x0e\x92\x01\v\x10@\x18\x01\"\x05r\x03\xb0\x01\x01R\x0ewriterAgentIds\"\xfd\x01\n" +
 	"\vModelConfig\x127\n" +
 	"\x11max_output_tokens\x18\x01 \x01(\x03B\v\xbaH\b\"\x06\x18\xc0\x84=(\x00R\x0fmaxOutputTokens\x12Z\n" +
 	"\x14allowed_server_tools\x18\x02 \x03(\tB(\xbaH%\x92\x01\"\x10 \x18\x01\"\x1cr\x1a2\x18^[a-z][a-z0-9_.-]{0,63}$R\x12allowedServerTools\x120\n" +
-	"\x05price\x18\x03 \x01(\v2\x1a.pantherclaw.v1.ModelPriceR\x05price\"\xfa\x04\n" +
+	"\x05price\x18\x03 \x01(\v2\x1a.pantherclaw.v1.ModelPriceR\x05price\x12'\n" +
+	"\x0fcapture_prompts\x18\x04 \x01(\bR\x0ecapturePrompts\"\xfa\x04\n" +
 	"\n" +
 	"ModelPrice\x12-\n" +
 	"\bcurrency\x18\x01 \x01(\tB\x11\xbaH\x0er\f2\n" +
