@@ -409,17 +409,16 @@ func budget(ctx context.Context, q *dbq.Queries, org ids.OrgID, run ids.UUID) ([
 		if b.Account {
 			l.Held, l.Committed, l.Released = b.Held.String(), b.Committed.String(), b.Released.String()
 			if b.RunCap > 0 {
-				// G0 M29 D822: only this run uses its own token account, so
-				// what is left is its cap less what it holds and committed.
+				// G0 M29 D822, D875: the run tree shares one token account, so
+				// what is left is the cap less what the whole tree holds and
+				// committed on it.
 				limit, err := money.FromInt(b.RunCap)
 				if err != nil {
 					return nil, err
 				}
 				l.Limit = limit.String()
-				if used, err := b.Held.Add(b.Committed); err == nil {
-					if left, err := limit.Sub(used); err == nil {
-						l.Remaining = left.String()
-					}
+				if left, err := limit.Sub(b.RunUsed); err == nil {
+					l.Remaining = left.String()
 				}
 			}
 		} else {

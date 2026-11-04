@@ -3932,6 +3932,7 @@ type PcRun struct {
 	AutomationExecutionID *ids.UUID
 	ScopeOperations       []string
 	MaxTokens             pgtype.Int8
+	TokenCapRunID         *ids.UUID
 }
 
 type PcSaasScanRun struct {

@@ -263,6 +263,9 @@ type DebitContext struct {
 	ModelTokens int64
 	// RunMaxTokens is the run's token cap, when it has one (G0 M29 D822).
 	RunMaxTokens *int64
+	// TokenCapRunID is the run that set that cap, the owner of the token
+	// account its whole run tree shares (G0 M29 D875); set with RunMaxTokens.
+	TokenCapRunID ids.UUID
 }
 
 // Plan is everything one action must reserve.
@@ -369,11 +372,12 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 			plan.Counters = append(plan.Counters, cd)
 		}
 	}
-	// G0 M29 D822: a run's token cap is one more level, owned by the run,
-	// locked last; it covers that run's model calls only and only restricts.
-	if dc.RunMaxTokens != nil && dc.ModelTokens > 0 && !dc.RunID.IsZero() {
-		owner := bdomain.Owner{Kind: bdomain.OwnerRun, ID: dc.RunID, Rank: bdomain.RunRank}
-		plan.Budgets = append(plan.Budgets, tokenDebit(owner, bdomain.RunTokensRule, dc.RunID.String(),
+	// G0 M29 D822, D875: a run's token cap is one more level, locked last,
+	// owned by the run that set it and shared by its whole run tree, so a
+	// child run's model calls cannot escape it; it only restricts.
+	if dc.RunMaxTokens != nil && dc.ModelTokens > 0 && !dc.TokenCapRunID.IsZero() {
+		owner := bdomain.Owner{Kind: bdomain.OwnerRun, ID: dc.TokenCapRunID, Rank: bdomain.RunRank}
+		plan.Budgets = append(plan.Budgets, tokenDebit(owner, bdomain.RunTokensRule, dc.TokenCapRunID.String(),
 			bdomain.GroupTask, bdomain.PeriodNone, *dc.RunMaxTokens, dc))
 	}
 	return plan, nil

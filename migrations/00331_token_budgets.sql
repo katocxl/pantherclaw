@@ -5,7 +5,7 @@
 -- counts money ('currency', the default, every existing row) or model tokens
 -- ('tokens', no currency). A run may carry a token cap, set at creation and
 -- never changed (pc.runs.max_tokens, D822); its account is owned by the run
--- (owner_kind 'run') and is locked last in the HR-048 order, so its rank
+-- that set the cap and shared with its descendants (owner_kind 'run', D875) and is locked last in the HR-048 order, so its rank
 -- is one past the deepest grant's (grants rank depth + 1, depth at most 4).
 -- A model call reserves an estimate and settles at the usage the provider
 -- reported: settled_amount is what a token reservation commits instead of
@@ -34,10 +34,19 @@ ALTER TABLE pc.reservations
     ADD COLUMN settled_amount numeric(26,8) CHECK (settled_amount >= 0);
 GRANT UPDATE (settled_amount) ON pc.reservations TO pc_app;
 
+-- A capped run and all its descendants share one token account, owned by
+-- the run that set the cap (token_cap_run_id, D875): a child run copies
+-- both columns from its parent, so its model calls cannot escape the cap.
 ALTER TABLE pc.runs
-    ADD COLUMN max_tokens bigint CHECK (max_tokens BETWEEN 1 AND 1000000000000);
+    ADD COLUMN max_tokens bigint CHECK (max_tokens BETWEEN 1 AND 1000000000000),
+    ADD COLUMN token_cap_run_id uuid,
+    ADD CONSTRAINT runs_token_cap_check CHECK ((max_tokens IS NULL) = (token_cap_run_id IS NULL)) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.runs VALIDATE CONSTRAINT runs_token_cap_check;
 
 -- +goose Down
+ALTER TABLE pc.runs DROP CONSTRAINT runs_token_cap_check;
+ALTER TABLE pc.runs DROP COLUMN token_cap_run_id;
 ALTER TABLE pc.runs DROP COLUMN max_tokens;
 REVOKE UPDATE (settled_amount) ON pc.reservations FROM pc_app;
 ALTER TABLE pc.reservations DROP COLUMN settled_amount;

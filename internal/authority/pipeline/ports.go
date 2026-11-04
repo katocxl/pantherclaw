@@ -136,8 +136,11 @@ type Run struct {
 	// D408). Empty is the whole grant.
 	ScopeOperations []string
 	// MaxTokens, when set, is the run's token cap (G0 M29 D822): one more
-	// debit level, owned by the run, for its model calls.
+	// debit level, owned by TokenCapRunID, for its model calls.
 	MaxTokens *int64
+	// TokenCapRunID is the run that set MaxTokens (itself or an ancestor):
+	// the run tree shares its token account (G0 M29 D875).
+	TokenCapRunID ids.UUID
 }
 
 // RunConsequenceCounts are how a run's actions stand downstream (G0 M17

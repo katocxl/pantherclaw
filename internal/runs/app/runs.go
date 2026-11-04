@@ -322,6 +322,7 @@ func (s *Service) StartRun(ctx context.Context, in StartInput) (Run, error) {
 		}
 		if in.MaxTokens != nil {
 			p.MaxTokens = pgtype.Int8{Int64: *in.MaxTokens, Valid: true} // G0 M29 D822
+			p.TokenCapRunID = &p.ID                                      // D875: the run owns its tree's cap
 		}
 		id := c.Principal.ID
 		if c.Principal.Kind == td.KindUser {
@@ -474,6 +475,8 @@ func startChildRunTx(ctx context.Context, tx db.TenantTx, in ChildInput, minutes
 			AutomationExecutionID: parent.AutomationExecutionID, // HR-274 attribution one level down (D91)
 			TaskRef:               in.TaskRef, TtlMinutes: minutes, NotAfter: &parent.ExpiresAt,
 			Simulated: parent.Simulated || a.RangeAgent,
+			// G0 M29 D875: the child shares its parent's token cap and account.
+			MaxTokens: parent.MaxTokens, TokenCapRunID: parent.TokenCapRunID,
 		})
 		if err != nil {
 			return err

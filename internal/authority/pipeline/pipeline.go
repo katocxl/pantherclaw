@@ -1051,7 +1051,7 @@ func verdictEffect(v pdomain.Verdict) adomain.Decision {
 func (p *Pipeline) budgets(ctx context.Context, s *state) {
 	plan, f := s.chain.Debits(*s.gAction, gdomain.DebitContext{
 		Now: s.cont.Now, RunID: s.ev.RunID, Principal: s.run.Principal, TeamID: s.agent.TeamID, Simulated: s.run.Simulated,
-		ModelTokens: ModelTokens(s.def, s.vals), RunMaxTokens: s.run.MaxTokens,
+		ModelTokens: ModelTokens(s.def, s.vals), RunMaxTokens: s.run.MaxTokens, TokenCapRunID: s.run.TokenCapRunID,
 	})
 	if f != nil {
 		s.cl.add(StepBoundaries, effectOf(*f), f.Reason(), f.Finding.Detail, f.Level.String())

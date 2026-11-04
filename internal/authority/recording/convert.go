@@ -179,6 +179,7 @@ func fromRun(id ids.UUID, run pipeline.Run, err error) Run {
 	}
 	out.ScopeOperations = slices.Clone(run.ScopeOperations)
 	out.MaxTokens = run.MaxTokens
+	out.TokenCapRunID = uid(run.TokenCapRunID)
 	return out
 }
 
@@ -204,7 +205,9 @@ func (r Run) value() (pipeline.Run, error) {
 	out.Active, out.TaskRef = r.Active, r.TaskRef
 	out.ScopeOperations = slices.Clone(r.ScopeOperations)
 	out.MaxTokens = r.MaxTokens
-	return out, errors.Join(errs[:]...)
+	var capErr error
+	out.TokenCapRunID, capErr = parseUID(r.TokenCapRunID)
+	return out, errors.Join(append(errs[:], capErr)...)
 }
 
 func fromAgent(id ids.UUID, a pipeline.Agent, err error) Agent {

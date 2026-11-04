@@ -909,7 +909,7 @@ func (q *Queries) SubjectAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 
 const subjectRun = `-- name: SubjectRun :one
 SELECT agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id,
-       principal_user_id, principal_sa_id, parent_run_id, grant_id, state, expires_at, task_ref, simulated, scope_operations, max_tokens,
+       principal_user_id, principal_sa_id, parent_run_id, grant_id, state, expires_at, task_ref, simulated, scope_operations, max_tokens, token_cap_run_id,
        (state = 'ACTIVE' AND expires_at > now())::boolean AS live
 FROM pc.runs
 WHERE org_id = $1 AND id = $2
@@ -932,6 +932,7 @@ type SubjectRunRow struct {
 	Simulated          bool
 	ScopeOperations    []string
 	MaxTokens          pgtype.Int8
+	TokenCapRunID      *ids.UUID
 	Live               bool
 }
 
@@ -955,6 +956,7 @@ func (q *Queries) SubjectRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) 
 		&i.Simulated,
 		&i.ScopeOperations,
 		&i.MaxTokens,
+		&i.TokenCapRunID,
 		&i.Live,
 	)
 	return i, err

@@ -227,7 +227,9 @@ type Run struct {
 	// MaxTokens is the run's token cap (G0 M29 D822); older recordings have
 	// none and replay unchanged.
 	MaxTokens *int64 `json:"max_tokens,omitzero"`
-	Err       string `json:"err,omitzero"`
+	// TokenCapRunID is the run that set MaxTokens (G0 M29 D875).
+	TokenCapRunID string `json:"token_cap_run,omitzero"`
+	Err           string `json:"err,omitzero"`
 }
 
 // Agent is an agent read.

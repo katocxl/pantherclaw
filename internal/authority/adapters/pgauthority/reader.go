@@ -367,6 +367,9 @@ func (s *snapshot) Run(ctx context.Context, org ids.OrgID, id ids.UUID) (pipelin
 	if row.MaxTokens.Valid {
 		capTokens := row.MaxTokens.Int64
 		out.MaxTokens = &capTokens // G0 M29 D822
+		if row.TokenCapRunID != nil {
+			out.TokenCapRunID = *row.TokenCapRunID // G0 M29 D875
+		}
 	}
 	if row.ParentRunID != nil {
 		ancestors, err := dbq.New(s.tx).RunAncestors(ctx, org, id)
