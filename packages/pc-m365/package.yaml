@@ -259,6 +259,8 @@ definitions:
         required: true
         max_items: 50
         pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+        # Each recipient's domain is an email_domain share (G0 M31 D958).
+        share: email_recipients
       role:
         type: enum
         material: true
@@ -354,6 +356,9 @@ definitions:
         material: true
         required: true
         values: [anonymous, organization]
+        # An anonymous link is a public share; an organization link shares
+        # to no one outside (G0 M31 D958).
+        share: m365_link_scope
     constraints:
       - kind: target_set
       - kind: allowed_values

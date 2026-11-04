@@ -152,6 +152,10 @@ definitions:
         material: true
         required: true
         values: [user, group, domain, anyone]
+        # Who receives access (G0 M31 D958): anyone is a public share,
+        # domain an email_domain share of domain, user and group an
+        # email_domain share of email_address's domain.
+        share: google_drive_permission
       role:
         type: enum
         material: true
