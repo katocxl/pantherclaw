@@ -21,6 +21,7 @@ var (
 	connectionKinds = map[string]pb.ConnectionKind{
 		"http": pb.ConnectionKind_CONNECTION_KIND_HTTP, "mcp": pb.ConnectionKind_CONNECTION_KIND_MCP,
 		"local": pb.ConnectionKind_CONNECTION_KIND_LOCAL, "model": pb.ConnectionKind_CONNECTION_KIND_MODEL,
+		"vectorstore": pb.ConnectionKind_CONNECTION_KIND_VECTORSTORE,
 	}
 	routeModes  = map[string]pb.RouteMode{"monitor": pb.RouteMode_ROUTE_MODE_MONITOR, "enforce": pb.RouteMode_ROUTE_MODE_ENFORCE}
 	accessModes = map[string]pb.AccessMode{
@@ -53,12 +54,12 @@ func enumFlag[T any](m map[string]T, flagName, v string) (T, error) {
 
 func connectionCommands() map[string]command {
 	return map[string]command{
-		"connection create": rpc("connection create NAME --kind http|mcp|local|model --gateway ID --package NAME [--base-url URL] "+
+		"connection create": rpc("connection create NAME --kind http|mcp|local|model|vectorstore --gateway ID --package NAME [--base-url URL] "+
 			"[--allowed-host HOST...] --access pantherclaw_held|agent_held|target_enforced|none [--header NAME [--scheme S]] "+
-			"[--class public|internal] [--default-mode monitor|enforce] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST...] [--simulated [--model-relay]]"+modelFlagUsage, 1,
+			"[--class public|internal] [--default-mode monitor|enforce] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST...] [--simulated [--model-relay]]"+modelFlagUsage+vectorstoreFlagUsage, 1,
 			func(fs *flag.FlagSet) call {
 				var hosts, agentHosts list
-				kind, gw, pkg, base := fs.String("kind", "", "http, mcp, local or model"), fs.String("gateway", "", "gateway id"),
+				kind, gw, pkg, base := fs.String("kind", "", "http, mcp, local, model or vectorstore"), fs.String("gateway", "", "gateway id"),
 					fs.String("package", "", "tool package name"), fs.String("base-url", "", "the target's base URL")
 				fs.Var(&hosts, "allowed-host", "host a credential may be sent to (repeatable; default: the base URL's host)")
 				fs.Var(&agentHosts, "agent-host", "a host name agents use for the API, which a sandbox maps here (repeatable)")
@@ -69,6 +70,7 @@ func connectionCommands() map[string]command {
 				class, mode := fs.String("class", "", "destination class"), fs.String("default-mode", "", "monitor (default) or enforce")
 				maxBytes, timeout := fs.Int("max-response-bytes", 0, "response cap"), fs.Int("timeout-ms", 0, "dispatch timeout")
 				mf := addModelFlags(fs, false)
+				vf := addVectorstoreFlags(fs, false)
 				return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
 					k, err1 := enumFlag(connectionKinds, "kind", *kind)
 					am, err2 := enumFlag(accessModes, "access", *acc)
@@ -84,12 +86,19 @@ func connectionCommands() map[string]command {
 							return nil, err
 						}
 					}
+					var vs *pb.VectorstoreConfig
+					if vf.set() {
+						var err error
+						if vs, err = vf.config(nil); err != nil {
+							return nil, err
+						}
+					}
 					return c.connections.CreateConnection(ctx, &pb.CreateConnectionRequest{
 						Name: a[0], Kind: k, GatewayId: *gw, Package: *pkg, BaseUrl: *base, AllowedHosts: hosts, AccessMode: am,
 						CredentialHeader: *header, CredentialScheme: *scheme, DestinationClass: dc, DefaultMode: dm,
 						MaxResponseBytes: int32(min(max(*maxBytes, 0), 8<<20)), TimeoutMs: int32(min(max(*timeout, 0), 60_000)),
 						AgentHosts: agentHosts, Simulated: *simulated, ModelRelay: *modelRelay,
-						Model: model,
+						Model: model, Vectorstore: vs,
 					})
 				}
 			}),
@@ -108,7 +117,7 @@ func connectionCommands() map[string]command {
 			}
 		}),
 		"connection update": rpc("connection update ID --revision N [--gateway ID] [--base-url URL] [--allowed-host HOST... | --clear-allowed-hosts] "+
-			"[--access MODE] [--class CLASS] [--default-mode MODE] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST... | --clear-agent-hosts]"+modelFlagUsage+" [--clear-price]", 1,
+			"[--access MODE] [--class CLASS] [--default-mode MODE] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST... | --clear-agent-hosts]"+modelFlagUsage+" [--clear-price] [--vector-schema S] [--vector-table T] [--dimensions N] [--distance D] [--writer AGENT_ID... | --clear-writers]", 1,
 			func(fs *flag.FlagSet) call {
 				var gw, base, acc, class, mode, maxBytes, timeout optional
 				var hosts, agentHosts list
@@ -125,6 +134,7 @@ func connectionCommands() map[string]command {
 				fs.Var(&maxBytes, "max-response-bytes", "new response cap")
 				fs.Var(&timeout, "timeout-ms", "new dispatch timeout")
 				mf := addModelFlags(fs, true)
+				vf := addVectorstoreFlags(fs, true)
 				return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
 					req := &pb.UpdateConnectionRequest{
 						Id: a[0], Revision: int32(min(max(*rev, 0), 1<<30)), GatewayId: gw.ptr(), BaseUrl: base.ptr(),
@@ -163,6 +173,15 @@ func connectionCommands() map[string]command {
 							return nil, err
 						}
 						if req.Model, err = mf.config(cur); err != nil {
+							return nil, err
+						}
+					}
+					if vf.set() {
+						cur, err := currentVectorstore(ctx, c, a[0])
+						if err != nil {
+							return nil, err
+						}
+						if req.Vectorstore, err = vf.config(cur); err != nil {
 							return nil, err
 						}
 					}

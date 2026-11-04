@@ -1,0 +1,298 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for a retrieval index on PostgreSQL with pgvector,
+# reached through a vectorstore connection (G0 M30 D922-D925). The agent
+# never writes SQL: it sends an embedding, a record or an id, and the
+# gateway builds one parameterised statement against the connection's one
+# table, which the admin created from `pclaw connections vectorstore ddl`
+# (the gateway never runs DDL). Every record carries its provenance: the
+# run, agent and transaction that wrote it, filled from the permit and
+# never from params (HR-704), and returned to every reader with the
+# record. A write by an agent not on the connection's writer list is held
+# for a person (VECTOR_WRITE_NOT_WRITER, HR-705). Content signals scan the
+# content and metadata an agent writes and the records a query returns, in
+# the org's mode.
+#
+# The gateway serves the package itself on the MCP face
+# (/mcp/{connection}, tools vector_query, vector_upsert, vector_delete) and
+# on the HTTP face (POST /{connection}/v1/vector/query, …/upsert,
+# …/delete); there is no upstream server. Both faces map to the same
+# actions, so they reach the same decision (F099). The SDK and hook faces
+# refuse vectorstore connections.
+format: 1
+name: pc.vectorstore
+version: 1.0.0
+publisher: pantherclaw
+summary: A governed pgvector retrieval index with provenance and held writes
+
+definitions:
+  - operation: vectorstore.records.query
+    summary: Find the records nearest an embedding
+    access: read
+    target:
+      type: vector_table
+      id_pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+      account: none
+    params:
+      embedding:
+        type: float_array
+        required: true
+        max_items: 16000
+      top_k:
+        type: integer
+        material: true
+        unit: records
+        min: "1"
+        max: "100"
+      filter:
+        type: string_map
+        max_keys: 16
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    constraints:
+      - kind: count_max
+        param: top_k
+        clamp: true
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    response:
+      format: rows
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/vector/query
+        route: vectorstore-records-query
+        extract:
+          target_id: input.table
+          params:
+            embedding: input.embedding
+            top_k: input.?top_k
+            filter: input.?filter
+      - channel: mcp
+        tool: vector_query
+        route: vectorstore-records-query
+        description: >-
+          Find the records of the connection's table nearest an embedding.
+          Name the table as schema.table and send an embedding with exactly
+          the table's dimensions; optionally filter on metadata keys that
+          must equal the given values. Each record comes back with its
+          distance and who wrote it (pc_run_id, pc_agent_id,
+          pc_written_at). At most top_k records (default 10) are returned.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [table, embedding]
+          properties:
+            table:
+              type: string
+              description: The table, as schema.table
+              pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+            embedding:
+              type: array
+              description: The query embedding
+              minItems: 1
+              maxItems: 16000
+              items:
+                type: number
+            top_k:
+              type: integer
+              description: The most records to return
+              minimum: 1
+              maximum: 100
+            filter:
+              type: object
+              description: Metadata keys and the values they must equal
+              maxProperties: 16
+              propertyNames:
+                pattern: '^[A-Za-z_][A-Za-z0-9_.-]{0,63}$'
+              additionalProperties:
+                type: string
+                maxLength: 1024
+        extract:
+          target_id: input.table
+          params:
+            embedding: input.embedding
+            top_k: input.?top_k
+            filter: input.?filter
+    dispatch:
+      sql:
+        operation: vector_query
+
+  - operation: vectorstore.records.upsert
+    summary: Write or replace one record of the retrieval index
+    access: write
+    target:
+      type: vector_table
+      id_pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+      account: none
+    params:
+      id:
+        type: text
+        required: true
+        max_length: 256
+      content:
+        type: text
+        required: true
+        max_length: 8192
+      embedding:
+        type: float_array
+        required: true
+        max_items: 16000
+      metadata:
+        type: string_map
+        max_keys: 32
+    effects:
+      - kind: retrieval_index.write
+        description: Writes or replaces one record that later queries can return
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    approval:
+      title: Write a record to {target.id}
+      fields: [target.id]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    response:
+      format: json
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/vector/upsert
+        route: vectorstore-records-upsert
+        extract:
+          target_id: input.table
+          params:
+            id: input.id
+            content: input.content
+            embedding: input.embedding
+            metadata: input.?metadata
+      - channel: mcp
+        tool: vector_upsert
+        route: vectorstore-records-upsert
+        description: >-
+          Write one record to the connection's table, replacing any record
+          with the same id. Send the text, its embedding with exactly the
+          table's dimensions, and optional string metadata. The record is
+          stored with who wrote it; a write by an agent the connection does
+          not list as a writer waits for a person.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [table, id, content, embedding]
+          properties:
+            table:
+              type: string
+              description: The table, as schema.table
+              pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+            id:
+              type: string
+              description: The record's id
+              minLength: 1
+              maxLength: 256
+            content:
+              type: string
+              description: The record's text
+              maxLength: 8192
+            embedding:
+              type: array
+              description: The record's embedding
+              minItems: 1
+              maxItems: 16000
+              items:
+                type: number
+            metadata:
+              type: object
+              description: String metadata a query can filter on
+              maxProperties: 32
+              propertyNames:
+                pattern: '^[A-Za-z_][A-Za-z0-9_.-]{0,63}$'
+              additionalProperties:
+                type: string
+                maxLength: 1024
+        extract:
+          target_id: input.table
+          params:
+            id: input.id
+            content: input.content
+            embedding: input.embedding
+            metadata: input.?metadata
+    dispatch:
+      sql:
+        operation: vector_upsert
+
+  - operation: vectorstore.records.delete
+    summary: Delete one record of the retrieval index
+    access: write
+    target:
+      type: vector_table
+      id_pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+      account: none
+    params:
+      id:
+        type: text
+        required: true
+        max_length: 256
+    effects:
+      - kind: retrieval_index.delete
+        description: Removes one record so later queries no longer return it
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    approval:
+      title: Delete a record from {target.id}
+      fields: [target.id]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    response:
+      format: json
+    mappings:
+      - channel: http
+        method: POST
+        path: /v1/vector/delete
+        route: vectorstore-records-delete
+        extract:
+          target_id: input.table
+          params:
+            id: input.id
+      - channel: mcp
+        tool: vector_delete
+        route: vectorstore-records-delete
+        description: >-
+          Delete one record of the connection's table by id. A delete by an
+          agent the connection does not list as a writer waits for a
+          person.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [table, id]
+          properties:
+            table:
+              type: string
+              description: The table, as schema.table
+              pattern: '^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$'
+            id:
+              type: string
+              description: The record's id
+              minLength: 1
+              maxLength: 256
+        extract:
+          target_id: input.table
+          params:
+            id: input.id
+    dispatch:
+      sql:
+        operation: vector_delete

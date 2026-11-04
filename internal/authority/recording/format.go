@@ -412,6 +412,7 @@ type Connection struct {
 	DestinationClass string            `json:"destination_class,omitzero"`
 	Modes            map[string]string `json:"modes,omitzero"`
 	Reads            []string          `json:"reads,omitzero"`
+	Writers          []string          `json:"writers,omitzero"` // G0 M30 D924
 	Err              string            `json:"err,omitzero"`
 }
 

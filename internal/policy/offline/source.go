@@ -41,6 +41,7 @@ import (
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
 	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
+	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
 )
 
 // Bounds of what one check reads. A check runs on a pull request's own
@@ -98,7 +99,7 @@ func builtin() [][]byte {
 	return [][]byte{
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcawss3.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
-		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package,
+		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package, pcvectorstore.Package,
 	}
 }
 

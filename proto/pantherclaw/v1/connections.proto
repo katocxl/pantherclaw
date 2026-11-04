@@ -165,6 +165,11 @@ enum ConnectionKind {
   // pantherclaw_held only. The gateway holds the provider key, decides each
   // call, scans the prompt and meters tokens (HR-690, HR-691).
   CONNECTION_KIND_MODEL = 12;
+  // A pgvector retrieval index (G0 M30 D922): pc.vectorstore only,
+  // pantherclaw_held only. The gateway builds every statement itself, fills
+  // each record's provenance from the permit and holds writes by agents not
+  // on the writer list (HR-704, HR-705).
+  CONNECTION_KIND_VECTORSTORE = 13;
 }
 
 // ConnectionState is whether actions may use a connection.
@@ -286,6 +291,71 @@ message Connection {
   bool model_relay = 34;
   // model is a model connection's settings (G0 M29 D811).
   ModelConfig model = 35;
+  // vectorstore is a vectorstore connection's settings (G0 M30 D922).
+  VectorstoreConfig vectorstore = 36;
+}
+
+// VectorstoreConfig is a vectorstore connection (G0 M30 D922-D925a): where
+// the database is, the one table the admin created from the printed DDL,
+// and the agents that may write without a person. Its password is the
+// connection's sealed static credential. The endpoint (host through
+// internal) is fixed once the connection exists: a change is refused with
+// VECTORSTORE_ENDPOINT_IMMUTABLE, and a store that moves is a new
+// connection.
+message VectorstoreConfig {
+  // Database host name or address.
+  string host = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 253
+    pattern: "^[A-Za-z0-9]([A-Za-z0-9.:-]{0,251}[A-Za-z0-9])?$"
+  }];
+  // Port (default 5432).
+  int32 port = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 65535
+  }];
+  // Database name.
+  string database = 3 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // Role the gateway logs in as; never a superuser.
+  string user = 4 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // "verify-full" (required), or "require" only with internal and a pinned
+  // CA.
+  string sslmode = 5 [(buf.validate.field).string = {
+    in: [
+      "verify-full",
+      "require"
+    ]
+  }];
+  // Optional pinned CA certificate (PEM).
+  string ca_pem = 6 [(buf.validate.field).string.max_len = 16384];
+  // Allows a private address; set only with a step-up.
+  bool internal = 7;
+  // The table's schema.
+  string schema_name = 8 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // The table's name.
+  string table_name = 9 [(buf.validate.field).string.pattern = "^[a-z_][a-z0-9_]{0,62}$"];
+  // The embedding's dimensions (1..16000).
+  int32 dimensions = 10 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 16000
+  }];
+  // The distance metric: cosine, l2 or inner_product.
+  string distance = 11 [(buf.validate.field).string = {
+    in: [
+      "cosine",
+      "l2",
+      "inner_product"
+    ]
+  }];
+  // Agents that may write without a person (at most 64); a write by any
+  // other agent is held (VECTOR_WRITE_NOT_WRITER, HR-705).
+  repeated string writer_agent_ids = 12 [(buf.validate.field).repeated = {
+    max_items: 64
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
 }
 
 // ModelConfig is a model connection's settings (G0 M29 D811, D813, D829).
@@ -684,6 +754,9 @@ message CreateConnectionRequest {
   // model is a model connection's settings (G0 M29 D811); only for kind
   // model, which takes the defaults when it is unset.
   ModelConfig model = 25;
+  // vectorstore is required for, and only for, a vectorstore connection
+  // (G0 M30 D922).
+  VectorstoreConfig vectorstore = 26;
 }
 
 // CreateConnectionResponse returns the connection.
@@ -803,6 +876,10 @@ message UpdateConnectionRequest {
   A2AConfig a2a = 21;
   // model replaces a model connection's settings (G0 M29 D811).
   ModelConfig model = 22;
+  // vectorstore replaces a vectorstore connection's settings (G0 M30
+  // D922): its endpoint must stay as it is (VECTORSTORE_ENDPOINT_IMMUTABLE);
+  // a new writer weakens.
+  VectorstoreConfig vectorstore = 23;
 }
 
 // UpdateConnectionResponse returns the connection.

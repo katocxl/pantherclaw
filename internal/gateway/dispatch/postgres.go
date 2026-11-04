@@ -485,6 +485,7 @@ func (e *Engine) pgSimVerify(ctx context.Context, conn *control.Connection) stri
 // Configured closes the pools of postgres connections a new configuration
 // no longer serves, or serves with another configuration (D105).
 func (e *Engine) Configured(cfg *control.Config) {
+	e.vectorConfigured(cfg) // G0 M30 D922 (vectorstore.go)
 	var closing []*pgtarget.Pool
 	defer func() {
 		// Outside the lock and off the configuration load: closing waits for

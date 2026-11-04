@@ -138,6 +138,10 @@ func paramType(t domain.ParamType) *types.Type {
 		return cel.ListType(cel.StringType)
 	case domain.TypeQueryFilter:
 		return cel.ListType(cel.DynType)
+	case domain.TypeFloatArray:
+		return cel.ListType(cel.DoubleType)
+	case domain.TypeStringMap:
+		return cel.MapType(cel.StringType, cel.StringType)
 	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath:
 		return cel.StringType
 	}
@@ -499,6 +503,10 @@ func evalParam(ctx context.Context, p *celenv.Program, t domain.ParamType, vars 
 		out.Str = string(s)
 	case domain.TypeIdentifierList:
 		out.List, ok = stringList(v)
+	case domain.TypeFloatArray:
+		out.Floats, ok = floatList(v)
+	case domain.TypeStringMap:
+		out.Map, ok = stringMap(v)
 	case domain.TypeQueryFilter:
 		var err error
 		if out.Filter, err = queryFilter(v); err != nil {
@@ -522,6 +530,28 @@ func stringList(v ref.Val) ([]string, bool) {
 }
 
 var reflectStrings = reflect.TypeOf([]string(nil))
+
+func floatList(v ref.Val) ([]float64, bool) {
+	native, err := v.ConvertToNative(reflectFloats)
+	if err != nil {
+		return nil, false
+	}
+	l, ok := native.([]float64)
+	return l, ok
+}
+
+var reflectFloats = reflect.TypeOf([]float64(nil))
+
+func stringMap(v ref.Val) (map[string]string, bool) {
+	native, err := v.ConvertToNative(reflectStringMap)
+	if err != nil {
+		return nil, false
+	}
+	m, ok := native.(map[string]string)
+	return m, ok
+}
+
+var reflectStringMap = reflect.TypeOf(map[string]string(nil))
 
 // queryFilter converts an extracted list of predicates to its typed form:
 // the CEL value becomes plain JSON and is decoded as strictly as an

@@ -259,6 +259,11 @@ type permitPAP struct {
 	// Approval is the approval the decision rests on, with every counted
 	// approver's assertion (HR-038, PAP-1 §7.2).
 	Approval *proof.Approval `json:"approval,omitzero"`
+	// Run and Agent are the run and agent of a vectorstore write's permit:
+	// the gateway records them as the record's provenance (G0 M30 D923,
+	// HR-704, D923a). Other permits carry neither.
+	Run   string `json:"run,omitzero"`
+	Agent string `json:"agent,omitzero"`
 }
 
 // permit signs the single-use permit (HR-009). It binds the effective
@@ -273,9 +278,13 @@ func (a *Authority) permit(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, ap
 	if ev.MonitorPermit() {
 		act = ev.ActionHash
 	}
+	pap := permitPAP{V: 1, Org: gw.Org.String(), Txn: txn.String(), Act: act, Epoch: ev.Epoch, Approval: approval}
+	if ev.Connection != nil && ev.Connection.Kind == "vectorstore" {
+		pap.Run, pap.Agent = ev.RunID.String(), ev.Identity.Agent
+	}
 	b, err := json.Marshal(permitClaims{
 		Iss: a.issuer(), Aud: "gw:" + gw.ID, Jti: id.String(), Iat: ev.Now.Unix(), Exp: exp.Unix(),
-		Pap: permitPAP{V: 1, Org: gw.Org.String(), Txn: txn.String(), Act: act, Epoch: ev.Epoch, Approval: approval},
+		Pap: pap,
 	})
 	if err != nil {
 		return nil, err

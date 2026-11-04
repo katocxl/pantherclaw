@@ -521,7 +521,28 @@ func fromConnection(id ids.UUID, c pipeline.Connection, err error) Connection {
 	return Connection{
 		ID: id.String(), Gateway: uid(c.Gateway), Kind: c.Kind, Package: c.Package, State: c.State, AccessMode: c.AccessMode,
 		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: maps.Clone(c.Modes), Reads: slices.Clone(c.Reads),
+		Writers: uidList(c.Writers),
 	}
+}
+
+func uidList(in []ids.UUID) []string {
+	var out []string
+	for _, u := range in {
+		out = append(out, u.String())
+	}
+	return out
+}
+
+func parseUIDList(in []string) ([]ids.UUID, error) {
+	var out []ids.UUID
+	for _, s := range in {
+		u, err := ids.ParseUUID(s)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, nil
 }
 
 func (c Connection) value() (pipeline.Connection, error) {
@@ -530,6 +551,7 @@ func (c Connection) value() (pipeline.Connection, error) {
 	}
 	id, err1 := ids.ParseUUID(c.ID)
 	gw, err2 := parseUID(c.Gateway)
+	writers, err3 := parseUIDList(c.Writers)
 	modes := maps.Clone(c.Modes)
 	if modes == nil {
 		modes = map[string]string{}
@@ -537,7 +559,8 @@ func (c Connection) value() (pipeline.Connection, error) {
 	return pipeline.Connection{
 		ID: id, Gateway: gw, Kind: c.Kind, Package: c.Package, State: c.State, AccessMode: c.AccessMode,
 		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: modes, Reads: slices.Clone(c.Reads),
-	}, errors.Join(err1, err2)
+		Writers: writers,
+	}, errors.Join(err1, err2, err3)
 }
 
 func fromHold(run, action ids.UUID, h *pipeline.HoldRequest, err error) Hold {

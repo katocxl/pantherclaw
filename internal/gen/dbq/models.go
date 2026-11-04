@@ -4631,6 +4631,24 @@ type PcUser struct {
 	AccountID   *ids.UUID
 }
 
+type PcVectorstoreConnection struct {
+	OrgID          ids.OrgID
+	ConnectionID   ids.UUID
+	Host           string
+	Port           int32
+	Database       string
+	DbUser         string
+	Sslmode        string
+	CaPem          *string
+	Internal       bool
+	SchemaName     string
+	TableName      string
+	Dimensions     int32
+	Distance       string
+	WriterAgentIds []ids.UUID
+	UpdatedAt      time.Time
+}
+
 type PcVerification struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
