@@ -244,8 +244,9 @@ func (s Step) check() error {
 
 // runs is what a campaign's digest covers: only what runs (ADR-0051,
 // HR-661), under the campaign file's own JSON names. The id, title,
-// technique, tier, threats, asi and rules describe the campaign and are left
-// out, so a tag or wording change keeps the digest.
+// technique, tier, threats, asi, rules and the ATLAS and ATT&CK tags (atlas,
+// attack, technique_why, techniques_none; G0 M28 D714c L2) describe the
+// campaign and are left out, so a tag or wording change keeps the digest.
 type runs struct {
 	APIVersion string           `json:"apiVersion"`
 	Task       string           `json:"task"`
