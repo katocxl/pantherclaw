@@ -2904,6 +2904,19 @@ type PcModelCall struct {
 	FinishedAt     *time.Time
 }
 
+type PcModelConnection struct {
+	OrgID              ids.OrgID
+	ConnectionID       ids.UUID
+	MaxOutputTokens    int64
+	AllowedServerTools []string
+	PriceCurrency      *string
+	PriceInput         *money.Decimal
+	PriceOutput        *money.Decimal
+	PriceCacheRead     *money.Decimal
+	PriceCacheWrite    *money.Decimal
+	UpdatedAt          time.Time
+}
+
 type PcModelDraft struct {
 	OrgID       ids.OrgID
 	VersionID   ids.UUID
