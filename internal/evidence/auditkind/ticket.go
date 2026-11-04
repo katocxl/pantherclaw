@@ -4,6 +4,8 @@
 package auditkind
 
 // Audit kinds under "ticket.". The ledger stores each as "audit." + the kind.
+//
+//nolint:gosec // G101: audit kind names, not credentials
 const (
 	TicketCreated           = "ticket.created"
 	TicketCreatedUnlinked   = "ticket.created_unlinked"

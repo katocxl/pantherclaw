@@ -4,6 +4,8 @@
 package auditkind
 
 // Audit kinds under "credential.". The ledger stores each as "audit." + the kind.
+//
+//nolint:gosec // G101: audit kind names, not credentials
 const (
 	CredentialRevokeFailed             = "credential.revoke_failed"
 	CredentialRotationActivated        = "credential.rotation_activated"

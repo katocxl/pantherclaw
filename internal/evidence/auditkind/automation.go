@@ -4,6 +4,8 @@
 package auditkind
 
 // Audit kinds under "automation.". The ledger stores each as "audit." + the kind.
+//
+//nolint:gosec // G101: audit kind names, not credentials
 const (
 	AutomationAuthorityRevoked              = "automation.authority_revoked"
 	AutomationCeilingEnded                  = "automation.ceiling_ended"

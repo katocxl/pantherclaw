@@ -37,7 +37,7 @@ const noFireEvent = "a no-fire test event named after a notification type"
 // kinds by text: the built-in detection rules, the Hub items, the SIEM
 // integration's samples and rules, and the SQL queries. Every audit.<kind>
 // there must be "audit." and a kind of auditkind.All(), and every prefix
-// (followed by ".", "*" or "%") must start some kind, so a misspelt kind
+// (followed by ".", "*" or "%") must start some kind, so a misspelled kind
 // can't make a rule or a query miss the entries it is for (HR-664, T-286).
 func TestHR664_ContentNamesKnownKinds(t *testing.T) {
 	t.Parallel()

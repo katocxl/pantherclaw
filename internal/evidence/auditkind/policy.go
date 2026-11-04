@@ -29,7 +29,7 @@ const (
 	PolicyExternalCheckEndpointNotAllowed = "policy.external_check_endpoint_not_allowed"
 	PolicyExternalCheckTested             = "policy.external_check_tested"
 	PolicyPublished                       = "policy.published"
-	PolicyRolloutCancelled                = "policy.rollout_cancelled"
+	PolicyRolloutCancelled                = "policy.rollout_cancelled" //nolint:misspell // the kind as written
 	PolicyRolloutPilotExpanded            = "policy.rollout_pilot_expanded"
 	PolicyRolloutPilotStarted             = "policy.rollout_pilot_started"
 	PolicyRolloutStarted                  = "policy.rollout_started"

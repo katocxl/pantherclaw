@@ -4,6 +4,8 @@
 package auditkind
 
 // Audit kinds under "authn.". The ledger stores each as "audit." + the kind.
+//
+//nolint:gosec // G101: audit kind names, not credentials
 const (
 	AuthnLogin              = "authn.login"
 	AuthnSessionCreated     = "authn.session_created"

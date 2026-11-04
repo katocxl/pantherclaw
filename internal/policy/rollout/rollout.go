@@ -816,7 +816,7 @@ func (s *Service) CancelRollout(ctx context.Context, rollout ids.UUID) (Rollout,
 		if err := cancel(ctx, tx, c.Actor(), r, voidRolloutCancelled); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, auditkind.PolicyRolloutCancelled, rollout, nil) //nolint:misspell // as the stage
+		return s.audit(ctx, tx, c, auditkind.PolicyRolloutCancelled, rollout, nil)
 	})
 	if err != nil {
 		return Rollout{}, err
@@ -861,7 +861,7 @@ func Halt(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r dbq.PcPol
 		return err
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: auditkind.PolicyRolloutCancelled, Actor: actor, Outcome: audit.Success, ReasonCode: reason, //nolint:misspell // as the stage
+		Name: auditkind.PolicyRolloutCancelled, Actor: actor, Outcome: audit.Success, ReasonCode: reason,
 		Object: &audit.Object{Type: "policy_rollout", ID: r.ID.String()},
 	})
 	return err
@@ -924,7 +924,7 @@ func (s *Service) Published(ctx context.Context, tx db.TenantTx, org ids.OrgID, 
 				return err
 			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
-				Name: auditkind.PolicyRolloutCancelled, Actor: actor, Outcome: audit.Success, ReasonCode: voidBaseChanged, //nolint:misspell // as the stage
+				Name: auditkind.PolicyRolloutCancelled, Actor: actor, Outcome: audit.Success, ReasonCode: voidBaseChanged,
 				Object: &audit.Object{Type: "policy_rollout", ID: r.ID.String()}, Details: map[string]string{"published_version_id": version.String()},
 			}); err != nil {
 				return err
