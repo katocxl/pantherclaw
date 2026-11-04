@@ -414,6 +414,12 @@ func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domai
 		}
 		dests = append(dests, actionir.Destination{Kind: c.m.Extract.Destinations[i].Kind, ID: id})
 	}
+	// Shares come from the definition's share extractors over the checked
+	// values, never from an agent-supplied field (G0 M30 D934).
+	shares, err := c.def.Shares(vals)
+	if err != nil {
+		return actionir.Parsed{}, ambiguous("shares: %v", err)
+	}
 	dedupe, err := c.def.DedupeKey(target, vals)
 	if err != nil {
 		return actionir.Parsed{}, err
@@ -423,7 +429,7 @@ func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domai
 		Operation:  c.def.Operation,
 		Definition: actionir.Definition{Package: m.pkg.Name, Version: m.pkg.Version, Digest: c.def.Digest},
 		Channel:    string(channel), Route: c.m.Route, Target: target, Params: params,
-		Destinations: dests, DedupeKey: dedupe,
+		Destinations: dests, Shares: shares, DedupeKey: dedupe,
 	})
 }
 

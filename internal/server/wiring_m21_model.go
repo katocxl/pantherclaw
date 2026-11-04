@@ -25,6 +25,7 @@ import (
 	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
+	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
@@ -58,7 +59,7 @@ func newModel(d apiDeps) *modelapp.Service {
 // told of (D316, D321).
 func builtinPackages() ([]*defsdomain.Package, error) {
 	raws := [][]byte{
-		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
+		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcawss3.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
 		pcchatgptenterprise.Package,
 	}

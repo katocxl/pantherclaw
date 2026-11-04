@@ -1,0 +1,160 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that change who can reach an Amazon S3
+# bucket (G0 M30 D934, D934a). It reaches S3's REST API, path-style, at the
+# s3.<region>.amazonaws.com host of an http connection whose credential is
+# of kind aws_sigv4, sealed with --aws-service s3: PantherClaw holds a base
+# access key that signs nothing but an sts:AssumeRole of one role, once per
+# dispatch, for 15 minutes, with a session policy that allows exactly the
+# one S3 action the operation names below, on exactly the target bucket
+# (HR-525). The agent never holds a key, and the base key never reaches S3.
+#
+# It is its own package because a connection has one host, and IAM, ECS
+# and S3 are three (D284). It has no connection test: a test read is a GET
+# (HR-188), and these are writes only.
+#
+# S3 speaks aws-rest: a PUT to /<bucket> whose fixed subresource (?policy,
+# ?acl) names the operation, never the agent (HR-526). A policy is sent as
+# its raw JSON body, at most 8 KiB (the material string limit; a longer
+# policy is refused); a canned ACL as the x-amz-acl header.
+#
+# Both operations share: they decide who outside the account can read the
+# bucket, and a read that happened cannot be taken back. The share
+# extractors name who each reaches, and the Authority holds a share to the
+# public or to an account not on the org's owned list (D935).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.aws.s3
+version: 1.0.0
+publisher: pantherclaw
+summary: Change an Amazon S3 bucket's policy and canned ACL
+
+definitions:
+  - operation: aws.s3.bucket_policy.put
+    summary: Replace an S3 bucket's policy
+    access: write
+    target:
+      type: aws_s3_bucket
+      id_pattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+      account: none
+    params:
+      policy:
+        type: content
+        material: true
+        required: true
+        max_length: 8192
+        share: aws_policy_principals
+    effects:
+      - kind: storage.bucket.policy.change
+        description: Replaces the bucket's policy, which can let other accounts or anyone read or write it
+    reversibility: irreversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Replace the policy of S3 bucket {target.id}
+      fields:
+        - target.id
+        - params.policy
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: aws_s3_put_bucket_policy
+        route: aws-s3-bucket-policy-put
+        description: >-
+          Replace the policy of an S3 bucket with the JSON policy you give (at
+          most 8 KiB). A policy that grants an account not on the
+          organization's owned list, or anyone, holds for a person.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [bucket, policy]
+          properties:
+            bucket:
+              type: string
+              description: The bucket's name
+              pattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+            policy:
+              type: string
+              description: The bucket policy, as JSON
+              maxLength: 8192
+        extract:
+          target_id: input.bucket
+          params:
+            policy: input.policy
+    dispatch:
+      http:
+        method: PUT
+        path: /{target.id}
+        encoding: aws-rest
+        subresource: policy
+        body_param: policy
+        aws_resource: 'arn:{aws.partition}:s3:::{target.id}'
+
+  - operation: aws.s3.bucket_acl.put
+    summary: Set an S3 bucket's canned ACL
+    access: write
+    target:
+      type: aws_s3_bucket
+      id_pattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+      account: none
+    params:
+      canned_acl:
+        type: enum
+        material: true
+        required: true
+        values: [private, public-read, public-read-write, authenticated-read]
+        share: aws_canned_acl
+    effects:
+      - kind: storage.bucket.acl.change
+        description: Sets the bucket's canned ACL, which can let anyone read or write it
+    reversibility: irreversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Set the ACL of S3 bucket {target.id} to {params.canned_acl}
+      fields:
+        - target.id
+        - params.canned_acl
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: aws_s3_put_bucket_acl
+        route: aws-s3-bucket-acl-put
+        description: >-
+          Set the canned ACL of an S3 bucket. Any ACL other than private
+          holds for a person.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [bucket, canned_acl]
+          properties:
+            bucket:
+              type: string
+              description: The bucket's name
+              pattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+            canned_acl:
+              type: string
+              enum: [private, public-read, public-read-write, authenticated-read]
+        extract:
+          target_id: input.bucket
+          params:
+            canned_acl: input.canned_acl
+    dispatch:
+      http:
+        method: PUT
+        path: /{target.id}
+        encoding: aws-rest
+        subresource: acl
+        header_params:
+          canned_acl: x-amz-acl
+        aws_resource: 'arn:{aws.partition}:s3:::{target.id}'

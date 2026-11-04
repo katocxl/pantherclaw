@@ -72,6 +72,10 @@ type ParamSpec struct {
 	Disclosure bool   `json:"disclosure,omitzero"`
 	MaxBytes   int    `json:"max_bytes,omitzero"`
 	MaxEntropy string `json:"max_entropy,omitzero"` // decimal, e.g. "6.0"
+	// Share names the extractor that reads the accounts the action shares
+	// to from this parameter's value (G0 M30 D934); the gateway mapper
+	// fills ActionIR shares with them.
+	Share ShareExtractor `json:"share,omitzero"`
 }
 
 const (
@@ -110,6 +114,8 @@ func (p ParamSpec) validate(name string) error {
 		return invalid("%s: max_entropy must be a decimal above 0 and at most 8 bits per byte", name)
 	case (p.MaxItems != 0) != (p.Type == TypeIdentifierList) || p.MaxItems < 0 || p.MaxItems > maxListItems:
 		return invalid("%s: identifier_list params need max_items 1..%d; other types take none", name, maxListItems)
+	case p.Share != "" && !p.Share.accepts(p.Type):
+		return invalid("%s: share extractor %q does not apply to a %s param", name, p.Share, p.Type)
 	}
 	switch p.Type {
 	case TypeMoney:
