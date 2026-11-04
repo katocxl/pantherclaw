@@ -52,8 +52,8 @@ import (
 func init() {
 	commands["sandbox run"] = command{
 		usage: "sandbox run --agent ID --connection ID... --grant ID --gateway URL --image REF@sha256:… [--edge-image REF] [--probe-image REF] " +
-			"[--gateway-addr HOST:PORT] [--workspace DIR] [--out DIR] [--canary-listen ADDR] [--ttl DURATION] [--max-tokens N] [--env NAME=VALUE]... " +
-			"[-- COMMAND ARGS...]",
+			"[--gateway-addr HOST:PORT] [--workspace DIR] [--out DIR [--include-protected]] [--canary-listen ADDR] [--ttl DURATION] [--max-tokens N] " +
+			"[--env NAME=VALUE]... [-- COMMAND ARGS...]",
 		run: sandboxRun,
 	}
 }
@@ -63,6 +63,10 @@ type sandboxRunFlags struct {
 	connections                                                                                    list
 	ttl                                                                                            time.Duration
 	args                                                                                           []string
+	// includeProtected puts the agent's changes to agent configuration and
+	// memory files into changes.patch; without it they are listed and left
+	// out (G0 M30 D944).
+	includeProtected bool
 	// maxTokens is the run's token cap, 0 for none (G0 M29 D822).
 	maxTokens int64
 	// env are the agent's extra NAME=VALUE entries (G0 M29 D823): checked
@@ -86,6 +90,8 @@ func parseSandboxRun(a *app, args []string) (sandboxRunFlags, error) {
 	fs.StringVar(&f.probeImage, "probe-image", probe, "the probe image id or digest (PANTHERCLAW_SANDBOX_PROBE_IMAGE)")
 	fs.StringVar(&f.workspace, "workspace", "", "a directory copied into the sandbox (its repository cleaned: objects and refs only)")
 	fs.StringVar(&f.out, "out", "", "an empty or new directory that gets the agent's changes as a patch (changes.patch, changes.txt, binary/)")
+	fs.BoolVar(&f.includeProtected, "include-protected", false,
+		"with --out: also put the agent's changes to agent configuration and memory files (CLAUDE.md, .claude/, .mcp.json, …) into changes.patch; they are listed either way")
 	fs.StringVar(&f.canaryListen, "canary-listen", "127.0.0.1", "where the canary listens on this host")
 	fs.DurationVar(&f.ttl, "ttl", 2*time.Hour, "how long the session lasts (at most 24h)")
 	fs.Int64Var(&f.maxTokens, "max-tokens", 0, "the run's token cap across its model calls (1 to 10^12; default: none)")
@@ -381,7 +387,7 @@ func runSandboxInto(ctx context.Context, a *app, f sandboxRunFlags, x sandboxExt
 		return err
 	}
 	if f.out != "" {
-		changes, err := box.CopyOut(ctx, f.workspace, f.out)
+		changes, err := box.CopyOutWith(ctx, f.workspace, f.out, workspace.DiffOptions{IncludeProtected: f.includeProtected})
 		if err != nil {
 			return err
 		}
@@ -525,15 +531,37 @@ func printChanges(w io.Writer, out string, changes []workspace.Change) {
 		_, _ = fmt.Fprintln(w, "the agent changed nothing in the workspace")
 		return
 	}
-	var flagged, binary []string
+	var flagged, binary, excluded, included []string
 	for _, c := range changes {
 		_, _ = fmt.Fprintf(w, "  %-8s %q\n", c.Kind, c.Path)
 		if c.Flagged {
 			flagged = append(flagged, strconv.Quote(c.Path))
 		}
-		if c.Binary && c.Kind != workspace.Deleted {
+		if c.Binary && c.Kind != workspace.Deleted && !c.Excluded {
 			binary = append(binary, strconv.Quote(c.Path))
 		}
+		switch {
+		case c.Excluded:
+			excluded = append(excluded, strconv.Quote(c.Path)+" ("+string(c.Protected)+")")
+		case c.Protected != "":
+			included = append(included, strconv.Quote(c.Path)+" ("+string(c.Protected)+")")
+		}
+	}
+	// The evidence of protected_paths_changed: a count and the classes
+	// (G0 M30 D944, HR-713).
+	if n, classes := workspace.ProtectedChanged(changes); n > 0 {
+		names := make([]string, len(classes))
+		for i, c := range classes {
+			names[i] = string(c)
+		}
+		_, _ = fmt.Fprintf(w, "protected_paths_changed: %d (%s)\n", n, strings.Join(names, ", "))
+	}
+	if len(excluded) > 0 {
+		_, _ = fmt.Fprintf(w, "not in the patch, agent configuration and memory files changed: %s; review them, then run again with --include-protected to apply them\n",
+			strings.Join(excluded, ", "))
+	}
+	if len(included) > 0 {
+		_, _ = fmt.Fprintf(w, "in the patch with --include-protected, agent configuration and memory files changed: %s\n", strings.Join(included, ", "))
 	}
 	_, _ = fmt.Fprintf(w, "%d changes: apply %s to your repository with git apply\n", len(changes), filepath.Join(out, sandbox.PatchFile))
 	if len(binary) > 0 {
