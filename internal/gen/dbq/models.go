@@ -2040,25 +2040,27 @@ type PcEvidenceIntegrity struct {
 }
 
 type PcEvidencePack struct {
-	OrgID            ids.OrgID
-	ID               ids.UUID
-	CreatedBy        ids.UUID
-	ScopeKind        string
-	Scope            []byte
-	Include          []byte
-	State            string
-	ErrorCode        *string
-	Manifest         *string
-	ManifestSha256   []byte
-	Content          []byte
-	ContentSha256    []byte
-	ContentSize      pgtype.Int8
-	Items            *int32
-	CreatedAt        time.Time
-	ReadyAt          *time.Time
-	ExpiresAt        *time.Time
-	AutomationID     *ids.UUID
-	AutomationAgents []ids.UUID
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	CreatedBy         ids.UUID
+	ScopeKind         string
+	Scope             []byte
+	Include           []byte
+	State             string
+	ErrorCode         *string
+	Manifest          *string
+	ManifestSha256    []byte
+	Content           []byte
+	ContentSha256     []byte
+	ContentSize       pgtype.Int8
+	Items             *int32
+	CreatedAt         time.Time
+	ReadyAt           *time.Time
+	ExpiresAt         *time.Time
+	AutomationID      *ids.UUID
+	AutomationAgents  []ids.UUID
+	ThreatFramework   *string
+	ThreatEnvironment *ids.UUID
 }
 
 type PcExecutionAttempt struct {

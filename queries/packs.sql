@@ -5,8 +5,15 @@
 -- inside db.InTenantTx and also filters by org_id explicitly.
 
 -- name: InsertEvidencePack :exec
-INSERT INTO pc.evidence_packs (org_id, id, created_by, scope_kind, scope, include)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(created_by), sqlc.arg(scope_kind), sqlc.arg(scope), sqlc.arg(include));
+-- threat_framework and threat_environment are set for a pack of scope
+-- threat_map only, at insert only (G0 M28 D720a).
+INSERT INTO pc.evidence_packs (org_id, id, created_by, scope_kind, scope, include, threat_framework, threat_environment)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(created_by), sqlc.arg(scope_kind), sqlc.arg(scope), sqlc.arg(include),
+        sqlc.narg(threat_framework), sqlc.narg(threat_environment));
+
+-- name: EvidencePackThreatMap :one
+-- The framework and environment of a pack of scope threat_map (D720a).
+SELECT threat_framework, threat_environment FROM pc.evidence_packs WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
 -- name: GetEvidencePack :one
 -- A pack without its content.

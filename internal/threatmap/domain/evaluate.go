@@ -542,10 +542,15 @@ func (e *eval) respond(ids []string, own TechniqueMap, subs []TechniqueMap) Resp
 			continue
 		}
 		var row AutomationRow
+		enable := Fix{Kind: FixEnablePlaybook, TargetID: a.ID, Label: fmt.Sprintf(labelEnablePlaybook, a.Name)}
 		switch {
+		case a.State == "DRAFT":
+			// A DRAFT automation only names a fix: it never makes Respond
+			// anything but GAP; HR-680 counts ACTIVE only (G0 M28 D720a(3)).
+			row = automationRow(a, LaneGap, ReasonPlaybookDisabled, enable)
 		case a.State != "ACTIVE":
-			row = automationRow(a, LanePartial, ReasonPlaybookDisabled,
-				Fix{Kind: FixEnablePlaybook, TargetID: a.ID, Label: fmt.Sprintf(labelEnablePlaybook, a.Name)})
+			// PAUSED: it ran and will again once resumed (D713).
+			row = automationRow(a, LanePartial, ReasonPlaybookDisabled, enable)
 		case !slices.ContainsFunc(hits, func(r RuleRow) bool { return r.Reason != ReasonRuleOff && r.Reason != ReasonEditionRequired }):
 			fix := hits[0].fix
 			row = automationRow(a, LanePartial, ReasonTriggerRuleOff, fix)
@@ -689,10 +694,19 @@ func (e *eval) seen(ids, controls []string) Seen {
 // a mapped scenario that is not PASSED (D713).
 func (e *eval) gaps(id string, t Technique) []Gap {
 	out := []Gap{}
-	if s := t.Prevent.State; s == LanePartial || s == LaneGap {
+	// A lane capped only by the sub-technique rule (D712) names the cap and
+	// no fix: there is nothing to turn on (G0 M28 D720b L1).
+	capped := func(l Lane, reasons []Reason, detail string) bool {
+		if len(reasons) != 1 || reasons[0] != ReasonSubtechniquesOnly {
+			return false
+		}
+		out = append(out, Gap{Lane: l, TechniqueID: id, Reason: ReasonSubtechniquesOnly, Fix: Fix{Label: detail}})
+		return true
+	}
+	if s := t.Prevent.State; (s == LanePartial || s == LaneGap) && !capped(LanePrevent, t.Prevent.Reasons, t.Prevent.Detail) {
 		out = append(out, Gap{Lane: LanePrevent, TechniqueID: id, Reason: t.Prevent.Reasons[0], Fix: e.preventFix(t.Prevent)})
 	}
-	if s := t.Detect.State; s == LanePartial || s == LaneGap {
+	if s := t.Detect.State; (s == LanePartial || s == LaneGap) && !capped(LaneDetect, t.Detect.Reasons, t.Detect.Detail) {
 		var f Fix
 		reason := firstReason(t.Detect.Reasons)
 		for _, r := range t.Detect.Rules {
@@ -701,12 +715,9 @@ func (e *eval) gaps(id string, t Technique) []Gap {
 				break
 			}
 		}
-		if f.Kind == "" {
-			f = Fix{Kind: FixNone, Label: labelNone}
-		}
 		out = append(out, Gap{Lane: LaneDetect, TechniqueID: id, Reason: reason, Fix: f})
 	}
-	if s := t.Respond.State; s == LanePartial || s == LaneGap {
+	if s := t.Respond.State; (s == LanePartial || s == LaneGap) && !capped(LaneRespond, t.Respond.Reasons, t.Respond.Detail) {
 		var f Fix
 		reason := firstReason(t.Respond.Reasons)
 		for _, r := range t.Respond.Automations {
@@ -715,9 +726,8 @@ func (e *eval) gaps(id string, t Technique) []Gap {
 				break
 			}
 		}
-		if f.Kind == "" {
-			f = Fix{Kind: FixNone, Label: labelNone}
-		}
+		// "ships no control" is only ever a NONE_SHIPPED lane's, never a
+		// PARTIAL or GAP one's (D720b L1): a row without a fix leaves none.
 		out = append(out, Gap{Lane: LaneRespond, TechniqueID: id, Reason: reason, Fix: f})
 	}
 	if t.Test.State != TestPassed && len(t.Test.Scenarios) > 0 {

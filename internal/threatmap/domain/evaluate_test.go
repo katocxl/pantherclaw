@@ -213,7 +213,8 @@ func TestHR680_RespondLaneStates(t *testing.T) {
 		{"community", func(in *domain.Inputs) { in.Editions = domain.Editions{} }, domain.LaneGap, domain.ReasonEditionRequired, domain.FixUpgradeEdition},
 		{"trigger rule off", func(in *domain.Inputs) { in.Rules[0].Disabled = true }, domain.LanePartial, domain.ReasonTriggerRuleOff, domain.FixEnableRule},
 		{"paused", func(in *domain.Inputs) { in.Automations[0].State = "PAUSED" }, domain.LanePartial, domain.ReasonPlaybookDisabled, domain.FixEnablePlaybook},
-		{"draft", func(in *domain.Inputs) { in.Automations[0].State = "DRAFT" }, domain.LanePartial, domain.ReasonPlaybookDisabled, domain.FixEnablePlaybook},
+		// D720a(3): a DRAFT automation only names its fix.
+		{"draft", func(in *domain.Inputs) { in.Automations[0].State = "DRAFT" }, domain.LaneGap, domain.ReasonPlaybookDisabled, domain.FixEnablePlaybook},
 		{"contain without playbooks", func(in *domain.Inputs) {
 			in.Automations[0].HasContain = true
 			in.Editions.AutomationPlaybooks = false
@@ -247,6 +248,86 @@ func TestHR680_RespondLaneStates(t *testing.T) {
 	if r := technique(t, domain.Evaluate(fixtureCatalog(), m, business()), "T0001").Respond; r.State != domain.LaneNoneShipped {
 		t.Errorf("nothing mapped: %+v", r)
 	}
+}
+
+// TestHR680_DraftAutomationNeverMakesRespondMoreThanGap: a DRAFT automation
+// triggered by a mapped rule names its ENABLE_PLAYBOOK fix and leaves
+// Respond GAP, so with Prevent and Detect not working the technique stays
+// GAP; only an ACTIVE automation counts (G0 M28 D720a(3)).
+// Covers: F960, F962, HR-680
+func TestHR680_DraftAutomationNeverMakesRespondMoreThanGap(t *testing.T) {
+	in := business()
+	in.Automations[0].State = "DRAFT"
+	in.Routes = nil
+	in.Rules[0].Disabled = true
+	in.Results = nil
+	tech := technique(t, eval(in), "T0001")
+	if tech.Respond.State != domain.LaneGap || tech.Status != domain.StatusGap {
+		t.Fatalf("respond %s, status %s", tech.Respond.State, tech.Status)
+	}
+	if len(tech.Respond.Automations) != 1 || tech.Respond.Automations[0].Lane != domain.LaneGap ||
+		!hasGap(tech, domain.LaneRespond, domain.FixEnablePlaybook) {
+		t.Errorf("draft row %+v, gaps %+v", tech.Respond.Automations, tech.Gaps)
+	}
+	// Beside an ACTIVE one, the ACTIVE one decides.
+	in.Rules[0].Disabled = false
+	in.Automations = append(in.Automations, domain.Automation{ID: "au2", Name: "live", State: "ACTIVE", TriggerRules: []string{"pc.rule.a"}})
+	if r := technique(t, eval(in), "T0001").Respond; r.State != domain.LaneEvidenced {
+		t.Errorf("with an active automation: %+v", r)
+	}
+}
+
+// TestHR680_SubtechniqueCapNamesNoFix: a lane capped only by the
+// sub-technique rule carries SUBTECHNIQUES_ONLY with its "covers N of M"
+// text and no fix; never a gateway route while every route is ENFORCED, and
+// never "ships no control" on a lane that is not NONE_SHIPPED. A lane with
+// another reason keeps that reason's fix (G0 M28 D720b L1).
+// Covers: F960, F962, HR-680
+func TestHR680_SubtechniqueCapNamesNoFix(t *testing.T) {
+	check := func(t *testing.T, tech domain.Technique, lane domain.Lane) {
+		t.Helper()
+		var n int
+		for _, g := range tech.Gaps {
+			if g.Fix.Kind == domain.FixNone || (g.Fix.Kind == domain.FixRouteThroughGateway && lane == domain.LanePrevent) {
+				t.Errorf("%s: gap %+v", lane, g)
+			}
+			if g.Lane != lane {
+				continue
+			}
+			n++
+			if g.Reason != domain.ReasonSubtechniquesOnly || g.Fix.Kind != "" || g.Fix.Label != "covers 1 of 2 sub-techniques" {
+				t.Errorf("%s: gap %+v", lane, g)
+			}
+		}
+		if n != 1 {
+			t.Errorf("%s: %d gaps in %+v", lane, n, tech.Gaps)
+		}
+	}
+	t.Run("prevent, every route enforced", func(t *testing.T) {
+		tech := technique(t, eval(business()), "T0002")
+		if tech.Prevent.State != domain.LanePartial || len(tech.Prevent.Reasons) != 1 {
+			t.Fatalf("prevent %+v", tech.Prevent)
+		}
+		check(t, tech, domain.LanePrevent)
+	})
+	t.Run("detect and respond", func(t *testing.T) {
+		m := fixtureMapping()
+		m.Techniques["T0002.001"] = domain.TechniqueMap{Rules: []string{"pc.rule.a"}}
+		tech := technique(t, domain.Evaluate(fixtureCatalog(), m, business()), "T0002")
+		if tech.Detect.State != domain.LanePartial || tech.Respond.State != domain.LanePartial {
+			t.Fatalf("detect %+v respond %+v", tech.Detect, tech.Respond)
+		}
+		check(t, tech, domain.LaneDetect)
+		check(t, tech, domain.LaneRespond)
+	})
+	t.Run("another reason keeps its fix", func(t *testing.T) {
+		in := business()
+		in.Routes[0].State = "PARTIAL"
+		tech := technique(t, eval(in), "T0002")
+		if !hasReason(tech.Prevent.Reasons, domain.ReasonSubtechniquesOnly) || !hasGap(tech, domain.LanePrevent, domain.FixRouteThroughGateway) {
+			t.Errorf("prevent %+v gaps %+v", tech.Prevent, tech.Gaps)
+		}
+	})
 }
 
 // TestHR689_TestLaneCountsOnlyServerObservedUnchangedResults: the Test lane

@@ -154,6 +154,7 @@ func registerEvidence(rs *connect.Server, d apiDeps) (*evapp.Service, error) {
 			}
 			return jobs.InsertTx(ctx, insert, tx, args, nil)
 		}, d.billing)
+		svc.WithThreatMap(threatMapPacks(d.pool, d.billing))
 	}
 	pantherclawv1connect.RegisterEvidenceServiceHandler(rs, evidencerpc.New(svc))
 	return svc, nil
@@ -169,7 +170,7 @@ func newPackBuilder(cfg *Config, pool *db.Pool, keyReg *keys.Registry, autos *au
 	s := &packbuild.Service{
 		Pool: pool, Keys: keyReg, LogOrigin: cfg.logOrigin(), Cosign: cfg.Evidence.MLDSACosign,
 		Explorer: &txapp.Explorer{Pool: pool}, Bundles: evapp.New(pool, cfg.logOrigin()), Log: log,
-		Compliance: complianceService(pool, bill),
+		Compliance: complianceService(pool, bill), ThreatMap: threatMapPacks(pool, bill),
 	}
 	if autos != nil && automationPackExecutions != nil {
 		executions, err := automationPackExecutions(autos, pool, bill, log)

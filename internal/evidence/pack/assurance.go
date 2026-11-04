@@ -15,14 +15,16 @@ const AssuranceFormat = "pantherclaw.assurance/v1"
 const AssurancePath = "assurance.json"
 
 // ExpectedStatement is the sentence the manifest of a pack of this scope
-// must carry: the fixed one, the range's (HR-224), or the compliance
-// report's (HR-600).
+// must carry: the fixed one, the range's (HR-224), the compliance report's
+// (HR-600), or the threat map's (G0 M28 D720).
 func (s Scope) ExpectedStatement() string {
 	switch s.Kind {
 	case ScopeRange:
 		return RangeStatement
 	case ScopeCompliance:
 		return ComplianceStatement
+	case ScopeThreatMap:
+		return ThreatMapStatement
 	}
 	return Statement
 }

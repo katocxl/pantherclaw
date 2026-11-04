@@ -25,6 +25,18 @@ func threatMapService(pool *db.Pool, ents tmapp.Entitlements) *tmapp.Service {
 	return &tmapp.Service{Pool: pool, Ents: ents, Store: pgthreatmap.Store{}}
 }
 
+// threatMapPacks is the threat map service for evidence packs of scope
+// threat_map (D720): the scope check at create time and the report at build
+// time. A nil billing service leaves the service without a licence, which
+// fails closed.
+func threatMapPacks(pool *db.Pool, bill *billing.Service) *tmapp.Service {
+	var ents tmapp.Entitlements
+	if bill != nil {
+		ents = bill
+	}
+	return threatMapService(pool, ents)
+}
+
 // registerM28ThreatMap serves ThreatMapService (G0 M28 D721); the procedure
 // permissions and classes are in procedures_m28_threatmap.go.
 func registerM28ThreatMap(rs *connect.Server, d apiDeps) {

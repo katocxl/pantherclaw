@@ -53,6 +53,10 @@ type target struct {
 	kind, id, title, label string
 	fix                    pvdomain.FixKind
 	techniques             []string
+	// since is when the underlying fact began, when the row has it (G0
+	// M28 D724a): a rule's disabled_at, a failing result's time. Zero
+	// means the evaluation time.
+	since time.Time
 }
 
 // Findings implements ports.Source.
@@ -90,10 +94,14 @@ func (s *Source) Findings(ctx context.Context, v pvports.Viewer, _ pvdomain.Filt
 			if err != nil {
 				return err
 			}
+			disabledAt := map[string]time.Time{}
+			for _, r := range in.Rules {
+				disabledAt[r.ID] = r.DisabledAt
+			}
 			for _, t := range domain.Evaluate(catalog.Load(f), mapset.Evaluator(f), in).Techniques {
-				collect(targets, t)
+				collect(targets, t, disabledAt)
 				for _, sub := range t.Subtechniques {
-					collect(targets, sub)
+					collect(targets, sub, disabledAt)
 				}
 			}
 		}
@@ -127,15 +135,20 @@ func add(targets map[string]*target, t target, technique string) {
 	if !slices.Contains(cur.techniques, technique) {
 		cur.techniques = append(cur.techniques, technique)
 	}
+	// The earliest known start, should two rows of one target differ.
+	if !t.since.IsZero() && (cur.since.IsZero() || t.since.Before(cur.since)) {
+		cur.since = t.since
+	}
 }
 
-// collect adds a technique's fix targets.
-func collect(targets map[string]*target, t domain.Technique) {
+// collect adds a technique's fix targets; disabledAt is each rule's
+// disabled_at (D724a).
+func collect(targets map[string]*target, t domain.Technique, disabledAt map[string]time.Time) {
 	for _, r := range t.Detect.Rules {
 		if r.Reason == domain.ReasonRuleOff && (r.Source == domain.SourceBuiltin || r.Source == domain.SourceHub) {
 			add(targets, target{
 				kind: KindRuleOff, id: "detection_rule:" + r.RuleID, title: "A detection rule mapped to MITRE techniques is off",
-				label: "Turn rule " + r.RuleID + " back on", fix: pvdomain.FixEnableRule,
+				label: "Turn rule " + r.RuleID + " back on", fix: pvdomain.FixEnableRule, since: disabledAt[r.RuleID],
 			}, t.ID)
 		}
 	}
@@ -157,7 +170,7 @@ func collect(targets map[string]*target, t domain.Technique) {
 		if sc.State == domain.TestFailed {
 			add(targets, target{
 				kind: KindTestFailed, id: "scenario:" + sc.ScenarioID, title: "A library scenario mapped to MITRE techniques failed",
-				label: "Run scenario " + sc.ScenarioID + " again after the fix", fix: pvdomain.FixRunRange,
+				label: "Run scenario " + sc.ScenarioID + " again after the fix", fix: pvdomain.FixRunRange, since: sc.RecordedAt,
 			}, t.ID)
 		}
 	}
@@ -173,9 +186,13 @@ func finding(t *target, now time.Time) pvdomain.Finding {
 	if len(ids) > maxListed {
 		list = strings.Join(ids[:maxListed], ", ") + fmt.Sprintf(" and %d more", len(ids)-maxListed)
 	}
+	since := now
+	if !t.since.IsZero() {
+		since = t.since
+	}
 	return pvdomain.Finding{
 		Source: pvdomain.SourceThreatMap, SourceID: t.id, Kind: t.kind, Title: t.title,
-		Detail: map[string]string{"techniques": list}, State: "OPEN", Since: now,
+		Detail: map[string]string{"techniques": list}, State: "OPEN", Since: since,
 		Fix: pvdomain.Fix{Kind: t.fix, TargetID: t.id, Label: t.label},
 	}
 }

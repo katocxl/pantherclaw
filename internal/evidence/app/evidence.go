@@ -72,6 +72,8 @@ type Service struct {
 	// Evidence packs; nil until WithPacks.
 	enqueuePack PackEnqueuer
 	editions    Editions
+	// threatMap checks a threat map pack's scope; nil until WithThreatMap.
+	threatMap ThreatMapScope
 }
 
 // New returns the service; logOrigin is evidence.log_origin.

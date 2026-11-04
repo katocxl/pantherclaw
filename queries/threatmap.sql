@@ -66,7 +66,7 @@ WHERE s.org_id = sqlc.arg(org_id)
 ORDER BY s.agent_id, s.connection_id, s.operation, s.id DESC;
 
 -- name: ThreatMapRuleStates :many
-SELECT rule_id, (disabled_at IS NOT NULL)::boolean AS disabled, last_input_at
+SELECT rule_id, disabled_at, last_input_at
 FROM pc.detection_rule_state
 WHERE org_id = sqlc.arg(org_id);
 
