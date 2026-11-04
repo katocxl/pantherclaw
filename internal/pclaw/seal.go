@@ -37,7 +37,8 @@ func init() {
 	commands["seal"] = command{
 		usage: "seal --connection ID --from-file FILE|- [--fingerprint sha256:HEX] [--github-app ID --installation N --account LOGIN]\n" +
 			"  [--oauth-token-url URL --oauth-client-id ID --oauth-scope SCOPE]\n" +
-			"  [--aws-access-key-id ID --aws-role-arn ARN [--aws-external-id ID] --aws-sts-url URL --aws-sts-region R --aws-region R --aws-service S]",
+			"  [--aws-access-key-id ID --aws-role-arn ARN [--aws-external-id ID] --aws-sts-url URL --aws-sts-region R --aws-region R --aws-service S]\n" +
+			"  | seal --connection ID --google-service-account KEY.json [--subject EMAIL] --scope URL [--scope URL ...] [--fingerprint sha256:HEX]",
 		run: seal,
 	}
 	commands["credential list"] = rpc("credential list CONNECTION", 1, func(*flag.FlagSet) call {
@@ -124,11 +125,23 @@ func seal(ctx context.Context, a *app, args []string) error {
 	stsRegion := fs.String("aws-sts-region", "", "with --aws-access-key-id: the region STS signs in")
 	region := fs.String("aws-region", "", "with --aws-access-key-id: the region of the connection's endpoint")
 	service := fs.String("aws-service", "", "with --aws-access-key-id: the service of the connection's endpoint, such as iam or ecs")
+	googleKey := fs.String("google-service-account", "", "seal a Google service account: the key file (JSON) Google issued; --from-file is not used")
+	subject := fs.String("subject", "", "with --google-service-account: the user the account acts as (domain-wide delegation)")
+	var googleScopes list
+	fs.Var(&googleScopes, "scope", "with --google-service-account: a scope, https://www.googleapis.com/auth/…; repeat for each (at most 8)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	isOAuth := *tokenURL != "" || *clientID != "" || *scope != ""
 	isAWS := *accessKey != "" || *roleARN != "" || *externalID != "" || *stsURL != "" || *stsRegion != "" || *region != "" || *service != ""
+	isGoogle := *googleKey != "" || *subject != "" || len(googleScopes) > 0
+	if isGoogle {
+		// G0 M31 D952: the key file is the credential.
+		if *googleKey == "" || len(googleScopes) == 0 || *from != "" || *app != "" || isOAuth || isAWS {
+			return errUsage
+		}
+		*from = *googleKey
+	}
 	if fs.NArg() != 0 || *conn == "" || *from == "" || (*app == "") != (*installation == 0 && *account == "") ||
 		(*app != "" && (isOAuth || isAWS)) || (isOAuth && isAWS) {
 		return errUsage
@@ -169,7 +182,7 @@ func seal(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if *app == "" && privateKey {
+	if *app == "" && !isGoogle && privateKey {
 		// A static credential goes to the target in a header: a private key
 		// must never be one.
 		clear(secret)
@@ -183,6 +196,11 @@ func seal(ctx context.Context, a *app, args []string) error {
 			return err
 		}
 		kind = domain.KindGitHubApp
+	case isGoogle:
+		if secret, err = sealGoogleServiceAccount(k, *subject, googleScopes, secret); err != nil {
+			return err
+		}
+		kind = domain.KindGoogleServiceAccount
 	case isOAuth:
 		if secret, err = sealOAuthClient(k, *tokenURL, *clientID, *scope, secret); err != nil {
 			return err
@@ -253,7 +271,7 @@ func sealOAuthClient(k *pb.GetSealingKeyResponse, tokenURL, clientID, scope stri
 	}
 	o := domain.OAuthClient{V: 1, TokenURL: tokenURL, ClientID: clientID, Scope: scope, ClientSecret: secret}
 	plain, err := o.Encode()
-	if errors.Is(err, domain.ErrOAuthClientTenant) {
+	if errors.Is(err, domain.ErrOAuthClientTenant) || errors.Is(err, domain.ErrOAuthProvider) {
 		return nil, err
 	}
 	if err != nil {
@@ -261,6 +279,37 @@ func sealOAuthClient(k *pb.GetSealingKeyResponse, tokenURL, clientID, scope stri
 			"and the client secret, printable with no spaces, in --from-file; nothing was sealed")
 	}
 	u, err := o.Token()
+	if err != nil || !bound(k, u) {
+		clear(plain)
+		return nil, errors.New("the token endpoint's host is not one this connection binds; add it to the connection's allowed hosts first; nothing was sealed")
+	}
+	return plain, nil
+}
+
+// sealGoogleServiceAccount turns a Google service account key file into
+// the content of a service account credential (G0 M31 D952) and clears the
+// file's bytes. Only the account's email, key and token endpoint are taken
+// from the file. The gateway places the tokens it mints as Authorization:
+// Bearer, so the connection must already use that header and scheme, and
+// the token endpoint must be on a host the seal binds (HR-060).
+func sealGoogleServiceAccount(k *pb.GetSealingKeyResponse, subject string, scopes []string, file []byte) ([]byte, error) {
+	defer clear(file)
+	if k.GetHeader() != domain.GoogleServiceAccountHeader || k.GetScheme() != domain.GoogleServiceAccountScheme {
+		return nil, errors.New("a Google service account's tokens go in Authorization: Bearer; set the connection's credential header and scheme to that first; nothing was sealed")
+	}
+	f, err := domain.ParseGoogleKeyFile(file)
+	if err != nil {
+		return nil, errors.New("--google-service-account needs the JSON key file Google issued for a service account; nothing was sealed")
+	}
+	key := []byte(f.PrivateKey)
+	defer clear(key)
+	sa := domain.GoogleServiceAccount{V: 1, ClientEmail: f.ClientEmail, PrivateKey: key, TokenURI: f.TokenURI, Subject: subject, Scopes: scopes}
+	plain, err := sa.Encode()
+	if err != nil {
+		return nil, errors.New("the service account needs an RSA key of at least 2048 bits, token_uri " + domain.GoogleTokenURI +
+			", an email --subject when one is given, and 1 to 8 distinct --scope values of the form https://www.googleapis.com/auth/…; nothing was sealed")
+	}
+	u, err := sa.Token()
 	if err != nil || !bound(k, u) {
 		clear(plain)
 		return nil, errors.New("the token endpoint's host is not one this connection binds; add it to the connection's allowed hosts first; nothing was sealed")

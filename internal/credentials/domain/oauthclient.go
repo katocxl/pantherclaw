@@ -8,6 +8,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
@@ -71,13 +72,66 @@ func (o OAuthClient) Token() (*url.URL, error) {
 	return u, nil
 }
 
-// Validate checks every field.
+// Validate checks every field. The token endpoint must be one of a known
+// provider's (G0 M31 D951), or a loopback simulator's.
 func (o OAuthClient) Validate() error {
 	if o.V != 1 || !clientIDRe.MatchString(o.ClientID) || !scopeRe.MatchString(o.Scope) || len(o.ClientSecret) > 1024 || !clientSecretRe.Match(o.ClientSecret) {
 		return ErrOAuthClient
 	}
-	_, err := o.Token()
+	_, err := o.Provider()
 	return err
+}
+
+// OAuth client providers (G0 M31 D951): the closed list of token
+// endpoints a client-credentials credential may name, and the loopback
+// endpoint of a development simulator.
+const (
+	ProviderMicrosoft  = "microsoft"
+	ProviderSalesforce = "salesforce"
+	ProviderLoopback   = "loopback"
+)
+
+// ErrOAuthProvider reports a token endpoint outside the provider list.
+var ErrOAuthProvider = fmt.Errorf("%w: the token endpoint is not a known provider's "+
+	"(Microsoft: https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token; "+
+	"Salesforce: https://<domain>.my.salesforce.com/services/oauth2/token); nothing was sealed", ErrOAuthClient)
+
+var (
+	// microsoftTokenRe is Microsoft Entra's v2.0 token endpoint for one
+	// tenant: a tenant id, a verified domain, or botframework.com.
+	microsoftTokenRe  = regexp.MustCompile(`^https://login\.microsoftonline\.com/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9.-]{0,252})/oauth2/v2\.0/token$`)
+	salesforceTokenRe = regexp.MustCompile(`^https://[a-z0-9-]+\.my\.salesforce\.com/services/oauth2/token$`)
+)
+
+// Provider derives the credential's provider from its token endpoint
+// (D951): Microsoft's or Salesforce's, or a loopback address, which only
+// a simulated connection reaches (the egress allow-list keeps a real
+// connection off loopback, HR-071). Anything else is refused.
+func (o OAuthClient) Provider() (string, error) {
+	u, err := o.Token()
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case Loopback(u):
+		return ProviderLoopback, nil
+	case microsoftTokenRe.MatchString(o.TokenURL):
+		return ProviderMicrosoft, nil
+	case salesforceTokenRe.MatchString(o.TokenURL):
+		return ProviderSalesforce, nil
+	}
+	return "", ErrOAuthProvider
+}
+
+// Loopback reports whether u's host is a loopback address or localhost,
+// the endpoint of a development simulator.
+func Loopback(u *url.URL) bool {
+	h := strings.ToLower(u.Hostname())
+	if h == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(h)
+	return err == nil && ip.IsLoopback()
 }
 
 // Encode returns the plaintext to seal. A Teams bot must pin its home tenant

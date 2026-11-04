@@ -112,12 +112,17 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		u.RawQuery = q.Encode()
 	}
 	out := Request{Method: t.Method, URL: u, Headers: maps.Clone(t.Headers)}
-	if len(t.Body) > 0 {
+	if len(t.Body) > 0 || t.GraphQL != nil {
 		obj, err := r.body(t.Body, transaction, t.Encoding != defs.EncodingForm, &gc)
 		if err != nil {
 			return Request{}, err
 		}
 		switch t.Encoding { //nolint:exhaustive // every other encoding is JSON
+		case defs.EncodingRFC5322Raw:
+			// A mail message the gateway writes from the mapped fields
+			// (G0 M31 D950 d).
+			out.ContentType = JSONContentType
+			out.Body, err = mailBody(obj)
 		case defs.EncodingForm:
 			out.ContentType = FormContentType
 			out.Body, err = EncodeForm(obj)
@@ -133,7 +138,12 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 			}
 		default:
 			out.ContentType = JSONContentType
-			if obj, err = nestJSON(obj); err == nil {
+			if obj, err = nestJSONBody(obj); err == nil {
+				if t.GraphQL != nil {
+					// The package's fixed document; the mapping is its
+					// variables (G0 M31 D950 c).
+					obj = graphQLBody(t.GraphQL.Document, obj)
+				}
 				out.Body, err = json.Marshal(obj, json.Deterministic(true))
 			}
 		}
