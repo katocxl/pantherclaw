@@ -171,6 +171,8 @@ func scanName(f ScanFinding) string {
 		s = "skill " + f.Attributes["name"]
 	case domain.ScanKindEnvSecret:
 		s = "credential " + f.Attributes["secret_kind"]
+	case domain.ScanKindAgentConfig:
+		s = "agent configuration " + f.Attributes["client"] + " " + f.Attributes["path_class"] + " (" + f.Attributes["scope"] + ")"
 	case saas.KindCopilotAgent:
 		s = "Copilot Studio agent " + f.Attributes["name"]
 	case saas.KindCustomGPT:
@@ -265,6 +267,11 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 			// counted again.
 			var reopen ids.UUID
 			prior, err := q.GetScanDiscovery(ctx, c.Org, source, f.Key[:])
+			if err == nil && f.Kind == domain.ScanKindAgentConfig {
+				if err := configChanged(ctx, tx, c, prior, observed); err != nil {
+					return err
+				}
+			}
 			switch {
 			case db.IsNoRows(err):
 			case err != nil:
@@ -381,6 +388,24 @@ func touch(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, w
 	return err
 }
 
+// configChanged records the drift of an agent configuration or memory file
+// (G0 M30 D941, HR-711): a digest that differs from the one the previous
+// scan of the same key recorded, whatever the discovery's state, writes
+// agent.config_changed with the old and new digests and nothing of the
+// contents; the built-in rule pc.agent.config_changed alerts on it. A first
+// sighting has no prior and writes nothing.
+func configChanged(ctx context.Context, tx db.TenantTx, c tenancy.Caller, prior dbq.GetScanDiscoveryRow, now map[string]string) error {
+	var before map[string]string
+	_ = json.Unmarshal(prior.Observed, &before) // unreadable reads as no digest before
+	if before["digest"] == now["digest"] {
+		return nil
+	}
+	return record(ctx, tx, c, auditkind.AgentConfigChanged, prior.AgentID, map[string]string{
+		"client": now["client"], "scope": now["scope"], "path_class": now["path_class"],
+		"old_digest": changeValue(before["digest"]), "new_digest": now["digest"],
+	})
+}
+
 // insertFinding records a new finding as a DISCOVERED agent with its
 // discovery, an ADMISSION entry and a history entry. With reopen, the
 // finding was dismissed: that discovery reopens for the new agent instead.
@@ -450,19 +475,20 @@ func insertFinding(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.
 }
 
 // Kinds of findings: a local `pclaw scan` reports MCP servers, agent
-// projects, hooks, skills and the presence of credentials; a gateway's
-// organization scan reports GitHub Apps, workflows and committed MCP
-// configuration (G0 M8, HR-209).
+// projects, hooks, skills, agent configuration digests (G0 M30 D941) and
+// the presence of credentials; a gateway's organization scan reports GitHub
+// Apps, workflows and committed MCP configuration (G0 M8, HR-209).
 var (
 	localKinds = map[string]bool{
 		"mcp_server": true, "agent_project": true, domain.ScanKindHook: true, domain.ScanKindSkill: true, domain.ScanKindEnvSecret: true,
+		domain.ScanKindAgentConfig: true,
 	}
 	githubKinds = map[string]bool{"github_app": true, "github_workflow": true, "github_mcp_config": true}
 	// ErrScanKind refuses a finding of the other kind of scan.
 	ErrScanKind = pcerr.New(pcerr.InvalidArgument, "SCAN_KIND",
-		"a local scan reports mcp_server, agent_project, hook, skill and env_secret findings; github_* findings come only from a gateway's organization scan")
+		"a local scan reports mcp_server, agent_project, hook, skill, agent_config and env_secret findings; github_* findings come only from a gateway's organization scan")
 	// ErrScanAttributes refuses a finding that carries more than its kind's
 	// metadata (HR-588).
 	ErrScanAttributes = pcerr.New(pcerr.InvalidArgument, "SCAN_ATTRIBUTES",
-		"a hook carries event and executable, a skill name and path, and an env_secret finding a known secret_kind; nothing else")
+		"a hook carries event and executable, a skill name and path, an agent_config client, scope, path_class, digest and size, and an env_secret finding a known secret_kind; nothing else")
 )

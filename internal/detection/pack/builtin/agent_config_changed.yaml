@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.agent.config_changed
+version: "1"
+title: Agent configuration or memory file changed
+description: >-
+  A scan found an agent configuration or memory file (settings, MCP servers,
+  hooks, memory or skills) whose digest differs from the one the previous
+  scan of the same file recorded (G0 M30 D941). The digests are recorded,
+  never the contents; someone checks whether the change was intended. An
+  alert only: nothing is contained.
+severity: MEDIUM
+attention: ALERT
+basis: OBSERVED
+owasp: [ASI06]
+atlas: [AML.T0081]
+edition: community
+on: [audit.agent.config_changed]
+group: agent
+tests:
+  - name: digest changed
+    fires: true
+    events:
+      - kind: audit.agent.config_changed
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1}
+        attrs: {client: claude_code, scope: project, path_class: hooks, old_digest: "1111111111111111111111111111111111111111111111111111111111111111", new_digest: "2222222222222222222222222222222222222222222222222222222222222222"}
+  - name: a discovery change
+    fires: false
+    events:
+      - kind: audit.agent.discovery_changed
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1}

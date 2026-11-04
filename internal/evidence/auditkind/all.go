@@ -27,6 +27,7 @@ var all = []string{
 	AccountDeleted,
 	AccountDeletionStarted,
 	AccountUserDeleted,
+	AgentConfigChanged,
 	AgentDiscovered,
 	AgentDiscoveryChanged,
 	AgentDiscoveryReappeared,

@@ -115,8 +115,14 @@ const (
 // their own repository with git apply, changes.txt, and under binary/ the
 // new content of changed binary files, none of them executable. Nothing
 // of the agent's is run, and no .git or tree is written back. It returns
-// what changed.
+// what changed. Changes to agent configuration and memory files are listed
+// and left out (workspace.Diff); CopyOutWith can include them.
 func (s *Sandbox) CopyOut(ctx context.Context, orig, dir string) ([]workspace.Change, error) {
+	return s.CopyOutWith(ctx, orig, dir, workspace.DiffOptions{})
+}
+
+// CopyOutWith is CopyOut with the diff's options (G0 M30 D944).
+func (s *Sandbox) CopyOutWith(ctx context.Context, orig, dir string, opts workspace.DiffOptions) ([]workspace.Change, error) {
 	if entries, err := os.ReadDir(dir); err == nil && len(entries) > 0 {
 		return nil, fmt.Errorf("sandbox: %s is not empty", dir)
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -138,7 +144,7 @@ func (s *Sandbox) CopyOut(ctx context.Context, orig, dir string) ([]workspace.Ch
 	if err != nil {
 		return nil, err
 	}
-	changes, err := workspace.Diff(orig, tmp, exec, f)
+	changes, err := workspace.DiffWith(orig, tmp, exec, f, opts)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -146,7 +152,7 @@ func (s *Sandbox) CopyOut(ctx context.Context, orig, dir string) ([]workspace.Ch
 		return nil, err
 	}
 	for _, c := range changes {
-		if c.Binary && c.Kind != workspace.Deleted {
+		if c.Binary && c.Kind != workspace.Deleted && !c.Excluded {
 			if err := copyFile(filepath.Join(tmp, filepath.FromSlash(c.Path)), filepath.Join(dir, BinaryDir, filepath.FromSlash(c.Path))); err != nil {
 				return nil, err
 			}

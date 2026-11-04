@@ -154,6 +154,9 @@ var materialKeys = map[string][]string{
 	// A person's local scan (#336 review).
 	"mcp_server":    {"transport", "command", "url_host", "env_names", "header_names", "package_ref"},
 	"agent_project": {"frameworks", "manifest"},
+	// An agent configuration or memory file's bytes (G0 M30 D941); its
+	// drift writes agent.config_changed (configChanged), not a discovery change.
+	domain.ScanKindAgentConfig: {"digest"},
 	// What a SaaS agent may reach, and who may reach it (G0 M26 D407).
 	saas.KindCopilotAgent: saas.MaterialKeys(saas.KindCopilotAgent),
 	saas.KindCustomGPT:    saas.MaterialKeys(saas.KindCustomGPT),
