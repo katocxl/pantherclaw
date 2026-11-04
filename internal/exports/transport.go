@@ -108,8 +108,7 @@ type answer struct {
 func do(c *http.Client, req *http.Request) (answer, error) {
 	res, err := c.Do(req)
 	if err != nil {
-		var ne net.Error
-		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()) {
+		if deadline(err) {
 			return answer{}, pushError{Code: "timeout"}
 		}
 		return answer{}, pushError{Code: "connection"}
@@ -117,9 +116,20 @@ func do(c *http.Client, req *http.Request) (answer, error) {
 	defer func() { _ = res.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(res.Body, maxAnswerBytes))
 	if err != nil {
+		// A destination that sends its headers and then stops answering
+		// has timed out too, so the sweep ends the step (HR-516).
+		if deadline(err) {
+			return answer{}, pushError{Code: "timeout", Status: res.StatusCode}
+		}
 		return answer{}, pushError{Code: "connection", Status: res.StatusCode}
 	}
 	return answer{Status: res.StatusCode, Header: res.Header, Body: body}, nil
+}
+
+// deadline reports whether err is a request or read that ran out of time.
+func deadline(err error) bool {
+	var ne net.Error
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout())
 }
 
 func etagOf(res answer) string {
