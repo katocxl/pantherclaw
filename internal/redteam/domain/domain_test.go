@@ -4,9 +4,11 @@
 package domain_test
 
 import (
+	"encoding/json/jsontext"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -224,14 +226,106 @@ func TestDigestIgnoresSpellingAndSetDigestIgnoresOrder(t *testing.T) {
 	if da != db || len(da) != 64 {
 		t.Errorf("digests differ: %s %s", da, db)
 	}
+	// A changed title describes the scenario and keeps the digest; a changed
+	// step runs something else and changes it (ADR-0051, HR-661).
 	sc, _ := domain.Parse([]byte(strings.Replace(a, "title: t", "title: u", 1)))
-	if dc, _ := domain.Digest(sc); dc == da {
-		t.Error("a changed title kept the digest")
+	if dc, _ := domain.Digest(sc); dc != da {
+		t.Error("a changed title changed the digest")
+	}
+	sd, _ := domain.Parse([]byte(strings.Replace(a, "{id: a,", "{id: b,", 1)))
+	if dd, _ := domain.Digest(sd); dd == da {
+		t.Error("a changed step kept the digest")
 	}
 	x := domain.SetDigest(map[string]string{"RT-001": "sha256:a", "RT-002": "sha256:b"})
 	y := domain.SetDigest(map[string]string{"RT-002": "sha256:b", "RT-001": "sha256:a"})
 	if x != y || x == domain.SetDigest(map[string]string{"RT-001": "sha256:a"}) {
 		t.Error("set digest wrong")
+	}
+}
+
+// TestHR661_TheScenarioDigestCoversOnlyWhatRuns: changing a field that only
+// describes the scenario keeps the digest; changing apiVersion, requires,
+// harness_only or any member of a step changes it. Every member of Scenario,
+// Step and Expect is in one list or the other, so a new member cannot ship
+// without a decision.
+func TestHR661_TheScenarioDigestCoversOnlyWhatRuns(t *testing.T) {
+	base := func() *domain.Scenario {
+		limit := 1
+		return &domain.Scenario{
+			APIVersion: "pantherclaw.range/v1", ID: "RT-009", Title: "t", Category: "boundary", Suite: "coding-agent",
+			Tier: "community", Attacker: "A1", Threats: []string{"T-080"}, Rules: []string{"HR-201"},
+			ASI: []string{"ASI02"}, ASIWhy: map[string]string{"ASI02": "Tool misuse (ASI02): why."}, Requires: []string{"github"},
+			Steps: []domain.Step{{
+				ID: "a", Do: "agent.call", With: jsontext.Value(`{"operation":"github.pull.merge"}`), Save: map[string]string{"tx": "transaction_id"},
+				Expect: domain.Expect{
+					Outcome: domain.OutcomeHold, MaxAllow: &limit, Reason: "r", Code: "C", SameDecisionAs: "z", DecisiveControl: "d",
+				},
+			}},
+		}
+	}
+	leftOut := map[string]func(*domain.Scenario){
+		"ID":       func(s *domain.Scenario) { s.ID = "RT-010" },
+		"Title":    func(s *domain.Scenario) { s.Title = "u" },
+		"Category": func(s *domain.Scenario) { s.Category = "recovery" },
+		"Suite":    func(s *domain.Scenario) { s.Suite = "platform" },
+		"Tier":     func(s *domain.Scenario) { s.Tier = "business" },
+		"Attacker": func(s *domain.Scenario) { s.Attacker = "A5" },
+		"Threats":  func(s *domain.Scenario) { s.Threats = append(s.Threats, "T-081") },
+		"Rules":    func(s *domain.Scenario) { s.Rules = append(s.Rules, "HR-202") },
+		"ASI":      func(s *domain.Scenario) { s.ASI = append(s.ASI, "ASI03") },
+		"ASIWhy":   func(s *domain.Scenario) { s.ASIWhy["ASI02"] = "Tool misuse (ASI02): other words." },
+	}
+	kept := map[string]func(*domain.Scenario){
+		"APIVersion":                   func(s *domain.Scenario) { s.APIVersion = "pantherclaw.range/v2" },
+		"Requires":                     func(s *domain.Scenario) { s.Requires = append(s.Requires, "slack") },
+		"HarnessOnly":                  func(s *domain.Scenario) { s.HarnessOnly = true },
+		"Steps":                        func(s *domain.Scenario) { s.Steps = append(s.Steps, s.Steps[0]) },
+		"Steps.ID":                     func(s *domain.Scenario) { s.Steps[0].ID = "b" },
+		"Steps.Do":                     func(s *domain.Scenario) { s.Steps[0].Do = "operator.revoke_grant" },
+		"Steps.With":                   func(s *domain.Scenario) { s.Steps[0].With = jsontext.Value(`{"operation":"github.push"}`) },
+		"Steps.Save":                   func(s *domain.Scenario) { s.Steps[0].Save["tx"] = "probe_report_id" },
+		"Steps.Expect":                 func(s *domain.Scenario) { s.Steps[0].Expect = domain.Expect{} },
+		"Steps.Expect.Outcome":         func(s *domain.Scenario) { s.Steps[0].Expect.Outcome = domain.OutcomeDeny },
+		"Steps.Expect.MaxAllow":        func(s *domain.Scenario) { two := 2; s.Steps[0].Expect.MaxAllow = &two },
+		"Steps.Expect.Reason":          func(s *domain.Scenario) { s.Steps[0].Expect.Reason = "q" },
+		"Steps.Expect.Code":            func(s *domain.Scenario) { s.Steps[0].Expect.Code = "D" },
+		"Steps.Expect.SameDecisionAs":  func(s *domain.Scenario) { s.Steps[0].Expect.SameDecisionAs = "y" },
+		"Steps.Expect.DecisiveControl": func(s *domain.Scenario) { s.Steps[0].Expect.DecisiveControl = "e" },
+	}
+	members := func(prefix string, typ reflect.Type) []string {
+		var out []string
+		for f := range typ.Fields() {
+			out = append(out, prefix+f.Name)
+		}
+		return out
+	}
+	all := members("", reflect.TypeFor[domain.Scenario]())
+	all = append(all, members("Steps.", reflect.TypeFor[domain.Step]())...)
+	all = append(all, members("Steps.Expect.", reflect.TypeFor[domain.Expect]())...)
+	for _, m := range all {
+		_, out := leftOut[m]
+		_, in := kept[m]
+		if out == in {
+			t.Errorf("%s: in neither or both lists; decide whether it runs (ADR-0051)", m)
+		}
+	}
+	want, err := domain.Digest(base())
+	if err != nil || len(want) != 64 {
+		t.Fatalf("digest %q: %v", want, err)
+	}
+	for name, edit := range leftOut {
+		s := base()
+		edit(s)
+		if got, _ := domain.Digest(s); got != want {
+			t.Errorf("%s only describes the scenario but changed the digest", name)
+		}
+	}
+	for name, edit := range kept {
+		s := base()
+		edit(s)
+		if got, _ := domain.Digest(s); got == want {
+			t.Errorf("%s runs but kept the digest", name)
+		}
 	}
 }
 

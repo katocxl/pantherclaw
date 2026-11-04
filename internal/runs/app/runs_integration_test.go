@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/oidcrp"
 	"github.com/katocxl/pantherclaw/internal/authn/oidctest"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -27,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
+	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	"github.com/katocxl/pantherclaw/internal/runs/app"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -437,4 +440,57 @@ func TestHR022_StartRunBindsOnlyAMatchingRootGrant(t *testing.T) {
 	wantCode(t, "another org's grant", err, pcerr.NotFound, "GRANT_NOT_FOUND")
 	_, err = app.New(w.pool).StartRun(w.ownerCtx(), app.StartInput{AgentID: agent, GrantID: &g})
 	wantCode(t, "no grants configured", err, pcerr.FailedPrecondition, "GRANTS_UNAVAILABLE")
+}
+
+// TestRunsrpc_PrincipalSourceIDJAGAndOperationsOnRunReads: a run an ID-JAG
+// assertion started reads PRINCIPAL_SOURCE_ID_JAG and the operations it is
+// narrowed to through GetRun and ListRuns; the signed-in person's own run
+// reads PRINCIPAL_SOURCE_LAUNCHER and lists no operations (the whole grant;
+// G0 M26 D400, D408).
+func TestRunsrpc_PrincipalSourceIDJAGAndOperationsOnRunReads(t *testing.T) {
+	w := newWorld(t)
+	w.svc.WithGrants(&grantspg.Store{Pool: w.pool})
+	agent := w.agent(t)
+	inst := w.instance(t, agent, "ADMITTED")
+	g := w.grant(t, agent, w.owner, ids.UUID{}, ids.UUID{}, "-1 hour", "2 hours", false)
+	start := func(in app.IdentityRunInput) app.Run {
+		t.Helper()
+		in.Org, in.Agent, in.Instance, in.User, in.Grant = w.org, agent, inst.Instance, w.owner, g
+		var r app.Run
+		if err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			r, err = w.svc.StartForIdentityTx(ctx, tx, in)
+			return err
+		}); err != nil {
+			t.Fatalf("identity run: %v", err)
+		}
+		return r
+	}
+	ops := []string{"payments.refund.create"}
+	jag := start(app.IdentityRunInput{Issuer: "https://idp.test", Subject: "alice", Operations: ops})
+	own := start(app.IdentityRunInput{})
+	want := map[string]struct {
+		source pantherclawv1.PrincipalSource
+		ops    []string
+	}{
+		jag.ID.String(): {pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_ID_JAG, ops},
+		own.ID.String(): {pantherclawv1.PrincipalSource_PRINCIPAL_SOURCE_LAUNCHER, nil},
+	}
+	rpc := runsrpc.NewRuns(w.svc)
+	for id, c := range want {
+		got, err := rpc.GetRun(w.ownerCtx(), &pantherclawv1.GetRunRequest{Id: id})
+		if err != nil || got.GetRun().GetPrincipalSource() != c.source || !slices.Equal(got.GetRun().GetScopeOperations(), c.ops) {
+			t.Errorf("GetRun %s: %v, %v; want %v with operations %v", id, got.GetRun(), err, c.source, c.ops)
+		}
+	}
+	l, err := rpc.ListRuns(w.ownerCtx(), &pantherclawv1.ListRunsRequest{PageSize: 10})
+	if err != nil || len(l.GetRuns()) != len(want) {
+		t.Fatalf("ListRuns: %v, %v; want %d runs", l.GetRuns(), err, len(want))
+	}
+	for _, r := range l.GetRuns() {
+		c, ok := want[r.GetId()]
+		if !ok || r.GetPrincipalSource() != c.source || !slices.Equal(r.GetScopeOperations(), c.ops) {
+			t.Errorf("ListRuns item %s: %v %v; want %v with operations %v", r.GetId(), r.GetPrincipalSource(), r.GetScopeOperations(), c.source, c.ops)
+		}
+	}
 }
