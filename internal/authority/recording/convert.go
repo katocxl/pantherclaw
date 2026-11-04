@@ -178,6 +178,8 @@ func fromRun(id ids.UUID, run pipeline.Run, err error) Run {
 		out.Ancestors = append(out.Ancestors, principalOf(a))
 	}
 	out.ScopeOperations = slices.Clone(run.ScopeOperations)
+	out.MaxTokens = run.MaxTokens
+	out.TokenCapRunID = uid(run.TokenCapRunID)
 	return out
 }
 
@@ -202,7 +204,10 @@ func (r Run) value() (pipeline.Run, error) {
 	}
 	out.Active, out.TaskRef = r.Active, r.TaskRef
 	out.ScopeOperations = slices.Clone(r.ScopeOperations)
-	return out, errors.Join(errs[:]...)
+	out.MaxTokens = r.MaxTokens
+	var capErr error
+	out.TokenCapRunID, capErr = parseUID(r.TokenCapRunID)
+	return out, errors.Join(append(errs[:], capErr)...)
 }
 
 func fromAgent(id ids.UUID, a pipeline.Agent, err error) Agent {
@@ -413,6 +418,9 @@ func fromAccount(ref bdomain.Ref, a bdomain.Account) AccountUsage {
 		Ref: fromRef(ref), ID: uid(a.ID), Rank: a.Rank, Currency: string(a.Currency), Reserved: a.Reserved.String(),
 		Spent: a.Spent.String(), MaxCount: a.MaxCount, ReservedCount: a.ReservedCount, SpentCount: a.SpentCount,
 	}
+	if a.Unit == bdomain.UnitTokens {
+		out.Unit = string(a.Unit) // G0 M29 D821
+	}
 	if a.Limit != nil {
 		s := a.Limit.String()
 		out.Limit = &s
@@ -423,7 +431,7 @@ func fromAccount(ref bdomain.Ref, a bdomain.Account) AccountUsage {
 func (a AccountUsage) value() (bdomain.Account, error) {
 	out := bdomain.Account{
 		Rank: a.Rank, Currency: money.Currency(a.Currency), MaxCount: a.MaxCount, ReservedCount: a.ReservedCount,
-		SpentCount: a.SpentCount,
+		SpentCount: a.SpentCount, Unit: bdomain.Unit(a.Unit),
 	}
 	var errs [4]error
 	out.ID, errs[0] = parseUID(a.ID)

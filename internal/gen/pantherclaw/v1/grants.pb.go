@@ -1360,7 +1360,10 @@ type BudgetAccount struct {
 	// Reserved count.
 	ReservedCount int64 `protobuf:"varint,13,opt,name=reserved_count,json=reservedCount,proto3" json:"reserved_count,omitempty"`
 	// Spent count.
-	SpentCount    int64 `protobuf:"varint,14,opt,name=spent_count,json=spentCount,proto3" json:"spent_count,omitempty"`
+	SpentCount int64 `protobuf:"varint,14,opt,name=spent_count,json=spentCount,proto3" json:"spent_count,omitempty"`
+	// What limit, reserved, spent and available count (G0 M29 D821):
+	// "currency", or "tokens" for a token rule (currency empty then).
+	Unit          string `protobuf:"bytes,15,opt,name=unit,proto3" json:"unit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1491,6 +1494,13 @@ func (x *BudgetAccount) GetSpentCount() int64 {
 		return x.SpentCount
 	}
 	return 0
+}
+
+func (x *BudgetAccount) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
 }
 
 // GetBudgetStateResponse lists the accounts, in lock order.
@@ -1659,7 +1669,7 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"\x06grants\x18\x01 \x03(\v2\x15.pantherclaw.v1.GrantR\x06grants\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"<\n" +
 	"\x15GetBudgetStateRequest\x12#\n" +
-	"\bgrant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\agrantId\"\xca\x03\n" +
+	"\bgrant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\agrantId\"\xde\x03\n" +
 	"\rBudgetAccount\x12\x1d\n" +
 	"\n" +
 	"owner_kind\x18\x01 \x01(\tR\townerKind\x12\x19\n" +
@@ -1677,7 +1687,8 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"\tmax_count\x18\f \x01(\x03H\x00R\bmaxCount\x88\x01\x01\x12%\n" +
 	"\x0ereserved_count\x18\r \x01(\x03R\rreservedCount\x12\x1f\n" +
 	"\vspent_count\x18\x0e \x01(\x03R\n" +
-	"spentCountB\f\n" +
+	"spentCount\x12\x12\n" +
+	"\x04unit\x18\x0f \x01(\tR\x04unitB\f\n" +
 	"\n" +
 	"_max_count\"S\n" +
 	"\x16GetBudgetStateResponse\x129\n" +

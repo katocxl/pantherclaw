@@ -328,6 +328,26 @@ type Execution struct {
 	// reused (HR-660); nil otherwise. The store accepts it only as a version
 	// of that connection's credential.
 	Credential *CredentialUsed
+	// ModelUsage is the token usage of a model call as the gateway parsed it
+	// from the provider's answer (G0 M29 D818); nil for every other
+	// operation. A reported usage settles the permit's token reservations
+	// at its total (D821), and a model operation's usage row records it
+	// (D825).
+	ModelUsage *ModelUsage
+}
+
+// ModelUsage is the token usage of one model call (G0 M29 D818).
+type ModelUsage struct {
+	InputTokens      int64
+	OutputTokens     int64
+	CacheReadTokens  int64
+	CacheWriteTokens int64
+	Reported         bool
+}
+
+// Total is the four counts summed.
+func (u ModelUsage) Total() int64 {
+	return u.InputTokens + u.OutputTokens + u.CacheReadTokens + u.CacheWriteTokens
 }
 
 // CredentialUsed names a sealed credential by id and version, never its

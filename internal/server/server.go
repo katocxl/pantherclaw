@@ -316,7 +316,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 
-	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: contentSink(pool)}
+	authorityStore := &pgauthority.Store{
+		Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: contentSink(pool),
+		TokenCostReports: tokenCostReports(bill),
+	}
 	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, consoleBaseURL(cfg.Auth.PublicURL, ext), log)
 	if err != nil {
 		return err
@@ -355,6 +358,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	wireM14A2A(m14core)
 	_ = m14core // the M14 streams' wiring registers its kinds here (G0 M14 D64)
 	wireM14Data(m14core, m6)
+	wireM29Model(m14core)
 	// Sealing a GitHub App credential schedules an org scan, and a daily one
 	// follows, so coverage reads its installation's permissions (F048).
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
@@ -947,6 +951,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerM11Search(rs, d)
 	registerCases(rs, d, grants)
+	registerModelUsage(rs, d)
 	registerResponse(rs, d)
 	registerExposure(rs, d)
 	registerSuggestions(rs, d)

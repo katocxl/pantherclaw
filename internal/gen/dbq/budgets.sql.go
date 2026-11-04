@@ -112,9 +112,9 @@ func (q *Queries) CountCounterRows(ctx context.Context, arg CountCounterRowsPara
 
 const ensureBudgetAccount = `-- name: EnsureBudgetAccount :exec
 
-INSERT INTO pc.budget_accounts (org_id, id, owner_kind, owner_id, rule, key_hash, period_start, rank, currency)
+INSERT INTO pc.budget_accounts (org_id, id, owner_kind, owner_id, rule, key_hash, period_start, rank, currency, unit)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8, $9)
+        $7, $8, $9, $10)
 ON CONFLICT (org_id, owner_id, rule, key_hash, period_start) DO NOTHING
 `
 
@@ -128,6 +128,7 @@ type EnsureBudgetAccountParams struct {
 	PeriodStart time.Time
 	Rank        int16
 	Currency    *string
+	Unit        string
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -150,6 +151,7 @@ func (q *Queries) EnsureBudgetAccount(ctx context.Context, arg EnsureBudgetAccou
 		arg.PeriodStart,
 		arg.Rank,
 		arg.Currency,
+		arg.Unit,
 	)
 	return err
 }
@@ -271,7 +273,7 @@ SELECT a.id,
 FROM pc.budget_accounts a
 LEFT JOIN LATERAL (
     SELECT sum(r.amount) AS amount, count(*) AS n,
-           sum(r.amount) FILTER (WHERE r.state = 'COMMITTED') AS spent,
+           sum(coalesce(r.settled_amount, r.amount)) FILTER (WHERE r.state = 'COMMITTED') AS spent,
            count(*) FILTER (WHERE r.state = 'COMMITTED') AS spent_n
     FROM pc.reservations r
     WHERE r.org_id = a.org_id AND r.account_id = a.id AND r.pending
@@ -348,7 +350,7 @@ func (q *Queries) InsertReservation(ctx context.Context, arg InsertReservationPa
 
 const listOwnerBudgetAccounts = `-- name: ListOwnerBudgetAccounts :many
 SELECT DISTINCT ON (a.owner_id, a.rule, a.key_hash)
-       a.id, a.owner_kind, a.owner_id, a.rule, a.period_start, a.rank, a.currency,
+       a.id, a.owner_kind, a.owner_id, a.rule, a.period_start, a.rank, a.currency, a.unit,
        (a.reserved - coalesce(p.amount, 0))::numeric(26,8) AS reserved,
        (a.spent + coalesce(p.spent, 0))::numeric(26,8) AS spent,
        (a.reserved_count - coalesce(p.n, 0))::integer AS reserved_count,
@@ -356,7 +358,7 @@ SELECT DISTINCT ON (a.owner_id, a.rule, a.key_hash)
 FROM pc.budget_accounts a
 LEFT JOIN LATERAL (
     SELECT sum(r.amount) AS amount, count(*) AS n,
-           sum(r.amount) FILTER (WHERE r.state = 'COMMITTED') AS spent,
+           sum(coalesce(r.settled_amount, r.amount)) FILTER (WHERE r.state = 'COMMITTED') AS spent,
            count(*) FILTER (WHERE r.state = 'COMMITTED') AS spent_n
     FROM pc.reservations r
     WHERE r.org_id = a.org_id AND r.account_id = a.id AND r.pending
@@ -373,6 +375,7 @@ type ListOwnerBudgetAccountsRow struct {
 	PeriodStart   time.Time
 	Rank          int16
 	Currency      *string
+	Unit          string
 	Reserved      money.Decimal
 	Spent         money.Decimal
 	ReservedCount int32
@@ -399,6 +402,7 @@ func (q *Queries) ListOwnerBudgetAccounts(ctx context.Context, orgID ids.OrgID, 
 			&i.PeriodStart,
 			&i.Rank,
 			&i.Currency,
+			&i.Unit,
 			&i.Reserved,
 			&i.Spent,
 			&i.ReservedCount,
@@ -435,7 +439,9 @@ func (q *Queries) LockCounter(ctx context.Context, orgID ids.OrgID, iD ids.UUID)
 }
 
 const lockPendingReservations = `-- name: LockPendingReservations :many
-SELECT r.id, r.account_id, r.counter_id, r.amount, r.state, coalesce(a.rank, c.rank)::smallint AS rank
+SELECT r.id, r.account_id, r.counter_id, r.amount,
+       coalesce(r.settled_amount, r.amount)::numeric(26,8) AS spent_amount,
+       r.state, coalesce(a.rank, c.rank)::smallint AS rank
 FROM pc.reservations r
 LEFT JOIN pc.budget_accounts a ON a.org_id = r.org_id AND a.id = r.account_id
 LEFT JOIN pc.counters c ON c.org_id = r.org_id AND c.id = r.counter_id
@@ -446,12 +452,13 @@ FOR UPDATE OF r SKIP LOCKED
 `
 
 type LockPendingReservationsRow struct {
-	ID        ids.UUID
-	AccountID *ids.UUID
-	CounterID *ids.UUID
-	Amount    money.Decimal
-	State     string
-	Rank      int16
+	ID          ids.UUID
+	AccountID   *ids.UUID
+	CounterID   *ids.UUID
+	Amount      money.Decimal
+	SpentAmount money.Decimal
+	State       string
+	Rank        int16
 }
 
 // LockPendingReservations takes a batch of pending reservations, with the
@@ -471,6 +478,7 @@ func (q *Queries) LockPendingReservations(ctx context.Context, orgID ids.OrgID, 
 			&i.AccountID,
 			&i.CounterID,
 			&i.Amount,
+			&i.SpentAmount,
 			&i.State,
 			&i.Rank,
 		); err != nil {
@@ -544,14 +552,33 @@ func (q *Queries) SetLockTimeout(ctx context.Context, timeout string) error {
 	return err
 }
 
-const settleHeldReservations = `-- name: SettleHeldReservations :execrows
-UPDATE pc.reservations SET state = $1, settled_at = now(), pending = true
-WHERE org_id = $2 AND permit_id = $3 AND state = 'HELD'
+const setTokenSettledAmounts = `-- name: SetTokenSettledAmounts :execrows
+UPDATE pc.reservations r SET settled_amount = $1
+FROM pc.budget_accounts a
+WHERE r.org_id = $2 AND r.permit_id = $3 AND r.state = 'HELD'
+  AND a.org_id = r.org_id AND a.id = r.account_id AND a.unit = 'tokens'
 `
 
 // SettleHeldReservations records an outcome on every held reservation of a
 // permit and leaves them pending: the rows are updated later, by
 // ApplyToBudgetAccount and ApplyToCounter (ADR-0015).
+// SetTokenSettledAmounts sets what each held token reservation of a permit
+// commits: the tokens the model call used, as the provider reported them
+// (G0 M29 D821, HR-693). It runs just before SettleHeldReservations; money
+// and count reservations keep committing their whole amount.
+func (q *Queries) SetTokenSettledAmounts(ctx context.Context, settledAmount *money.Decimal, orgID ids.OrgID, permitID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setTokenSettledAmounts, settledAmount, orgID, permitID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const settleHeldReservations = `-- name: SettleHeldReservations :execrows
+UPDATE pc.reservations SET state = $1, settled_at = now(), pending = true
+WHERE org_id = $2 AND permit_id = $3 AND state = 'HELD'
+`
+
 func (q *Queries) SettleHeldReservations(ctx context.Context, toState string, orgID ids.OrgID, permitID ids.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, settleHeldReservations, toState, orgID, permitID)
 	if err != nil {

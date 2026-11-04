@@ -166,8 +166,8 @@ enum ContentScan {
 
 // PayloadFinding is one credential-shaped value in an action's payload.
 message PayloadFinding {
-  // The format: github_token, private_key, aws_access_key, slack_token or
-  // pantherclaw_token; or scan_incomplete, when the gateway could not look
+  // The format: github_token, private_key, aws_access_key, slack_token,
+  // pantherclaw_token, anthropic or openai (G0 M29 D816); or scan_incomplete, when the gateway could not look
   // at the whole payload (too many strings, a base64 value too large).
   string kind = 1 [(buf.validate.field).string = {
     min_len: 1
@@ -515,6 +515,38 @@ message RecordExecutionRequest {
   // accepts it only when it is a version of the permit's connection's
   // credential, and then names it on the receipt.
   CredentialUsed credential_used = 12;
+  // The tokens a model call used, as the provider reported them (G0 M29
+  // D818); sent only for model operations. A token reservation settles at
+  // their total when reported is true (D821).
+  ModelUsage model_usage = 13;
+}
+
+// ModelUsage is the token usage of one model call (G0 M29 D818). OpenAI's
+// cached tokens are counted in cache_read_tokens, not in input_tokens.
+message ModelUsage {
+  // Input tokens not read from or written to the provider's cache.
+  int64 input_tokens = 1 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 1000000000
+  }];
+  // Output tokens.
+  int64 output_tokens = 2 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 1000000000
+  }];
+  // Input tokens read from the provider's cache.
+  int64 cache_read_tokens = 3 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 1000000000
+  }];
+  // Input tokens written to the provider's cache.
+  int64 cache_write_tokens = 4 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 1000000000
+  }];
+  // Whether the answer carried the provider's usage; when false the counts
+  // are not used and the whole reservation commits (D821).
+  bool reported = 5;
 }
 
 // CredentialUsed names a sealed credential by id and version, never its
@@ -849,6 +881,16 @@ message ExplainedBudget {
   string unknown = 7;
   // The grant or guardrail that owns the rule.
   string owner_id = 8;
+  // What the amounts count (G0 M29 D821): "currency", or "tokens" for a
+  // token rule (no currency then); empty on records from before M29 means
+  // currency.
+  string unit = 9 [(buf.validate.field).string = {
+    in: [
+      "",
+      "currency",
+      "tokens"
+    ]
+  }];
 }
 
 // ConsequenceLabel is what a consequence is, apart from what was

@@ -26,6 +26,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/policy/scenario"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
+	pcanthropic "github.com/katocxl/pantherclaw/packages/pc-anthropic"
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
@@ -34,6 +35,7 @@ import (
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
+	pcopenai "github.com/katocxl/pantherclaw/packages/pc-openai"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
@@ -96,7 +98,7 @@ func builtin() [][]byte {
 	return [][]byte{
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcawss3.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
-		pcchatgptenterprise.Package,
+		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package,
 	}
 }
 

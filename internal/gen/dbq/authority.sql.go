@@ -201,7 +201,8 @@ func (q *Queries) EngageKillSwitch(ctx context.Context, engagedBy string, reason
 
 const executionContext = `-- name: ExecutionContext :one
 SELECT p.mode, p.connection_id, t.channel, c.access_mode, t.id AS transaction_id, t.action_hash, t.effective_hash,
-       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required, t.simulated
+       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required, t.simulated,
+       c.kind AS connection_kind
 FROM pc.permits p
 JOIN pc.transactions t ON t.org_id = p.org_id AND t.id = p.transaction_id
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
@@ -223,6 +224,7 @@ type ExecutionContextRow struct {
 	TargetID            *string
 	EffectLevelRequired *string
 	Simulated           bool
+	ConnectionKind      *string
 }
 
 // ExecutionContext is what an execution receipt states about a permit:
@@ -246,6 +248,7 @@ func (q *Queries) ExecutionContext(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.TargetID,
 		&i.EffectLevelRequired,
 		&i.Simulated,
+		&i.ConnectionKind,
 	)
 	return i, err
 }
