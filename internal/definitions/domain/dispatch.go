@@ -86,6 +86,12 @@ type HTTPDispatch struct {
 	// D950 c): the body is {"query": <document>, "variables": <the body
 	// mapping>}, so the agent supplies only the mapped values.
 	GraphQL *GraphQLDocument `json:"graphql,omitzero"`
+	// SubjectTarget marks a template whose path names the acting user as
+	// me or primary (G0 M31 D956a): the gateway refuses the dispatch, before
+	// anything is minted or sent, unless the connection's credential is a
+	// google_service_account whose subject equals target.id (ASCII case
+	// folded), TARGET_NOT_CREDENTIAL_SUBJECT.
+	SubjectTarget bool `json:"subject_target,omitzero"`
 }
 
 // MCPDispatch is a call of one tool on an upstream (remote) MCP server, or
@@ -445,6 +451,11 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 	}
 	if h.AWSResource != "" && !h.Encoding.AWS() {
 		return invalid("%s.aws_resource belongs to aws-json and aws-query templates", at)
+	}
+	if h.SubjectTarget && (h.Encoding.AWS() || h.GraphQL != nil) {
+		// The acting user is a Google service account's subject (G0 M31
+		// D956a): never an AWS session or a GraphQL endpoint.
+		return invalid("%s.subject_target is not for aws-json, aws-query or GraphQL templates", at)
 	}
 	return nil
 }

@@ -377,6 +377,15 @@ func mailbox(r *http.Request, g Grant) string {
 	return g.Subject
 }
 
+// calendar resolves a calendarId path value: "primary" is the token
+// subject's calendar.
+func calendar(r *http.Request, g Grant) string {
+	if c := r.PathValue("cal"); c != "primary" {
+		return c
+	}
+	return g.Subject
+}
+
 // gmailSend accepts {"raw": base64url of an RFC 5322 message}.
 func (s *Server) gmailSend(w http.ResponseWriter, r *http.Request, g Grant) {
 	var in struct {
@@ -503,17 +512,17 @@ func (s *Server) permDelete(w http.ResponseWriter, r *http.Request, _ Grant) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) eventList(w http.ResponseWriter, r *http.Request, _ Grant) {
+func (s *Server) eventList(w http.ResponseWriter, r *http.Request, g Grant) {
 	items := []map[string]any{}
 	for _, e := range s.events {
-		if e.Calendar == r.PathValue("cal") {
+		if e.Calendar == calendar(r, g) {
 			items = append(items, map[string]any{"id": e.ID, "summary": e.Summary, "start": map[string]string{"dateTime": e.Start}, "end": map[string]string{"dateTime": e.End}})
 		}
 	}
 	write(w, http.StatusOK, map[string]any{"kind": "calendar#events", "items": items})
 }
 
-func (s *Server) eventCreate(w http.ResponseWriter, r *http.Request, _ Grant) {
+func (s *Server) eventCreate(w http.ResponseWriter, r *http.Request, g Grant) {
 	var in struct {
 		Summary string `json:"summary"`
 		Start   struct {
@@ -537,7 +546,7 @@ func (s *Server) eventCreate(w http.ResponseWriter, r *http.Request, _ Grant) {
 		return
 	}
 	s.seq++
-	e := Event{ID: "evt" + strconv.Itoa(s.seq), Calendar: r.PathValue("cal"), Summary: in.Summary, Start: in.Start.DateTime, End: in.End.DateTime}
+	e := Event{ID: "evt" + strconv.Itoa(s.seq), Calendar: calendar(r, g), Summary: in.Summary, Start: in.Start.DateTime, End: in.End.DateTime}
 	for _, a := range in.Attendees {
 		e.Attendees = append(e.Attendees, a.Email)
 	}

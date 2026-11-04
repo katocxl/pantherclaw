@@ -29,6 +29,7 @@ import (
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
+	pcgmail "github.com/katocxl/pantherclaw/packages/pc-gmail"
 	pcgoogleworkspace "github.com/katocxl/pantherclaw/packages/pc-google-workspace"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
 	pcm365 "github.com/katocxl/pantherclaw/packages/pc-m365"
@@ -62,7 +63,7 @@ func builtinPackages() ([]*defsdomain.Package, error) {
 	raws := [][]byte{
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
-		pcchatgptenterprise.Package, pcgoogleworkspace.Package, pcm365.Package,
+		pcchatgptenterprise.Package, pcgmail.Package, pcgoogleworkspace.Package, pcm365.Package,
 	}
 	pkgs := make([]*defsdomain.Package, 0, len(raws))
 	for _, raw := range raws {

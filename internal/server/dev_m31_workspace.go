@@ -10,6 +10,7 @@ import (
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pcgmail "github.com/katocxl/pantherclaw/packages/pc-gmail"
 	pcgoogleworkspace "github.com/katocxl/pantherclaw/packages/pc-google-workspace"
 	pcm365 "github.com/katocxl/pantherclaw/packages/pc-m365"
 )
@@ -18,7 +19,18 @@ import (
 const (
 	devGoogleWorkspaceConnectionName = "google-workspace"
 	devM365ConnectionName            = "m365"
+	devGmailConnectionName           = "gmail"
 )
+
+// seedGmailAgentConnection creates the development connection through which
+// agents send and read Gmail with pc.gmail (G0 M31 D956): targetURL is the
+// Google API base (pantherclaw-sim google), its host the only one the
+// credential is bound to, and the service account key is held by the
+// gateway, which mints a token for the sealed subject on every dispatch.
+// DEVELOPMENT ONLY.
+func seedGmailAgentConnection(ctx context.Context, cfg *Config, pool *db.Pool, org ids.OrgID, gateway ids.UUID, targetURL string) (capp.Connection, error) {
+	return seedBearerAgentConnection(ctx, cfg, pool, org, gateway, targetURL, devGmailConnectionName, pcgmail.Name)
+}
 
 // seedGoogleWorkspaceAgentConnection creates the development connection
 // through which agents work in Google Drive and Calendar with

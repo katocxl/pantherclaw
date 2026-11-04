@@ -305,3 +305,164 @@ definitions:
       http:
         method: DELETE
         path: /drive/v3/files/{target.id}/permissions/{params.permission_id}
+
+  # A calendar is its owner's email address, so a grant or policy binds
+  # whose calendar an agent may use. A path value may never carry "@"
+  # (HR-073), so the path names it as primary, which Google resolves to the
+  # credential's subject; subject_target makes the gateway refuse the
+  # dispatch unless that subject is the target (D956a,
+  # TARGET_NOT_CREDENTIAL_SUBJECT).
+  - operation: calendar.event.list
+    summary: List the events of a Google Calendar user's primary calendar
+    access: read
+    target:
+      type: google_calendar
+      id_pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: calendar_list_events
+        route: calendar-event-list
+        description: >-
+          List the events of a user's primary Google Calendar, by the
+          user's email address.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [calendar]
+          properties:
+            calendar:
+              type: string
+              description: The calendar owner's email address
+              pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+        extract:
+          target_id: input.calendar
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /calendar/v3/calendars/primary/events
+        subject_target: true
+
+  - operation: calendar.event.create
+    summary: Create an event in a Google Calendar user's primary calendar
+    access: write
+    target:
+      type: google_calendar
+      id_pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      account: none
+    params:
+      summary:
+        type: content
+        material: true
+        required: true
+        max_length: 1024
+        # Every attendee reads the event: a disclosure param.
+        disclosure: true
+        max_bytes: 1024
+      start:
+        type: content
+        material: true
+        required: true
+        # An RFC 3339 date-time, which Google checks.
+        max_length: 64
+      end:
+        type: content
+        material: true
+        required: true
+        max_length: 64
+      attendees:
+        type: identifier_list
+        material: true
+        max_items: 50
+        pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+    constraints:
+      - kind: target_set
+      - kind: allowed_values
+        param: attendees
+    effects:
+      - kind: calendar.event.create
+        description: Creates an event that every attendee can see
+    reversibility: compensatable
+    dedupe_key: [target.id, params.summary, params.start, params.end, params.attendees]
+    retry:
+      safe: false
+      on_unknown: fail
+    approval:
+      title: Create an event in the Google Calendar of {target.id}
+      fields:
+        - target.id
+        - params.attendees
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: calendar_create_event
+        route: calendar-event-create
+        description: >-
+          Create an event in a user's primary Google Calendar, by the user's
+          email address: a summary of at most 1024 bytes, a start and an end
+          as RFC 3339 date-times such as 2026-11-05T09:00:00Z, and at most 50
+          attendees by email address.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [calendar, summary, start, end]
+          properties:
+            calendar:
+              type: string
+              description: The calendar owner's email address
+              pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            summary:
+              type: string
+              description: The event's title
+              maxLength: 1024
+            start:
+              type: string
+              description: The start, an RFC 3339 date-time
+              maxLength: 64
+            end:
+              type: string
+              description: The end, an RFC 3339 date-time
+              maxLength: 64
+            attendees:
+              type: array
+              description: The attendees' email addresses
+              maxItems: 50
+              items:
+                type: string
+                pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+        extract:
+          target_id: input.calendar
+          params:
+            summary: input.summary
+            start: input.start
+            end: input.end
+            attendees: input.?attendees
+    dispatch:
+      http:
+        method: POST
+        path: /calendar/v3/calendars/primary/events
+        subject_target: true
+        body:
+          summary: params.summary
+          start[dateTime]: params.start
+          end[dateTime]: params.end
+          # One attendee object per address (G0 M31 D950 a).
+          attendees[*][email]: params.attendees

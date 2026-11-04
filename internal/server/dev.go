@@ -27,6 +27,7 @@ import (
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
+	pcgmail "github.com/katocxl/pantherclaw/packages/pc-gmail"
 	pcgoogleworkspace "github.com/katocxl/pantherclaw/packages/pc-google-workspace"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
 	pcm365 "github.com/katocxl/pantherclaw/packages/pc-m365"
@@ -85,7 +86,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	jiraURL := fs.String("jira-url", "", "with --gateway-out: also seed pc.jira and the connection \"jira\" to this Jira site (pantherclaw-sim jira: http://127.0.0.1:9096), its project facts read by the gateway")
 	awsECSURL := fs.String("aws-ecs-url", "", "with --gateway-out: also seed pc.aws.ecs and the connection \"aws-ecs\" to this ECS endpoint (pantherclaw-sim aws)")
 	gitlabURL := fs.String("gitlab-url", "", "with --gateway-out: also seed pc.gitlab and the connection \"gitlab\" to this GitLab instance (pantherclaw-sim gitlab: http://127.0.0.1:9097), its merge request facts read by the gateway")
-	googleURL := fs.String("google-url", "", "with --gateway-out: also seed pc.google-workspace and the connection \"google-workspace\" to this Google API base (pantherclaw-sim google: http://127.0.0.1:9104)")
+	googleURL := fs.String("google-url", "", "with --gateway-out: also seed pc.google-workspace and pc.gmail and the connections \"google-workspace\" and \"gmail\" to this Google API base (pantherclaw-sim google: http://127.0.0.1:9104)")
 	m365URL := fs.String("m365-url", "", "with --gateway-out: also seed pc.m365 and the connection \"m365\" to this Microsoft Graph base (pantherclaw-sim m365: http://127.0.0.1:9105)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -212,7 +213,8 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		pkgs = append(pkgs, devPackage{pcawsecs.Name, pcawsecs.Version, pcawsecs.Package})
 	}
 	if *googleURL != "" {
-		pkgs = append(pkgs, devPackage{pcgoogleworkspace.Name, pcgoogleworkspace.Version, pcgoogleworkspace.Package})
+		pkgs = append(pkgs, devPackage{pcgoogleworkspace.Name, pcgoogleworkspace.Version, pcgoogleworkspace.Package},
+			devPackage{pcgmail.Name, pcgmail.Version, pcgmail.Package})
 	}
 	if *m365URL != "" {
 		pkgs = append(pkgs, devPackage{pcm365.Name, pcm365.Version, pcm365.Package})
@@ -311,7 +313,15 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 				return err
 			}
 			_, _ = fmt.Fprintf(stdout, "seeded google-workspace connection %s (%s) to %s; seal a service account key file with "+
-				"pclaw seal --connection %s --google-service-account FILE --scope https://www.googleapis.com/auth/drive\n", c.ID, c.Name, *googleURL, c.ID)
+				"pclaw seal --connection %s --google-service-account FILE --subject USER_EMAIL --scope https://www.googleapis.com/auth/drive "+
+				"--scope https://www.googleapis.com/auth/calendar.events\n", c.ID, c.Name, *googleURL, c.ID)
+			g, err := seedGmailAgentConnection(ctx, cfg, pool, org, gw, *googleURL)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(stdout, "seeded gmail connection %s (%s) to %s; seal a service account key file with "+
+				"pclaw seal --connection %s --google-service-account FILE --subject MAILBOX_EMAIL --scope https://www.googleapis.com/auth/gmail.send "+
+				"--scope https://www.googleapis.com/auth/gmail.readonly\n", g.ID, g.Name, *googleURL, g.ID)
 		}
 		if *m365URL != "" {
 			c, err := seedM365AgentConnection(ctx, cfg, pool, org, gw, *m365URL)
