@@ -13,7 +13,7 @@ import (
 // launchLimits are the limits of a launch's grant (D9, D84 E7): the
 // ceiling's per-grant limits, or a launch's own limits that only narrow
 // them. Every per-grant rule must be kept (same id, grouping, operations,
-// currency, key and period) with a limit no larger; a launch may add
+// currency, access, key and period) with a limit no larger; a launch may add
 // rules. It reports false when want would widen per-grant.
 func launchLimits(perGrant gdomain.Limits, want *gdomain.Limits) (gdomain.Limits, bool) {
 	if want == nil {
@@ -26,7 +26,8 @@ func launchLimits(perGrant gdomain.Limits, want *gdomain.Limits) (gdomain.Limits
 		}
 		w := want.Budgets[i]
 		if w.Grouping != p.Grouping || !slices.Equal(w.Operations, p.Operations) || w.Currency != p.Currency ||
-			w.Period != p.Period || !notAbove(w.Limit, p.Limit) || !notAbove(w.MaxCount, p.MaxCount) {
+			w.Access != p.Access || w.Period != p.Period || !notAbove(w.Limit, p.Limit) || !notAbove(w.MaxCount, p.MaxCount) ||
+			!notAbove(w.MaxTokens, p.MaxTokens) { // G0 M29 D821: a token cap only narrows too
 			return gdomain.Limits{}, false
 		}
 	}

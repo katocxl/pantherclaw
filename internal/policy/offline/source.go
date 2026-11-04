@@ -26,8 +26,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/policy/scenario"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
+	pcanthropic "github.com/katocxl/pantherclaw/packages/pc-anthropic"
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
+	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
@@ -36,11 +38,13 @@ import (
 	pcgoogleworkspace "github.com/katocxl/pantherclaw/packages/pc-google-workspace"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
 	pcm365 "github.com/katocxl/pantherclaw/packages/pc-m365"
+	pcopenai "github.com/katocxl/pantherclaw/packages/pc-openai"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
 	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
+	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
 )
 
 // Bounds of what one check reads. A check runs on a pull request's own
@@ -96,9 +100,10 @@ func (w *world) add(p *defs.Package) {
 // that names no --packages.
 func builtin() [][]byte {
 	return [][]byte{
-		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
+		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcawss3.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
-		pcchatgptenterprise.Package, pcgmail.Package, pcgoogleworkspace.Package, pcm365.Package,
+		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package, pcvectorstore.Package,
+		pcgmail.Package, pcgoogleworkspace.Package, pcm365.Package,
 	}
 }
 

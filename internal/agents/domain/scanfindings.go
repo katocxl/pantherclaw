@@ -16,7 +16,37 @@ const (
 	ScanKindHook      = "hook"
 	ScanKindSkill     = "skill"
 	ScanKindEnvSecret = "env_secret"
+	// ScanKindAgentConfig is an agent configuration or memory file by its
+	// digest, never its contents (G0 M30 D941, HR-710).
+	ScanKindAgentConfig = "agent_config"
 )
+
+// agentConfigValues are the values an agent_config finding's enumerated
+// attributes may take (agentconfig.Scope, agentconfig.PathClass).
+var agentConfigValues = map[string][]string{
+	"scope":      {"user", "project"},
+	"path_class": {"settings", "mcp", "hooks", "memory", "skills"},
+}
+
+// digestTooLarge is the digest of a file the scan did not read (scan.DigestTooLarge).
+const digestTooLarge = "too_large"
+
+// agentConfigOK reports whether an agent_config finding's values are what
+// the scan sends: a known scope and class, a lower-case hex SHA-256 or
+// too_large, and a decimal size.
+func agentConfigOK(attrs map[string]string) bool {
+	for k, values := range agentConfigValues {
+		if !slices.Contains(values, attrs[k]) {
+			return false
+		}
+	}
+	d := attrs["digest"]
+	if d != digestTooLarge && (len(d) != 64 || strings.ContainsFunc(d, func(r rune) bool { return (r < '0' || r > '9') && (r < 'a' || r > 'f') })) {
+		return false
+	}
+	s := attrs["size"]
+	return s != "" && len(s) <= 20 && !strings.ContainsFunc(s, func(r rune) bool { return r < '0' || r > '9' })
+}
 
 // ScanSecretKinds are the credential kinds a scan reports as present: those
 // the recommendations catalog reads (D238). A finding holds the kind and
@@ -25,11 +55,37 @@ var ScanSecretKinds = []string{
 	"anthropic_api_key", "aws_access_key_id", "aws_secret_access_key", "google_api_key", "openai_api_key",
 }
 
+// SourceConfigFile marks an env_secret finding read from an agent
+// configuration or memory file (G0 M30 D942).
+const SourceConfigFile = "config_file"
+
+// ConfigSecretKinds are the credential formats a scan reports from an agent
+// configuration file (the gateway's outbound formats, outbound.Formats):
+// submitted as env_secret with source config_file, never the value (G0 M30
+// D942, D943a).
+var ConfigSecretKinds = []string{"aws_access_key", "github_token", "pantherclaw_token", "private_key", "slack_token"}
+
+// envSecretOK reports whether an env_secret finding names a kind the server
+// takes: one of ScanSecretKinds, or with source config_file one of
+// ConfigSecretKinds and a known path class.
+func envSecretOK(attrs map[string]string) bool {
+	switch attrs["source"] {
+	case "":
+		_, classed := attrs["path_class"]
+		return !classed && slices.Contains(ScanSecretKinds, attrs["secret_kind"])
+	case SourceConfigFile:
+		return slices.Contains(ConfigSecretKinds, attrs["secret_kind"]) && slices.Contains(agentConfigValues["path_class"], attrs["path_class"])
+	}
+	return false
+}
+
 // scanAttributes are the only attributes of the closed finding kinds (HR-588).
 var scanAttributes = map[string][]string{
 	ScanKindHook:      {"event", "executable"},
 	ScanKindSkill:     {"name", "path"},
-	ScanKindEnvSecret: {"secret_kind"},
+	ScanKindEnvSecret: {"secret_kind", "source", "path_class"},
+	// Never contents or values: a digest and a size (HR-710).
+	ScanKindAgentConfig: {"client", "scope", "path_class", "digest", "size"},
 }
 
 // scanNamedAttributes are the attributes the server keeps of the other local
@@ -92,8 +148,9 @@ func DeviceScope(scope string) bool {
 }
 
 // ScanAttributesOK reports whether a finding's attributes are allowed: a
-// finding of a closed kind carries only its named attributes, and an
-// env_secret finding one of ScanSecretKinds. Other kinds are not limited here.
+// finding of a closed kind carries only its named attributes, an env_secret
+// finding a kind envSecretOK takes, and an agent_config finding a digest
+// (agentConfigOK). Other kinds are not limited here.
 func ScanAttributesOK(kind string, attrs map[string]string) bool {
 	allowed, closed := scanAttributes[kind]
 	if !closed {
@@ -104,7 +161,10 @@ func ScanAttributesOK(kind string, attrs map[string]string) bool {
 			return false
 		}
 	}
-	return kind != ScanKindEnvSecret || slices.Contains(ScanSecretKinds, attrs["secret_kind"])
+	if kind == ScanKindAgentConfig {
+		return agentConfigOK(attrs)
+	}
+	return kind != ScanKindEnvSecret || envSecretOK(attrs)
 }
 
 // ScanAttributes returns the attributes a finding of a closed kind may carry,

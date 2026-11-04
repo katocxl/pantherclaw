@@ -495,7 +495,15 @@ func dispatches(kind string, d *defs.Definition) bool {
 		return d.Dispatch != nil && d.Dispatch.A2A != nil
 	case "postgres":
 		// Structured reads (D9, D64), likewise only through a sender.
-		return d.Dispatch != nil && d.Dispatch.SQL != nil
+		return d.Dispatch != nil && d.Dispatch.SQL != nil && !slices.Contains(defs.VectorOperations, d.Dispatch.SQL.Operation)
+	case "vectorstore":
+		// A retrieval index's queries and writes (G0 M30 D922), through
+		// the gateway's vectorstore sender only.
+		return d.Dispatch != nil && d.Dispatch.SQL != nil && slices.Contains(defs.VectorOperations, d.Dispatch.SQL.Operation)
+	case "model":
+		// A model provider's API (G0 M29 D811, D813), through the gateway's
+		// model path only.
+		return d.IsModel()
 	}
 	return false
 }
@@ -886,8 +894,12 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	p.policyRules(ctx, s)
 	p.external(ctx, s) // G0 M16 D81 (external.go)
 	s.disclosure()
+	if p.at(8) {
+		p.shares(ctx, s) // G0 M30 D935, D935a (shares.go)
+	}
 	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	s.contentHold()         // G0 M27 D507, D512 (content.go)
+	s.vectorWriterHold()    // G0 M30 D924 (vectorstore_m30.go)
 	p.boundariesM14(ctx, s) // G0 M14 D11, D78, D89 (scope.go)
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
@@ -1049,7 +1061,10 @@ func verdictEffect(v pdomain.Verdict) adomain.Decision {
 // budgets plans every reservation (ancestor debiting, HR-048) and checks it
 // against current usage. The binding reservation is in step 9.
 func (p *Pipeline) budgets(ctx context.Context, s *state) {
-	plan, f := s.chain.Debits(*s.gAction, gdomain.DebitContext{Now: s.cont.Now, RunID: s.ev.RunID, Principal: s.run.Principal, TeamID: s.agent.TeamID, Simulated: s.run.Simulated})
+	plan, f := s.chain.Debits(*s.gAction, gdomain.DebitContext{
+		Now: s.cont.Now, RunID: s.ev.RunID, Principal: s.run.Principal, TeamID: s.agent.TeamID, Simulated: s.run.Simulated,
+		ModelTokens: ModelTokens(s.def, s.vals), RunMaxTokens: s.run.MaxTokens, TokenCapRunID: s.run.TokenCapRunID,
+	})
 	if f != nil {
 		s.cl.add(StepBoundaries, effectOf(*f), f.Reason(), f.Finding.Detail, f.Level.String())
 		return
@@ -1066,6 +1081,7 @@ func (p *Pipeline) budgets(ctx context.Context, s *state) {
 	book := bdomain.NewBook()
 	var lines []bdomain.Line
 	labels := map[ids.UUID]string{}
+	tokenLines := map[ids.UUID]bool{}
 	s.ev.Rows = Rows{Accounts: map[bdomain.Ref]ids.UUID{}, Counters: map[bdomain.Ref]ids.UUID{}}
 	for _, d := range plan.Budgets {
 		acc := usage.Accounts[d.Ref]
@@ -1073,9 +1089,15 @@ func (p *Pipeline) budgets(ctx context.Context, s *state) {
 			s.ev.Rows.Accounts[d.Ref] = acc.ID
 		}
 		acc.ID, acc.Rank, acc.Currency, acc.Limit, acc.MaxCount = ids.NewV7(), d.Ref.Owner.Rank, d.Currency, d.Limit, d.MaxCount
+		acc.Unit = d.Unit
 		book.Accounts[acc.ID] = &acc
 		lines = append(lines, bdomain.Line{Kind: bdomain.KindBudget, ID: acc.ID, Rank: acc.Rank, Amount: d.Amount})
 		labels[acc.ID] = levelOf(s.chain, d.Ref.Owner) + " budget " + d.Ref.Rule
+		if d.Unit == bdomain.UnitTokens {
+			// G0 M29 D821: "<level> token budget <rule>: N of M tokens used".
+			labels[acc.ID] = levelOf(s.chain, d.Ref.Owner) + " token budget " + d.Ref.Rule
+			tokenLines[acc.ID] = true
+		}
 	}
 	for _, d := range plan.Counters {
 		c, exists := usage.Counters[d.Ref]
@@ -1095,8 +1117,11 @@ func (p *Pipeline) budgets(ctx context.Context, s *state) {
 	}
 	if failed, err := book.Check(lines); err != nil {
 		code := gdomain.ReasonBudgetExhausted
-		if failed.Kind == bdomain.KindCounter {
+		switch {
+		case failed.Kind == bdomain.KindCounter:
 			code = gdomain.ReasonCountLimitReached
+		case tokenLines[failed.ID]:
+			code = gdomain.ReasonTokenBudgetExhausted // G0 M29 D821
 		}
 		s.cl.add(StepBoundaries, adomain.Deny, code, labels[failed.ID]+": "+err.Error(), "")
 	}

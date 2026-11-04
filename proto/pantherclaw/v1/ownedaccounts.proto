@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// OwnedAccountService is the org's list of its own cloud accounts, GitHub
+// organizations, email domains, GCP projects and Azure tenants (G0 M30 D933,
+// D935; HR-707, HR-708).
+//
+// An action that shares to an account not on the list holds for a person
+// (SHARE_ACCOUNT_NOT_OWNED), and an empty list holds every cross-account
+// share. Adding an account loosens that hold, so it files a protected change
+// that applies only when a second person confirms it with a security key.
+// Removing one applies at once.
+service OwnedAccountService {
+  // ListOwnedAccounts lists the org's owned accounts.
+  // permission: org.owned_accounts.read
+  rpc ListOwnedAccounts(ListOwnedAccountsRequest) returns (ListOwnedAccountsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AddOwnedAccount files the protected change that adds an account (a
+  // person). Nothing changes until a second person confirms it.
+  // permission: org.owned_accounts.manage
+  rpc AddOwnedAccount(AddOwnedAccountRequest) returns (AddOwnedAccountResponse);
+  // RemoveOwnedAccount removes an account at once (a person): shares to it
+  // hold again.
+  // permission: org.owned_accounts.manage
+  rpc RemoveOwnedAccount(RemoveOwnedAccountRequest) returns (RemoveOwnedAccountResponse);
+}
+
+// OwnedAccount is one account the org named as its own.
+message OwnedAccount {
+  string id = 1;
+  // aws_account, github_org, email_domain, gcp_project or azure_tenant.
+  string kind = 2;
+  string value = 3;
+  string added_by = 4;
+  google.protobuf.Timestamp add_time = 5;
+}
+
+// ListOwnedAccountsRequest asks for the list.
+message ListOwnedAccountsRequest {}
+
+// ListOwnedAccountsResponse is the list, by kind and value.
+message ListOwnedAccountsResponse {
+  repeated OwnedAccount accounts = 1;
+}
+
+// AddOwnedAccountRequest names an account to add.
+message AddOwnedAccountRequest {
+  string kind = 1 [(buf.validate.field).string = {
+    in: ["aws_account", "github_org", "email_domain", "gcp_project", "azure_tenant"]
+  }];
+  string value = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 253
+  }];
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// AddOwnedAccountResponse names the protected change filed.
+message AddOwnedAccountResponse {
+  string protected_change_id = 1;
+}
+
+// RemoveOwnedAccountRequest names an account to remove.
+message RemoveOwnedAccountRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// RemoveOwnedAccountResponse is empty.
+message RemoveOwnedAccountResponse {}

@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/agentconfig"
 )
 
 // Change is one path the agent changed.
@@ -28,6 +30,20 @@ type Change struct {
 	// Binary is a file with binary content, old or new: it is not in the
 	// patch, and the caller carries its new content another way.
 	Binary bool
+	// Protected is the class of an agent configuration or memory file
+	// (agentconfig.Classify), "" for any other path (G0 M30 D944).
+	Protected agentconfig.PathClass
+	// Excluded marks a protected change left out of the patch, and its
+	// binary content out of the copy-out, because it was not included.
+	Excluded bool
+}
+
+// DiffOptions say how Diff treats protected paths.
+type DiffOptions struct {
+	// IncludeProtected puts changes to agent configuration and memory files
+	// into the patch; without it they are listed, marked Excluded and left
+	// out (G0 M30 D944, HR-713).
+	IncludeProtected bool
 }
 
 // Change kinds.
@@ -63,8 +79,15 @@ func Flagged(p string) bool {
 // bits); oldRoot's come from the file system, as Pack read them. A .git on
 // either side is never read and nothing is run. A binary file is left out
 // of the patch and marked Binary: git applies a binary patch only with SHA-1
-// blob ids, a hash SB-3 keeps out of the code.
+// blob ids, a hash SB-3 keeps out of the code. A change to an agent
+// configuration or memory file is listed but left out of the patch
+// (DiffWith includes it on request).
 func Diff(oldRoot, newRoot string, exec Executables, w io.Writer) ([]Change, error) {
+	return DiffWith(oldRoot, newRoot, exec, w, DiffOptions{})
+}
+
+// DiffWith is Diff with options.
+func DiffWith(oldRoot, newRoot string, exec Executables, w io.Writer, opts DiffOptions) ([]Change, error) {
 	olds, err := files(oldRoot)
 	if err != nil {
 		return nil, err
@@ -122,8 +145,11 @@ func Diff(oldRoot, newRoot string, exec Executables, w io.Writer) ([]Change, err
 			continue
 		}
 		c.Binary = binary(ob) || binary(nb)
+		if class, ok := agentconfig.Classify(p); ok {
+			c.Protected, c.Excluded = class, !opts.IncludeProtected
+		}
 		out = append(out, c)
-		if !c.Binary {
+		if !c.Binary && !c.Excluded {
 			writeFile(bw, p, oOK, nOK, ob, nb, o.exec, n.exec)
 		}
 	}
@@ -386,9 +412,30 @@ func span(before, n int) string {
 	return fmt.Sprintf("%d,%d", before+1, n)
 }
 
+// ProtectedChanged is the evidence protected_paths_changed records (G0 M30
+// D944): how many changes touch agent configuration or memory files, and
+// their classes in agentconfig order.
+func ProtectedChanged(changes []Change) (int, []agentconfig.PathClass) {
+	n, seen := 0, map[agentconfig.PathClass]bool{}
+	for _, c := range changes {
+		if c.Protected != "" {
+			n++
+			seen[c.Protected] = true
+		}
+	}
+	var classes []agentconfig.PathClass
+	for _, cl := range agentconfig.Classes {
+		if seen[cl] {
+			classes = append(classes, cl)
+		}
+	}
+	return n, classes
+}
+
 // WriteManifest writes one line per change: its kind, its path (quoted as
-// git quotes it, since the agent chose it), and "binary" and "review" for
-// binary content and flagged files.
+// git quotes it, since the agent chose it), "binary" and "review" for
+// binary content and flagged files, "protected:<class>" for an agent
+// configuration or memory file and "excluded" when it is not in the patch.
 func WriteManifest(w io.Writer, changes []Change) error {
 	bw := bufio.NewWriter(w)
 	for _, c := range changes {
@@ -398,6 +445,12 @@ func WriteManifest(w io.Writer, changes []Change) error {
 		}
 		if c.Flagged {
 			line += "\treview"
+		}
+		if c.Protected != "" {
+			line += "\tprotected:" + string(c.Protected)
+		}
+		if c.Excluded {
+			line += "\texcluded"
 		}
 		_, _ = bw.WriteString(line + "\n")
 	}

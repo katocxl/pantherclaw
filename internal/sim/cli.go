@@ -49,6 +49,7 @@ Usage:
   pantherclaw-sim chatgpt-enterprise [--addr 127.0.0.1:9102] [--key-file FILE] [--deny]
   pantherclaw-sim google [--addr 127.0.0.1:9104] [--service-account-file FILE] [--rate-limit 0] [--invalid-grant] [--not-found]
   pantherclaw-sim m365 [--addr 127.0.0.1:9105] [--client-file FILE] [--rate-limit 0] [--invalid-client] [--not-found]
+  pantherclaw-sim model [--addr 127.0.0.1:9103] [--key KEY] [--stream-delay 0s] [--status 0]
   pantherclaw-sim aws --secret-file FILE [--addr 127.0.0.1:9099] [--external-id ID] [--role-actions *] [--throttle 0] [--deny-assume-role]
                       [--long-sessions]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
@@ -79,6 +80,7 @@ var defaultAddrs = map[string]string{
 	"chatgpt-enterprise": "127.0.0.1:9102",
 	"google":             "127.0.0.1:9104",
 	"m365":               "127.0.0.1:9105",
+	"model":              "127.0.0.1:9103",
 	"canary":             "127.0.0.1:18433",
 }
 
@@ -119,6 +121,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runGoogle(ctx, args[1:], stderr)
 	case "m365":
 		err = runM365(ctx, args[1:], stderr)
+	case "model":
+		err = runModel(ctx, args[1:], stderr)
 	case "aws":
 		err = runAWS(ctx, args[1:], stderr)
 	case "load":

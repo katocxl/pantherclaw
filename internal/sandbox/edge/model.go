@@ -13,8 +13,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // A campaign's model route (G0 M25 D313): the agent's calls to the one model
@@ -87,13 +85,15 @@ func (e *Edge) forwardModel(w http.ResponseWriter, r *http.Request, host string)
 			out.Header.Set(h, v)
 		}
 	}
-	action := ids.NewV7().String()
+	key := fingerprint(r.Method, target, body)
+	action := e.held.action(key)
 	out.Header.Set(headerRunID, e.run)
 	out.Header.Set(headerAction, action)
 	if e.session != "" {
 		out.Header.Set(headerSession, e.session)
 	}
 	res, err := e.stream.Do(out) //nolint:gosec // G704: only the configured gateway (see above)
+	e.heldAnswer(key, action, res, err)
 	if err != nil {
 		e.log.WarnContext(r.Context(), "edge.gateway_unreachable", "connection", e.model.conn, "error", err.Error())
 		e.answer(w, r, host, http.StatusBadGateway, "gateway_unreachable")

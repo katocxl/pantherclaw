@@ -42,8 +42,8 @@ func main() {
 // are post-1.0 and come after M13, in that order (G0 M15, G0 M17, G0 M18,
 // G0 M19, G0 M20, G0 M21). M22, M23 and M24 follow M21 (G0 M22, G0 M23,
 // G0 M24). M25, M26 and M27 follow M24 (G0 M25, G0 M26, G0 M27). M28
-// follows M27 (G0 M28).
-var milestones = []string{"M0", "M1", "M1.5", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M12", "M11.1", "M10", "M11", "M14", "UI", "M13", "M15", "M16", "M17", "M18", "M19", "M20", "M21", "M22", "M23", "M24", "M25", "M26", "M27", "M28"}
+// follows M27 (G0 M28), and M29 follows M28 (G0 M29 D801).
+var milestones = []string{"M0", "M1", "M1.5", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M12", "M11.1", "M10", "M11", "M14", "UI", "M13", "M15", "M16", "M17", "M18", "M19", "M20", "M21", "M22", "M23", "M24", "M25", "M26", "M27", "M28", "M29", "M30"}
 
 func milestoneIndex(m string) int { return slices.Index(milestones, strings.TrimSpace(m)) }
 

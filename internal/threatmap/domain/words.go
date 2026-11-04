@@ -49,6 +49,7 @@ const (
 	ReasonEngineLive           Reason = "ENGINE_LIVE"
 	ReasonInputRecent          Reason = "INPUT_RECENT"
 	ReasonTriggerRuleOff       Reason = "TRIGGER_RULE_OFF"
+	ReasonNarrowedTrigger      Reason = "NARROWED_TRIGGER"
 	ReasonPlaybookDisabled     Reason = "PLAYBOOK_DISABLED"
 	ReasonPlaybookNotInstalled Reason = "PLAYBOOK_NOT_INSTALLED"
 	ReasonScenarioChanged      Reason = "SCENARIO_CHANGED"
@@ -77,6 +78,7 @@ var reasonTexts = map[Reason]string{
 	ReasonEngineLive:           "The rule listens for events that exist only when the act happens; the engine is reading this organization's events.",
 	ReasonInputRecent:          "Input this rule reads arrived in the last 7 days.",
 	ReasonTriggerRuleOff:       "The automation is active, but the rule that triggers it is off or not licensed.",
+	ReasonNarrowedTrigger:      "The automation's trigger also tests something other than the rule, so it may not run on every alert of the rule.",
 	ReasonPlaybookDisabled:     "The automation is not active.",
 	ReasonPlaybookNotInstalled: "A Hub playbook responds to a mapped rule, and it is not installed.",
 	ReasonScenarioChanged:      "A result was recorded for an earlier version of the scenario and is not counted.",

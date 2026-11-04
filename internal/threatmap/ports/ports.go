@@ -33,6 +33,8 @@ type Records struct {
 type Seen struct {
 	Alerts    []domain.AlertGroup
 	Decisions []domain.DecisionCount
+	// Outcomes are connector refusals by outcome code (G0 M30 D947a).
+	Outcomes []domain.OutcomeCount
 }
 
 // Snapshot is one stored day of one scope and framework (D719).

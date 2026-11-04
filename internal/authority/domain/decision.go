@@ -37,13 +37,16 @@ type Reason struct {
 // Stable reason codes of the service layer (identity, binding) shared with
 // the pipeline.
 const (
-	ReasonAmbiguousInput   = "AMBIGUOUS_INPUT"
-	ReasonNoGrant          = "NO_GRANT"
-	ReasonOrgMismatch      = "ORG_MISMATCH"
-	ReasonKillSwitch       = "KILL_SWITCH_ENGAGED"
-	ReasonBudgetExhausted  = "BUDGET_EXHAUSTED"
-	ReasonActionTampered   = "ACTION_TAMPERED"
-	ReasonDuplicateRequest = "DUPLICATE_REQUEST"
+	ReasonAmbiguousInput  = "AMBIGUOUS_INPUT"
+	ReasonNoGrant         = "NO_GRANT"
+	ReasonOrgMismatch     = "ORG_MISMATCH"
+	ReasonKillSwitch      = "KILL_SWITCH_ENGAGED"
+	ReasonBudgetExhausted = "BUDGET_EXHAUSTED"
+	// ReasonTokenBudgetExhausted: a model call would pass a token cap (G0
+	// M29 D821).
+	ReasonTokenBudgetExhausted = "TOKEN_BUDGET_EXHAUSTED" //nolint:gosec // G101: a reason code, not a credential
+	ReasonActionTampered       = "ACTION_TAMPERED"
+	ReasonDuplicateRequest     = "DUPLICATE_REQUEST"
 	// Workload identity and run binding (M3; HR-021, HR-022). The detail of an
 	// identity reason is the PAP-Error code (PAP-1 §12).
 	ReasonIdentityUnverified = "IDENTITY_UNVERIFIED"

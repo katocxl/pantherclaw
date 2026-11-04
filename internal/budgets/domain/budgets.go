@@ -121,11 +121,48 @@ const MaxCounterRows = 10_000
 
 // Owner is the grant or envelope that declares a rule. Rank orders locks:
 // envelopes first (0), then grants from the root down (depth + 1). It is
-// what makes the lock order "ancestor first" (HR-048).
+// what makes the lock order "ancestor first" (HR-048). A run with a token
+// cap owns one more account, locked last (G0 M29 D822).
 type Owner struct {
-	Kind string // "grant" or "envelope"
+	Kind string // "grant", "envelope" or "run"
 	ID   ids.UUID
 	Rank int
+}
+
+// Owner kinds.
+const (
+	OwnerGrant    = "grant"
+	OwnerEnvelope = "envelope"
+	// OwnerRun owns a run's token cap (G0 M29 D822).
+	OwnerRun = "run"
+)
+
+// RunRank is the rank of a run's token account: one past the deepest
+// grant's (grants rank depth + 1, depth at most 4), so it is locked last
+// (G0 M29 D822, HR-048).
+const RunRank = 6
+
+// RunTokensRule is the rule id of a run's token cap (G0 M29 D822).
+const RunTokensRule = "run_tokens"
+
+// Unit is what a budget account counts (G0 M29 D821).
+type Unit string
+
+// Units. The zero value counts as UnitCurrency: every account before M29.
+const (
+	UnitCurrency Unit = "currency"
+	UnitTokens   Unit = "tokens"
+)
+
+// Valid reports whether u is a known unit.
+func (u Unit) Valid() bool { return u == UnitCurrency || u == UnitTokens }
+
+// OrCurrency is u, or UnitCurrency when unset.
+func (u Unit) OrCurrency() Unit {
+	if u == "" {
+		return UnitCurrency
+	}
+	return u
 }
 
 // Ref names one account or counter row before it is resolved to a row id:
@@ -148,6 +185,9 @@ type Debit struct {
 	Ref      Ref
 	Grouping Grouping
 	Period   Period
+	// Unit is what the amount counts: money (Currency set or count-only) or
+	// model tokens (no Currency; Limit is the token cap; G0 M29 D821).
+	Unit Unit
 	// Currency and Limit bound the amount; MaxCount bounds the number of
 	// actions. A rule sets either or both.
 	Currency money.Currency

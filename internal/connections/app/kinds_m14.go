@@ -454,13 +454,13 @@ type kindConfig struct {
 // registered is refused with ErrKindNotImplemented and nothing is created
 // (G0 M14 D4, D64: fail closed). It returns nil for the other kinds.
 func (s *Service) checkM14Kind(in *CreateInput) (*kindConfig, error) {
-	if in.Kind != KindPostgres && in.Kind != KindA2A {
-		if in.Postgres != nil || in.A2A != nil {
+	if in.Kind != KindPostgres && in.Kind != KindA2A && in.Kind != KindModel && in.Kind != KindVectorstore {
+		if in.Postgres != nil || in.A2A != nil || in.Model != nil || in.Vectorstore != nil {
 			return nil, ErrShape
 		}
 		return nil, nil
 	}
-	cfg, err := checkKindConfig(in.Kind, in.Simulated, in.Postgres, in.A2A)
+	cfg, err := checkKindConfig(in.Kind, in.Simulated, in.Postgres, in.A2A, in.Model, in.Vectorstore)
 	if err != nil {
 		return nil, err
 	}
@@ -476,10 +476,33 @@ func (s *Service) checkM14Kind(in *CreateInput) (*kindConfig, error) {
 
 // checkKindConfig validates the configuration a kind carries: exactly its
 // own, checked and with its defaults.
-func checkKindConfig(kind string, simulated bool, pg *PostgresConfig, peer *A2AConfig) (any, error) {
+func checkKindConfig(kind string, simulated bool, pg *PostgresConfig, peer *A2AConfig, model *ModelConfig, vs *VectorstoreConfig) (any, error) {
+	if vs != nil && kind != KindVectorstore {
+		return nil, ErrShape
+	}
 	switch kind {
+	case KindVectorstore:
+		// G0 M30 D922, D925a.
+		if vs == nil || pg != nil || peer != nil || model != nil {
+			return nil, ErrShape
+		}
+		cfg, err := vs.Check()
+		if err != nil {
+			return nil, err
+		}
+		return &cfg, nil
+	case KindModel:
+		// G0 M29 D811.
+		if model == nil || pg != nil || peer != nil {
+			return nil, ErrShape
+		}
+		cfg, err := model.Check()
+		if err != nil {
+			return nil, err
+		}
+		return &cfg, nil
 	case KindPostgres:
-		if pg == nil || peer != nil {
+		if pg == nil || peer != nil || model != nil {
 			return nil, ErrShape
 		}
 		cfg, err := pg.Check()
@@ -488,7 +511,7 @@ func checkKindConfig(kind string, simulated bool, pg *PostgresConfig, peer *A2AC
 		}
 		return &cfg, nil
 	case KindA2A:
-		if peer == nil || pg != nil {
+		if peer == nil || pg != nil || model != nil {
 			return nil, ErrShape
 		}
 		cfg, err := peer.Check(simulated)
@@ -507,7 +530,12 @@ func checkKindConfig(kind string, simulated bool, pg *PostgresConfig, peer *A2AC
 // header like an http connection's.
 func (s *Service) m14Shape(kind string, simulated bool, in *CreateInput) (*string, []string, error) {
 	switch kind {
-	case KindPostgres:
+	case KindModel:
+		return s.modelShape(in.BaseURL, in.AllowedHosts, simulated, in.CredentialScheme, in.CredentialHeader)
+	case KindPostgres, KindVectorstore:
+		// A vectorstore connection's host is in its settings and its
+		// password goes in no header, as a postgres connection's (G0 M30
+		// D925a).
 		if in.BaseURL != "" || len(in.AllowedHosts) > 0 || in.CredentialHeader != "" || in.CredentialScheme != "" || len(in.AgentHosts) > 0 {
 			return nil, nil, ErrShape
 		}
@@ -543,8 +571,8 @@ func (s *Service) m14Shape(kind string, simulated bool, in *CreateInput) (*strin
 // implemented, and a store without a gateway check cannot validate the
 // move, so it is refused too (fail closed). Other kinds are not asked.
 func (s *Service) checkKindGateway(ctx context.Context, tx db.TenantTx, org ids.OrgID, conn dbq.PcConnection, gateway ids.UUID) error {
-	if conn.Kind != KindPostgres && conn.Kind != KindA2A {
-		return nil
+	if conn.Kind != KindPostgres && conn.Kind != KindA2A && conn.Kind != KindVectorstore {
+		return nil // a model connection may move: its settings depend on no gateway (G0 M29 D811)
 	}
 	store, ok := s.kinds.Get(conn.Kind)
 	if !ok {

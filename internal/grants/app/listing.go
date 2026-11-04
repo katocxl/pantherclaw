@@ -32,13 +32,15 @@ type GrantFilter struct {
 // BudgetAccount is the stored state of one budget account (one rule,
 // grouping key and period of a grant or guardrail).
 type BudgetAccount struct {
-	ID            ids.UUID
-	OwnerKind     string // "grant" or "envelope"
-	OwnerID       ids.UUID
-	Rule          string
-	PeriodStart   time.Time
-	Rank          int
-	Currency      string
+	ID          ids.UUID
+	OwnerKind   string // "grant" or "envelope"
+	OwnerID     ids.UUID
+	Rule        string
+	PeriodStart time.Time
+	Rank        int
+	Currency    string
+	// Unit is "currency" or "tokens" (G0 M29 D821).
+	Unit          string
 	Reserved      money.Decimal
 	Spent         money.Decimal
 	ReservedCount int64
@@ -237,6 +239,12 @@ func (s *Service) BudgetState(ctx context.Context, id domain.GrantID) ([]Account
 			if r.MaxCount != "" {
 				if n, err := strconv.ParseInt(r.MaxCount, 10, 64); err == nil {
 					st.MaxCount = &n
+				}
+			}
+			if r.IsTokenRule() {
+				// G0 M29 D821: a token rule's cap is its limit, in tokens.
+				if l, err := money.Parse(r.MaxTokens); err == nil {
+					st.Limit = &l
 				}
 			}
 		}

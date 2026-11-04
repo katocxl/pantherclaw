@@ -158,6 +158,7 @@ func printFindings(a *app, findings []scan.Finding) error {
 		{scan.KindAgentProject, "Agent projects"},
 		{scan.KindHook, "Hooks"},
 		{scan.KindSkill, "Skills"},
+		{scan.KindAgentConfig, "Agent configuration and memory files (digests)"},
 		{scan.KindEnvSecret, "Credentials (redacted)"},
 	}
 	var b strings.Builder
@@ -205,6 +206,9 @@ func describeFinding(f scan.Finding) string {
 		return at["event"] + ": " + at["executable"]
 	case scan.KindSkill:
 		return at["name"] + " (" + at["path"] + ")"
+	case scan.KindAgentConfig:
+		// A digest, never the contents (G0 M30 D941).
+		return at["path"] + " (" + at["client"] + " " + at["path_class"] + ", " + at["scope"] + "): sha256 " + at["digest"] + ", " + at["size"] + " bytes"
 	default:
 		return at["name"] + ": " + at["secret_kind"] + " " + at["redacted"] + " (" + at["where"] + ")"
 	}

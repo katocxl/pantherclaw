@@ -18,17 +18,23 @@ type Encoding string
 // protocols (G0 M20 D254): a JSON body as application/x-amz-json-1.1 with
 // the operation in a fixed X-Amz-Target header, and a flat form body whose
 // fixed Action and Version name the operation, answered in XML. Both are
-// POSTs to the service's root path.
+// POSTs to the service's root path. aws-rest is S3's REST protocol (G0 M30
+// D934a): a request to a path naming the bucket with a fixed subresource
+// (?policy, ?acl) naming the operation, a raw body from one param and
+// headers from enum params, never from the agent's own fields.
 const (
 	EncodingDefault  Encoding = ""
 	EncodingJSON     Encoding = "json"
 	EncodingForm     Encoding = "form"
 	EncodingAWSJSON  Encoding = "aws-json"
 	EncodingAWSQuery Encoding = "aws-query"
+	EncodingAWSRest  Encoding = "aws-rest"
 )
 
 // AWS returns whether e is one of AWS's protocols.
-func (e Encoding) AWS() bool { return e == EncodingAWSJSON || e == EncodingAWSQuery }
+func (e Encoding) AWS() bool {
+	return e == EncodingAWSJSON || e == EncodingAWSQuery || e == EncodingAWSRest
+}
 
 // AWS protocol details (D254): the media types of aws-json bodies (1.1
 // sent, 1.0 or 1.1 read) and the header that names an aws-json operation.
@@ -50,7 +56,8 @@ type SuccessCheck struct {
 	Equals bool   `json:"equals"`
 }
 
-// SQLDispatch is a structured read of a postgres connection (D9, D16).
+// SQLDispatch is a structured read of a postgres connection (D9, D16), or a
+// vector operation of a vectorstore connection (G0 M30 D922).
 type SQLDispatch struct {
 	Operation string `json:"operation"`
 }
@@ -62,6 +69,45 @@ type A2ADispatch struct {
 
 // SQLOperations are the structured reads a postgres connection serves.
 var SQLOperations = []string{"rows", "aggregate", "tables"}
+
+// Vector operations, the sql dispatch of a vectorstore connection (G0 M30
+// D922): a query reads; an upsert or a delete is a reversible write.
+const (
+	VectorQuery  = "vector_query"
+	VectorUpsert = "vector_upsert"
+	VectorDelete = "vector_delete"
+)
+
+// VectorOperations are the vector operations, valid only for a vectorstore
+// connection.
+var VectorOperations = []string{VectorQuery, VectorUpsert, VectorDelete}
+
+// validateVectorDispatch checks a vector operation's definition: a query is
+// a read, an upsert or a delete a reversible write, and the embedding,
+// where one is sent, is a required float_array (D922, D927).
+func (d *Definition) validateVectorDispatch(at, op string) error {
+	switch op {
+	case VectorQuery:
+		if d.Access != AccessRead {
+			return invalid("%s.sql: %s is a read", at, op)
+		}
+	case VectorUpsert, VectorDelete:
+		if d.Access != AccessWrite || d.Reversibility != Reversible {
+			return invalid("%s.sql: %s is a reversible write", at, op)
+		}
+	}
+	if op == VectorQuery || op == VectorUpsert {
+		if p, ok := d.Params["embedding"]; !ok || p.Type != TypeFloatArray || !p.Required {
+			return invalid("%s.sql: %s needs a required float_array param embedding", at, op)
+		}
+	}
+	if op == VectorUpsert || op == VectorDelete {
+		if _, ok := d.Params["id"]; !ok || !d.Params["id"].Required {
+			return invalid("%s.sql: %s needs a required param id", at, op)
+		}
+	}
+	return nil
+}
 
 // A2AMethods are the A2A 1.0 methods the gateway mediates (D31).
 var A2AMethods = []string{"SendMessage", "SendStreamingMessage", "GetTask", "ListTasks", "CancelTask", "SubscribeToTask"}

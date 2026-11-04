@@ -56,6 +56,8 @@ var movingKinds = []string{"audit." + auditkind.PolicyPublished, "audit." + audi
 // moving lists the ledger kind prefixes of changes that move reach.
 var moving = []string{
 	"audit.grant", "audit.policy.exception", "audit.connection", "audit.credential", "audit.coverage", "audit.agent",
+	// The agent audit kinds are agents.* (G0 M30 D949); audit.agent stays.
+	"audit.agents",
 	"coverage.snapshot", "coverage.invalidation",
 	// An automation enabled, paused or retired moves its ceiling (D37).
 	"audit.automation",

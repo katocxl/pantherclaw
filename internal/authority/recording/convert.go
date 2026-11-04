@@ -178,6 +178,8 @@ func fromRun(id ids.UUID, run pipeline.Run, err error) Run {
 		out.Ancestors = append(out.Ancestors, principalOf(a))
 	}
 	out.ScopeOperations = slices.Clone(run.ScopeOperations)
+	out.MaxTokens = run.MaxTokens
+	out.TokenCapRunID = uid(run.TokenCapRunID)
 	return out
 }
 
@@ -202,7 +204,10 @@ func (r Run) value() (pipeline.Run, error) {
 	}
 	out.Active, out.TaskRef = r.Active, r.TaskRef
 	out.ScopeOperations = slices.Clone(r.ScopeOperations)
-	return out, errors.Join(errs[:]...)
+	out.MaxTokens = r.MaxTokens
+	var capErr error
+	out.TokenCapRunID, capErr = parseUID(r.TokenCapRunID)
+	return out, errors.Join(append(errs[:], capErr)...)
 }
 
 func fromAgent(id ids.UUID, a pipeline.Agent, err error) Agent {
@@ -413,6 +418,9 @@ func fromAccount(ref bdomain.Ref, a bdomain.Account) AccountUsage {
 		Ref: fromRef(ref), ID: uid(a.ID), Rank: a.Rank, Currency: string(a.Currency), Reserved: a.Reserved.String(),
 		Spent: a.Spent.String(), MaxCount: a.MaxCount, ReservedCount: a.ReservedCount, SpentCount: a.SpentCount,
 	}
+	if a.Unit == bdomain.UnitTokens {
+		out.Unit = string(a.Unit) // G0 M29 D821
+	}
 	if a.Limit != nil {
 		s := a.Limit.String()
 		out.Limit = &s
@@ -423,7 +431,7 @@ func fromAccount(ref bdomain.Ref, a bdomain.Account) AccountUsage {
 func (a AccountUsage) value() (bdomain.Account, error) {
 	out := bdomain.Account{
 		Rank: a.Rank, Currency: money.Currency(a.Currency), MaxCount: a.MaxCount, ReservedCount: a.ReservedCount,
-		SpentCount: a.SpentCount,
+		SpentCount: a.SpentCount, Unit: bdomain.Unit(a.Unit),
 	}
 	var errs [4]error
 	out.ID, errs[0] = parseUID(a.ID)
@@ -513,7 +521,28 @@ func fromConnection(id ids.UUID, c pipeline.Connection, err error) Connection {
 	return Connection{
 		ID: id.String(), Gateway: uid(c.Gateway), Kind: c.Kind, Package: c.Package, State: c.State, AccessMode: c.AccessMode,
 		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: maps.Clone(c.Modes), Reads: slices.Clone(c.Reads),
+		Writers: uidList(c.Writers),
 	}
+}
+
+func uidList(in []ids.UUID) []string {
+	var out []string
+	for _, u := range in {
+		out = append(out, u.String())
+	}
+	return out
+}
+
+func parseUIDList(in []string) ([]ids.UUID, error) {
+	var out []ids.UUID
+	for _, s := range in {
+		u, err := ids.ParseUUID(s)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, nil
 }
 
 func (c Connection) value() (pipeline.Connection, error) {
@@ -522,6 +551,7 @@ func (c Connection) value() (pipeline.Connection, error) {
 	}
 	id, err1 := ids.ParseUUID(c.ID)
 	gw, err2 := parseUID(c.Gateway)
+	writers, err3 := parseUIDList(c.Writers)
 	modes := maps.Clone(c.Modes)
 	if modes == nil {
 		modes = map[string]string{}
@@ -529,7 +559,8 @@ func (c Connection) value() (pipeline.Connection, error) {
 	return pipeline.Connection{
 		ID: id, Gateway: gw, Kind: c.Kind, Package: c.Package, State: c.State, AccessMode: c.AccessMode,
 		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: modes, Reads: slices.Clone(c.Reads),
-	}, errors.Join(err1, err2)
+		Writers: writers,
+	}, errors.Join(err1, err2, err3)
 }
 
 func fromHold(run, action ids.UUID, h *pipeline.HoldRequest, err error) Hold {

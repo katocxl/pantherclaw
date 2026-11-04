@@ -124,6 +124,7 @@ var roles = []Role{
 			PermHubRead, PermHubInstall,
 			PermBehaviorRead,
 			PermThreatMapRead,
+			PermOwnedAccountsRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
@@ -144,6 +145,7 @@ var roles = []Role{
 			PermHubRead, PermHubInstall,
 			PermBehaviorRead,
 			PermThreatMapRead,
+			PermOwnedAccountsRead, PermOwnedAccountsManage,
 		}),
 	},
 	{
@@ -189,7 +191,7 @@ var roles = []Role{
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
 			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead, PermAutomationRead,
 			PermA2APeerRunRead, PermIdentityProviderRead, PermCatalogRead, PermContentRead, PermHubRead, PermBehaviorRead, PermComplianceRead,
-			PermThreatMapRead,
+			PermThreatMapRead, PermOwnedAccountsRead,
 		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{

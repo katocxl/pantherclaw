@@ -65,6 +65,10 @@ type Store struct {
 	// Content takes a tool result's content flags in the outcome's transaction
 	// (G0 M27 D507); nil keeps none.
 	Content *contentapp.Sink
+	// TokenCostReports reports whether org is on Team or higher now, so a
+	// model call's usage row carries a cost estimate (G0 M29 D825, D829);
+	// nil writes none (fail closed).
+	TokenCostReports func(ctx context.Context, org ids.OrgID) bool
 }
 
 // PeerDelegation delegates to a peer agent in BeginDispatch's transaction.
@@ -512,6 +516,9 @@ func budgetStates(ctx context.Context, q *dbq.Queries, org ids.OrgID, ev *pipeli
 			Level: d.Ref.Owner.ID.String(), Rule: d.Ref.Rule, Currency: string(d.Currency),
 			Reserved: a.Reserved.String(), Spent: a.Spent.String(),
 		}
+		if d.Unit == bdomain.UnitTokens {
+			st.Unit = string(bdomain.UnitTokens) // G0 M29 D821
+		}
 		amt, cnt := a.Available()
 		if amt != nil {
 			st.Available = amt.String()
@@ -739,6 +746,9 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		if e.DispatchMS >= 0 {
 			attempt.DispatchMs = &e.DispatchMS
 		}
+		if e.OutcomeCode != "" {
+			attempt.OutcomeCode = &e.OutcomeCode // G0 M30 D947a
+		}
 		if err := q.InsertExecutionAttempt(ctx, attempt); err != nil {
 			return err
 		}
@@ -760,8 +770,18 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 			return err
 		}
 		receipt = r.JWS
+		if err := s.modelUsage(ctx, tx, pc, txn, o, e.ModelUsage, now); err != nil {
+			return err
+		}
 		switch o {
 		case finalize.Accepted, finalize.Delegated:
+			// G0 M29 D821: token reservations commit the tokens the provider
+			// reported; unreported, each commits its whole reservation.
+			if u := e.ModelUsage; u != nil && u.Reported {
+				if err := pgbudgets.SettleTokens(ctx, q, org, permit, u.Total()); err != nil {
+					return err
+				}
+			}
 			if err := pgbudgets.Settle(ctx, q, org, permit, bdomain.Commit); err != nil {
 				return err
 			}

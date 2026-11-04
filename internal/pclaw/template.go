@@ -513,7 +513,7 @@ func mergeBudgets(cur, tpl []byte, update bool) (merged []byte, loosened, kept [
 }
 
 // notLooser reports whether budget b is the same as old except, at most,
-// a lower limit or max_count.
+// a lower limit, max_count or max_tokens.
 func notLooser(b map[string]any, oldAny any) bool {
 	old, _ := oldAny.(map[string]any)
 	for _, k := range []string{"grouping", "operations", "currency", "period"} {
@@ -521,7 +521,7 @@ func notLooser(b map[string]any, oldAny any) bool {
 			return false
 		}
 	}
-	for _, k := range []string{"limit", "max_count"} {
+	for _, k := range []string{"limit", "max_count", "max_tokens"} { // max_tokens: G0 M29 D821
 		nv, nok := b[k].(string)
 		ov, ook := old[k].(string)
 		switch {

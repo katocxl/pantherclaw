@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,7 +35,13 @@ import (
 // widened after review, founder decision 2026-10-13). It reads the hook
 // input, resolves the working directory to its final form, signs a PAP/1
 // request with the developer's desktop workload key (L1, HR-092) in the
-// configured run, and asks the gateway's /hook/{connection}.
+// configured run, and asks the gateway's /hook/{connection}. It also runs
+// before every Write, Edit, MultiEdit and NotebookEdit: a write to an agent
+// configuration or memory file of the project (agentconfig) asks the
+// gateway the same way as pc.shell agent_config.write, and any other write
+// is left alone with no call (G0 M30 D943, HR-712). Like the shell route,
+// this is cooperative (PARTIAL): an agent that writes without the tool, or
+// a client without the hook, is not asked about.
 //
 // It answers allow only when PantherClaw allowed and recorded the command.
 // Everything else blocks it (exit code 2, the reason on stderr): a denial,
@@ -73,8 +80,21 @@ type hookInput struct {
 	Cwd       string `json:"cwd"`
 	ToolInput struct {
 		Command string `json:"command"`
+		// FilePath is what Write, Edit and MultiEdit write; NotebookPath
+		// what NotebookEdit does.
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
 	} `json:"tool_input"`
 }
+
+// writeTools are the tools that write a file. A write to a file
+// agentconfig.Classify marks protected asks the gateway (pc.shell
+// agent_config.write, G0 M30 D943, HR-712); any other write is not asked
+// about, so ordinary edits wait for nothing.
+var writeTools = []string{"Write", "Edit", "MultiEdit", "NotebookEdit"}
+
+// hookLocal is the answer to a write the hook does not ask about.
+const hookLocal = "local"
 
 // hookAnswer is the gateway's answer (internal/gateway/hook.Answer).
 type hookAnswer struct {
@@ -88,6 +108,10 @@ func hookClaudeCode(ctx context.Context, a *app, args []string) error {
 	defer cancel()
 	ans, err := a.hookAsk(ctx, args)
 	switch {
+	case err == nil && ans.Decision == hookLocal:
+		// Not a protected file: no answer, so Claude Code's own permission
+		// rules decide the write as they would without the hook.
+		return nil
 	case err != nil:
 		// Worded as the gateway words CANNOT_AUTHORIZE (internal/gateway/hook,
 		// sdk), so a refusal reads the same whichever side made it (T-069).
@@ -118,9 +142,6 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return hookAnswer{}, errors.New("usage: pclaw " + commands["hook claude-code"].usage)
 	}
-	if *gateway == "" || *conn == "" || *keyFile == "" {
-		return hookAnswer{}, errors.New("set --gateway, --connection and --key-file (or PANTHERCLAW_GATEWAY, PANTHERCLAW_HOOK_CONNECTION and PANTHERCLAW_WORKLOAD_KEY_FILE)")
-	}
 	raw, err := io.ReadAll(io.LimitReader(a.stdin, hookMaxInput+1))
 	if err != nil || len(raw) > hookMaxInput {
 		return hookAnswer{}, errors.New("the hook input cannot be read")
@@ -130,11 +151,13 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 		return hookAnswer{}, errors.New("the hook input is not Claude Code's PreToolUse JSON")
 	}
 	shell := shellOf[in.Tool]
+	write := slices.Contains(writeTools, in.Tool)
 	switch {
 	case in.Event != "PreToolUse":
 		return hookAnswer{}, fmt.Errorf("a %q hook event (only PreToolUse is decided)", in.Event)
+	case write:
 	case shell == "":
-		return hookAnswer{}, fmt.Errorf("the %q tool (only the commands Bash, PowerShell and Monitor run are decided)", in.Tool)
+		return hookAnswer{}, fmt.Errorf("the %q tool (only the commands Bash, PowerShell and Monitor run and the writes of Write, Edit, MultiEdit and NotebookEdit are decided)", in.Tool)
 	case in.ToolInput.Command == "" && in.Tool == "Monitor":
 		return hookAnswer{}, errors.New("a Monitor call without a command (its WebSocket form, say) is nothing PantherClaw decides")
 	case in.ToolInput.Command == "":
@@ -143,6 +166,22 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 	cwd, err := finalPath(in.Cwd)
 	if err != nil {
 		return hookAnswer{}, err
+	}
+	var input map[string]string
+	if write {
+		base, rel, class, protected, err := protectedWrite(in, cwd)
+		switch {
+		case err != nil:
+			return hookAnswer{}, err
+		case !protected:
+			return hookAnswer{Decision: hookLocal}, nil
+		}
+		// cwd is the base the path is relative to: the project, or the home
+		// (D943a). call is added below, once it is known.
+		input = map[string]string{"op": "write", "path": rel, "class": string(class), "cwd": base}
+	}
+	if *gateway == "" || *conn == "" || *keyFile == "" {
+		return hookAnswer{}, errors.New("set --gateway, --connection and --key-file (or PANTHERCLAW_GATEWAY, PANTHERCLAW_HOOK_CONNECTION and PANTHERCLAW_WORKLOAD_KEY_FILE)")
 	}
 	call := in.ToolUseID
 	if !hookCallPattern.MatchString(call) {
@@ -173,9 +212,13 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 	if err != nil {
 		return hookAnswer{}, err
 	}
-	body, err := json.Marshal(map[string]any{"tool": "shell", "input": map[string]string{
-		"shell": shell, "command": in.ToolInput.Command, "cwd": cwd, "call": call,
-	}}, json.Deterministic(true))
+	tool := "shell"
+	if input != nil {
+		tool, input["call"] = "agent_config", call
+	} else {
+		input = map[string]string{"shell": shell, "command": in.ToolInput.Command, "cwd": cwd, "call": call}
+	}
+	body, err := json.Marshal(map[string]any{"tool": tool, "input": input}, json.Deterministic(true))
 	if err != nil {
 		return hookAnswer{}, err
 	}

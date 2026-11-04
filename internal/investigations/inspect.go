@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	mudomain "github.com/katocxl/pantherclaw/internal/modelusage/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 // Section is one section of a run inspection (rows26 D20).
@@ -77,6 +79,9 @@ type InspectOptions struct {
 	PageToken string
 	// WithPhases fills inferred phases (Team, F232).
 	WithPhases bool
+	// WithTokenEstimate fills the budget section's cost estimate (Team,
+	// G0 M29 D824, D829).
+	WithTokenEstimate bool
 }
 
 // RunSummary is who ran what under which authority.
@@ -121,6 +126,18 @@ type BudgetLine struct {
 	Held, Committed, Released string
 	Count                     int64
 	Remaining                 string
+	// Unit is "currency" or "tokens" for an account, empty for a counter;
+	// Limit is the rule's cap (G0 M29 D824). A run's own token account
+	// carries both from the run; the caller fills the rest.
+	Unit, Limit string
+}
+
+// TokenEstimate is a cost estimate of a run's model calls from the org's
+// own prices (G0 M29 D824, HR-698), labeled an estimate; Team only.
+type TokenEstimate struct {
+	Estimates     []mudomain.Amount
+	PricedCalls   int64
+	UnpricedCalls int64
 }
 
 // RouteCoverage is a coverage snapshot a run's decisions claimed.
@@ -154,6 +171,8 @@ type Inspection struct {
 	// budget lines' remaining limit.
 	Grants       []ids.UUID
 	ScopeLimited bool
+	// TokenEstimate is set with the budget section on Team (G0 M29 D824).
+	TokenEstimate *TokenEstimate
 }
 
 // InspectRun assembles a run's inspection: every section is read only
@@ -229,6 +248,11 @@ func InspectRun(ctx context.Context, tx db.TenantTx, s SectionScope, run ids.UUI
 		}
 		if out.Grants, err = q.InvRunGrants(ctx, org, run); err != nil {
 			return Inspection{}, err
+		}
+		if o.WithTokenEstimate {
+			if out.TokenEstimate, err = tokenEstimate(ctx, q, org, run); err != nil {
+				return Inspection{}, err
+			}
 		}
 	}
 	if read[SectionApprovals] {
@@ -381,14 +405,46 @@ func budget(ctx context.Context, q *dbq.Queries, org ids.OrgID, run ids.UUID) ([
 	}
 	out := make([]BudgetLine, 0, len(rows))
 	for _, b := range rows {
-		l := BudgetLine{Account: b.LineID, IsAccount: b.Account, Rule: b.Rule, Currency: b.Currency, Count: b.Reservations}
+		l := BudgetLine{Account: b.LineID, IsAccount: b.Account, Rule: b.Rule, Currency: b.Currency, Count: b.Reservations, Unit: b.Unit}
 		if b.Account {
 			l.Held, l.Committed, l.Released = b.Held.String(), b.Committed.String(), b.Released.String()
+			if b.RunCap > 0 {
+				// G0 M29 D822, D875: the run tree shares one token account, so
+				// what is left is the cap less what the whole tree holds and
+				// committed on it.
+				limit, err := money.FromInt(b.RunCap)
+				if err != nil {
+					return nil, err
+				}
+				l.Limit = limit.String()
+				if left, err := limit.Sub(b.RunUsed); err == nil {
+					l.Remaining = left.String()
+				}
+			}
 		} else {
 			l.Held, l.Committed, l.Released = strconv.FormatInt(b.HeldCount, 10), strconv.FormatInt(b.CommittedCount, 10),
 				strconv.FormatInt(b.ReleasedCount, 10)
 		}
 		out = append(out, l)
+	}
+	return out, nil
+}
+
+// tokenEstimate sums the estimates of a run's model calls by currency (G0
+// M29 D824); nil when the run made none.
+func tokenEstimate(ctx context.Context, q *dbq.Queries, org ids.OrgID, run ids.UUID) (*TokenEstimate, error) {
+	rows, err := q.InvRunTokenEstimate(ctx, org, &run)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	out := &TokenEstimate{}
+	for _, r := range rows {
+		if r.Currency == "" {
+			out.UnpricedCalls += r.Calls
+			continue
+		}
+		out.PricedCalls += r.Calls
+		out.Estimates = append(out.Estimates, mudomain.Amount{Currency: money.Currency(r.Currency), Amount: r.Amount})
 	}
 	return out, nil
 }

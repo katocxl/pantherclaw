@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,10 @@ type Limits struct {
 // per grouping and period. A grant's rules are task budgets (grouping
 // "task"), shared by its runs and by every grant delegated from it; an
 // envelope's rules group by principal, account, team or org.
+//
+// A token rule (G0 M29 D821) sets MaxTokens and none of Currency, Limit and
+// MaxCount: it caps the model tokens of the model calls it covers, in the
+// unit "tokens".
 type BudgetRule struct {
 	ID         string           `json:"id"`
 	Grouping   bdomain.Grouping `json:"grouping"`
@@ -35,7 +40,55 @@ type BudgetRule struct {
 	Currency   string           `json:"currency,omitzero"`
 	Limit      string           `json:"limit,omitzero"`
 	MaxCount   string           `json:"max_count,omitzero"`
+	MaxTokens  string           `json:"max_tokens,omitzero"`
 	Period     bdomain.Period   `json:"period"`
+	// Access, when set, keeps the rule to the operations of that access
+	// ("read" or "write"); it needs max_count and takes no limit or currency
+	// (G0 M30 D930). Only an access rule may name the operations "*" (D930a).
+	Access string `json:"access,omitzero"`
+}
+
+// IsTokenRule reports whether r caps model tokens (G0 M29 D821).
+func (r BudgetRule) IsTokenRule() bool { return r.MaxTokens != "" }
+
+// opsWildcard is the operations entry that names every operation of a
+// rule's access (G0 M30 D930a).
+const opsWildcard = "*"
+
+// validateScope checks the rule's operations and access (G0 M30 D930,
+// D930a): access is "", "read" or "write"; an access rule counts actions
+// only, so it needs max_count and takes no limit or currency; and "*" is
+// accepted only alone, on an access rule.
+func (r BudgetRule) validateScope(name string) error {
+	switch defs.Access(r.Access) {
+	case "", defs.AccessRead, defs.AccessWrite:
+	default:
+		return invalid("%s: unknown access %q", name, r.Access)
+	}
+	if r.Access != "" && (r.MaxCount == "" || r.Limit != "" || r.Currency != "" || r.MaxTokens != "") {
+		return invalid("%s: %s: an access budget sets max_count and no limit, currency or max_tokens", name, CodeBudgetAccessNeedsCount)
+	}
+	if slices.Contains(r.Operations, opsWildcard) {
+		if r.Access == "" || len(r.Operations) != 1 {
+			return invalid("%s: %s: \"*\" stands alone and needs access", name, CodeBudgetWildcardNeedsAccess)
+		}
+		return nil
+	}
+	if err := r.Operations.validate(name + ".operations"); err != nil || len(r.Operations) == 0 {
+		return invalid("%s: name the operations it covers", name)
+	}
+	return nil
+}
+
+// covers reports whether the rule applies to the action: its operations
+// match and, on an access rule, the action's definition has that access
+// (G0 M30 D930). "*" matches every operation, so with access it covers
+// every operation of that access (D930a).
+func (r BudgetRule) covers(a Action) bool {
+	if r.Access != "" && string(a.Access) != r.Access {
+		return false
+	}
+	return r.Operations.Matches(a.Operation)
 }
 
 // CountRule limits how many of the actions it covers may happen per key
@@ -55,7 +108,19 @@ type CountRule struct {
 const (
 	maxRules      = 16
 	maxCountValue = 1_000_000_000
+	// MaxTokensValue is the largest token cap a rule may set (G0 M29 D821).
+	MaxTokensValue = 1_000_000_000_000
 )
+
+// ParseMaxTokens parses a token cap: a whole number from 1 to
+// MaxTokensValue in canonical form (G0 M29 D821).
+func ParseMaxTokens(name, s string) (int64, error) {
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 1 || n > MaxTokensValue || strconv.FormatInt(n, 10) != s {
+		return 0, invalid("%s: %q is not a whole number of tokens from 1 to %d", name, s, int64(MaxTokensValue))
+	}
+	return n, nil
+}
 
 var (
 	ruleIDPattern  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
@@ -87,8 +152,8 @@ func (l Limits) validate(onGrant bool) error {
 			return invalid("%s: rule ids are unique lowercase names", name)
 		}
 		seen[r.ID] = true
-		if err := r.Operations.validate(name + ".operations"); err != nil || len(r.Operations) == 0 {
-			return invalid("%s: name the operations it covers", name)
+		if err := r.validateScope(name); err != nil {
+			return err
 		}
 		switch {
 		case !r.Grouping.Valid():
@@ -99,10 +164,18 @@ func (l Limits) validate(onGrant bool) error {
 			return invalid("%s: task budgets belong on grants", name)
 		case !r.Period.Valid():
 			return invalid("%s: unknown period %q", name, r.Period)
+		case r.IsTokenRule() && (r.Currency != "" || r.Limit != "" || r.MaxCount != ""):
+			// G0 M29 D821: a token rule counts tokens only.
+			return invalid("%s: a max_tokens budget sets no currency, limit or max_count", name)
+		case r.IsTokenRule():
+			if _, err := ParseMaxTokens(name+".max_tokens", r.MaxTokens); err != nil {
+				return err
+			}
+			continue
 		case (r.Currency == "") != (r.Limit == ""):
 			return invalid("%s: currency and limit go together", name)
 		case r.Limit == "" && r.MaxCount == "":
-			return invalid("%s: set a limit, a max_count or both", name)
+			return invalid("%s: set a limit, a max_count or both, or max_tokens alone", name)
 		}
 		if r.Limit != "" {
 			m, err := money.ParseMoney(r.Limit, r.Currency)
@@ -181,6 +254,19 @@ func (l Limits) checkDispatched(lookup func(op string) *defs.Definition) error {
 	return nil
 }
 
+// ReservedTokens is what a model call reserves against a token rule (G0 M29
+// D813, HR-693): its max tokens times its choices (1 unless the API takes
+// several), plus a third of its request bytes, rounded up. It applies to
+// the create operations; count and read operations reserve none. Inputs
+// are clamped (0..MaxTokensValue tokens, 1..1,000,000 choices, 0 or more
+// bytes), so the sum cannot overflow.
+func ReservedTokens(maxTokens, choices, inputBytes int64) int64 {
+	maxTokens = min(max(maxTokens, 0), MaxTokensValue)
+	choices = min(max(choices, 1), 1_000_000)
+	inputBytes = max(inputBytes, 0)
+	return maxTokens*choices + inputBytes/3 + min(inputBytes%3, 1)
+}
+
 // DecodeLimits strictly decodes a limits document, like DecodeBounds.
 func DecodeLimits(raw []byte) (Limits, error) {
 	if len(raw) == 0 || len(raw) > MaxBoundsBytes {
@@ -199,11 +285,18 @@ func DecodeLimits(raw []byte) (Limits, error) {
 // Stable reason codes for budgets and counters.
 const (
 	ReasonBudgetExhausted       = "BUDGET_EXHAUSTED"
+	ReasonTokenBudgetExhausted  = "TOKEN_BUDGET_EXHAUSTED" //nolint:gosec // G101: a reason code (G0 M29 D821), not a credential
 	ReasonCountLimitReached     = "COUNT_LIMIT_REACHED"
 	ReasonBudgetCurrency        = "BUDGET_CURRENCY_NOT_COVERED"
 	ReasonBudgetValueAmbiguous  = "BUDGET_VALUE_AMBIGUOUS"
 	ReasonLimitKeyMissing       = "LIMIT_KEY_MISSING"
 	ReasonCounterCapacityExceed = "COUNTER_CAPACITY"
+)
+
+// Codes of budget rules refused as invalid (G0 M30 D930, D930a).
+const (
+	CodeBudgetAccessNeedsCount    = "BUDGET_ACCESS_NEEDS_COUNT"
+	CodeBudgetWildcardNeedsAccess = "BUDGET_WILDCARD_NEEDS_ACCESS"
 )
 
 // DebitContext is what debits are keyed by, besides the action.
@@ -216,6 +309,14 @@ type DebitContext struct {
 	// run never changes what real agents depend on (HR-222). Grant-owned
 	// lines still apply.
 	Simulated bool
+	// ModelTokens are the tokens a model call reserves (G0 M29 D813,
+	// ReservedTokens); 0 for every other action, which token rules skip.
+	ModelTokens int64
+	// RunMaxTokens is the run's token cap, when it has one (G0 M29 D822).
+	RunMaxTokens *int64
+	// TokenCapRunID is the run that set that cap, the owner of the token
+	// account its whole run tree shares (G0 M29 D875); set with RunMaxTokens.
+	TokenCapRunID ids.UUID
 }
 
 // Plan is everything one action must reserve.
@@ -251,7 +352,21 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 		value, valueErr := moneyParam(a.Params)
 		amountRules, inCurrency := 0, 0
 		for _, r := range limits.Budgets {
-			if !r.Operations.Matches(a.Operation) {
+			if !r.covers(a) {
+				continue
+			}
+			if r.IsTokenRule() {
+				// G0 M29 D821: a token rule debits only model calls that
+				// reserve tokens, by those tokens; every other action skips it.
+				if dc.ModelTokens <= 0 {
+					continue
+				}
+				capTokens, _ := ParseMaxTokens("", r.MaxTokens)
+				key, ok := groupingKey(r.Grouping, task, a, dc)
+				if !ok {
+					return Plan{}, unknownLimit(l.level, "budgets."+r.ID, ReasonLimitKeyMissing, "the action has no "+string(r.Grouping)+" to key this budget")
+				}
+				plan.Budgets = append(plan.Budgets, tokenDebit(owner, r.ID, key, r.Grouping, r.Period, capTokens, dc))
 				continue
 			}
 			d := bdomain.Debit{Grouping: r.Grouping, Period: r.Period}
@@ -308,7 +423,26 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 			plan.Counters = append(plan.Counters, cd)
 		}
 	}
+	// G0 M29 D822, D875: a run's token cap is one more level, locked last,
+	// owned by the run that set it and shared by its whole run tree, so a
+	// child run's model calls cannot escape it; it only restricts.
+	if dc.RunMaxTokens != nil && dc.ModelTokens > 0 && !dc.TokenCapRunID.IsZero() {
+		owner := bdomain.Owner{Kind: bdomain.OwnerRun, ID: dc.TokenCapRunID, Rank: bdomain.RunRank}
+		plan.Budgets = append(plan.Budgets, tokenDebit(owner, bdomain.RunTokensRule, dc.TokenCapRunID.String(),
+			bdomain.GroupTask, bdomain.PeriodNone, *dc.RunMaxTokens, dc))
+	}
 	return plan, nil
+}
+
+// tokenDebit is one level's token debit of a model call (G0 M29 D821): the
+// cap is the limit and the reserved tokens the amount, in unit tokens.
+func tokenDebit(owner bdomain.Owner, rule, key string, g bdomain.Grouping, p bdomain.Period, capTokens int64, dc DebitContext) bdomain.Debit {
+	limit, _ := money.FromInt(capTokens)
+	amount, _ := money.FromInt(dc.ModelTokens)
+	return bdomain.Debit{
+		Ref:      bdomain.Ref{Owner: owner, Rule: rule, Key: bdomain.KeyHash(owner, rule, key), Start: p.Start(dc.Now)},
+		Grouping: g, Period: p, Unit: bdomain.UnitTokens, Limit: &limit, Amount: amount,
+	}
 }
 
 func (c Chain) envelopeAt(id ids.UUID) Envelope {

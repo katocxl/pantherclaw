@@ -23,23 +23,31 @@ import (
 // over-claim. It only parses where; it never evaluates it. Sorted, each id
 // once.
 func TriggerRules(where string) []string {
+	ids, _ := TriggerRulesNarrowed(where)
+	return ids
+}
+
+// TriggerRulesNarrowed is TriggerRules, and also reports whether a conjunct
+// that does not touch the rule id narrows the filter, so the automation may
+// not fire on every alert of the rules it names (G0 M30 D948, F-M28-1).
+func TriggerRulesNarrowed(where string) ([]string, bool) {
 	if where == "" {
-		return nil
+		return nil, false
 	}
 	env, err := cel.NewEnv()
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	a, iss := env.Parse(where)
 	if iss.Err() != nil {
-		return nil
+		return nil, false
 	}
 	r := analyze(a.NativeRep().Expr())
 	if r.kind != constrained || len(r.ids) == 0 {
-		return nil
+		return nil, false
 	}
 	slices.Sort(r.ids)
-	return slices.Compact(r.ids)
+	return slices.Compact(r.ids), r.narrowed
 }
 
 type constraint int
@@ -56,6 +64,8 @@ const (
 type result struct {
 	kind constraint
 	ids  []string
+	// narrowed: a conjunct that does not touch the rule id was ignored.
+	narrowed bool
 }
 
 func analyze(e ast.Expr) result {
@@ -63,20 +73,24 @@ func analyze(e ast.Expr) result {
 		switch e.AsCall().FunctionName() {
 		case operators.LogicalAnd:
 			out := result{kind: unconstrained}
+			narrowed := false
 			for _, arg := range e.AsCall().Args() {
 				r := analyze(arg)
 				switch r.kind {
 				case unknown:
 					return r
 				case constrained:
+					narrowed = narrowed || r.narrowed
 					if out.kind == unconstrained {
 						out = r
 						continue
 					}
 					out.ids = slices.DeleteFunc(slices.Clone(out.ids), func(id string) bool { return !slices.Contains(r.ids, id) })
 				case unconstrained:
+					narrowed = true
 				}
 			}
+			out.narrowed = narrowed
 			return out
 		case operators.LogicalOr:
 			out := result{kind: constrained}
@@ -87,6 +101,7 @@ func analyze(e ast.Expr) result {
 					return result{kind: unknown}
 				}
 				out.ids = append(out.ids, r.ids...)
+				out.narrowed = out.narrowed || r.narrowed
 			}
 			return out
 		}

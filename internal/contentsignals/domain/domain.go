@@ -58,6 +58,9 @@ const (
 	// IncompleteUnknownKind: a gateway sent a kind outside the closed list
 	// (D533).
 	IncompleteUnknownKind = "unknown_kind"
+	// IncompleteDecodeBound: decoding stopped at its byte budget before
+	// every string was read through its layers (G0 M30 D920, HR-703).
+	IncompleteDecodeBound = "decode_bound"
 )
 
 // Scan markers: what a gateway says it did with a body (D533). Only
@@ -98,12 +101,18 @@ const (
 	MaxFindings = 16
 	// MaxLocation bounds a location.
 	MaxLocation = 128
+	// MaxEncoding bounds a finding's Encoding.
+	MaxEncoding = 64
 )
 
 // Finding is one flag: what kind and where, never the value (HR-649).
 type Finding struct {
 	Kind     string
 	Location string
+	// Encoding names the decoding layers a hit was found through, joined
+	// by "+" in application order (base64, hex, url, escape, entity,
+	// confusable, zero_width); empty for a plain hit (G0 M30 D921).
+	Encoding string
 }
 
 var (
@@ -112,14 +121,18 @@ var (
 		KindPIINationalID, KindClassifierFlag, KindScanIncomplete,
 	}
 	locationRe = regexp.MustCompile(`^[!-~]{1,128}$`)
+	encodingRe = regexp.MustCompile(`^[a-z_+]{0,64}$`)
 )
 
 // ValidKind reports whether k is a known finding kind.
 func ValidKind(k string) bool { return slices.Contains(kinds, k) }
 
 // Valid reports whether f may be accepted from a gateway or a classifier: a
-// known kind, and a location of printable ASCII within the bound.
-func (f Finding) Valid() bool { return ValidKind(f.Kind) && locationRe.MatchString(f.Location) }
+// known kind, a location of printable ASCII within the bound, and an
+// encoding of layer names within its bound.
+func (f Finding) Valid() bool {
+	return ValidKind(f.Kind) && locationRe.MatchString(f.Location) && encodingRe.MatchString(f.Encoding)
+}
 
 // Reason is what f counts as in what WATCHING would have held (D512): its
 // kind, or why the scan could not finish, so an org sees large results apart
@@ -127,7 +140,8 @@ func (f Finding) Valid() bool { return ValidKind(f.Kind) && locationRe.MatchStri
 func (f Finding) Reason() string {
 	if f.Kind == KindScanIncomplete {
 		switch f.Location {
-		case IncompleteOverBound, IncompleteClassifier, IncompleteBuiltin, IncompleteNotScanned, IncompleteUnknownKind:
+		case IncompleteOverBound, IncompleteClassifier, IncompleteBuiltin, IncompleteNotScanned, IncompleteUnknownKind,
+			IncompleteDecodeBound:
 			return f.Location
 		}
 	}
@@ -159,7 +173,7 @@ func Pick(in []Finding) []Finding {
 }
 
 func compare(a, b Finding) int {
-	return cmp.Or(strings.Compare(a.Kind, b.Kind), strings.Compare(a.Location, b.Location))
+	return cmp.Or(strings.Compare(a.Kind, b.Kind), strings.Compare(a.Location, b.Location), strings.Compare(a.Encoding, b.Encoding))
 }
 
 // Wording a person reads (D504, HR-651). No string here or anywhere else in
