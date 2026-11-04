@@ -274,6 +274,13 @@ func TestHR661_TheScenarioDigestCoversOnlyWhatRuns(t *testing.T) {
 		"Rules":    func(s *domain.Scenario) { s.Rules = append(s.Rules, "HR-202") },
 		"ASI":      func(s *domain.Scenario) { s.ASI = append(s.ASI, "ASI03") },
 		"ASIWhy":   func(s *domain.Scenario) { s.ASIWhy["ASI02"] = "Tool misuse (ASI02): other words." },
+		// G0 M28 D714c L2: technique tags are metadata, never the digest.
+		"ATLAS":  func(s *domain.Scenario) { s.ATLAS = append(s.ATLAS, "AML.T0053") },
+		"ATTACK": func(s *domain.Scenario) { s.ATTACK = append(s.ATTACK, "T1213") },
+		"TechniqueWhy": func(s *domain.Scenario) {
+			s.TechniqueWhy = map[string]string{"T1213": "Data from information repositories (T1213): why."}
+		},
+		"TechniquesNone": func(s *domain.Scenario) { s.TechniquesNone = "Tests PantherClaw itself." },
 	}
 	kept := map[string]func(*domain.Scenario){
 		"APIVersion":                   func(s *domain.Scenario) { s.APIVersion = "pantherclaw.range/v2" },

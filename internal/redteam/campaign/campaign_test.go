@@ -111,6 +111,13 @@ func TestHR661_TheCampaignDigestCoversOnlyWhatRuns(t *testing.T) {
 		"Threats":   func(f *campaign.File) { f.Threats = append(f.Threats, "T-263") },
 		"ASI":       func(f *campaign.File) { f.ASI = append(f.ASI, "ASI02") },
 		"Rules":     func(f *campaign.File) { f.Rules = append(f.Rules, "HR-609") },
+		// G0 M28 D714c L2: technique tags are metadata, never the digest.
+		"ATLAS":  func(f *campaign.File) { f.ATLAS = append(f.ATLAS, "AML.T0053") },
+		"ATTACK": func(f *campaign.File) { f.ATTACK = append(f.ATTACK, "T1213") },
+		"TechniqueWhy": func(f *campaign.File) {
+			f.TechniqueWhy = map[string]string{"T1213": "Data from information repositories (T1213): why."}
+		},
+		"TechniquesNone": func(f *campaign.File) { f.TechniquesNone = "Tests PantherClaw itself." },
 	}
 	kept := map[string]func(*campaign.File){
 		"APIVersion":          func(f *campaign.File) { f.APIVersion = "pantherclaw.campaign/v2" },
