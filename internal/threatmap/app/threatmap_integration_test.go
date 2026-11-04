@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/detection/pack"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -352,6 +353,10 @@ func TestHR687_TurningARuleOffRaisesOneAlertPerDroppedLane(t *testing.T) {
 	}
 	drain := func() {
 		t.Helper()
+		// The feed reads chained entries only.
+		if _, err := ledger.ChainAll(ctx, f.p, f.org, 1000); err != nil {
+			t.Fatal(err)
+		}
 		for range 50 {
 			r, err := eng.Process(ctx, f.org)
 			if err != nil {
