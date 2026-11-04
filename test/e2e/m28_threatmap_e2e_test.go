@@ -28,7 +28,7 @@ import (
 	dpack "github.com/katocxl/pantherclaw/internal/detection/pack"
 	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
-	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger/ledgertest"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -121,9 +121,7 @@ func TestE2E_M28_ThreatMap(t *testing.T) {
 	detect := func() {
 		t.Helper()
 		for range 100 {
-			if _, err := ledger.ChainAll(ctx, s.pool, s.org, 1000); err != nil {
-				t.Fatal(err)
-			}
+			ledgertest.ChainSettled(t, ctx, s.pool, s.org)
 			res, err := eng.Process(ctx, s.org)
 			if err != nil {
 				t.Fatal(err)

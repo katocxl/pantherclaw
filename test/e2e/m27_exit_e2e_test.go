@@ -30,7 +30,7 @@ import (
 	bapp "github.com/katocxl/pantherclaw/internal/behavior/app"
 	"github.com/katocxl/pantherclaw/internal/behavior/simhistory"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
-	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger/ledgertest"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -249,9 +249,7 @@ func m27InferredAlertSkipsContain(t *testing.T, s *stack, owner ids.UUID) ids.UU
 	feedAll := func() {
 		t.Helper()
 		for range 100 {
-			if _, err := ledger.ChainAll(ctx, s.pool, s.org, 1000); err != nil {
-				t.Fatal(err)
-			}
+			ledgertest.ChainSettled(t, ctx, s.pool, s.org)
 			res, err := trig.ProcessFeed(ctx, s.org)
 			if err != nil {
 				t.Fatal(err)
