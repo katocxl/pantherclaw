@@ -75,7 +75,7 @@ func verifyThreatMapPack(t *testing.T, edit func(*domain.Report, *pack.Manifest)
 // Covers: F968, HR-688
 func TestHR688_VerifyReDerivesTheThreatMap(t *testing.T) {
 	r := verifyThreatMapPack(t, nil)
-	for _, name := range []string{"pack.signature", "pack.items", "pack.statement", "threatmap.report", "threatmap.lanes"} {
+	for _, name := range []string{"pack.signature", "pack.items", "pack.statement", "threatmap.report", "threatmap.mapping", "threatmap.lanes"} {
 		if got := statusOf(r, name); got != bundle.Passed {
 			t.Errorf("%s = %q, want passed:\n%+v", name, got, r.Checks)
 		}
@@ -87,7 +87,8 @@ func TestHR688_VerifyReDerivesTheThreatMap(t *testing.T) {
 
 // TestHR688_AThreatMapThatSaysMoreThanItsInputsFails: each way a signed
 // report can show more than its own inputs and mapping give fails, and a
-// report of another MITRE catalog is not re-derived (D720).
+// report of another MITRE catalog or PantherClaw mapping is not re-derived
+// (D720, D720e).
 // Covers: F968, HR-688, HR-680
 func TestHR688_AThreatMapThatSaysMoreThanItsInputsFails(t *testing.T) {
 	for _, tc := range []struct {
@@ -115,7 +116,7 @@ func TestHR688_AThreatMapThatSaysMoreThanItsInputsFails(t *testing.T) {
 			// Without its enforced route, no Prevent control is acting.
 			r.Inputs.Routes = []domain.Route{}
 		}},
-		{"a mapping widened under the lanes", "threatmap.lanes", bundle.Failed, func(r *domain.Report, _ *pack.Manifest) {
+		{"a mapping widened under the shipped digest", "threatmap.mapping", bundle.Failed, func(r *domain.Report, _ *pack.Manifest) {
 			for i := range r.Techniques {
 				if r.Techniques[i].Prevent != domain.LaneNoneShipped || r.Techniques[i].Status == domain.StatusOutside {
 					continue
@@ -136,8 +137,13 @@ func TestHR688_AThreatMapThatSaysMoreThanItsInputsFails(t *testing.T) {
 		{"the general statement on the manifest", "pack.statement", bundle.Failed, func(_ *domain.Report, m *pack.Manifest) { m.Statement = pack.Statement }},
 		{"a header that is not its inputs'", "threatmap.report", bundle.Failed, func(r *domain.Report, _ *pack.Manifest) { r.Inputs.Scope.EnvironmentID = "e1" }},
 		{"another mapping digest", "threatmap.report", bundle.Failed, func(r *domain.Report, _ *pack.Manifest) { r.MappingDigest = "00" }},
+		{"built with another PantherClaw mapping", "threatmap.mapping", bundle.NotAvailable, func(r *domain.Report, _ *pack.Manifest) {
+			// Consistent with itself, under a digest this build does not ship
+			// (D720e).
+			r.MappingDigest, r.Mapping.Digest = "00", "00"
+		}},
 		{"another catalog", "threatmap.lanes", bundle.NotAvailable, func(r *domain.Report, _ *pack.Manifest) { r.Catalog.Digest = "00" }},
-		{"an unknown framework", "threatmap.lanes", bundle.NotAvailable, func(r *domain.Report, _ *pack.Manifest) {
+		{"an unknown framework", "threatmap.mapping", bundle.NotAvailable, func(r *domain.Report, _ *pack.Manifest) {
 			r.Framework, r.Inputs.Framework = "capec", "capec"
 		}},
 	} {

@@ -9,11 +9,13 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	"github.com/katocxl/pantherclaw/internal/threatmap/domain"
+	"github.com/katocxl/pantherclaw/internal/threatmap/mapset"
 )
 
 // verifyThreatMap checks a pack of scope threat_map offline (G0 M28 D720,
 // HR-688): the report is of the manifest's org and carries the fixed
-// statement; it was built with the MITRE catalog this verifier embeds,
+// statement; its mapping is this verifier's PantherClaw mapping (D720e),
+// else it is not re-derived; it was built with the MITRE catalog this verifier embeds,
 // else it cannot be re-derived here; and re-running the evaluator on the
 // report's own inputs and mapping gives every technique, lane, reason, gap
 // and tactic count it shows. Any difference fails.
@@ -53,6 +55,24 @@ func verifyThreatMap(r *Report, m *pack.Manifest, files map[string][]byte) {
 	}
 	r.add("threatmap.report", subject, Passed, "threat map of %s (MITRE %s), evaluated %s", truncate(string(rep.Framework)),
 		truncate(rep.Catalog.Version), rep.EvaluatedAt.UTC().Format("2006-01-02T15:04:05Z"))
+	// The mapping is this build's (G0 M28 D720e): its digest names the whole
+	// mapping document, so a pack with this build's digest must carry this
+	// build's evaluator view byte for byte; another digest is another
+	// PantherClaw's mapping and is not re-derived here.
+	shipped := mapset.Evaluator(rep.Framework)
+	if shipped.Digest == "" || rep.MappingDigest != shipped.Digest {
+		r.add("threatmap.mapping", subject, NotAvailable, "built with another PantherClaw mapping (%s): update pclaw to re-derive it",
+			truncate(rep.MappingDigest))
+		r.notFull = true
+		return
+	}
+	got, errGot := pack.Canonical(rep.Mapping)
+	own, errOwn := pack.Canonical(shipped)
+	if errGot != nil || errOwn != nil || !bytes.Equal(got, own) {
+		r.add("threatmap.mapping", subject, Failed, "the report's mapping differs from the PantherClaw mapping its digest names")
+		return
+	}
+	r.add("threatmap.mapping", subject, Passed, "the report's mapping is PantherClaw mapping %s", truncate(rep.MappingDigest))
 	want, err := rep.Rederive()
 	switch {
 	case errors.Is(err, domain.ErrOtherCatalog):
