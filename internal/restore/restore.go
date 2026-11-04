@@ -231,7 +231,7 @@ func Audit(ctx context.Context, tx db.TenantTx, entries []Event, operator domain
 	details := map[string]string{"count": strconv.Itoa(len(entries)), "first_seq": strconv.FormatInt(first, 10), "last_seq": strconv.FormatInt(last, 10)}
 	local, noLocal := 0, 0
 	for _, e := range entries {
-		if e.Kind != "response.credential_revoked" {
+		if e.Kind != auditkind.ResponseCredentialRevoked {
 			continue
 		}
 		connection, version, _ := strings.Cut(e.Object.ID, "/")

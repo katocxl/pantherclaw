@@ -80,10 +80,10 @@ var kinds = map[string]rule{
 	auditkind.GatewayCertificateRevoked:        {"tighten", "gateway_certificate", "certificate_id"},
 	auditkind.AccessApiKeyRevoked:             {"tighten", "api_key", ""},
 	auditkind.AccessServiceAccountKeyRevoked: {"tighten", "service_account_key", "key"},
-	"access.service_account_disabled":    {"tighten", "service_account", ""},
-	"access.service_account_enabled":     {"loosen", "service_account", ""},
-	"access.user_disabled":               {"tighten", "user", ""},
-	"access.user_enabled":                {"loosen", "user", ""},
+	auditkind.AccessServiceAccountDisabled:    {"tighten", "service_account", ""},
+	auditkind.AccessServiceAccountEnabled:     {"loosen", "service_account", ""},
+	auditkind.AccessUserDisabled:               {"tighten", "user", ""},
+	auditkind.AccessUserEnabled:                {"loosen", "user", ""},
 	auditkind.AccessInvitationRevoked:          {"tighten", "invitation", ""},
 	auditkind.PackageSigningKeyRevoked:        {"tighten", "package_signing_key", ""},
 	auditkind.AuthnWebauthnSuspended:           {"tighten", "webauthn", ""},
@@ -91,7 +91,7 @@ var kinds = map[string]rule{
 	auditkind.AuthnSessionRevoked:              {"tighten", "session", ""},
 	auditkind.AuthnSessionEnded:                {"tighten", "session", ""},
 	auditkind.AuthnSessionsRevoked:             {"tighten", "user_sessions", ""},
-	"response.credential_revoked":        {"tighten", "sealed_credential", "version"},
+	auditkind.ResponseCredentialRevoked:        {"tighten", "sealed_credential", "version"},
 	auditkind.ConnectionSealedRevoked:          {"tighten", "sealed_credential", "version"},
 	auditkind.ConnectionQuarantined:             {"tighten", "connection", ""},
 	auditkind.ConnectionRestored:                {"loosen", "connection", ""},
@@ -140,7 +140,7 @@ func FromEntry(entry domain.Entry, seq int64) (Event, bool, error) {
 	if r.detail != "" {
 		obj.ID = body.Details[r.detail]
 		switch kind {
-		case "response.credential_revoked":
+		case auditkind.ResponseCredentialRevoked:
 			obj.ID = body.Details["connection"] + "/" + obj.ID
 		case auditkind.ConnectionSealedRevoked:
 			obj.ID = body.Object.ID + "/" + obj.ID

@@ -100,7 +100,7 @@ func validateObject(e Event) error {
 			return errors.New("restore: invalid connection id")
 		}
 		v, err := strconv.ParseInt(version, 10, 32)
-		if err != nil || v < 0 || v == 0 && e.Kind != "response.credential_revoked" || strconv.FormatInt(v, 10) != version {
+		if err != nil || v < 0 || v == 0 && e.Kind != auditkind.ResponseCredentialRevoked || strconv.FormatInt(v, 10) != version {
 			return errors.New("restore: invalid credential version")
 		}
 	default:

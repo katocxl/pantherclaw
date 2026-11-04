@@ -4,6 +4,7 @@
 package app
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
@@ -72,9 +73,9 @@ func (w *Writer) Assign(ctx context.Context, id ids.UUID, unassign bool) (Entry,
 			return ErrNotDecider
 		}
 		var assignee *ids.UUID
-		name := "waitlist.unassigned"
+		name := auditkind.WaitlistUnassigned
 		if !unassign {
-			assignee, name = &c.Principal.ID, "waitlist.assigned"
+			assignee, name = &c.Principal.ID, auditkind.WaitlistAssigned
 		}
 		n, err := q.AssignWaitlistEntry(ctx, assignee, c.Org, id)
 		if err != nil {

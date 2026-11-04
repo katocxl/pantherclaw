@@ -16,6 +16,7 @@
 package packbuild
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/mldsa"
 	"crypto/sha256"
@@ -86,8 +87,8 @@ func retentionAt(revs []retention.Revision, at time.Time) []pack.Retention {
 
 // Ledger kinds of org-level containment and restoration events (F529).
 var orgEventKinds = []string{
-	"audit.connection.quarantined", "audit.connection.restored", "audit.connection.retired",
-	"audit.security.kill_switch_engaged", "audit.security.kill_switch_restored",
+	"audit." + auditkind.ConnectionQuarantined, "audit." + auditkind.ConnectionRestored, "audit." + auditkind.ConnectionRetired,
+	"audit." + auditkind.SecurityKillSwitchEngaged, "audit." + auditkind.SecurityKillSwitchRestored,
 }
 
 // CaptureSource reads the payload captures of transactions for a pack

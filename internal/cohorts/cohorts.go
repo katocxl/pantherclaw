@@ -517,9 +517,9 @@ func (s *Service) ChangeMembers(ctx context.Context, id ids.UUID, agents []ids.U
 		if err := c.Require(PermManage, scope); err != nil {
 			return err
 		}
-		name := "cohort.members_added"
+		name := auditkind.CohortMembersAdded
 		if remove {
-			name = "cohort.members_removed"
+			name = auditkind.CohortMembersRemoved
 		}
 		return s.audit(ctx, tx, c, name, id, map[string]string{"agents": fmt.Sprint(len(agents)), "changed": fmt.Sprint(n)})
 	})

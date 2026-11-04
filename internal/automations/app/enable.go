@@ -318,9 +318,9 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 			return err
 		}
 	}
-	name := "automation.enabled"
+	name := auditkind.AutomationEnabled
 	if r.Kind == KindRollout {
-		name = "automation.rollout_widened"
+		name = auditkind.AutomationRolloutWidened
 	}
 	caller, err := tapp.CallerFrom(ctx)
 	if err != nil {

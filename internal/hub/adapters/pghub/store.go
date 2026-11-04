@@ -6,6 +6,7 @@
 package pghub
 
 import (
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"fmt"
 
@@ -130,9 +131,9 @@ func (s *Store) Finish(ctx context.Context, org ids.OrgID, c tapp.Caller, f app.
 			return err
 		}
 		out = installOf(r)
-		name, outcome := "hub.item_installed", audit.Success
+		name, outcome := auditkind.HubItemInstalled, audit.Success
 		if f.Status != app.StatusInstalled {
-			name, outcome = "hub.item_install_failed", audit.Failure
+			name, outcome = auditkind.HubItemInstallFailed, audit.Failure
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: name, Actor: c.Actor(), Outcome: outcome,

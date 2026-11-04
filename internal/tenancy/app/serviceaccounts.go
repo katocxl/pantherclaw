@@ -269,9 +269,9 @@ func (s *ServiceAccounts) SetState(ctx context.Context, id td.ServiceAccountID, 
 			return notFound(err, ErrServiceAccountNotFound)
 		}
 		out = serviceAccountView(c.Org, r)
-		event := "access.service_account_enabled"
+		event := auditkind.AccessServiceAccountEnabled
 		if state == td.Disabled {
-			event = "access.service_account_disabled"
+			event = auditkind.AccessServiceAccountDisabled
 		}
 		return record(ctx, tx, c, event, "service_account", r.ID, nil)
 	})

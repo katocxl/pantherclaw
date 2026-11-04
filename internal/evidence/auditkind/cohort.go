@@ -7,5 +7,7 @@ package auditkind
 const (
 	CohortCreated = "cohort.created"
 	CohortDeleted = "cohort.deleted"
+	CohortMembersAdded = "cohort.members_added"
+	CohortMembersRemoved = "cohort.members_removed"
 	CohortUpdated = "cohort.updated"
 )

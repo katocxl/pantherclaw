@@ -147,17 +147,26 @@ var AuditKindPrefixes = []string{"billing.", "scim.", "saml."}
 
 // CoreAuditKinds are the kinds the core itself writes under those
 // prefixes. No extension may write one, so a ledger entry of such a kind is
-// always the core's (D528).
-var CoreAuditKinds = map[string]bool{
-	auditkind.BillingCompGranted: true, auditkind.BillingCompRevoked: true, auditkind.BillingCheckoutRecorded: true,
-	"billing.subscription_bound": true, "billing.subscription_duplicate": true, auditkind.BillingSubscriptionEnded: true,
-	auditkind.BillingPlanEventIgnored: true, auditkind.BillingPlanApplied: true, "billing.lapse_reminder": true,
-	auditkind.ScimUserCreated: true, auditkind.ScimUserChanged: true, auditkind.ScimUserDeleted: true, auditkind.ScimUserDeprovisioned: true,
-	auditkind.ScimUserDeprovisionRefused: true, auditkind.ScimPartsDropped: true,
-	auditkind.ScimGroupCreated: true, auditkind.ScimGroupChanged: true, auditkind.ScimGroupDeleted: true,
-	auditkind.ScimGroupRoleMappingAdded: true, auditkind.ScimGroupRoleMappingRemoved: true,
-	auditkind.ScimTokenCreated: true, auditkind.ScimTokenActivated: true, auditkind.ScimTokenRevoked: true,
-	auditkind.SamlConnectionPut: true, auditkind.SamlConnectionDisabled: true,
+// always the core's (D528). It is derived from auditkind, so it can't fall
+// behind the core (HR-664).
+var CoreAuditKinds = coreAuditKinds()
+
+// reservedKinds are kinds under AuditKindPrefixes that no extension may
+// write although no core audit entry has them: billing.lapse_reminder is
+// the core's notification template for a lapsing plan.
+var reservedKinds = []string{"billing.lapse_reminder"}
+
+func coreAuditKinds() map[string]bool {
+	out := map[string]bool{}
+	for _, k := range auditkind.All() {
+		if slices.ContainsFunc(AuditKindPrefixes, func(p string) bool { return strings.HasPrefix(k, p) }) {
+			out[k] = true
+		}
+	}
+	for _, k := range reservedKinds {
+		out[k] = true
+	}
+	return out
 }
 
 // ErrAuditKind refuses an audit kind outside the set's own prefixes, or one

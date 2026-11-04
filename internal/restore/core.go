@@ -27,8 +27,8 @@ func registerCore(r *Registry) {
 		auditkind.GatewayCertificateRevoked:        {`UPDATE pc.gateway_certs SET state='REVOKED',revoked_at=now(),revoke_reason='restored_revocation',superseded_at=NULL WHERE org_id=$1 AND id=$2::uuid AND state<>'REVOKED'`},
 		auditkind.AccessApiKeyRevoked:             {`UPDATE pc.api_keys SET state='REVOKED',revoked_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
 		auditkind.AccessServiceAccountKeyRevoked: {`UPDATE pc.service_account_keys SET state='REVOKED',revoked_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
-		"access.service_account_disabled":    {`UPDATE pc.service_accounts SET state='DISABLED',updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
-		"access.user_disabled":               {`UPDATE pc.users SET state='DISABLED',updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
+		auditkind.AccessServiceAccountDisabled:    {`UPDATE pc.service_accounts SET state='DISABLED',updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
+		auditkind.AccessUserDisabled:               {`UPDATE pc.users SET state='DISABLED',updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
 		auditkind.AccessInvitationRevoked:          {`UPDATE pc.invitations SET state='REVOKED',revoked_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='PENDING'`},
 		auditkind.AuthnWebauthnSuspended:           {`UPDATE pc.webauthn_credentials SET state='SUSPENDED',state_reason='CLONE_SUSPECTED',changed_at=now(),changed_by='operator:restore' WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
 		auditkind.AuthnWebauthnRemoved:             {`UPDATE pc.webauthn_credentials SET state='REMOVED',state_reason='ADMIN_REMOVED',changed_at=now(),changed_by='operator:restore' WHERE org_id=$1 AND id=$2::uuid AND state<>'REMOVED'`},
@@ -68,7 +68,7 @@ func registerCore(r *Registry) {
 		_, err := tx.Exec(ctx, `UPDATE pc.credentials SET state='REVOKED',superseded_at=NULL,revoked_at=now(),revoked_by='operator:restore' WHERE org_id=$1 AND connection_id=$2::uuid AND version=$3::integer AND state<>'REVOKED'`, tx.OrgID(), connection, version)
 		return err
 	}
-	r.handlers["response.credential_revoked"] = r.handlers[auditkind.ConnectionSealedRevoked]
+	r.handlers[auditkind.ResponseCredentialRevoked] = r.handlers[auditkind.ConnectionSealedRevoked]
 	r.handlers[auditkind.SecurityKillSwitchEngaged] = func(ctx context.Context, tx db.TenantTx, e Event) error {
 		if e.Object.ID != tx.OrgID().String() {
 			return errors.New("restore: kill switch object is another organization")

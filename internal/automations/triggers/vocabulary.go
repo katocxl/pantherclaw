@@ -107,11 +107,11 @@ func Means(name string, e feed.Event, f Facts) bool {
 	case VocabEffectRecorded:
 		return e.Kind == kindEffect
 	case VocabRunEnded:
-		return e.Kind == "audit.run.ended"
+		return e.Kind == "audit." + auditkind.RunEnded
 	case VocabGrantIssued:
-		return e.Kind == "audit.grant.issued"
+		return e.Kind == "audit." + auditkind.GrantIssued
 	case VocabGrantRevoked:
-		return e.Kind == "audit.grant.revoked"
+		return e.Kind == "audit." + auditkind.GrantRevoked
 	case VocabCoverageLost:
 		if e.Kind == kindCoverageInv {
 			return true
@@ -131,15 +131,15 @@ func Means(name string, e feed.Event, f Facts) bool {
 	case VocabCaseClosed:
 		return e.Kind == kindCase && f.CaseClosed
 	case VocabAgentDiscovered:
-		return e.Kind == "audit.agent.discovered"
+		return e.Kind == "audit." + auditkind.AgentDiscovered
 	case VocabDiscoveryChanged:
-		return e.Kind == "audit.agent.discovery_changed"
+		return e.Kind == "audit." + auditkind.AgentDiscoveryChanged
 	case VocabDiscoveryVanished:
-		return e.Kind == "audit.agent.discovery_vanished"
+		return e.Kind == "audit." + auditkind.AgentDiscoveryVanished
 	case VocabApprovalExpired:
-		return e.Kind == "audit.approval.expired"
+		return e.Kind == "audit." + auditkind.ApprovalExpired
 	case VocabAutomationFinished:
-		return e.Kind == "audit.automation.execution_finished"
+		return e.Kind == "audit." + auditkind.AutomationExecutionFinished
 	}
 	return false
 }

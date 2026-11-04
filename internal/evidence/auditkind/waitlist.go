@@ -6,6 +6,7 @@ package auditkind
 // Audit kinds under "waitlist.". The ledger stores each as "audit." + the kind.
 const (
 	WaitlistAccessRequestDismissed = "waitlist.access_request_dismissed"
+	WaitlistAssigned = "waitlist.assigned"
 	WaitlistDeliveryFailing = "waitlist.delivery_failing"
 	WaitlistEntryClosed = "waitlist.entry_closed"
 	WaitlistEntryExpired = "waitlist.entry_expired"
@@ -14,4 +15,5 @@ const (
 	WaitlistEscalationChainSet = "waitlist.escalation_chain_set"
 	WaitlistRouted = "waitlist.routed"
 	WaitlistSettingsUpdated = "waitlist.settings_updated"
+	WaitlistUnassigned = "waitlist.unassigned"
 )

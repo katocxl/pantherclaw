@@ -293,9 +293,9 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 	}
 	details["action"], details["epoch"], details["sharing_agents"] = a.ID.String(), strconv.FormatInt(epoch, 10), strconv.Itoa(len(p.Agents))
 	details["shared_connections"] = strconv.Itoa(len(p.Shared))
-	name := "response.credential_revoked"
+	name := auditkind.ResponseCredentialRevoked
 	if kind == rdomain.KindRotate {
-		name = "response.credential_rotated"
+		name = auditkind.ResponseCredentialRotated
 	}
 	if err := recordAction(ctx, tx, evActor, name, a.ID, details, r.Reason); err != nil {
 		return reflexdomain.ContainResult{}, err

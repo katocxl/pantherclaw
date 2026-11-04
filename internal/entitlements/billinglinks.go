@@ -239,9 +239,9 @@ func (l *Links) BindSubscription(ctx context.Context, provider, checkoutRef, sub
 		}); err != nil {
 			return err
 		}
-		name, outcome := "billing.subscription_bound", audit.Success
+		name, outcome := auditkind.BillingSubscriptionBound, audit.Success
 		if duplicate {
-			name, outcome = "billing.subscription_duplicate", audit.Denied
+			name, outcome = auditkind.BillingSubscriptionDuplicate, audit.Denied
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: name, Actor: billingActor, Outcome: outcome,

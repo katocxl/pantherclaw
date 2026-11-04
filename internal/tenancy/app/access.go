@@ -288,9 +288,9 @@ func (a *Access) SetUserState(ctx context.Context, id td.UserID, state td.Accoun
 			return notFound(err, ErrUserNotFound)
 		}
 		details := map[string]string{}
-		event := "access.user_enabled"
+		event := auditkind.AccessUserEnabled
 		if state == td.Disabled {
-			event = "access.user_disabled"
+			event = auditkind.AccessUserDisabled
 			reason := "USER_DISABLED"
 			n, err := q.RevokeUserSessions(ctx, &reason, c.Org, r.ID)
 			if err != nil {
