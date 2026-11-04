@@ -16,12 +16,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -46,16 +48,24 @@ const (
 	maxBatches = 20
 )
 
+// movingKinds are the ledger kinds of single changes that move reach: a
+// published policy (a rollback publishes too) and a changed guardrails
+// envelope.
+var movingKinds = []string{"audit." + auditkind.PolicyPublished, "audit." + auditkind.GuardrailsChanged}
+
 // moving lists the ledger kind prefixes of changes that move reach.
 var moving = []string{
-	"audit.grant", "audit.envelope", "audit.policy.published", "audit.policy.rollback", "audit.policy.exception",
-	"audit.connection", "audit.credential", "audit.coverage", "audit.agent", "coverage.snapshot", "coverage.invalidation",
+	"audit.grant", "audit.policy.exception", "audit.connection", "audit.credential", "audit.coverage", "audit.agent",
+	"coverage.snapshot", "coverage.invalidation",
 	// An automation enabled, paused or retired moves its ceiling (D37).
 	"audit.automation",
 }
 
 // Moves reports whether an event of kind may change reach.
 func Moves(kind string) bool {
+	if slices.Contains(movingKinds, kind) {
+		return true
+	}
 	for _, p := range moving {
 		if kind == p || strings.HasPrefix(kind, p+".") || strings.HasPrefix(kind, p+"_") {
 			return true

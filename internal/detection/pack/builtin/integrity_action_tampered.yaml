@@ -21,4 +21,4 @@ tests:
   - name: something else
     fires: false
     events:
-      - {kind: audit.security.evidence_integrity_reset}
+      - {kind: audit.evidence.integrity_reset}

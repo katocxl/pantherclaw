@@ -7,10 +7,12 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
@@ -127,7 +129,7 @@ func TestMapClasses(t *testing.T) {
 		{
 			name: "account change", class: 3001, category: 3, ty: 300105, severity: 1, status: 1,
 			ev: func() Event {
-				e := event("audit.user.disabled")
+				e := event("audit.access.user_disabled")
 				e.ActorType, e.Outcome = "user", "SUCCESS"
 				e.Subjects = []reflexdomain.Subject{{Type: reflexdomain.SubjectUser, ID: "u9"}}
 				return e
@@ -135,6 +137,20 @@ func TestMapClasses(t *testing.T) {
 			check: func(t *testing.T, r Record) {
 				if r.User == nil || r.User.UID != "u9" || r.User.TypeID != 1 || r.Actor.User.Type != "User" {
 					t.Errorf("user = %+v actor = %+v", r.User, r.Actor)
+				}
+			},
+		},
+		{
+			name: "authentication", class: 3002, category: 3, ty: 300201, severity: 1, status: 1,
+			ev: func() Event {
+				e := event("audit.authn.login")
+				e.ActorType, e.Outcome = "user", "SUCCESS"
+				e.Subjects = []reflexdomain.Subject{{Type: reflexdomain.SubjectUser, ID: "u9"}}
+				return e
+			},
+			check: func(t *testing.T, r Record) {
+				if r.User == nil || r.User.UID != "u9" || r.ActivityName != "Logon" {
+					t.Errorf("user = %+v activity %q", r.User, r.ActivityName)
 				}
 			},
 		},
@@ -265,4 +281,24 @@ func mustUUID(s string) ids.UUID {
 		panic(err)
 	}
 	return u
+}
+
+// TestIAMPrefixesMatchKinds: every prefix of the Account Change and
+// Authentication tables starts an audit kind the core writes, so a
+// misspelled or stale prefix can't leave those entries as API Activity
+// (HR-664), and every authn kind lands in one of the two classes.
+func TestIAMPrefixesMatchKinds(t *testing.T) {
+	kinds := auditkind.All()
+	for _, p := range slices.Concat(accountKinds, authnKinds) {
+		if !slices.ContainsFunc(kinds, func(k string) bool { return strings.HasPrefix("audit."+k, p) }) {
+			t.Errorf("prefix %q matches no audit kind the core writes", p)
+		}
+	}
+	for _, k := range kinds {
+		if strings.HasPrefix(k, "authn.") {
+			if r := Map(event("audit."+k), ""); r.ClassUID != classAccountChange && r.ClassUID != classAuthentication {
+				t.Errorf("%s maps to class %d, want Account Change or Authentication", k, r.ClassUID)
+			}
+		}
+	}
 }

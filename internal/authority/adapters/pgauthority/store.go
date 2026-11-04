@@ -119,8 +119,15 @@ func (s *Store) Prepare(ctx context.Context, org ids.OrgID, plan gdomain.Plan) (
 // Finalize implements finalize.Store: one transaction, in the lock order.
 func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) error {
 	ev := w.Eval
+	var lines []pgbudgets.Line
+	if w.Permit != nil {
+		lines = reservationLines(w)
+	}
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if err := s.probeBusy(ctx, tx, org, lines); err != nil {
+			return err
+		}
 		holds := finalize.Holds(ev)
 		if w.Permit != nil || holds {
 			// A hold takes the same containment and chain check as a permit:
@@ -174,15 +181,6 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			return err
 		}
 		if w.Permit != nil {
-			rows := pgbudgets.Rows{Accounts: map[bdomain.Ref]ids.UUID{}, Counters: map[bdomain.Ref]ids.UUID{}}
-			for _, r := range w.Rows {
-				if r.Kind == bdomain.KindCounter {
-					rows.Counters[r.Ref] = r.ID
-				} else {
-					rows.Accounts[r.Ref] = r.ID
-				}
-			}
-			lines := pgbudgets.Lines(ev.Plan.Budgets, ev.Plan.Counters, rows)
 			mode := pipeline.ModeEnforce
 			if ev.MonitorPermit() {
 				mode = pipeline.ModeMonitor
@@ -225,7 +223,7 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			// row another transaction holds for longer than LockTimeout
 			// fails fast instead of queueing (ADR-0015).
 			if s.LockTimeout > 0 && len(lines) > 0 {
-				if err := q.SetLockTimeout(ctx, fmt.Sprintf("%dms", max(s.LockTimeout.Milliseconds(), 1))); err != nil {
+				if err := q.SetLockTimeout(ctx, lockTimeout(s.LockTimeout)); err != nil {
 					return err
 				}
 			}
@@ -246,6 +244,55 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 	}
 	return err
 }
+
+// reservationLines are the reservation lines of w's plan on its rows.
+func reservationLines(w finalize.Write) []pgbudgets.Line {
+	rows := pgbudgets.Rows{Accounts: map[bdomain.Ref]ids.UUID{}, Counters: map[bdomain.Ref]ids.UUID{}}
+	for _, r := range w.Rows {
+		if r.Kind == bdomain.KindCounter {
+			rows.Counters[r.Ref] = r.ID
+		} else {
+			rows.Accounts[r.Ref] = r.ID
+		}
+	}
+	return pgbudgets.Lines(w.Eval.Plan.Budgets, w.Eval.Plan.Counters, rows)
+}
+
+// errProbed rolls back a busy probe that found its rows free.
+var errProbed = errors.New("pgauthority: probed")
+
+// probeBusy finds a budget row another transaction holds for longer than
+// LockTimeout before the finalization does its work: in a savepoint it
+// takes the rows in the lock order under the timeout, then rolls back to
+// it, which releases the rows and the timeout. The reservation, the
+// finalization's last statement, would find the row busy only after the
+// checks, the receipt and its writes, which a busy refusal then does
+// twice for nothing, slower the busier the database (ADR-0015). A row
+// taken between the probe and the reservation still fails fast there.
+func (s *Store) probeBusy(ctx context.Context, tx db.TenantTx, org ids.OrgID, lines []pgbudgets.Line) error {
+	if s.LockTimeout <= 0 || len(lines) == 0 {
+		return nil
+	}
+	err := tx.Savepoint(ctx, "budget_probe", func() error {
+		q := dbq.New(tx)
+		if err := q.SetLockTimeout(ctx, lockTimeout(s.LockTimeout)); err != nil {
+			return err
+		}
+		if err := pgbudgets.LockLines(ctx, q, org, lines); err != nil {
+			return err
+		}
+		return errProbed
+	})
+	switch {
+	case errors.Is(err, errProbed):
+		return nil
+	case db.IsLockTimeout(err):
+		return finalize.ErrBusy
+	}
+	return err
+}
+
+func lockTimeout(d time.Duration) string { return fmt.Sprintf("%dms", max(d.Milliseconds(), 1)) }
 
 // approvals maps the approvals adapter's errors onto the finalization's.
 func approvals(err error) error {
