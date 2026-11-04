@@ -153,7 +153,7 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 	if len(changes) > 0 { // only closure-invalidating kinds
 		return ids.UUID{}, ErrClosureStale
 	}
-	v := domain.Evaluate(c.Probes, c.ConfigChecks)
+	v := domain.EvaluateIn(domain.ContainmentOf(c.Engine.Runtime), c.Probes, c.ConfigChecks)
 	probes, err := json.Marshal(c.Probes)
 	if err != nil {
 		return ids.UUID{}, err

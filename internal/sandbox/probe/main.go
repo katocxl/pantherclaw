@@ -114,9 +114,14 @@ func Main(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io
 	fs := flag.NewFlagSet("pantherclaw-probe", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	config := fs.String("config", "", "the probe configuration file ("+ConfigFormat+")")
-	if err := fs.Parse(args); err != nil || *config == "" || fs.NArg() != 0 {
+	profile := fs.String("profile", "", "\""+ProfileKubernetes+"\": probe an agent pod's routes, configured from the environment")
+	if err := fs.Parse(args); err != nil || (*config == "") == (*profile == "") || (*profile != "" && *profile != ProfileKubernetes) || fs.NArg() != 0 {
 		_, _ = fmt.Fprintln(stderr, "usage: pantherclaw-probe --config FILE   (inside a sandbox's probe container; started by pclaw sandbox run)")
+		_, _ = fmt.Fprintln(stderr, "       pantherclaw-probe --profile kubernetes   (in a probe pod with the edge as its sidecar)")
 		return 2
+	}
+	if *profile == ProfileKubernetes {
+		return kubeMain(ctx, stdout, stderr)
 	}
 	c, err := ReadConfig(*config)
 	var out string

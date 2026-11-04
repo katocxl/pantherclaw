@@ -187,7 +187,7 @@ func readOnly(pkg *defs.Package, operation string) bool {
 func closureRecord(c dbq.PcCoverageClosure) (*domain.ClosureRecord, error) {
 	rec := &domain.ClosureRecord{
 		ID: c.ID, Agent: c.AgentID, Connection: c.ConnectionID, SandboxSession: c.SandboxSessionID,
-		SessionStartedAt: c.SessionStartedAt, ObservedAt: c.ObservedAt, ExpiresAt: c.ExpiresAt,
+		Containment: domain.ContainmentOf(c.Runtime), SessionStartedAt: c.SessionStartedAt, ObservedAt: c.ObservedAt, ExpiresAt: c.ExpiresAt,
 		Bound: domain.Bound{
 			ConnectionRevision: c.ConnectionRevision, Gateway: c.GatewayID, PackageVersion: c.PackageVersionID,
 			CredentialVersion: c.CredentialVersion,

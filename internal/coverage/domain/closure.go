@@ -228,14 +228,27 @@ type Verdict struct {
 	Failed []string
 }
 
-// Evaluate computes what a closure's probe results and configuration
-// checks prove. A name passes only when it has results and all of them
-// passed with the expected outcome. Nothing closes unless the named
-// positive and negative controls passed (a sandbox in which nothing is
-// reachable proves nothing), and any failed result fails the closure. A
-// passed closure that lacks a kind's probes simply does not close it.
+// Evaluate computes what a sandbox closure's probe results and
+// configuration checks prove (ContainmentSandbox). EvaluateIn evaluates
+// under another containment profile.
 func Evaluate(probes []ProbeResult, checks []ConfigCheck) Verdict {
+	return EvaluateIn(ContainmentSandbox, probes, checks)
+}
+
+// EvaluateIn computes what a closure's probe results and configuration
+// checks prove under containment profile c. A name passes only when it has
+// results and all of them passed with the expected outcome. Nothing closes
+// unless the profile's named positive and negative controls passed (a
+// sandbox in which nothing is reachable proves nothing), and any failed
+// result fails the closure. A passed closure that lacks a kind's probes
+// simply does not close it. An unknown profile closes nothing and fails.
+func EvaluateIn(c Containment, probes []ProbeResult, checks []ConfigCheck) Verdict {
 	var v Verdict
+	pr, known := profiles[c]
+	if !known {
+		v.Failed = append(v.Failed, "containment:"+string(c))
+		return v
+	}
 	type key struct{ role, name string }
 	byKey := map[key][]ProbeResult{}
 	roles := map[string]bool{}
@@ -272,11 +285,15 @@ func Evaluate(probes []ProbeResult, checks []ConfigCheck) Verdict {
 		}
 		return false
 	}
-	positive := required(RolePositiveControl, ProbeEdgeMediated, Reachable)
-	positive = required(RolePositiveControl, ProbeCanaryControl, Reachable) && positive
+	positive := true
+	for _, name := range pr.positive {
+		positive = required(RolePositiveControl, name, Reachable) && positive
+	}
 	v.PositiveControls = positive && roles[RolePositiveControl]
 	v.Negative = required(RoleNegativeControl, ProbeEdgeUnmappedRefused, Blocked) && roles[RoleNegativeControl]
-	v.Canary = required(RoleCanary, ProbeExternalCanary, Blocked) && roles[RoleCanary]
+	if pr.canary {
+		v.Canary = required(RoleCanary, ProbeExternalCanary, Blocked) && roles[RoleCanary]
+	}
 	if !v.PositiveControls || !v.Negative {
 		return v
 	}
@@ -288,16 +305,16 @@ func Evaluate(probes []ProbeResult, checks []ConfigCheck) Verdict {
 		if !proven(role, name, Blocked) {
 			return false
 		}
-		return slices.Contains(twinOptional, name) || proven(RolePositiveControl, twinOf(name), Reachable)
+		return slices.Contains(pr.twinOptional, name) || proven(RolePositiveControl, twinOf(name), Reachable)
 	}
 	for _, k := range ContainmentKinds {
-		if slices.ContainsFunc(closingProbes[k], func(n string) bool { return !closes(n) }) ||
-			slices.ContainsFunc(closingChecks[k], func(id string) bool { return !ok[id] }) {
+		if slices.ContainsFunc(pr.closingProbes[k], func(n string) bool { return !closes(n) }) ||
+			slices.ContainsFunc(pr.closingChecks[k], func(id string) bool { return !ok[id] }) {
 			continue
 		}
 		v.Closed = append(v.Closed, k)
 	}
 	v.EgressMediated = proven(RolePositiveControl, ProbeConnectorEgress, Reachable)
-	v.Passed = v.Canary && len(v.Failed) == 0
+	v.Passed = (v.Canary || !pr.canary) && len(v.Failed) == 0
 	return v
 }

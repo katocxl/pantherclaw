@@ -838,6 +838,16 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Threat map:** seven new Prevent controls, M29's token caps among them, `NARROWED_TRIGGER`, connector refusals counted.
 - Migrations `00340`–`00345` (`00343` reserved; `00346`–`00349` spare).
 
+### M32 — Kubernetes and edge enforcement
+**HR:** HR-730..744 · **F:** F1020–F1029 · **ADR:** 0059 · **G0:** [g0/M32.md](g0/M32.md).
+- **Code first**, like M30 and M31: three streams on pushed branches, assembled on `code/m32` from `code/m31`; tests come in the testing phase.
+- **Admission** (FQ32-1): a fail-closed webhook on its own TLS listener; a pod in a protected namespace needs an issuer entry, one app container, pinned images, the `pantherclaw-edge` native sidecar and its token mounted only there.
+- **Edge and gateway** (FQ32-2, FQ32-3): the edge's `kubernetes` mode enrols from the pod's projected token and keeps its keys in memory; agent pods reach only the gateway, with no DNS; a gateway enrols from its own projected token.
+- **Chart:** cluster config, an in-cluster gateway, the admission listener and per agent namespace a NetworkPolicy, webhook, reviewer role and probe CronJob; self-hosted clusters only (FQ32-4).
+- **Kube closures:** the probe's `kubernetes` profile, reports signed by the pod's attested key, the server's admission and NetworkPolicy checks, the `ContainmentKubernetes` profile, 24-hour expiry; pod runs under the issuer entry's run grant.
+- **Threat map:** `prevent.kubernetes_closure` and `prevent.kubernetes_admission`; T1610 and T1613 leave Outside.
+- Migrations `00360`–`00363`.
+
 ---
 
 ## 9. CI/CD summary

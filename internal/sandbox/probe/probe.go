@@ -103,7 +103,11 @@ func observe(err error) string {
 
 // Run runs the catalog for c and returns its results in catalog order.
 func Run(ctx context.Context, c Config) []report.Result {
-	ps := catalog(c)
+	return runProbes(ctx, catalog(c))
+}
+
+// runProbes runs a catalog and returns its results in catalog order.
+func runProbes(ctx context.Context, ps []probe) []report.Result {
 	out := make([]report.Result, len(ps))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 8)

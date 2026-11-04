@@ -41,6 +41,11 @@ const (
 	KindCanary  = "canary"
 )
 
+// RuntimeKubernetes is the runtime of a report from an agent pod's probe
+// (G0 M32 D970): the pod's edge signs it with the pod's attested workload
+// key, and Network.Name is the pod's namespace.
+const RuntimeKubernetes = "kubernetes"
+
 // Roles and observations of a result (the closure contract).
 const (
 	RoleProbe    = "probe"
@@ -166,7 +171,7 @@ func (r Report) Validate() error {
 		return bad("session or nonce")
 	case r.StartedAt.IsZero() || r.FinishedAt.Before(r.StartedAt):
 		return bad("times")
-	case r.Engine.Runtime != "runc" && r.Engine.Runtime != "runsc":
+	case r.Engine.Runtime != "runc" && r.Engine.Runtime != "runsc" && r.Engine.Runtime != RuntimeKubernetes:
 		return bad("runtime")
 	case len(r.Results) > MaxResults || len(r.Canary.Hits) > MaxHits || len(r.Config.Checks) > MaxChecks:
 		return bad("too many entries")

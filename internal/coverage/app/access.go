@@ -339,7 +339,7 @@ func (s *Service) currentClosure(ctx context.Context, q *dbq.Queries, org ids.Or
 	if err != nil {
 		return nil, err
 	}
-	if b.PackageVersionID == nil || !domain.Evaluate(rec.Probes, rec.ConfigChecks).Passed || !s.now().Before(c.ExpiresAt) ||
+	if b.PackageVersionID == nil || !domain.EvaluateIn(rec.Containment, rec.Probes, rec.ConfigChecks).Passed || !s.now().Before(c.ExpiresAt) ||
 		!sameBound(rec.Bound, domain.Bound{
 			ConnectionRevision: b.Revision, Gateway: b.GatewayID, PackageVersion: *b.PackageVersionID,
 			CredentialVersion: b.CredentialVersion,

@@ -105,6 +105,9 @@ type ClosureRecord struct {
 	ObservedAt       time.Time
 	ExpiresAt        time.Time
 	Bound            Bound
+	// Containment is the profile the closure is evaluated under; empty is
+	// ContainmentSandbox (G0 M32 D970).
+	Containment Containment
 }
 
 // Change is a recorded invalidation event of the scope.
@@ -218,7 +221,7 @@ func Compute(e Evidence) Result {
 	if closure != nil {
 		stale = staleReasons(e, closure)
 		if len(stale) == 0 {
-			v = Evaluate(closure.Probes, closure.ConfigChecks)
+			v = EvaluateIn(closure.containment(), closure.Probes, closure.ConfigChecks)
 		}
 	}
 	var r Result
