@@ -417,6 +417,9 @@ message IssuerRevision {
   string closed_by = 18;
   // When.
   google.protobuf.Timestamp close_time = 19;
+  // Kubernetes only: the grant a pod's run is started under (G0 M32
+  // D973); empty: none.
+  string run_grant_id = 26;
 }
 
 // CreateEnrollmentTokenRequest creates an enrollment token.
@@ -537,6 +540,11 @@ message RevokeInstanceResponse {
 
 // ProposeIssuerEntryRequest proposes a new entry or a new revision.
 message ProposeIssuerEntryRequest {
+  option (buf.validate.message).cel = {
+    id: "run_grant_kubernetes_only"
+    message: "run_grant_id is only for a kubernetes binding"
+    expression: "this.run_grant_id == '' || has(this.kubernetes)"
+  };
   // Existing entry to revise; empty for a new entry.
   string entry_id = 1 [(buf.validate.field).string = {
     max_len: 36
@@ -566,6 +574,14 @@ message ProposeIssuerEntryRequest {
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;
+  // Kubernetes only: the grant a pod's run is started under
+  // (KubernetesService.StartPodRun, G0 M32 D973). Part of the revision, so
+  // it changes only through a new revision and its approval; empty: the
+  // entry starts no runs.
+  string run_grant_id = 13 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
   // Reason, recorded with the revision.
   string reason = 6 [(buf.validate.field).string = {
     min_len: 1

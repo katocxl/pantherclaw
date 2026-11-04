@@ -59,6 +59,12 @@ const (
 	// GatewayAdminServiceListFleetProcedure is the procedure name of the GatewayAdminService's
 	// ListFleet RPC.
 	GatewayAdminServiceListFleetProcedure = "/pantherclaw.v1.GatewayAdminService/ListFleet"
+	// GatewayAdminServiceSetGatewayKubernetesBindingProcedure is the procedure name of the
+	// GatewayAdminService's SetGatewayKubernetesBinding RPC.
+	GatewayAdminServiceSetGatewayKubernetesBindingProcedure = "/pantherclaw.v1.GatewayAdminService/SetGatewayKubernetesBinding"
+	// GatewayAdminServiceClearGatewayKubernetesBindingProcedure is the procedure name of the
+	// GatewayAdminService's ClearGatewayKubernetesBinding RPC.
+	GatewayAdminServiceClearGatewayKubernetesBindingProcedure = "/pantherclaw.v1.GatewayAdminService/ClearGatewayKubernetesBinding"
 	// GatewayServiceEnrollProcedure is the procedure name of the GatewayService's Enroll RPC.
 	GatewayServiceEnrollProcedure = "/pantherclaw.v1.GatewayService/Enroll"
 	// GatewayServiceRenewCertificateProcedure is the procedure name of the GatewayService's
@@ -198,6 +204,20 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	gatewayAdminServiceSetGatewayKubernetesBindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayAdminService").Methods().ByName("SetGatewayKubernetesBinding"),
+			Procedure:  GatewayAdminServiceSetGatewayKubernetesBindingProcedure,
+		}
+	})
+	gatewayAdminServiceClearGatewayKubernetesBindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayAdminService").Methods().ByName("ClearGatewayKubernetesBinding"),
+			Procedure:  GatewayAdminServiceClearGatewayKubernetesBindingProcedure,
+		}
+	})
 )
 
 // GatewayAdminServiceClient is a client for the pantherclaw.v1.GatewayAdminService service.
@@ -245,6 +265,18 @@ type GatewayAdminServiceClient interface {
 	// its compliance with the minimum and its config lag (Team).
 	// permission: gateway.read
 	ListFleet(context.Context, *v1.ListFleetRequest) (*v1.ListFleetResponse, error)
+	// SetGatewayKubernetesBinding binds an active gateway to one service
+	// account of a configured cluster (G0 M32 D968): a pod of that account
+	// may then enroll a replica with its projected token (audience
+	// pantherclaw-gateway:<org>) instead of a `pcg_` token. It replaces any
+	// earlier binding and is audited (gateway.kubernetes_binding_set).
+	// permission: gateway.manage
+	SetGatewayKubernetesBinding(context.Context, *v1.SetGatewayKubernetesBindingRequest) (*v1.SetGatewayKubernetesBindingResponse, error)
+	// ClearGatewayKubernetesBinding removes a gateway's Kubernetes binding;
+	// only enrollment tokens enroll it afterwards. Audited
+	// (gateway.kubernetes_binding_cleared).
+	// permission: gateway.manage
+	ClearGatewayKubernetesBinding(context.Context, *v1.ClearGatewayKubernetesBindingRequest) (*v1.ClearGatewayKubernetesBindingResponse, error)
 }
 
 // NewGatewayAdminServiceClient constructs a client for the pantherclaw.v1.GatewayAdminService
@@ -299,6 +331,18 @@ type GatewayAdminServiceHandler interface {
 	// its compliance with the minimum and its config lag (Team).
 	// permission: gateway.read
 	ListFleet(context.Context, *v1.ListFleetRequest) (*v1.ListFleetResponse, error)
+	// SetGatewayKubernetesBinding binds an active gateway to one service
+	// account of a configured cluster (G0 M32 D968): a pod of that account
+	// may then enroll a replica with its projected token (audience
+	// pantherclaw-gateway:<org>) instead of a `pcg_` token. It replaces any
+	// earlier binding and is audited (gateway.kubernetes_binding_set).
+	// permission: gateway.manage
+	SetGatewayKubernetesBinding(context.Context, *v1.SetGatewayKubernetesBindingRequest) (*v1.SetGatewayKubernetesBindingResponse, error)
+	// ClearGatewayKubernetesBinding removes a gateway's Kubernetes binding;
+	// only enrollment tokens enroll it afterwards. Audited
+	// (gateway.kubernetes_binding_cleared).
+	// permission: gateway.manage
+	ClearGatewayKubernetesBinding(context.Context, *v1.ClearGatewayKubernetesBindingRequest) (*v1.ClearGatewayKubernetesBindingResponse, error)
 }
 
 // RegisterGatewayAdminServiceHandler registers svc as the pantherclaw.v1.GatewayAdminService
@@ -316,6 +360,8 @@ func RegisterGatewayAdminServiceHandler(server *connect.Server, svc GatewayAdmin
 		connect.Method{Spec: gatewayAdminServiceGetFleetPolicySpec(), Handler: adapter.getFleetPolicy},
 		connect.Method{Spec: gatewayAdminServiceSetFleetPolicySpec(), Handler: adapter.setFleetPolicy},
 		connect.Method{Spec: gatewayAdminServiceListFleetSpec(), Handler: adapter.listFleet},
+		connect.Method{Spec: gatewayAdminServiceSetGatewayKubernetesBindingSpec(), Handler: adapter.setGatewayKubernetesBinding},
+		connect.Method{Spec: gatewayAdminServiceClearGatewayKubernetesBindingSpec(), Handler: adapter.clearGatewayKubernetesBinding},
 	)
 }
 
@@ -360,6 +406,14 @@ func (UnimplementedGatewayAdminServiceHandler) SetFleetPolicy(context.Context, *
 
 func (UnimplementedGatewayAdminServiceHandler) ListFleet(context.Context, *v1.ListFleetRequest) (*v1.ListFleetResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.ListFleet is not implemented")
+}
+
+func (UnimplementedGatewayAdminServiceHandler) SetGatewayKubernetesBinding(context.Context, *v1.SetGatewayKubernetesBindingRequest) (*v1.SetGatewayKubernetesBindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.SetGatewayKubernetesBinding is not implemented")
+}
+
+func (UnimplementedGatewayAdminServiceHandler) ClearGatewayKubernetesBinding(context.Context, *v1.ClearGatewayKubernetesBindingRequest) (*v1.ClearGatewayKubernetesBindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.ClearGatewayKubernetesBinding is not implemented")
 }
 
 type gatewayAdminServiceClient struct {
@@ -441,6 +495,22 @@ func (c *gatewayAdminServiceClient) SetFleetPolicy(ctx context.Context, req *v1.
 func (c *gatewayAdminServiceClient) ListFleet(ctx context.Context, req *v1.ListFleetRequest) (*v1.ListFleetResponse, error) {
 	var res v1.ListFleetResponse
 	if err := c.client.CallUnary(ctx, gatewayAdminServiceListFleetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayAdminServiceClient) SetGatewayKubernetesBinding(ctx context.Context, req *v1.SetGatewayKubernetesBindingRequest) (*v1.SetGatewayKubernetesBindingResponse, error) {
+	var res v1.SetGatewayKubernetesBindingResponse
+	if err := c.client.CallUnary(ctx, gatewayAdminServiceSetGatewayKubernetesBindingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayAdminServiceClient) ClearGatewayKubernetesBinding(ctx context.Context, req *v1.ClearGatewayKubernetesBindingRequest) (*v1.ClearGatewayKubernetesBindingResponse, error) {
+	var res v1.ClearGatewayKubernetesBindingResponse
+	if err := c.client.CallUnary(ctx, gatewayAdminServiceClearGatewayKubernetesBindingSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -562,6 +632,30 @@ func (h gatewayAdminServiceHandler) listFleet(ctx context.Context, _ connect.Spe
 		return err
 	}
 	res, err := h.svc.ListFleet(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayAdminServiceHandler) setGatewayKubernetesBinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetGatewayKubernetesBindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetGatewayKubernetesBinding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayAdminServiceHandler) clearGatewayKubernetesBinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ClearGatewayKubernetesBindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ClearGatewayKubernetesBinding(ctx, &req)
 	if err != nil {
 		return err
 	}
