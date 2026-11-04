@@ -313,8 +313,17 @@ func TestIngest_ChronicleParserLoopsOverTheBatch(t *testing.T) {
 	if !strings.Contains(loop, `mutate { merge => { "@output" => "event" } }`) {
 		t.Error("the loop does not write an event per entry")
 	}
+	// A loop over a list inside the batch entry binds a name that reads from
+	// the entry too (the attacks loops, G0 M28 D718).
+	fromEntry := map[string]bool{"ev": true}
+	for _, m := range regexp.MustCompile(`for _, ([a-z_]+) in ([a-z_.]+) \{`).FindAllStringSubmatch(parser, -1) {
+		if root, _, ok := strings.Cut(m[2], "."); ok && fromEntry[root] {
+			fromEntry[m[1]] = true
+		}
+	}
 	for _, m := range regexp.MustCompile(`%\{([a-z_.]+)\}`).FindAllStringSubmatch(parser, -1) {
-		if m[1] != "ocsf_test" && !strings.HasPrefix(m[1], "ev.") {
+		root, _, ok := strings.Cut(m[1], ".")
+		if m[1] != "ocsf_test" && (!ok || !fromEntry[root]) {
 			t.Errorf("%%{%s} is not read from the batch entry", m[1])
 		}
 	}

@@ -1,0 +1,9 @@
+rule_id,attack_tactics,attack_techniques
+pc-siem-001,,
+pc-siem-002,,
+pc-siem-003,,
+pc-siem-004,TA0112,T1685
+pc-siem-005,,
+pc-siem-006,,
+pc-siem-007,TA0112,T1685.002
+pc-siem-008,,

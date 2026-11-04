@@ -22,7 +22,14 @@ Send batches to HEC's raw endpoint, `/services/collector/raw`, with a token whos
 
 **The webhook signature is not verified.** Splunk doesn't read the Standard Webhooks headers, so anyone who can post to that endpoint with the token can write events that the searches will trust. HEC also wants its token in an `Authorization` header, which the export doesn't send. `pclaw siem forward` verifies the signature, but it writes the events to a file and adds no token ([runbook](../../../docs/runbooks/siem-forwarder.md)), so something you run must add the token. Keep the endpoint reachable only from it.
 
+## ATT&CK and ATLAS techniques
+
+- Per rule: `lookups/pantherclaw_mitre.csv` lists, by `rule_id` (the `pc-siem-###` id in each search's name), the ATT&CK Enterprise tactic ids and technique ids the rule names, as `rules.yaml` gives them. A rule that names none has empty cells. `transforms.conf` defines it as the lookup `pantherclaw_mitre`: `| lookup pantherclaw_mitre rule_id`. It sets no alert action.
+- Per event, both frameworks: the event's JSON is read as is. An alert carries them in `finding_info.attacks{}` and an incident in `finding_info_list{}.attacks{}`, each entry with `technique.uid`, `sub_technique.uid` (when the id is a sub-technique), `tactic.uid` and `version` ("20.0" for ATT&CK, "ATLAS 2026.10" for ATLAS). For example `spath path=finding_info.attacks{}.technique.uid output=technique`.
+
 ## What was not checked
+
+- The lookup has not been loaded by Splunk; a test checks that its rows equal `rules.yaml`.
 
 - The searches have not run on a Splunk instance. A test reads the search terms and evaluates them over the samples, which checks the logic and not Splunk's parsing.
 - The batch split has not run in Splunk. A test applies `LINE_BREAKER`, `SEDCMD` and the transform regexes to `../samples/batch/batch.json` with Go's regular expressions and gets the samples back byte for byte. That assumes Splunk applies them as its documentation says, and in that order.

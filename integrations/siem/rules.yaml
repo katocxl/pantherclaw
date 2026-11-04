@@ -1,37 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # The rules every pack carries, one entry per rule. fires_on lists the samples
 # in samples/ that the rule must fire on; it must fire on no other sample.
+# Each rule names its ATT&CK Enterprise techniques (attack) or says in one line
+# why it names none (techniques_none); every pack's static MITRE fields equal
+# these. Per event, both frameworks travel in finding_info.attacks.
 rules:
   - id: pc-siem-001
     title: PantherClaw high or critical alert
     severity: high
     fires_on: [alert-critical, alert-high-inferred]
+    techniques_none: "Forwards any PantherClaw alert; its techniques travel per event in finding_info.attacks."
   - id: pc-siem-002
     title: PantherClaw incident opened
     severity: high
     fires_on: [incident-open]
+    techniques_none: "Forwards any PantherClaw incident; its techniques travel per event in finding_info.attacks."
   - id: pc-siem-003
     title: PantherClaw denied an agent action
     severity: low
     fires_on: [decision-deny]
+    techniques_none: "A deny can stop many techniques; this rule does not name one."
   - id: pc-siem-004
     title: PantherClaw enforcement coverage invalidated
     severity: medium
     fires_on: [coverage-invalidation]
+    attack: [T1685]
   - id: pc-siem-005
     title: PantherClaw containment action
     severity: medium
     fires_on: [response-contain]
+    techniques_none: "Reports PantherClaw's own containment action, not an attacker technique."
   - id: pc-siem-006
     title: PantherClaw kill switch engaged
     severity: critical
     fires_on: [kill-switch-engaged]
+    techniques_none: "Reports PantherClaw's own containment being engaged by a person, not an attacker technique."
   - id: pc-siem-007
     title: PantherClaw SIEM export changed
     severity: medium
     # Listed event codes only: a routine retry (siem-destination-retried) is not a change.
     fires_on: [siem-destination-state-changed]
+    attack: [T1685.002]
   - id: pc-siem-008
     title: PantherClaw discovered an unclaimed agent
     severity: low
     fires_on: [agent-discovered]
+    techniques_none: "Reports an agent nobody has claimed, an inventory finding rather than an attacker technique."
