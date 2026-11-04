@@ -55,9 +55,17 @@ type Config struct {
 		// GatewayURL overrides the gateway listener URL the server named at
 		// enrollment.
 		GatewayURL string `json:"gateway_url" env:"PC_GW_CONTROL_GATEWAY_URL"`
-		// IdentityDir keeps the gateway's key and certificate (0700).
-		IdentityDir string          `json:"identity_dir" env:"PC_GW_IDENTITY_DIR"`
-		Timeout     config.Duration `json:"timeout" env:"PC_GW_CONTROL_TIMEOUT"`
+		// IdentityDir keeps the gateway's key and certificate (0700). With
+		// kubernetes_token_file it may be an emptyDir: the gateway enrolls
+		// again on restart.
+		IdentityDir string `json:"identity_dir" env:"PC_GW_IDENTITY_DIR"`
+		// KubernetesTokenFile is the gateway pod's projected service-account
+		// token (audience pantherclaw-gateway:<org>), an alternative to a
+		// `pcg_` enrollment token for a gateway bound to its service account
+		// (G0 M32 D968). Read at each enrollment; needs api_url and
+		// ca_sha256.
+		KubernetesTokenFile string          `json:"kubernetes_token_file" env:"PC_GW_CONTROL_KUBERNETES_TOKEN_FILE"`
+		Timeout             config.Duration `json:"timeout" env:"PC_GW_CONTROL_TIMEOUT"`
 		// VerifyEvery is how often the gateway claims verification tasks
 		// (G0 M7): 1 second to 10 minutes, default 10 seconds.
 		VerifyEvery config.Duration `json:"verify_every" env:"PC_GW_CONTROL_VERIFY_EVERY"`
@@ -162,6 +170,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Control.IdentityDir == "" {
 		errs = append(errs, errors.New("control.identity_dir is required"))
+	}
+	if c.Control.KubernetesTokenFile != "" && (c.Control.APIURL == "" || c.Control.CASHA256 == "") {
+		errs = append(errs, errors.New("control.kubernetes_token_file needs control.api_url and control.ca_sha256"))
 	}
 	if d := c.Control.VerifyEvery.D(); d != 0 && (d < time.Second || d > 10*time.Minute) {
 		errs = append(errs, errors.New("control.verify_every must be between 1s and 10m"))

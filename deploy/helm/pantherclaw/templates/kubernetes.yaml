@@ -185,7 +185,7 @@ automountServiceAccountToken: false
 # The daily containment probe (D969, D970): an agent pod whose app
 # container is the probe.
 {{- include "pantherclaw.probeCronJob" (dict "root" $ "name" "pantherclaw-probe" "namespace" $ns.name "clusterIP" $clusterIP
-      "serviceAccount" "pantherclaw-probe" "org" $org "args" (list "--profile" "kubernetes")) }}
+      "serviceAccount" "pantherclaw-probe" "org" $org "args" (list "--profile" "kubernetes") "hosts" $ns.hosts) }}
 {{- end }}
 {{- $first := first $v.agentNamespaces }}
 ---
@@ -213,7 +213,7 @@ metadata:
 automountServiceAccountToken: false
 ---
 {{- include "pantherclaw.probeCronJob" (dict "root" $ "name" "pantherclaw-probe-control" "namespace" .Release.Namespace "clusterIP" $clusterIP
-      "serviceAccount" "pantherclaw-probe-control" "org" $first.org "args" (list "--profile" "kubernetes" "--kind" "control")) }}
+      "serviceAccount" "pantherclaw-probe-control" "org" $first.org "args" (list "--profile" "kubernetes" "--kind" "control") "hosts" $first.hosts) }}
 ---
 # The canary (D970a): what the probe must not reach from an agent pod.
 apiVersion: apps/v1

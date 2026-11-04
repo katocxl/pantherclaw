@@ -31,6 +31,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 )
 
 // The edge's kubernetes mode (G0 M32 D966, D973): the native sidecar of an
@@ -40,6 +42,10 @@ import (
 
 // PodNameEnv is the downward-API variable that names the pod.
 const PodNameEnv = "PC_POD_NAME"
+
+// NamespaceEnv is the downward-API variable that names the pod's namespace
+// (D970b).
+const NamespaceEnv = "PC_NAMESPACE"
 
 // caFile is the session CA certificate's name in the shared CA directory.
 const caFile = "ca.crt"
@@ -294,14 +300,99 @@ func (p *podRuns) Run(ctx context.Context) {
 	}
 }
 
-// errNoPodRunStart is the run start until the contracts land; it refuses,
-// so the edge forwards nothing.
-var errNoPodRunStart = errors.New("edge: no pod run start is available")
+// kubernetesClient is KubernetesService, signed with the pod's key and
+// carrying its workload token.
+func (w *kubeWorkload) kubernetesClient() pantherclawv1connect.KubernetesServiceClient {
+	return pantherclawv1connect.NewKubernetesServiceClient(connect.NewClient(connecthttp.NewTransport(w.withToken, w.api)))
+}
 
 // startPodRun starts the pod's run (KubernetesService.StartPodRun, G0 M32
-// D973).
-func (w *kubeWorkload) startPodRun(context.Context, string) (string, error) {
-	return "", errNoPodRunStart
+// D973) under the issuer entry's run grant; a refusal leaves the edge with
+// no run, so it forwards nothing.
+func (w *kubeWorkload) startPodRun(ctx context.Context, pod string) (string, error) {
+	res, err := w.kubernetesClient().StartPodRun(ctx, &pantherclawv1.StartPodRunRequest{PodName: pod})
+	if err != nil {
+		return "", fmt.Errorf("edge: start pod run: %w", err)
+	}
+	if _, err := ids.ParseUUID(res.GetRunId()); err != nil {
+		return "", errors.New("edge: start pod run: the server sent no run id")
+	}
+	return res.GetRunId(), nil
+}
+
+// ReportPath is the loopback-only path the probe posts its report to
+// (kubernetes mode, G0 M32 D966, D970b).
+const ReportPath = "/__pc/report"
+
+// maxReportBody bounds a probe report.
+const maxReportBody = 256 << 10
+
+// reporter signs probe reports with the pod's workload key and submits them
+// (D970b).
+type reporter struct {
+	w              *kubeWorkload
+	pod, namespace string
+	log            *slog.Logger
+}
+
+// reportAnswer is what the probe gets back.
+type reportAnswer struct {
+	KubeClosureID string   `json:"kube_closure_id,omitempty"`
+	Kind          string   `json:"kind,omitempty"`
+	Passed        bool     `json:"passed"`
+	Failed        []string `json:"failed,omitempty"`
+	Error         string   `json:"error,omitempty"`
+}
+
+func writeReportAnswer(w http.ResponseWriter, status int, a reportAnswer) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.MarshalWrite(w, a)
+}
+
+// ServeHTTP takes one report: a fresh nonce for the pod's namespace, the
+// session (the pod), the network (the namespace) and no image digests (the
+// server reads the pod's own), signed and submitted with SubmitClosure.
+func (rp *reporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeReportAnswer(w, http.StatusMethodNotAllowed, reportAnswer{Error: "method_not_allowed"})
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxReportBody+1))
+	if err != nil || len(body) > maxReportBody {
+		writeReportAnswer(w, http.StatusRequestEntityTooLarge, reportAnswer{Error: "report_too_large"})
+		return
+	}
+	var rep report.Report
+	if err := json.Unmarshal(body, &rep, json.RejectUnknownMembers(true)); err != nil {
+		writeReportAnswer(w, http.StatusBadRequest, reportAnswer{Error: "report_invalid"})
+		return
+	}
+	ctx := r.Context()
+	kc := rp.w.kubernetesClient()
+	nonce, err := kc.IssueClosureNonce(ctx, &pantherclawv1.IssueClosureNonceRequest{Namespace: rp.namespace})
+	if err != nil {
+		rp.log.WarnContext(ctx, "edge.report_refused", "step", "nonce", "error", err.Error())
+		writeReportAnswer(w, http.StatusBadGateway, reportAnswer{Error: "nonce_refused"})
+		return
+	}
+	rep.Nonce, rep.Session, rep.Network.Name, rep.Images = nonce.GetNonce(), rp.pod, rp.namespace, report.Images{}
+	signed, err := report.Sign(rp.w.key, rep)
+	if err != nil {
+		writeReportAnswer(w, http.StatusUnprocessableEntity, reportAnswer{Error: "report_invalid"})
+		return
+	}
+	res, err := kc.SubmitClosure(ctx, &pantherclawv1.SubmitClosureRequest{ReportJws: signed})
+	if err != nil {
+		rp.log.WarnContext(ctx, "edge.report_refused", "step", "submit", "error", err.Error())
+		writeReportAnswer(w, http.StatusBadGateway, reportAnswer{Error: "submit_refused"})
+		return
+	}
+	rp.log.InfoContext(ctx, "edge.report_submitted", "kube_closure", res.GetKubeClosureId(), "kind", res.GetKind(), "passed", res.GetPassed())
+	writeReportAnswer(w, http.StatusOK, reportAnswer{
+		KubeClosureID: res.GetKubeClosureId(), Kind: res.GetKind(), Passed: res.GetPassed(), Failed: res.GetFailed(),
+	})
 }
 
 // runKubernetes serves kubernetes mode until ctx ends.
@@ -309,6 +400,10 @@ func runKubernetes(ctx context.Context, c Config, out io.Writer, log *slog.Logge
 	pod := os.Getenv(PodNameEnv)
 	if pod == "" {
 		return fmt.Errorf("edge: %s (the downward-API pod name) is not set", PodNameEnv)
+	}
+	namespace := os.Getenv(NamespaceEnv)
+	if namespace == "" {
+		return fmt.Errorf("edge: %s (the downward-API namespace) is not set", NamespaceEnv)
 	}
 	addr, err := loopbackAddr(c.Listen)
 	if err != nil {
@@ -352,7 +447,7 @@ func runKubernetes(ctx context.Context, c Config, out io.Writer, log *slog.Logge
 	}
 	ln = &loopbackListener{Listener: ln}
 	srv := &http.Server{
-		Handler:           kubeHandler(e, w),
+		Handler:           kubeHandler(e, &reporter{w: w, pod: pod, namespace: namespace, log: log}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       idleTimeout,
 		MaxHeaderBytes:    32 << 10,
@@ -380,9 +475,17 @@ func runKubernetes(ctx context.Context, c Config, out io.Writer, log *slog.Logge
 	return nil
 }
 
-// kubeHandler serves the agent's proxy requests through e.
-func kubeHandler(e *Edge, _ *kubeWorkload) http.Handler {
-	return e
+// kubeHandler serves the agent's proxy requests through e, and a direct
+// (non-proxy) request for ReportPath through rp. Proxy requests carry an
+// absolute URL or are CONNECTs, so they never reach rp.
+func kubeHandler(e *Edge, rp http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect && r.URL.Host == "" && r.URL.Path == ReportPath {
+			rp.ServeHTTP(w, r)
+			return
+		}
+		e.ServeHTTP(w, r)
+	})
 }
 
 // writeCA writes the session CA's certificate (never its key) to dir/ca.crt

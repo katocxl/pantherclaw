@@ -70,6 +70,9 @@ func LoadOrEnroll(ctx context.Context, cfg *Config, enrollFile string, log *slog
 	if err == nil && !id.Expired(time.Now()) {
 		return id, nil
 	}
+	if enrollFile == "" && cfg.Control.KubernetesTokenFile != "" {
+		return enrollKubernetes(ctx, cfg, log)
+	}
 	if enrollFile == "" {
 		if err == nil {
 			return nil, errors.New("gateway: the gateway certificate expired; enroll again with a new token")
@@ -85,6 +88,25 @@ func LoadOrEnroll(ctx context.Context, cfg *Config, enrollFile string, log *slog
 	}
 	log.InfoContext(ctx, "gateway.enrolling", slog.String("api_url", f.APIURL))
 	return enroll(ctx, cfg, f.APIURL, f.CASHA256, pclog.NewSecret(f.Token))
+}
+
+// enrollKubernetes enrolls with the pod's projected service-account token
+// (control.kubernetes_token_file, G0 M32 D968) and saves the identity.
+func enrollKubernetes(ctx context.Context, cfg *Config, log *slog.Logger) (*control.Identity, error) {
+	tok, err := config.ReadSecretFile(cfg.Control.KubernetesTokenFile)
+	if err != nil {
+		return nil, err
+	}
+	log.InfoContext(ctx, "gateway.enrolling", slog.String("api_url", cfg.Control.APIURL), slog.String("with", "kubernetes_token"))
+	hc := httpx.NewControlClient(httpx.ControlConfig{Timeout: cfg.Control.Timeout.D()})
+	id, err := control.EnrollKubernetes(ctx, hc, cfg.Control.APIURL, pclog.NewSecret(strings.TrimSpace(string(tok.Reveal()))), cfg.Control.CASHA256)
+	if err != nil {
+		return nil, err
+	}
+	if err := id.Save(cfg.Control.IdentityDir); err != nil {
+		return nil, err
+	}
+	return id, nil
 }
 
 const usage = `pantherclaw-gateway — PantherClaw gateway

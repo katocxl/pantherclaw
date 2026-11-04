@@ -173,7 +173,7 @@ G0 M32 D966, D970a: the edge configuration of a namespace (dict "root" $
 
 {{/*
 G0 M32 D969, D970, D970a: a daily probe CronJob (dict "root" $ "name" NAME
-"namespace" NS "clusterIP" GATEWAY_IP "serviceAccount" SA "org" ORG "args" LIST):
+"namespace" NS "clusterIP" GATEWAY_IP "serviceAccount" SA "org" ORG "args" LIST "hosts" MAP):
 an agent pod whose app container is the probe.
 */}}
 {{- define "pantherclaw.probeCronJob" -}}
@@ -210,6 +210,8 @@ spec:
               env:
                 {{- include "pantherclaw.agentEnv" .root | nindent 16 }}
                 {{- include "pantherclaw.probeEnv" .root | nindent 16 }}
+                - name: PC_AGENT_HOSTS
+                  value: {{ join "," (keys .hosts | sortAlpha) | quote }}
               securityContext:
                 {{- toYaml $v.securityContext | nindent 16 }}
               volumeMounts:
@@ -268,6 +270,10 @@ initContainers:
         valueFrom:
           fieldRef:
             fieldPath: metadata.name
+      - name: PC_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
     securityContext:
       {{- toYaml $v.securityContext | nindent 6 }}
     volumeMounts:
