@@ -83,6 +83,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	jiraURL := fs.String("jira-url", "", "with --gateway-out: also seed pc.jira and the connection \"jira\" to this Jira site (pantherclaw-sim jira: http://127.0.0.1:9096), its project facts read by the gateway")
 	awsECSURL := fs.String("aws-ecs-url", "", "with --gateway-out: also seed pc.aws.ecs and the connection \"aws-ecs\" to this ECS endpoint (pantherclaw-sim aws)")
 	gitlabURL := fs.String("gitlab-url", "", "with --gateway-out: also seed pc.gitlab and the connection \"gitlab\" to this GitLab instance (pantherclaw-sim gitlab: http://127.0.0.1:9097), its merge request facts read by the gateway")
+	saas := devSaaSFlags(fs)
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -127,7 +128,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 	}
 	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "" ||
-		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "") && *gatewayOut == "" {
+		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || saas.any()) && *gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
 	if *a2aURL != "" && (*workloadOut == "" || *a2aPeerOut == "") {
@@ -207,6 +208,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if *awsECSURL != "" {
 		pkgs = append(pkgs, devPackage{pcawsecs.Name, pcawsecs.Version, pcawsecs.Package})
 	}
+	pkgs = append(pkgs, saas.packages()...)
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
 	}
@@ -294,6 +296,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 			_, _ = fmt.Fprintf(stdout, "seeded aws-ecs connection %s (%s) to %s, its deployment controller read by the gateway; seal a base key with "+
 				"pclaw seal --connection %s --from-file SECRET --aws-access-key-id ID --aws-role-arn ARN --aws-sts-url URL --aws-sts-region R --aws-region R --aws-service ecs\n",
 				c.ID, c.Name, *awsECSURL, c.ID)
+		}
+		if err := saas.seed(ctx, cfg, pool, org, gw, stdout); err != nil {
+			return err
 		}
 		if *a2aURL != "" {
 			if err := seedA2A(ctx, cfg, pool, org, gw, w, *a2aURL, *a2aPeerOut, stdout); err != nil {

@@ -1,0 +1,323 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that work in Linear (G0 M31 D960). It
+# reaches Linear's GraphQL API at api.linear.app through an http connection
+# whose credential PantherClaw holds: a personal API key, placed as the
+# whole Authorization header with no scheme, as Linear takes it, and
+# checked against credential_pattern before any byte is sent (HR-301). The
+# agent never holds the key.
+#
+# Every operation is a POST to /graphql with a GraphQL document fixed here
+# (D950): the agent never supplies document text, only the variables the
+# body mapping names, so it can never select another field or run another
+# mutation. Every operation posts to the same path, so agents reach them
+# through MCP tools only, one tool per document.
+#
+# What an agent writes into Linear is type content: sent exactly as
+# written, so it is material, bound by the permit and any approval, and
+# visible to policy; text params are never dispatched from a template
+# (HR-023).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.linear
+version: 1.0.0
+publisher: pantherclaw
+summary: Read, create, update and comment on Linear issues
+
+definitions:
+  - operation: linear.issue.get
+    summary: Read a Linear issue
+    access: read
+    target:
+      type: linear_issue
+      id_pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Z][A-Z0-9]{0,6}-[1-9][0-9]{0,8})$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: linear_get_issue
+        route: linear-issue-get
+        description: >-
+          Read a Linear issue by its id or its identifier, such as ENG-42:
+          its title, description, state and team.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [issue]
+          properties:
+            issue:
+              type: string
+              description: The issue id or identifier, such as ENG-42
+              pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Z][A-Z0-9]{0,6}-[1-9][0-9]{0,8})$'
+        extract:
+          target_id: input.issue
+          params: {}
+    dispatch:
+      credential_pattern: '^lin_api_[A-Za-z0-9]{40}$'
+      http:
+        method: POST
+        path: /graphql
+        graphql:
+          document: >-
+            query IssueGet($id: String!) { issue(id: $id) { id identifier title
+            description url state { id name } team { id key } } }
+        body:
+          id: target.id
+
+  - operation: linear.issue.create
+    summary: Create a Linear issue in a team
+    access: write
+    target:
+      type: linear_team
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    params:
+      title:
+        type: content
+        material: true
+        required: true
+        max_length: 255
+      description:
+        type: content
+        material: true
+        max_length: 8192
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: issue.create
+        description: Creates an issue that everyone who can read the team can read
+    reversibility: compensatable
+    dedupe_key: [target.id, params.title]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Create a Linear issue in team {target.id}
+      fields:
+        - target.id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: linear_create_issue
+        route: linear-issue-create
+        description: >-
+          Create a Linear issue in a team, by the team's id, with a title of
+          at most 255 characters and an optional Markdown description of at
+          most 8192 characters.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [team_id, title]
+          properties:
+            team_id:
+              type: string
+              description: The team id, a UUID
+              pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            title:
+              type: string
+              description: The issue's title
+              maxLength: 255
+            description:
+              type: string
+              description: The issue's description, Markdown
+              maxLength: 8192
+        extract:
+          target_id: input.team_id
+          params:
+            title: input.title
+            description: input.?description
+    dispatch:
+      credential_pattern: '^lin_api_[A-Za-z0-9]{40}$'
+      http:
+        method: POST
+        path: /graphql
+        graphql:
+          document: >-
+            mutation IssueCreate($input: IssueCreateInput!) { issueCreate(input: $input)
+            { success issue { id identifier url } } }
+        body:
+          input[teamId]: target.id
+          input[title]: params.title
+          input[description]: params.description
+
+  - operation: linear.issue.update
+    summary: Change a Linear issue's title, description or state
+    access: write
+    target:
+      type: linear_issue
+      id_pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Z][A-Z0-9]{0,6}-[1-9][0-9]{0,8})$'
+      account: none
+    params:
+      title:
+        type: content
+        material: true
+        max_length: 255
+      description:
+        type: content
+        material: true
+        max_length: 8192
+      state_id:
+        type: identifier
+        material: true
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: issue.update
+        description: Changes the issue, which everyone who can read the team sees
+    reversibility: compensatable
+    dedupe_key: [target.id, params.title, params.description, params.state_id]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Change Linear issue {target.id}
+      fields:
+        - target.id
+        - params.state_id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: linear_update_issue
+        route: linear-issue-update
+        description: >-
+          Change a Linear issue, by its id or identifier such as ENG-42: its
+          title, its Markdown description or its workflow state, by the
+          state's id.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [issue]
+          properties:
+            issue:
+              type: string
+              description: The issue id or identifier, such as ENG-42
+              pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Z][A-Z0-9]{0,6}-[1-9][0-9]{0,8})$'
+            title:
+              type: string
+              description: The new title
+              maxLength: 255
+            description:
+              type: string
+              description: The new description, Markdown
+              maxLength: 8192
+            state_id:
+              type: string
+              description: The new workflow state's id, a UUID
+              pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        extract:
+          target_id: input.issue
+          params:
+            title: input.?title
+            description: input.?description
+            state_id: input.?state_id
+    dispatch:
+      credential_pattern: '^lin_api_[A-Za-z0-9]{40}$'
+      http:
+        method: POST
+        path: /graphql
+        graphql:
+          document: >-
+            mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id,
+            input: $input) { success issue { id identifier url state { id name } } } }
+        body:
+          id: target.id
+          input[title]: params.title
+          input[description]: params.description
+          input[stateId]: params.state_id
+
+  - operation: linear.issue.comment
+    summary: Comment on a Linear issue
+    access: write
+    target:
+      type: linear_issue
+      id_pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Z][A-Z0-9]{0,6}-[1-9][0-9]{0,8})$'
+      account: none
+    params:
+      body:
+        type: content
+        material: true
+        required: true
+        max_length: 8192
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: message.send
+        description: Adds a comment that everyone who can read the issue can read
+    reversibility: compensatable
+    dedupe_key: [target.id, params.body]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Comment on Linear issue {target.id}
+      fields:
+        - target.id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: linear_comment_issue
+        route: linear-issue-comment
+        description: >-
+          Add a Markdown comment of at most 8192 characters to a Linear
+          issue, by its id or identifier such as ENG-42.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [issue, body]
+          properties:
+            issue:
+              type: string
+              description: The issue id or identifier, such as ENG-42
+              pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Z][A-Z0-9]{0,6}-[1-9][0-9]{0,8})$'
+            body:
+              type: string
+              description: The comment, Markdown
+              maxLength: 8192
+        extract:
+          target_id: input.issue
+          params:
+            body: input.body
+    dispatch:
+      credential_pattern: '^lin_api_[A-Za-z0-9]{40}$'
+      http:
+        method: POST
+        path: /graphql
+        graphql:
+          document: >-
+            mutation CommentCreate($input: CommentCreateInput!) { commentCreate(input: $input)
+            { success comment { id url } } }
+        body:
+          input[issueId]: target.id
+          input[body]: params.body
+
+# What the package covers: no environment, records scoped by issue and team.
+coverage:
+  environment:
+    source: none
+  record_scope: [linear_issue, linear_team]
+  channels: [mcp]

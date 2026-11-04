@@ -33,7 +33,10 @@ import (
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
+	pclinear "github.com/katocxl/pantherclaw/packages/pc-linear"
+	pcnotion "github.com/katocxl/pantherclaw/packages/pc-notion"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
+	pcsalesforce "github.com/katocxl/pantherclaw/packages/pc-salesforce"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
 	pcstripe "github.com/katocxl/pantherclaw/packages/pc-stripe"
@@ -95,7 +98,7 @@ func builtin() [][]byte {
 	return [][]byte{
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
-		pcchatgptenterprise.Package,
+		pcchatgptenterprise.Package, pcsalesforce.Package, pcnotion.Package, pclinear.Package,
 	}
 }
 

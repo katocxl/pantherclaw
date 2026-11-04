@@ -184,6 +184,10 @@ const (
 	PackageAWS    = "pc.aws"
 	// PackageAWSECS is an AWS connection too (D284: one host per connection).
 	PackageAWSECS = "pc.aws.ecs"
+	// The M31 software-as-a-service packages (G0 M31 D960).
+	PackageSalesforce = "pc.salesforce"
+	PackageNotion     = "pc.notion"
+	PackageLinear     = "pc.linear"
 )
 
 // Procedures that list evidence.
