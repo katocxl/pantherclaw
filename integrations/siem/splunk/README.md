@@ -20,7 +20,7 @@ PantherClaw posts each batch as one JSON body: `{"type":"pantherclaw.ocsf.batch"
 
 Send batches to HEC's raw endpoint, `/services/collector/raw`, with a token whose sourcetype is `pantherclaw:ocsf:batch`. Both sourcetypes must be on the instance that parses the data, which is the indexer or a heavy forwarder.
 
-**The webhook signature is not verified.** Splunk doesn't read the Standard Webhooks headers, so anyone who can post to that endpoint with the token can write events that the searches will trust. HEC also wants its token in an `Authorization` header, which the export doesn't send. Until a verifying forwarder ships with PantherClaw (a later piece), something you run must add the token. Keep the endpoint reachable only from it.
+**The webhook signature is not verified.** Splunk doesn't read the Standard Webhooks headers, so anyone who can post to that endpoint with the token can write events that the searches will trust. HEC also wants its token in an `Authorization` header, which the export doesn't send. `pclaw siem forward` verifies the signature, but it writes the events to a file and adds no token ([runbook](../../../docs/runbooks/siem-forwarder.md)), so something you run must add the token. Keep the endpoint reachable only from it.
 
 ## What was not checked
 

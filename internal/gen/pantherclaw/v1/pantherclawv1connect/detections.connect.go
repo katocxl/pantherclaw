@@ -47,6 +47,12 @@ const (
 	// DetectionServiceEnableRuleProcedure is the procedure name of the DetectionService's EnableRule
 	// RPC.
 	DetectionServiceEnableRuleProcedure = "/pantherclaw.v1.DetectionService/EnableRule"
+	// DetectionServiceRequestCustomRuleConfirmationProcedure is the procedure name of the
+	// DetectionService's RequestCustomRuleConfirmation RPC.
+	DetectionServiceRequestCustomRuleConfirmationProcedure = "/pantherclaw.v1.DetectionService/RequestCustomRuleConfirmation"
+	// DetectionServiceWithdrawCustomRuleConfirmationProcedure is the procedure name of the
+	// DetectionService's WithdrawCustomRuleConfirmation RPC.
+	DetectionServiceWithdrawCustomRuleConfirmationProcedure = "/pantherclaw.v1.DetectionService/WithdrawCustomRuleConfirmation"
 )
 
 var (
@@ -101,6 +107,20 @@ var (
 			Procedure:  DetectionServiceEnableRuleProcedure,
 		}
 	})
+	detectionServiceRequestCustomRuleConfirmationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_detections_proto.Services().ByName("DetectionService").Methods().ByName("RequestCustomRuleConfirmation"),
+			Procedure:  DetectionServiceRequestCustomRuleConfirmationProcedure,
+		}
+	})
+	detectionServiceWithdrawCustomRuleConfirmationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_detections_proto.Services().ByName("DetectionService").Methods().ByName("WithdrawCustomRuleConfirmation"),
+			Procedure:  DetectionServiceWithdrawCustomRuleConfirmationProcedure,
+		}
+	})
 )
 
 // DetectionServiceClient is a client for the pantherclaw.v1.DetectionService service.
@@ -131,6 +151,18 @@ type DetectionServiceClient interface {
 	// errors back on (a person only).
 	// permission: detection.manage
 	EnableRule(context.Context, *v1.EnableRuleRequest) (*v1.EnableRuleResponse, error)
+	// RequestCustomRuleConfirmation asks for one exact published version of
+	// a custom rule to be confirmed (HR-666): it files a protected change that
+	// a second person with detection.manage decides with a security key. Once
+	// confirmed, the version's alerts are RULE_MATCH until a new version, a
+	// disable or a withdrawal ends the confirmation (Business; a person
+	// only).
+	// permission: detection.manage
+	RequestCustomRuleConfirmation(context.Context, *v1.RequestCustomRuleConfirmationRequest) (*v1.RequestCustomRuleConfirmationResponse, error)
+	// WithdrawCustomRuleConfirmation ends a rule's confirmation at once: its
+	// alerts are INFERRED again (a person only).
+	// permission: detection.manage
+	WithdrawCustomRuleConfirmation(context.Context, *v1.WithdrawCustomRuleConfirmationRequest) (*v1.WithdrawCustomRuleConfirmationResponse, error)
 }
 
 // NewDetectionServiceClient constructs a client for the pantherclaw.v1.DetectionService service.
@@ -167,6 +199,18 @@ type DetectionServiceHandler interface {
 	// errors back on (a person only).
 	// permission: detection.manage
 	EnableRule(context.Context, *v1.EnableRuleRequest) (*v1.EnableRuleResponse, error)
+	// RequestCustomRuleConfirmation asks for one exact published version of
+	// a custom rule to be confirmed (HR-666): it files a protected change that
+	// a second person with detection.manage decides with a security key. Once
+	// confirmed, the version's alerts are RULE_MATCH until a new version, a
+	// disable or a withdrawal ends the confirmation (Business; a person
+	// only).
+	// permission: detection.manage
+	RequestCustomRuleConfirmation(context.Context, *v1.RequestCustomRuleConfirmationRequest) (*v1.RequestCustomRuleConfirmationResponse, error)
+	// WithdrawCustomRuleConfirmation ends a rule's confirmation at once: its
+	// alerts are INFERRED again (a person only).
+	// permission: detection.manage
+	WithdrawCustomRuleConfirmation(context.Context, *v1.WithdrawCustomRuleConfirmationRequest) (*v1.WithdrawCustomRuleConfirmationResponse, error)
 }
 
 // RegisterDetectionServiceHandler registers svc as the pantherclaw.v1.DetectionService
@@ -181,6 +225,8 @@ func RegisterDetectionServiceHandler(server *connect.Server, svc DetectionServic
 		connect.Method{Spec: detectionServicePublishCustomRuleSpec(), Handler: adapter.publishCustomRule},
 		connect.Method{Spec: detectionServiceDisableCustomRuleSpec(), Handler: adapter.disableCustomRule},
 		connect.Method{Spec: detectionServiceEnableRuleSpec(), Handler: adapter.enableRule},
+		connect.Method{Spec: detectionServiceRequestCustomRuleConfirmationSpec(), Handler: adapter.requestCustomRuleConfirmation},
+		connect.Method{Spec: detectionServiceWithdrawCustomRuleConfirmationSpec(), Handler: adapter.withdrawCustomRuleConfirmation},
 	)
 }
 
@@ -213,6 +259,14 @@ func (UnimplementedDetectionServiceHandler) DisableCustomRule(context.Context, *
 
 func (UnimplementedDetectionServiceHandler) EnableRule(context.Context, *v1.EnableRuleRequest) (*v1.EnableRuleResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.DetectionService.EnableRule is not implemented")
+}
+
+func (UnimplementedDetectionServiceHandler) RequestCustomRuleConfirmation(context.Context, *v1.RequestCustomRuleConfirmationRequest) (*v1.RequestCustomRuleConfirmationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.DetectionService.RequestCustomRuleConfirmation is not implemented")
+}
+
+func (UnimplementedDetectionServiceHandler) WithdrawCustomRuleConfirmation(context.Context, *v1.WithdrawCustomRuleConfirmationRequest) (*v1.WithdrawCustomRuleConfirmationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.DetectionService.WithdrawCustomRuleConfirmation is not implemented")
 }
 
 type detectionServiceClient struct {
@@ -270,6 +324,22 @@ func (c *detectionServiceClient) DisableCustomRule(ctx context.Context, req *v1.
 func (c *detectionServiceClient) EnableRule(ctx context.Context, req *v1.EnableRuleRequest) (*v1.EnableRuleResponse, error) {
 	var res v1.EnableRuleResponse
 	if err := c.client.CallUnary(ctx, detectionServiceEnableRuleSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *detectionServiceClient) RequestCustomRuleConfirmation(ctx context.Context, req *v1.RequestCustomRuleConfirmationRequest) (*v1.RequestCustomRuleConfirmationResponse, error) {
+	var res v1.RequestCustomRuleConfirmationResponse
+	if err := c.client.CallUnary(ctx, detectionServiceRequestCustomRuleConfirmationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *detectionServiceClient) WithdrawCustomRuleConfirmation(ctx context.Context, req *v1.WithdrawCustomRuleConfirmationRequest) (*v1.WithdrawCustomRuleConfirmationResponse, error) {
+	var res v1.WithdrawCustomRuleConfirmationResponse
+	if err := c.client.CallUnary(ctx, detectionServiceWithdrawCustomRuleConfirmationSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -355,6 +425,30 @@ func (h detectionServiceHandler) enableRule(ctx context.Context, _ connect.Spec,
 		return err
 	}
 	res, err := h.svc.EnableRule(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h detectionServiceHandler) requestCustomRuleConfirmation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RequestCustomRuleConfirmationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RequestCustomRuleConfirmation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h detectionServiceHandler) withdrawCustomRuleConfirmation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WithdrawCustomRuleConfirmationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.WithdrawCustomRuleConfirmation(ctx, &req)
 	if err != nil {
 		return err
 	}

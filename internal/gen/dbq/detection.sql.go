@@ -271,6 +271,63 @@ func (q *Queries) EnableDetectionRule(ctx context.Context, orgID ids.OrgID, rule
 	return result.RowsAffected(), nil
 }
 
+const endCustomRuleConfirmations = `-- name: EndCustomRuleConfirmations :many
+UPDATE pc.custom_detection_rule_confirmations
+SET ended_at = now(), ended_reason = $1, ended_by = $2
+WHERE org_id = $3 AND rule_id = $4 AND ended_at IS NULL
+  AND (coalesce(cardinality($5::int[]), 0) = 0 OR version = ANY ($5::int[]))
+RETURNING org_id, id, rule_id, version, content_digest, protected_change_id, requested_by, confirmed_at, ended_at, ended_reason, ended_by
+`
+
+type EndCustomRuleConfirmationsParams struct {
+	Reason   *string
+	EndedBy  *string
+	OrgID    ids.OrgID
+	RuleID   string
+	Versions []int32
+}
+
+// Ends a rule's open confirmation of the given versions (all when versions
+// is empty): a new publish ('superseded'), a disable ('disabled') or a
+// withdrawal ('withdrawn').
+func (q *Queries) EndCustomRuleConfirmations(ctx context.Context, arg EndCustomRuleConfirmationsParams) ([]PcCustomDetectionRuleConfirmation, error) {
+	rows, err := q.db.Query(ctx, endCustomRuleConfirmations,
+		arg.Reason,
+		arg.EndedBy,
+		arg.OrgID,
+		arg.RuleID,
+		arg.Versions,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcCustomDetectionRuleConfirmation{}
+	for rows.Next() {
+		var i PcCustomDetectionRuleConfirmation
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.RuleID,
+			&i.Version,
+			&i.ContentDigest,
+			&i.ProtectedChangeID,
+			&i.RequestedBy,
+			&i.ConfirmedAt,
+			&i.EndedAt,
+			&i.EndedReason,
+			&i.EndedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ensureDetectionCursor = `-- name: EnsureDetectionCursor :one
 
 INSERT INTO pc.detection_cursors (org_id, seq)
@@ -439,6 +496,50 @@ func (q *Queries) InsertCustomRule(ctx context.Context, arg InsertCustomRulePara
 	return i, err
 }
 
+const insertCustomRuleConfirmation = `-- name: InsertCustomRuleConfirmation :one
+INSERT INTO pc.custom_detection_rule_confirmations (org_id, id, rule_id, version, content_digest, protected_change_id, requested_by)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7)
+RETURNING org_id, id, rule_id, version, content_digest, protected_change_id, requested_by, confirmed_at, ended_at, ended_reason, ended_by
+`
+
+type InsertCustomRuleConfirmationParams struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	RuleID            string
+	Version           int32
+	ContentDigest     []byte
+	ProtectedChangeID ids.UUID
+	RequestedBy       string
+}
+
+func (q *Queries) InsertCustomRuleConfirmation(ctx context.Context, arg InsertCustomRuleConfirmationParams) (PcCustomDetectionRuleConfirmation, error) {
+	row := q.db.QueryRow(ctx, insertCustomRuleConfirmation,
+		arg.OrgID,
+		arg.ID,
+		arg.RuleID,
+		arg.Version,
+		arg.ContentDigest,
+		arg.ProtectedChangeID,
+		arg.RequestedBy,
+	)
+	var i PcCustomDetectionRuleConfirmation
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.RuleID,
+		&i.Version,
+		&i.ContentDigest,
+		&i.ProtectedChangeID,
+		&i.RequestedBy,
+		&i.ConfirmedAt,
+		&i.EndedAt,
+		&i.EndedReason,
+		&i.EndedBy,
+	)
+	return i, err
+}
+
 const insertCustomRuleTest = `-- name: InsertCustomRuleTest :exec
 INSERT INTO pc.custom_detection_rule_tests (org_id, id, rule, passed, firing, non_firing, results, run_by)
 VALUES ($1, $2, $3, $4, $5, $6,
@@ -597,6 +698,118 @@ func (q *Queries) MarkDetectionOverflow(ctx context.Context, orgID ids.OrgID, ru
 	return result.RowsAffected(), nil
 }
 
+const openCustomRuleConfirmation = `-- name: OpenCustomRuleConfirmation :one
+SELECT org_id, id, rule_id, version, content_digest, protected_change_id, requested_by, confirmed_at, ended_at, ended_reason, ended_by FROM pc.custom_detection_rule_confirmations
+WHERE org_id = $1 AND rule_id = $2 AND ended_at IS NULL
+FOR UPDATE
+`
+
+// A rule's open confirmation (HR-666), locked.
+func (q *Queries) OpenCustomRuleConfirmation(ctx context.Context, orgID ids.OrgID, ruleID string) (PcCustomDetectionRuleConfirmation, error) {
+	row := q.db.QueryRow(ctx, openCustomRuleConfirmation, orgID, ruleID)
+	var i PcCustomDetectionRuleConfirmation
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.RuleID,
+		&i.Version,
+		&i.ContentDigest,
+		&i.ProtectedChangeID,
+		&i.RequestedBy,
+		&i.ConfirmedAt,
+		&i.EndedAt,
+		&i.EndedReason,
+		&i.EndedBy,
+	)
+	return i, err
+}
+
+const openCustomRuleConfirmations = `-- name: OpenCustomRuleConfirmations :many
+SELECT org_id, id, rule_id, version, content_digest, protected_change_id, requested_by, confirmed_at, ended_at, ended_reason, ended_by FROM pc.custom_detection_rule_confirmations
+WHERE org_id = $1 AND ended_at IS NULL
+ORDER BY rule_id
+`
+
+func (q *Queries) OpenCustomRuleConfirmations(ctx context.Context, orgID ids.OrgID) ([]PcCustomDetectionRuleConfirmation, error) {
+	rows, err := q.db.Query(ctx, openCustomRuleConfirmations, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcCustomDetectionRuleConfirmation{}
+	for rows.Next() {
+		var i PcCustomDetectionRuleConfirmation
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.RuleID,
+			&i.Version,
+			&i.ContentDigest,
+			&i.ProtectedChangeID,
+			&i.RequestedBy,
+			&i.ConfirmedAt,
+			&i.EndedAt,
+			&i.EndedReason,
+			&i.EndedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pendingCustomRuleConfirmationOf = `-- name: PendingCustomRuleConfirmationOf :one
+SELECT id FROM pc.protected_changes
+WHERE org_id = $1 AND surface = 'detection.custom_rule.confirm' AND subject = $2 AND state = 'PENDING'
+`
+
+// The pending protected change confirming a version of the rule (one per
+// rule: a newer request replaces an older one).
+func (q *Queries) PendingCustomRuleConfirmationOf(ctx context.Context, orgID ids.OrgID, ruleID string) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, pendingCustomRuleConfirmationOf, orgID, ruleID)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const pendingCustomRuleConfirmations = `-- name: PendingCustomRuleConfirmations :many
+SELECT id, subject, coalesce((payload ->> 'version')::int, 0)::int AS version
+FROM pc.protected_changes
+WHERE org_id = $1 AND surface = 'detection.custom_rule.confirm' AND state = 'PENDING'
+ORDER BY id
+`
+
+type PendingCustomRuleConfirmationsRow struct {
+	ID      ids.UUID
+	Subject string
+	Version int32
+}
+
+// The pending protected changes that would confirm a custom rule version.
+func (q *Queries) PendingCustomRuleConfirmations(ctx context.Context, orgID ids.OrgID) ([]PendingCustomRuleConfirmationsRow, error) {
+	rows, err := q.db.Query(ctx, pendingCustomRuleConfirmations, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PendingCustomRuleConfirmationsRow{}
+	for rows.Next() {
+		var i PendingCustomRuleConfirmationsRow
+		if err := rows.Scan(&i.ID, &i.Subject, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pruneDetectionSeen = `-- name: PruneDetectionSeen :exec
 WITH gone AS (
     DELETE FROM pc.detection_seen WHERE org_id = $1 AND last_seen < $2
@@ -676,15 +889,48 @@ func (q *Queries) PublishCustomRule(ctx context.Context, arg PublishCustomRulePa
 	return result.RowsAffected(), nil
 }
 
+const publishedCustomRule = `-- name: PublishedCustomRule :one
+SELECT org_id, id, rule_id, version, content, content_digest, state, created_by, created_at, published_by, published_at, ledger_entry_id, disabled_by, disabled_at, disabled_reason FROM pc.custom_detection_rules
+WHERE org_id = $1 AND rule_id = $2 AND state = 'PUBLISHED'
+FOR UPDATE
+`
+
+// The PUBLISHED version of a rule, locked.
+func (q *Queries) PublishedCustomRule(ctx context.Context, orgID ids.OrgID, ruleID string) (PcCustomDetectionRule, error) {
+	row := q.db.QueryRow(ctx, publishedCustomRule, orgID, ruleID)
+	var i PcCustomDetectionRule
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.RuleID,
+		&i.Version,
+		&i.Content,
+		&i.ContentDigest,
+		&i.State,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.PublishedBy,
+		&i.PublishedAt,
+		&i.LedgerEntryID,
+		&i.DisabledBy,
+		&i.DisabledAt,
+		&i.DisabledReason,
+	)
+	return i, err
+}
+
 const publishedCustomRules = `-- name: PublishedCustomRules :many
 SELECT r.id, r.rule_id, r.version, r.content, r.content_digest,
        coalesce(v.content_digest, ''::bytea)::bytea AS recorded_digest,
        (e.id IS NOT NULL)::bool AS ledger_present,
        (e.body_removed_at IS NOT NULL)::bool AS ledger_body_removed,
        coalesce(CASE WHEN e.body_removed_at IS NULL
-                     THEN convert_from(e.body, 'UTF8')::jsonb -> 'details' ->> 'content_digest' END, '')::text AS ledger_digest
+                     THEN convert_from(e.body, 'UTF8')::jsonb -> 'details' ->> 'content_digest' END, '')::text AS ledger_digest,
+       coalesce(c.version, 0)::int AS confirmed_version,
+       coalesce(c.content_digest, ''::bytea)::bytea AS confirmed_digest
 FROM pc.custom_detection_rules r
 LEFT JOIN pc.detection_rule_versions v ON v.org_id = r.org_id AND v.rule = r.id
+LEFT JOIN pc.custom_detection_rule_confirmations c ON c.org_id = r.org_id AND c.rule_id = r.rule_id AND c.ended_at IS NULL
 LEFT JOIN pc.ledger_entries e ON e.org_id = r.org_id AND e.id = r.ledger_entry_id
     AND e.kind = 'audit.detection.rule_published'
     AND (e.body_removed_at IS NOT NULL
@@ -703,12 +949,16 @@ type PublishedCustomRulesRow struct {
 	LedgerPresent     bool
 	LedgerBodyRemoved bool
 	LedgerDigest      string
+	ConfirmedVersion  int32
+	ConfirmedDigest   []byte
 }
 
 // Published custom rules with the digest their publication recorded: in
 // detection_rule_versions (append-only, retention-safe) and in the ledger
 // entry, bound to its kind and to the rule (HR-241, D59 L2). The ledger
-// digest is empty when retention removed the body.
+// digest is empty when retention removed the body. The rule's open
+// confirmation (HR-666) comes with its version and digest; the engine
+// applies it only when both equal the running version's.
 func (q *Queries) PublishedCustomRules(ctx context.Context, orgID ids.OrgID) ([]PublishedCustomRulesRow, error) {
 	rows, err := q.db.Query(ctx, publishedCustomRules, orgID)
 	if err != nil {
@@ -728,6 +978,8 @@ func (q *Queries) PublishedCustomRules(ctx context.Context, orgID ids.OrgID) ([]
 			&i.LedgerPresent,
 			&i.LedgerBodyRemoved,
 			&i.LedgerDigest,
+			&i.ConfirmedVersion,
+			&i.ConfirmedDigest,
 		); err != nil {
 			return nil, err
 		}

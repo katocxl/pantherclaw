@@ -56,9 +56,16 @@ type DetectionRule struct {
 	// Consecutive evaluation errors.
 	ConsecutiveErrors int32 `protobuf:"varint,18,opt,name=consecutive_errors,json=consecutiveErrors,proto3" json:"consecutive_errors,omitempty"`
 	// The rule's YAML, for custom rules.
-	Content       string `protobuf:"bytes,19,opt,name=content,proto3" json:"content,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Content string `protobuf:"bytes,19,opt,name=content,proto3" json:"content,omitempty"`
+	// The two-person confirmation of this custom rule version (HR-666), set
+	// only while it applies: the version is PUBLISHED and its content digest
+	// is the confirmed one. Its alerts are then RULE_MATCH.
+	Confirmation *CustomRuleConfirmation `protobuf:"bytes,20,opt,name=confirmation,proto3" json:"confirmation,omitempty"`
+	// The protected change, waiting for a second person, that would confirm
+	// this version; empty when none is pending.
+	PendingConfirmationChangeId string `protobuf:"bytes,21,opt,name=pending_confirmation_change_id,json=pendingConfirmationChangeId,proto3" json:"pending_confirmation_change_id,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *DetectionRule) Reset() {
@@ -224,6 +231,102 @@ func (x *DetectionRule) GetContent() string {
 	return ""
 }
 
+func (x *DetectionRule) GetConfirmation() *CustomRuleConfirmation {
+	if x != nil {
+		return x.Confirmation
+	}
+	return nil
+}
+
+func (x *DetectionRule) GetPendingConfirmationChangeId() string {
+	if x != nil {
+		return x.PendingConfirmationChangeId
+	}
+	return ""
+}
+
+// CustomRuleConfirmation is a second person's confirmation of one exact
+// published custom rule version (HR-666).
+type CustomRuleConfirmation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The confirmed version number.
+	Version int32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	// Hex SHA-256 of the confirmed content.
+	ContentDigest string                 `protobuf:"bytes,2,opt,name=content_digest,json=contentDigest,proto3" json:"content_digest,omitempty"`
+	ConfirmTime   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=confirm_time,json=confirmTime,proto3" json:"confirm_time,omitempty"`
+	// Who asked for it ("user:<id>").
+	RequestedBy string `protobuf:"bytes,4,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	// The protected change the second person confirmed.
+	ProtectedChangeId string `protobuf:"bytes,5,opt,name=protected_change_id,json=protectedChangeId,proto3" json:"protected_change_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CustomRuleConfirmation) Reset() {
+	*x = CustomRuleConfirmation{}
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CustomRuleConfirmation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CustomRuleConfirmation) ProtoMessage() {}
+
+func (x *CustomRuleConfirmation) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CustomRuleConfirmation.ProtoReflect.Descriptor instead.
+func (*CustomRuleConfirmation) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CustomRuleConfirmation) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *CustomRuleConfirmation) GetContentDigest() string {
+	if x != nil {
+		return x.ContentDigest
+	}
+	return ""
+}
+
+func (x *CustomRuleConfirmation) GetConfirmTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ConfirmTime
+	}
+	return nil
+}
+
+func (x *CustomRuleConfirmation) GetRequestedBy() string {
+	if x != nil {
+		return x.RequestedBy
+	}
+	return ""
+}
+
+func (x *CustomRuleConfirmation) GetProtectedChangeId() string {
+	if x != nil {
+		return x.ProtectedChangeId
+	}
+	return ""
+}
+
 // ListRulesRequest has no filters.
 type ListRulesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -233,7 +336,7 @@ type ListRulesRequest struct {
 
 func (x *ListRulesRequest) Reset() {
 	*x = ListRulesRequest{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -245,7 +348,7 @@ func (x *ListRulesRequest) String() string {
 func (*ListRulesRequest) ProtoMessage() {}
 
 func (x *ListRulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -258,7 +361,7 @@ func (x *ListRulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRulesRequest.ProtoReflect.Descriptor instead.
 func (*ListRulesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{1}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{2}
 }
 
 // ListRulesResponse lists the rules.
@@ -275,7 +378,7 @@ type ListRulesResponse struct {
 
 func (x *ListRulesResponse) Reset() {
 	*x = ListRulesResponse{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -287,7 +390,7 @@ func (x *ListRulesResponse) String() string {
 func (*ListRulesResponse) ProtoMessage() {}
 
 func (x *ListRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -300,7 +403,7 @@ func (x *ListRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRulesResponse.ProtoReflect.Descriptor instead.
 func (*ListRulesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListRulesResponse) GetRules() []*DetectionRule {
@@ -333,7 +436,7 @@ type GetDetectionStatusRequest struct {
 
 func (x *GetDetectionStatusRequest) Reset() {
 	*x = GetDetectionStatusRequest{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -345,7 +448,7 @@ func (x *GetDetectionStatusRequest) String() string {
 func (*GetDetectionStatusRequest) ProtoMessage() {}
 
 func (x *GetDetectionStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -358,7 +461,7 @@ func (x *GetDetectionStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDetectionStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetDetectionStatusRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{4}
 }
 
 // GetDetectionStatusResponse says how far detection has read.
@@ -377,7 +480,7 @@ type GetDetectionStatusResponse struct {
 
 func (x *GetDetectionStatusResponse) Reset() {
 	*x = GetDetectionStatusResponse{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +492,7 @@ func (x *GetDetectionStatusResponse) String() string {
 func (*GetDetectionStatusResponse) ProtoMessage() {}
 
 func (x *GetDetectionStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,7 +505,7 @@ func (x *GetDetectionStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDetectionStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetDetectionStatusResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetDetectionStatusResponse) GetCursorSeq() int64 {
@@ -444,7 +547,7 @@ type CreateCustomRuleRequest struct {
 
 func (x *CreateCustomRuleRequest) Reset() {
 	*x = CreateCustomRuleRequest{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -456,7 +559,7 @@ func (x *CreateCustomRuleRequest) String() string {
 func (*CreateCustomRuleRequest) ProtoMessage() {}
 
 func (x *CreateCustomRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -469,7 +572,7 @@ func (x *CreateCustomRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCustomRuleRequest.ProtoReflect.Descriptor instead.
 func (*CreateCustomRuleRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateCustomRuleRequest) GetContent() string {
@@ -489,7 +592,7 @@ type CreateCustomRuleResponse struct {
 
 func (x *CreateCustomRuleResponse) Reset() {
 	*x = CreateCustomRuleResponse{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +604,7 @@ func (x *CreateCustomRuleResponse) String() string {
 func (*CreateCustomRuleResponse) ProtoMessage() {}
 
 func (x *CreateCustomRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +617,7 @@ func (x *CreateCustomRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCustomRuleResponse.ProtoReflect.Descriptor instead.
 func (*CreateCustomRuleResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CreateCustomRuleResponse) GetRule() *DetectionRule {
@@ -534,7 +637,7 @@ type TestCustomRuleRequest struct {
 
 func (x *TestCustomRuleRequest) Reset() {
 	*x = TestCustomRuleRequest{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -546,7 +649,7 @@ func (x *TestCustomRuleRequest) String() string {
 func (*TestCustomRuleRequest) ProtoMessage() {}
 
 func (x *TestCustomRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -559,7 +662,7 @@ func (x *TestCustomRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestCustomRuleRequest.ProtoReflect.Descriptor instead.
 func (*TestCustomRuleRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TestCustomRuleRequest) GetId() string {
@@ -583,7 +686,7 @@ type RuleTestResult struct {
 
 func (x *RuleTestResult) Reset() {
 	*x = RuleTestResult{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -595,7 +698,7 @@ func (x *RuleTestResult) String() string {
 func (*RuleTestResult) ProtoMessage() {}
 
 func (x *RuleTestResult) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -608,7 +711,7 @@ func (x *RuleTestResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleTestResult.ProtoReflect.Descriptor instead.
 func (*RuleTestResult) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RuleTestResult) GetName() string {
@@ -659,7 +762,7 @@ type TestCustomRuleResponse struct {
 
 func (x *TestCustomRuleResponse) Reset() {
 	*x = TestCustomRuleResponse{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -671,7 +774,7 @@ func (x *TestCustomRuleResponse) String() string {
 func (*TestCustomRuleResponse) ProtoMessage() {}
 
 func (x *TestCustomRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -684,7 +787,7 @@ func (x *TestCustomRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestCustomRuleResponse.ProtoReflect.Descriptor instead.
 func (*TestCustomRuleResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *TestCustomRuleResponse) GetResults() []*RuleTestResult {
@@ -711,7 +814,7 @@ type PublishCustomRuleRequest struct {
 
 func (x *PublishCustomRuleRequest) Reset() {
 	*x = PublishCustomRuleRequest{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -723,7 +826,7 @@ func (x *PublishCustomRuleRequest) String() string {
 func (*PublishCustomRuleRequest) ProtoMessage() {}
 
 func (x *PublishCustomRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -736,7 +839,7 @@ func (x *PublishCustomRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishCustomRuleRequest.ProtoReflect.Descriptor instead.
 func (*PublishCustomRuleRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PublishCustomRuleRequest) GetId() string {
@@ -757,7 +860,7 @@ type PublishCustomRuleResponse struct {
 
 func (x *PublishCustomRuleResponse) Reset() {
 	*x = PublishCustomRuleResponse{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -769,7 +872,7 @@ func (x *PublishCustomRuleResponse) String() string {
 func (*PublishCustomRuleResponse) ProtoMessage() {}
 
 func (x *PublishCustomRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -782,7 +885,7 @@ func (x *PublishCustomRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishCustomRuleResponse.ProtoReflect.Descriptor instead.
 func (*PublishCustomRuleResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PublishCustomRuleResponse) GetRule() *DetectionRule {
@@ -810,7 +913,7 @@ type DisableCustomRuleRequest struct {
 
 func (x *DisableCustomRuleRequest) Reset() {
 	*x = DisableCustomRuleRequest{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -822,7 +925,7 @@ func (x *DisableCustomRuleRequest) String() string {
 func (*DisableCustomRuleRequest) ProtoMessage() {}
 
 func (x *DisableCustomRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -835,7 +938,7 @@ func (x *DisableCustomRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableCustomRuleRequest.ProtoReflect.Descriptor instead.
 func (*DisableCustomRuleRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DisableCustomRuleRequest) GetId() string {
@@ -862,7 +965,7 @@ type DisableCustomRuleResponse struct {
 
 func (x *DisableCustomRuleResponse) Reset() {
 	*x = DisableCustomRuleResponse{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -874,7 +977,7 @@ func (x *DisableCustomRuleResponse) String() string {
 func (*DisableCustomRuleResponse) ProtoMessage() {}
 
 func (x *DisableCustomRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -887,7 +990,7 @@ func (x *DisableCustomRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableCustomRuleResponse.ProtoReflect.Descriptor instead.
 func (*DisableCustomRuleResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DisableCustomRuleResponse) GetRule() *DetectionRule {
@@ -907,7 +1010,7 @@ type EnableRuleRequest struct {
 
 func (x *EnableRuleRequest) Reset() {
 	*x = EnableRuleRequest{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -919,7 +1022,7 @@ func (x *EnableRuleRequest) String() string {
 func (*EnableRuleRequest) ProtoMessage() {}
 
 func (x *EnableRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -932,7 +1035,7 @@ func (x *EnableRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnableRuleRequest.ProtoReflect.Descriptor instead.
 func (*EnableRuleRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *EnableRuleRequest) GetRuleId() string {
@@ -952,7 +1055,7 @@ type EnableRuleResponse struct {
 
 func (x *EnableRuleResponse) Reset() {
 	*x = EnableRuleResponse{}
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -964,7 +1067,7 @@ func (x *EnableRuleResponse) String() string {
 func (*EnableRuleResponse) ProtoMessage() {}
 
 func (x *EnableRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_detections_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -977,7 +1080,7 @@ func (x *EnableRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnableRuleResponse.ProtoReflect.Descriptor instead.
 func (*EnableRuleResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *EnableRuleResponse) GetEnabled() bool {
@@ -987,11 +1090,207 @@ func (x *EnableRuleResponse) GetEnabled() bool {
 	return false
 }
 
+// RequestCustomRuleConfirmationRequest names one published version.
+type RequestCustomRuleConfirmationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleId        string                 `protobuf:"bytes,1,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestCustomRuleConfirmationRequest) Reset() {
+	*x = RequestCustomRuleConfirmationRequest{}
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestCustomRuleConfirmationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestCustomRuleConfirmationRequest) ProtoMessage() {}
+
+func (x *RequestCustomRuleConfirmationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestCustomRuleConfirmationRequest.ProtoReflect.Descriptor instead.
+func (*RequestCustomRuleConfirmationRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RequestCustomRuleConfirmationRequest) GetRuleId() string {
+	if x != nil {
+		return x.RuleId
+	}
+	return ""
+}
+
+func (x *RequestCustomRuleConfirmationRequest) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *RequestCustomRuleConfirmationRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// RequestCustomRuleConfirmationResponse names the filed protected change.
+type RequestCustomRuleConfirmationResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ProtectedChangeId string                 `protobuf:"bytes,1,opt,name=protected_change_id,json=protectedChangeId,proto3" json:"protected_change_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RequestCustomRuleConfirmationResponse) Reset() {
+	*x = RequestCustomRuleConfirmationResponse{}
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestCustomRuleConfirmationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestCustomRuleConfirmationResponse) ProtoMessage() {}
+
+func (x *RequestCustomRuleConfirmationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestCustomRuleConfirmationResponse.ProtoReflect.Descriptor instead.
+func (*RequestCustomRuleConfirmationResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RequestCustomRuleConfirmationResponse) GetProtectedChangeId() string {
+	if x != nil {
+		return x.ProtectedChangeId
+	}
+	return ""
+}
+
+// WithdrawCustomRuleConfirmationRequest names a rule.
+type WithdrawCustomRuleConfirmationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleId        string                 `protobuf:"bytes,1,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WithdrawCustomRuleConfirmationRequest) Reset() {
+	*x = WithdrawCustomRuleConfirmationRequest{}
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WithdrawCustomRuleConfirmationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WithdrawCustomRuleConfirmationRequest) ProtoMessage() {}
+
+func (x *WithdrawCustomRuleConfirmationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WithdrawCustomRuleConfirmationRequest.ProtoReflect.Descriptor instead.
+func (*WithdrawCustomRuleConfirmationRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *WithdrawCustomRuleConfirmationRequest) GetRuleId() string {
+	if x != nil {
+		return x.RuleId
+	}
+	return ""
+}
+
+func (x *WithdrawCustomRuleConfirmationRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// WithdrawCustomRuleConfirmationResponse is empty.
+type WithdrawCustomRuleConfirmationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WithdrawCustomRuleConfirmationResponse) Reset() {
+	*x = WithdrawCustomRuleConfirmationResponse{}
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WithdrawCustomRuleConfirmationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WithdrawCustomRuleConfirmationResponse) ProtoMessage() {}
+
+func (x *WithdrawCustomRuleConfirmationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_detections_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WithdrawCustomRuleConfirmationResponse.ProtoReflect.Descriptor instead.
+func (*WithdrawCustomRuleConfirmationResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_detections_proto_rawDescGZIP(), []int{20}
+}
+
 var File_pantherclaw_v1_detections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_detections_proto_rawDesc = "" +
 	"\n" +
-	"\x1fpantherclaw/v1/detections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcf\x04\n" +
+	"\x1fpantherclaw/v1/detections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\x05\n" +
 	"\rDetectionRule\x12\x17\n" +
 	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +
@@ -1012,7 +1311,15 @@ const file_pantherclaw_v1_detections_proto_rawDesc = "" +
 	"\fdisable_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\vdisableTime\x12'\n" +
 	"\x0fdisabled_reason\x18\x11 \x01(\tR\x0edisabledReason\x12-\n" +
 	"\x12consecutive_errors\x18\x12 \x01(\x05R\x11consecutiveErrors\x12\x18\n" +
-	"\acontent\x18\x13 \x01(\tR\acontent\"\x12\n" +
+	"\acontent\x18\x13 \x01(\tR\acontent\x12J\n" +
+	"\fconfirmation\x18\x14 \x01(\v2&.pantherclaw.v1.CustomRuleConfirmationR\fconfirmation\x12C\n" +
+	"\x1epending_confirmation_change_id\x18\x15 \x01(\tR\x1bpendingConfirmationChangeId\"\xeb\x01\n" +
+	"\x16CustomRuleConfirmation\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x05R\aversion\x12%\n" +
+	"\x0econtent_digest\x18\x02 \x01(\tR\rcontentDigest\x12=\n" +
+	"\fconfirm_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vconfirmTime\x12!\n" +
+	"\frequested_by\x18\x04 \x01(\tR\vrequestedBy\x12.\n" +
+	"\x13protected_change_id\x18\x05 \x01(\tR\x11protectedChangeId\"\x12\n" +
 	"\x10ListRulesRequest\"\x90\x01\n" +
 	"\x11ListRulesResponse\x123\n" +
 	"\x05rules\x18\x01 \x03(\v2\x1d.pantherclaw.v1.DetectionRuleR\x05rules\x12!\n" +
@@ -1055,7 +1362,19 @@ const file_pantherclaw_v1_detections_proto_rawDesc = "" +
 	"\x11EnableRuleRequest\x127\n" +
 	"\arule_id\x18\x01 \x01(\tB\x1e\xbaH\x1br\x19\x10\x01\x18\x80\x012\x12^[a-z][a-z0-9_.]*$R\x06ruleId\".\n" +
 	"\x12EnableRuleResponse\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled2\xcc\x05\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\"\xab\x01\n" +
+	"$RequestCustomRuleConfirmationRequest\x12<\n" +
+	"\arule_id\x18\x01 \x01(\tB#\xbaH r\x1e\x10\x01\x18\x80\x012\x17^org\\.[a-z][a-z0-9_.]*$R\x06ruleId\x12!\n" +
+	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\aversion\x12\"\n" +
+	"\x06reason\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x06reason\"W\n" +
+	"%RequestCustomRuleConfirmationResponse\x12.\n" +
+	"\x13protected_change_id\x18\x01 \x01(\tR\x11protectedChangeId\"\x89\x01\n" +
+	"%WithdrawCustomRuleConfirmationRequest\x12<\n" +
+	"\arule_id\x18\x01 \x01(\tB#\xbaH r\x1e\x10\x01\x18\x80\x012\x17^org\\.[a-z][a-z0-9_.]*$R\x06ruleId\x12\"\n" +
+	"\x06reason\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x06reason\"(\n" +
+	"&WithdrawCustomRuleConfirmationResponse2\xed\a\n" +
 	"\x10DetectionService\x12U\n" +
 	"\tListRules\x12 .pantherclaw.v1.ListRulesRequest\x1a!.pantherclaw.v1.ListRulesResponse\"\x03\x90\x02\x01\x12p\n" +
 	"\x12GetDetectionStatus\x12).pantherclaw.v1.GetDetectionStatusRequest\x1a*.pantherclaw.v1.GetDetectionStatusResponse\"\x03\x90\x02\x01\x12e\n" +
@@ -1064,7 +1383,9 @@ const file_pantherclaw_v1_detections_proto_rawDesc = "" +
 	"\x11PublishCustomRule\x12(.pantherclaw.v1.PublishCustomRuleRequest\x1a).pantherclaw.v1.PublishCustomRuleResponse\x12h\n" +
 	"\x11DisableCustomRule\x12(.pantherclaw.v1.DisableCustomRuleRequest\x1a).pantherclaw.v1.DisableCustomRuleResponse\x12S\n" +
 	"\n" +
-	"EnableRule\x12!.pantherclaw.v1.EnableRuleRequest\x1a\".pantherclaw.v1.EnableRuleResponseB\xc8\x01\n" +
+	"EnableRule\x12!.pantherclaw.v1.EnableRuleRequest\x1a\".pantherclaw.v1.EnableRuleResponse\x12\x8c\x01\n" +
+	"\x1dRequestCustomRuleConfirmation\x124.pantherclaw.v1.RequestCustomRuleConfirmationRequest\x1a5.pantherclaw.v1.RequestCustomRuleConfirmationResponse\x12\x8f\x01\n" +
+	"\x1eWithdrawCustomRuleConfirmation\x125.pantherclaw.v1.WithdrawCustomRuleConfirmationRequest\x1a6.pantherclaw.v1.WithdrawCustomRuleConfirmationResponseB\xc8\x01\n" +
 	"\x12com.pantherclaw.v1B\x0fDetectionsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1079,54 +1400,65 @@ func file_pantherclaw_v1_detections_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_detections_proto_rawDescData
 }
 
-var file_pantherclaw_v1_detections_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pantherclaw_v1_detections_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_pantherclaw_v1_detections_proto_goTypes = []any{
-	(*DetectionRule)(nil),              // 0: pantherclaw.v1.DetectionRule
-	(*ListRulesRequest)(nil),           // 1: pantherclaw.v1.ListRulesRequest
-	(*ListRulesResponse)(nil),          // 2: pantherclaw.v1.ListRulesResponse
-	(*GetDetectionStatusRequest)(nil),  // 3: pantherclaw.v1.GetDetectionStatusRequest
-	(*GetDetectionStatusResponse)(nil), // 4: pantherclaw.v1.GetDetectionStatusResponse
-	(*CreateCustomRuleRequest)(nil),    // 5: pantherclaw.v1.CreateCustomRuleRequest
-	(*CreateCustomRuleResponse)(nil),   // 6: pantherclaw.v1.CreateCustomRuleResponse
-	(*TestCustomRuleRequest)(nil),      // 7: pantherclaw.v1.TestCustomRuleRequest
-	(*RuleTestResult)(nil),             // 8: pantherclaw.v1.RuleTestResult
-	(*TestCustomRuleResponse)(nil),     // 9: pantherclaw.v1.TestCustomRuleResponse
-	(*PublishCustomRuleRequest)(nil),   // 10: pantherclaw.v1.PublishCustomRuleRequest
-	(*PublishCustomRuleResponse)(nil),  // 11: pantherclaw.v1.PublishCustomRuleResponse
-	(*DisableCustomRuleRequest)(nil),   // 12: pantherclaw.v1.DisableCustomRuleRequest
-	(*DisableCustomRuleResponse)(nil),  // 13: pantherclaw.v1.DisableCustomRuleResponse
-	(*EnableRuleRequest)(nil),          // 14: pantherclaw.v1.EnableRuleRequest
-	(*EnableRuleResponse)(nil),         // 15: pantherclaw.v1.EnableRuleResponse
-	(*timestamppb.Timestamp)(nil),      // 16: google.protobuf.Timestamp
+	(*DetectionRule)(nil),                          // 0: pantherclaw.v1.DetectionRule
+	(*CustomRuleConfirmation)(nil),                 // 1: pantherclaw.v1.CustomRuleConfirmation
+	(*ListRulesRequest)(nil),                       // 2: pantherclaw.v1.ListRulesRequest
+	(*ListRulesResponse)(nil),                      // 3: pantherclaw.v1.ListRulesResponse
+	(*GetDetectionStatusRequest)(nil),              // 4: pantherclaw.v1.GetDetectionStatusRequest
+	(*GetDetectionStatusResponse)(nil),             // 5: pantherclaw.v1.GetDetectionStatusResponse
+	(*CreateCustomRuleRequest)(nil),                // 6: pantherclaw.v1.CreateCustomRuleRequest
+	(*CreateCustomRuleResponse)(nil),               // 7: pantherclaw.v1.CreateCustomRuleResponse
+	(*TestCustomRuleRequest)(nil),                  // 8: pantherclaw.v1.TestCustomRuleRequest
+	(*RuleTestResult)(nil),                         // 9: pantherclaw.v1.RuleTestResult
+	(*TestCustomRuleResponse)(nil),                 // 10: pantherclaw.v1.TestCustomRuleResponse
+	(*PublishCustomRuleRequest)(nil),               // 11: pantherclaw.v1.PublishCustomRuleRequest
+	(*PublishCustomRuleResponse)(nil),              // 12: pantherclaw.v1.PublishCustomRuleResponse
+	(*DisableCustomRuleRequest)(nil),               // 13: pantherclaw.v1.DisableCustomRuleRequest
+	(*DisableCustomRuleResponse)(nil),              // 14: pantherclaw.v1.DisableCustomRuleResponse
+	(*EnableRuleRequest)(nil),                      // 15: pantherclaw.v1.EnableRuleRequest
+	(*EnableRuleResponse)(nil),                     // 16: pantherclaw.v1.EnableRuleResponse
+	(*RequestCustomRuleConfirmationRequest)(nil),   // 17: pantherclaw.v1.RequestCustomRuleConfirmationRequest
+	(*RequestCustomRuleConfirmationResponse)(nil),  // 18: pantherclaw.v1.RequestCustomRuleConfirmationResponse
+	(*WithdrawCustomRuleConfirmationRequest)(nil),  // 19: pantherclaw.v1.WithdrawCustomRuleConfirmationRequest
+	(*WithdrawCustomRuleConfirmationResponse)(nil), // 20: pantherclaw.v1.WithdrawCustomRuleConfirmationResponse
+	(*timestamppb.Timestamp)(nil),                  // 21: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_detections_proto_depIdxs = []int32{
-	16, // 0: pantherclaw.v1.DetectionRule.disable_time:type_name -> google.protobuf.Timestamp
-	0,  // 1: pantherclaw.v1.ListRulesResponse.rules:type_name -> pantherclaw.v1.DetectionRule
-	16, // 2: pantherclaw.v1.GetDetectionStatusResponse.update_time:type_name -> google.protobuf.Timestamp
-	0,  // 3: pantherclaw.v1.CreateCustomRuleResponse.rule:type_name -> pantherclaw.v1.DetectionRule
-	8,  // 4: pantherclaw.v1.TestCustomRuleResponse.results:type_name -> pantherclaw.v1.RuleTestResult
-	0,  // 5: pantherclaw.v1.PublishCustomRuleResponse.rule:type_name -> pantherclaw.v1.DetectionRule
-	8,  // 6: pantherclaw.v1.PublishCustomRuleResponse.results:type_name -> pantherclaw.v1.RuleTestResult
-	0,  // 7: pantherclaw.v1.DisableCustomRuleResponse.rule:type_name -> pantherclaw.v1.DetectionRule
-	1,  // 8: pantherclaw.v1.DetectionService.ListRules:input_type -> pantherclaw.v1.ListRulesRequest
-	3,  // 9: pantherclaw.v1.DetectionService.GetDetectionStatus:input_type -> pantherclaw.v1.GetDetectionStatusRequest
-	5,  // 10: pantherclaw.v1.DetectionService.CreateCustomRule:input_type -> pantherclaw.v1.CreateCustomRuleRequest
-	7,  // 11: pantherclaw.v1.DetectionService.TestCustomRule:input_type -> pantherclaw.v1.TestCustomRuleRequest
-	10, // 12: pantherclaw.v1.DetectionService.PublishCustomRule:input_type -> pantherclaw.v1.PublishCustomRuleRequest
-	12, // 13: pantherclaw.v1.DetectionService.DisableCustomRule:input_type -> pantherclaw.v1.DisableCustomRuleRequest
-	14, // 14: pantherclaw.v1.DetectionService.EnableRule:input_type -> pantherclaw.v1.EnableRuleRequest
-	2,  // 15: pantherclaw.v1.DetectionService.ListRules:output_type -> pantherclaw.v1.ListRulesResponse
-	4,  // 16: pantherclaw.v1.DetectionService.GetDetectionStatus:output_type -> pantherclaw.v1.GetDetectionStatusResponse
-	6,  // 17: pantherclaw.v1.DetectionService.CreateCustomRule:output_type -> pantherclaw.v1.CreateCustomRuleResponse
-	9,  // 18: pantherclaw.v1.DetectionService.TestCustomRule:output_type -> pantherclaw.v1.TestCustomRuleResponse
-	11, // 19: pantherclaw.v1.DetectionService.PublishCustomRule:output_type -> pantherclaw.v1.PublishCustomRuleResponse
-	13, // 20: pantherclaw.v1.DetectionService.DisableCustomRule:output_type -> pantherclaw.v1.DisableCustomRuleResponse
-	15, // 21: pantherclaw.v1.DetectionService.EnableRule:output_type -> pantherclaw.v1.EnableRuleResponse
-	15, // [15:22] is the sub-list for method output_type
-	8,  // [8:15] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	21, // 0: pantherclaw.v1.DetectionRule.disable_time:type_name -> google.protobuf.Timestamp
+	1,  // 1: pantherclaw.v1.DetectionRule.confirmation:type_name -> pantherclaw.v1.CustomRuleConfirmation
+	21, // 2: pantherclaw.v1.CustomRuleConfirmation.confirm_time:type_name -> google.protobuf.Timestamp
+	0,  // 3: pantherclaw.v1.ListRulesResponse.rules:type_name -> pantherclaw.v1.DetectionRule
+	21, // 4: pantherclaw.v1.GetDetectionStatusResponse.update_time:type_name -> google.protobuf.Timestamp
+	0,  // 5: pantherclaw.v1.CreateCustomRuleResponse.rule:type_name -> pantherclaw.v1.DetectionRule
+	9,  // 6: pantherclaw.v1.TestCustomRuleResponse.results:type_name -> pantherclaw.v1.RuleTestResult
+	0,  // 7: pantherclaw.v1.PublishCustomRuleResponse.rule:type_name -> pantherclaw.v1.DetectionRule
+	9,  // 8: pantherclaw.v1.PublishCustomRuleResponse.results:type_name -> pantherclaw.v1.RuleTestResult
+	0,  // 9: pantherclaw.v1.DisableCustomRuleResponse.rule:type_name -> pantherclaw.v1.DetectionRule
+	2,  // 10: pantherclaw.v1.DetectionService.ListRules:input_type -> pantherclaw.v1.ListRulesRequest
+	4,  // 11: pantherclaw.v1.DetectionService.GetDetectionStatus:input_type -> pantherclaw.v1.GetDetectionStatusRequest
+	6,  // 12: pantherclaw.v1.DetectionService.CreateCustomRule:input_type -> pantherclaw.v1.CreateCustomRuleRequest
+	8,  // 13: pantherclaw.v1.DetectionService.TestCustomRule:input_type -> pantherclaw.v1.TestCustomRuleRequest
+	11, // 14: pantherclaw.v1.DetectionService.PublishCustomRule:input_type -> pantherclaw.v1.PublishCustomRuleRequest
+	13, // 15: pantherclaw.v1.DetectionService.DisableCustomRule:input_type -> pantherclaw.v1.DisableCustomRuleRequest
+	15, // 16: pantherclaw.v1.DetectionService.EnableRule:input_type -> pantherclaw.v1.EnableRuleRequest
+	17, // 17: pantherclaw.v1.DetectionService.RequestCustomRuleConfirmation:input_type -> pantherclaw.v1.RequestCustomRuleConfirmationRequest
+	19, // 18: pantherclaw.v1.DetectionService.WithdrawCustomRuleConfirmation:input_type -> pantherclaw.v1.WithdrawCustomRuleConfirmationRequest
+	3,  // 19: pantherclaw.v1.DetectionService.ListRules:output_type -> pantherclaw.v1.ListRulesResponse
+	5,  // 20: pantherclaw.v1.DetectionService.GetDetectionStatus:output_type -> pantherclaw.v1.GetDetectionStatusResponse
+	7,  // 21: pantherclaw.v1.DetectionService.CreateCustomRule:output_type -> pantherclaw.v1.CreateCustomRuleResponse
+	10, // 22: pantherclaw.v1.DetectionService.TestCustomRule:output_type -> pantherclaw.v1.TestCustomRuleResponse
+	12, // 23: pantherclaw.v1.DetectionService.PublishCustomRule:output_type -> pantherclaw.v1.PublishCustomRuleResponse
+	14, // 24: pantherclaw.v1.DetectionService.DisableCustomRule:output_type -> pantherclaw.v1.DisableCustomRuleResponse
+	16, // 25: pantherclaw.v1.DetectionService.EnableRule:output_type -> pantherclaw.v1.EnableRuleResponse
+	18, // 26: pantherclaw.v1.DetectionService.RequestCustomRuleConfirmation:output_type -> pantherclaw.v1.RequestCustomRuleConfirmationResponse
+	20, // 27: pantherclaw.v1.DetectionService.WithdrawCustomRuleConfirmation:output_type -> pantherclaw.v1.WithdrawCustomRuleConfirmationResponse
+	19, // [19:28] is the sub-list for method output_type
+	10, // [10:19] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_detections_proto_init() }
@@ -1140,7 +1472,7 @@ func file_pantherclaw_v1_detections_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_detections_proto_rawDesc), len(file_pantherclaw_v1_detections_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

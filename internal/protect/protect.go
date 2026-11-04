@@ -106,6 +106,12 @@ const (
 	// D512, HR-652): always held for a second person, whatever the
 	// TOOL_MEANING mode (AlwaysProtected).
 	SurfaceContentSignalMode Surface = "content.signals.mode"
+	// SurfaceCustomRuleConfirm confirms one exact published custom
+	// detection rule version, whose alerts then raise as RULE_MATCH
+	// (HR-666): always held for a second person, whatever the
+	// CONSEQUENCE_RULES mode (AlwaysProtected). Withdrawing a confirmation
+	// applies directly.
+	SurfaceCustomRuleConfirm Surface = "detection.custom_rule.confirm"
 	// The IdP-native access surfaces (G0 M26 D400-D402, D408; HR-623):
 	// always held for a second person, whatever the CUSTODY mode
 	// (AlwaysProtected). Each only adds or turns something on; taking it
@@ -157,6 +163,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermCatalogManage
 	case SurfaceContentSignalMode:
 		return td.PermContentManage
+	case SurfaceCustomRuleConfirm:
+		return td.PermDetectionManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}
@@ -166,11 +174,11 @@ func (s Surface) Permission() td.Permission {
 // AlwaysProtected reports whether every change of the surface waits for a
 // second person, in every mode of its category, and can never be applied
 // as an emergency (G0 M17 D107, HR-453; G0 M18 D155, HR-481; G0 M24 D223,
-// HR-586; G0 M26 D408, HR-623).
+// HR-586; G0 M26 D408, HR-623; HR-666).
 func (s Surface) AlwaysProtected() bool {
 	return s == SurfaceConsequenceRule ||
 		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly ||
-		s == SurfaceCatalogMode || s == SurfaceContentSignalMode ||
+		s == SurfaceCatalogMode || s == SurfaceContentSignalMode || s == SurfaceCustomRuleConfirm ||
 		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient ||
 		s == SurfaceSCIMTokenActivate || s == SurfaceSAMLConnectionPut || s == SurfaceSAMLDisable ||
 		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove

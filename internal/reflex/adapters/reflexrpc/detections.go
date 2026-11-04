@@ -5,6 +5,7 @@ package reflexrpc
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/katocxl/pantherclaw/internal/detection/engine"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -36,6 +37,15 @@ func ruleProto(r reflexapp.Rule) *pb.DetectionRule {
 	}
 	if s := r.State; s != nil {
 		out.DisableTime, out.DisabledReason, out.ConsecutiveErrors = tsp(s.DisabledAt), str(s.DisabledReason), s.ConsecutiveErrors
+	}
+	if c := r.Confirmation; c != nil {
+		out.Confirmation = &pb.CustomRuleConfirmation{
+			Version: c.Version, ContentDigest: hex.EncodeToString(c.ContentDigest), ConfirmTime: tsp(&c.ConfirmedAt),
+			RequestedBy: c.RequestedBy, ProtectedChangeId: c.ProtectedChangeID.String(),
+		}
+	}
+	if !r.PendingConfirmation.IsZero() {
+		out.PendingConfirmationChangeId = r.PendingConfirmation.String()
 	}
 	return out
 }
@@ -125,4 +135,25 @@ func (h *DetectionHandler) EnableRule(ctx context.Context, req *pb.EnableRuleReq
 		return nil, err
 	}
 	return &pb.EnableRuleResponse{Enabled: ok}, nil
+}
+
+// RequestCustomRuleConfirmation implements DetectionServiceHandler.
+func (h *DetectionHandler) RequestCustomRuleConfirmation(ctx context.Context, req *pb.RequestCustomRuleConfirmationRequest) (
+	*pb.RequestCustomRuleConfirmationResponse, error,
+) {
+	held, err := h.svc.RequestCustomRuleConfirmation(ctx, req.GetRuleId(), req.GetVersion(), req.GetReason())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.RequestCustomRuleConfirmationResponse{ProtectedChangeId: held.Change.String()}, nil
+}
+
+// WithdrawCustomRuleConfirmation implements DetectionServiceHandler.
+func (h *DetectionHandler) WithdrawCustomRuleConfirmation(ctx context.Context, req *pb.WithdrawCustomRuleConfirmationRequest) (
+	*pb.WithdrawCustomRuleConfirmationResponse, error,
+) {
+	if err := h.svc.WithdrawCustomRuleConfirmation(ctx, req.GetRuleId(), req.GetReason()); err != nil {
+		return nil, err
+	}
+	return &pb.WithdrawCustomRuleConfirmationResponse{}, nil
 }
