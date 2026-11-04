@@ -68254,7 +68254,9 @@
           "PRINCIPAL_SOURCE_UNSPECIFIED",
           "PRINCIPAL_SOURCE_LAUNCHER",
           "PRINCIPAL_SOURCE_SUBJECT_TOKEN",
-          "PRINCIPAL_SOURCE_PARENT_RUN"
+          "PRINCIPAL_SOURCE_PARENT_RUN",
+          "PRINCIPAL_SOURCE_ID_JAG",
+          "PRINCIPAL_SOURCE_AUTOMATION"
         ],
         "description": "PrincipalSource says how the represented principal was established."
       },
@@ -68578,6 +68580,14 @@
             "type": "string",
             "title": "grant_id",
             "description": "The grant whose authority the run uses; empty for a run without one,\n whose actions are denied (NO_GRANT)."
+          },
+          "scopeOperations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "scope_operations",
+            "description": "The operations the run is narrowed to within its grant (G0 M26 D400);\n empty for the whole grant."
           }
         },
         "title": "Run",
@@ -88638,7 +88648,7 @@
         },
         "title": "RangeScenarioDecl",
         "additionalProperties": false,
-        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form.\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125)."
+        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the canonical form of what the\n scenario runs: its apiVersion, requires, harness_only and steps (ADR-0051).\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125)."
       },
       "pantherclaw.v1.RangeScenarioDeclInput": {
         "type": "object",
@@ -88698,7 +88708,7 @@
         },
         "title": "RangeScenarioDecl",
         "additionalProperties": false,
-        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the scenario's canonical form.\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125).",
+        "description": "RangeScenarioDecl declares a scenario of the set a range runs. The\n digest is the SHA-256 (lowercase hex) of the canonical form of what the\n scenario runs: its apiVersion, requires, harness_only and steps (ADR-0051).\n RT-### is the PantherClaw library: the server accepts it only with the\n library's digest and takes its tier from the library. CX-### is\n customer-authored (G0 M17 D124, D125).",
         "x-pantherclaw-input-of": "pantherclaw.v1.RangeScenarioDecl",
         "required": [
           "id",

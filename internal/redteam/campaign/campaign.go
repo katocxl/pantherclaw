@@ -230,11 +230,24 @@ func (s Step) check() error {
 	return nil
 }
 
-// Digest is the SHA-256 (hex) of the RFC 8785 canonical JSON of the parsed
-// file, as a scenario's (rtdomain.Digest): spelling in the YAML does not
-// change it.
+// runs is what a campaign's digest covers: only what runs (ADR-0051,
+// HR-661), under the campaign file's own JSON names. The id, title,
+// technique, tier, threats, asi and rules describe the campaign and are left
+// out, so a tag or wording change keeps the digest.
+type runs struct {
+	APIVersion string           `json:"apiVersion"`
+	Task       string           `json:"task"`
+	Plants     []Plant          `json:"plants,omitzero"`
+	Attempts   []domain.Attempt `json:"attempts"`
+	Script     []Step           `json:"script"`
+}
+
+// Digest is the SHA-256 (hex) of the RFC 8785 canonical JSON of what the
+// parsed file runs: apiVersion, task, plants, attempts and script, as a
+// scenario's (rtdomain.Digest). Spelling in the YAML does not change it, and
+// neither does a field that only describes the campaign (ADR-0051).
 func Digest(f *File) (string, error) {
-	raw, err := json.Marshal(f)
+	raw, err := json.Marshal(runs{APIVersion: f.APIVersion, Task: f.Task, Plants: f.Plants, Attempts: f.Attempts, Script: f.Script})
 	if err != nil {
 		return "", err
 	}
