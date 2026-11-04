@@ -4,10 +4,11 @@
 package protect
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"

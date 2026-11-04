@@ -5,9 +5,9 @@ package auditkind
 
 // Audit kinds under "cohort.". The ledger stores each as "audit." + the kind.
 const (
-	CohortCreated = "cohort.created"
-	CohortDeleted = "cohort.deleted"
-	CohortMembersAdded = "cohort.members_added"
+	CohortCreated        = "cohort.created"
+	CohortDeleted        = "cohort.deleted"
+	CohortMembersAdded   = "cohort.members_added"
 	CohortMembersRemoved = "cohort.members_removed"
-	CohortUpdated = "cohort.updated"
+	CohortUpdated        = "cohort.updated"
 )

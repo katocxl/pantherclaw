@@ -4,13 +4,14 @@
 package pgtransactions
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/json/v2"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"

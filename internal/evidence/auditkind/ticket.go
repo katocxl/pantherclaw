@@ -5,15 +5,15 @@ package auditkind
 
 // Audit kinds under "ticket.". The ledger stores each as "audit." + the kind.
 const (
-	TicketCreated = "ticket.created"
-	TicketCreatedUnlinked = "ticket.created_unlinked"
+	TicketCreated           = "ticket.created"
+	TicketCreatedUnlinked   = "ticket.created_unlinked"
 	TicketFieldOwnerChanged = "ticket.field_owner_changed"
-	TicketLinked = "ticket.linked"
-	TicketOpenRequested = "ticket.open_requested"
+	TicketLinked            = "ticket.linked"
+	TicketOpenRequested     = "ticket.open_requested"
 	TicketOwnedFieldIgnored = "ticket.owned_field_ignored"
-	TicketSyncConfigured = "ticket.sync_configured"
-	TicketSyncFailed = "ticket.sync_failed"
+	TicketSyncConfigured    = "ticket.sync_configured"
+	TicketSyncFailed        = "ticket.sync_failed"
 	TicketSyncSecretRotated = "ticket.sync_secret_rotated"
-	TicketSyncStateChanged = "ticket.sync_state_changed"
-	TicketWebhookRefused = "ticket.webhook_refused"
+	TicketSyncStateChanged  = "ticket.sync_state_changed"
+	TicketWebhookRefused    = "ticket.webhook_refused"
 )

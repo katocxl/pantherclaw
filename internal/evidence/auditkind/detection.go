@@ -7,9 +7,9 @@ package auditkind
 const (
 	DetectionCustomRuleConfirmationRequested = "detection.custom_rule.confirmation_requested"
 	DetectionCustomRuleConfirmationWithdrawn = "detection.custom_rule.confirmation_withdrawn"
-	DetectionCustomRuleConfirmed = "detection.custom_rule.confirmed"
-	DetectionRuleCreated = "detection.rule_created"
-	DetectionRuleDisabled = "detection.rule_disabled"
-	DetectionRuleEnabled = "detection.rule_enabled"
-	DetectionRulePublished = "detection.rule_published"
+	DetectionCustomRuleConfirmed             = "detection.custom_rule.confirmed"
+	DetectionRuleCreated                     = "detection.rule_created"
+	DetectionRuleDisabled                    = "detection.rule_disabled"
+	DetectionRuleEnabled                     = "detection.rule_enabled"
+	DetectionRulePublished                   = "detection.rule_published"
 )

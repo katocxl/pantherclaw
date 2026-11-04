@@ -4,11 +4,12 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"slices"
 	"strconv"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/jackc/pgx/v5"
 

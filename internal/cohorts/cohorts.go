@@ -16,7 +16,6 @@
 package cohorts
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"encoding/json/v2"
@@ -27,6 +26,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"

@@ -4,7 +4,6 @@
 package protect
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -13,6 +12,8 @@ import (
 	"log/slog"
 	"maps"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"

@@ -4,7 +4,6 @@
 package datarequests
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +12,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/jackc/pgx/v5"
 

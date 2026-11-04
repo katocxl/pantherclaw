@@ -31,7 +31,6 @@
 package checkpoints
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/mldsa"
@@ -39,6 +38,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/jackc/pgx/v5/pgtype"
 

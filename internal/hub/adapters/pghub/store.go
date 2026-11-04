@@ -6,9 +6,10 @@
 package pghub
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"fmt"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"

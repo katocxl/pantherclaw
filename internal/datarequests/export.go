@@ -4,7 +4,6 @@
 package datarequests
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"archive/zip"
 	"bytes"
 	"context"
@@ -16,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/jackc/pgx/v5"
 

@@ -4,7 +4,6 @@
 package engine
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -14,6 +13,8 @@ import (
 	"log/slog"
 	"maps"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/jackc/pgx/v5/pgtype"
 

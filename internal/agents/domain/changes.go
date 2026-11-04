@@ -4,10 +4,11 @@
 package domain
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"fmt"
 	"regexp"
 	"unicode/utf8"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 )
 
 // ChangeKind names one entry of an agent's append-only history (F024).

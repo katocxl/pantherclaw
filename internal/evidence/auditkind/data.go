@@ -5,10 +5,10 @@ package auditkind
 
 // Audit kinds under "data.". The ledger stores each as "audit." + the kind.
 const (
-	DataDeletionCanceled = "data.deletion_canceled"
+	DataDeletionCanceled   = "data.deletion_canceled"
 	DataDeletionRecordRead = "data.deletion_record_read"
-	DataDeletionRequested = "data.deletion_requested"
-	DataExportDownloaded = "data.export_downloaded"
-	DataExportReady = "data.export_ready"
-	DataExportRequested = "data.export_requested"
+	DataDeletionRequested  = "data.deletion_requested"
+	DataExportDownloaded   = "data.export_downloaded"
+	DataExportReady        = "data.export_ready"
+	DataExportRequested    = "data.export_requested"
 )

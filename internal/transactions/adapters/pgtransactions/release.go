@@ -4,7 +4,6 @@
 package pgtransactions
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -12,6 +11,8 @@ import (
 	"encoding/hex"
 	"strconv"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/budgets/adapters/pgbudgets"

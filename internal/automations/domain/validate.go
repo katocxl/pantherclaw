@@ -4,7 +4,6 @@
 package domain
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -15,8 +14,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	_ "time/tzdata" // schedules name IANA zones; validation must not depend on the host's zone files
 	"unicode/utf8"
+
+	_ "time/tzdata" // schedules name IANA zones; validation must not depend on the host's zone files
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"

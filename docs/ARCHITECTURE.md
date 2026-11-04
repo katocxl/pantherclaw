@@ -216,6 +216,7 @@ Standard library only. Ed25519 signatures (optional ML-DSA-65 dual signature), A
 ## 12. Evidence ledger
 
 - Receipts (decision, execution, effect) and platform audit events are written **unchained** inside their business transaction.
+- Every audit kind the core writes is a constant in `internal/evidence/auditkind` (HR-664). To add a kind, add a constant there (and its name to `all`) and write it with that constant; a test refuses a string literal at an audit call site, and `extension.CoreAuditKinds` follows the constants.
 - A per-org **chainer** (a per-org lock on the ledger head) links rows older than `pg_snapshot_xmin(pg_current_snapshot())` into the hash chain — no rollback gaps, no hot row in the authorization path.
 - Merkle tiles and **signed checkpoints** per time window; one **global** root periodically anchored to Sigstore **Rekor v2** with an RFC 3161 timestamp (tenant activity is not revealed).
 - `pclaw verify` checks signatures, chain continuity and consistency proofs offline. The ledger proves integrity of what it contains, not completeness.

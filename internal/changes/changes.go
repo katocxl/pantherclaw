@@ -17,7 +17,6 @@
 package changes
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"cmp"
 	"context"
@@ -32,6 +31,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"

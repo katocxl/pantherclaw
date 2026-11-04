@@ -4,12 +4,13 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json/v2"
 	"unicode/utf8"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"

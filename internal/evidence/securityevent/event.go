@@ -6,13 +6,14 @@
 package securityevent
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -75,38 +76,38 @@ type rule struct{ direction, objectType, detail string }
 // These are exact audit names, not suffix or prefix matches. A new kind
 // requires explicit review and an accompanying replay implementation.
 var kinds = map[string]rule{
-	auditkind.SigningKeyRevoked:                {"tighten", "signing_key", ""},
-	auditkind.GatewayRevoked:                    {"tighten", "gateway", ""},
-	auditkind.GatewayCertificateRevoked:        {"tighten", "gateway_certificate", "certificate_id"},
-	auditkind.AccessApiKeyRevoked:             {"tighten", "api_key", ""},
+	auditkind.SigningKeyRevoked:              {"tighten", "signing_key", ""},
+	auditkind.GatewayRevoked:                 {"tighten", "gateway", ""},
+	auditkind.GatewayCertificateRevoked:      {"tighten", "gateway_certificate", "certificate_id"},
+	auditkind.AccessApiKeyRevoked:            {"tighten", "api_key", ""},
 	auditkind.AccessServiceAccountKeyRevoked: {"tighten", "service_account_key", "key"},
-	auditkind.AccessServiceAccountDisabled:    {"tighten", "service_account", ""},
-	auditkind.AccessServiceAccountEnabled:     {"loosen", "service_account", ""},
-	auditkind.AccessUserDisabled:               {"tighten", "user", ""},
-	auditkind.AccessUserEnabled:                {"loosen", "user", ""},
-	auditkind.AccessInvitationRevoked:          {"tighten", "invitation", ""},
-	auditkind.PackageSigningKeyRevoked:        {"tighten", "package_signing_key", ""},
-	auditkind.AuthnWebauthnSuspended:           {"tighten", "webauthn", ""},
-	auditkind.AuthnWebauthnRemoved:             {"tighten", "webauthn", ""},
-	auditkind.AuthnSessionRevoked:              {"tighten", "session", ""},
-	auditkind.AuthnSessionEnded:                {"tighten", "session", ""},
-	auditkind.AuthnSessionsRevoked:             {"tighten", "user_sessions", ""},
-	auditkind.ResponseCredentialRevoked:        {"tighten", "sealed_credential", "version"},
-	auditkind.ConnectionSealedRevoked:          {"tighten", "sealed_credential", "version"},
-	auditkind.ConnectionQuarantined:             {"tighten", "connection", ""},
-	auditkind.ConnectionRestored:                {"loosen", "connection", ""},
-	auditkind.GrantRevoked:                      {"tighten", "grant", ""},
-	auditkind.IdentityIssuerDisabled:           {"tighten", "issuer", ""},
-	auditkind.ResponseContain:                   {"tighten", "containment_control", "control_id"},
-	auditkind.McpCatalogServerRevoked:         {"tighten", "mcp_server", ""},
-	auditkind.AgentsAgentSuspended:             {"tighten", "agent", ""},
-	"agents.agent_restored":              {"loosen", "agent", ""},
-	auditkind.SecurityKillSwitchEngaged:       {"tighten", "org", ""},
-	auditkind.SecurityKillSwitchRestored:      {"loosen", "org", ""},
-	auditkind.OrgDeletionStarted:               {"tighten", "org", ""},
-	auditkind.OrgDeleted:                        {"tighten", "org", ""},
-	auditkind.AccountDeletionStarted:           {"tighten", "account", ""},
-	auditkind.AccountDeleted:                    {"tighten", "account", ""},
+	auditkind.AccessServiceAccountDisabled:   {"tighten", "service_account", ""},
+	auditkind.AccessServiceAccountEnabled:    {"loosen", "service_account", ""},
+	auditkind.AccessUserDisabled:             {"tighten", "user", ""},
+	auditkind.AccessUserEnabled:              {"loosen", "user", ""},
+	auditkind.AccessInvitationRevoked:        {"tighten", "invitation", ""},
+	auditkind.PackageSigningKeyRevoked:       {"tighten", "package_signing_key", ""},
+	auditkind.AuthnWebauthnSuspended:         {"tighten", "webauthn", ""},
+	auditkind.AuthnWebauthnRemoved:           {"tighten", "webauthn", ""},
+	auditkind.AuthnSessionRevoked:            {"tighten", "session", ""},
+	auditkind.AuthnSessionEnded:              {"tighten", "session", ""},
+	auditkind.AuthnSessionsRevoked:           {"tighten", "user_sessions", ""},
+	auditkind.ResponseCredentialRevoked:      {"tighten", "sealed_credential", "version"},
+	auditkind.ConnectionSealedRevoked:        {"tighten", "sealed_credential", "version"},
+	auditkind.ConnectionQuarantined:          {"tighten", "connection", ""},
+	auditkind.ConnectionRestored:             {"loosen", "connection", ""},
+	auditkind.GrantRevoked:                   {"tighten", "grant", ""},
+	auditkind.IdentityIssuerDisabled:         {"tighten", "issuer", ""},
+	auditkind.ResponseContain:                {"tighten", "containment_control", "control_id"},
+	auditkind.McpCatalogServerRevoked:        {"tighten", "mcp_server", ""},
+	auditkind.AgentsAgentSuspended:           {"tighten", "agent", ""},
+	"agents.agent_restored":                  {"loosen", "agent", ""},
+	auditkind.SecurityKillSwitchEngaged:      {"tighten", "org", ""},
+	auditkind.SecurityKillSwitchRestored:     {"loosen", "org", ""},
+	auditkind.OrgDeletionStarted:             {"tighten", "org", ""},
+	auditkind.OrgDeleted:                     {"tighten", "org", ""},
+	auditkind.AccountDeletionStarted:         {"tighten", "account", ""},
+	auditkind.AccountDeleted:                 {"tighten", "account", ""},
 }
 
 // Rule returns the required direction and object type of a closed kind.

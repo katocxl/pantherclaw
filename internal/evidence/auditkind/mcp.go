@@ -5,9 +5,9 @@ package auditkind
 
 // Audit kinds under "mcp.". The ledger stores each as "audit." + the kind.
 const (
-	McpCatalogModeChanged = "mcp.catalog.mode_changed"
+	McpCatalogModeChanged    = "mcp.catalog.mode_changed"
 	McpCatalogServerApproved = "mcp.catalog.server_approved"
-	McpCatalogServerDenied = "mcp.catalog.server_denied"
+	McpCatalogServerDenied   = "mcp.catalog.server_denied"
 	McpCatalogServerProposed = "mcp.catalog.server_proposed"
-	McpCatalogServerRevoked = "mcp.catalog.server_revoked"
+	McpCatalogServerRevoked  = "mcp.catalog.server_revoked"
 )

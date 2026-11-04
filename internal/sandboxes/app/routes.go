@@ -4,11 +4,12 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"strconv"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	cdomain "github.com/katocxl/pantherclaw/internal/campaigns/domain"
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"

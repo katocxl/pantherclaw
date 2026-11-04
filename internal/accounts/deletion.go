@@ -4,7 +4,6 @@
 package accounts
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,6 +12,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evd "github.com/katocxl/pantherclaw/internal/evidence/domain"

@@ -4,13 +4,14 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"

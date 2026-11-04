@@ -4,9 +4,10 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"

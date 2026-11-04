@@ -10,7 +10,6 @@
 package pgmanifest
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,6 +19,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"google.golang.org/protobuf/proto"
 

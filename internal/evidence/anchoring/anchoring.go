@@ -32,7 +32,6 @@
 package anchoring
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -42,6 +41,8 @@ import (
 	"log/slog"
 	"slices"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/anchor"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"

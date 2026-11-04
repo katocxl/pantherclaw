@@ -4,13 +4,14 @@
 package signals
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strconv"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/jackc/pgx/v5"
 

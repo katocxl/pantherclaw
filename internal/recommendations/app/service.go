@@ -326,7 +326,7 @@ func recordChange(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, id 
 	if !ok {
 		return fmt.Errorf("recommendations: no audit kind for change %q", event)
 	}
-	b, err :=evdomain.CanonicalBody(map[string]string{"recommendation": string(id), "event": event})
+	b, err := evdomain.CanonicalBody(map[string]string{"recommendation": string(id), "event": event})
 	if err != nil {
 		return err
 	}

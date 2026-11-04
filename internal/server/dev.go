@@ -4,7 +4,6 @@
 package server
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"flag"
@@ -12,6 +11,8 @@ import (
 	"io"
 	"os"
 	"slices"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"

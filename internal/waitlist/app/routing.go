@@ -4,7 +4,6 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"fmt"
@@ -12,6 +11,8 @@ import (
 	"slices"
 	"strconv"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"

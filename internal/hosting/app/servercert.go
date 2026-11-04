@@ -4,9 +4,10 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/ed25519"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gateways/ca"

@@ -4,10 +4,11 @@
 package restore
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -22,20 +23,20 @@ func registerCore(r *Registry) {
 	// All statements are fixed, tenant-filtered, conditional tightening
 	// transitions. Existing revoked/disabled/ended objects are no-ops.
 	statements := map[string][]string{
-		auditkind.SigningKeyRevoked:                {`UPDATE pc.keys SET state='REVOKED', state_changed_at=now() WHERE org_id=$1 AND kid=$2 AND state IN ('ACTIVE','RETIRING')`},
-		auditkind.GatewayRevoked:                    {`UPDATE pc.gateways SET state='REVOKED',revoked_by='operator:restore',revoked_at=now(),revoke_reason='re-applied after restore',config_version=config_version+1 WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`, `UPDATE pc.gateway_certs SET state='REVOKED',revoked_at=now(),revoke_reason='restored_revocation',superseded_at=NULL WHERE org_id=$1 AND gateway_id=$2::uuid AND state<>'REVOKED'`},
-		auditkind.GatewayCertificateRevoked:        {`UPDATE pc.gateway_certs SET state='REVOKED',revoked_at=now(),revoke_reason='restored_revocation',superseded_at=NULL WHERE org_id=$1 AND id=$2::uuid AND state<>'REVOKED'`},
-		auditkind.AccessApiKeyRevoked:             {`UPDATE pc.api_keys SET state='REVOKED',revoked_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
+		auditkind.SigningKeyRevoked:              {`UPDATE pc.keys SET state='REVOKED', state_changed_at=now() WHERE org_id=$1 AND kid=$2 AND state IN ('ACTIVE','RETIRING')`},
+		auditkind.GatewayRevoked:                 {`UPDATE pc.gateways SET state='REVOKED',revoked_by='operator:restore',revoked_at=now(),revoke_reason='re-applied after restore',config_version=config_version+1 WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`, `UPDATE pc.gateway_certs SET state='REVOKED',revoked_at=now(),revoke_reason='restored_revocation',superseded_at=NULL WHERE org_id=$1 AND gateway_id=$2::uuid AND state<>'REVOKED'`},
+		auditkind.GatewayCertificateRevoked:      {`UPDATE pc.gateway_certs SET state='REVOKED',revoked_at=now(),revoke_reason='restored_revocation',superseded_at=NULL WHERE org_id=$1 AND id=$2::uuid AND state<>'REVOKED'`},
+		auditkind.AccessApiKeyRevoked:            {`UPDATE pc.api_keys SET state='REVOKED',revoked_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
 		auditkind.AccessServiceAccountKeyRevoked: {`UPDATE pc.service_account_keys SET state='REVOKED',revoked_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
-		auditkind.AccessServiceAccountDisabled:    {`UPDATE pc.service_accounts SET state='DISABLED',updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
-		auditkind.AccessUserDisabled:               {`UPDATE pc.users SET state='DISABLED',updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
-		auditkind.AccessInvitationRevoked:          {`UPDATE pc.invitations SET state='REVOKED',revoked_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='PENDING'`},
-		auditkind.AuthnWebauthnSuspended:           {`UPDATE pc.webauthn_credentials SET state='SUSPENDED',state_reason='CLONE_SUSPECTED',changed_at=now(),changed_by='operator:restore' WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
-		auditkind.AuthnWebauthnRemoved:             {`UPDATE pc.webauthn_credentials SET state='REMOVED',state_reason='ADMIN_REMOVED',changed_at=now(),changed_by='operator:restore' WHERE org_id=$1 AND id=$2::uuid AND state<>'REMOVED'`},
-		auditkind.IdentityIssuerDisabled:           {`UPDATE pc.trusted_issuers SET state=CASE WHEN state='PROPOSED' THEN 'WITHDRAWN' ELSE 'DISABLED' END,closed_at=now(),closed_by='operator:restore' WHERE org_id=$1 AND entry_id=$2::uuid AND state IN ('ACTIVE','PROPOSED')`},
-		auditkind.AuthnSessionsRevoked:             {`UPDATE pc.sessions SET state='ENDED',ended_at=now(),end_reason='ADMIN_REVOKED' WHERE org_id=$1 AND user_id=$2::uuid AND state='ACTIVE'`, `UPDATE pc.cli_sessions SET state='REVOKED',revoked_at=now(),revoke_reason='RESTORE_REAPPLIED' WHERE org_id=$1 AND user_id=$2::uuid AND state='ACTIVE'`},
-		auditkind.ConnectionQuarantined:             {`UPDATE pc.connections SET state='QUARANTINED',quarantine_reason='manual',revision=revision+1,updated_at=now(),updated_by='operator:restore' WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
-		auditkind.AgentsAgentSuspended:             {`UPDATE pc.agents SET state='SUSPENDED',suspended_from=state,updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state NOT IN ('SUSPENDED','RETIRED')`},
+		auditkind.AccessServiceAccountDisabled:   {`UPDATE pc.service_accounts SET state='DISABLED',updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
+		auditkind.AccessUserDisabled:             {`UPDATE pc.users SET state='DISABLED',updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
+		auditkind.AccessInvitationRevoked:        {`UPDATE pc.invitations SET state='REVOKED',revoked_at=now() WHERE org_id=$1 AND id=$2::uuid AND state='PENDING'`},
+		auditkind.AuthnWebauthnSuspended:         {`UPDATE pc.webauthn_credentials SET state='SUSPENDED',state_reason='CLONE_SUSPECTED',changed_at=now(),changed_by='operator:restore' WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
+		auditkind.AuthnWebauthnRemoved:           {`UPDATE pc.webauthn_credentials SET state='REMOVED',state_reason='ADMIN_REMOVED',changed_at=now(),changed_by='operator:restore' WHERE org_id=$1 AND id=$2::uuid AND state<>'REMOVED'`},
+		auditkind.IdentityIssuerDisabled:         {`UPDATE pc.trusted_issuers SET state=CASE WHEN state='PROPOSED' THEN 'WITHDRAWN' ELSE 'DISABLED' END,closed_at=now(),closed_by='operator:restore' WHERE org_id=$1 AND entry_id=$2::uuid AND state IN ('ACTIVE','PROPOSED')`},
+		auditkind.AuthnSessionsRevoked:           {`UPDATE pc.sessions SET state='ENDED',ended_at=now(),end_reason='ADMIN_REVOKED' WHERE org_id=$1 AND user_id=$2::uuid AND state='ACTIVE'`, `UPDATE pc.cli_sessions SET state='REVOKED',revoked_at=now(),revoke_reason='RESTORE_REAPPLIED' WHERE org_id=$1 AND user_id=$2::uuid AND state='ACTIVE'`},
+		auditkind.ConnectionQuarantined:          {`UPDATE pc.connections SET state='QUARANTINED',quarantine_reason='manual',revision=revision+1,updated_at=now(),updated_by='operator:restore' WHERE org_id=$1 AND id=$2::uuid AND state='ACTIVE'`},
+		auditkind.AgentsAgentSuspended:           {`UPDATE pc.agents SET state='SUSPENDED',suspended_from=state,updated_at=now() WHERE org_id=$1 AND id=$2::uuid AND state NOT IN ('SUSPENDED','RETIRED')`},
 	}
 	for kind, statements := range statements {
 		r.handlers[kind] = func(ctx context.Context, tx db.TenantTx, e Event) error {

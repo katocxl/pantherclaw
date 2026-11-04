@@ -4,13 +4,14 @@
 package server
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"

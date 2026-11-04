@@ -4,8 +4,9 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"

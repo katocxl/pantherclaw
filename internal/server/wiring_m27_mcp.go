@@ -4,12 +4,13 @@
 package server
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"connectrpc.com/connect/v2"
 

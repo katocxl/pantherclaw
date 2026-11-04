@@ -9,11 +9,12 @@
 package templatesrpc
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 

@@ -4,10 +4,11 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"slices"
 	"strconv"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"

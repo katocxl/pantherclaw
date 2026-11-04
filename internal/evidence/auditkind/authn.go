@@ -5,16 +5,16 @@ package auditkind
 
 // Audit kinds under "authn.". The ledger stores each as "audit." + the kind.
 const (
-	AuthnLogin = "authn.login"
-	AuthnSessionCreated = "authn.session_created"
-	AuthnSessionEnded = "authn.session_ended"
-	AuthnSessionReuse = "authn.session_reuse"
-	AuthnSessionRevoked = "authn.session_revoked"
-	AuthnSessionsRevoked = "authn.sessions_revoked"
-	AuthnStepUp = "authn.step_up"
-	AuthnTokenIssued = "authn.token_issued"
+	AuthnLogin              = "authn.login"
+	AuthnSessionCreated     = "authn.session_created"
+	AuthnSessionEnded       = "authn.session_ended"
+	AuthnSessionReuse       = "authn.session_reuse"
+	AuthnSessionRevoked     = "authn.session_revoked"
+	AuthnSessionsRevoked    = "authn.sessions_revoked"
+	AuthnStepUp             = "authn.step_up"
+	AuthnTokenIssued        = "authn.token_issued"
 	AuthnWebauthnRegistered = "authn.webauthn_registered"
-	AuthnWebauthnRemoved = "authn.webauthn_removed"
-	AuthnWebauthnRenamed = "authn.webauthn_renamed"
-	AuthnWebauthnSuspended = "authn.webauthn_suspended"
+	AuthnWebauthnRemoved    = "authn.webauthn_removed"
+	AuthnWebauthnRenamed    = "authn.webauthn_renamed"
+	AuthnWebauthnSuspended  = "authn.webauthn_suspended"
 )

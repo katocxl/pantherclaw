@@ -15,7 +15,6 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -23,6 +22,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	casesdomain "github.com/katocxl/pantherclaw/internal/cases/domain"

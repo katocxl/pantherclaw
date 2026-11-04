@@ -5,7 +5,7 @@ package auditkind
 
 // Audit kinds under "account.". The ledger stores each as "audit." + the kind.
 const (
-	AccountDeleted = "account.deleted"
+	AccountDeleted         = "account.deleted"
 	AccountDeletionStarted = "account.deletion_started"
-	AccountUserDeleted = "account.user_deleted"
+	AccountUserDeleted     = "account.user_deleted"
 )

@@ -6,5 +6,5 @@ package auditkind
 // Audit kinds under "saas.". The ledger stores each as "audit." + the kind.
 const (
 	SaasScanFinished = "saas.scan_finished"
-	SaasScanStarted = "saas.scan_started"
+	SaasScanStarted  = "saas.scan_started"
 )

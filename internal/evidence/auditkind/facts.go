@@ -5,6 +5,6 @@ package auditkind
 
 // Audit kinds under "facts.". The ledger stores each as "audit." + the kind.
 const (
-	FactsProviderDisabled = "facts.provider_disabled"
+	FactsProviderDisabled   = "facts.provider_disabled"
 	FactsProviderRegistered = "facts.provider_registered"
 )

@@ -4,13 +4,14 @@
 package securityevent
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )

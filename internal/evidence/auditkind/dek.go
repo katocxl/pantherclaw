@@ -5,6 +5,6 @@ package auditkind
 
 // Audit kinds under "dek.". The ledger stores each as "audit." + the kind.
 const (
-	DekCreated = "dek.created"
+	DekCreated   = "dek.created"
 	DekRewrapped = "dek.rewrapped"
 )

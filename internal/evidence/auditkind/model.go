@@ -5,11 +5,11 @@ package auditkind
 
 // Audit kinds under "model.". The ledger stores each as "audit." + the kind.
 const (
-	ModelCall = "model.call"
-	ModelCallStarted = "model.call.started"
+	ModelCall             = "model.call"
+	ModelCallStarted      = "model.call.started"
 	ModelDraftingDisabled = "model.drafting_disabled"
-	ModelDraftingEnabled = "model.drafting_enabled"
-	ModelKeyCleared = "model.key_cleared"
-	ModelKeySet = "model.key_set"
-	ModelSettingsUpdated = "model.settings_updated"
+	ModelDraftingEnabled  = "model.drafting_enabled"
+	ModelKeyCleared       = "model.key_cleared"
+	ModelKeySet           = "model.key_set"
+	ModelSettingsUpdated  = "model.settings_updated"
 )

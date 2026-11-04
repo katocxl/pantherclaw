@@ -4,7 +4,6 @@
 package server
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,6 +14,8 @@ import (
 	"os"
 	"slices"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"

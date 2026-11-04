@@ -5,10 +5,10 @@ package auditkind
 
 // Audit kinds under "change.". The ledger stores each as "audit." + the kind.
 const (
-	ChangeApproved = "change.approved"
+	ChangeApproved  = "change.approved"
 	ChangeConfirmed = "change.confirmed"
-	ChangeDeclined = "change.declined"
-	ChangeExpired = "change.expired"
+	ChangeDeclined  = "change.declined"
+	ChangeExpired   = "change.expired"
 	ChangeRequested = "change.requested"
-	ChangeVoided = "change.voided"
+	ChangeVoided    = "change.voided"
 )

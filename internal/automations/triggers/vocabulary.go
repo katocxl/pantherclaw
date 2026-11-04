@@ -4,9 +4,10 @@
 package triggers
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"slices"
 	"strings"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
@@ -107,11 +108,11 @@ func Means(name string, e feed.Event, f Facts) bool {
 	case VocabEffectRecorded:
 		return e.Kind == kindEffect
 	case VocabRunEnded:
-		return e.Kind == "audit." + auditkind.RunEnded
+		return e.Kind == "audit."+auditkind.RunEnded
 	case VocabGrantIssued:
-		return e.Kind == "audit." + auditkind.GrantIssued
+		return e.Kind == "audit."+auditkind.GrantIssued
 	case VocabGrantRevoked:
-		return e.Kind == "audit." + auditkind.GrantRevoked
+		return e.Kind == "audit."+auditkind.GrantRevoked
 	case VocabCoverageLost:
 		if e.Kind == kindCoverageInv {
 			return true
@@ -131,15 +132,15 @@ func Means(name string, e feed.Event, f Facts) bool {
 	case VocabCaseClosed:
 		return e.Kind == kindCase && f.CaseClosed
 	case VocabAgentDiscovered:
-		return e.Kind == "audit." + auditkind.AgentDiscovered
+		return e.Kind == "audit."+auditkind.AgentDiscovered
 	case VocabDiscoveryChanged:
-		return e.Kind == "audit." + auditkind.AgentDiscoveryChanged
+		return e.Kind == "audit."+auditkind.AgentDiscoveryChanged
 	case VocabDiscoveryVanished:
-		return e.Kind == "audit." + auditkind.AgentDiscoveryVanished
+		return e.Kind == "audit."+auditkind.AgentDiscoveryVanished
 	case VocabApprovalExpired:
-		return e.Kind == "audit." + auditkind.ApprovalExpired
+		return e.Kind == "audit."+auditkind.ApprovalExpired
 	case VocabAutomationFinished:
-		return e.Kind == "audit." + auditkind.AutomationExecutionFinished
+		return e.Kind == "audit."+auditkind.AutomationExecutionFinished
 	}
 	return false
 }

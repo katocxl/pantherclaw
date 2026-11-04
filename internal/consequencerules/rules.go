@@ -11,13 +11,14 @@
 package consequencerules
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"strconv"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"

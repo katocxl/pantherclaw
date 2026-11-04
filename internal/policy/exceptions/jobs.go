@@ -4,11 +4,12 @@
 package exceptions
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"

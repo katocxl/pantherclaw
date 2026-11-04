@@ -8,7 +8,6 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -20,6 +19,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/oidcrp"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"

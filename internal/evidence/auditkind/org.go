@@ -5,6 +5,6 @@ package auditkind
 
 // Audit kinds under "org.". The ledger stores each as "audit." + the kind.
 const (
-	OrgDeleted = "org.deleted"
+	OrgDeleted         = "org.deleted"
 	OrgDeletionStarted = "org.deletion_started"
 )

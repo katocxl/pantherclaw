@@ -6,5 +6,5 @@ package auditkind
 // Audit kinds under "licence.". The ledger stores each as "audit." + the kind.
 const (
 	LicenceInstalled = "licence.installed"
-	LicenceRejected = "licence.rejected"
+	LicenceRejected  = "licence.rejected"
 )

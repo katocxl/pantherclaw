@@ -5,8 +5,8 @@ package auditkind
 
 // Audit kinds under "package.". The ledger stores each as "audit." + the kind.
 const (
-	PackageImported = "package.imported"
+	PackageImported             = "package.imported"
 	PackageSigningKeyRegistered = "package.signing_key.registered"
-	PackageSigningKeyRevoked = "package.signing_key.revoked"
-	PackageTransitioned = "package.transitioned"
+	PackageSigningKeyRevoked    = "package.signing_key.revoked"
+	PackageTransitioned         = "package.transitioned"
 )

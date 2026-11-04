@@ -8,7 +8,7 @@ const (
 	SandboxReportAccepted = "sandbox.report_accepted"
 	SandboxReportRejected = "sandbox.report_rejected"
 	SandboxRoutesReported = "sandbox.routes_reported"
-	SandboxSessionEnded = "sandbox.session_ended"
+	SandboxSessionEnded   = "sandbox.session_ended"
 	SandboxSessionExpired = "sandbox.session_expired"
 	SandboxSessionStarted = "sandbox.session_started"
 )

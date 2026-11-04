@@ -8,7 +8,6 @@
 package pgauthority
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,6 +15,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
 	approvalsapp "github.com/katocxl/pantherclaw/internal/approvals/app"

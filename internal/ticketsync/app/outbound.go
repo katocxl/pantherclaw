@@ -4,11 +4,12 @@
 package app
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/v2"
 	"errors"
 	"strconv"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	casesdomain "github.com/katocxl/pantherclaw/internal/cases/domain"
 	casesstore "github.com/katocxl/pantherclaw/internal/cases/store"

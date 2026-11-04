@@ -5,12 +5,12 @@ package auditkind
 
 // Audit kinds under "billing.". The ledger stores each as "audit." + the kind.
 const (
-	BillingCheckoutRecorded = "billing.checkout_recorded"
-	BillingCompGranted = "billing.comp_granted"
-	BillingCompRevoked = "billing.comp_revoked"
-	BillingPlanApplied = "billing.plan_applied"
-	BillingPlanEventIgnored = "billing.plan_event_ignored"
-	BillingSubscriptionBound = "billing.subscription_bound"
+	BillingCheckoutRecorded      = "billing.checkout_recorded"
+	BillingCompGranted           = "billing.comp_granted"
+	BillingCompRevoked           = "billing.comp_revoked"
+	BillingPlanApplied           = "billing.plan_applied"
+	BillingPlanEventIgnored      = "billing.plan_event_ignored"
+	BillingSubscriptionBound     = "billing.subscription_bound"
 	BillingSubscriptionDuplicate = "billing.subscription_duplicate"
-	BillingSubscriptionEnded = "billing.subscription_ended"
+	BillingSubscriptionEnded     = "billing.subscription_ended"
 )

@@ -5,8 +5,8 @@ package auditkind
 
 // Audit kinds under "breakglass.". The ledger stores each as "audit." + the kind.
 const (
-	BreakglassActivated = "breakglass.activated"
-	BreakglassCall = "breakglass.call"
-	BreakglassEnded = "breakglass.ended"
+	BreakglassActivated      = "breakglass.activated"
+	BreakglassCall           = "breakglass.call"
+	BreakglassEnded          = "breakglass.ended"
 	BreakglassHoldersChanged = "breakglass.holders_changed"
 )

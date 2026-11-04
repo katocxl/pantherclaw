@@ -4,7 +4,6 @@
 package server
 
 import (
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"context"
 	"encoding/json/jsontext"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"net/url"
 	"slices"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
