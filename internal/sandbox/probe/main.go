@@ -115,13 +115,14 @@ func Main(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io
 	fs.SetOutput(stderr)
 	config := fs.String("config", "", "the probe configuration file ("+ConfigFormat+")")
 	profile := fs.String("profile", "", "\""+ProfileKubernetes+"\": probe an agent pod's routes, configured from the environment")
+	kind := fs.String("kind", report.KindSandbox, "with --profile kubernetes: sandbox, or control for the positive twins")
 	if err := fs.Parse(args); err != nil || (*config == "") == (*profile == "") || (*profile != "" && *profile != ProfileKubernetes) || fs.NArg() != 0 {
 		_, _ = fmt.Fprintln(stderr, "usage: pantherclaw-probe --config FILE   (inside a sandbox's probe container; started by pclaw sandbox run)")
-		_, _ = fmt.Fprintln(stderr, "       pantherclaw-probe --profile kubernetes   (in a probe pod with the edge as its sidecar)")
+		_, _ = fmt.Fprintln(stderr, "       pantherclaw-probe --profile kubernetes [--kind sandbox|control]   (in a probe pod with the edge as its sidecar)")
 		return 2
 	}
 	if *profile == ProfileKubernetes {
-		return kubeMain(ctx, stdout, stderr)
+		return kubeMain(ctx, *kind, stdout, stderr)
 	}
 	c, err := ReadConfig(*config)
 	var out string

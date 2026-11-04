@@ -33,32 +33,33 @@ import (
 const ProfileKubernetes = "kubernetes"
 
 // The environment of a kubernetes probe run (the chart's probe CronJobs,
-// G0 M32 D969). KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT are the
-// ones the kubelet sets.
+// G0 M32 D969, D970a). KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT
+// are the ones the kubelet sets. PC_HOST_IP and PC_CANARY_IP are required;
+// the others are optional, and what they leave empty in the report is the
+// edge's to fill before it signs.
 const (
-	EnvKind          = "PC_PROBE_KIND"         // sandbox or control
-	EnvPodName       = "PC_POD_NAME"           // downward API metadata.name
-	EnvNamespace     = "PC_NAMESPACE"          // downward API metadata.namespace
-	EnvHostIP        = "PC_HOST_IP"            // downward API status.hostIP
-	EnvCanaryService = "PC_CANARY_SERVICE"     // the pantherclaw-canary Service, IP or IP:port
-	EnvCanaryPod     = "PC_CANARY_POD"         // a canary pod, IP or IP:port
-	EnvAgentHosts    = "PC_AGENT_HOSTS"        // the edge's mapped hosts, comma-separated
-	EnvEdgeImage     = "PC_EDGE_IMAGE_DIGEST"  // sha256:<hex>
-	EnvProbeImage    = "PC_PROBE_IMAGE_DIGEST" // sha256:<hex>
+	EnvHostIP     = "PC_HOST_IP"            // the node IP (downward API status.hostIP)
+	EnvCanaryIP   = "PC_CANARY_IP"          // the pantherclaw-canary Service clusterIP
+	EnvPodName    = "PC_POD_NAME"           // downward API metadata.name
+	EnvNamespace  = "PC_NAMESPACE"          // downward API metadata.namespace
+	EnvAgentHosts = "PC_AGENT_HOSTS"        // the edge's mapped hosts, comma-separated
+	EnvEdgeImage  = "PC_EDGE_IMAGE_DIGEST"  // sha256:<hex>
+	EnvProbeImage = "PC_PROBE_IMAGE_DIGEST" // sha256:<hex>
 )
 
-// The edge in the pod (G0 M32 D964, D966).
+// The edge in the pod and the canary (G0 M32 D964, D966, D970a).
 const (
 	kubeEdge     = "127.0.0.1:3128"
 	kubeCAFile   = "/pc-edge/ca.crt"
 	kubeReport   = "http://" + kubeEdge + "/__pc/report"
 	resolvConf   = "/etc/resolv.conf"
-	canaryPort   = "80"
+	canaryPort   = "8080"
 	maxKubeReply = 64 << 10
 )
 
-// KubeConfig is a kubernetes probe run's configuration, from its
-// environment.
+// KubeConfig is a kubernetes probe run's configuration: its kind from
+// `--kind` (sandbox by default, control for the twin in the release
+// namespace), the rest from its environment.
 type KubeConfig struct {
 	Kind      string
 	Pod       string
@@ -66,8 +67,8 @@ type KubeConfig struct {
 	// APIServer is the cluster's API server, host:port.
 	APIServer string
 	HostIP    string
-	// CanaryService and CanaryPod are host:port.
-	CanaryService, CanaryPod string
+	// CanaryService is the canary Service's clusterIP:8080.
+	CanaryService string
 	// Nameservers are the pod's resolvers from resolv.conf.
 	Nameservers []string
 	AgentHosts  []string
@@ -76,55 +77,38 @@ type KubeConfig struct {
 	CAFile      string
 }
 
-// KubeConfigFromEnv reads a kubernetes run's configuration. Every value
-// is required except the agent hosts of a control run; a missing target
-// is the probe's failure, which never passes.
-func KubeConfigFromEnv(getenv func(string) string) (KubeConfig, error) {
+// KubeConfigFromEnv reads a kubernetes run's configuration for kind. A
+// sandbox run without agent hosts still runs: its edge_mediated control
+// fails, which never passes.
+func KubeConfigFromEnv(kind string, getenv func(string) string) (KubeConfig, error) {
 	c := KubeConfig{
-		Kind: getenv(EnvKind), Pod: getenv(EnvPodName), Namespace: getenv(EnvNamespace), HostIP: getenv(EnvHostIP),
-		CanaryService: withPort(getenv(EnvCanaryService)), CanaryPod: withPort(getenv(EnvCanaryPod)),
+		Kind: kind, Pod: getenv(EnvPodName), Namespace: getenv(EnvNamespace), HostIP: getenv(EnvHostIP),
 		Images: report.Images{Edge: getenv(EnvEdgeImage), Probe: getenv(EnvProbeImage)},
 		Edge:   kubeEdge, CAFile: kubeCAFile,
 	}
 	if h, p := getenv("KUBERNETES_SERVICE_HOST"), getenv("KUBERNETES_SERVICE_PORT"); h != "" && p != "" {
 		c.APIServer = net.JoinHostPort(h, p)
 	}
+	canary := getenv(EnvCanaryIP)
+	if net.ParseIP(canary) != nil {
+		c.CanaryService = net.JoinHostPort(canary, canaryPort)
+	}
 	for h := range strings.SplitSeq(getenv(EnvAgentHosts), ",") {
 		if h = strings.TrimSpace(h); h != "" {
 			c.AgentHosts = append(c.AgentHosts, h)
 		}
 	}
-	var missing []string
-	for name, v := range map[string]string{
-		EnvPodName: c.Pod, EnvNamespace: c.Namespace, EnvHostIP: c.HostIP, EnvCanaryService: c.CanaryService,
-		EnvCanaryPod: c.CanaryPod, EnvEdgeImage: c.Images.Edge, EnvProbeImage: c.Images.Probe, "KUBERNETES_SERVICE_HOST": c.APIServer,
-	} {
-		if v == "" {
-			missing = append(missing, name)
-		}
-	}
 	switch {
 	case c.Kind != report.KindSandbox && c.Kind != report.KindControl:
-		return KubeConfig{}, fmt.Errorf("probe: %s is %q, want sandbox or control", EnvKind, c.Kind)
-	case len(missing) > 0:
-		return KubeConfig{}, fmt.Errorf("probe: the environment lacks %s", strings.Join(missing, ", "))
-	case c.Kind == report.KindSandbox && len(c.AgentHosts) == 0:
-		return KubeConfig{}, fmt.Errorf("probe: a sandbox run needs %s", EnvAgentHosts)
+		return KubeConfig{}, fmt.Errorf("probe: --kind %q, want sandbox or control", c.Kind)
 	case net.ParseIP(c.HostIP) == nil:
 		return KubeConfig{}, fmt.Errorf("probe: %s %q is not an IP address", EnvHostIP, c.HostIP)
+	case c.CanaryService == "":
+		return KubeConfig{}, fmt.Errorf("probe: %s %q is not an IP address", EnvCanaryIP, canary)
+	case c.APIServer == "":
+		return KubeConfig{}, errors.New("probe: KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT are not set")
 	}
 	return c, nil
-}
-
-// withPort adds the canary's port to a bare address.
-func withPort(a string) string {
-	if a == "" {
-		return ""
-	}
-	if _, _, err := net.SplitHostPort(a); err == nil {
-		return a
-	}
-	return net.JoinHostPort(a, canaryPort)
 }
 
 // nameservers are resolv.conf's nameservers.
@@ -168,7 +152,6 @@ func kubeCatalog(c KubeConfig, marker string) []probe {
 	tcp("kubelet", net.JoinHostPort(c.HostIP, "10250"), net.JoinHostPort(c.HostIP, "10255"))
 	tcp("node_ip", net.JoinHostPort(c.HostIP, "22"), net.JoinHostPort(c.HostIP, "443"))
 	tcp("service_other", c.CanaryService)
-	tcp("pod_other", c.CanaryPod)
 	tcp("direct_https", "1.1.1.1:443")
 	for _, network := range []string{"udp", "tcp"} {
 		add("dns_external", network+" 8.8.8.8:53", answers("8.8.8.8:53", network, marker))
@@ -203,6 +186,11 @@ func kubeCatalog(c KubeConfig, marker string) []probe {
 			viaEdge(proxy, nil, http.MethodGet, "http://unmapped.invalid/"+marker, nil),
 		},
 	)
+	if len(c.AgentHosts) == 0 {
+		ps = append(ps, probe{"edge_mediated", report.RolePositive, report.Reachable, EnvAgentHosts, func(context.Context) error {
+			return failed{errors.New("no mapped host to reach through the edge")}
+		}})
+	}
 	for _, h := range c.AgentHosts {
 		ps = append(ps, probe{"edge_mediated", report.RolePositive, report.Reachable, "https://" + h + " through the edge", func(ctx context.Context) error {
 			roots, err := caPool(c.CAFile)
@@ -262,8 +250,8 @@ func postReport(ctx context.Context, r report.Report) (string, error) {
 }
 
 // kubeMain is `pantherclaw-probe --profile kubernetes`.
-func kubeMain(ctx context.Context, stdout, stderr io.Writer) int {
-	c, err := KubeConfigFromEnv(os.Getenv)
+func kubeMain(ctx context.Context, kind string, stdout, stderr io.Writer) int {
+	c, err := KubeConfigFromEnv(kind, os.Getenv)
 	var out string
 	if err == nil {
 		c.Nameservers = nameservers(resolvConf)

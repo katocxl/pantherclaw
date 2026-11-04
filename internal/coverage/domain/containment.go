@@ -44,10 +44,9 @@ const (
 	ProbeNodeIP = "node_ip"
 	// ProbeDNSCluster is the pod's cluster resolver, on UDP and TCP 53.
 	ProbeDNSCluster = "dns_cluster"
-	// ProbeServiceOther is another Service (the pantherclaw-canary one).
+	// ProbeServiceOther is another Service (the pantherclaw-canary one on
+	// TCP 8080); it also exercises pod-to-pod through the policy (D970a).
 	ProbeServiceOther = "service_other"
-	// ProbePodOther is another pod (the canary pod).
-	ProbePodOther = "pod_other"
 )
 
 // Kubernetes configuration checks, made by the server (G0 M32 D970).
@@ -78,7 +77,7 @@ type profile struct {
 // its positive twin from the control run, and both server checks are ok.
 var kubeProbes = []string{
 	ProbeKubeAPI, ProbeKubelet, ProbeNodeIP, ProbeMetadata, ProbeDNSCluster, ProbeDNSExternal, ProbeDirectHTTPS,
-	ProbeServiceOther, ProbePodOther, ProbeIPv6,
+	ProbeServiceOther, ProbeIPv6,
 }
 
 var kubeChecks = []string{CheckAdmissionEnforced, CheckNetpolEgressGatewayOnly}
