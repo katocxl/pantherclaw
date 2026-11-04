@@ -4,6 +4,7 @@
 package bundle_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -151,6 +152,16 @@ func TestHR688_AThreatMapThatSaysMoreThanItsInputsFails(t *testing.T) {
 			r := verifyThreatMapPack(t, tc.edit)
 			if got := statusOf(r, tc.check); got != tc.want {
 				t.Errorf("%s = %q, want %q:\n%+v", tc.check, got, tc.want, r.Checks)
+			}
+			if tc.want != bundle.NotAvailable {
+				return
+			}
+			// D720f: a part this pclaw cannot re-derive points to the one
+			// that built the pack.
+			for _, c := range r.Checks {
+				if c.Name == tc.check && !strings.HasSuffix(c.Detail, ": check this part with the pclaw version that built the pack") {
+					t.Errorf("%s: %q", tc.check, c.Detail)
+				}
 			}
 		})
 	}

@@ -61,7 +61,7 @@ func verifyThreatMap(r *Report, m *pack.Manifest, files map[string][]byte) {
 	// PantherClaw's mapping and is not re-derived here.
 	shipped := mapset.Evaluator(rep.Framework)
 	if shipped.Digest == "" || rep.MappingDigest != shipped.Digest {
-		r.add("threatmap.mapping", subject, NotAvailable, "built with another PantherClaw mapping (%s): update pclaw to re-derive it",
+		r.add("threatmap.mapping", subject, NotAvailable, "built with another PantherClaw mapping (%s): check this part with the pclaw version that built the pack",
 			truncate(rep.MappingDigest))
 		r.notFull = true
 		return
@@ -76,7 +76,7 @@ func verifyThreatMap(r *Report, m *pack.Manifest, files map[string][]byte) {
 	want, err := rep.Rederive()
 	switch {
 	case errors.Is(err, domain.ErrOtherCatalog):
-		r.add("threatmap.lanes", subject, NotAvailable, "built with another MITRE catalog (%s %s): update pclaw to re-derive it",
+		r.add("threatmap.lanes", subject, NotAvailable, "built with another MITRE catalog (%s %s): check this part with the pclaw version that built the pack",
 			truncate(string(rep.Framework)), truncate(rep.Catalog.Version))
 		r.notFull = true
 		return
