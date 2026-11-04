@@ -537,7 +537,7 @@ func (e *Edge) stripQuery(r *http.Request, host string) string {
 		if err1 != nil || err2 != nil {
 			name, value = k, v
 		}
-		kind := tokenKind(value)
+		kind := TokenKind(value)
 		if kind == "" && !slices.Contains(credentialParams, strings.ToLower(name)) {
 			kept = append(kept, p)
 			continue
@@ -563,7 +563,7 @@ func credentialKind(header, v string) string {
 	if !found {
 		scheme, token = "", scheme
 	}
-	if k := tokenKind(token); k != "" {
+	if k := TokenKind(token); k != "" {
 		return k
 	}
 	if scheme != "" {
@@ -572,8 +572,13 @@ func credentialKind(header, v string) string {
 	return strings.ToLower(header)
 }
 
-// tokenKind names a token by its well-known prefix, "" when it has none.
-func tokenKind(token string) string {
+// TokenKind names a token by its well-known prefix, "" when it has none. It
+// is exported for pclaw's --env check (G0 M29 D816, D823), and knows the
+// Anthropic and OpenAI key formats (HR-694).
+func TokenKind(token string) string {
+	if kind := modelKeyKind(token); kind != "" {
+		return kind
+	}
 	for _, p := range []struct{ prefix, kind string }{
 		{"github_pat_", "github_pat"},
 		{"ghp_", "github_pat"},

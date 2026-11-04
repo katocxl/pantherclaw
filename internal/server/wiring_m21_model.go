@@ -23,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/search"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
+	pcanthropic "github.com/katocxl/pantherclaw/packages/pc-anthropic"
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
@@ -30,6 +31,7 @@ import (
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
+	pcopenai "github.com/katocxl/pantherclaw/packages/pc-openai"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
@@ -60,7 +62,7 @@ func builtinPackages() ([]*defsdomain.Package, error) {
 	raws := [][]byte{
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
-		pcchatgptenterprise.Package,
+		pcchatgptenterprise.Package, pcanthropic.Package, pcopenai.Package,
 	}
 	pkgs := make([]*defsdomain.Package, 0, len(raws))
 	for _, raw := range raws {

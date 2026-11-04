@@ -1,0 +1,220 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for the OpenAI Chat Completions and Responses APIs
+# over a model connection (G0 M29 D811, D813, D813a; F980; HR-690, HR-691,
+# HR-696). It serves OpenAI, OpenAI-compatible servers and Azure OpenAI's v1
+# API.
+#
+# The connection is kind model, base URL with the API version path
+# (https://api.openai.com/v1, Azure https://<resource>.openai.azure.com/openai/v1;
+# pantherclaw-sim model at http://127.0.0.1:9103/v1 in development and
+# tests), access mode pantherclaw_held: the gateway holds the provider key
+# and places it (by default Authorization: Bearer; Azure api-key) only on
+# requests to the connection's own host; the agent never holds it. The key
+# may be any printable ASCII without spaces: compatible servers use their
+# own key formats.
+#
+# A model call is not rebuilt from a template. The gateway strictly parses
+# the agent's JSON body (one object, no duplicate member names, valid UTF-8),
+# decides on its metadata and the sha256 of the re-encoded body, and
+# forwards exactly that body to the base URL plus the operation's fixed path
+# (the written exception to HR-075, HR-691). Its only edit is adding the
+# connection's max output tokens when the request has none
+# (max_completion_tokens on Chat Completions, max_output_tokens on
+# Responses). So the mappings below name a method and the path below the
+# connection's base URL path and extract nothing: the params come from the
+# gateway's model API parser.
+#
+# server_tools lists the provider-side tool types a request names (Chat
+# Completions: a tools[] type other than function and custom, and
+# web_search_options; Responses: a tools[] type other than function, custom,
+# local_shell and computer_use_preview, and background mode). Each is refused
+# unless an admin allowed it on the connection (HR-696); policies can see
+# them.
+#
+# Model calls have no dedupe key (D813a): identical prompts are independent
+# calls, so an SDK's automatic retry is never parked as a duplicate. Spend
+# is metered in tokens (D821), not by deduplication.
+format: 1
+name: pc.openai
+version: 1.0.0
+publisher: pantherclaw
+summary: OpenAI Chat Completions and Responses APIs (and models) through a model connection
+
+definitions:
+  - operation: openai.chat.create
+    summary: Ask a model for a reply (Chat Completions API)
+    access: write
+    target:
+      type: model
+      id_pattern: '^[!-~]{1,256}$'
+      account: none
+    params:
+      model:
+        type: identifier
+        material: true
+        required: true
+        max_length: 256
+      max_tokens:
+        type: integer
+        material: true
+        required: true
+        unit: count
+        min: "1"
+        max: "1000000"
+      choices:
+        type: integer
+        material: true
+        required: true
+        unit: count
+        min: "1"
+        max: "16"
+      stream:
+        type: boolean
+        material: true
+        required: true
+      input_bytes:
+        type: integer
+        material: true
+        required: true
+        unit: bytes
+        min: "0"
+        max: "16777216"
+      server_tools:
+        type: identifier_list
+        material: true
+        max_items: 32
+        pattern: '^[a-z][a-z0-9_.-]{0,63}$'
+      body_sha256:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+    effects:
+      - kind: model.inference
+        description: The provider generates a reply and bills the tokens it uses
+    reversibility: reversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Send a request to the model {params.model}
+      fields: [params.model, params.max_tokens, params.choices, params.stream, params.input_bytes, params.server_tools]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      model:
+        api: openai.chat
+        path: /chat/completions
+      credential_pattern: '^[!-~]{8,512}$'
+    mappings:
+      - channel: http
+        method: POST
+        path: /chat/completions
+        route: openai-chat
+
+  - operation: openai.responses.create
+    summary: Ask a model for a reply (Responses API)
+    access: write
+    target:
+      type: model
+      id_pattern: '^[!-~]{1,256}$'
+      account: none
+    params:
+      model:
+        type: identifier
+        material: true
+        required: true
+        max_length: 256
+      max_tokens:
+        type: integer
+        material: true
+        required: true
+        unit: count
+        min: "1"
+        max: "1000000"
+      stream:
+        type: boolean
+        material: true
+        required: true
+      input_bytes:
+        type: integer
+        material: true
+        required: true
+        unit: bytes
+        min: "0"
+        max: "16777216"
+      server_tools:
+        type: identifier_list
+        material: true
+        max_items: 32
+        pattern: '^[a-z][a-z0-9_.-]{0,63}$'
+      body_sha256:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+    effects:
+      - kind: model.inference
+        description: The provider generates a reply and bills the tokens it uses
+    reversibility: reversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Send a request to the model {params.model}
+      fields: [params.model, params.max_tokens, params.stream, params.input_bytes, params.server_tools]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      model:
+        api: openai.responses
+        path: /responses
+      credential_pattern: '^[!-~]{8,512}$'
+    mappings:
+      - channel: http
+        method: POST
+        path: /responses
+        route: openai-responses
+
+  - operation: openai.models.read
+    summary: List the models, or read one
+    access: read
+    target:
+      type: model
+      id_pattern: '^[!-~]{1,256}$'
+      account: none
+    params:
+      model:
+        type: identifier
+        max_length: 256
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    dispatch:
+      model:
+        api: openai.models
+        path: /models
+      credential_pattern: '^[!-~]{8,512}$'
+    mappings:
+      - channel: http
+        method: GET
+        path: /models
+        route: openai-models-list
+      - channel: http
+        method: GET
+        path: /models/{id}
+        route: openai-models-get

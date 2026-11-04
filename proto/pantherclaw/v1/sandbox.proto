@@ -156,6 +156,10 @@ message SandboxServiceStartSessionResponse {
   // agent_hosts maps each host agents use to its connection's name: the
   // edge's mapping (connections' agent_hosts).
   map<string, string> agent_hosts = 4;
+  // model_connections names the connections among agent_hosts' values that
+  // are of kind model (G0 M29 D814): the edge sends their hosts' requests
+  // on its model path (streamed, 16 MiB, 10 minutes).
+  repeated string model_connections = 5;
 }
 
 message SubmitProbeReportRequest {
