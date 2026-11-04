@@ -507,7 +507,7 @@ func TestHR687_TheDispatcherQueuesOneSnapshotPerActiveOrg(t *testing.T) {
 		}
 		dispatched++
 		deadline := time.Now().Add(30 * time.Second)
-		for f.adminCount(`SELECT count(*)::text FROM pc.river_job WHERE kind = 'threatmap.snapshot' AND state = 'completed'`) < dispatched {
+		for f.adminCount(`SELECT count(*)::text FROM pc.river_job WHERE kind = 'threatmap.snapshot' AND state = 'completed'`) < dispatched { //nolint:contextcheck // dbtest's admin reads take no context
 			if time.Now().After(deadline) {
 				t.Fatalf("dispatch %d did not complete", dispatched)
 			}
