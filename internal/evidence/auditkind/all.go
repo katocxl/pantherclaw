@@ -344,6 +344,8 @@ var all = []string{
 	NotificationsInvitationSent,
 	OrgDeleted,
 	OrgDeletionStarted,
+	OrgOwnedAccountAdded,
+	OrgOwnedAccountRemoved,
 	PackageImported,
 	PackageSigningKeyRegistered,
 	PackageSigningKeyRevoked,

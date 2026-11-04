@@ -1,0 +1,280 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.reads.enumeration
+version: "1"
+title: One run read many different targets
+description: >-
+  Within 10 minutes, one run was authorized to read 60 or more different
+  targets. An agent walking a whole repository, bucket or customer list
+  looks like this (G0 M30 D931a, D931b). The rule counts distinct targets
+  by a digest of connection and target id; it does not see the ids or the
+  data. A read budget (D930) limits the volume itself.
+severity: MEDIUM
+attention: ALERT
+basis: INFERRED
+atlas: [AML.T0075]
+attack: [T1119, T1530]
+edition: business
+on: [receipt.decision]
+match: >-
+  event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"]
+  && (event.attrs.?access.orValue("") == "read"
+  || event.operation.matches("\.(read|get|list|search|download|export|fetch|clone)(\.|$)"))
+window:
+  duration: 10m
+  group_by: [subjects.run]
+  distinct: attrs.target_digest
+  count: 60
+group: run
+tests:
+  - name: sixty targets
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 5s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t02}, at: 10s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t03}, at: 15s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t04}, at: 20s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t05}, at: 25s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t06}, at: 30s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t07}, at: 35s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t08}, at: 40s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t09}, at: 45s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t10}, at: 50s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t11}, at: 55s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t12}, at: 60s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t13}, at: 65s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t14}, at: 70s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t15}, at: 75s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t16}, at: 80s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t17}, at: 85s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t18}, at: 90s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t19}, at: 95s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t20}, at: 100s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t21}, at: 105s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t22}, at: 110s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t23}, at: 115s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t24}, at: 120s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t25}, at: 125s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t26}, at: 130s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t27}, at: 135s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t28}, at: 140s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t29}, at: 145s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t30}, at: 150s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t31}, at: 155s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t32}, at: 160s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t33}, at: 165s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t34}, at: 170s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t35}, at: 175s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t36}, at: 180s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t37}, at: 185s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t38}, at: 190s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t39}, at: 195s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t40}, at: 200s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t41}, at: 205s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t42}, at: 210s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t43}, at: 215s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t44}, at: 220s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t45}, at: 225s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t46}, at: 230s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t47}, at: 235s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t48}, at: 240s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t49}, at: 245s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t50}, at: 250s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t51}, at: 255s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t52}, at: 260s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t53}, at: 265s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t54}, at: 270s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t55}, at: 275s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t56}, at: 280s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t57}, at: 285s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t58}, at: 290s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t59}, at: 295s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t60}, at: 300s}
+  - name: one target read often
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 5s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 10s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 15s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 20s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 25s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 30s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 35s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 40s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 45s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 50s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 55s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 60s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 65s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 70s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 75s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 80s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 85s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 90s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 95s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 100s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 105s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 110s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 115s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 120s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 125s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 130s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 135s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 140s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 145s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 150s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 155s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 160s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 165s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 170s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 175s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 180s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 185s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 190s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 195s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 200s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 205s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 210s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 215s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 220s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 225s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 230s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 235s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 240s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 245s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 250s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 255s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 260s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 265s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 270s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 275s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 280s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 285s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 290s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 295s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 300s}
+  - name: fifty nine targets
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 5s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t02}, at: 10s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t03}, at: 15s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t04}, at: 20s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t05}, at: 25s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t06}, at: 30s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t07}, at: 35s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t08}, at: 40s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t09}, at: 45s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t10}, at: 50s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t11}, at: 55s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t12}, at: 60s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t13}, at: 65s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t14}, at: 70s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t15}, at: 75s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t16}, at: 80s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t17}, at: 85s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t18}, at: 90s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t19}, at: 95s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t20}, at: 100s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t21}, at: 105s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t22}, at: 110s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t23}, at: 115s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t24}, at: 120s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t25}, at: 125s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t26}, at: 130s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t27}, at: 135s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t28}, at: 140s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t29}, at: 145s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t30}, at: 150s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t31}, at: 155s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t32}, at: 160s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t33}, at: 165s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t34}, at: 170s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t35}, at: 175s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t36}, at: 180s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t37}, at: 185s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t38}, at: 190s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t39}, at: 195s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t40}, at: 200s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t41}, at: 205s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t42}, at: 210s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t43}, at: 215s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t44}, at: 220s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t45}, at: 225s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t46}, at: 230s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t47}, at: 235s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t48}, at: 240s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t49}, at: 245s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t50}, at: 250s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t51}, at: 255s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t52}, at: 260s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t53}, at: 265s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t54}, at: 270s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t55}, at: 275s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t56}, at: 280s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t57}, at: 285s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t58}, at: 290s}
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t59}, at: 295s}
+  - name: reads denied
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t01}, at: 5s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t02}, at: 10s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t03}, at: 15s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t04}, at: 20s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t05}, at: 25s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t06}, at: 30s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t07}, at: 35s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t08}, at: 40s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t09}, at: 45s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t10}, at: 50s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t11}, at: 55s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t12}, at: 60s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t13}, at: 65s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t14}, at: 70s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t15}, at: 75s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t16}, at: 80s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t17}, at: 85s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t18}, at: 90s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t19}, at: 95s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t20}, at: 100s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t21}, at: 105s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t22}, at: 110s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t23}, at: 115s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t24}, at: 120s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t25}, at: 125s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t26}, at: 130s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t27}, at: 135s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t28}, at: 140s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t29}, at: 145s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t30}, at: 150s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t31}, at: 155s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t32}, at: 160s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t33}, at: 165s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t34}, at: 170s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t35}, at: 175s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t36}, at: 180s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t37}, at: 185s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t38}, at: 190s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t39}, at: 195s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t40}, at: 200s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t41}, at: 205s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t42}, at: 210s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t43}, at: 215s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t44}, at: 220s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t45}, at: 225s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t46}, at: 230s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t47}, at: 235s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t48}, at: 240s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t49}, at: 245s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t50}, at: 250s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t51}, at: 255s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t52}, at: 260s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t53}, at: 265s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t54}, at: 270s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t55}, at: 275s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t56}, at: 280s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t57}, at: 285s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t58}, at: 290s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t59}, at: 295s}
+      - {kind: receipt.decision, decision: DENY, operation: crm.customer.read, subjects: {run: r1}, attrs: {target_digest: t60}, at: 300s}

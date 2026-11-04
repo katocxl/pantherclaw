@@ -1,0 +1,5 @@
+{
+  "limits": {
+    "budgets": [{"id": "reads_per_day", "grouping": "task", "operations": ["*"], "access": "read", "max_count": "500", "period": "day"}]
+  }
+}

@@ -188,6 +188,9 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 	if pap.Would != "" {
 		entry["would"] = pap.Would
 	}
+	if d := TargetDigest(ev); d != "" {
+		entry["target_digest"] = d // G0 M30 D931a: distinct targets, no raw ids
+	}
 	body, err := evdomain.CanonicalBody(entry)
 	if err != nil {
 		return Receipt{}, err
@@ -458,4 +461,21 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 		return Receipt{}, err
 	}
 	return Receipt{JWS: jws, Body: body}, nil
+}
+
+// TargetDigest is the decision event's target_digest (G0 M30 D931a): the
+// first 32 hex characters of sha256(connection id, NUL, target id), so a
+// detection can count the distinct targets a run touched without the feed
+// carrying raw ids. It is empty when the decision has no target; an action
+// without a connection hashes an empty connection id.
+func TargetDigest(ev *pipeline.Evaluation) string {
+	if ev.Target.ID == "" {
+		return ""
+	}
+	conn := ""
+	if ev.Connection != nil {
+		conn = ev.Connection.ID.String()
+	}
+	sum := sha256.Sum256([]byte(conn + "\x00" + ev.Target.ID))
+	return hex.EncodeToString(sum[:])[:32]
 }

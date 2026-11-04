@@ -123,13 +123,14 @@ func decision(e *Event, body []byte) error {
 		Reason     string `json:"reason"`
 		Monitor    string `json:"monitor"`
 		Would      string `json:"would"`
+		Target     string `json:"target_digest"`
 	}
 	if err := json.Unmarshal(body, &b); err != nil {
 		return err
 	}
 	e.Decision, e.Reason = b.Decision, b.Reason
 	e.Subjects = appendID(e.Subjects, reflexdomain.SubjectTransaction, b.Txn)
-	e.Attrs = attrs("evaluation", b.Evaluation, "would", b.Would)
+	e.Attrs = attrs("evaluation", b.Evaluation, "would", b.Would, "target_digest", b.Target)
 	if b.Monitor == "true" {
 		e.Mode = "MONITOR"
 	}

@@ -134,6 +134,11 @@ const (
 	SurfaceSAMLDisable        Surface = "saml.connection.disable"
 	SurfaceGroupMappingAdd    Surface = "group.role_mapping.add"
 	SurfaceGroupMappingRemove Surface = "group.role_mapping.remove"
+	// SurfaceOwnedAccountAdd adds an account to the org's owned list, so
+	// shares to it stop holding (G0 M30 D933, HR-708): always held for a
+	// second person, whatever the CONSEQUENCE_RULES mode (AlwaysProtected).
+	// Removing one applies directly.
+	SurfaceOwnedAccountAdd Surface = "org.owned_account.add"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -169,6 +174,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermContentManage
 	case SurfaceCustomRuleConfirm:
 		return td.PermDetectionManage
+	case SurfaceOwnedAccountAdd:
+		return td.PermOwnedAccountsManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
 	}
@@ -178,14 +185,15 @@ func (s Surface) Permission() td.Permission {
 // AlwaysProtected reports whether every change of the surface waits for a
 // second person, in every mode of its category, and can never be applied
 // as an emergency (G0 M17 D107, HR-453; G0 M18 D155, HR-481; G0 M24 D223,
-// HR-586; G0 M26 D408, HR-623; HR-666; G0 M30 D945b).
+// HR-586; G0 M26 D408, HR-623; HR-666; G0 M30 D933, HR-708; G0 M30 D945b).
 func (s Surface) AlwaysProtected() bool {
 	return s == SurfaceConsequenceRule ||
 		s == SurfaceIdentityProviderPut || s == SurfaceIdentityProviderDisable || s == SurfaceIdentityProviderOwnOnly ||
 		s == SurfaceCatalogMode || s == SurfaceContentSignalMode || s == SurfaceCustomRuleConfirm ||
 		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient ||
 		s == SurfaceSCIMTokenActivate || s == SurfaceSAMLConnectionPut || s == SurfaceSAMLDisable ||
-		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove || s == SurfaceModelCapture
+		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove || s == SurfaceModelCapture ||
+		s == SurfaceOwnedAccountAdd
 }
 
 // Change domains and kinds of internal/changes (D6).

@@ -90,6 +90,9 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		if err != nil {
 			return Request{}, err
 		}
+		if t.Encoding == defs.EncodingAWSRest && !defs.S3BucketRe.MatchString(v) {
+			return Request{}, fmt.Errorf("%w: %q is not an S3 bucket name", ErrBuild, v) // G0 M30 D934a
+		}
 		path.WriteString(url.PathEscape(v))
 	}
 	u, err := url.Parse(base.Scheme + "://" + base.Host + path.String())
@@ -149,6 +152,9 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		sum := sha256.Sum256(out.Body)
 		out.BodySHA256 = sum[:]
 	}
+	if t.Encoding == defs.EncodingAWSRest {
+		awsRest(&out, t, vals)
+	}
 	if gc.groups > 0 && gc.matched == 0 {
 		return Request{}, fmt.Errorf("%w: no part of the target id is sent", ErrBuild)
 	}
@@ -156,6 +162,28 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		out.IdempotencyHeader, out.IdempotencyKey = t.IdempotencyHeader, "pc-"+transaction
 	}
 	return out, nil
+}
+
+// awsRest completes an aws-rest request (G0 M30 D934a): the fixed
+// subresource is the whole query (?policy, ?acl), the body param is the raw
+// body, and each header param's enum value goes in its header.
+func awsRest(out *Request, t *defs.HTTPDispatch, vals defs.Values) {
+	out.URL.RawQuery = t.Subresource
+	if t.BodyParam != "" {
+		if v, ok := vals[t.BodyParam]; ok {
+			out.ContentType, out.Body = defs.AWSRestBodyType, []byte(v.Str)
+			sum := sha256.Sum256(out.Body)
+			out.BodySHA256 = sum[:]
+		}
+	}
+	for name, header := range t.HeaderParams {
+		if v, ok := vals[name]; ok {
+			if out.Headers == nil {
+				out.Headers = map[string]string{}
+			}
+			out.Headers[header] = v.Str
+		}
+	}
 }
 
 // groupCount counts the target-group references of a request's body and

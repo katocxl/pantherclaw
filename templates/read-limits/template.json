@@ -1,0 +1,22 @@
+{
+  "name": "read-limits",
+  "summary": "A task's agents read at most 500 times a day across every operation whose definition is a read; the 501st read that day is refused.",
+  "task_ref": "template:read-limits",
+  "requires_agent": false,
+  "protects": [
+    "the task's grant counts every read, by the definition's access, and refuses the 501st read in a day (COUNT_LIMIT_REACHED)"
+  ],
+  "excludes": [
+    "writes: the count covers reads only",
+    "what a read returns: the count is of reads, not of rows or bytes",
+    "reads spread across several tasks or grants, each counted on its own",
+    "the limit is an example: change it in a new grant before relying on it"
+  ],
+  "placeholders": {},
+  "routes": [],
+  "grant": "a count of at most 500 reads a day, across every operation whose definition is a read",
+  "requires": {
+    "packages": [],
+    "connections": []
+  }
+}

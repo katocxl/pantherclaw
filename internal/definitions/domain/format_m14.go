@@ -18,17 +18,23 @@ type Encoding string
 // protocols (G0 M20 D254): a JSON body as application/x-amz-json-1.1 with
 // the operation in a fixed X-Amz-Target header, and a flat form body whose
 // fixed Action and Version name the operation, answered in XML. Both are
-// POSTs to the service's root path.
+// POSTs to the service's root path. aws-rest is S3's REST protocol (G0 M30
+// D934a): a request to a path naming the bucket with a fixed subresource
+// (?policy, ?acl) naming the operation, a raw body from one param and
+// headers from enum params, never from the agent's own fields.
 const (
 	EncodingDefault  Encoding = ""
 	EncodingJSON     Encoding = "json"
 	EncodingForm     Encoding = "form"
 	EncodingAWSJSON  Encoding = "aws-json"
 	EncodingAWSQuery Encoding = "aws-query"
+	EncodingAWSRest  Encoding = "aws-rest"
 )
 
 // AWS returns whether e is one of AWS's protocols.
-func (e Encoding) AWS() bool { return e == EncodingAWSJSON || e == EncodingAWSQuery }
+func (e Encoding) AWS() bool {
+	return e == EncodingAWSJSON || e == EncodingAWSQuery || e == EncodingAWSRest
+}
 
 // AWS protocol details (D254): the media types of aws-json bodies (1.1
 // sent, 1.0 or 1.1 read) and the header that names an aws-json operation.

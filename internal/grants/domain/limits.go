@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,10 +42,54 @@ type BudgetRule struct {
 	MaxCount   string           `json:"max_count,omitzero"`
 	MaxTokens  string           `json:"max_tokens,omitzero"`
 	Period     bdomain.Period   `json:"period"`
+	// Access, when set, keeps the rule to the operations of that access
+	// ("read" or "write"); it needs max_count and takes no limit or currency
+	// (G0 M30 D930). Only an access rule may name the operations "*" (D930a).
+	Access string `json:"access,omitzero"`
 }
 
 // IsTokenRule reports whether r caps model tokens (G0 M29 D821).
 func (r BudgetRule) IsTokenRule() bool { return r.MaxTokens != "" }
+
+// opsWildcard is the operations entry that names every operation of a
+// rule's access (G0 M30 D930a).
+const opsWildcard = "*"
+
+// validateScope checks the rule's operations and access (G0 M30 D930,
+// D930a): access is "", "read" or "write"; an access rule counts actions
+// only, so it needs max_count and takes no limit or currency; and "*" is
+// accepted only alone, on an access rule.
+func (r BudgetRule) validateScope(name string) error {
+	switch defs.Access(r.Access) {
+	case "", defs.AccessRead, defs.AccessWrite:
+	default:
+		return invalid("%s: unknown access %q", name, r.Access)
+	}
+	if r.Access != "" && (r.MaxCount == "" || r.Limit != "" || r.Currency != "" || r.MaxTokens != "") {
+		return invalid("%s: %s: an access budget sets max_count and no limit, currency or max_tokens", name, CodeBudgetAccessNeedsCount)
+	}
+	if slices.Contains(r.Operations, opsWildcard) {
+		if r.Access == "" || len(r.Operations) != 1 {
+			return invalid("%s: %s: \"*\" stands alone and needs access", name, CodeBudgetWildcardNeedsAccess)
+		}
+		return nil
+	}
+	if err := r.Operations.validate(name + ".operations"); err != nil || len(r.Operations) == 0 {
+		return invalid("%s: name the operations it covers", name)
+	}
+	return nil
+}
+
+// covers reports whether the rule applies to the action: its operations
+// match and, on an access rule, the action's definition has that access
+// (G0 M30 D930). "*" matches every operation, so with access it covers
+// every operation of that access (D930a).
+func (r BudgetRule) covers(a Action) bool {
+	if r.Access != "" && string(a.Access) != r.Access {
+		return false
+	}
+	return r.Operations.Matches(a.Operation)
+}
 
 // CountRule limits how many of the actions it covers may happen per key
 // and window (HR-049). Key is one of: task (the declaring grant, or for an
@@ -107,8 +152,8 @@ func (l Limits) validate(onGrant bool) error {
 			return invalid("%s: rule ids are unique lowercase names", name)
 		}
 		seen[r.ID] = true
-		if err := r.Operations.validate(name + ".operations"); err != nil || len(r.Operations) == 0 {
-			return invalid("%s: name the operations it covers", name)
+		if err := r.validateScope(name); err != nil {
+			return err
 		}
 		switch {
 		case !r.Grouping.Valid():
@@ -248,6 +293,12 @@ const (
 	ReasonCounterCapacityExceed = "COUNTER_CAPACITY"
 )
 
+// Codes of budget rules refused as invalid (G0 M30 D930, D930a).
+const (
+	CodeBudgetAccessNeedsCount    = "BUDGET_ACCESS_NEEDS_COUNT"
+	CodeBudgetWildcardNeedsAccess = "BUDGET_WILDCARD_NEEDS_ACCESS"
+)
+
 // DebitContext is what debits are keyed by, besides the action.
 type DebitContext struct {
 	Now       time.Time
@@ -301,7 +352,7 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 		value, valueErr := moneyParam(a.Params)
 		amountRules, inCurrency := 0, 0
 		for _, r := range limits.Budgets {
-			if !r.Operations.Matches(a.Operation) {
+			if !r.covers(a) {
 				continue
 			}
 			if r.IsTokenRule() {
