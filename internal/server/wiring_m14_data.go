@@ -8,6 +8,7 @@ import (
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/connections/pgmanifest"
+	"github.com/katocxl/pantherclaw/internal/connections/sfmanifest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -44,7 +45,9 @@ func postgresManifests(d apiDeps) *pgmanifest.Service {
 func mountM14Data(mux *http.ServeMux, d apiDeps) {
 	if d.web != nil {
 		svc := postgresManifests(d)
-		d.web.MountPostgresManifests(mux, svc)
+		// One confirm path for postgres and snowflake manifests (G0 M31
+		// D962a).
+		d.web.MountPostgresManifests(mux, manifestsByKind{pg: svc, sf: sfmanifest.New(d.pool)})
 		probeM14("m14.postgres.manifests", svc)
 	}
 }

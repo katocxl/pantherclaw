@@ -93,7 +93,7 @@ func withScope(ctx context.Context, conn *control.Connection, def *defs.Definiti
 		seen[o.GetKind()] = true
 		switch o.GetKind() {
 		case obligationRecordScope:
-			if conn.GetKind() != "postgres" || !slices.Contains(def.Scoping, "records") || !pgdispatch.ValidIdentifier(o.GetParam()) {
+			if (conn.GetKind() != "postgres" && conn.GetKind() != "snowflake") || !slices.Contains(def.Scoping, "records") || !pgdispatch.ValidIdentifier(o.GetParam()) {
 				return ctx, CodeScopeUnsupported
 			}
 			s.records = &pgdispatch.RecordScope{Key: o.GetParam(), Values: slices.Clone(o.GetValues())}
@@ -114,8 +114,9 @@ func withScope(ctx context.Context, conn *control.Connection, def *defs.Definiti
 		return ctx, ""
 	}
 	// Only these routes pass the answer through the scope engine: any other
-	// kind or access mode fails closed (D102, D116).
-	if (conn.GetKind() != "http" && conn.GetKind() != "postgres") || conn.GetAccessMode() != "pantherclaw_held" {
+	// kind or access mode fails closed (D102, D116); snowflake is held to
+	// the scope exactly like postgres (G0 M31 D962a).
+	if !slices.Contains([]string{"http", "postgres", "snowflake"}, conn.GetKind()) || conn.GetAccessMode() != "pantherclaw_held" {
 		return ctx, CodeScopeUnsupported
 	}
 	return context.WithValue(ctx, scopeKey{}, &s), ""

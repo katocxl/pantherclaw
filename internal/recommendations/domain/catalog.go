@@ -192,6 +192,10 @@ const (
 	PackageSalesforce = "pc.salesforce"
 	PackageNotion     = "pc.notion"
 	PackageLinear     = "pc.linear"
+	// The M31 cloud model and data packages (G0 M31 D961, D962, D962a).
+	PackageVertex    = "pc.vertex"
+	PackageBedrock   = "pc.bedrock"
+	PackageSnowflake = "pc.snowflake"
 )
 
 // Procedures that list evidence.

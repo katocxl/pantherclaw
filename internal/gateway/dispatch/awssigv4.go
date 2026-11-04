@@ -49,13 +49,23 @@ func (e *Engine) awsSession(ctx context.Context, conn *control.Connection, def *
 	if def.PostVerificationRead() && a.Service != defs.ECSSigningService {
 		return nil, broker.ErrAWSAction
 	}
-	resource, err := def.AWSResourceARN(target, a.Account(), a.Region, a.Partition())
-	if err != nil {
+	var policy string
+	if profile, ok, err := def.BedrockProfileResources(target, a.Region, a.Partition()); err != nil {
 		return nil, err
-	}
-	policy, err := broker.SessionPolicy(a.Service, action, resource)
-	if err != nil {
-		return nil, err
+	} else if ok {
+		// A system inference profile: the profile and its foundation model
+		// (G0 M31 D961a).
+		if policy, err = broker.BedrockProfilePolicy(a.Service, action, profile); err != nil {
+			return nil, err
+		}
+	} else {
+		resource, err := def.AWSResourceARN(target, a.Account(), a.Region, a.Partition())
+		if err != nil {
+			return nil, err
+		}
+		if policy, err = broker.SessionPolicy(a.Service, action, resource); err != nil {
+			return nil, err
+		}
 	}
 	c, err := e.tokenClient(conn, a.STSURL)
 	if err != nil {

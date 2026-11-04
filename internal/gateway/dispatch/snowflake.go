@@ -41,7 +41,8 @@ const SnowflakeStatementsPath = "/api/v2/statements"
 // snowflakePoll is how often a statement still running is asked about.
 const snowflakePoll = 500 * time.Millisecond
 
-var snowflakeHandleRe = regexp.MustCompile(`^[0-9A-Za-z-]{1,64}$`)
+// snowflakeHandleRe is a statement handle: a UUID, nothing else.
+var snowflakeHandleRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // sendSnowflake builds, commits, sends and records a read of a snowflake
 // connection (G0 M31 D962). The statement is built from the permitted
@@ -202,8 +203,14 @@ func (e *Engine) runSnowflake(ctx context.Context, client *egress.Client, req *h
 			return nil, errSnowflakeTimeout
 		}
 		time.Sleep(snowflakePoll)
-		poll := *u
-		poll.Path = u.Path + "/" + a.StatementHandle
+		// A poll goes only to the connection's own host, at
+		// /api/v2/statements/{handle} with handle a UUID (G0 M31 D962,
+		// choice 11): the URL is rebuilt from the base URL's scheme and host,
+		// never taken from the answer.
+		if u.Path != SnowflakeStatementsPath || !snowflakeHandleRe.MatchString(a.StatementHandle) {
+			return nil, errSnowflakeAnswer
+		}
+		poll := url.URL{Scheme: u.Scheme, Host: u.Host, Path: SnowflakeStatementsPath + "/" + a.StatementHandle}
 		next, perr := client.HTTPRequest(ctx, egress.Request{Method: http.MethodGet, URL: &poll})
 		if perr != nil {
 			return nil, perr

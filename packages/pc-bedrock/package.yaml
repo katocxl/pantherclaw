@@ -11,7 +11,10 @@
 # credential is aws_sigv4 sealed for the service bedrock: each call is
 # signed with a session assumed for that call alone and narrowed to one
 # action on the one foundation model the path names (HR-525): InvokeModel
-# for Converse, InvokeModelWithResponseStream for ConverseStream. The
+# for Converse, InvokeModelWithResponseStream for ConverseStream. A
+# system inference profile id (prefix us., eu., apac., global., jp., au. or
+# us-gov.) narrows it instead to that profile in the region (any account)
+# and its foundation model in any region (D961a). The
 # connection's allowed hosts name the STS host beside the runtime's. The
 # agent never holds a key.
 #
