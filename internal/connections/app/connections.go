@@ -433,6 +433,9 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	if err := s.checkModelPrice(ctx, in.Model); err != nil {
 		return Connection{}, err
 	}
+	if in.Model != nil && in.Model.CapturePrompts {
+		return Connection{}, ErrModelCaptureOnCreate // G0 M30 D945b
+	}
 	in.DestinationClass = orDefault(in.DestinationClass, ClassPublic)
 	in.DefaultMode = orDefault(in.DefaultMode, ModeMonitor)
 	in.MaxResponseBytes = orDefault(in.MaxResponseBytes, DefaultMaxResponseBytes)

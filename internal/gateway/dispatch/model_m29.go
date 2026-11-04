@@ -120,6 +120,9 @@ type ModelStart struct {
 	Decision      pb.Decision
 	Monitor       bool
 	Nonce         string
+	// Keep is how many bytes of the reply Answer keeps for capture (G0 M30
+	// D945b); zero keeps none.
+	Keep int
 }
 
 // ModelAnswer is how passing an answer on ended (D818).
@@ -136,6 +139,10 @@ type ModelAnswer struct {
 	Usage modelapi.Usage
 	// Digest is the SHA-256 of the bytes the provider sent.
 	Digest []byte
+	// Kept is the first ModelStart.Keep bytes of the reply, unredacted,
+	// and Size the reply's whole length (G0 M30 D945b).
+	Kept []byte
+	Size int64
 }
 
 // DispatchModel runs one model call down the model path (D812): the
@@ -291,14 +298,19 @@ func (e *Engine) sendModel(ctx context.Context, r Result, c ModelCall, d decided
 	}
 	ans := c.Answer(ModelStart{
 		Response: res, Secret: secret, TransactionID: r.TransactionID, Decision: r.Decision, Monitor: r.Monitor, Nonce: r.Nonce,
+		Keep: modelKeep(conn, c.Action.Action.Operation, r.Monitor, secret, time.Now()),
 	})
 	_ = res.Body.Close()
 	elapsed := time.Since(start)
 	t.lap("target")
+	// Bodies an active capture profile asks for, redacted while the secret
+	// is still held (G0 M30 D945b).
+	caps := modelCaptures(conn, c.Action.Action.Operation, r.Monitor, body, ans.Kept, ans.Size, secret, time.Now())
 	done()
 	outcome, class, code := modelOutcome(res.StatusCode, ans)
 	e.breaker.record(ctx, conn, outcome)
-	// Metadata only, never a body (D820, HR-695).
+	// Metadata only, never a body (D820, HR-695): a body is kept only as a
+	// capture (G0 M30 D945b).
 	e.log.InfoContext(ctx, "gateway.model_call", slog.String("connection_id", conn.GetId()), slog.String("transaction_id", want.Txn),
 		slog.String("operation", c.Action.Action.Operation), slog.String("model", c.Action.Action.Target.ID),
 		slog.Int("input_bytes", len(body)), slog.Int("status", res.StatusCode), slog.String("outcome", outcome.String()),
@@ -309,7 +321,7 @@ func (e *Engine) sendModel(ctx context.Context, r Result, c ModelCall, d decided
 		e.log.WarnContext(ctx, "gateway.model_answer_cut", slog.String("transaction_id", want.Txn), pclog.Err(ans.Err))
 	}
 	return e.record(ctx, r, want, outcome, res.StatusCode, ans.Digest, elapsed, class, code, t,
-		usage(ans, outcome == pb.Outcome_OUTCOME_ACCEPTED))
+		usage(ans, outcome == pb.Outcome_OUTCOME_ACCEPTED), func(req *pb.RecordExecutionRequest) { req.Captures = caps })
 }
 
 // modelUsageOf returns what a model call's record carries (D818, D825):

@@ -256,8 +256,11 @@ type McpClient struct {
 	RedirectUris []string `protobuf:"bytes,8,rep,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
 	// SHA-256 of the confirmed document, hex.
 	DocumentDigest string `protobuf:"bytes,9,opt,name=document_digest,json=documentDigest,proto3" json:"document_digest,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The confirmed document asks for DPoP-bound access tokens (RFC 9449):
+	// every token request must then carry a DPoP proof (G0 M30 D911, D914).
+	DpopBound     bool `protobuf:"varint,10,opt,name=dpop_bound,json=dpopBound,proto3" json:"dpop_bound,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *McpClient) Reset() {
@@ -351,6 +354,13 @@ func (x *McpClient) GetDocumentDigest() string {
 		return x.DocumentDigest
 	}
 	return ""
+}
+
+func (x *McpClient) GetDpopBound() bool {
+	if x != nil {
+		return x.DpopBound
+	}
+	return false
 }
 
 // McpAccess is the org's MCP authorization setting.
@@ -1710,7 +1720,7 @@ const file_pantherclaw_v1_idp_access_proto_rawDesc = "" +
 	"\bagent_id\x18\x04 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\x12;\n" +
 	"\vcreate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xb8\x02\n" +
+	"createTime\"\xd7\x02\n" +
 	"\tMcpClient\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1724,7 +1734,10 @@ const file_pantherclaw_v1_idp_access_proto_rawDesc = "" +
 	"\vclient_name\x18\a \x01(\tR\n" +
 	"clientName\x12#\n" +
 	"\rredirect_uris\x18\b \x03(\tR\fredirectUris\x12'\n" +
-	"\x0fdocument_digest\x18\t \x01(\tR\x0edocumentDigest\"^\n" +
+	"\x0fdocument_digest\x18\t \x01(\tR\x0edocumentDigest\x12\x1d\n" +
+	"\n" +
+	"dpop_bound\x18\n" +
+	" \x01(\bR\tdpopBound\"^\n" +
 	"\tMcpAccess\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1f\n" +
 	"\vgateway_url\x18\x02 \x01(\tR\n" +

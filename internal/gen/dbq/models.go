@@ -2817,6 +2817,7 @@ type PcMcpAuthorizationCode struct {
 	UsedAt          *time.Time
 	RunID           *ids.UUID
 	ReusedAt        *time.Time
+	DpopJkt         *string
 }
 
 type PcMcpCatalogSetting struct {
@@ -2841,6 +2842,7 @@ type PcMcpClient struct {
 	ActivatedAt    *time.Time
 	RemovedBy      *ids.UUID
 	RemovedAt      *time.Time
+	DpopBound      bool
 }
 
 type PcMcpRefreshToken struct {
@@ -2854,6 +2856,7 @@ type PcMcpRefreshToken struct {
 	State     string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	DpopJkt   *string
 }
 
 type PcMcpServer struct {
@@ -2917,6 +2920,7 @@ type PcModelConnection struct {
 	PriceCacheRead     *money.Decimal
 	PriceCacheWrite    *money.Decimal
 	UpdatedAt          time.Time
+	CapturePrompts     bool
 }
 
 type PcModelDraft struct {

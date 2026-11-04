@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"net/url"
 	"strings"
@@ -44,10 +45,15 @@ func (s *Service) McpVerifier() (*jws.Verifier, error) {
 // admitted and its agent usable. Bearer proof is level 0 (HR-627). The run
 // and the connection the token names are checked against the action by the
 // caller.
+//
+// A DPoP-bound token (cnf.jkt and pap.proof "dpop", G0 M30 D913) is never
+// accepted as a bearer token: in.Proof must be a DPoP proof over this
+// request, signed with the token's key, carrying the token's hash and a
+// live nonce of the org, and its jti is consumed like a PAP/1 proof's
+// (replay: proof_replay; nonce missing or stale: use_nonce). A proof with
+// an unbound token is refused: the gateway forwards one only for the DPoP
+// scheme.
 func (s *Service) identifyBearer(ctx context.Context, org ids.OrgID, in IdentifyInput) (Identified, error) {
-	if in.Proof != "" {
-		return Identified{}, pap.Err(pap.CodeInvalidToken) // a bearer token carries no PAP/1 proof
-	}
 	if !OAuthRoute(in.Request.URL) {
 		return Identified{}, pap.Err(pap.CodeInvalidToken) // a pap-mcp+jwt on a PAP/1 route
 	}
@@ -66,6 +72,17 @@ func (s *Service) identifyBearer(ctx context.Context, org ids.OrgID, in Identify
 		return Identified{}, pap.Err(pap.CodeInvalidToken)
 	}
 	out := Identified{Instance: tok.Instance, Environment: tok.Environment, Level: 0, Proof: mcptoken.ProofBearer, Bearer: &tok}
+	switch {
+	case tok.JKT == "" && in.Proof != "":
+		return Identified{}, pap.Err(pap.CodeInvalidToken) // an unbound token under the DPoP scheme
+	case tok.JKT != "" && in.Proof == "":
+		return Identified{}, pap.Err(pap.CodeInvalidToken) // a bound token is never bearer (HR-700)
+	case tok.JKT != "":
+		if err := s.checkDPoP(ctx, org, in, tok); err != nil {
+			return Identified{}, err
+		}
+		out.Proof, out.JKT = mcptoken.ProofDPoP, tok.JKT
+	}
 	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		r, err := q.GetInstance(ctx, org, tok.Instance.Instance)
@@ -111,4 +128,23 @@ func (s *Service) identifyBearer(ctx context.Context, org ids.OrgID, in Identify
 		return Identified{}, err
 	}
 	return out, err
+}
+
+// checkDPoP verifies the DPoP proof of a call with a DPoP-bound token (RFC
+// 9449 §4.3, §7.1; G0 M30 D913): its key is the token's cnf.jkt, htm the
+// request's method, htu the URL the token's aud was checked against, ath
+// the token's hash; then its nonce must be live and its jti unseen, which
+// Consume records in its own committed transaction (HR-090).
+func (s *Service) checkDPoP(ctx context.Context, org ids.OrgID, in IdentifyInput, tok mcptoken.Token) error {
+	c, err := pap.VerifyDPoP(in.Proof, pap.DPoPRequest{Method: in.Request.Method, URL: in.Request.URL, Token: in.Request.Token}, s.clk.Now())
+	if err != nil {
+		return err
+	}
+	if subtle.ConstantTimeCompare([]byte(c.JKT()), []byte(tok.JKT)) != 1 {
+		return pap.Err(pap.CodeKeyMismatch)
+	}
+	if c.Nonce() == "" {
+		return pap.Err(pap.CodeUseNonce)
+	}
+	return s.Consume(ctx, org, c)
 }

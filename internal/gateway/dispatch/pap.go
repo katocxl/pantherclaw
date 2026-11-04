@@ -34,6 +34,11 @@ const (
 	// HeaderAction carries the action token to a target-enforced
 	// connection (PAP-1 §10, HR-188).
 	HeaderAction = "PAP-Action"
+	// HeaderMcpDPoP carries the DPoP proof of a request the OAuth route
+	// took under the DPoP scheme (G0 M30 D913). Only that route sets it,
+	// after removing any a client sent, and only the MCP face's OAuth path
+	// reads it.
+	HeaderMcpDPoP = "PC-MCP-DPoP"
 )
 
 // nonceCacheFor bounds how long the gateway serves a nonce from its cache.

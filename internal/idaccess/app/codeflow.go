@@ -28,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/idaccess/domain"
 	"github.com/katocxl/pantherclaw/internal/idaccess/ports"
+	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -74,11 +75,16 @@ func redirectError(code, desc string) *AuthorizeError {
 type AuthorizeRequest struct {
 	ClientID, RedirectURI, State, CodeChallenge, Resource, Scope string
 	HasScope                                                     bool
+	// DPoPJKT is the key the code is bound to (RFC 9449 §10): its token
+	// request must prove that key (G0 M30 D912).
+	DPoPJKT string
 }
 
 // AuthorizeParams are the parameters an authorization request carries;
 // any other is ignored (RFC 6749 §3.1).
-var AuthorizeParams = []string{"response_type", "client_id", "redirect_uri", "state", "code_challenge", "code_challenge_method", "resource", "scope"}
+var AuthorizeParams = []string{
+	"response_type", "client_id", "redirect_uri", "state", "code_challenge", "code_challenge_method", "resource", "scope", "dpop_jkt",
+}
 
 // Consent is what the consent page states (D408.4, HR-628): the client by
 // its URL and host and its UNTRUSTED name, the agent it acts as, the server
@@ -137,7 +143,7 @@ func ParseAuthorize(q url.Values) (AuthorizeRequest, *AuthorizeError) {
 	}
 	r := AuthorizeRequest{
 		ClientID: q.Get("client_id"), RedirectURI: q.Get("redirect_uri"), State: q.Get("state"),
-		CodeChallenge: q.Get("code_challenge"), Resource: q.Get("resource"), Scope: q.Get("scope"),
+		CodeChallenge: q.Get("code_challenge"), Resource: q.Get("resource"), Scope: q.Get("scope"), DPoPJKT: q.Get("dpop_jkt"),
 	}
 	_, r.HasScope = q["scope"]
 	if r.ClientID == "" || r.RedirectURI == "" {
@@ -159,6 +165,8 @@ func checkRest(q url.Values, r AuthorizeRequest) *AuthorizeError {
 		return redirectError("invalid_request", "PKCE with S256 is required")
 	case r.Resource == "":
 		return redirectError("invalid_target", "the resource parameter is required")
+	case r.DPoPJKT != "" && !pap.ValidJKT(r.DPoPJKT):
+		return redirectError("invalid_request", "dpop_jkt is not a key thumbprint")
 	}
 	return nil
 }
@@ -359,7 +367,7 @@ func (f *CodeFlow) Approve(ctx context.Context, o ids.OrgID, user ids.UUID, q ur
 		}
 		if err := q.InsertMcpAuthorizationCode(ctx, dbq.InsertMcpAuthorizationCodeParams{
 			OrgID: o, CodeHash: digest(code), ClientID: client.ID, UserID: user, RedirectUri: c.Request.RedirectURI,
-			CodeChallenge: c.Request.CodeChallenge, Resource: c.Resource, ScopeOperations: scopeOps,
+			CodeChallenge: c.Request.CodeChallenge, Resource: c.Resource, ScopeOperations: scopeOps, DpopJkt: optJKT(c.Request.DPoPJKT),
 		}); err != nil {
 			return err
 		}
@@ -432,8 +440,14 @@ func (f *CodeFlow) AuthorizationCode(ctx context.Context, form url.Values) (auth
 	// spend commits on its own, before anything about the request is checked.
 	row, err := f.spendCode(ctx, org, code)
 	var out authnapp.TokenResponse
+	var jkt string
 	if err == nil {
-		out, err = f.finishCode(ctx, org, row, clientURL, form, now)
+		// The DPoP proof is checked once the code is spent: a refused proof
+		// costs the code too (G0 M30 D912).
+		jkt, err = tokenDPoP(ctx, f.Pool, f.PublicURL, org, now)
+	}
+	if err == nil {
+		out, err = f.finishCodeBound(ctx, org, row, clientURL, form, jkt, now)
 	}
 	var r refusal
 	if errors.As(err, &r) {
@@ -494,10 +508,18 @@ func (f *CodeFlow) spendCode(ctx context.Context, org ids.OrgID, code string) (d
 func (f *CodeFlow) finishCode(ctx context.Context, org ids.OrgID, row dbq.PcMcpAuthorizationCode, clientURL string, form url.Values,
 	now time.Time,
 ) (authnapp.TokenResponse, error) {
+	return f.finishCodeBound(ctx, org, row, clientURL, form, "", now)
+}
+
+// finishCodeBound is finishCode for a request that proved the DPoP key jkt
+// ("" for none; G0 M30 D912).
+func (f *CodeFlow) finishCodeBound(ctx context.Context, org ids.OrgID, row dbq.PcMcpAuthorizationCode, clientURL string, form url.Values,
+	jkt string, now time.Time,
+) (authnapp.TokenResponse, error) {
 	var out authnapp.TokenResponse
 	var reused bool
 	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		err := f.redeemCode(ctx, tx, org, row, clientURL, form, now, &out)
+		err := f.redeemCode(ctx, tx, org, row, clientURL, form, jkt, now, &out)
 		if errors.Is(err, errCodeReused) {
 			reused = true
 			return nil
@@ -510,9 +532,12 @@ func (f *CodeFlow) finishCode(ctx context.Context, org ids.OrgID, row dbq.PcMcpA
 	return out, err
 }
 
-// redeemCode checks a spent code's request and issues the tokens.
+// redeemCode checks a spent code's request and issues the tokens, bound to
+// the DPoP key jkt when the request proved one (G0 M30 D912): a client
+// whose document asks for DPoP-bound tokens must prove a key, and a code
+// that names a key must be redeemed with that key.
 func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID, row dbq.PcMcpAuthorizationCode, clientURL string,
-	form url.Values, now time.Time, out *authnapp.TokenResponse,
+	form url.Values, jkt string, now time.Time, out *authnapp.TokenResponse,
 ) error {
 	q := dbq.New(tx)
 	client, err := q.GetMcpClient(ctx, org, row.ClientID)
@@ -530,6 +555,10 @@ func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		return refuse(authnapp.ErrInvalidGrant, "pkce")
 	case form.Get("resource") != "" && form.Get("resource") != row.Resource:
 		return refuse(authnapp.ErrInvalidGrant, "resource_mismatch")
+	case client.DpopBound && jkt == "":
+		return refuse(authnapp.ErrInvalidDPoPProof, "dpop_required")
+	case row.DpopJkt != nil && *row.DpopJkt != jkt:
+		return refuse(authnapp.ErrInvalidDPoPProof, "dpop_jkt_mismatch")
 	}
 	scope, err := domain.ParseScope(strings.Join(row.ScopeOperations, " "), len(row.ScopeOperations) > 0)
 	if err != nil {
@@ -569,7 +598,7 @@ func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		*out = authnapp.TokenResponse{}
 		return errCodeReused
 	}
-	*out, err = f.issue(ctx, q, org, client, run.ID, run.EnvironmentID, run.ExpiresAt, conn, row.Resource, choice.Operations, ids.NewV7(), now)
+	*out, err = f.issue(ctx, q, org, client, run.ID, run.EnvironmentID, run.ExpiresAt, conn, row.Resource, choice.Operations, ids.NewV7(), jkt, now)
 	if err != nil {
 		return err
 	}
@@ -578,6 +607,7 @@ func (f *CodeFlow) redeemCode(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		Object: &audit.Object{Type: "run", ID: run.ID.String()},
 		Details: map[string]string{
 			"grant": "authorization_code", "client": client.ID.String(), "resource": row.Resource, "grant_id": choice.Grant.String(),
+			"binding": bindingOf(jkt),
 		},
 	})
 	return err
@@ -599,13 +629,14 @@ func (f *CodeFlow) liveResource(ctx context.Context, q *dbq.Queries, org ids.Org
 	return conn, nil
 }
 
-// issue mints an access token and a refresh token of family for the run.
+// issue mints an access token and a refresh token of family for the run,
+// both bound to the DPoP key jkt when it is set (G0 M30 D912).
 func (f *CodeFlow) issue(ctx context.Context, q *dbq.Queries, org ids.OrgID, client dbq.PcMcpClient, run, env ids.UUID,
-	runExpires time.Time, conn, resource string, ops []string, family ids.UUID, now time.Time,
+	runExpires time.Time, conn, resource string, ops []string, family ids.UUID, jkt string, now time.Time,
 ) (authnapp.TokenResponse, error) {
 	tok, exp, err := f.Tokens.Mint(ctx, ports.AccessClaims{
 		Org: org, Environment: env, Agent: client.AgentID, Instance: client.InstanceID, Run: run, Connection: conn,
-		Resource: resource, ClientKind: ports.ClientMcp, Client: client.ID, Scope: ops,
+		Resource: resource, ClientKind: ports.ClientMcp, Client: client.ID, Scope: ops, JKT: jkt,
 	}, now)
 	if err != nil {
 		return authnapp.TokenResponse{}, err
@@ -613,12 +644,12 @@ func (f *CodeFlow) issue(ctx context.Context, q *dbq.Queries, org ids.OrgID, cli
 	refresh := secret(RefreshPrefix, org)
 	if err := q.InsertMcpRefreshToken(ctx, dbq.InsertMcpRefreshTokenParams{
 		OrgID: org, ID: ids.NewV7(), FamilyID: family, TokenHash: digest(refresh), ClientID: client.ID, RunID: run,
-		Resource: resource, ExpiresAt: runExpires,
+		Resource: resource, ExpiresAt: runExpires, DpopJkt: optJKT(jkt),
 	}); err != nil {
 		return authnapp.TokenResponse{}, err
 	}
 	return authnapp.TokenResponse{
-		AccessToken: tok, TokenType: "Bearer", ExpiresIn: int(exp.Sub(now).Seconds()), RefreshToken: refresh,
+		AccessToken: tok, TokenType: tokenType(jkt), ExpiresIn: int(exp.Sub(now).Seconds()), RefreshToken: refresh,
 		Scope: strings.Join(ops, " "), RunID: run.String(),
 	}, nil
 }
@@ -652,6 +683,12 @@ func (f *CodeFlow) Refresh(ctx context.Context, form url.Values) (authnapp.Token
 	now := f.Clock.Now()
 	var out authnapp.TokenResponse
 	var reuse errReuse
+	// A refused DPoP proof is answered only after the token's reuse check:
+	// a rotated token presented again still kills its family.
+	jkt, dpopErr := tokenDPoP(ctx, f.Pool, f.PublicURL, org, now)
+	if dpopErr != nil && !errors.As(dpopErr, new(refusal)) {
+		return authnapp.TokenResponse{}, dpopErr
+	}
 	err := f.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		row, err := q.LockMcpRefreshToken(ctx, org, digest(token))
@@ -694,6 +731,9 @@ func (f *CodeFlow) Refresh(ctx context.Context, form url.Values) (authnapp.Token
 		case "KILLED":
 			return refuse(authnapp.ErrInvalidGrant, "refresh_killed")
 		}
+		if dpopErr != nil {
+			return dpopErr
+		}
 		switch {
 		case !row.ExpiresAt.After(now):
 			return refuse(authnapp.ErrInvalidGrant, "refresh_expired")
@@ -701,6 +741,11 @@ func (f *CodeFlow) Refresh(ctx context.Context, form url.Values) (authnapp.Token
 			return refuse(authnapp.ErrInvalidGrant, "client_removed")
 		case form.Get("resource") != "" && form.Get("resource") != row.Resource:
 			return refuse(authnapp.ErrInvalidGrant, "resource_mismatch")
+		case client.DpopBound && jkt == "":
+			return refuse(authnapp.ErrInvalidDPoPProof, "dpop_required")
+		case row.DpopJkt != nil && *row.DpopJkt != jkt:
+			// A bound refresh token is refreshed with its own key only (G0 M30 D912).
+			return refuse(authnapp.ErrInvalidDPoPProof, "dpop_key_mismatch")
 		}
 		run, err := q.SubjectRun(ctx, org, row.RunID)
 		if err != nil {
@@ -719,7 +764,8 @@ func (f *CodeFlow) Refresh(ctx context.Context, form url.Values) (authnapp.Token
 		} else if n != 1 {
 			return refuse(authnapp.ErrInvalidGrant, "refresh_raced")
 		}
-		out, err = f.issue(ctx, q, org, client, row.RunID, run.EnvironmentID, run.ExpiresAt, conn, row.Resource, run.ScopeOperations, row.FamilyID, now)
+		out, err = f.issue(ctx, q, org, client, row.RunID, run.EnvironmentID, run.ExpiresAt, conn, row.Resource, run.ScopeOperations, row.FamilyID,
+			jkt, now)
 		return err
 	})
 	var r refusal
@@ -794,5 +840,7 @@ func (f *CodeFlow) Metadata(ctx context.Context, org ids.OrgID) (map[string]any,
 		"client_id_metadata_document_supported":            true,
 		"authorization_response_iss_parameter_supported":   true,
 		"authorization_grant_profiles_supported":           []string{GrantProfileIDJAG},
+		// DPoP proofs use the PAP/1 proof algorithms (G0 M30 D914).
+		"dpop_signing_alg_values_supported": pap.ProofAlgorithms,
 	}, true, nil
 }

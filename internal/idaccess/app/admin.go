@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -456,7 +457,7 @@ func (s *Admin) document(ctx context.Context, clientURL string) (ports.ClientMet
 func documentSummary(md ports.ClientMetadata) map[string]string {
 	return map[string]string{
 		"client_name": md.Name, "redirect_uris": strings.Join(md.RedirectURIs, " "),
-		"document_digest": fmt.Sprintf("%x", DocumentDigest(md)),
+		"document_digest": fmt.Sprintf("%x", DocumentDigest(md)), "dpop_bound": strconv.FormatBool(md.DPoPBound),
 	}
 }
 
@@ -499,7 +500,7 @@ func (s *Admin) AllowMcpClient(ctx context.Context, clientURL string, agent ids.
 		}
 		row, err = q.InsertMcpClient(ctx, dbq.InsertMcpClientParams{
 			OrgID: c.Org, ID: ids.NewV7(), ClientUrl: clientURL, AgentID: agent, InstanceID: inst.ID, CreatedBy: c.Principal.ID,
-			ClientName: md.Name, RedirectUris: md.RedirectURIs, DocumentDigest: DocumentDigest(md),
+			ClientName: md.Name, RedirectUris: md.RedirectURIs, DocumentDigest: DocumentDigest(md), DpopBound: md.DPoPBound,
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrState
@@ -522,6 +523,8 @@ type mcpDocumentPayload struct {
 	Redirect []string `json:"redirect_uris"`
 	Previous []byte   `json:"previous_digest"`
 	Digest   []byte   `json:"document_digest"`
+	// DPoPBound follows the document (G0 M30 D911).
+	DPoPBound bool `json:"dpop_bound,omitzero"`
 }
 
 // RefreshMcpClientDocument files taking an active client's live document,
@@ -563,7 +566,7 @@ func (s *Admin) RefreshMcpClientDocument(ctx context.Context, id ids.UUID) (dbq.
 		summary["previous_digest"] = fmt.Sprintf("%x", row.DocumentDigest)
 		var err error
 		f, err = s.file(ctx, tx, c, protect.SurfaceMcpClient, row.ID, mcpDocumentPayload{
-			ID: row.ID, Name: md.Name, Redirect: md.RedirectURIs, Previous: row.DocumentDigest, Digest: d,
+			ID: row.ID, Name: md.Name, Redirect: md.RedirectURIs, Previous: row.DocumentDigest, Digest: d, DPoPBound: md.DPoPBound,
 		}, summary)
 		return err
 	})
@@ -769,7 +772,7 @@ func (s *Admin) applyMcpClient(ctx context.Context, tx db.TenantTx, author tenan
 	if doc, ok := documentPayload(payload); ok {
 		if err := one(q.UpdateMcpClientDocument(ctx, dbq.UpdateMcpClientDocumentParams{
 			OrgID: tx.OrgID(), ID: id, ClientName: doc.Name, RedirectUris: doc.Redirect, DocumentDigest: doc.Digest,
-			PreviousDigest: doc.Previous,
+			PreviousDigest: doc.Previous, DpopBound: doc.DPoPBound,
 		})); err != nil {
 			return err
 		}
