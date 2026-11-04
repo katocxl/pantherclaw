@@ -250,6 +250,36 @@ func (q *Queries) ExecutionContext(ctx context.Context, orgID ids.OrgID, iD ids.
 	return i, err
 }
 
+const executionCredentialKnown = `-- name: ExecutionCredentialKnown :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.credentials
+    WHERE org_id = $1 AND id = $2 AND connection_id = $3
+      AND version = $4::integer
+)
+`
+
+type ExecutionCredentialKnownParams struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Version      int32
+}
+
+// ExecutionCredentialKnown: whether a credential the gateway reported
+// opening is that version of the connection's credential, in any state
+// (HR-660).
+func (q *Queries) ExecutionCredentialKnown(ctx context.Context, arg ExecutionCredentialKnownParams) (bool, error) {
+	row := q.db.QueryRow(ctx, executionCredentialKnown,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.Version,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getPermit = `-- name: GetPermit :one
 SELECT p.state, p.epoch, p.expires_at, p.gateway_id, p.transaction_id, (p.expires_at <= clock_timestamp())::boolean AS expired,
        c.epoch AS current_epoch, c.kill_switch

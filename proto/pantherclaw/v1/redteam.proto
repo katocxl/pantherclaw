@@ -113,7 +113,8 @@ enum RangeObservedBy {
 }
 
 // RangeScenarioDecl declares a scenario of the set a range runs. The
-// digest is the SHA-256 (lowercase hex) of the scenario's canonical form.
+// digest is the SHA-256 (lowercase hex) of the canonical form of what the
+// scenario runs: its apiVersion, requires, harness_only and steps (ADR-0051).
 // RT-### is the PantherClaw library: the server accepts it only with the
 // library's digest and takes its tier from the library. CX-### is
 // customer-authored (G0 M17 D124, D125).
