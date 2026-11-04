@@ -169,15 +169,16 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 	}
 	var input map[string]string
 	if write {
-		rel, class, protected, err := protectedWrite(in, cwd)
+		base, rel, class, protected, err := protectedWrite(in, cwd)
 		switch {
 		case err != nil:
 			return hookAnswer{}, err
 		case !protected:
 			return hookAnswer{Decision: hookLocal}, nil
 		}
-		// call is added below, once it is known.
-		input = map[string]string{"op": "write", "path": rel, "class": string(class), "cwd": cwd}
+		// cwd is the base the path is relative to: the project, or the home
+		// (D943a). call is added below, once it is known.
+		input = map[string]string{"op": "write", "path": rel, "class": string(class), "cwd": base}
 	}
 	if *gateway == "" || *conn == "" || *keyFile == "" {
 		return hookAnswer{}, errors.New("set --gateway, --connection and --key-file (or PANTHERCLAW_GATEWAY, PANTHERCLAW_HOOK_CONNECTION and PANTHERCLAW_WORKLOAD_KEY_FILE)")

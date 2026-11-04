@@ -28,7 +28,8 @@ import (
 // person when it is not enrolled yet (HR-094: admitted with the fingerprint
 // shown before), and installs the PreToolUse hook that asks the gateway
 // before every command a tool runs in a shell (Bash, PowerShell and
-// Monitor; HR-186) with `pclaw hook claude-code`, in the settings file of
+// Monitor; HR-186), and before every write to an agent configuration or
+// memory file (G0 M30 D943), with `pclaw hook claude-code`, in the settings file of
 // the chosen scope. When the org has no connection of the hook's name, it
 // creates it, serving pc.shell, or says what must happen first
 // (claudeconn.go).
@@ -55,10 +56,12 @@ func init() {
 // the hook runs is `pclaw hook claude-code`.
 var claudeHookArgs = []string{"hook", "claude-code"}
 
-// shellTools are the tools that run commands in a shell, which PantherClaw's
-// hook decides (HR-186; Monitor added after review, founder decision
-// 2026-10-13). The hook init installs matches them all.
-var shellTools = []string{"Bash", "PowerShell", "Monitor"}
+// shellTools are the tools PantherClaw's hook runs before: those that run
+// commands in a shell, which it decides (HR-186; Monitor added after
+// review, founder decision 2026-10-13), and those that write files, whose
+// writes to agent configuration and memory files it decides (G0 M30 D943,
+// D943a). The hook init installs matches them all.
+var shellTools = []string{"Bash", "PowerShell", "Monitor", "Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 // connectionName is a connection name (ConnectionService).
 var connectionName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)

@@ -171,6 +171,9 @@ func scanName(f ScanFinding) string {
 		s = "skill " + f.Attributes["name"]
 	case domain.ScanKindEnvSecret:
 		s = "credential " + f.Attributes["secret_kind"]
+		if f.Attributes["source"] == domain.SourceConfigFile {
+			s += " in an agent " + f.Attributes["path_class"] + " file"
+		}
 	case domain.ScanKindAgentConfig:
 		s = "agent configuration " + f.Attributes["client"] + " " + f.Attributes["path_class"] + " (" + f.Attributes["scope"] + ")"
 	case saas.KindCopilotAgent:
@@ -490,5 +493,5 @@ var (
 	// ErrScanAttributes refuses a finding that carries more than its kind's
 	// metadata (HR-588).
 	ErrScanAttributes = pcerr.New(pcerr.InvalidArgument, "SCAN_ATTRIBUTES",
-		"a hook carries event and executable, a skill name and path, an agent_config client, scope, path_class, digest and size, and an env_secret finding a known secret_kind; nothing else")
+		"a hook carries event and executable, a skill name and path, an agent_config client, scope, path_class, digest and size, and an env_secret finding a known secret_kind (with source config_file, a path_class); nothing else")
 )
