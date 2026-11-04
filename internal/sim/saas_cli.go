@@ -21,7 +21,7 @@ import (
 func runCopilotStudio(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("copilot-studio", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9100", "listen address (loopback)")
+	addr := fs.String("addr", defaultAddrs["copilot-studio"], "listen address (loopback)")
 	deny := fs.Bool("deny-components", false, "answer botcomponents 403")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -35,7 +35,7 @@ func runCopilotStudio(ctx context.Context, args []string, stderr io.Writer) erro
 func runChatGPTEnterprise(ctx context.Context, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("chatgpt-enterprise", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:9101", "listen address (loopback)")
+	addr := fs.String("addr", defaultAddrs["chatgpt-enterprise"], "listen address (loopback)")
 	keyFile := fs.String("key-file", "", "file holding the only accepted key (otherwise any is)")
 	deny := fs.Bool("deny", false, "answer the list 403")
 	if err := fs.Parse(args); err != nil {
