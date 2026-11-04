@@ -58877,12 +58877,12 @@
             },
             "title": "attack",
             "maxItems": 16,
-            "description": "ATT\u0026CK Enterprise techniques the rule maps to (G0 M28 D718).\n PROVISIONAL field number until post-M27's proto changes land (D703)."
+            "description": "ATT\u0026CK Enterprise techniques the rule maps to (G0 M28 D718)."
           },
           "techniquesNone": {
             "type": "string",
             "title": "techniques_none",
-            "description": "Why a built-in rule maps to no technique, in one line; empty\n otherwise (G0 M28 D714, D718).\n PROVISIONAL field number until post-M27's proto changes land (D703)."
+            "description": "Why a built-in rule maps to no technique, in one line; empty\n otherwise (G0 M28 D714, D718)."
           }
         },
         "title": "DetectionRule",

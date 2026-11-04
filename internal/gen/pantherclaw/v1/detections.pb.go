@@ -65,11 +65,9 @@ type DetectionRule struct {
 	// this version; empty when none is pending.
 	PendingConfirmationChangeId string `protobuf:"bytes,21,opt,name=pending_confirmation_change_id,json=pendingConfirmationChangeId,proto3" json:"pending_confirmation_change_id,omitempty"`
 	// ATT&CK Enterprise techniques the rule maps to (G0 M28 D718).
-	// PROVISIONAL field number until post-M27's proto changes land (D703).
 	Attack []string `protobuf:"bytes,22,rep,name=attack,proto3" json:"attack,omitempty"`
 	// Why a built-in rule maps to no technique, in one line; empty
 	// otherwise (G0 M28 D714, D718).
-	// PROVISIONAL field number until post-M27's proto changes land (D703).
 	TechniquesNone string `protobuf:"bytes,23,opt,name=techniques_none,json=techniquesNone,proto3" json:"techniques_none,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache

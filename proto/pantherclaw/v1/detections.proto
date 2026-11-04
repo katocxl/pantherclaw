@@ -99,7 +99,6 @@ message DetectionRule {
   // this version; empty when none is pending.
   string pending_confirmation_change_id = 21;
   // ATT&CK Enterprise techniques the rule maps to (G0 M28 D718).
-  // PROVISIONAL field number until post-M27's proto changes land (D703).
   repeated string attack = 22 [(buf.validate.field).repeated = {
     max_items: 16
     items: {
@@ -108,7 +107,6 @@ message DetectionRule {
   }];
   // Why a built-in rule maps to no technique, in one line; empty
   // otherwise (G0 M28 D714, D718).
-  // PROVISIONAL field number until post-M27's proto changes land (D703).
   string techniques_none = 23;
 }
 
