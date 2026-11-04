@@ -221,11 +221,14 @@ func sandboxClosure(e *Event, body []byte) error {
 }
 
 // reflexEntry reads Reflex's own entries (alerts, live events, incidents):
-// detection skips them, the live stream and export read them.
+// detection skips them, the live stream and export read them. An alert's
+// event_kind attribute is the kind of the event that raised it (HR-665),
+// for alert triggers to filter on.
 func reflexEntry(e *Event, body []byte) error {
 	var b struct {
 		ID        string                 `json:"id"`
 		Rule      string                 `json:"rule"`
+		EventKind string                 `json:"event_kind"`
 		Severity  string                 `json:"severity"`
 		Attention string                 `json:"attention"`
 		Basis     string                 `json:"basis"`
@@ -242,7 +245,8 @@ func reflexEntry(e *Event, body []byte) error {
 		}
 	}
 	e.Outcome, e.Test = b.State, b.Test
-	e.Attrs = attrs("id", b.ID, "rule", b.Rule, "severity", b.Severity, "attention", b.Attention, "basis", b.Basis)
+	e.Attrs = attrs("id", b.ID, "rule", b.Rule, "event_kind", b.EventKind, "severity", b.Severity,
+		"attention", b.Attention, "basis", b.Basis)
 	return nil
 }
 
