@@ -576,3 +576,49 @@ Mapping digest: `ff5bb665420edb85691f4e2d5ad6b9b45df0b6785f4011415bd142f06c0bf25
 | [T1496](https://attack.mitre.org/techniques/T1496) | Resource Hijacking | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
 | [T1489](https://attack.mitre.org/techniques/T1489) | Service Stop | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1529](https://attack.mitre.org/techniques/T1529) | System Shutdown/Reboot | Outside PantherClaw: covered by EDR | It needs an endpoint. |
+
+## Techniques by abuse case
+
+Abuse cases from [THREAT_MODEL](THREAT_MODEL.md) that no library range scenario tests, or whose scenarios map to no MITRE technique, are not listed.
+
+| Abuse case | ATLAS | ATT&CK Enterprise |
+|---|---|---|
+| T-001 | AML.T0086 | T1567.001 |
+| T-002 | — | T1548 |
+| T-005 | — | T1548 |
+| T-006 | — | T1548 |
+| T-008 | AML.T0118.001 | — |
+| T-010 | — | T1677 |
+| T-011 | AML.T0048.000 | T1657 |
+| T-014 | AML.T0050, AML.T0053, AML.T0055 | T1059.004, T1071.004, T1552.001, T1552.004 |
+| T-015 | AML.T0086 | T1552.005, T1567.001 |
+| T-017 | AML.T0086 | T1567.001 |
+| T-019 | AML.T0109, AML.T0110.000 | — |
+| T-020 | AML.T0053 | — |
+| T-021 | — | T1552.005 |
+| T-032 | AML.T0091.000 | T1550.001 |
+| T-069 | — | T1685 |
+| T-080 | — | T1685 |
+| T-081 | AML.T0091.000 | T1550.001 |
+| T-083 | AML.T0053 | T1548, T1677 |
+| T-086 | AML.T0050, AML.T0055, AML.T0105 | T1059.004, T1071.004, T1552.001, T1552.004, T1552.005, T1611 |
+| T-088 | AML.T0105, AML.T0109, AML.T0110.000 | T1552.005, T1611 |
+| T-093 | AML.T0086 | T1567.001 |
+| T-142 | AML.T0048.000 | T1657 |
+| T-143 | AML.T0036 | T1213.006, T1565.001 |
+| T-144 | AML.T0036 | T1213.006 |
+| T-145 | AML.T0073 | T1548 |
+| T-146 | AML.T0086 | T1567 |
+| T-147 | AML.T0073, AML.T0091.000 | T1550.001 |
+| T-148 | AML.T0118.001 | — |
+| T-149 | AML.T0073 | — |
+| T-226 | AML.T0086 | T1567 |
+| T-229 | AML.T0053 | — |
+| T-266 | — | T1606 |
+| T-267 | AML.T0091.000 | T1550.001 |
+| T-268 | AML.T0091.000 | T1550.001 |
+| T-269 | AML.T0091.000 | T1550.001 |
+| T-272 | AML.T0051.001, AML.T0093 | — |
+| T-273 | AML.T0051.001, AML.T0093 | — |
+| T-276 | AML.T0051.001 | T1698 |
+| T-281 | AML.T0051.001, AML.T0099 | T1698 |

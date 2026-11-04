@@ -17,13 +17,14 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/redteam/library"
 	"github.com/katocxl/pantherclaw/internal/threatmap/catalog"
 	"github.com/katocxl/pantherclaw/internal/threatmap/mapping"
 	"github.com/katocxl/pantherclaw/internal/threatmap/mapset"
 )
 
-// statement is the threat map's fixed statement (HR-681), word for word.
-const statement = "This map shows the PantherClaw controls mapped to each technique and the evidence for them. " +
+// Statement is the threat map's fixed statement (HR-681), word for word.
+const Statement = "This map shows the PantherClaw controls mapped to each technique and the evidence for them. " +
 	"A mapped control covers the technique, not every way of carrying it out. " +
 	"Techniques outside PantherClaw need other tools. It is not a score or a guarantee."
 
@@ -57,12 +58,14 @@ var tools = map[mapping.ToolKind]string{
 }
 
 // Render returns the document for s, byte for byte the same for the same
-// set and catalogs.
-func Render(s *mapset.Set) []byte {
+// set, catalogs, library and threats. threats maps a library scenario id
+// to the abuse cases (T-###) its file cites; it feeds the section
+// "Techniques by abuse case", whose ids come from the library entries.
+func Render(s *mapset.Set, threats map[string][]string) []byte {
 	var b bytes.Buffer
 	b.WriteString("# MITRE ATLAS and ATT&CK Enterprise mapping\n\n")
 	b.WriteString("Generated from the code by `internal/threatmap/mapdoc`; do not edit. Regenerate with `task docs:mitre` ([G0 M28](../g0/M28.md), [ADR-0055](../adr/0055-mitre-threat-map.md)).\n\n")
-	fmt.Fprintf(&b, "> %s\n\n", statement)
+	fmt.Fprintf(&b, "> %s\n\n", Statement)
 	b.WriteString("Every technique of both matrices has exactly one place:\n\n")
 	b.WriteString("- **Mapped:** PantherClaw controls, detection rules, signal kinds, Hub content or range scenarios are mapped to the technique or one of its sub-techniques. What the organization's map shows for it depends on that organization's evidence ([runbook](../runbooks/threat-map.md)).\n")
 	b.WriteString("- **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.\n")
@@ -76,7 +79,59 @@ func Render(s *mapset.Set) []byte {
 	for _, f := range catalog.Frameworks() {
 		framework(&b, f, catalog.Load(f), s.Techniques(f))
 	}
+	abuseCases(&b, threats)
 	return b.Bytes()
+}
+
+// abuseCases writes "Techniques by abuse case" (G0 M28): one row per abuse
+// case cited by a library scenario, with the sorted union of the ATLAS and
+// ATT&CK ids of those scenarios' library entries. A scenario with no
+// library entry, or one that maps no technique, adds nothing; an abuse case
+// with no id gets no row.
+func abuseCases(b *bytes.Buffer, threats map[string][]string) {
+	ids := map[string][]string{}
+	for sid, ts := range threats {
+		e, ok := library.Lookup(sid)
+		if !ok {
+			continue
+		}
+		techniques := append(slices.Clone(e.ATLAS), e.ATTACK...)
+		if len(techniques) == 0 {
+			continue
+		}
+		for _, t := range ts {
+			ids[t] = append(ids[t], techniques...)
+		}
+	}
+	keys := make([]string, 0, len(ids))
+	for t := range ids {
+		keys = append(keys, t)
+	}
+	slices.Sort(keys)
+	b.WriteString("\n## Techniques by abuse case\n\n")
+	b.WriteString("Abuse cases from [THREAT_MODEL](THREAT_MODEL.md) that no library range scenario tests, or whose scenarios map to no MITRE technique, are not listed.\n\n")
+	b.WriteString("| Abuse case | ATLAS | ATT&CK Enterprise |\n|---|---|---|\n")
+	for _, t := range keys {
+		all := ids[t]
+		slices.Sort(all)
+		all = slices.Compact(all)
+		var atlas, attack []string
+		for _, id := range all {
+			if f, _ := catalog.FrameworkOf(id); f == catalog.FrameworkATLAS {
+				atlas = append(atlas, id)
+			} else {
+				attack = append(attack, id)
+			}
+		}
+		fmt.Fprintf(b, "| %s | %s | %s |\n", cell(t), orDash(atlas), orDash(attack))
+	}
+}
+
+func orDash(ids []string) string {
+	if len(ids) == 0 {
+		return "—"
+	}
+	return strings.Join(ids, ", ")
 }
 
 func framework(b *bytes.Buffer, f catalog.Framework, c *catalog.Catalog, m map[string]mapset.TechniqueMappings) {
