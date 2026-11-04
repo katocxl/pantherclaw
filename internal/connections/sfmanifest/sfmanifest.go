@@ -234,6 +234,28 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (Manifest, error) {
 	return out, err
 }
 
+// Serves reports whether id is a snowflake connection the caller (with
+// connection.manage) can see, so one confirm path serves both kinds
+// (G0 M31 D962a). It changes nothing.
+func (s *Service) Serves(ctx context.Context, id ids.UUID) (bool, error) {
+	c, err := caller(ctx)
+	if err != nil {
+		return false, err
+	}
+	var ok bool
+	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		conn, err := dbq.New(tx).GetConnection(ctx, c.Org, id)
+		if db.IsNoRows(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		ok = conn.Kind == capp.KindSnowflake
+		return nil
+	})
+	return ok, err
+}
+
 // Confirm applies the proposed configuration a page showed (digest): a
 // person with connection.manage and a fresh security-key step-up. The
 // connection's gateway reloads its configuration.

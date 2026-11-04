@@ -104,7 +104,7 @@ func (s *state) requiredSets() {
 // obligations are replaced by them. When a scope applies but the
 // definition does not declare it can enforce that kind (Scoping), or the
 // route is not one whose answer the gateway itself reads (a pantherclaw_held
-// http or postgres connection, on the http or mcp channel), the action is
+// http, postgres or snowflake connection, on the http or mcp channel), the action is
 // CANNOT_AUTHORIZE SCOPE_UNSUPPORTED (HR-302): never silently unscoped.
 // Without any scope there is no obligation (the gateway still withholds
 // secret values).
@@ -172,8 +172,9 @@ func (s *state) scopeUnsupported(records, classes bool) string {
 		return s.def.Operation + " cannot limit the data classes of its answer"
 	case s.a.Channel != string(defs.ChannelHTTP) && s.a.Channel != string(defs.ChannelMCP):
 		return "a data scope is enforced only on answers the gateway reads, not through the " + s.a.Channel + " channel"
-	case s.conn == nil || s.conn.AccessMode != "pantherclaw_held" || (s.conn.Kind != "http" && s.conn.Kind != "postgres"):
-		return "a data scope is enforced only through a pantherclaw_held http or postgres connection"
+	case s.conn == nil || s.conn.AccessMode != "pantherclaw_held" || !slices.Contains([]string{"http", "postgres", "snowflake"}, s.conn.Kind):
+		// snowflake is held to the scope exactly like postgres (G0 M31 D962a).
+		return "a data scope is enforced only through a pantherclaw_held http, postgres or snowflake connection"
 	}
 	return ""
 }

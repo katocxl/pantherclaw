@@ -83,8 +83,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	jiraURL := fs.String("jira-url", "", "with --gateway-out: also seed pc.jira and the connection \"jira\" to this Jira site (pantherclaw-sim jira: http://127.0.0.1:9096), its project facts read by the gateway")
 	awsECSURL := fs.String("aws-ecs-url", "", "with --gateway-out: also seed pc.aws.ecs and the connection \"aws-ecs\" to this ECS endpoint (pantherclaw-sim aws)")
 	gitlabURL := fs.String("gitlab-url", "", "with --gateway-out: also seed pc.gitlab and the connection \"gitlab\" to this GitLab instance (pantherclaw-sim gitlab: http://127.0.0.1:9097), its merge request facts read by the gateway")
-	modelURL := fs.String("model-url", "", "with --gateway-out: also seed pc.anthropic, pc.openai and the simulated model connections \"anthropic\" and \"openai\" "+
-		"to this fake model (pantherclaw-sim model: "+devSimModelURL+"), held by the gateway (G0 M29 D811)")
+	modelURL := fs.String("model-url", "", "with --gateway-out: also seed pc.anthropic, pc.openai, pc.vertex, pc.bedrock and the simulated model connections "+
+		"\"anthropic\", \"openai\", \"vertex\" and \"bedrock\" to this fake model (pantherclaw-sim model: "+devSimModelURL+
+		"; vertex and bedrock at its /vertex/models and /bedrock), held by the gateway (G0 M29 D811, G0 M31 D962a)")
 	saas := devSaaSFlags(fs)
 	if err := fs.Parse(args[1:]); err != nil {
 		return err

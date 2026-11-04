@@ -21,7 +21,7 @@ var (
 	connectionKinds = map[string]pb.ConnectionKind{
 		"http": pb.ConnectionKind_CONNECTION_KIND_HTTP, "mcp": pb.ConnectionKind_CONNECTION_KIND_MCP,
 		"local": pb.ConnectionKind_CONNECTION_KIND_LOCAL, "model": pb.ConnectionKind_CONNECTION_KIND_MODEL,
-		"vectorstore": pb.ConnectionKind_CONNECTION_KIND_VECTORSTORE,
+		"vectorstore": pb.ConnectionKind_CONNECTION_KIND_VECTORSTORE, "snowflake": pb.ConnectionKind_CONNECTION_KIND_SNOWFLAKE,
 	}
 	routeModes  = map[string]pb.RouteMode{"monitor": pb.RouteMode_ROUTE_MODE_MONITOR, "enforce": pb.RouteMode_ROUTE_MODE_ENFORCE}
 	accessModes = map[string]pb.AccessMode{
@@ -54,12 +54,12 @@ func enumFlag[T any](m map[string]T, flagName, v string) (T, error) {
 
 func connectionCommands() map[string]command {
 	return map[string]command{
-		"connection create": rpc("connection create NAME --kind http|mcp|local|model|vectorstore --gateway ID --package NAME [--base-url URL] "+
+		"connection create": rpc("connection create NAME --kind http|mcp|local|model|vectorstore|snowflake --gateway ID --package NAME [--base-url URL] "+
 			"[--allowed-host HOST...] --access pantherclaw_held|agent_held|target_enforced|none [--header NAME [--scheme S]] "+
-			"[--class public|internal] [--default-mode monitor|enforce] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST...] [--simulated [--model-relay]]"+modelFlagUsage+vectorstoreFlagUsage, 1,
+			"[--class public|internal] [--default-mode monitor|enforce] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST...] [--simulated [--model-relay]]"+modelFlagUsage+vectorstoreFlagUsage+snowflakeFlagUsage, 1,
 			func(fs *flag.FlagSet) call {
 				var hosts, agentHosts list
-				kind, gw, pkg, base := fs.String("kind", "", "http, mcp, local, model or vectorstore"), fs.String("gateway", "", "gateway id"),
+				kind, gw, pkg, base := fs.String("kind", "", "http, mcp, local, model, vectorstore or snowflake"), fs.String("gateway", "", "gateway id"),
 					fs.String("package", "", "tool package name"), fs.String("base-url", "", "the target's base URL")
 				fs.Var(&hosts, "allowed-host", "host a credential may be sent to (repeatable; default: the base URL's host)")
 				fs.Var(&agentHosts, "agent-host", "a host name agents use for the API, which a sandbox maps here (repeatable)")
@@ -71,6 +71,7 @@ func connectionCommands() map[string]command {
 				maxBytes, timeout := fs.Int("max-response-bytes", 0, "response cap"), fs.Int("timeout-ms", 0, "dispatch timeout")
 				mf := addModelFlags(fs, false)
 				vf := addVectorstoreFlags(fs, false)
+				sf := addSnowflakeFlags(fs)
 				return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
 					k, err1 := enumFlag(connectionKinds, "kind", *kind)
 					am, err2 := enumFlag(accessModes, "access", *acc)
@@ -93,12 +94,16 @@ func connectionCommands() map[string]command {
 							return nil, err
 						}
 					}
+					var snowflake *pb.SnowflakeConfig
+					if sf.set() {
+						snowflake = sf.config()
+					}
 					return c.connections.CreateConnection(ctx, &pb.CreateConnectionRequest{
 						Name: a[0], Kind: k, GatewayId: *gw, Package: *pkg, BaseUrl: *base, AllowedHosts: hosts, AccessMode: am,
 						CredentialHeader: *header, CredentialScheme: *scheme, DestinationClass: dc, DefaultMode: dm,
 						MaxResponseBytes: int32(min(max(*maxBytes, 0), 8<<20)), TimeoutMs: int32(min(max(*timeout, 0), 60_000)),
 						AgentHosts: agentHosts, Simulated: *simulated, ModelRelay: *modelRelay,
-						Model: model, Vectorstore: vs,
+						Model: model, Vectorstore: vs, Snowflake: snowflake,
 					})
 				}
 			}),
