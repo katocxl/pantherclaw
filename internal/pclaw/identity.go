@@ -164,17 +164,18 @@ func identityCommands() map[string]command {
 				})
 			}
 		}),
-		"issuer propose-kubernetes": rpc("issuer propose-kubernetes --agent ID --cluster NAME --namespace NS --service-account NAME --service-account-uid UID [--image-repository R...] [--image-digest D...] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+		"issuer propose-kubernetes": rpc("issuer propose-kubernetes --agent ID --cluster NAME --namespace NS --service-account NAME --service-account-uid UID [--image-repository R...] [--image-digest D...] [--run-grant ID] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			cluster, ns := fs.String("cluster", "", "cluster name from the server configuration"), fs.String("namespace", "", "namespace")
 			sa, uid := fs.String("service-account", "", "service account name"), fs.String("service-account-uid", "", "service account UID")
 			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			runGrant := fs.String("run-grant", "", "grant each pod's run starts under (a change needs activation by an Identity Publisher)")
 			var repos, digests list
 			fs.Var(&repos, "image-repository", "allowed image repository (repeatable)")
 			fs.Var(&digests, "image-digest", "allowed image digest sha256:… (repeatable)")
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
 				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
-					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason, RunGrantId: *runGrant,
 					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Kubernetes{Kubernetes: &pantherclawv1.KubernetesBinding{
 						Cluster: *cluster, Namespace: *ns, ServiceAccountName: *sa, ServiceAccountUid: *uid,
 						ImageRepositories: repos, ImageDigests: digests,

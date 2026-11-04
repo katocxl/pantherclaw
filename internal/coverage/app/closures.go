@@ -170,7 +170,7 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 		result = "PASSED"
 	}
 	row, err := q.InsertCoverageClosure(ctx, dbq.InsertCoverageClosureParams{
-		OrgID: tx.OrgID(), ID: ids.NewV7(), AgentID: c.Agent, ConnectionID: c.Connection, SandboxSessionID: c.SandboxSession,
+		OrgID: tx.OrgID(), ID: ids.NewV7(), AgentID: c.Agent, ConnectionID: c.Connection, SandboxSessionID: &c.SandboxSession,
 		Result: result, Probes: probes, PositiveControlsPassed: v.PositiveControls, NegativeControlsPassed: v.Negative,
 		CanaryPassed: v.Canary, SigningKeyJkt: c.SigningKeyJKT, ServerNonce: c.ServerNonce, ResultsSha256: c.ResultsSHA256[:],
 		EngineVersion: c.Engine.Version, ApiVersion: c.Engine.APIVersion, Runtime: c.Engine.Runtime,

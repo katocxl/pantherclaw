@@ -111,3 +111,20 @@ SELECT * FROM pc.broker_keys
 WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id)
 ORDER BY version DESC
 LIMIT 20;
+
+-- Sets or (NULL) clears an active gateway's Kubernetes binding (G0 M32
+-- D968, migration 00361).
+-- name: SetGatewayKubeBinding :one
+UPDATE pc.gateways SET kube_binding = sqlc.narg(kube_binding)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE'
+RETURNING *;
+
+-- The active gateways bound to one cluster, namespace and service account,
+-- for enrollment by a projected token (G0 M32 D968).
+-- name: ListGatewaysForKubeBinding :many
+SELECT * FROM pc.gateways
+WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' AND kube_binding IS NOT NULL
+  AND kube_binding ->> 'cluster' = sqlc.arg(cluster)::text
+  AND kube_binding ->> 'namespace' = sqlc.arg(namespace)::text
+  AND kube_binding ->> 'service_account_name' = sqlc.arg(service_account_name)::text
+ORDER BY id;
