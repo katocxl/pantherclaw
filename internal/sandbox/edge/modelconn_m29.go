@@ -14,8 +14,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // Model connections (G0 M29 D814, D815): an agent host mapped to a model
@@ -97,13 +95,15 @@ func (e *Edge) forwardModelConnection(w http.ResponseWriter, r *http.Request, ho
 			out.Header.Set(h, v)
 		}
 	}
-	action := ids.NewV7().String()
+	key := fingerprint(r.Method, target, body)
+	action := e.held.action(key)
 	out.Header.Set(headerRunID, e.run)
 	out.Header.Set(headerAction, action)
 	if e.session != "" {
 		out.Header.Set(headerSession, e.session)
 	}
 	res, err := e.modelConn.Do(out) //nolint:gosec // G704: only the configured gateway (see above)
+	e.heldAnswer(key, action, res, err)
 	if err != nil {
 		e.log.WarnContext(r.Context(), "edge.gateway_unreachable", "connection", conn, "error", err.Error())
 		e.answer(w, r, host, http.StatusBadGateway, "gateway_unreachable")

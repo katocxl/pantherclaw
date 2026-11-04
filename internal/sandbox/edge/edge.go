@@ -150,6 +150,9 @@ type Edge struct {
 	ca                *authority
 	log               *slog.Logger
 	refused, stripped atomic.Int64
+	// held maps requests held for approval to their action ids (G0 M30
+	// D945a).
+	held *heldActions
 }
 
 // New returns an edge with a fresh session CA.
@@ -251,6 +254,7 @@ func New(o Options) (*Edge, error) {
 		// each call through its context.
 		model: model, stream: &http.Client{Transport: transport, CheckRedirect: noRedirect},
 		modelConns: modelConns, modelConn: &http.Client{Transport: modelTransport, CheckRedirect: noRedirect},
+		held: newHeldActions(),
 	}, nil
 }
 
@@ -490,13 +494,15 @@ func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string
 			out.Header.Set(h, v)
 		}
 	}
-	action := ids.NewV7().String()
+	key := fingerprint(r.Method, target, body)
+	action := e.held.action(key)
 	out.Header.Set(headerRunID, e.run)
 	out.Header.Set(headerAction, action)
 	if e.session != "" {
 		out.Header.Set(headerSession, e.session)
 	}
 	res, err := e.client.Do(out) //nolint:gosec,bodyclose // G704: only the configured gateway (see above); relay closes the body
+	e.heldAnswer(key, action, res, err)
 	e.relay(w, r, host, conn, action, res, err)
 }
 
