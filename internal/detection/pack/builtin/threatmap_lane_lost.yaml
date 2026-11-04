@@ -20,7 +20,7 @@ tests:
     fires: true
     events:
       - {kind: audit.threatmap.lane_lost, actor_type: system, attrs: {framework: atlas, technique_id: AML.T0051.001, lane: DETECT, from: EVIDENCED, to: GAP}}
-  - name: another threat map event
+  - name: another audit event
     fires: false
     events:
-      - {kind: audit.threatmap.snapshot_taken, actor_type: system}
+      - {kind: audit.detection.rule_disabled, actor_type: system}
