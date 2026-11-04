@@ -68,6 +68,113 @@ gatewayAPI:
     type: LoadBalancer
     annotations: {}
 
+# Workload identity on this cluster (G0 M32 D969). Each entry becomes one
+# identity.kubernetes_clusters entry of the server: the server calls the
+# cluster's TokenReview API and reads pods with its own projected service
+# account token (bound to system:auth-delegator). The chart generates one
+# webhook secret per cluster for the admission webhook path (D969a).
+identity:
+  kubernetesClusters: []
+  # - name: home
+  #   # The org ids that may bind issuer entries to this cluster.
+  #   orgs: [00000000-0000-0000-0000-000000000000]
+  #   # The private ranges the API server resolves to (the Service range
+  #   # of kubernetes.default.svc and the control plane's addresses).
+  #   allowedPrefixes: [10.96.0.0/12]
+  #   # Default: the in-cluster API server.
+  #   apiServer: https://kubernetes.default.svc
+  # The lifetime of the server's own projected reviewer token.
+  reviewerTokenExpirationSeconds: 3600
+
+# An in-cluster gateway for agent pods (G0 M32 D968, D969): off by default.
+# It enrolls from a projected service account token (audience
+# pantherclaw-gateway:<org>) bound to the gateway in PantherClaw, keeps its
+# identity in an emptyDir and enrolls again on every restart.
+gateway:
+  enabled: false
+  # The org the gateway serves (its token audience).
+  org: ""
+  image:
+    repository: ghcr.io/katocxl/pantherclaw-gateway
+    # Pin the digest from the release notes; it wins over the tag.
+    digest: ""
+    tag: ""  # default: the chart's appVersion
+  replicas: 1
+  port: 8090
+  # The hostname agent pods call; they resolve it through hostAliases to
+  # service.clusterIP (agent pods get no DNS, FQ32-3).
+  hostname: pantherclaw-gateway.pantherclaw.internal
+  service:
+    # A fixed address in the cluster's Service range; required when
+    # agentNamespaces is set (D965).
+    clusterIP: ""
+  # kubernetes.io/tls Secret for the agent-facing listener (its certificate
+  # names hostname). Required when the gateway is enabled.
+  tls:
+    existingSecret: ""
+  # The server's API the gateway enrolls with; default publicURL.
+  controlAPIURL: ""
+  # The internal CA pin ("sha256:<hex>") from the gateway's enrollment page.
+  caSHA256: ""
+  # Private ranges the gateway's targets live in (egress.allowed_prefixes).
+  egressAllowedPrefixes: []
+  # The edge pins the CA of the agent-facing certificate ("sha256:<hex>");
+  # empty: the edge image's system roots.
+  tlsCAPin: ""
+  tokenExpirationSeconds: 3600
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+# The admission webhook (G0 M32 D967, D969): off by default. It fails
+# closed (failurePolicy Fail, FQ32-1): while the API is down, no pod starts
+# in a protected namespace.
+admission:
+  enabled: false
+  port: 8444
+  # The identity.kubernetesClusters entry that is this cluster.
+  cluster: ""
+  tls:
+    # kubernetes.io/tls Secret for the webhook listener; its certificate
+    # names <release>-pantherclaw-api.<namespace>.svc. Required when enabled.
+    existingSecret: ""
+    # "<namespace>/<certificate>": cert-manager injects the CA bundle.
+    certManagerCertificate: ""
+    # Otherwise the CA bundle (base64 PEM) the API server verifies with.
+    caBundle: ""
+  # The edge and probe images admitted ("sha256:<hex>").
+  edgeImageDigests: []
+  probeImageDigests: []
+  # The webhook secret in the webhook path is generated into a Secret the
+  # chart owns (kept on uninstall) and reused on upgrade. A GitOps re-render
+  # (helm template) generates a new one: pods in protected namespaces may
+  # then be denied for up to about 2 minutes until the Secret syncs to the
+  # server (failing closed, FQ32-1).
+
+# Agent namespaces (G0 M32 D965, D969). For each one the chart renders the
+# agent NetworkPolicy (egress only to the gateway, no DNS), the reviewer's
+# Role, one ValidatingWebhookConfiguration per org and a daily probe
+# CronJob. Label each namespace pantherclaw.dev/protect=enforce and
+# pantherclaw.dev/org=<org>. See examples/agent-pod.yaml for an agent pod.
+agentNamespaces: []
+# - name: agents
+#   org: 00000000-0000-0000-0000-000000000000
+#   # NetworkPolicy ingress peers; empty: no ingress.
+#   ingressFrom: []
+#   # The edge's hosts map (agent host -> connection), rendered into the
+#   # namespace's pantherclaw-edge ConfigMap (D966).
+#   hosts: {api.github.com: github}
+
+# The daily containment probe in each agent namespace (G0 M32 D970).
+probe:
+  schedule: "17 3 * * *"
+  image:
+    repository: ghcr.io/katocxl/pantherclaw-probe
+    digest: ""
+  edgeImage:
+    repository: ghcr.io/katocxl/pantherclaw-edge
+    digest: ""
+
 database:
   host: postgres.example.internal
   # A primary and its standbys instead of host (G0 M19 D202): each "host" or
@@ -112,6 +219,8 @@ networkPolicy:
   # Outbound: DNS, the database, HTTPS (identity providers, notifications)
   # and SMTP submission.
   egressPorts: [443, 587]
+  # With identity.kubernetesClusters: the API server's endpoint ports.
+  kubernetesAPIPorts: [443, 6443]
 
 podDisruptionBudget:
   enabled: true

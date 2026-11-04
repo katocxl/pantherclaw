@@ -80,7 +80,206 @@ stage-secrets init container (G0 M13 D42).
 {{- if eq .role "worker" -}}
 {{- $_ := set $cfg "health" (dict "addr" (printf "0.0.0.0:%d" (int $v.worker.healthPort))) -}}
 {{- end -}}
+{{- /* G0 M32 D969: the clusters, reviewed with the server's own projected token. Not for the migrate Job, which mounts none of it. */ -}}
+{{- if and $v.identity.kubernetesClusters (ne .role "migrate") -}}
+{{- $clusters := list -}}
+{{- range $v.identity.kubernetesClusters -}}
+{{- $clusters = append $clusters (dict "name" .name "api_server" (default "https://kubernetes.default.svc" .apiServer)
+      "ca_file" (printf "%s/ca.crt" (include "pantherclaw.kubeDir" .)) "token_file" (printf "%s/token" (include "pantherclaw.kubeDir" .))
+      "allowed_prefixes" (required "identity.kubernetesClusters[].allowedPrefixes is required" .allowedPrefixes)
+      "orgs" (required "identity.kubernetesClusters[].orgs is required" .orgs)
+      "webhook_secret_file" (printf "%s/%s" (include "pantherclaw.webhookDir" .) .name)) -}}
+{{- end -}}
+{{- $_ := set $cfg "identity" (dict "kubernetes_clusters" $clusters) -}}
+{{- end -}}
+{{- /* G0 M32 D967, D969: the admission listener, on the API only. */ -}}
+{{- if and $v.admission.enabled (ne .role "worker") (ne .role "migrate") -}}
+{{- $_ := set $cfg "admission" (dict "listen" (printf "0.0.0.0:%d" (int $v.admission.port))
+      "tls_cert_file" "/etc/pantherclaw/admission-tls/tls.crt" "tls_key_file" "/etc/pantherclaw/admission-tls/tls.key"
+      "edge_image_digests" $v.admission.edgeImageDigests "probe_image_digests" $v.admission.probeImageDigests) -}}
+{{- end -}}
 {{- toPrettyJson $cfg -}}
+{{- end -}}
+
+{{/* G0 M32 D969: where the server's projected reviewer token and the cluster CA are mounted. */}}
+{{- define "pantherclaw.kubeDir" -}}/var/run/pantherclaw/kube{{- end -}}
+
+{{/* G0 M32 D969a: where the webhook Secret is mounted (one key per cluster). */}}
+{{- define "pantherclaw.webhookDir" -}}/etc/pantherclaw/webhook{{- end -}}
+
+{{/* The webhook Secret's name. */}}
+{{- define "pantherclaw.webhookSecretName" -}}{{ include "pantherclaw.fullname" . }}-webhook{{- end -}}
+
+{{/*
+G0 M32 D969a: the webhook secret of a cluster (dict "root" $ "cluster" NAME).
+It is reused from the chart's Secret when it exists (lookup on upgrade),
+else generated, and cached for the rest of this render so that the Secret
+and the webhook path hold the same value.
+*/}}
+{{- define "pantherclaw.webhookSecret" -}}
+{{- $root := .root -}}
+{{- if not (hasKey $root.Values "__pcWebhookSecrets") -}}
+{{- $_ := set $root.Values "__pcWebhookSecrets" dict -}}
+{{- end -}}
+{{- $cache := get $root.Values "__pcWebhookSecrets" -}}
+{{- if not (hasKey $cache .cluster) -}}
+{{- $value := "" -}}
+{{- $existing := lookup "v1" "Secret" $root.Release.Namespace (include "pantherclaw.webhookSecretName" $root) -}}
+{{- if and $existing $existing.data -}}
+{{- with index $existing.data .cluster -}}{{- $value = b64dec . -}}{{- end -}}
+{{- end -}}
+{{- if not $value -}}{{- $value = randAlphaNum 48 -}}{{- end -}}
+{{- $_ := set $cache .cluster $value -}}
+{{- end -}}
+{{- get $cache .cluster -}}
+{{- end -}}
+
+{{/* An image by digest when set, else by tag (default appVersion). Arguments: dict "root" $ "image" VALUES. */}}
+{{- define "pantherclaw.image" -}}
+{{- if .image.digest -}}
+{{- printf "%s@%s" .image.repository .image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .image.repository (default .root.Chart.AppVersion .image.tag) -}}
+{{- end -}}
+{{- end -}}
+
+{{/* G0 M32 D969: the edge and probe images of the probe CronJob, by digest; the digest defaults to the first admitted one. */}}
+{{- define "pantherclaw.edgeImage" -}}
+{{- $d := default (first .Values.admission.edgeImageDigests) .Values.probe.edgeImage.digest -}}
+{{- printf "%s@%s" .Values.probe.edgeImage.repository (required "probe.edgeImage.digest or admission.edgeImageDigests is required" $d) -}}
+{{- end -}}
+{{- define "pantherclaw.probeImage" -}}
+{{- $d := default (first .Values.admission.probeImageDigests) .Values.probe.image.digest -}}
+{{- printf "%s@%s" .Values.probe.image.repository (required "probe.image.digest or admission.probeImageDigests is required" $d) -}}
+{{- end -}}
+
+{{/* G0 M32 D966, D969: the gateway URL agent pods call. */}}
+{{- define "pantherclaw.agentGatewayURL" -}}
+{{- printf "https://%s:%d" .Values.gateway.hostname (int .Values.gateway.port) -}}
+{{- end -}}
+
+{{/* G0 M32 D964: the label keys of a protected namespace. */}}
+{{- define "pantherclaw.protectLabel" -}}pantherclaw.dev/protect{{- end -}}
+{{- define "pantherclaw.orgLabel" -}}pantherclaw.dev/org{{- end -}}
+
+{{/*
+G0 M32 D966, D967, D969: the pod-level part of an agent pod (dict "root" $
+"clusterIP" IP "serviceAccount" NAME "org" ORG): no service account token,
+the gateway hostname pinned by hostAliases (no DNS, FQ32-3), the edge as the
+one native sidecar with the projected token (audience pantherclaw:<org>)
+mounted into it alone, and the /pc-edge emptyDir its CA certificate goes to.
+examples/agent-pod.yaml is the same shape.
+*/}}
+{{- define "pantherclaw.agentPodSpec" -}}
+{{- $v := .root.Values -}}
+serviceAccountName: {{ .serviceAccount }}
+automountServiceAccountToken: false
+enableServiceLinks: false
+securityContext:
+  {{- toYaml $v.podSecurityContext | nindent 2 }}
+hostAliases:
+  - ip: {{ .clusterIP | quote }}
+    hostnames: [{{ $v.gateway.hostname | quote }}]
+initContainers:
+  - name: pantherclaw-edge
+    image: {{ include "pantherclaw.edgeImage" .root }}
+    imagePullPolicy: IfNotPresent
+    restartPolicy: Always
+    args: ["--config", "/etc/pantherclaw-edge/edge.json"]
+    env:
+      - name: PC_POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+    securityContext:
+      {{- toYaml $v.securityContext | nindent 6 }}
+    volumeMounts:
+      - name: edge-config
+        mountPath: /etc/pantherclaw-edge
+        readOnly: true
+      - name: edge-token
+        mountPath: /var/run/pantherclaw/edge
+        readOnly: true
+      - name: pc-edge
+        mountPath: /pc-edge
+volumes:
+  - name: edge-config
+    configMap:
+      name: pantherclaw-edge
+  - name: edge-token
+    projected:
+      defaultMode: 0440
+      sources:
+        - serviceAccountToken:
+            path: token
+            audience: {{ printf "pantherclaw:%s" .org | quote }}
+            expirationSeconds: 3600
+  - name: pc-edge
+    emptyDir:
+      medium: Memory
+      sizeLimit: 1Mi
+{{- end -}}
+
+{{/* G0 M32 D969: an agent container's environment: every request through the edge, trusting its CA. */}}
+{{- define "pantherclaw.agentEnv" -}}
+- name: HTTPS_PROXY
+  value: http://127.0.0.1:3128
+- name: HTTP_PROXY
+  value: http://127.0.0.1:3128
+- name: SSL_CERT_FILE
+  value: /pc-edge/ca.crt
+{{- end -}}
+
+{{/*
+G0 M32 D969: the server's mounts for Kubernetes (dict "root" $ "role" "api|worker"):
+its projected reviewer token with the cluster CA, the webhook Secret (read
+again while the server runs, D967) and, on the API, the admission
+certificate (reloaded by CertReloader). They are mounted, not staged, so a
+rotation reaches the running server (D969a).
+*/}}
+{{- define "pantherclaw.kubeMounts" -}}
+{{- $v := .root.Values -}}
+{{- if $v.identity.kubernetesClusters }}
+- name: kube
+  mountPath: {{ include "pantherclaw.kubeDir" . }}
+  readOnly: true
+- name: webhook
+  mountPath: {{ include "pantherclaw.webhookDir" . }}
+  readOnly: true
+{{- end }}
+{{- if and $v.admission.enabled (eq .role "api") }}
+- name: admission-tls
+  mountPath: /etc/pantherclaw/admission-tls
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{- define "pantherclaw.kubeVolumes" -}}
+{{- $v := .root.Values -}}
+{{- if $v.identity.kubernetesClusters }}
+- name: kube
+  projected:
+    defaultMode: 0440
+    sources:
+      - serviceAccountToken:
+          path: token
+          expirationSeconds: {{ int $v.identity.reviewerTokenExpirationSeconds }}
+      - configMap:
+          name: kube-root-ca.crt
+          items:
+            - key: ca.crt
+              path: ca.crt
+- name: webhook
+  secret:
+    secretName: {{ include "pantherclaw.webhookSecretName" .root }}
+    defaultMode: 0440
+{{- end }}
+{{- if and $v.admission.enabled (eq .role "api") }}
+- name: admission-tls
+  secret:
+    secretName: {{ required "admission.tls.existingSecret is required when admission.enabled" $v.admission.tls.existingSecret }}
+    defaultMode: 0440
+{{- end }}
 {{- end -}}
 
 {{/* The stage-secrets init container (G0 M13 D42). Arguments: dict "root" $ "keys" (list of dict "volume" "key" "as"). */}}

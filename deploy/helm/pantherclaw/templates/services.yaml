@@ -26,6 +26,12 @@ spec:
     - name: http
       port: {{ .Values.api.service.port }}
       targetPort: http
+    {{- if .Values.admission.enabled }}
+    # The admission webhook the API server calls (G0 M32 D967, D969).
+    - name: admission
+      port: {{ .Values.admission.port }}
+      targetPort: admission
+    {{- end }}
 ---
 # The server's gateway listener: TCP passed through to the API pods, which
 # terminate the mutual TLS themselves (never terminate it at a proxy).

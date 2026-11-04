@@ -1,0 +1,169 @@
+{{/*
+SPDX-License-Identifier: BUSL-1.1
+Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+The in-cluster gateway for agent pods (G0 M32 D968, D969): off by default.
+It enrolls from a projected service account token (audience
+pantherclaw-gateway:<org>), keeps its identity in an emptyDir and enrolls
+again on restart.
+*/}}
+{{- if .Values.gateway.enabled }}
+{{- $g := .Values.gateway }}
+{{- $fullname := include "pantherclaw.fullname" . }}
+{{- $org := required "gateway.org is required when gateway.enabled" $g.org }}
+{{- $tlsSecret := required "gateway.tls.existingSecret is required when gateway.enabled" $g.tls.existingSecret }}
+{{- $cfg := dict "listen" (printf "0.0.0.0:%d" (int $g.port)) "public_url" (include "pantherclaw.agentGatewayURL" .)
+      "log" (dict "level" .Values.logLevel)
+      "tls" (dict "cert_file" "/etc/pantherclaw-gateway/secrets/tls.crt" "key_file" "/etc/pantherclaw-gateway/secrets/tls.key")
+      "control" (dict "api_url" (default .Values.publicURL $g.controlAPIURL)
+        "ca_sha256" (required "gateway.caSHA256 is required when gateway.enabled" $g.caSHA256)
+        "identity_dir" "/var/lib/pantherclaw-gateway/identity"
+        "kubernetes_token_file" "/var/run/pantherclaw/gateway/token")
+      "egress" (dict "allowed_prefixes" $g.egressAllowedPrefixes) }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullname }}-gateway
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-gateway
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+data:
+  gateway.json: |
+    {{- toPrettyJson $cfg | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-gateway
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: {{ $g.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pantherclaw.selector" (dict "root" . "component" "gateway") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pantherclaw.labels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway
+      annotations:
+        checksum/config: {{ toPrettyJson $cfg | sha256sum }}
+    spec:
+      serviceAccountName: {{ $fullname }}-gateway
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: stage-secrets
+          image: {{ include "pantherclaw.image" (dict "root" . "image" $g.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["secrets", "stage", "--from", "/secrets-src", "--to", "/secrets"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+            - name: tls
+              mountPath: /secrets-src/tls.crt
+              subPath: tls.crt
+              readOnly: true
+            - name: tls
+              mountPath: /secrets-src/tls.key
+              subPath: tls.key
+              readOnly: true
+      containers:
+        - name: gateway
+          image: {{ include "pantherclaw.image" (dict "root" . "image" $g.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve", "--config", "/etc/pantherclaw-gateway/gateway.json"]
+          ports:
+            - name: gateway
+              containerPort: {{ $g.port }}
+          resources:
+            {{- toYaml $g.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pantherclaw-gateway/gateway.json
+              subPath: gateway.json
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/pantherclaw-gateway/secrets
+              readOnly: true
+            - name: token
+              mountPath: /var/run/pantherclaw/gateway
+              readOnly: true
+            # The gateway's key and certificate: enrolled again on restart.
+            - name: identity
+              mountPath: /var/lib/pantherclaw-gateway/identity
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-gateway
+        - name: secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: identity
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: {{ printf "pantherclaw-gateway:%s" $org | quote }}
+                  expirationSeconds: {{ int $g.tokenExpirationSeconds }}
+        - name: tls
+          secret:
+            secretName: {{ $tlsSecret }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# A fixed address: agent pods reach the gateway through hostAliases, with
+# no DNS (D965, FQ32-3).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-gateway
+  labels:
+    {{- include "pantherclaw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  type: ClusterIP
+  {{- with $g.service.clusterIP }}
+  clusterIP: {{ . }}
+  {{- end }}
+  selector:
+    {{- include "pantherclaw.selector" (dict "root" . "component" "gateway") | nindent 4 }}
+  ports:
+    - name: gateway
+      port: {{ $g.port }}
+      targetPort: gateway
+      protocol: TCP
+{{- end }}
