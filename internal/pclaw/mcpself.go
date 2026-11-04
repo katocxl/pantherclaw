@@ -36,7 +36,7 @@ func mcpSelf(ctx context.Context, a *app, args []string) error {
 	return (&selfmcp.Server{Backend: b, Out: a.stdout}).Serve(ctx, a.stdin)
 }
 
-// selfBackend is the four reads under the service account's key, behind the
+// selfBackend is the five reads under the service account's key, behind the
 // allow-list transport. A person's stored login is refused: the role that
 // audits every read binds only to service accounts.
 func (a *app) selfBackend() (selfmcp.Backend, error) {

@@ -4,6 +4,6 @@
 package domain
 
 // SelfMCP reports whether an Investigator may read through PantherClaw's own
-// MCP server (G0 M27 D510): Team and above. Without it the role's four reads
+// MCP server (G0 M27 D510): Team and above. Without it the role's five reads
 // answer EDITION_REQUIRED.
 func (e Entitlements) SelfMCP() bool { return e.Edition.Paid() }

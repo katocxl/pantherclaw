@@ -15,7 +15,7 @@ import (
 )
 
 // TestHR655_TheStreamIgnoresTheInvestigatorRole (G0 M27 D510): the role
-// counts on its four reads only, so on the live stream a service account
+// counts on its five reads only, so on the live stream a service account
 // keeps just its other bindings. With Investigator alone it is refused; with
 // Investigator at the org and Viewer in team A it sees team A's alerts and
 // not team B's, which the role's org-wide incident.read would have shown.
