@@ -4,11 +4,66 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
+	"net/http"
 	"regexp"
+
+	"golang.org/x/sync/errgroup"
+
+	"github.com/katocxl/pantherclaw/internal/identity/adapters/kube"
+	"github.com/katocxl/pantherclaw/internal/kubeadmission"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 )
+
+// serveAdmission starts the admission webhook's TLS listener when
+// admission.listen is set (G0 M32 D967): its own listener, with the
+// certificate pair re-read when it changes, serving only POST
+// /admission/v1/{cluster}/{org}/{secret}. Roles api and all.
+func serveAdmission(ctx context.Context, g *errgroup.Group, cfg *Config, pool *db.Pool, clusters *kube.Directory, log *slog.Logger) error {
+	a := cfg.Admission
+	if a.Listen == "" {
+		return nil
+	}
+	certs, err := httpx.NewCertReloader(a.TLSCertFile, a.TLSKeyFile, log)
+	if err != nil {
+		return fmt.Errorf("server: admission: %w", err)
+	}
+	mux := http.NewServeMux()
+	kubeadmission.New(kubeadmission.Config{
+		Clusters: clusters, Pool: pool, EdgeDigests: a.EdgeImageDigests, Log: log,
+	}).Mount(mux)
+	srv, err := httpx.NewServer(httpx.ServerConfig{
+		Addr: a.Listen, Handler: mux, TLS: httpx.ReloadingServerTLSConfig(certs), BodyLimit: kubeadmission.MaxBody, Logger: log,
+	})
+	if err != nil {
+		return err
+	}
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", a.Listen)
+	if err != nil {
+		return fmt.Errorf("server: admission listener: %w", err)
+	}
+	serveCertReloads(ctx, g, certs)
+	g.Go(func() error {
+		if err := srv.ServeTLS(ln, "", ""); !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	})
+	g.Go(func() error {
+		<-ctx.Done()
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
+		defer cancel()
+		return srv.Shutdown(sctx)
+	})
+	log.InfoContext(ctx, "server.admission_listening", slog.String("addr", ln.Addr().String()))
+	return nil
+}
 
 // The M32 admission stream's wiring (G0 M32 D967).
 
