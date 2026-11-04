@@ -14,9 +14,10 @@ import "google/protobuf/timestamp.proto";
 // Each technique shows the PantherClaw controls mapped to it in four lanes,
 // Prevent, Detect, Respond and Test, and the evidence for each from the org's
 // own records. A mapped control covers the technique, not every way of
-// carrying it out; techniques outside PantherClaw need other tools. There is
-// no score. Prevent and Seen follow the agent or environment filter; Detect,
-// Respond and Test are org-wide and every response says so.
+// carrying it out; techniques outside PantherClaw need other tools. Every
+// response carries the fixed statement that says so. Prevent and Seen follow
+// the agent or environment filter; Detect, Respond and Test are org-wide and
+// every response says so.
 //
 // A person signed in to the console reads the matrix, technique pages and
 // gaps on every edition; an API key or access token needs Team or higher

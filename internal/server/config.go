@@ -95,6 +95,8 @@ type Config struct {
 	Backups BackupsConfig `json:"backups"`
 	// Model is optional model drafting (G0 M21 D309; config_m21_model.go).
 	Model ModelConfig `json:"model"`
+	// ThreatMap is the M28 threat map (config_m28.go).
+	ThreatMap ThreatMapConfig `json:"threat_map"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -267,6 +269,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateLimits()...)
 	errs = append(errs, c.validateExternalChecks()...)
 	errs = append(errs, c.validateModel()...)
+	errs = append(errs, c.validateThreatMap()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

@@ -627,6 +627,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerPostureQueueJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM28ThreatMapJobs(evidenceJobs, jreg, pool, bill, cfg.ThreatMap, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerM27BehaviorJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}

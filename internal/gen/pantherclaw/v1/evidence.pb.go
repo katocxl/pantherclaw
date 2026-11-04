@@ -2116,7 +2116,7 @@ func (x *PackCompliance) GetPeriod() *PackTimeRange {
 // PackThreatMap names a threat map report: a framework and an optional
 // environment (G0 M28 D720). The pack holds threat_map.json, evaluated when
 // the pack is built, and its statement is the threat map's own: it shows the
-// mapped controls and their evidence, and is not a score or a guarantee.
+// mapped controls and their evidence, and what they do not cover.
 // Team and above.
 type PackThreatMap struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`

@@ -20,6 +20,11 @@ const (
 	// KindDeprovisionedOwnerKey: an active API key whose maker was
 	// deprovisioned (G0 M26 D409).
 	KindDeprovisionedOwnerKey = "DEPROVISIONED_OWNER_KEY"
+	// The threat map's kinds (G0 M28 D724).
+	KindThreatMapRuleOff              = "threatmap_rule_off"
+	KindThreatMapPlaybookNotInstalled = "threatmap_playbook_not_installed"
+	KindThreatMapPlaybookDisabled     = "threatmap_playbook_disabled"
+	KindThreatMapTestFailed           = "threatmap_test_failed"
 )
 
 // severityByKind is the fixed table for sources that state no severity
@@ -34,6 +39,12 @@ var severityByKind = map[string]Severity{
 	KindUnapprovedServer:  SeverityHigh,
 	// A departed person's key still works: rotate it.
 	KindDeprovisionedOwnerKey: SeverityHigh,
+	// A mapped rule off or a mapped scenario failing leaves techniques
+	// unwatched or untested (G0 M28 D724).
+	KindThreatMapRuleOff:              SeverityHigh,
+	KindThreatMapPlaybookNotInstalled: SeverityMedium,
+	KindThreatMapPlaybookDisabled:     SeverityMedium,
+	KindThreatMapTestFailed:           SeverityHigh,
 }
 
 // recommendationPrefixes are the families of recommendation ids: a

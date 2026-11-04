@@ -255,6 +255,9 @@ var objectTypes = map[string]reflexdomain.SubjectType{
 	"service_account": reflexdomain.SubjectServiceAccount, "policy_version": reflexdomain.SubjectPolicyVersion,
 	"alert": reflexdomain.SubjectAlert, "incident": reflexdomain.SubjectIncident, "case": reflexdomain.SubjectCase,
 	"finding": reflexdomain.SubjectFinding, "approval_request": reflexdomain.SubjectResource,
+	// threat_lane: one lane of one technique on one day (G0 M28 D719a), so
+	// pc.threatmap.lane_lost groups one alert per drop.
+	"threat_lane": reflexdomain.SubjectResource,
 }
 
 // detailSubjects are audit detail keys that name a subject.

@@ -62373,7 +62373,7 @@
         },
         "title": "PackThreatMap",
         "additionalProperties": false,
-        "description": "PackThreatMap names a threat map report: a framework and an optional\n environment (G0 M28 D720). The pack holds threat_map.json, evaluated when\n the pack is built, and its statement is the threat map's own: it shows the\n mapped controls and their evidence, and is not a score or a guarantee.\n Team and above.",
+        "description": "PackThreatMap names a threat map report: a framework and an optional\n environment (G0 M28 D720). The pack holds threat_map.json, evaluated when\n the pack is built, and its statement is the threat map's own: it shows the\n mapped controls and their evidence, and what they do not cover.\n Team and above.",
         "required": [
           "framework"
         ]
@@ -87288,6 +87288,7 @@
               "catalog",
               "provisioning",
               "saas",
+              "threatmap",
               null
             ]
           },
@@ -87448,7 +87449,7 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "description": "kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,\n ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,\n REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL,\n REVIEW_SERVER or NONE. NONE: this edition has nowhere to act on it."
+            "description": "kind: REVIEW_FINDING, REVIEW_GRANT, ASSIGN_OWNER, ROTATE_CREDENTIAL,\n ENFORCE_PATH, NARROW_SCOPES, ADD_VERIFIER, REVIEW_COVERAGE,\n REVIEW_SUGGESTION, REVIEW_AGENT, CONNECT_INTEGRATION, REVIEW_TOOL,\n REVIEW_SERVER, ENABLE_RULE, INSTALL_HUB_ITEM, ENABLE_AUTOMATION, RUN_RANGE\n or NONE. NONE: this edition has nowhere to act on it."
           },
           "targetId": {
             "type": "string",
@@ -102842,7 +102843,7 @@
     },
     {
       "name": "pantherclaw.v1.ThreatMapService",
-      "description": "ThreatMapService reads the org's MITRE ATT\u0026CK Enterprise and MITRE ATLAS\n threat map (G0 M28 D710-D724; F960-F973; HR-680..689).\n\n Each technique shows the PantherClaw controls mapped to it in four lanes,\n Prevent, Detect, Respond and Test, and the evidence for each from the org's\n own records. A mapped control covers the technique, not every way of\n carrying it out; techniques outside PantherClaw need other tools. There is\n no score. Prevent and Seen follow the agent or environment filter; Detect,\n Respond and Test are org-wide and every response says so.\n\n A person signed in to the console reads the matrix, technique pages and\n gaps on every edition; an API key or access token needs Team or higher\n (founder FQ1 A). The Navigator export needs Team, the history Business."
+      "description": "ThreatMapService reads the org's MITRE ATT\u0026CK Enterprise and MITRE ATLAS\n threat map (G0 M28 D710-D724; F960-F973; HR-680..689).\n\n Each technique shows the PantherClaw controls mapped to it in four lanes,\n Prevent, Detect, Respond and Test, and the evidence for each from the org's\n own records. A mapped control covers the technique, not every way of\n carrying it out; techniques outside PantherClaw need other tools. Every\n response carries the fixed statement that says so. Prevent and Seen follow\n the agent or environment filter; Detect, Respond and Test are org-wide and\n every response says so.\n\n A person signed in to the console reads the matrix, technique pages and\n gaps on every edition; an API key or access token needs Team or higher\n (founder FQ1 A). The Navigator export needs Team, the history Business."
     },
     {
       "name": "pantherclaw.v1.EvidenceService",
