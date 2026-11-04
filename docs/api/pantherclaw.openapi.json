@@ -11725,6 +11725,114 @@
         }
       }
     },
+    "/pantherclaw.v1.DetectionService/RequestCustomRuleConfirmation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.DetectionService"
+        ],
+        "summary": "RequestCustomRuleConfirmation",
+        "description": "RequestCustomRuleConfirmation asks for one exact published version of\n a custom rule to be confirmed (HR-666): it files a protected change that\n a second person with detection.manage decides with a security key. Once\n confirmed, the version's alerts are RULE_MATCH until a new version, a\n disable or a withdrawal ends the confirmation (Business; a person\n only).\n permission: detection.manage",
+        "operationId": "pantherclaw.v1.DetectionService.RequestCustomRuleConfirmation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RequestCustomRuleConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RequestCustomRuleConfirmationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.DetectionService/WithdrawCustomRuleConfirmation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.DetectionService"
+        ],
+        "summary": "WithdrawCustomRuleConfirmation",
+        "description": "WithdrawCustomRuleConfirmation ends a rule's confirmation at once: its\n alerts are INFERRED again (a person only).\n permission: detection.manage",
+        "operationId": "pantherclaw.v1.DetectionService.WithdrawCustomRuleConfirmation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.WithdrawCustomRuleConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.WithdrawCustomRuleConfirmationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.EnforcementPointService/CreateEnforcementPoint": {
       "post": {
         "tags": [
@@ -58622,6 +58730,39 @@
         "additionalProperties": false,
         "description": "CreateCustomRuleResponse returns the draft."
       },
+      "pantherclaw.v1.CustomRuleConfirmation": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "version",
+            "format": "int32",
+            "description": "The confirmed version number."
+          },
+          "contentDigest": {
+            "type": "string",
+            "title": "content_digest",
+            "description": "Hex SHA-256 of the confirmed content."
+          },
+          "confirmTime": {
+            "title": "confirm_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "requestedBy": {
+            "type": "string",
+            "title": "requested_by",
+            "description": "Who asked for it (\"user:\u003cid\u003e\")."
+          },
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id",
+            "description": "The protected change the second person confirmed."
+          }
+        },
+        "title": "CustomRuleConfirmation",
+        "additionalProperties": false,
+        "description": "CustomRuleConfirmation is a second person's confirmation of one exact\n published custom rule version (HR-666)."
+      },
       "pantherclaw.v1.DetectionRule": {
         "type": "object",
         "properties": {
@@ -58717,6 +58858,16 @@
             "title": "content",
             "description": "The rule's YAML, for custom rules."
           },
+          "confirmation": {
+            "title": "confirmation",
+            "description": "The two-person confirmation of this custom rule version (HR-666), set\n only while it applies: the version is PUBLISHED and its content digest\n is the confirmed one. Its alerts are then RULE_MATCH.",
+            "$ref": "#/components/schemas/pantherclaw.v1.CustomRuleConfirmation"
+          },
+          "pendingConfirmationChangeId": {
+            "type": "string",
+            "title": "pending_confirmation_change_id",
+            "description": "The protected change, waiting for a second person, that would confirm\n this version; empty when none is pending."
+          },
           "attack": {
             "type": "array",
             "items": {
@@ -58726,7 +58877,7 @@
             },
             "title": "attack",
             "maxItems": 16,
-            "description": "Fields 20 and 21 are post-M27's (G0 M28 D703).\n ATT\u0026CK Enterprise techniques the rule maps to (G0 M28 D718).\n PROVISIONAL field number until post-M27's proto changes land (D703)."
+            "description": "ATT\u0026CK Enterprise techniques the rule maps to (G0 M28 D718).\n PROVISIONAL field number until post-M27's proto changes land (D703)."
           },
           "techniquesNone": {
             "type": "string",
@@ -58910,6 +59061,50 @@
         "additionalProperties": false,
         "description": "PublishCustomRuleResponse returns the published rule."
       },
+      "pantherclaw.v1.RequestCustomRuleConfirmationRequest": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^org\\.[a-z][a-z0-9_.]*$"
+          },
+          "version": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+            "title": "version",
+            "format": "int32"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "RequestCustomRuleConfirmationRequest",
+        "additionalProperties": false,
+        "description": "RequestCustomRuleConfirmationRequest names one published version.",
+        "required": [
+          "ruleId",
+          "version",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RequestCustomRuleConfirmationResponse": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id"
+          }
+        },
+        "title": "RequestCustomRuleConfirmationResponse",
+        "additionalProperties": false,
+        "description": "RequestCustomRuleConfirmationResponse names the filed protected change."
+      },
       "pantherclaw.v1.RuleTestResult": {
         "type": "object",
         "properties": {
@@ -58973,6 +59168,37 @@
         "title": "TestCustomRuleResponse",
         "additionalProperties": false,
         "description": "TestCustomRuleResponse returns the results."
+      },
+      "pantherclaw.v1.WithdrawCustomRuleConfirmationRequest": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "rule_id",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^org\\.[a-z][a-z0-9_.]*$"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "WithdrawCustomRuleConfirmationRequest",
+        "additionalProperties": false,
+        "description": "WithdrawCustomRuleConfirmationRequest names a rule.",
+        "required": [
+          "ruleId",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.WithdrawCustomRuleConfirmationResponse": {
+        "type": "object",
+        "title": "WithdrawCustomRuleConfirmationResponse",
+        "additionalProperties": false,
+        "description": "WithdrawCustomRuleConfirmationResponse is empty."
       },
       "pantherclaw.v1.ActivateEnforcementPointRequest": {
         "type": "object",

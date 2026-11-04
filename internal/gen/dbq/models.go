@@ -1616,6 +1616,20 @@ type PcCustomDetectionRule struct {
 	DisabledReason *string
 }
 
+type PcCustomDetectionRuleConfirmation struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	RuleID            string
+	Version           int32
+	ContentDigest     []byte
+	ProtectedChangeID ids.UUID
+	RequestedBy       string
+	ConfirmedAt       time.Time
+	EndedAt           *time.Time
+	EndedReason       *string
+	EndedBy           *string
+}
+
 type PcCustomDetectionRuleTest struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID

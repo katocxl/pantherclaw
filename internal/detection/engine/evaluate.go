@@ -226,9 +226,14 @@ func Signal(c *Compiled, e feed.Event, f Firing) reflexdomain.Signal {
 		Test:  e.Test,
 		Facts: map[string]string{"event_kind": truncate(e.Kind, 512), "count": strconv.Itoa(f.Count)},
 	}
-	if !r.Builtin() && s.Basis.Confirmed() {
-		// A custom rule raises inference at most (D526 P6), whatever an older
-		// publication declared: no automation contains on it.
+	switch {
+	case !r.Builtin() && c.Confirmed:
+		// A version two people confirmed raises RULE_MATCH (HR-666).
+		s.Basis = reflexdomain.BasisRuleMatch
+	case !r.Builtin() && s.Basis.Confirmed():
+		// Any other custom rule raises inference at most (D526 P6, HR-640),
+		// whatever an older publication declared: no automation contains on
+		// it.
 		s.Basis = reflexdomain.BasisInferred
 	}
 	if e.Operation != "" {
