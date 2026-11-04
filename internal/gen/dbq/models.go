@@ -2745,6 +2745,17 @@ type PcKubeClosure struct {
 	ExpiresAt    time.Time
 }
 
+type PcKubeClosureNonce struct {
+	OrgID      ids.OrgID
+	Nonce      []byte
+	Cluster    string
+	Namespace  string
+	InstanceID ids.UUID
+	IssuedAt   time.Time
+	UsedAt     *time.Time
+	ExpiresAt  time.Time
+}
+
 type PcLedgerChain struct {
 	OrgID     ids.OrgID
 	Seq       int64
@@ -3970,6 +3981,7 @@ type PcRun struct {
 	ScopeOperations       []string
 	MaxTokens             pgtype.Int8
 	TokenCapRunID         *ids.UUID
+	LauncherIssuerID      *ids.UUID
 }
 
 type PcSaasScanRun struct {
