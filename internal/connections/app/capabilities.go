@@ -216,6 +216,18 @@ func declareKind(out *Capabilities, c Connection) {
 		// G0 M14 D16, D100.
 		out.Enforcement = Support{Supported, "The gateway builds every query itself from the reviewed manifest: " +
 			"parameterized, in a read-only transaction, with a row cap and a statement timeout (HR-307, HR-308)."}
+	case KindModel:
+		// G0 M29 D812, D813, D814.
+		out.Enforcement = Support{Supported, "The gateway strictly parses each model request, decides on its metadata and " +
+			"the hash of the body it forwards, scans every part of the prompt for secrets and holds the provider key " +
+			"itself (HR-690, HR-691, HR-694)."}
+		out.Limits = append(out.Limits, Limit{
+			"PROMPT_IN_PLAINTEXT",
+			"The gateway and the sandbox edge see prompts and replies in plaintext; neither captures nor logs them (R-73, HR-695).",
+		})
+		out.Failure = append(out.Failure,
+			"A stream that breaks, errs or passes 16 MiB is aborted and its outcome is UNKNOWN: its token reservation is held (HR-692, HR-693).")
+		return
 	case KindA2A:
 		// G0 M14 D31, D33, D100.
 		out.Enforcement = Support{Supported, "The gateway builds every message to the peer agent itself from the reviewed " +
