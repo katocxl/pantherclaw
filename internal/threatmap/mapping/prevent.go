@@ -77,7 +77,7 @@ var Prevent = []PreventControl{
 		ID: "prevent.grant_scope", Title: "Grants name the operations, targets and limits an agent may use", Surface: SurfaceAuthority,
 		ReasonCodes: []string{"NO_GRANT", "OPERATION_NOT_GRANTED", "TARGET_NOT_GRANTED", "OUTSIDE_GUARDRAIL", "GRANT_LIMIT_EXCEEDED"},
 		HR:          []string{"HR-045", "HR-046"}, Requires: RequiresAlways,
-		Techniques: []string{"AML.T0053", "AML.T0101", "AML.T0036", "T1213", "T1485", "T1565.001"},
+		Techniques: []string{"AML.T0053", "AML.T0101", "AML.T0036", "T1213", "T1485", "T1565.001", "T1567.001"},
 		Why: map[string]string{
 			"AML.T0053": "AI agent tool invocation (AML.T0053): a tool call outside the agent's grant is denied before it runs.",
 			"AML.T0101": "Data destruction via AI agent tool invocation (AML.T0101): a delete the grant does not name is denied.",
@@ -85,6 +85,7 @@ var Prevent = []PreventControl{
 			"T1213":     "Data from information repositories (T1213): an agent's read outside its granted targets is denied.",
 			"T1485":     "Data destruction (T1485): a destructive operation the grant does not name is denied.",
 			"T1565.001": "Stored data manipulation (T1565.001): a write the grant does not name is denied.",
+			"T1567.001": "Exfiltration to code repository (T1567.001): a push to a repository the grant does not name is denied.",
 		},
 	},
 	{
@@ -124,11 +125,13 @@ var Prevent = []PreventControl{
 		ID: "prevent.secret_outbound", Title: "Outgoing actions carrying a secret are refused", Surface: SurfaceGateway,
 		ReasonCodes: []string{"secret_in_payload", "SECRET_IN_PAYLOAD"},
 		HR:          []string{"HR-225"}, Requires: RequiresAlways,
-		Techniques: []string{"AML.T0055", "AML.T0086", "T1552.001"},
+		Techniques: []string{"AML.T0055", "AML.T0086", "T1552.001", "T1552.004", "T1567.001"},
 		Why: map[string]string{
 			"AML.T0055": "Unsecured credentials (AML.T0055): a found credential placed in an outgoing action is refused.",
 			"AML.T0086": "Exfiltration via AI agent tool invocation (AML.T0086): a tool write carrying a secret is refused or held.",
 			"T1552.001": "Credentials in files (T1552.001): a token read from a file cannot leave in an outgoing action.",
+			"T1552.004": "Private keys (T1552.004): a private key found in the workspace cannot leave in an outgoing action.",
+			"T1567.001": "Exfiltration to code repository (T1567.001): a commit carrying a found credential is refused or held.",
 		},
 	},
 	{
@@ -178,7 +181,7 @@ var Prevent = []PreventControl{
 		HR:       []string{"HR-122", "HR-214"},
 		Requires: RequiresAlways,
 		Techniques: []string{
-			"AML.T0105", "AML.T0025", "AML.T0072", "T1611", "T1552.005", "T1071.004", "T1048", "T1095", "T1105",
+			"AML.T0105", "AML.T0025", "AML.T0072", "T1611", "T1552.005", "T1552.004", "T1071.004", "T1048", "T1095", "T1105",
 			"T1041", "T1572", "T1090",
 		},
 		Why: map[string]string{
@@ -187,6 +190,7 @@ var Prevent = []PreventControl{
 			"AML.T0072": "Cyber communication channel (AML.T0072): a command channel from the sandbox has no route but the edge.",
 			"T1611":     "Escape to host (T1611): sandbox networks reach neither the host nor the Docker socket.",
 			"T1552.005": "Cloud instance metadata API (T1552.005): the metadata address has no route from the sandbox.",
+			"T1552.004": "Private keys (T1552.004): a push over SSH with a found key has no route out of the sandbox.",
 			"T1071.004": "DNS (T1071.004): the sandbox has no resolver route to the internet.",
 			"T1048":     "Exfiltration over alternative protocol (T1048): IPv6, ICMP and raw ports have no route out of the sandbox.",
 			"T1095":     "Non-application layer protocol (T1095): ICMP and raw sockets have no route out of the sandbox.",
