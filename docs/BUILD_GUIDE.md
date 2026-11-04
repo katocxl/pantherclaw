@@ -836,7 +836,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Agent configuration** (FD5, answer C): digests and a drift alert from scans, a hook route and read-only sandbox binds; never contents or values.
 - **Content and retrieval** (FD7): decoding before content signals; `pc.vectorstore` on pgvector with a writer list and provenance.
 - **Threat map:** six new Prevent controls (seven with M29's token caps), `NARROWED_TRIGGER`, connector refusals counted.
-- Migrations `00340`–`00344` (`00343` reserved; `00345`–`00349` spare).
+- Migrations `00340`–`00345` (`00343` reserved; `00346`–`00349` spare).
 
 ---
 

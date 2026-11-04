@@ -329,7 +329,7 @@ var Prevent = []PreventControl{
 	},
 	{
 		ID: "prevent.query_scope", Title: "A database query reaches only the manifest's tables and columns", Surface: SurfaceConnector,
-		OutcomeCodes: []string{"table_not_allowed", "column_not_allowed", "scope_unsupported"},
+		OutcomeCodes: []string{"table_not_allowed", "column_not_allowed"},
 		HR:           []string{"HR-307", "HR-715"}, Requires: RequiresAlways,
 		Techniques: []string{"T1213.006"},
 		Why: map[string]string{
