@@ -57,8 +57,9 @@ import (
 // hand. No playbook contains (D550): a refused delegation, a refused issue
 // and a refused revision of another agent's grant revoke nothing; a
 // confirmed incident naming a transaction and a customer's (inferred, D526
-// P6) incident naming a run suspend nothing; each opens its case. It is part
-// of `task range`.
+// P6) incident naming a run suspend nothing; each opens its case. The two
+// containment playbooks (HR-665) are listed apart and not run here. It is
+// part of `task range`.
 //
 // Covers: F942, F943
 func TestRange_ScenariosPlaybooks(t *testing.T) {
@@ -67,13 +68,22 @@ func TestRange_ScenariosPlaybooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	var books []seed.Item
+	var contain []string
 	for _, it := range items {
-		if it.Entry.Kind == hubdomain.KindAutomation && strings.HasPrefix(it.Entry.Name, "pc.playbook.") {
-			books = append(books, it)
+		if it.Entry.Kind != hubdomain.KindAutomation || !strings.HasPrefix(it.Entry.Name, "pc.playbook.") {
+			continue
 		}
+		if strings.HasSuffix(it.Entry.Name, "-contain") {
+			contain = append(contain, it.Entry.Name)
+			continue
+		}
+		books = append(books, it)
 	}
 	if len(books) != 6 {
 		t.Fatalf("%d playbooks, want 6", len(books))
+	}
+	if want := []string{"pc.playbook.poisoned-mcp-server-contain", "pc.playbook.rogue-sub-agent-contain"}; !slices.Equal(contain, want) {
+		t.Fatalf("containment playbooks %v, want %v", contain, want)
 	}
 	for _, it := range books {
 		body, err := it.Item.DecodeBody()
@@ -87,10 +97,10 @@ func TestRange_ScenariosPlaybooks(t *testing.T) {
 				pbCaseOnly(t, b, pbSignal{"network_changed", "", identityapp.NetworkChangedEvent(pbInstance, pbAgent, "10.0.0.0/24", "192.0.2.0/24")})
 			case "pc.playbook.poisoned-mcp-server":
 				pbCaseOnly(t, b, pbSignal{"drift", "", connapp.DriftQuarantinedEvent(evdomain.Actor{Type: "gateway", ID: pbGateway}, pbConn,
-					"acme/refunds", "1.0.0", "ACTIVE", "get_refund", "sha256:aa", "sha256:bb", "clean")})
+					"acme/refunds", "1.0.0", "ACTIVE", "get_refund", "sha256:aa", "sha256:bb", "clean", pbRun)})
 			case "pc.playbook.rogue-sub-agent":
 				pbCaseOnly(t, b,
-					pbSignal{"delegate_refused", "", grantsapp.DelegateRefusedEvent(pbInstance, pbParent, pbAgent)},
+					pbSignal{"delegate_refused", "", grantsapp.DelegateRefusedEvent(pbInstance, pbParent, pbAgent, pbRun)},
 					pbSignal{"issue_refused", "", grantsapp.IssueRefusedEvent(pbSA, "grant.issue", pbAgent, ids.UUID{})},
 					pbSignal{"revise_refused_other_agents_grant", "", grantsapp.IssueRefusedEvent(pbSA, "grant.revise", ids.UUID{}, pbOther)})
 			case "pc.playbook.compromised-laptop":

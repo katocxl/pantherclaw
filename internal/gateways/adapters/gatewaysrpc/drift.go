@@ -43,9 +43,18 @@ func (h *GatewayHandler) ReportDrift(ctx context.Context, req *pb.ReportDriftReq
 	if err != nil {
 		return nil, errInvalidID
 	}
+	// A call-time report names the call's transaction; the run comes from
+	// the server's own row of it, never from the gateway (HR-665).
+	var txn ids.UUID
+	if t := req.GetTransactionId(); t != "" {
+		if txn, err = ids.ParseUUID(t); err != nil {
+			return nil, errInvalidID
+		}
+	}
 	quarantined, err := h.drifts.ReportDriftDescribed(ctx, id.Org, id.Gateway, conn, req.GetTool(), req.GetExpectedDigest(),
 		req.GetObservedDigest(), connapp.ObservedDescription{
 			Text: req.ObservedDescription, Truncated: req.GetObservedDescriptionTruncated(), Digest: req.GetObservedDescriptionSha256(),
+			Transaction: txn,
 		})
 	if err != nil {
 		return nil, err

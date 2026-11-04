@@ -811,7 +811,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Behaviour profiles** (Business, [ADR-0049](adr/0049-behaviour-profiles-on-own-transactions.md), V6): a job on PantherClaw's own transactions, off the decision path, labelled INFERRED and UNVALIDATED, coded on simulated history kept in its own table. Approval context sits outside the binding.
 - **Contain only on CONFIRMED alerts** (every automation): a contain step on an inferred alert skips with `UNCONFIRMED_SIGNAL`, and custom detection rules are capped at INFERRED unless two people confirmed the version (HR-666). A person contains every other alert.
 - **Content signals** (Business, [ADR-0050](adr/0050-content-signals-boundary-amendment.md), V5, a written amendment to F789): opt-in and restrict-only, OFF then WATCHING then ACTIVE by step-up, failing closed as a hold in ACTIVE, with no safety claim. Findings keep kind and location, never value. Upgrade gateways before ACTIVE.
-- **Playbooks** (Team): six in `hub/`, a draft on install; none contains, each opens a case for a person.
+- **Playbooks** (Team): six in `hub/`, a draft on install; none contains, each opens a case for a person. After M27, two separate containment playbooks (Business) suspend only the run a CONFIRMED alert names (HR-665).
 - **SIEM packs** (Business): six in `integrations/siem/`, Apache-2.0, on OCSF export, tested offline on golden samples, with no vendor engine run and no store certification.
 - **MCP server** (Team, founder decision H9): `pclaw mcp self`, four reads, the Investigator role admitted only on those reads, and the server's audit of each. The assistant is parked.
 - **Console** (private stream): the baseline view.
