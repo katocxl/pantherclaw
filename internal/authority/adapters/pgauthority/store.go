@@ -627,6 +627,9 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 			return err
 		}
 		x := executed(pc, finalize.RecordedByGateway)
+		if x.Credential, err = reportedCredential(ctx, q, org, pc.ConnectionID, e.Credential); err != nil {
+			return err
+		}
 		if o == finalize.Delegated {
 			access := ""
 			if pc.AccessMode != nil {
@@ -731,6 +734,28 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		return nil
 	})
 	return receipt, err
+}
+
+// reportedCredential checks the credential a gateway reported opening for a
+// dispatch: it must be that version of the permit's connection's
+// credential, in any state, and a permit without a connection takes none
+// (HR-660). Nil when none was reported.
+func reportedCredential(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn *ids.UUID, c *finalize.CredentialUsed,
+) (*finalize.CredentialUsed, error) {
+	if c == nil {
+		return nil, nil //nolint:nilnil // no credential reported is no error
+	}
+	if conn == nil || c.ID.IsZero() || c.Version <= 0 {
+		return nil, finalize.ErrCredentialNotOfConnection
+	}
+	ok, err := q.ExecutionCredentialKnown(ctx, dbq.ExecutionCredentialKnownParams{OrgID: org, ID: c.ID, ConnectionID: *conn, Version: c.Version})
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, finalize.ErrCredentialNotOfConnection
+	}
+	return &finalize.CredentialUsed{ID: c.ID, Version: c.Version}, nil
 }
 
 // revokeFailed records credential.revoke_failed when a dispatch's minted
