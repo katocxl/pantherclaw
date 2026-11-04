@@ -16,6 +16,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -38,6 +39,11 @@ type ClusterConfig struct {
 	AllowedPrefixes []string `json:"allowed_prefixes"`
 	// Orgs lists the org ids that may bind issuer entries to this cluster.
 	Orgs []string `json:"orgs"`
+	// WebhookSecretFile holds the secret of this cluster's admission
+	// webhook path (G0 M32 D967): at least 32 bytes, re-read every minute.
+	// Empty: the admission listener answers every request for the cluster
+	// with 404.
+	WebhookSecretFile string `json:"webhook_secret_file"`
 }
 
 // Validate checks one cluster entry.
@@ -58,6 +64,9 @@ func (c ClusterConfig) Validate() error {
 		if _, err := netip.ParsePrefix(p); err != nil {
 			errs = append(errs, fmt.Errorf("allowed_prefixes: %q is not a CIDR", p))
 		}
+	}
+	if c.WebhookSecretFile != "" && strings.TrimSpace(c.WebhookSecretFile) != c.WebhookSecretFile {
+		errs = append(errs, errors.New("webhook_secret_file must be a path without surrounding spaces"))
 	}
 	if len(c.Orgs) == 0 {
 		errs = append(errs, errors.New("orgs must list at least one org id"))

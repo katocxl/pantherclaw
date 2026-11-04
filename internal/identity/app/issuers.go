@@ -246,6 +246,14 @@ func (b Binding) widening(prev *Binding) []string {
 	}
 }
 
+// sameUUID reports whether a and b name the same id (both nil included).
+func sameUUID(a, b *ids.UUID) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 // Revision is one revision of an issuer entry.
 type Revision struct {
 	ID          ids.UUID
@@ -266,6 +274,9 @@ type Revision struct {
 	ActivatedAt *time.Time
 	ClosedBy    string
 	ClosedAt    *time.Time
+	// RunGrantID is a Kubernetes entry's run grant (G0 M32 D973); nil:
+	// none.
+	RunGrantID *ids.UUID
 }
 
 func revisionView(r dbq.PcTrustedIssuer) (Revision, error) {
@@ -273,7 +284,7 @@ func revisionView(r dbq.PcTrustedIssuer) (Revision, error) {
 		ID: r.ID, EntryID: r.EntryID, Revision: int(r.Revision), AgentID: r.AgentID, Kind: issuers.Kind(r.Kind),
 		Issuer: r.Issuer, Audience: r.Audience, Algorithms: r.Algorithms, AutoAdmit: r.AutoAdmit, State: r.State,
 		ProposedBy: r.ProposedBy, ProposedAt: r.ProposedAt, ActivatedBy: deref(r.ActivatedBy), ActivatedAt: r.ActivatedAt,
-		ClosedBy: deref(r.ClosedBy), ClosedAt: r.ClosedAt,
+		ClosedBy: deref(r.ClosedBy), ClosedAt: r.ClosedAt, RunGrantID: r.RunGrantID,
 	}
 	if err := json.Unmarshal(r.Binding, &out.Binding); err != nil {
 		return out, err
@@ -338,6 +349,10 @@ type ProposeInput struct {
 	Binding   Binding
 	AutoAdmit bool
 	Reason    string
+	// RunGrantID is a Kubernetes entry's run grant (G0 M32 D973); nil:
+	// none. Any change from the active revision's is a widening, so it
+	// takes effect only when a human activates the revision.
+	RunGrantID *ids.UUID
 }
 
 // ProposeIssuer creates an entry or a revision (HR-140, HR-141). A
@@ -352,6 +367,9 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 	}
 	if err := adomain.ValidateReason(in.Reason); err != nil {
 		return Revision{}, pcerr.Wrap(err, pcerr.InvalidArgument, "REASON", err.Error())
+	}
+	if in.RunGrantID != nil && (in.Binding.Kubernetes == nil || in.RunGrantID.IsZero()) {
+		return Revision{}, pcerr.New(pcerr.InvalidArgument, "ISSUER_RUN_GRANT", "a run grant is only for a kubernetes binding")
 	}
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -388,6 +406,7 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		entryID, number := in.EntryID, int32(1)
 		var prev *Binding
 		var prevAuto bool
+		var prevRunGrant *ids.UUID
 		var active *dbq.PcTrustedIssuer
 		if !entryID.IsZero() {
 			e, err := lockEntry(ctx, q, c.Org, entryID)
@@ -407,7 +426,7 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 				if err != nil {
 					return err
 				}
-				prev, prevAuto = &pr.Binding, pr.AutoAdmit
+				prev, prevAuto, prevRunGrant = &pr.Binding, pr.AutoAdmit, pr.RunGrantID
 			}
 		} else {
 			entryID = ids.NewV7()
@@ -415,6 +434,9 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 		widening := in.Binding.widening(prev)
 		if in.AutoAdmit && (prev == nil || !prevAuto) {
 			widening = append(widening, "auto-admission turned on")
+		}
+		if prev != nil && !sameUUID(in.RunGrantID, prevRunGrant) {
+			widening = append(widening, "run grant changed")
 		}
 		state := "PROPOSED"
 		var activatedBy *string
@@ -443,8 +465,12 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 			OrgID: c.Org, ID: ids.NewV7(), EntryID: entryID, Revision: number, AgentID: a.ID, Kind: string(in.Binding.kind()),
 			Issuer: in.Binding.issuer(), Audience: in.Binding.audience(c.Org), Algorithms: in.Binding.algorithms(), Binding: binding,
 			AutoAdmit: in.AutoAdmit, Widening: wjson, State: state, ProposedBy: c.Principal.String(), ActivatedBy: activatedBy,
+			RunGrantID: in.RunGrantID,
 		})
 		if err != nil {
+			if in.RunGrantID != nil && db.IsForeignKeyViolation(err) {
+				return pcerr.New(pcerr.InvalidArgument, "ISSUER_RUN_GRANT", "the run grant is not a grant of this organization")
+			}
 			return err
 		}
 		if out, err = revisionView(r); err != nil {

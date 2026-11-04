@@ -15452,6 +15452,114 @@
         }
       }
     },
+    "/pantherclaw.v1.GatewayAdminService/SetGatewayKubernetesBinding": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayAdminService"
+        ],
+        "summary": "SetGatewayKubernetesBinding",
+        "description": "SetGatewayKubernetesBinding binds an active gateway to one service\n account of a configured cluster (G0 M32 D968): a pod of that account\n may then enroll a replica with its projected token (audience\n pantherclaw-gateway:\u003corg\u003e) instead of a `pcg_` token. It replaces any\n earlier binding and is audited (gateway.kubernetes_binding_set).\n permission: gateway.manage",
+        "operationId": "pantherclaw.v1.GatewayAdminService.SetGatewayKubernetesBinding",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetGatewayKubernetesBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetGatewayKubernetesBindingResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayAdminService/ClearGatewayKubernetesBinding": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayAdminService"
+        ],
+        "summary": "ClearGatewayKubernetesBinding",
+        "description": "ClearGatewayKubernetesBinding removes a gateway's Kubernetes binding;\n only enrollment tokens enroll it afterwards. Audited\n (gateway.kubernetes_binding_cleared).\n permission: gateway.manage",
+        "operationId": "pantherclaw.v1.GatewayAdminService.ClearGatewayKubernetesBinding",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ClearGatewayKubernetesBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ClearGatewayKubernetesBindingResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.GatewayService/Enroll": {
       "post": {
         "tags": [
@@ -20519,6 +20627,168 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.InspectRunResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.KubernetesService/IssueClosureNonce": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.KubernetesService"
+        ],
+        "summary": "IssueClosureNonce",
+        "description": "IssueClosureNonce returns a fresh single-use nonce for one closure\n report of the caller's namespace. The namespace must be the one the\n caller's instance was attested in.\n permission: workload.run",
+        "operationId": "pantherclaw.v1.KubernetesService.IssueClosureNonce",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.IssueClosureNonceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.IssueClosureNonceResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.KubernetesService/SubmitClosure": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.KubernetesService"
+        ],
+        "summary": "SubmitClosure",
+        "description": "SubmitClosure accepts a probe report the caller's edge signed with the\n pod's workload key (a compact JWS). The server checks the signer (an L2\n instance enrolled by Kubernetes attestation whose binding namespace is\n the report's), the edge and probe image digests (admission\n configuration), the nonce, and the cluster-side checks, then records a\n Kubernetes closure (24 hours) and the coverage closure of every mapped\n connection (audit kubernetes.closure_recorded).\n permission: workload.run",
+        "operationId": "pantherclaw.v1.KubernetesService.SubmitClosure",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SubmitClosureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SubmitClosureResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.KubernetesService/StartPodRun": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.KubernetesService"
+        ],
+        "summary": "StartPodRun",
+        "description": "StartPodRun starts the run of the caller's pod under the run grant of\n the issuer entry the caller's instance was attested by (D973). A pod\n has one run at a time; a new run starts when the previous one ended.\n permission: workload.run",
+        "operationId": "pantherclaw.v1.KubernetesService.StartPodRun",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.StartPodRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.StartPodRunResponse"
                 }
               }
             }
@@ -67962,6 +68232,36 @@
         "additionalProperties": false,
         "description": "ClaimVerificationsResponse lists the leased tasks."
       },
+      "pantherclaw.v1.ClearGatewayKubernetesBindingRequest": {
+        "type": "object",
+        "properties": {
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id",
+            "format": "uuid",
+            "description": "Gateway id."
+          }
+        },
+        "title": "ClearGatewayKubernetesBindingRequest",
+        "additionalProperties": false,
+        "description": "ClearGatewayKubernetesBindingRequest unbinds a gateway.",
+        "required": [
+          "gatewayId"
+        ]
+      },
+      "pantherclaw.v1.ClearGatewayKubernetesBindingResponse": {
+        "type": "object",
+        "properties": {
+          "gateway": {
+            "title": "gateway",
+            "description": "The gateway.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Gateway"
+          }
+        },
+        "title": "ClearGatewayKubernetesBindingResponse",
+        "additionalProperties": false,
+        "description": "ClearGatewayKubernetesBindingResponse returns the gateway."
+      },
       "pantherclaw.v1.ConnectionStateEntry": {
         "type": "object",
         "properties": {
@@ -68332,6 +68632,11 @@
             "type": "boolean",
             "title": "connected",
             "description": "Whether some replica reported in the last 90 seconds."
+          },
+          "kubernetesBinding": {
+            "title": "kubernetes_binding",
+            "description": "The Kubernetes service account whose projected token may enroll a\n replica (G0 M32 D968); unset: none.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GatewayKubernetesBinding"
           }
         },
         "title": "Gateway",
@@ -68581,6 +68886,106 @@
         "additionalProperties": false,
         "description": "GatewayConnection is a connection as its gateway sees it."
       },
+      "pantherclaw.v1.GatewayKubernetesBinding": {
+        "type": "object",
+        "properties": {
+          "cluster": {
+            "type": "string",
+            "title": "cluster",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Cluster name from the server configuration (identity.kubernetes_clusters)."
+          },
+          "namespace": {
+            "type": "string",
+            "title": "namespace",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Namespace."
+          },
+          "serviceAccountName": {
+            "type": "string",
+            "title": "service_account_name",
+            "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$",
+            "description": "Service account name."
+          },
+          "serviceAccountUid": {
+            "type": "string",
+            "title": "service_account_uid",
+            "format": "uuid",
+            "description": "Service account UID."
+          },
+          "imageDigests": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxItems": 50,
+              "uniqueItems": true
+            },
+            "title": "image_digests",
+            "maxItems": 50,
+            "uniqueItems": true,
+            "description": "Optional allowed image digests of the gateway container; empty accepts\n any image pinned by digest."
+          }
+        },
+        "title": "GatewayKubernetesBinding",
+        "additionalProperties": false,
+        "description": "GatewayKubernetesBinding pins the gateway pods of one service account in\n a configured cluster (G0 M32 D968). The service-account UID makes a\n deleted and recreated account with the same name a different identity."
+      },
+      "pantherclaw.v1.GatewayKubernetesBindingInput": {
+        "type": "object",
+        "properties": {
+          "cluster": {
+            "type": "string",
+            "title": "cluster",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Cluster name from the server configuration (identity.kubernetes_clusters)."
+          },
+          "namespace": {
+            "type": "string",
+            "title": "namespace",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Namespace."
+          },
+          "serviceAccountName": {
+            "type": "string",
+            "title": "service_account_name",
+            "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$",
+            "description": "Service account name."
+          },
+          "serviceAccountUid": {
+            "type": "string",
+            "title": "service_account_uid",
+            "format": "uuid",
+            "description": "Service account UID."
+          },
+          "imageDigests": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxItems": 50,
+              "uniqueItems": true
+            },
+            "title": "image_digests",
+            "maxItems": 50,
+            "uniqueItems": true,
+            "description": "Optional allowed image digests of the gateway container; empty accepts\n any image pinned by digest."
+          }
+        },
+        "title": "GatewayKubernetesBinding",
+        "additionalProperties": false,
+        "description": "GatewayKubernetesBinding pins the gateway pods of one service account in\n a configured cluster (G0 M32 D968). The service-account UID makes a\n deleted and recreated account with the same name a different identity.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.GatewayKubernetesBinding",
+        "required": [
+          "cluster",
+          "namespace",
+          "serviceAccountName",
+          "serviceAccountUid"
+        ]
+      },
       "pantherclaw.v1.GatewayMcpAccess": {
         "type": "object",
         "properties": {
@@ -68664,12 +69069,40 @@
         "type": "object",
         "properties": {
           "token": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "title": "token",
             "maxLength": 128,
-            "minLength": 16,
-            "pattern": "^pcg_[A-Za-z0-9_-]+$",
-            "description": "The `pcg_` enrollment token."
+            "description": "The `pcg_` enrollment token.",
+            "anyOf": [
+              {
+                "minLength": 16,
+                "pattern": "^pcg_[A-Za-z0-9_-]+$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "kubernetesToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "kubernetes_token",
+            "maxLength": 16384,
+            "description": "A projected service-account token of a pod bound to the gateway\n (audience pantherclaw-gateway:\u003corg\u003e, G0 M32 D968), a JWT.",
+            "anyOf": [
+              {
+                "minLength": 16,
+                "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           },
           "csr": {
             "type": "string",
@@ -68682,9 +69115,8 @@
         },
         "title": "GatewayServiceEnrollRequest",
         "additionalProperties": false,
-        "description": "GatewayServiceEnrollRequest exchanges a token for a certificate.",
+        "description": "GatewayServiceEnrollRequest exchanges a token for a certificate: exactly\n one of a `pcg_` enrollment token and a Kubernetes projected token.\nexactly one of token and kubernetes_token is required:\n```\n(this.token != '') != (this.kubernetes_token != '')\n```\n\n",
         "required": [
-          "token",
           "csr"
         ]
       },
@@ -70683,6 +71115,42 @@
         "title": "SetFleetPolicyResponse",
         "additionalProperties": false,
         "description": "SetFleetPolicyResponse is the policy as stored."
+      },
+      "pantherclaw.v1.SetGatewayKubernetesBindingRequest": {
+        "type": "object",
+        "properties": {
+          "gatewayId": {
+            "type": "string",
+            "title": "gateway_id",
+            "format": "uuid",
+            "description": "Gateway id."
+          },
+          "binding": {
+            "title": "binding",
+            "description": "The binding.",
+            "$ref": "#/components/schemas/pantherclaw.v1.GatewayKubernetesBindingInput"
+          }
+        },
+        "title": "SetGatewayKubernetesBindingRequest",
+        "required": [
+          "binding",
+          "gatewayId"
+        ],
+        "additionalProperties": false,
+        "description": "SetGatewayKubernetesBindingRequest binds a gateway."
+      },
+      "pantherclaw.v1.SetGatewayKubernetesBindingResponse": {
+        "type": "object",
+        "properties": {
+          "gateway": {
+            "title": "gateway",
+            "description": "The gateway.",
+            "$ref": "#/components/schemas/pantherclaw.v1.Gateway"
+          }
+        },
+        "title": "SetGatewayKubernetesBindingResponse",
+        "additionalProperties": false,
+        "description": "SetGatewayKubernetesBindingResponse returns the gateway."
       },
       "pantherclaw.v1.SignAgentCardRequest": {
         "type": "object",
@@ -74820,6 +75288,11 @@
             "title": "close_time",
             "description": "When.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "runGrantId": {
+            "type": "string",
+            "title": "run_grant_id",
+            "description": "Kubernetes only: the grant a pod's run is started under (G0 M32\n D973); empty: none."
           }
         },
         "title": "IssuerRevision",
@@ -75248,6 +75721,22 @@
             "title": "auto_admit",
             "description": "Admit matching instances without an owner (a widening when turned on)."
           },
+          "runGrantId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "run_grant_id",
+            "description": "Kubernetes only: the grant a pod's run is started under\n (KubernetesService.StartPodRun, G0 M32 D973). Part of the revision, so\n it changes only through a new revision and its approval; empty: the\n entry starts no runs.",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
           "reason": {
             "type": "string",
             "title": "reason",
@@ -75258,7 +75747,7 @@
         },
         "title": "ProposeIssuerEntryRequest",
         "additionalProperties": false,
-        "description": "ProposeIssuerEntryRequest proposes a new entry or a new revision.",
+        "description": "ProposeIssuerEntryRequest proposes a new entry or a new revision.\nrun_grant_id is only for a kubernetes binding:\n```\nthis.run_grant_id == '' || has(this.kubernetes)\n```\n\n",
         "required": [
           "agentId",
           "reason"
@@ -79086,6 +79575,164 @@
         "title": "WhatHappenedResponse",
         "additionalProperties": false,
         "description": "WhatHappenedResponse is what actually happened (F239)."
+      },
+      "pantherclaw.v1.IssueClosureNonceRequest": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "namespace",
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "The caller's namespace."
+          }
+        },
+        "title": "IssueClosureNonceRequest",
+        "additionalProperties": false,
+        "description": "IssueClosureNonceRequest names the namespace a report is for.",
+        "required": [
+          "namespace"
+        ]
+      },
+      "pantherclaw.v1.IssueClosureNonceResponse": {
+        "type": "object",
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "title": "nonce",
+            "description": "Single-use server nonce."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When it stops being accepted.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "IssueClosureNonceResponse",
+        "additionalProperties": false,
+        "description": "IssueClosureNonceResponse is the nonce."
+      },
+      "pantherclaw.v1.KubernetesConnectionClosure": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "Connection id."
+          },
+          "closureId": {
+            "type": "string",
+            "title": "closure_id",
+            "description": "Coverage closure id."
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "passed",
+            "description": "Whether it passed."
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "failed",
+            "description": "failed names the results that kept it from passing."
+          }
+        },
+        "title": "KubernetesConnectionClosure",
+        "additionalProperties": false,
+        "description": "KubernetesConnectionClosure is the coverage closure recorded for one\n mapped connection."
+      },
+      "pantherclaw.v1.StartPodRunRequest": {
+        "type": "object",
+        "properties": {
+          "podName": {
+            "type": "string",
+            "title": "pod_name",
+            "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$",
+            "description": "The pod's name (from the downward API); it must be the pod the\n caller's instance was attested for."
+          }
+        },
+        "title": "StartPodRunRequest",
+        "additionalProperties": false,
+        "description": "StartPodRunRequest names the caller's pod.",
+        "required": [
+          "podName"
+        ]
+      },
+      "pantherclaw.v1.StartPodRunResponse": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "title": "run_id",
+            "description": "The run id."
+          }
+        },
+        "title": "StartPodRunResponse",
+        "additionalProperties": false,
+        "description": "StartPodRunResponse is the run."
+      },
+      "pantherclaw.v1.SubmitClosureRequest": {
+        "type": "object",
+        "properties": {
+          "reportJws": {
+            "type": "string",
+            "title": "report_jws",
+            "maxLength": 65536,
+            "minLength": 1,
+            "description": "report_jws is the signed report, a compact JWS."
+          }
+        },
+        "title": "SubmitClosureRequest",
+        "additionalProperties": false,
+        "description": "SubmitClosureRequest carries one signed probe report.",
+        "required": [
+          "reportJws"
+        ]
+      },
+      "pantherclaw.v1.SubmitClosureResponse": {
+        "type": "object",
+        "properties": {
+          "kubeClosureId": {
+            "type": "string",
+            "title": "kube_closure_id",
+            "description": "The Kubernetes closure id."
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "\"sandbox\" or \"control\"."
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "passed",
+            "description": "Whether the report passed."
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "failed",
+            "description": "failed names the results and checks that were not as expected."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When the closure expires (24 hours).",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "closures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.KubernetesConnectionClosure"
+            },
+            "title": "closures",
+            "description": "The coverage closures of the mapped connections (kind sandbox only)."
+          }
+        },
+        "title": "SubmitClosureResponse",
+        "additionalProperties": false,
+        "description": "SubmitClosureResponse is what the server recorded."
       },
       "pantherclaw.v1.McpCatalogMode": {
         "type": "string",
@@ -104552,6 +105199,10 @@
     {
       "name": "pantherclaw.v1.InvestigationService",
       "description": "InvestigationService explains runs and actions from recorded evidence\n (G0 M10 D20; F239, F241, F248, F232, F284, F234; HR-247). Every row is\n read with evidence.read where its agent lives; rows of other agents are\n left out before anything is counted, and an action or run outside that\n scope is reported as not found. Nothing here asserts causation: items\n carry their basis, and a comparison never labels a run malicious."
+    },
+    {
+      "name": "pantherclaw.v1.KubernetesService",
+      "description": "KubernetesService is called by the edge of an agent pod in a protected\n namespace (G0 M32 D966, D970, D973). Like WorkloadService it is\n authenticated by PAP/1, never by user or service-account credentials:\n the caller is an instance enrolled by Kubernetes attestation, and every\n call carries a PAP-Proof signed with the pod's workload key and its\n workload token."
     },
     {
       "name": "pantherclaw.v1.McpCatalogService",

@@ -84,6 +84,9 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 		State: revisionState[r.State], ProposedBy: r.ProposedBy, ProposeTime: timestamppb.New(r.ProposedAt),
 		ActivatedBy: r.ActivatedBy, ActivateTime: tsp(r.ActivatedAt), ClosedBy: r.ClosedBy, CloseTime: tsp(r.ClosedAt),
 	}
+	if r.RunGrantID != nil {
+		out.RunGrantId = r.RunGrantID.String()
+	}
 	if g := r.Binding.GitHub; g != nil {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_GITHUB_ACTIONS
 		out.Binding = &pantherclawv1.IssuerRevision_Github{Github: &pantherclawv1.GithubBinding{
@@ -147,9 +150,17 @@ func (s *Identity) ProposeIssuerEntry(ctx context.Context, req *pantherclawv1.Pr
 	if err != nil {
 		return nil, err
 	}
+	var runGrant *ids.UUID
+	if req.GetRunGrantId() != "" {
+		g, err := parseID(req.GetRunGrantId())
+		if err != nil {
+			return nil, err
+		}
+		runGrant = &g
+	}
 	r, err := s.svc.ProposeIssuer(ctx, app.ProposeInput{
 		EntryID: entry, AgentID: agent, Binding: bindingFromProto(req),
-		AutoAdmit: req.GetAutoAdmit(), Reason: req.GetReason(),
+		AutoAdmit: req.GetAutoAdmit(), Reason: req.GetReason(), RunGrantID: runGrant,
 	}, s.clusters)
 	if err != nil {
 		return nil, err

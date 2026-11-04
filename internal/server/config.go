@@ -97,6 +97,9 @@ type Config struct {
 	Model ModelConfig `json:"model"`
 	// ThreatMap is the M28 threat map (config_m28.go).
 	ThreatMap ThreatMapConfig `json:"threat_map"`
+	// Admission is the M32 Kubernetes admission webhook
+	// (wiring_m32_admission.go).
+	Admission AdmissionConfig `json:"admission"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -270,6 +273,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateExternalChecks()...)
 	errs = append(errs, c.validateModel()...)
 	errs = append(errs, c.validateThreatMap()...)
+	errs = append(errs, c.validateAdmission()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

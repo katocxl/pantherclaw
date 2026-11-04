@@ -1430,7 +1430,7 @@ type PcCoverageClosure struct {
 	ID                     ids.UUID
 	AgentID                ids.UUID
 	ConnectionID           ids.UUID
-	SandboxSessionID       ids.UUID
+	SandboxSessionID       *ids.UUID
 	Result                 string
 	Probes                 []byte
 	PositiveControlsPassed bool
@@ -1453,6 +1453,7 @@ type PcCoverageClosure struct {
 	ObservedAt             time.Time
 	ExpiresAt              time.Time
 	RecordedAt             time.Time
+	KubeClosureID          *ids.UUID
 }
 
 type PcCoverageExclusion struct {
@@ -2308,6 +2309,7 @@ type PcGateway struct {
 	RevokedBy     *string
 	RevokedAt     *time.Time
 	RevokeReason  *string
+	KubeBinding   []byte
 }
 
 type PcGatewayAlertState struct {
@@ -2720,6 +2722,19 @@ type PcKillSwitchRequest struct {
 	DecidedBy    *ids.UUID
 	DeciderCred  *ids.UUID
 	DecidedAt    *time.Time
+}
+
+type PcKubeClosure struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Cluster      string
+	Namespace    string
+	InstanceID   ids.UUID
+	Kind         string
+	ReportDigest string
+	Result       string
+	EvaluatedAt  time.Time
+	ExpiresAt    time.Time
 }
 
 type PcLedgerChain struct {
@@ -4606,6 +4621,7 @@ type PcTrustedIssuer struct {
 	ActivatedAt *time.Time
 	ClosedBy    *string
 	ClosedAt    *time.Time
+	RunGrantID  *ids.UUID
 }
 
 type PcUnreceiptedEffect struct {
