@@ -21,17 +21,9 @@ import (
 var ledgerKind = regexp.MustCompile(`audit\.([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)(.?)`)
 
 // contentAllowed are audit.<kind> strings in content that name no kind the
-// core writes, keyed "<path>|<kind>", each with why.
-var contentAllowed = map[string]string{
-	"internal/detection/pack/builtin/integrity_action_tampered.yaml|security.evidence_integrity_reset":           noFireEvent,
-	"internal/detection/pack/builtin/integrity_effect_without_receipt.yaml|security.evidence_integrity_reset":    noFireEvent,
-	"internal/detection/pack/builtin/integrity_evidence_integrity_failed.yaml|security.evidence_integrity_reset": noFireEvent,
-}
-
-// noFireEvent: a rule test event the rule must not fire on. Its kind is the
-// name of a notification type, not of an audit entry, and is used only as
-// "something else".
-const noFireEvent = "a no-fire test event named after a notification type"
+// core writes, keyed "<path>|<kind>", each with why. Empty: every one in
+// content today is real.
+var contentAllowed = map[string]string{}
 
 // TestHR664_ContentNamesKnownKinds reads the content that names audit
 // kinds by text: the built-in detection rules, the Hub items, the SIEM
