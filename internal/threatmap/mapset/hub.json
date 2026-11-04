@@ -1,0 +1,100 @@
+{
+  "rules": [
+    {
+      "id": "org.hub.external_disclosure_repeat",
+      "item": "pc.detect.external-disclosure-repeat",
+      "atlas": [
+        "AML.T0086"
+      ],
+      "attack": [
+        "T1567"
+      ]
+    },
+    {
+      "id": "org.hub.first_production_deploy",
+      "item": "pc.detect.first-production-deploy"
+    },
+    {
+      "id": "org.hub.held_merge_then_shell",
+      "item": "pc.detect.held-merge-then-shell",
+      "atlas": [
+        "AML.T0050"
+      ],
+      "attack": [
+        "T1059.004"
+      ]
+    },
+    {
+      "id": "org.hub.merge_denial_burst",
+      "item": "pc.detect.merge-denial-burst",
+      "atlas": [
+        "AML.T0133"
+      ]
+    },
+    {
+      "id": "org.hub.refund_burst",
+      "item": "pc.detect.refund-burst",
+      "atlas": [
+        "AML.T0048.000"
+      ],
+      "attack": [
+        "T1657"
+      ]
+    },
+    {
+      "id": "org.hub.refund_cap_probing",
+      "item": "pc.detect.refund-cap-probing",
+      "atlas": [
+        "AML.T0133",
+        "AML.T0048.000"
+      ],
+      "attack": [
+        "T1657"
+      ]
+    },
+    {
+      "id": "org.hub.secret_outbound_refused",
+      "item": "pc.detect.secret-outbound-refused",
+      "atlas": [
+        "AML.T0086"
+      ],
+      "attack": [
+        "T1552"
+      ]
+    },
+    {
+      "id": "org.hub.shell_merge_attempt",
+      "item": "pc.detect.shell-merge-attempt",
+      "atlas": [
+        "AML.T0050"
+      ],
+      "attack": [
+        "T1059.004"
+      ]
+    }
+  ],
+  "playbooks": [
+    {
+      "name": "pc.playbook.leaked-key",
+      "rules": [
+        "org.hub.secret_outbound_refused",
+        "pc.identity.key_new_network"
+      ]
+    },
+    {
+      "name": "pc.playbook.poisoned-mcp-server",
+      "rules": [
+        "pc.tools.description_injection",
+        "pc.tools.drift"
+      ]
+    },
+    {
+      "name": "pc.playbook.rogue-sub-agent",
+      "rules": [
+        "pc.authority.self_approve",
+        "pc.authority.self_issue",
+        "pc.delegation.depth_anomaly"
+      ]
+    }
+  ]
+}

@@ -10,6 +10,11 @@ rules: [HR-307]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent smuggles SQL into the parts of a read tool's request."
+atlas: [AML.T0036]
+attack: [T1213.006]
+technique_why:
+  AML.T0036: "Data from information repositories (AML.T0036): the agent smuggles SQL into a read tool's request to reach more data."
+  T1213.006: "Databases (T1213.006): the injected SQL targets a Postgres database."
 requires: [pg.query]
 harness_only: false
 steps:

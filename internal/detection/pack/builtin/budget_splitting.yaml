@@ -11,6 +11,8 @@ severity: MEDIUM
 attention: ALERT
 basis: INFERRED
 owasp: [ASI02]
+atlas: [AML.T0048.000]
+attack: [T1657]
 edition: business
 on: [receipt.decision]
 match: event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"] && "budget" in event.attrs

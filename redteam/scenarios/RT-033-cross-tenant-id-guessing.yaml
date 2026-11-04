@@ -10,6 +10,7 @@ rules: [HR-050, HR-051]
 asi: [ASI03]
 asi_why:
   ASI03: "Identity and privilege abuse (ASI03): the agent guesses ids to reach another organisation's records."
+techniques_none: "Tests PantherClaw's own tenant isolation: ids of another organization's records are not found."
 requires: [second_org]
 harness_only: false
 steps:

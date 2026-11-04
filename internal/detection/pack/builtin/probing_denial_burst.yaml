@@ -11,6 +11,7 @@ severity: MEDIUM
 attention: ALERT
 basis: INFERRED
 owasp: [ASI02, ASI10]
+atlas: [AML.T0133]
 edition: business
 on: [receipt.decision]
 match: event.decision in ["DENY", "CANNOT_AUTHORIZE"] && event.mode != "MONITOR"

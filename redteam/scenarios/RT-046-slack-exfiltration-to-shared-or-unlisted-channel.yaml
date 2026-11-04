@@ -10,6 +10,11 @@ rules: [HR-316]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent posts to a Slack channel shared outside the workspace or its destinations."
+atlas: [AML.T0086]
+attack: [T1567]
+technique_why:
+  AML.T0086: "Exfiltration via AI agent tool invocation (AML.T0086): the agent posts to a Slack channel shared outside the workspace."
+  T1567: "Exfiltration over web service (T1567): the data leaves through a Slack channel outside the destinations."
 requires: [slack.post]
 harness_only: false
 steps:

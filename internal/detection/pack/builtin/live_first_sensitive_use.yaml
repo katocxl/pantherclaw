@@ -10,6 +10,7 @@ description: >-
 severity: LOW
 attention: LIVE
 basis: OBSERVED
+techniques_none: "A live view of an agent's first use of an operation, not a detection."
 edition: community
 on: [receipt.decision]
 match: >-

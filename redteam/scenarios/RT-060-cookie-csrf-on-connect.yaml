@@ -7,6 +7,7 @@ tier: business
 attacker: A9
 threats: [T-160]
 rules: [HR-342, HR-343]
+techniques_none: "Tests PantherClaw's own management plane: another site cannot ride a session cookie into the Connect API."
 requires: [browser]
 harness_only: false
 steps:

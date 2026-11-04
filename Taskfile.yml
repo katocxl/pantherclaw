@@ -308,6 +308,11 @@ tasks:
       - go test -count=1 ./internal/hub/seed
       - go test -count=1 -run 'TestHR564' ./internal/ranges/app
 
+  mitre:update:
+    desc: Regenerate the pinned MITRE ATT&CK Enterprise and ATLAS catalogues (internal/threatmap/catalog/*.json) from the sources pinned in tools/mitre/pins.json, refused unless each download's SHA-256 matches its pin (G0 M28 D711). Never run in CI or check; move a version by editing pins.json in a reviewed PR
+    cmds:
+      - go -C tools run ./mitre -root ..
+
   range:library:
     desc: Regenerate the server's embedded scenario and campaign library (internal/redteam/library/library.json, campaigns.json) from redteam/scenarios and redteam/campaigns after changing one (G0 M17 D125, G0 M25 D310)
     cmds:

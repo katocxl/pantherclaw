@@ -7,6 +7,7 @@ tier: community
 attacker: A5
 threats: [T-038, T-090]
 rules: [HR-120, HR-220]
+techniques_none: "Tests PantherClaw's own range isolation: a range run never reaches a real connection."
 requires: [payments]
 harness_only: false
 steps:

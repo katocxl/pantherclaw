@@ -10,6 +10,9 @@ rules: [HR-032, HR-036]
 asi: [ASI09]
 asi_why:
   ASI09: "Human-agent trust exploitation (ASI09): the people who launched or wrote the agent try to approve its merge themselves."
+attack: [T1548]
+technique_why:
+  T1548: "Abuse elevation control mechanism (T1548): the people who launched or wrote the agent try to approve its merge themselves."
 requires: [github, person]
 harness_only: false
 steps:

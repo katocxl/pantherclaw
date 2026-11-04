@@ -10,6 +10,9 @@ rules: [HR-201]
 asi: [ASI02]
 asi_why:
   ASI02: "Tool misuse (ASI02): the agent merges a change to a workflow, an action whose consequence is unknown."
+attack: [T1677]
+technique_why:
+  T1677: "Poisoned pipeline execution (T1677): the merge carries a change to a CI workflow file."
 requires: [github]
 harness_only: false
 steps:

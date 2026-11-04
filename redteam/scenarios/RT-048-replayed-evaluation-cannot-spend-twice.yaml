@@ -10,6 +10,11 @@ rules: [HR-318, HR-319]
 asi: [ASI03]
 asi_why:
   ASI03: "Identity and privilege abuse (ASI03): a replayed evaluation tries to spend the agent's budget twice."
+atlas: [AML.T0091.000]
+attack: [T1550.001]
+technique_why:
+  AML.T0091.000: "Application access token (AML.T0091.000): a replayed evaluation tries to spend the agent's budget twice."
+  T1550.001: "Application access token (T1550.001): the replayed evaluation stands in for a fresh authorization."
 requires: [payments, authzen.evaluate]
 harness_only: false
 steps:

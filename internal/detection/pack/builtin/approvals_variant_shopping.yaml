@@ -11,6 +11,7 @@ severity: MEDIUM
 attention: ALERT
 basis: OBSERVED
 owasp: [ASI09]
+attack: [T1548]
 edition: community
 on: [audit.security.variant_suspected]
 group: target
