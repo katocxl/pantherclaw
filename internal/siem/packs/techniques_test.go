@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-//nolint:misspell // MITRE and the packs' own mitre field names (G0 M28 D714a).
 package packs_test
 
 import (

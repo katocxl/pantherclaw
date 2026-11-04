@@ -212,8 +212,6 @@ var sources = []string{SourceDetection, SourceResponse, SourceSIEM, SourceSignal
 // another part of the product (response, SIEM delivery, Shared Signals,
 // coverage, the system itself). The Raiser turns it into an alert, a live
 // event or nothing, by its attention (D14).
-//
-//nolint:misspell // MITRE is a proper noun (the ATLAS publisher), not "miter".
 type Signal struct {
 	Org         ids.OrgID
 	Source      string
