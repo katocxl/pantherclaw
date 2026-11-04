@@ -325,6 +325,7 @@ func runSandboxInto(ctx context.Context, a *app, f sandboxRunFlags, x sandboxExt
 		Run: run.GetRun().GetId(), KeyFile: kf, TokenFile: tokenFile, ProbeKey: probeKey, HostKey: hostKey, Canary: cn, CanaryPorts: ports,
 		HostPorts: []int{gwPort}, Dir: dir, BeforeProbe: a.beforeProbe,
 		ModelHost: x.modelHost, ModelConnection: x.modelConnection, ModelPlaceholder: x.placeholder,
+		ModelConnections: started.GetModelConnections(), // G0 M29 D814, D815, D877
 	})
 	defer func() {
 		if err := box.Close(context.WithoutCancel(ctx)); err != nil {
