@@ -319,6 +319,8 @@ func (ThreatLane) EnumDescriptor() ([]byte, []int) {
 type ThreatFixKind int32
 
 const (
+	// No fix the organization can apply (G0 M28 D720c): a lane capped only
+	// by its sub-techniques, or a lane with no fix.
 	ThreatFixKind_THREAT_FIX_KIND_UNSPECIFIED           ThreatFixKind = 0
 	ThreatFixKind_THREAT_FIX_KIND_ENABLE_RULE           ThreatFixKind = 1
 	ThreatFixKind_THREAT_FIX_KIND_END_SUPPRESSION       ThreatFixKind = 2

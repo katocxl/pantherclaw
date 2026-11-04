@@ -118,6 +118,8 @@ enum ThreatLane {
 
 // ThreatFixKind is how to close a gap.
 enum ThreatFixKind {
+  // No fix the organization can apply (G0 M28 D720c): a lane capped only
+  // by its sub-techniques, or a lane with no fix.
   THREAT_FIX_KIND_UNSPECIFIED = 0;
   THREAT_FIX_KIND_ENABLE_RULE = 1;
   THREAT_FIX_KIND_END_SUPPRESSION = 2;

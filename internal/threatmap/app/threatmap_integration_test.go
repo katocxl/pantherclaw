@@ -457,7 +457,7 @@ func liveCandidate(t *testing.T) string {
 // TestHR680_PostureSinceIsWhenTheRuleWentOff: a rule turned off 20 days ago
 // is a posture finding since its disabled_at, the same on every read, not
 // since the read (G0 M28 D724a).
-// Covers: F960, HR-680
+// Covers: F971, HR-680
 func TestHR680_PostureSinceIsWhenTheRuleWentOff(t *testing.T) {
 	f := newFx(t)
 	rule := liveCandidate(t)

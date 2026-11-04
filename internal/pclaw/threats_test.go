@@ -71,6 +71,9 @@ func (f *fakeThreatMap) ListThreatGaps(_ context.Context, req *pb.ListThreatGaps
 	return &pb.ListThreatGapsResponse{Gaps: []*pb.ThreatGap{{
 		Lane: pb.ThreatLane_THREAT_LANE_TEST, TechniqueId: "AML.T0054", FixKind: pb.ThreatFixKind_THREAT_FIX_KIND_RUN_SCENARIO,
 		TargetId: "s9", Label: "Run scenario s9",
+	}, {
+		// No fix the organization can apply (D720c).
+		Lane: pb.ThreatLane_THREAT_LANE_PREVENT, TechniqueId: "AML.T0002", Reason: "SUBTECHNIQUES_ONLY", Label: "covers 1 of 2 sub-techniques",
 	}}}, nil
 }
 
@@ -135,7 +138,8 @@ func TestThreatsCommands(t *testing.T) {
 
 	code, out, _ = run(t, env, "threats", "gaps")
 	if code != 0 || len(f.gaps) != 2 || f.gaps[1].GetPageToken() != "Mg" || !strings.Contains(out, "ENABLE_RULE r1") ||
-		!strings.Contains(out, "RUN_SCENARIO s9") || !ends(out) {
+		!strings.Contains(out, "RUN_SCENARIO s9") || !strings.Contains(out, "covers 1 of 2 sub-techniques") ||
+		strings.Contains(out, "UNSPECIFIED") || strings.Contains(out, "NO FIX") || !ends(out) {
 		t.Fatalf("gaps = %d %q (%d pages)", code, out, len(f.gaps))
 	}
 

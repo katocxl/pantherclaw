@@ -415,16 +415,16 @@ func writeThreatGaps(w io.Writer, gaps []*pb.ThreatGap) error {
 	if len(gaps) == 0 {
 		e.f("No PARTIAL or GAP lane.\n")
 	}
-	target := "\x00"
+	group := "\x00"
 	for _, g := range gaps {
-		if g.GetTargetId() != target {
-			target = g.GetTargetId()
-			// A gap with no fix (a lane capped only by its sub-techniques,
-			// G0 M28 D720b) has no kind and no target.
-			if g.GetFixKind() == pb.ThreatFixKind_THREAT_FIX_KIND_UNSPECIFIED {
-				e.f("\nNO FIX %s\n", target)
-			} else {
-				e.f("\n%s %s\n", threatEnum(g.GetFixKind(), "THREAT_FIX_KIND_"), target)
+		// A gap with no fix the organization can apply (a lane capped only
+		// by its sub-techniques) has no fix line (G0 M28 D720c).
+		key := g.GetFixKind().String() + "\x00" + g.GetTargetId()
+		if key != group {
+			e.f("\n")
+			group = key
+			if g.GetFixKind() != pb.ThreatFixKind_THREAT_FIX_KIND_UNSPECIFIED {
+				e.f("%s %s\n", threatEnum(g.GetFixKind(), "THREAT_FIX_KIND_"), g.GetTargetId())
 			}
 		}
 		writeGap(e, g)

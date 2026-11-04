@@ -78,6 +78,12 @@ type rangeDriver struct {
 	planEvents int
 	// flood is the api.flood steps' API layer, shared by a scenario's steps (M13).
 	flood *floodState
+
+	// hubKey, set before Setup, is the stack's dev.hub_key_file; business
+	// runs it with hosted plans and a Business plan from the start (M28's
+	// exit journey).
+	hubKey   string
+	business bool
 }
 
 type reviewer struct {
@@ -139,7 +145,8 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	o.stripe = needsStripe(sc)
 	o.a2a = needsA2A(sc)
-	o.billing = requires(sc, "billing")
+	o.billing = requires(sc, "billing") || d.business
+	o.hubKey = d.hubKey
 	if needsPostgres(sc) {
 		o.postgres = pgtargettest.New(t)
 	}
@@ -162,6 +169,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.s = sandboxStart(d)
 	} else {
 		d.s = start(t, o)
+	}
+	if d.business {
+		activePlan(t, d.s.pool, d.s.org)
 	}
 	d.fix = app.Fixture{}
 	d.plant()
