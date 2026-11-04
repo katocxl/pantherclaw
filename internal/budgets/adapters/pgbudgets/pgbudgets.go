@@ -207,6 +207,21 @@ func ReserveLines(ctx context.Context, q *dbq.Queries, org ids.OrgID, lines []Li
 	return nil
 }
 
+// LockLines takes every line's row in the lines' order, as ReserveLines
+// would, and writes nothing.
+func LockLines(ctx context.Context, q *dbq.Queries, org ids.OrgID, lines []Line) error {
+	for _, l := range lines {
+		lock := q.LockBudgetAccount
+		if l.Kind == bdomain.KindCounter {
+			lock = q.LockCounter
+		}
+		if err := lock(ctx, org, l.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func kindName(k bdomain.Kind) string {
 	if k == bdomain.KindCounter {
 		return "counter"

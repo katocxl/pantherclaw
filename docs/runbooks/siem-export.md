@@ -20,7 +20,7 @@ The URL is refused when it is not HTTPS, resolves to a private or loopback addre
 Each POST is one batch of at most 100 events and 1 MiB.
 
 - **Headers:** `webhook-id` (the batch id), `webhook-timestamp`, `webhook-signature` (Standard Webhooks, `v1,<base64 HMAC-SHA256>` over `id.timestamp.body`). Refuse a batch whose signature does not verify or whose timestamp is more than 5 minutes off.
-- **Events:** OCSF 1.9. Decisions are API Activity (6003) with `authorizations[]`; alerts are Detection Finding (2004); incidents are Incident Finding (2005); audit is API Activity (6003) or Account Change (3001); anything else is Base Event (0). Each carries actors, the decision reason, the policy version, effects, coverage and uncertainty; never payloads or secrets.
+- **Events:** OCSF 1.9. Decisions are API Activity (6003) with `authorizations[]`; alerts are Detection Finding (2004); incidents are Incident Finding (2005); audit is API Activity (6003), Account Change (3001) or Authentication (3002); anything else is Base Event (0). Each carries actors, the decision reason, the policy version, effects, coverage and uncertainty; never payloads or secrets.
 - **Dedupe:** delivery is at-least-once (R-31). Dedupe on `metadata.uid`, the ledger entry id, which never changes.
 
 ## 3. Watch delivery health

@@ -19,6 +19,7 @@ package ocsf
 import (
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 )
@@ -117,6 +118,7 @@ const (
 	classDetection       = 2004
 	classIncident        = 2005
 	classAccountChange   = 3001
+	classAuthentication  = 3002
 	classAPIActivity     = 6003
 	categoryFindings     = 2
 	categoryIAM          = 3
@@ -128,9 +130,13 @@ const (
 	activityOther        = 99
 	accountEnable        = 2
 	accountDisable       = 5
-	accountDelete        = 6
 	accountAttach        = 7
 	accountDetach        = 8
+	accountMFAEnable     = 10
+	accountMFADisable    = 11
+	authnLogon           = 1
+	authnLogoff          = 2
+	authnTicket          = 3
 	findingUpdate        = 2
 	findingClose         = 3
 	findingStatusNew     = 1
@@ -344,8 +350,10 @@ func Map(e Event, productVersion string) Record {
 		mapDetection(&r, e)
 	case class == ClassIncidents:
 		mapIncident(&r, e)
-	case class == ClassAudit && accountChange(e.Kind):
+	case class == ClassAudit && hasAnyPrefix(e.Kind, accountKinds):
 		mapAccountChange(&r, e)
+	case class == ClassAudit && hasAnyPrefix(e.Kind, authnKinds):
+		mapAuthentication(&r, e)
 	case class == ClassAudit:
 		mapAudit(&r, e)
 	default:
@@ -397,16 +405,26 @@ func mapAccountChange(r *Record, e Event) {
 	r.ClassUID, r.ClassName, r.CategoryUID, r.CategoryName = classAccountChange, "Account Change", categoryIAM, "Identity & Access Management"
 	r.ActivityID, r.ActivityName = accountActivity(e.Kind)
 	r.StatusID, r.Status = statusOf(e.Outcome)
+	r.User = subjectUser(e)
+	r.Message = e.Kind
+}
+
+func mapAuthentication(r *Record, e Event) {
+	r.ClassUID, r.ClassName, r.CategoryUID, r.CategoryName = classAuthentication, "Authentication", categoryIAM, "Identity & Access Management"
+	r.ActivityID, r.ActivityName = authnActivity(e.Kind)
+	r.StatusID, r.Status = statusOf(e.Outcome)
+	r.User = subjectUser(e)
+	r.Message = e.Kind
+}
+
+// subjectUser is the person or service account the entry is about.
+func subjectUser(e Event) *User {
 	for _, s := range e.Subjects {
 		if s.Type == reflexdomain.SubjectUser || s.Type == reflexdomain.SubjectServiceAccount {
-			r.User = userOf(string(s.Type), s.ID)
-			break
+			return userOf(string(s.Type), s.ID)
 		}
 	}
-	if r.User == nil {
-		r.User = &User{UID: "unknown", TypeID: 0}
-	}
-	r.Message = e.Kind
+	return &User{UID: "unknown", TypeID: 0}
 }
 
 func mapAudit(r *Record, e Event) {
@@ -418,10 +436,18 @@ func mapAudit(r *Record, e Event) {
 	r.Message = e.Kind
 }
 
-// accountChange: audit kinds about a person's or service account's
-// account, its keys, roles or sessions.
-func accountChange(kind string) bool {
-	for _, p := range []string{"audit.user.", "audit.service_account.", "audit.role.", "audit.webauthn.", "audit.session."} {
+// accountKinds are the audit kinds about a person's or service account's
+// account, its keys, roles or second factors (Account Change).
+var accountKinds = []string{
+	"audit.access.user_", "audit.access.service_account_", "audit.access.role_", "audit.access.api_key_", "audit.authn.webauthn_",
+}
+
+// authnKinds are the audit kinds about signing in, sessions and tokens
+// (Authentication).
+var authnKinds = []string{"audit.authn.login", "audit.authn.session", "audit.authn.step_up", "audit.authn.token_issued"}
+
+func hasAnyPrefix(kind string, prefixes []string) bool {
+	for _, p := range prefixes {
 		if strings.HasPrefix(kind, p) {
 			return true
 		}
@@ -429,21 +455,46 @@ func accountChange(kind string) bool {
 	return false
 }
 
+// accountActivity reads the verb ending an account kind
+// ("audit.access.user_disabled"). A key is not the account: adding or
+// revoking one is Other.
 func accountActivity(kind string) (int, string) {
-	verb := kind[strings.LastIndexByte(kind, '.')+1:]
+	verb := kind[strings.LastIndexByte(kind, '_')+1:]
+	switch {
+	case strings.HasPrefix(kind, "audit.authn.webauthn_"):
+		switch verb {
+		case "registered":
+			return accountMFAEnable, "MFA Factor Enable"
+		case "removed", "suspended":
+			return accountMFADisable, "MFA Factor Disable"
+		}
+		return activityOther, "Other"
+	case strings.Contains(kind, "key_"):
+		return activityOther, "Other"
+	}
 	switch verb {
-	case "created", "invited", "added", "registered":
+	case "created":
 		return activityCreate, "Create"
-	case "enabled", "restored", "reactivated":
+	case "enabled":
 		return accountEnable, "Enable"
-	case "disabled", "suspended", "revoked":
+	case "disabled":
 		return accountDisable, "Disable"
-	case "deleted", "removed":
-		return accountDelete, "Delete"
-	case "bound", "granted":
+	case "bound":
 		return accountAttach, "Attach Policy"
 	case "unbound":
 		return accountDetach, "Detach Policy"
+	}
+	return activityOther, "Other"
+}
+
+func authnActivity(kind string) (int, string) {
+	switch strings.TrimPrefix(kind, "audit.") {
+	case auditkind.AuthnLogin, auditkind.AuthnSessionCreated, auditkind.AuthnStepUp:
+		return authnLogon, "Logon"
+	case auditkind.AuthnSessionEnded, auditkind.AuthnSessionRevoked, auditkind.AuthnSessionsRevoked:
+		return authnLogoff, "Logoff"
+	case auditkind.AuthnTokenIssued:
+		return authnTicket, "Authentication Ticket"
 	}
 	return activityOther, "Other"
 }

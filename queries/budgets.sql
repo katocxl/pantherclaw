@@ -137,6 +137,14 @@ LEFT JOIN LATERAL (
 WHERE a.org_id = sqlc.arg(org_id) AND a.owner_id = ANY(sqlc.arg(owner_ids)::uuid[])
 ORDER BY a.owner_id, a.rule, a.key_hash, a.period_start DESC;
 
+-- LockBudgetAccount and LockCounter take a row as its reservation would,
+-- writing nothing: a busy probe (ADR-0015).
+-- name: LockBudgetAccount :exec
+SELECT 1 FROM pc.budget_accounts WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR NO KEY UPDATE;
+
+-- name: LockCounter :exec
+SELECT 1 FROM pc.counters WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR NO KEY UPDATE;
+
 -- SetLockTimeout bounds lock waits for the rest of the transaction.
 -- name: SetLockTimeout :exec
 SELECT set_config('lock_timeout', sqlc.arg(timeout)::text, true);

@@ -58,6 +58,22 @@ func (w *world) holdBudgetRows() func() {
 	}
 }
 
+// signCounter counts the receipts the finalizations it wraps sign: each
+// finalization signs once its checks passed, just before its writes.
+type signCounter struct {
+	finalize.Store
+	signed int
+}
+
+func (s *signCounter) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) error {
+	sign := w.Sign
+	w.Sign = func(b []finalize.BudgetState) (finalize.Receipt, error) {
+		s.signed++
+		return sign(b)
+	}
+	return s.Store.Finalize(ctx, org, w)
+}
+
 // settling reports whether the audited lister finds the org among those
 // with settlements to apply.
 func (w *world) settling() bool {
@@ -150,6 +166,8 @@ func TestADR0015_ABusyBudgetFailsFast(t *testing.T) {
 	}
 
 	req := w.request(run, ids.NewV7(), "ch_2", "20.00")
+	signs := &signCounter{Store: w.auth.Store}
+	w.auth.Store = signs
 	release := w.holdBudgetRows()
 	start := time.Now()
 	busy := w.authorize(req)
@@ -157,6 +175,11 @@ func TestADR0015_ABusyBudgetFailsFast(t *testing.T) {
 	release()
 	if busy.Decision != adomain.CannotAuthorize || decisive(busy) != finalize.ReasonBudgetBusy || busy.Permit != "" {
 		t.Fatalf("a busy budget: %s %s permit %q", busy.Decision, decisive(busy), busy.Permit)
+	}
+	// The busy row is found before a finalization's work: only the
+	// BUDGET_BUSY answer signs a receipt, not the two busy attempts.
+	if signs.signed != 1 {
+		t.Fatalf("%d receipts signed for a busy refusal; want only its own", signs.signed)
 	}
 	if took > 1500*time.Millisecond {
 		t.Fatalf("the refusal took %v; it must not queue towards the caller's timeout", took)
