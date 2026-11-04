@@ -17,3 +17,9 @@ SET max_output_tokens = EXCLUDED.max_output_tokens, allowed_server_tools = EXCLU
 -- name: GetModelConnection :one
 SELECT max_output_tokens, allowed_server_tools, price_currency, price_input, price_output, price_cache_read, price_cache_write
 FROM pc.model_connections WHERE org_id = @org_id AND connection_id = @connection_id;
+
+-- How many of these connections are model connections, whose prompts and
+-- replies are never captured (G0 M29 D820).
+-- name: CountModelConnections :one
+SELECT count(*)::integer FROM pc.connections
+WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(connection_ids)::uuid[]) AND kind = 'model';

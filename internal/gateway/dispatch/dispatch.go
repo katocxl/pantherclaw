@@ -458,88 +458,11 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if read, unreported := e.reportGitLabFacts(ctx, conn, c.Action.Action); read && unreported != nil {
 		return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
-	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content, ContentScan: scan})
-	t.lap("authz")
-	if err != nil {
-		e.log.ErrorContext(ctx, "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
-		return Result{Class: CannotAuthorize, Code: CodeAuthorityUnavailable, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
-	}
-	e.nonces.set(ar.GetNonce(), time.Time{})
-	r := Result{
-		Decision: ar.GetDecision(), TransactionID: ar.GetTransactionId(), Nonce: ar.GetNonce(),
-		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR, Wait: ar.GetWait(),
-		Explanation: ar.GetAgentExplanation(),
-	}
-	for _, rs := range ar.GetReasons() {
-		r.Reasons = append(r.Reasons, rs.GetCode())
-	}
-	if rs := ar.GetReasons(); r.Decision == pb.Decision_DECISION_CANNOT_AUTHORIZE && len(rs) > 0 && rs[0].GetCode() == "IDENTITY_UNVERIFIED" {
-		// The workload could not be verified: a PAP-Error, so it can retry
-		// with a fresh nonce or token (PAP-1 §12).
-		r.Class, r.PAPError, r.Code = AuthenticationFailed, pap.Code(rs[0].GetDetail()), rs[0].GetDetail()
+	ctx, d, r, ok := e.decide(ctx, c, findings, content, scan, t)
+	if !ok {
 		return r
 	}
-	if ar.GetPermit() == "" {
-		return refused(r)
-	}
-	if !r.Monitor && !allows(r.Decision) {
-		return r.fail(EnforcementFailed, CodePermitInvalid)
-	}
-	def, ok := conn.Package.Definition(c.Action.Action.Operation)
-	if !ok || ar.GetActionHash() != c.Action.HashHex() {
-		return r.fail(EnforcementFailed, CodePermitInvalid)
-	}
-	// The permit binds the effective action (the requested one with the
-	// obligations applied) or, in monitor mode, the requested one.
-	bound := c.Action
-	if !r.Monitor {
-		if (conn.GetKind() == "local" || cooperative(c)) && len(ar.GetObligations()) > 0 {
-			// A cooperative client runs the action as it asked: it can
-			// honor no obligation (HR-186).
-			return r.fail(EnforcementFailed, CodeObligation)
-		}
-		eff, err := effective(def, c.Action, ar.GetObligations())
-		if errors.Is(err, errDisclosure) {
-			return r.fail(EnforcementFailed, CodeObligationFailed)
-		} else if err != nil {
-			return r.fail(EnforcementFailed, CodeObligation)
-		}
-		want := ar.GetEffectiveActionHash()
-		if want == "" {
-			want = c.Action.HashHex()
-		}
-		if eff.HashHex() != want {
-			return r.fail(EnforcementFailed, CodeEffective)
-		}
-		bound = eff
-	}
-	want := permitWant{PermitID: ar.GetPermitId(), Txn: ar.GetTransactionId(), Act: bound.HashHex(), Epoch: ar.GetEpoch()}
-	approval, err := e.permits.verify(ctx, ar.GetPermit(), want)
-	if err != nil {
-		e.log.ErrorContext(ctx, "security.permit_rejected", slog.String("transaction_id", want.Txn), pclog.Err(err))
-		return r.fail(EnforcementFailed, CodePermitInvalid)
-	}
-	if err := e.approved(approval, c.Action, bound); err != nil {
-		e.log.ErrorContext(ctx, "security.approval_unverified", slog.String("transaction_id", want.Txn), pclog.Err(err))
-		return r.fail(EnforcementFailed, CodeApprovalUnverified)
-	}
-	t.lap("verify")
-	// Containment may have changed while the Authority decided: a permit
-	// from an older epoch, or a view gone stale, dispatches nothing.
-	// BeginDispatch stays the authoritative check (HR-001).
-	epoch, class, code := e.contained(conn)
-	if class != "" {
-		return r.fail(class, code)
-	}
-	if want.Epoch < epoch {
-		return r.fail(EnforcementFailed, CodeEpochStale)
-	}
-	ctx, scopeCode := withScope(ctx, conn, def, ar.GetObligations())
-	if scopeCode != "" {
-		return r.fail(EnforcementFailed, scopeCode)
-	}
-	// From here on, what the dispatch opens is named on its receipt (HR-660).
-	ctx = withCredentialUse(ctx, conn)
+	def, bound, want := d.def, d.bound, d.want
 	if cooperative(c) {
 		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
@@ -555,6 +478,109 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return send(e, ctx, r, conn, def, bound, want, t) // G0 M14 D75
 	}
 	return r.fail(EnforcementFailed, CodeKindNotImplemented)
+}
+
+// decided is a permitted action, ready to be dispatched: its definition,
+// the action its permit binds and what BeginDispatch needs.
+type decided struct {
+	def   *defs.Definition
+	bound actionir.Parsed
+	want  permitWant
+}
+
+// decide asks the Authority about c and checks what it answered: the
+// permit, the obligations, the approval and containment again (HR-009,
+// HR-010). ok is false with the result to answer when the action may not
+// be dispatched; otherwise the result carries the decision, and ctx notes
+// the data scope and what the dispatch opens (HR-660). The model path
+// (G0 M29 D812) shares it with every other connection.
+func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFinding, content []*pb.ContentFinding, scan pb.ContentScan,
+	t *timer,
+) (context.Context, decided, Result, bool) {
+	conn := c.Connection
+	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content, ContentScan: scan})
+	t.lap("authz")
+	if err != nil {
+		e.log.ErrorContext(ctx, "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		return ctx, decided{}, Result{Class: CannotAuthorize, Code: CodeAuthorityUnavailable, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}, false
+	}
+	e.nonces.set(ar.GetNonce(), time.Time{})
+	r := Result{
+		Decision: ar.GetDecision(), TransactionID: ar.GetTransactionId(), Nonce: ar.GetNonce(),
+		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR, Wait: ar.GetWait(),
+		Explanation: ar.GetAgentExplanation(),
+	}
+	for _, rs := range ar.GetReasons() {
+		r.Reasons = append(r.Reasons, rs.GetCode())
+	}
+	if rs := ar.GetReasons(); r.Decision == pb.Decision_DECISION_CANNOT_AUTHORIZE && len(rs) > 0 && rs[0].GetCode() == "IDENTITY_UNVERIFIED" {
+		// The workload could not be verified: a PAP-Error, so it can retry
+		// with a fresh nonce or token (PAP-1 §12).
+		r.Class, r.PAPError, r.Code = AuthenticationFailed, pap.Code(rs[0].GetDetail()), rs[0].GetDetail()
+		return ctx, decided{}, r, false
+	}
+	if ar.GetPermit() == "" {
+		return ctx, decided{}, refused(r), false
+	}
+	if !r.Monitor && !allows(r.Decision) {
+		return ctx, decided{}, r.fail(EnforcementFailed, CodePermitInvalid), false
+	}
+	def, ok := conn.Package.Definition(c.Action.Action.Operation)
+	if !ok || ar.GetActionHash() != c.Action.HashHex() {
+		return ctx, decided{}, r.fail(EnforcementFailed, CodePermitInvalid), false
+	}
+	// The permit binds the effective action (the requested one with the
+	// obligations applied) or, in monitor mode, the requested one.
+	bound := c.Action
+	if !r.Monitor {
+		if (conn.GetKind() == "local" || cooperative(c)) && len(ar.GetObligations()) > 0 {
+			// A cooperative client runs the action as it asked: it can
+			// honor no obligation (HR-186).
+			return ctx, decided{}, r.fail(EnforcementFailed, CodeObligation), false
+		}
+		eff, err := effective(def, c.Action, ar.GetObligations())
+		if errors.Is(err, errDisclosure) {
+			return ctx, decided{}, r.fail(EnforcementFailed, CodeObligationFailed), false
+		} else if err != nil {
+			return ctx, decided{}, r.fail(EnforcementFailed, CodeObligation), false
+		}
+		want := ar.GetEffectiveActionHash()
+		if want == "" {
+			want = c.Action.HashHex()
+		}
+		if eff.HashHex() != want {
+			return ctx, decided{}, r.fail(EnforcementFailed, CodeEffective), false
+		}
+		bound = eff
+	}
+	want := permitWant{PermitID: ar.GetPermitId(), Txn: ar.GetTransactionId(), Act: bound.HashHex(), Epoch: ar.GetEpoch()}
+	approval, err := e.permits.verify(ctx, ar.GetPermit(), want)
+	if err != nil {
+		e.log.ErrorContext(ctx, "security.permit_rejected", slog.String("transaction_id", want.Txn), pclog.Err(err))
+		return ctx, decided{}, r.fail(EnforcementFailed, CodePermitInvalid), false
+	}
+	if err := e.approved(approval, c.Action, bound); err != nil {
+		e.log.ErrorContext(ctx, "security.approval_unverified", slog.String("transaction_id", want.Txn), pclog.Err(err))
+		return ctx, decided{}, r.fail(EnforcementFailed, CodeApprovalUnverified), false
+	}
+	t.lap("verify")
+	// Containment may have changed while the Authority decided: a permit
+	// from an older epoch, or a view gone stale, dispatches nothing.
+	// BeginDispatch stays the authoritative check (HR-001).
+	epoch, class, code := e.contained(conn)
+	if class != "" {
+		return ctx, decided{}, r.fail(class, code), false
+	}
+	if want.Epoch < epoch {
+		return ctx, decided{}, r.fail(EnforcementFailed, CodeEpochStale), false
+	}
+	ctx, scopeCode := withScope(ctx, conn, def, ar.GetObligations())
+	if scopeCode != "" {
+		return ctx, decided{}, r.fail(EnforcementFailed, scopeCode), false
+	}
+	// From here on, what the dispatch opens is named on its receipt (HR-660).
+	ctx = withCredentialUse(ctx, conn)
+	return ctx, decided{def: def, bound: bound, want: want}, r, true
 }
 
 // delegate commits and records a cooperative channel's permitted action
@@ -700,7 +726,7 @@ func (e *Engine) client(conn *control.Connection) (*egress.Client, error) {
 
 // entry returns the connection's clients, new for each revision.
 func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
-	if kindNotImplemented(conn.GetKind()) {
+	if kindNotImplemented(conn.GetKind()) && conn.GetKind() != KindModel {
 		return clientEntry{}, errKindNotImplemented
 	}
 	if conn.GetKind() == "mcp_container" {
@@ -718,7 +744,16 @@ func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
 	if conn.GetModelRelay() {
 		timeout = ModelCallTimeout // a client's timeout spans the whole stream
 	}
-	c, err := egress.NewClient(conn.GetBaseUrl(), timeout, conn.GetMaxResponseBytes(), e.allowed)
+	newClient := func() (*egress.Client, error) {
+		return egress.NewClient(conn.GetBaseUrl(), timeout, conn.GetMaxResponseBytes(), e.allowed)
+	}
+	if conn.GetKind() == KindModel {
+		// The model path's fixed limits (G0 M29 D814).
+		newClient = func() (*egress.Client, error) {
+			return egress.NewModelClient(conn.GetBaseUrl(), ModelConnTimeout, e.allowed)
+		}
+	}
+	c, err := newClient()
 	if err != nil {
 		return clientEntry{}, err
 	}

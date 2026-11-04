@@ -23,7 +23,7 @@ import (
 // edge maps the providers' API hosts to them.
 const (
 	devSimModelURL = "http://127.0.0.1:9103/v1"
-	devSimModelKey = "sim-model-key" //nolint:gosec // G101: the simulator's published development key, not a credential
+	devSimModelKey = "sim-model-key"
 )
 
 // devModelConnections are the seeded model connections: name, package, the

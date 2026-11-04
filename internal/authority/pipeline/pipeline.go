@@ -496,6 +496,10 @@ func dispatches(kind string, d *defs.Definition) bool {
 	case "postgres":
 		// Structured reads (D9, D64), likewise only through a sender.
 		return d.Dispatch != nil && d.Dispatch.SQL != nil
+	case "model":
+		// A model provider's API (G0 M29 D811, D813), through the gateway's
+		// model path only.
+		return d.IsModel()
 	}
 	return false
 }

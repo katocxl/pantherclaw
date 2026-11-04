@@ -15,6 +15,20 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
+const countModelConnections = `-- name: CountModelConnections :one
+SELECT count(*)::integer FROM pc.connections
+WHERE org_id = $1 AND id = ANY ($2::uuid[]) AND kind = 'model'
+`
+
+// How many of these connections are model connections, whose prompts and
+// replies are never captured (G0 M29 D820).
+func (q *Queries) CountModelConnections(ctx context.Context, orgID ids.OrgID, connectionIds []ids.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countModelConnections, orgID, connectionIds)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getModelConnection = `-- name: GetModelConnection :one
 SELECT max_output_tokens, allowed_server_tools, price_currency, price_input, price_output, price_cache_read, price_cache_write
 FROM pc.model_connections WHERE org_id = $1 AND connection_id = $2

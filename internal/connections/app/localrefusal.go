@@ -27,6 +27,11 @@ const RefusalSecretInPayload = "secret_in_payload"
 // D33, D40).
 const RefusalElicitationRefused = "elicitation_refused"
 
+// RefusalModelServerTool is the gateway's local refusal of a model request
+// naming a provider-side tool its connection does not allow (G0 M29 D813,
+// HR-696).
+const RefusalModelServerTool = "model_server_tool_not_allowed"
+
 // ElicitationReasons are the reasons an elicitation refusal may carry.
 var ElicitationReasons = []string{"url_mode", "undeclared_field", "type_mismatch", "duplicate_field", "too_many_fields", "injection_flagged"}
 
@@ -47,6 +52,7 @@ type RefusalDetail struct {
 var refusals = map[string][2]string{
 	RefusalSecretInPayload:    {auditkind.ConnectionSecretInPayloadRefused, "SECRET_IN_PAYLOAD"},
 	RefusalElicitationRefused: {auditkind.ConnectionElicitationRefused, "ELICITATION_REFUSED"},
+	RefusalModelServerTool:    {auditkind.ConnectionModelServerToolRefused, "MODEL_SERVER_TOOL_NOT_ALLOWED"},
 }
 
 // ReportLocalRefusal records that gateway refused an action through

@@ -18,10 +18,10 @@ import (
 // modelFlags are a model connection's settings on connection create and
 // update (G0 M29 D811a). A price needs Team (D829).
 type modelFlags struct {
-	maxOut                                   optional
-	tools                                    list
+	maxOut                                  optional
+	tools                                   list
 	currency, input, output, cacheR, cacheW optional
-	clearPrice                               *bool
+	clearPrice                              *bool
 }
 
 const modelFlagUsage = " [--max-output-tokens N] [--allow-server-tool TYPE...] [--price-currency CUR --price-input D --price-output D " +
@@ -87,8 +87,11 @@ func (m *modelFlags) config(base *pb.ModelConfig) (*pb.ModelConfig, error) {
 			o   *optional
 			dst *string
 		}{
-			{&m.currency, &p.Currency}, {&m.input, &p.InputPerMillion}, {&m.output, &p.OutputPerMillion},
-			{&m.cacheR, &p.CacheReadPerMillion}, {&m.cacheW, &p.CacheWritePerMillion},
+			{&m.currency, &p.Currency},
+			{&m.input, &p.InputPerMillion},
+			{&m.output, &p.OutputPerMillion},
+			{&m.cacheR, &p.CacheReadPerMillion},
+			{&m.cacheW, &p.CacheWritePerMillion},
 		} {
 			if f.o.set {
 				*f.dst = f.o.v
