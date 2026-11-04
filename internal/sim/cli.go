@@ -47,6 +47,8 @@ Usage:
   pantherclaw-sim okta [--addr 127.0.0.1:9101] [--base-url URL] [--expired] [--wrong-audience] [--cnf]
   pantherclaw-sim copilot-studio [--addr 127.0.0.1:9100] [--deny-components]
   pantherclaw-sim chatgpt-enterprise [--addr 127.0.0.1:9102] [--key-file FILE] [--deny]
+  pantherclaw-sim google [--addr 127.0.0.1:9104] [--service-account-file FILE] [--rate-limit 0] [--invalid-grant] [--not-found]
+  pantherclaw-sim m365 [--addr 127.0.0.1:9105] [--client-file FILE] [--rate-limit 0] [--invalid-client] [--not-found]
   pantherclaw-sim aws --secret-file FILE [--addr 127.0.0.1:9099] [--external-id ID] [--role-actions *] [--throttle 0] [--deny-assume-role]
                       [--long-sessions]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
@@ -75,6 +77,8 @@ var defaultAddrs = map[string]string{
 	"copilot-studio":     "127.0.0.1:9100",
 	"okta":               "127.0.0.1:9101",
 	"chatgpt-enterprise": "127.0.0.1:9102",
+	"google":             "127.0.0.1:9104",
+	"m365":               "127.0.0.1:9105",
 	"canary":             "127.0.0.1:18433",
 }
 
@@ -111,6 +115,10 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runCopilotStudio(ctx, args[1:], stderr)
 	case "chatgpt-enterprise":
 		err = runChatGPTEnterprise(ctx, args[1:], stderr)
+	case "google":
+		err = runGoogle(ctx, args[1:], stderr)
+	case "m365":
+		err = runM365(ctx, args[1:], stderr)
 	case "aws":
 		err = runAWS(ctx, args[1:], stderr)
 	case "load":

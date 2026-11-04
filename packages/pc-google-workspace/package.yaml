@@ -1,0 +1,307 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that work in Google Drive and Google
+# Calendar (G0 M31 D956). It reaches www.googleapis.com through an http
+# connection whose credential is of kind google_service_account (D952):
+# PantherClaw holds the service account's private key and, for every
+# dispatch, signs a short-lived JWT assertion and exchanges it at Google's
+# token endpoint for an access token; the token, never the key, is placed
+# on the request, and the agent holds neither. With domain-wide delegation
+# the credential names the one user it acts as. What it may reach is what
+# its scopes allow, so seal only the scopes these operations need
+# (drive, drive.metadata.readonly, calendar.events).
+#
+# A permission given to anyone or to another domain shares the file
+# outside the organization, and a new permission is irreversible once
+# anyone has opened the file, so drive.permission.create is irreversible
+# and its approval shows who receives access.
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.google-workspace
+version: 1.0.0
+publisher: pantherclaw
+summary: List and read Google Drive files, share them, and list and create Google Calendar events
+
+definitions:
+  - operation: drive.file.list
+    summary: List Google Drive files
+    access: read
+    # The target is the corpus listed: user (what the account owns or was
+    # given) or domain (what its domain shares with it).
+    target:
+      type: drive_corpus
+      id_pattern: '^(user|domain)$'
+      account: none
+    params:
+      page_size:
+        type: integer
+        material: true
+        unit: count
+        min: '1'
+        max: '100'
+    constraints:
+      - kind: target_set
+      - kind: count_max
+        param: page_size
+        clamp: true
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: drive_list_files
+        route: drive-file-list
+        description: >-
+          List Google Drive files the connection's account can see, in the
+          user corpus (what it owns or was given) or the domain corpus (what
+          its domain shares with it): at most page_size files, 1 to 100.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [corpus]
+          properties:
+            corpus:
+              type: string
+              description: user or domain
+              enum: [user, domain]
+            page_size:
+              type: integer
+              description: How many files, 1 to 100
+              minimum: 1
+              maximum: 100
+        extract:
+          target_id: input.corpus
+          params:
+            page_size: input.?page_size
+    dispatch:
+      http:
+        method: GET
+        path: /drive/v3/files
+        query:
+          corpora: target.id
+          pageSize: params.page_size
+
+  - operation: drive.file.get
+    summary: Read a Google Drive file's metadata
+    access: read
+    target:
+      type: drive_file
+      id_pattern: '^[A-Za-z0-9_-]{10,128}$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: drive_get_file
+        route: drive-file-get
+        description: >-
+          Read a Google Drive file's metadata, by its file id: its name,
+          type, size, owners and when it last changed. Never its content.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [file_id]
+          properties:
+            file_id:
+              type: string
+              description: The file id
+              pattern: '^[A-Za-z0-9_-]{10,128}$'
+        extract:
+          target_id: input.file_id
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /drive/v3/files/{target.id}
+        # Metadata only: a fixed field list, never alt=media.
+        query:
+          fields: literal.id,name,mimeType,size,modifiedTime,owners,webViewLink
+
+  - operation: drive.permission.create
+    summary: Share a Google Drive file
+    access: write
+    target:
+      type: drive_file
+      id_pattern: '^[A-Za-z0-9_-]{10,128}$'
+      account: none
+    params:
+      type:
+        type: enum
+        material: true
+        required: true
+        values: [user, group, domain, anyone]
+      role:
+        type: enum
+        material: true
+        required: true
+        values: [reader, commenter, writer]
+      email_address:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+      domain:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+    constraints:
+      - kind: target_set
+      - kind: allowed_values
+        param: type
+      - kind: allowed_values
+        param: role
+      - kind: allowed_values
+        param: email_address
+      - kind: allowed_values
+        param: domain
+    effects:
+      - kind: file.share
+        description: Gives a user, a group, a domain or anyone access to the file
+    reversibility: irreversible
+    dedupe_key: [target.id, params.type, params.role, params.email_address, params.domain]
+    retry:
+      safe: false
+      on_unknown: fail
+    approval:
+      title: Share Google Drive file {target.id} with {params.type} as {params.role}
+      fields:
+        - target.id
+        - params.type
+        - params.role
+        - params.email_address
+        - params.domain
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: drive_share_file
+        route: drive-permission-create
+        description: >-
+          Share a Google Drive file, by its file id: with a user or a group
+          (by email address), a whole domain, or anyone with the link, as
+          reader, commenter or writer.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [file_id, type, role]
+          properties:
+            file_id:
+              type: string
+              description: The file id
+              pattern: '^[A-Za-z0-9_-]{10,128}$'
+            type:
+              type: string
+              description: user, group, domain or anyone
+              enum: [user, group, domain, anyone]
+            role:
+              type: string
+              description: reader, commenter or writer
+              enum: [reader, commenter, writer]
+            email_address:
+              type: string
+              description: The user's or group's email address, for type user or group
+              pattern: '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+            domain:
+              type: string
+              description: The domain, for type domain
+              pattern: '^[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$'
+        extract:
+          target_id: input.file_id
+          params:
+            type: input.type
+            role: input.role
+            email_address: input.?email_address
+            domain: input.?domain
+    dispatch:
+      http:
+        method: POST
+        path: /drive/v3/files/{target.id}/permissions
+        body:
+          type: params.type
+          role: params.role
+          emailAddress: params.email_address
+          domain: params.domain
+
+  - operation: drive.permission.delete
+    summary: Remove a permission from a Google Drive file
+    access: write
+    target:
+      type: drive_file
+      id_pattern: '^[A-Za-z0-9_-]{10,128}$'
+      account: none
+    params:
+      permission_id:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: file.unshare
+        description: Removes one user's, group's, domain's or anyone's access to the file
+    reversibility: compensatable
+    dedupe_key: [target.id, params.permission_id]
+    retry:
+      safe: false
+      on_unknown: fail
+    approval:
+      title: Remove permission {params.permission_id} from Google Drive file {target.id}
+      fields:
+        - target.id
+        - params.permission_id
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-04
+    mappings:
+      - channel: mcp
+        tool: drive_unshare_file
+        route: drive-permission-delete
+        description: >-
+          Remove one permission from a Google Drive file, by the file id and
+          the permission id.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [file_id, permission_id]
+          properties:
+            file_id:
+              type: string
+              description: The file id
+              pattern: '^[A-Za-z0-9_-]{10,128}$'
+            permission_id:
+              type: string
+              description: The permission id
+              pattern: '^[A-Za-z0-9_-]{1,128}$'
+        extract:
+          target_id: input.file_id
+          params:
+            permission_id: input.permission_id
+    dispatch:
+      http:
+        method: DELETE
+        path: /drive/v3/files/{target.id}/permissions/{params.permission_id}

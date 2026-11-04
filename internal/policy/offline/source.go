@@ -32,7 +32,9 @@ import (
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
+	pcgoogleworkspace "github.com/katocxl/pantherclaw/packages/pc-google-workspace"
 	pcjira "github.com/katocxl/pantherclaw/packages/pc-jira"
+	pcm365 "github.com/katocxl/pantherclaw/packages/pc-m365"
 	pcpostgres "github.com/katocxl/pantherclaw/packages/pc-postgres"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
 	pcslack "github.com/katocxl/pantherclaw/packages/pc-slack"
@@ -95,7 +97,7 @@ func builtin() [][]byte {
 	return [][]byte{
 		mockpayments.Package, pca2a.Package, pcaws.Package, pcawsecs.Package, pcgithub.Package, pcgitlab.Package, pcjira.Package,
 		pcpostgres.Package, pcshell.Package, pcslack.Package, pcstripe.Package, pcteams.Package, pccopilotstudio.Package,
-		pcchatgptenterprise.Package,
+		pcchatgptenterprise.Package, pcgoogleworkspace.Package, pcm365.Package,
 	}
 }
 
