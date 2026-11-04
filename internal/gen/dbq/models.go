@@ -2077,6 +2077,7 @@ type PcExecutionAttempt struct {
 	AccessMode     *string
 	RecordedBy     string
 	TargetRef      *string
+	OutcomeCode    *string
 }
 
 type PcExecutionReceipt struct {

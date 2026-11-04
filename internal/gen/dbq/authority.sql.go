@@ -329,10 +329,10 @@ func (q *Queries) InsertContainment(ctx context.Context, orgID ids.OrgID) error 
 
 const insertExecutionAttempt = `-- name: InsertExecutionAttempt :exec
 INSERT INTO pc.execution_attempts (org_id, id, permit_id, transaction_id, outcome, target_status, response_digest, dispatch_ms,
-                                   access_mode, recorded_by, target_ref)
+                                   access_mode, recorded_by, target_ref, outcome_code)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9,
-        $10, $11)
+        $10, $11, $12)
 `
 
 type InsertExecutionAttemptParams struct {
@@ -347,6 +347,7 @@ type InsertExecutionAttemptParams struct {
 	AccessMode     *string
 	RecordedBy     string
 	TargetRef      *string
+	OutcomeCode    *string
 }
 
 func (q *Queries) InsertExecutionAttempt(ctx context.Context, arg InsertExecutionAttemptParams) error {
@@ -362,6 +363,7 @@ func (q *Queries) InsertExecutionAttempt(ctx context.Context, arg InsertExecutio
 		arg.AccessMode,
 		arg.RecordedBy,
 		arg.TargetRef,
+		arg.OutcomeCode,
 	)
 	return err
 }

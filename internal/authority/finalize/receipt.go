@@ -334,6 +334,10 @@ type Execution struct {
 	// at its total (D821), and a model operation's usage row records it
 	// (D825).
 	ModelUsage *ModelUsage
+	// OutcomeCode is the code of a connector's refusal after the decision
+	// (G0 M30 D947a); "" otherwise. It is recorded with the attempt, not
+	// signed into the receipt.
+	OutcomeCode string
 }
 
 // ModelUsage is the token usage of one model call (G0 M29 D818).

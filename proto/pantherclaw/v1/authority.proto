@@ -519,6 +519,10 @@ message RecordExecutionRequest {
   // D818); sent only for model operations. A token reservation settles at
   // their total when reported is true (D821).
   ModelUsage model_usage = 13;
+  // The code of a connector's refusal after the decision, e.g.
+  // table_not_allowed (G0 M30 D947a); empty otherwise. The threat map counts
+  // it against a Prevent control's outcome codes.
+  string outcome_code = 14 [(buf.validate.field).string.pattern = "^([a-z][a-z0-9_]{0,63})?$"];
 }
 
 // ModelUsage is the token usage of one model call (G0 M29 D818). OpenAI's

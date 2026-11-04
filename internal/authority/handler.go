@@ -242,6 +242,7 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 		ContentScan:     scanOf(req.GetContentScan()),
 		Credential:      cred,
 		ModelUsage:      modelUsageOf(req.GetModelUsage()),
+		OutcomeCode:     req.GetOutcomeCode(),
 	})
 	if err != nil {
 		return nil, err

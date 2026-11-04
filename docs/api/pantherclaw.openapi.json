@@ -41698,6 +41698,22 @@
                 "type": "null"
               }
             ]
+          },
+          "outcomeCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "outcome_code",
+            "description": "The code of a connector's refusal after the decision, e.g.\n table_not_allowed (G0 M30 D947a); empty otherwise. The threat map counts\n it against a Prevent control's outcome codes.",
+            "anyOf": [
+              {
+                "pattern": "^([a-z][a-z0-9_]{0,63})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "RecordExecutionRequest",

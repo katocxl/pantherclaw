@@ -33,10 +33,10 @@ WHERE p.org_id = sqlc.arg(org_id) AND p.id = sqlc.arg(id);
 
 -- name: InsertExecutionAttempt :exec
 INSERT INTO pc.execution_attempts (org_id, id, permit_id, transaction_id, outcome, target_status, response_digest, dispatch_ms,
-                                   access_mode, recorded_by, target_ref)
+                                   access_mode, recorded_by, target_ref, outcome_code)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(permit_id), sqlc.arg(transaction_id), sqlc.arg(outcome),
         sqlc.narg(target_status), sqlc.narg(response_digest), sqlc.narg(dispatch_ms), sqlc.narg(access_mode),
-        sqlc.arg(recorded_by), sqlc.narg(target_ref));
+        sqlc.arg(recorded_by), sqlc.narg(target_ref), sqlc.narg(outcome_code));
 
 -- DispatchingPermit is what a permit bound, read at BeginDispatch for the
 -- action token (G0 M6 decision 17, HR-188).

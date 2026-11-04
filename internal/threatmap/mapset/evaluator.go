@@ -93,7 +93,8 @@ func clone(m domain.Mapping) domain.Mapping {
 	}
 	out.Controls = make([]mapping.PreventControl, len(m.Controls))
 	for i, c := range m.Controls {
-		c.ReasonCodes, c.HR, c.Techniques, c.Why = slices.Clone(c.ReasonCodes), slices.Clone(c.HR), slices.Clone(c.Techniques), maps.Clone(c.Why)
+		c.ReasonCodes, c.OutcomeCodes, c.HR = slices.Clone(c.ReasonCodes), slices.Clone(c.OutcomeCodes), slices.Clone(c.HR)
+		c.Techniques, c.Why = slices.Clone(c.Techniques), maps.Clone(c.Why)
 		out.Controls[i] = c
 	}
 	out.Kinds = make(map[string]mapping.KindMapping, len(m.Kinds))

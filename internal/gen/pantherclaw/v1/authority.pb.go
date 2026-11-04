@@ -2044,7 +2044,11 @@ type RecordExecutionRequest struct {
 	// The tokens a model call used, as the provider reported them (G0 M29
 	// D818); sent only for model operations. A token reservation settles at
 	// their total when reported is true (D821).
-	ModelUsage    *ModelUsage `protobuf:"bytes,13,opt,name=model_usage,json=modelUsage,proto3" json:"model_usage,omitempty"`
+	ModelUsage *ModelUsage `protobuf:"bytes,13,opt,name=model_usage,json=modelUsage,proto3" json:"model_usage,omitempty"`
+	// The code of a connector's refusal after the decision, e.g.
+	// table_not_allowed (G0 M30 D947a); empty otherwise. The threat map counts
+	// it against a Prevent control's outcome codes.
+	OutcomeCode   string `protobuf:"bytes,14,opt,name=outcome_code,json=outcomeCode,proto3" json:"outcome_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2168,6 +2172,13 @@ func (x *RecordExecutionRequest) GetModelUsage() *ModelUsage {
 		return x.ModelUsage
 	}
 	return nil
+}
+
+func (x *RecordExecutionRequest) GetOutcomeCode() string {
+	if x != nil {
+		return x.OutcomeCode
+	}
+	return ""
 }
 
 // ModelUsage is the token usage of one model call (G0 M29 D818). OpenAI's
@@ -3965,7 +3976,7 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\foutbound_url\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\voutboundUrl\x129\n" +
 	"\x14outbound_body_sha256\x18\x05 \x01(\fB\a\xbaH\x04z\x02\x18 R\x12outboundBodySha256\":\n" +
 	"\x15BeginDispatchResponse\x12!\n" +
-	"\faction_token\x18\x01 \x01(\tR\vactionToken\"\xb3\x06\n" +
+	"\faction_token\x18\x01 \x01(\tR\vactionToken\"\xf8\x06\n" +
 	"\x16RecordExecutionRequest\x12%\n" +
 	"\tpermit_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bpermitId\x12=\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x17.pantherclaw.v1.OutcomeB\n" +
@@ -3986,7 +3997,8 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\fcontent_scan\x18\v \x01(\x0e2\x1b.pantherclaw.v1.ContentScanR\vcontentScan\x12G\n" +
 	"\x0fcredential_used\x18\f \x01(\v2\x1e.pantherclaw.v1.CredentialUsedR\x0ecredentialUsed\x12;\n" +
 	"\vmodel_usage\x18\r \x01(\v2\x1a.pantherclaw.v1.ModelUsageR\n" +
-	"modelUsage\"\x86\x02\n" +
+	"modelUsage\x12C\n" +
+	"\foutcome_code\x18\x0e \x01(\tB \xbaH\x1dr\x1b2\x19^([a-z][a-z0-9_]{0,63})?$R\voutcomeCode\"\x86\x02\n" +
 	"\n" +
 	"ModelUsage\x120\n" +
 	"\finput_tokens\x18\x01 \x01(\x03B\r\xbaH\n" +

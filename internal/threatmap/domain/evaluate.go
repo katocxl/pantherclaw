@@ -557,6 +557,10 @@ func (e *eval) respond(ids []string, own TechniqueMap, subs []TechniqueMap) Resp
 		case a.HasContain && !e.in.Editions.AutomationPlaybooks:
 			row = automationRow(a, LanePartial, ReasonEditionRequired,
 				Fix{Kind: FixUpgradeEdition, TargetID: "business", Label: fmt.Sprintf(labelUpgradeEdition, "Business")})
+		case a.Narrowed:
+			// The trigger tests more than the rule id: it may not run on every
+			// alert of the rule (G0 M30 D948, F-M28-1).
+			row = automationRow(a, LanePartial, ReasonNarrowedTrigger, Fix{})
 		default:
 			row = automationRow(a, LaneEvidenced, "", Fix{})
 		}
@@ -662,7 +666,8 @@ func (e *eval) test(l lane, ids []string) TestLane {
 
 // seen counts, in scope and window (the inputs hold only those), the alerts
 // that carry the technique or a sub-technique, and the refusals and holds
-// whose decisive reason is a mapped control's (D713).
+// whose decisive reason is a mapped control's (D713), and the connector
+// refusals whose outcome code is (G0 M30 D948).
 func (e *eval) seen(ids, controls []string) Seen {
 	s := Seen{WindowDays: SeenDays}
 	for _, g := range e.in.Alerts {
@@ -685,6 +690,19 @@ func (e *eval) seen(ids, controls []string) Seen {
 			s.Refusals += d.Count
 		case "REQUIRE_APPROVAL":
 			s.Holds += d.Count
+		}
+	}
+	// A connector's refusal after the decision counts as a refusal (G0 M30
+	// D948, F-M28-2).
+	outcomes := map[string]bool{}
+	for _, id := range controls {
+		for _, c := range e.controls[id].OutcomeCodes {
+			outcomes[c] = true
+		}
+	}
+	for _, o := range e.in.Outcomes {
+		if outcomes[o.Code] {
+			s.Refusals += o.Count
 		}
 	}
 	return s
