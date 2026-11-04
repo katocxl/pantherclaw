@@ -127,16 +127,17 @@ SELECT coalesce((SELECT s.mode FROM pc.content_signal_settings s WHERE s.org_id 
 SELECT coalesce((SELECT s.mode FROM pc.mcp_catalog_settings s WHERE s.org_id = sqlc.arg(org_id)), 'WATCH')::text;
 
 -- name: ThreatMapAlertGroups :many
--- Non-test alerts first seen since since, grouped by their techniques, in
+-- Non-test alerts first seen since since, grouped by their ATLAS and ATT&CK
+-- techniques (G0 M28 D720a: both once signals carry attack), in
 -- scope: every alert, or one with an agent subject in agents.
-SELECT a.atlas::text[] AS techniques, count(*)::bigint AS n
+SELECT (a.atlas || a.attack)::text[] AS techniques, count(*)::bigint AS n
 FROM pc.alerts a
-WHERE a.org_id = sqlc.arg(org_id) AND NOT a.test AND a.first_seen >= sqlc.arg(since) AND cardinality(a.atlas) > 0
+WHERE a.org_id = sqlc.arg(org_id) AND NOT a.test AND a.first_seen >= sqlc.arg(since) AND cardinality(a.atlas) + cardinality(a.attack) > 0
   AND (sqlc.arg(all_agents)::boolean
        OR EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s
                   WHERE s ->> 'type' = 'agent' AND (s ->> 'id') = ANY (sqlc.arg(agents)::uuid[]::text[])))
-GROUP BY a.atlas
-ORDER BY a.atlas;
+GROUP BY a.atlas, a.attack
+ORDER BY a.atlas, a.attack;
 
 -- name: ThreatMapDecisionCounts :many
 -- Real refusals and holds since since, by decisive reason code, in scope.

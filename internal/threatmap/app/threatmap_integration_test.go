@@ -8,6 +8,7 @@ package app_test
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"slices"
 	"strconv"
@@ -33,6 +34,7 @@ import (
 	pvdomain "github.com/katocxl/pantherclaw/internal/postureview/domain"
 	pvports "github.com/katocxl/pantherclaw/internal/postureview/ports"
 	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -537,6 +539,52 @@ func TestHR687_TheDispatcherQueuesOneSnapshotPerActiveOrg(t *testing.T) {
 			if n != 1 {
 				t.Errorf("dispatch %d: org %s has %d jobs", i+1, org, n)
 			}
+		}
+	}
+}
+
+// TestHR680_SeenCountsAlertsOfBothFrameworks: Seen counts the non-test
+// alerts carrying the technique or a sub-technique in either framework's
+// own ids, now that signals carry ATT&CK (G0 M28 D720a).
+// Covers: F961, HR-680
+func TestHR680_SeenCountsAlertsOfBothFrameworks(t *testing.T) {
+	f := newFx(t)
+	s := f.svc(billing.Business)
+	raise := func(key string, atlas, attack []string, test bool) {
+		t.Helper()
+		if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+			sum := sha256.Sum256([]byte(key))
+			_, err := (&alerts.Raiser{}).Raise(ctx, tx.Pgx(), reflexdomain.Signal{
+				Org: f.org, Source: reflexdomain.SourceDetection, RuleID: "org.seen_" + key, RuleVersion: "1",
+				RuleDigest: "sha256:" + hex.EncodeToString(sum[:]), Title: "Seen " + key, Summary: "A signal for the Seen count.",
+				Severity: reflexdomain.SeverityMedium, Attention: reflexdomain.AttentionAlert, Basis: reflexdomain.BasisInferred,
+				Subjects:  []reflexdomain.Subject{{Type: reflexdomain.SubjectAgent, ID: f.agent.String()}},
+				DedupeKey: "seen-" + key, OccurredAt: time.Now(), ATLAS: atlas, ATTACK: attack, Test: test,
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raise("both", []string{"AML.T0086"}, []string{"T1567"}, false)
+	raise("attack-sub", nil, []string{"T1567.001"}, false)
+	raise("atlas-only", []string{"AML.T0086"}, nil, false)
+	raise("test", []string{"AML.T0086"}, []string{"T1567"}, true)
+	as := f.as(tenancy.CredBrowserSession, td.RoleAuditor, f.orgScope())
+	for _, tc := range []struct {
+		f    catalog.Framework
+		id   string
+		want int64
+	}{
+		{catalog.FrameworkATTACK, "T1567", 2},
+		{catalog.FrameworkATLAS, "AML.T0086", 2},
+	} {
+		_, tech, err := s.Technique(as, tc.f, tc.id, tmapp.Scope{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tech.Seen.AlertsRaised != tc.want {
+			t.Errorf("%s %s: %d alerts seen, want %d", tc.f, tc.id, tech.Seen.AlertsRaised, tc.want)
 		}
 	}
 }
