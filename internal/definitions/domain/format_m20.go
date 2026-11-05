@@ -64,10 +64,11 @@ func (d *Definition) validateAWSDispatch(at string, h *HTTPDispatch) error {
 	if err := d.validateAWSResource(at, h.AWSResource); err != nil {
 		return err
 	}
-	for _, k := range slices.Sorted(maps.Keys(h.Body)) {
-		if strings.HasSuffix(k, "[]") && !strings.HasPrefix(h.Body[k], "target.") {
-			return invalid("%s.body.%s: an aws-json list holds one value of the target", at, k)
-		}
+	if err := d.validateAWSExtraResources(at, h); err != nil {
+		return err
+	}
+	if err := d.validateAWSJSONLists(at, h); err != nil {
+		return err
 	}
 	switch h.Encoding { //nolint:exhaustive // only called for the two AWS encodings
 	case EncodingAWSJSON:
@@ -275,6 +276,13 @@ func (d *Definition) AWSResourceARN(target actionir.Target, account, region, par
 		}
 		return "*", nil
 	}
+	return d.awsARN(t, target, account, region, partition)
+}
+
+// awsARN substitutes an ARN template's references; a value with a
+// wildcard or a character outside an ARN's, or a missing part, builds
+// nothing.
+func (d *Definition) awsARN(t string, target actionir.Target, account, region, partition string) (string, error) {
 	var err error
 	out := arnRefRe.ReplaceAllStringFunc(t, func(m string) string {
 		ref := m[1 : len(m)-1]

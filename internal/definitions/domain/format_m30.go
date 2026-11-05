@@ -72,8 +72,8 @@ func (d *Definition) validateAWSRestRoute(at string, h *HTTPDispatch) error {
 	switch {
 	case d.Access != AccessRead:
 		return invalid("%s: an aws-rest route is a read", at)
-	case h.AWSResource != "", h.BodyParam != "", len(h.HeaderParams) > 0, h.IdempotencyHeader != "":
-		return invalid("%s: an aws-rest route has no aws_resource, body_param, header_params or idempotency header", at)
+	case h.AWSResource != "", len(h.AWSExtraResources) > 0, h.BodyParam != "", len(h.HeaderParams) > 0, h.IdempotencyHeader != "":
+		return invalid("%s: an aws-rest route has no aws_resource, aws_extra_resources, body_param, header_params or idempotency header", at)
 	}
 	return nil
 }
@@ -98,6 +98,9 @@ func (d *Definition) validateAWSRestDispatch(at string, h *HTTPDispatch) error {
 		return invalid("%s: aws-rest sends no body fields, query or idempotency header", at)
 	}
 	if err := d.validateAWSResource(at, h.AWSResource); err != nil {
+		return err
+	}
+	if err := d.validateAWSExtraResources(at, h); err != nil {
 		return err
 	}
 	if h.BodyParam != "" {
