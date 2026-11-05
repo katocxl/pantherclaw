@@ -1107,7 +1107,7 @@ func (q *Queries) ExpiredEnforcedCoverageScopes(ctx context.Context, orgID ids.O
 }
 
 const getCoverageClosure = `-- name: GetCoverageClosure :one
-SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures WHERE org_id = $1 AND id = $2
+SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at, kube_closure_id FROM pc.coverage_closures WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetCoverageClosure(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcCoverageClosure, error) {
@@ -1141,6 +1141,7 @@ func (q *Queries) GetCoverageClosure(ctx context.Context, orgID ids.OrgID, iD id
 		&i.ObservedAt,
 		&i.ExpiresAt,
 		&i.RecordedAt,
+		&i.KubeClosureID,
 	)
 	return i, err
 }
@@ -1176,16 +1177,16 @@ const insertCoverageClosure = `-- name: InsertCoverageClosure :one
 INSERT INTO pc.coverage_closures (org_id, id, agent_id, connection_id, sandbox_session_id, result, probes,
     positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256,
     engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision,
-    package_version_id, credential_version, session_started_at, observed_at, expires_at)
+    package_version_id, credential_version, session_started_at, observed_at, expires_at, kube_closure_id)
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9,
     $10, $11, $12, $13,
     $14, $15, $16, $17::text[],
     $18, $19, $20, $21,
     $22, $23, $24, $25,
-    $26)
+    $26, $27)
 ON CONFLICT (org_id, agent_id, connection_id, server_nonce) DO NOTHING
-RETURNING org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at
+RETURNING org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at, kube_closure_id
 `
 
 type InsertCoverageClosureParams struct {
@@ -1193,7 +1194,7 @@ type InsertCoverageClosureParams struct {
 	ID                     ids.UUID
 	AgentID                ids.UUID
 	ConnectionID           ids.UUID
-	SandboxSessionID       ids.UUID
+	SandboxSessionID       *ids.UUID
 	Result                 string
 	Probes                 []byte
 	PositiveControlsPassed bool
@@ -1215,6 +1216,7 @@ type InsertCoverageClosureParams struct {
 	SessionStartedAt       time.Time
 	ObservedAt             time.Time
 	ExpiresAt              time.Time
+	KubeClosureID          *ids.UUID
 }
 
 // A replayed result set (the same server nonce) inserts nothing, so the
@@ -1247,6 +1249,7 @@ func (q *Queries) InsertCoverageClosure(ctx context.Context, arg InsertCoverageC
 		arg.SessionStartedAt,
 		arg.ObservedAt,
 		arg.ExpiresAt,
+		arg.KubeClosureID,
 	)
 	var i PcCoverageClosure
 	err := row.Scan(
@@ -1277,6 +1280,7 @@ func (q *Queries) InsertCoverageClosure(ctx context.Context, arg InsertCoverageC
 		&i.ObservedAt,
 		&i.ExpiresAt,
 		&i.RecordedAt,
+		&i.KubeClosureID,
 	)
 	return i, err
 }
@@ -1486,7 +1490,7 @@ func (q *Queries) LastEnforcedCoverageSnapshot(ctx context.Context, arg LastEnfo
 }
 
 const latestCoverageClosure = `-- name: LatestCoverageClosure :one
-SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures
+SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at, kube_closure_id FROM pc.coverage_closures
 WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
 ORDER BY id DESC
 LIMIT 1
@@ -1525,12 +1529,13 @@ func (q *Queries) LatestCoverageClosure(ctx context.Context, orgID ids.OrgID, ag
 		&i.ObservedAt,
 		&i.ExpiresAt,
 		&i.RecordedAt,
+		&i.KubeClosureID,
 	)
 	return i, err
 }
 
 const listCoverageClosuresPage = `-- name: ListCoverageClosuresPage :many
-SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures
+SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at, kube_closure_id FROM pc.coverage_closures
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR connection_id = $2::uuid)
   AND ($3::uuid IS NULL OR agent_id = $3::uuid)
@@ -1590,6 +1595,7 @@ func (q *Queries) ListCoverageClosuresPage(ctx context.Context, arg ListCoverage
 			&i.ObservedAt,
 			&i.ExpiresAt,
 			&i.RecordedAt,
+			&i.KubeClosureID,
 		); err != nil {
 			return nil, err
 		}

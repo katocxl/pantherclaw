@@ -186,7 +186,7 @@ func readOnly(pkg *defs.Package, operation string) bool {
 // closureRecord is a stored closure as the calculus reads it.
 func closureRecord(c dbq.PcCoverageClosure) (*domain.ClosureRecord, error) {
 	rec := &domain.ClosureRecord{
-		ID: c.ID, Agent: c.AgentID, Connection: c.ConnectionID, SandboxSession: c.SandboxSessionID,
+		ID: c.ID, Agent: c.AgentID, Connection: c.ConnectionID, SandboxSession: derefUUID(c.SandboxSessionID),
 		SessionStartedAt: c.SessionStartedAt, ObservedAt: c.ObservedAt, ExpiresAt: c.ExpiresAt,
 		Bound: domain.Bound{
 			ConnectionRevision: c.ConnectionRevision, Gateway: c.GatewayID, PackageVersion: c.PackageVersionID,
@@ -207,4 +207,13 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// derefUUID is the zero UUID for nil: a closure that rests on a Kubernetes
+// closure has no sandbox session (G0 M32 D970).
+func derefUUID(p *ids.UUID) ids.UUID {
+	if p == nil {
+		return ids.UUID{}
+	}
+	return *p
 }

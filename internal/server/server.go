@@ -526,6 +526,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if err := m6.serveGateways(ctx, g, cfg, svc, log, nil); err != nil {
 			return err
 		}
+		if err := serveAdmission(ctx, g, cfg, pool, clusters, log); err != nil {
+			return err
+		}
 		certs, err := publicCertReloader(cfg, log)
 		if err != nil {
 			return err

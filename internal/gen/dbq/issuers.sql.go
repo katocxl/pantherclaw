@@ -17,7 +17,7 @@ import (
 const activateIssuerRevision = `-- name: ActivateIssuerRevision :one
 UPDATE pc.trusted_issuers SET state = 'ACTIVE', activated_by = $1, activated_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'PROPOSED'
-RETURNING org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at
+RETURNING org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at, run_grant_id
 `
 
 func (q *Queries) ActivateIssuerRevision(ctx context.Context, activatedBy *string, orgID ids.OrgID, iD ids.UUID) (PcTrustedIssuer, error) {
@@ -43,12 +43,13 @@ func (q *Queries) ActivateIssuerRevision(ctx context.Context, activatedBy *strin
 		&i.ActivatedAt,
 		&i.ClosedBy,
 		&i.ClosedAt,
+		&i.RunGrantID,
 	)
 	return i, err
 }
 
 const activeRevisionFor = `-- name: ActiveRevisionFor :one
-SELECT a.org_id, a.id, a.entry_id, a.revision, a.agent_id, a.kind, a.issuer, a.audience, a.algorithms, a.binding, a.auto_admit, a.widening, a.state, a.proposed_by, a.proposed_at, a.activated_by, a.activated_at, a.closed_by, a.closed_at FROM pc.trusted_issuers r JOIN pc.trusted_issuers a ON a.org_id = r.org_id AND a.entry_id = r.entry_id
+SELECT a.org_id, a.id, a.entry_id, a.revision, a.agent_id, a.kind, a.issuer, a.audience, a.algorithms, a.binding, a.auto_admit, a.widening, a.state, a.proposed_by, a.proposed_at, a.activated_by, a.activated_at, a.closed_by, a.closed_at, a.run_grant_id FROM pc.trusted_issuers r JOIN pc.trusted_issuers a ON a.org_id = r.org_id AND a.entry_id = r.entry_id
 WHERE r.org_id = $1 AND r.id = $2 AND a.state = 'ACTIVE'
 `
 
@@ -78,6 +79,7 @@ func (q *Queries) ActiveRevisionFor(ctx context.Context, orgID ids.OrgID, revisi
 		&i.ActivatedAt,
 		&i.ClosedBy,
 		&i.ClosedAt,
+		&i.RunGrantID,
 	)
 	return i, err
 }
@@ -85,12 +87,12 @@ func (q *Queries) ActiveRevisionFor(ctx context.Context, orgID ids.OrgID, revisi
 const insertIssuerRevision = `-- name: InsertIssuerRevision :one
 
 INSERT INTO pc.trusted_issuers (org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding,
-    auto_admit, widening, state, proposed_by, activated_by, activated_at)
+    auto_admit, widening, state, proposed_by, activated_by, activated_at, run_grant_id)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7, $8, $9, $10, $11, $12,
     $13, $14, $15,
-    CASE WHEN $13::text = 'ACTIVE' THEN now() END)
-RETURNING org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at
+    CASE WHEN $13::text = 'ACTIVE' THEN now() END, $16)
+RETURNING org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at, run_grant_id
 `
 
 type InsertIssuerRevisionParams struct {
@@ -109,6 +111,7 @@ type InsertIssuerRevisionParams struct {
 	State       string
 	ProposedBy  string
 	ActivatedBy *string
+	RunGrantID  *ids.UUID
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -134,6 +137,7 @@ func (q *Queries) InsertIssuerRevision(ctx context.Context, arg InsertIssuerRevi
 		arg.State,
 		arg.ProposedBy,
 		arg.ActivatedBy,
+		arg.RunGrantID,
 	)
 	var i PcTrustedIssuer
 	err := row.Scan(
@@ -156,12 +160,13 @@ func (q *Queries) InsertIssuerRevision(ctx context.Context, arg InsertIssuerRevi
 		&i.ActivatedAt,
 		&i.ClosedBy,
 		&i.ClosedAt,
+		&i.RunGrantID,
 	)
 	return i, err
 }
 
 const listActiveIssuers = `-- name: ListActiveIssuers :many
-SELECT org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at FROM pc.trusted_issuers WHERE org_id = $1 AND kind = $2 AND state = 'ACTIVE'
+SELECT org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at, run_grant_id FROM pc.trusted_issuers WHERE org_id = $1 AND kind = $2 AND state = 'ACTIVE'
 `
 
 // Active entries of one preset kind, for attestation (slice 10).
@@ -194,6 +199,7 @@ func (q *Queries) ListActiveIssuers(ctx context.Context, orgID ids.OrgID, kind s
 			&i.ActivatedAt,
 			&i.ClosedBy,
 			&i.ClosedAt,
+			&i.RunGrantID,
 		); err != nil {
 			return nil, err
 		}
@@ -206,7 +212,7 @@ func (q *Queries) ListActiveIssuers(ctx context.Context, orgID ids.OrgID, kind s
 }
 
 const listCurrentIssuerRevisions = `-- name: ListCurrentIssuerRevisions :many
-SELECT DISTINCT ON (entry_id) org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at FROM pc.trusted_issuers
+SELECT DISTINCT ON (entry_id) org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at, run_grant_id FROM pc.trusted_issuers
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR agent_id = $2::uuid)
   AND entry_id > coalesce($3::uuid, '00000000-0000-0000-0000-000000000000')
@@ -257,6 +263,7 @@ func (q *Queries) ListCurrentIssuerRevisions(ctx context.Context, arg ListCurren
 			&i.ActivatedAt,
 			&i.ClosedBy,
 			&i.ClosedAt,
+			&i.RunGrantID,
 		); err != nil {
 			return nil, err
 		}
@@ -269,7 +276,7 @@ func (q *Queries) ListCurrentIssuerRevisions(ctx context.Context, arg ListCurren
 }
 
 const listIssuerRevisions = `-- name: ListIssuerRevisions :many
-SELECT org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at FROM pc.trusted_issuers WHERE org_id = $1 AND entry_id = $2
+SELECT org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at, run_grant_id FROM pc.trusted_issuers WHERE org_id = $1 AND entry_id = $2
 ORDER BY revision DESC
 `
 
@@ -302,6 +309,72 @@ func (q *Queries) ListIssuerRevisions(ctx context.Context, orgID ids.OrgID, entr
 			&i.ActivatedAt,
 			&i.ClosedBy,
 			&i.ClosedAt,
+			&i.RunGrantID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKubernetesIssuersFor = `-- name: ListKubernetesIssuersFor :many
+SELECT org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at, run_grant_id FROM pc.trusted_issuers
+WHERE org_id = $1 AND kind = 'kubernetes' AND state = 'ACTIVE'
+  AND binding #>> '{kubernetes,cluster}' = $2::text
+  AND binding #>> '{kubernetes,namespace}' = $3::text
+  AND binding #>> '{kubernetes,service_account_name}' = $4::text
+ORDER BY entry_id
+`
+
+type ListKubernetesIssuersForParams struct {
+	OrgID              ids.OrgID
+	Cluster            string
+	Namespace          string
+	ServiceAccountName string
+}
+
+// The active kubernetes entries for one cluster, namespace and service
+// account, for the admission webhook (G0 M32 D967; index
+// trusted_issuers_kubernetes_lookup, migration 00360).
+func (q *Queries) ListKubernetesIssuersFor(ctx context.Context, arg ListKubernetesIssuersForParams) ([]PcTrustedIssuer, error) {
+	rows, err := q.db.Query(ctx, listKubernetesIssuersFor,
+		arg.OrgID,
+		arg.Cluster,
+		arg.Namespace,
+		arg.ServiceAccountName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcTrustedIssuer{}
+	for rows.Next() {
+		var i PcTrustedIssuer
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.EntryID,
+			&i.Revision,
+			&i.AgentID,
+			&i.Kind,
+			&i.Issuer,
+			&i.Audience,
+			&i.Algorithms,
+			&i.Binding,
+			&i.AutoAdmit,
+			&i.Widening,
+			&i.State,
+			&i.ProposedBy,
+			&i.ProposedAt,
+			&i.ActivatedBy,
+			&i.ActivatedAt,
+			&i.ClosedBy,
+			&i.ClosedAt,
+			&i.RunGrantID,
 		); err != nil {
 			return nil, err
 		}
@@ -314,7 +387,7 @@ func (q *Queries) ListIssuerRevisions(ctx context.Context, orgID ids.OrgID, entr
 }
 
 const lockIssuerEntry = `-- name: LockIssuerEntry :many
-SELECT org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at FROM pc.trusted_issuers WHERE org_id = $1 AND entry_id = $2
+SELECT org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at, run_grant_id FROM pc.trusted_issuers WHERE org_id = $1 AND entry_id = $2
 ORDER BY revision FOR UPDATE
 `
 
@@ -347,6 +420,7 @@ func (q *Queries) LockIssuerEntry(ctx context.Context, orgID ids.OrgID, entryID 
 			&i.ActivatedAt,
 			&i.ClosedBy,
 			&i.ClosedAt,
+			&i.RunGrantID,
 		); err != nil {
 			return nil, err
 		}
@@ -361,7 +435,7 @@ func (q *Queries) LockIssuerEntry(ctx context.Context, orgID ids.OrgID, entryID 
 const setIssuerRevisionState = `-- name: SetIssuerRevisionState :one
 UPDATE pc.trusted_issuers SET state = $1, closed_by = $2, closed_at = now()
 WHERE org_id = $3 AND id = $4 AND state = $5
-RETURNING org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at
+RETURNING org_id, id, entry_id, revision, agent_id, kind, issuer, audience, algorithms, binding, auto_admit, widening, state, proposed_by, proposed_at, activated_by, activated_at, closed_by, closed_at, run_grant_id
 `
 
 type SetIssuerRevisionStateParams struct {
@@ -401,6 +475,7 @@ func (q *Queries) SetIssuerRevisionState(ctx context.Context, arg SetIssuerRevis
 		&i.ActivatedAt,
 		&i.ClosedBy,
 		&i.ClosedAt,
+		&i.RunGrantID,
 	)
 	return i, err
 }

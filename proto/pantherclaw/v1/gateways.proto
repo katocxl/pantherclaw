@@ -72,6 +72,18 @@ service GatewayAdminService {
   rpc ListFleet(ListFleetRequest) returns (ListFleetResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // SetGatewayKubernetesBinding binds an active gateway to one service
+  // account of a configured cluster (G0 M32 D968): a pod of that account
+  // may then enroll a replica with its projected token (audience
+  // pantherclaw-gateway:<org>) instead of a `pcg_` token. It replaces any
+  // earlier binding and is audited (gateway.kubernetes_binding_set).
+  // permission: gateway.manage
+  rpc SetGatewayKubernetesBinding(SetGatewayKubernetesBindingRequest) returns (SetGatewayKubernetesBindingResponse);
+  // ClearGatewayKubernetesBinding removes a gateway's Kubernetes binding;
+  // only enrollment tokens enroll it afterwards. Audited
+  // (gateway.kubernetes_binding_cleared).
+  // permission: gateway.manage
+  rpc ClearGatewayKubernetesBinding(ClearGatewayKubernetesBindingRequest) returns (ClearGatewayKubernetesBindingResponse);
 }
 
 // GatewayService is called by gateways. Enroll is served on the public API
@@ -250,6 +262,58 @@ message Gateway {
   repeated GatewayReplica replicas = 16;
   // Whether some replica reported in the last 90 seconds.
   bool connected = 17;
+  // The Kubernetes service account whose projected token may enroll a
+  // replica (G0 M32 D968); unset: none.
+  GatewayKubernetesBinding kubernetes_binding = 18;
+}
+
+// GatewayKubernetesBinding pins the gateway pods of one service account in
+// a configured cluster (G0 M32 D968). The service-account UID makes a
+// deleted and recreated account with the same name a different identity.
+message GatewayKubernetesBinding {
+  // Cluster name from the server configuration (identity.kubernetes_clusters).
+  string cluster = 1 [(buf.validate.field).string.pattern = "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"];
+  // Namespace.
+  string namespace = 2 [(buf.validate.field).string.pattern = "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"];
+  // Service account name.
+  string service_account_name = 3 [(buf.validate.field).string.pattern = "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"];
+  // Service account UID.
+  string service_account_uid = 4 [(buf.validate.field).string.uuid = true];
+  // Optional allowed image digests of the gateway container; empty accepts
+  // any image pinned by digest.
+  repeated string image_digests = 5 [(buf.validate.field).repeated = {
+    max_items: 50
+    unique: true
+    items: {
+      string: {pattern: "^sha256:[0-9a-f]{64}$"}
+    }
+  }];
+}
+
+// SetGatewayKubernetesBindingRequest binds a gateway.
+message SetGatewayKubernetesBindingRequest {
+  // Gateway id.
+  string gateway_id = 1 [(buf.validate.field).string.uuid = true];
+  // The binding.
+  GatewayKubernetesBinding binding = 2 [(buf.validate.field).required = true];
+}
+
+// SetGatewayKubernetesBindingResponse returns the gateway.
+message SetGatewayKubernetesBindingResponse {
+  // The gateway.
+  Gateway gateway = 1;
+}
+
+// ClearGatewayKubernetesBindingRequest unbinds a gateway.
+message ClearGatewayKubernetesBindingRequest {
+  // Gateway id.
+  string gateway_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ClearGatewayKubernetesBindingResponse returns the gateway.
+message ClearGatewayKubernetesBindingResponse {
+  // The gateway.
+  Gateway gateway = 1;
 }
 
 // GatewayReplica is one gateway process that reports status (G0 M15 D10).
@@ -458,14 +522,33 @@ message RevokeGatewayCertificateRequest {
 // RevokeGatewayCertificateResponse confirms it.
 message RevokeGatewayCertificateResponse {}
 
-// GatewayServiceEnrollRequest exchanges a token for a certificate.
+// GatewayServiceEnrollRequest exchanges a token for a certificate: exactly
+// one of a `pcg_` enrollment token and a Kubernetes projected token.
 message GatewayServiceEnrollRequest {
+  option (buf.validate.message).cel = {
+    id: "enroll_one_token"
+    message: "exactly one of token and kubernetes_token is required"
+    expression: "(this.token != '') != (this.kubernetes_token != '')"
+  };
   // The `pcg_` enrollment token.
-  string token = 1 [(buf.validate.field).string = {
-    min_len: 16
-    max_len: 128
-    pattern: "^pcg_[A-Za-z0-9_-]+$"
-  }];
+  string token = 1 [
+    (buf.validate.field).string = {
+      min_len: 16
+      max_len: 128
+      pattern: "^pcg_[A-Za-z0-9_-]+$"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // A projected service-account token of a pod bound to the gateway
+  // (audience pantherclaw-gateway:<org>, G0 M32 D968), a JWT.
+  string kubernetes_token = 3 [
+    (buf.validate.field).string = {
+      min_len: 16
+      max_len: 16384
+      pattern: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
   // DER PKCS #10 certificate request for an Ed25519 key, signed by that key.
   bytes csr = 2 [(buf.validate.field).bytes = {
     min_len: 64
