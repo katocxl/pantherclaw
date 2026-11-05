@@ -19,6 +19,7 @@ Project files (relative to the repository): each client's settings, MCP and hook
 
 - `pclaw init` installs a hook whose matcher includes the write tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) besides the shell tools. Run `pclaw init` again after upgrading so an older matcher gains them.
 - A write to a listed file asks the gateway as `agent_config.write`. It is refused unless a grant names `agent_config.write` (HR-712). A write to any other path is decided on the machine with no call.
+- The hook checks user files against your home directory and your user configuration directory, so it needs both: `HOME` (`USERPROFILE` on Windows) and the configuration directory (`XDG_CONFIG_HOME` or `~/.config` on Linux, `%APPDATA%` on Windows, `~/Library/Application Support` on macOS). If either cannot be found or resolved, the hook refuses every write rather than let one through unchecked (fail closed). Run the agent with them set.
 - The route is **cooperative** (PARTIAL): an agent that writes without the hook is not asked. Scans still see the change afterwards by its digest (R-74).
 
 ## 4. The sandbox: read-only, and left out of the patch

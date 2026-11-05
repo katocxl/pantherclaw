@@ -274,8 +274,8 @@ func decodeBase64Runs(s string) []string {
 	var out []string
 	add := func(enc *base64.Encoding, r string) {
 		b, err := enc.DecodeString(r)
-		if err == nil && printable(b) && !slices.Contains(out, string(b)) {
-			out = append(out, string(b))
+		if t, ok := readable(b); err == nil && ok && !slices.Contains(out, t) {
+			out = append(out, t)
 		}
 	}
 	for _, run := range base64Re.FindAllString(s, -1) {
@@ -327,25 +327,33 @@ func decodeHexRuns(s string) []string {
 		}
 		for _, r := range reads {
 			b, err := hex.DecodeString(r)
-			if err == nil && printable(b) && !slices.Contains(out, string(b)) {
-				out = append(out, string(b))
+			if t, ok := readable(b); err == nil && ok && !slices.Contains(out, t) {
+				out = append(out, t)
 			}
 		}
 	}
 	return out
 }
 
-// printable reports whether b is UTF-8 with at least 80% printable runes.
-func printable(b []byte) bool {
-	if len(b) == 0 || !utf8.Valid(b) {
-		return false
+// readable is b as text, each byte that is not UTF-8 replaced with U+FFFD,
+// and whether at least 80% of it is printable runes, an invalid byte
+// counting as one unprintable rune. A few junk bytes from a glued prefix
+// or suffix thus do not hide the text after them (G0 M30 D1215a).
+func readable(b []byte) (string, bool) {
+	if len(b) == 0 {
+		return "", false
 	}
 	n, ok := 0, 0
-	for _, r := range string(b) {
+	for rest := b; len(rest) > 0; {
+		r, size := utf8.DecodeRune(rest)
+		rest = rest[size:]
 		n++
+		if r == utf8.RuneError && size == 1 {
+			continue
+		}
 		if unicode.IsPrint(r) || r == '\n' || r == '\r' || r == '\t' {
 			ok++
 		}
 	}
-	return ok*5 >= n*4
+	return strings.ToValidUTF8(string(b), string(utf8.RuneError)), ok*5 >= n*4
 }

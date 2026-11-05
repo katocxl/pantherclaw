@@ -66,6 +66,11 @@ func TestHR703_OneCharacterNextToARunDoesNotHideIt(t *testing.T) {
 		{"char before base64", "note x" + b64, "base64"},
 		{"char after base64", b64 + "Q tail", "base64"},
 		{"mixed alphabets", b64 + "-ab+/cdefghijklmnopq_rs", "base64"},
+		// D1215a: junk bytes that are not UTF-8 count as unprintable.
+		{"byte before hex", "id ff" + hx, "hex"},
+		{"byte after hex", hx + "ff", "hex"},
+		{"4 chars before base64", "note ////" + b64, "base64"},
+		{"5 chars before base64", "note /////" + b64, "base64"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
