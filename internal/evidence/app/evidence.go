@@ -479,6 +479,9 @@ func (s *Service) exportBundle(ctx context.Context, sel Selection, consistencyFr
 		if b.ProbeReports, err = probeReports(ctx, q, c.Org, entries); err != nil {
 			return err
 		}
+		if b.ReceiptSigs, err = receiptSigs(ctx, q, c.Org, b.Receipts); err != nil { // G0 M35 D1042
+			return err
+		}
 		labels, err := policyLabels(ctx, q, c.Org, entries)
 		if err != nil {
 			return err
@@ -528,6 +531,11 @@ func (s *Service) exportBundle(ctx context.Context, sel Selection, consistencyFr
 		if an != nil {
 			notes[an.anchor.Checkpoint] = an.note
 			b.Anchor, out.Anchored = an.anchor, true
+			// The anchor in the deployment-wide root log, with the
+			// witnesses' cosignatures (G0 M35 D1041).
+			if b.Global, err = globalProof(ctx, q, an.id); err != nil {
+				return err
+			}
 		}
 		sizes := slices.Sorted(maps.Keys(notes))
 		for _, size := range sizes {

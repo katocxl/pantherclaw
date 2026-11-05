@@ -107,6 +107,16 @@ Anyone holding `evidence.read` can check a transaction's evidence without trusti
    pclaw verify bundle.json --trust trust.json --previous saved-checkpoint.txt --sigstore-trusted-root trusted_root.json [--json]
    ```
 
+   Instead of a file, `--sigstore-tuf` fetches Sigstore's `trusted_root.json` through TUF from `https://tuf-repo-cdn.sigstore.dev`, starting from the Sigstore root built into `pclaw` (G0 M35 D1040). It is the one option that makes network calls, to that host only; `--tuf-cache DIR` keeps the verified metadata between runs. It cannot be combined with `--sigstore-trusted-root`.
+
+   To count witnesses of the deployment's root log (G0 M35 D1041), pass a file of the witnesses you trust, one cosignature/v1 verifier key per line (`#` starts a comment), and how many of them must have cosigned:
+
+   ```bash
+   pclaw verify bundle.json --trust trust.json --witnesses witnesses.txt --witness-threshold 2
+   ```
+
+   Take the witness keys from the witnesses themselves, not from the deployment. Bundles exported since M35 also carry the root log's checkpoint and the anchor's inclusion proof in it; pin the trust file again with `pclaw evidence trust` after the upgrade so it holds the `global_log` key (and the `receipts_pq` key when the deployment co-signs receipts).
+
 The report lists every check as `passed`, `failed` or `not_available`, and exits non-zero when one failed:
 
 | Check | What it establishes |
@@ -118,7 +128,10 @@ The report lists every check as `passed`, `failed` or `not_available`, and exits
 | `entry.link`, `entry.inclusion` | each entry's hash is recomputed from the entry and its predecessor's hash, and the entry is in the checkpoint's tree; a body removed by retention is not available, with the policy and the date |
 | `receipt.signature`, `receipt.ledger` | each decision, execution and effect receipt is signed by a pinned `receipts` key valid when it was issued, and a chained entry records it |
 | `receipt.coverage` | a decision receipt's coverage claim (G0 M9, HR-217, PAP-1 §9.1) matches the snapshot ledger. The claimed snapshot's verified `coverage.snapshot` entry has the receipt's agent, connection and operation, the claim's `snapshot_state` and exclusions, and was computed before the decision. A claim that did not lapse holds the snapshot's state, and the snapshot had not expired, no `coverage.invalidation` of the scope and no newer snapshot came before the decision. A lapsed claim is never `ENFORCED`, and its `reason` holds: the snapshot expired before the decision, or an invalidation of that kind came in between. A transaction's bundle carries, for each claim, the claimed snapshot, the scope's next snapshot and its invalidations up to the decision; a missing one is not available, and receipts without a claim have no such check. A receipt whose claim could not be read at decision time carries `{"unavailable": "timeout"|"error"}` alone and is not available, "claim unavailable (timeout)", never passed; a marker with another reason or with any other field fails |
-| `anchor.leaf`, `anchor.root`, `anchor.signature`, `anchor.log`, `anchor.timestamp` | the org's blinded leaf is in the anchored global root, the statement is signed by a pinned `anchors` key, the transparency log includes it, and an authority timestamped the signature; `anchor` is not available when nothing is anchored yet, and the last two without `--sigstore-trusted-root` |
+| `anchor.leaf`, `anchor.root`, `anchor.signature`, `anchor.log`, `anchor.timestamp` | the org's blinded leaf is in the anchored global root, the statement is signed by a pinned `anchors` key, the transparency log includes it, and an authority timestamped the signature; `anchor` is not available when nothing is anchored yet, and the last two without `--sigstore-trusted-root` or `--sigstore-tuf` |
+| `global.checkpoint`, `global.inclusion` | the root log's checkpoint (origin `<log origin>/global`) is signed by a pinned `global_log` key, and the anchor's global root is a leaf of it; not available when the bundle has no root log checkpoint, failed when the trust file has no `global_log` key that signed it |
+| `global.witnesses` | at least `--witness-threshold` of the witnesses in `--witnesses` cosigned that checkpoint (cosignature/v1); a cosignature by a named witness that does not verify fails; not available without `--witnesses` |
+| `receipt.cosignature` | a receipt's ML-DSA-65 co-signature (`sigs[]`, PAP-1 §9.4, G0 M35 D1042) verifies under a pinned `receipts_pq` key; not available when the receipt has none or the trust file has no `receipts_pq` key |
 
 Every report ends with its limits: what passed shows the integrity of the evidence in the bundle, issued by the holder of the keys you pinned. It does not show that the bundle is complete, that an external effect happened, or that anything is certified.
 

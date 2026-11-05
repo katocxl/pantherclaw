@@ -2568,6 +2568,38 @@ type PcGithubScanRun struct {
 	FinishedAt     *time.Time
 }
 
+type PcGlobalCheckpoint struct {
+	TreeSize  int64
+	RootHash  []byte
+	Note      []byte
+	Kid       string
+	CreatedAt time.Time
+}
+
+type PcGlobalCheckpointCosignature struct {
+	TreeSize  int64
+	Witness   string
+	KeyID     int64
+	SignedAt  time.Time
+	Line      string
+	CreatedAt time.Time
+}
+
+type PcGlobalLogLeafe struct {
+	LeafIndex int64
+	AnchorID  ids.UUID
+	Root      []byte
+	CreatedAt time.Time
+}
+
+type PcGlobalLogTile struct {
+	Level     int16
+	TileIndex int64
+	Width     int16
+	Hashes    []byte
+	CreatedAt time.Time
+}
+
 type PcGrant struct {
 	OrgID                 ids.OrgID
 	ID                    ids.UUID
@@ -3870,6 +3902,13 @@ type PcRateCounter struct {
 	Key         string
 	WindowStart time.Time
 	Count       int32
+}
+
+type PcReceiptSignature struct {
+	OrgID         ids.OrgID
+	ReceiptSha256 []byte
+	Sigs          []byte
+	CreatedAt     time.Time
 }
 
 type PcRecommendationDismissal struct {

@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/actiontoken"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/receiptsig"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/transactions/domain"
@@ -186,6 +187,8 @@ type EffectResult struct {
 type Signed struct {
 	JWS  string
 	Body []byte
+	// Sigs is the PAP-1 §9.4 sigs[] (G0 M35 D1042); nil when co-signing is off.
+	Sigs []byte
 }
 
 // Sign signs an effect receipt.
@@ -357,7 +360,11 @@ func SignEffect(receipts Signer, issuer string, e Effect) (Signed, error) {
 	if err != nil {
 		return Signed{}, err
 	}
-	return Signed{JWS: token, Body: body}, nil
+	sigs, err := receiptsig.Of(receipts, token) // G0 M35 D1042: PAP-1 sigs[] when co-signing is on
+	if err != nil {
+		return Signed{}, err
+	}
+	return Signed{JWS: token, Body: body, Sigs: sigs}, nil
 }
 
 // digest is the hex SHA-256 of a canonical field map.

@@ -380,6 +380,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	verification.Receipts = receiptsSigner(cfg.Evidence.MLDSACosign, reg, verification.Receipts) // G0 M35 D1042
 	m6.verifications = verification
 	wireM20Rotation(pool, m6, verification, bill, log)
 	m6.facts = gatewayFacts(pool)
@@ -1068,6 +1069,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		_, _ = w.Write(b)
 	})
 	mountEvidenceKeys(mux, d)
+	mountGlobalCheckpoint(mux, d) // G0 M35 D1041
 	mountM10Ops(mux)
 	// Extension routes come last, so they can be checked against every
 	// core route (HR-341).

@@ -53,6 +53,25 @@ Third-party dependencies are listed in go.mod/go.sum and the SDK lockfiles,
 and in the SBOM attached to every official release. Their licenses are
 reproduced in release artifacts as required.
 
+Sigstore TUF root and go-tuf
+----------------------------
+internal/evidence/sigstoretuf/root.json is the Sigstore root of trust (TUF
+root metadata, version 14), copied unchanged from
+github.com/sigstore/sigstore-go v1.3.0, pkg/tuf/repository/root.json
+(Copyright The Sigstore Authors), under the Apache License, Version 2.0.
+
+The TUF client is github.com/theupdateframework/go-tuf/v2, under the
+Apache License, Version 2.0, whose NOTICE reads:
+  Copyright 2024 The Update Framework Authors
+
+  Apache 2.0 License
+  Copyright 2024 The Apache Software Foundation
+
+  This product includes software developed at
+  The Apache Software Foundation (/).
+
+  SPDX-License-Identifier: Apache-2.0
+
 MITRE ATT&CK
 ------------
 internal/threatmap/catalog/attack-enterprise.json holds the ids, names,
