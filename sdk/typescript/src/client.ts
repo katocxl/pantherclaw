@@ -480,6 +480,49 @@ export class Client {
     return no(`unknown decision ${a.decision}`);
   }
 
+  /**
+   * Asks the local connection's /hook face about one call of a hook
+   * mapping of its package (`tool`, such as `computer` of pc.computer)
+   * with its input, as sent. Allow only on an allow; a hold is a deny with
+   * `held`. Never throws (HR-200).
+   */
+  async hookCall(connection: string, tool: string, input: Record<string, unknown>): Promise<HookResult> {
+    const no = (why: string): HookResult => ({ outcome: "cannot_decide", held: false, why });
+    if (!this.cfg.gateway || !this.cfg.runId) return no("the gateway URL and the run id are required");
+    if (typeof connection !== "string" || !connectionName.test(connection)) return no(`no connection is named ${connection}`);
+    if (typeof tool !== "string" || !tool || typeof input !== "object" || input === null || Array.isArray(input)) {
+      return no("a hook call needs a tool name and an input object");
+    }
+    let body: string;
+    try {
+      body = JSON.stringify({ input, tool });
+    } catch (e) {
+      return no(`the call's input is not JSON: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (encoder.encode(body).length > MAX_CALL_BODY) return no("the call is larger than the /hook face takes");
+    let res: Sent;
+    try {
+      res = await this.do("POST", `${this.cfg.gateway}/hook/${encodeURIComponent(connection)}`, body, {
+        "Content-Type": "application/json",
+        "PAP-Run-Id": this.cfg.runId,
+      });
+    } catch (e) {
+      return no(`PantherClaw cannot decide: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (res.status !== 200) return no(`the gateway answered HTTP ${res.status}`);
+    let a: HookAnswer;
+    try {
+      const v = plain(parseJSON(res.body));
+      if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("not an object");
+      a = v as HookAnswer;
+    } catch {
+      return no("the gateway's answer is not readable");
+    }
+    if (a.decision === "allow") return { outcome: "allow", held: false, answer: a, why: a.reason ?? "" };
+    if (a.decision === "deny") return { outcome: "deny", held: a.held === true, answer: a, why: a.reason ?? "" };
+    return no(`unknown decision ${a.decision}`);
+  }
+
   /** Long-polls a held call at the server: answers when the state differs from `known` or after `timeoutS` (at most 30). */
   async wait(handle: string, known = "", timeoutS = 30, signal?: AbortSignal): Promise<{ state: WaitState; timedOut: boolean }> {
     const req: Record<string, unknown> = { runId: this.cfg.runId, handle, timeoutSeconds: Math.min(timeoutS, 30) };

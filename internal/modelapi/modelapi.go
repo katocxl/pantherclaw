@@ -444,6 +444,10 @@ func (r *Request) serverTools(top map[string]jsontext.Value) error {
 			if r.providerSide(name, set && typ.Kind() != 'n') {
 				names[name] = true
 			}
+			if r.computerTool(name, set && typ.Kind() != 'n') {
+				// Client-run, but declaring it needs computer_use allowed (D985, HR-756).
+				names[ComputerUse] = true
+			}
 		}
 	}
 	present := func(name string) bool { v, ok := top[name]; return ok && v.Kind() != 'n' }
@@ -481,6 +485,27 @@ func (r *Request) serverTools(top map[string]jsontext.Value) error {
 	}
 	slices.Sort(r.ServerTools)
 	return nil
+}
+
+// ComputerUse is the pseudo-name a request carries in ServerTools when it
+// declares a client-run computer tool (D985, HR-756): the tool runs in the
+// agent, and the model connection's allowed_server_tools must name it.
+const ComputerUse = "computer_use"
+
+// computerTool reports whether a tool of type name (set: the tool has a
+// type) is a client-run computer tool: an Anthropic computer_* tool or the
+// Responses API's computer_use_preview.
+func (r *Request) computerTool(name string, set bool) bool {
+	switch {
+	case !set:
+		return false
+	case r.API.Anthropic():
+		return strings.HasPrefix(name, "computer_")
+	case r.API == OpenAIResponses:
+		return name == "computer_use_preview"
+	default:
+		return false
+	}
 }
 
 // providerSide reports whether a tool of type name (set: the tool has a
