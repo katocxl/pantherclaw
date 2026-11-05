@@ -27,6 +27,25 @@ func m31Def(t *testing.T, raw []byte, op string) *domain.Definition {
 	return d
 }
 
+// The decoder lets a dedupe key name an optional param: Gmail's copies and
+// Drive's share destinations are optional and still tell two actions apart
+// (HR-007, G0 M31 D1208).
+func TestHR007_AnOptionalParamMayBeADedupeField(t *testing.T) {
+	for _, c := range []struct {
+		raw       []byte
+		op, param string
+	}{
+		{pcgmail.Package, "gmail.message.send", "cc"},
+		{pcgoogleworkspace.Package, "drive.permission.create", "email_address"},
+		{pcgoogleworkspace.Package, "drive.permission.create", "domain"},
+	} {
+		d := m31Def(t, c.raw, c.op)
+		if d.Params[c.param].Required || !slices.Contains(d.Dedupe, "params."+c.param) {
+			t.Errorf("%s: %s is not an optional dedupe field", c.op, c.param)
+		}
+	}
+}
+
 func domainShare(id string) actionir.Destination {
 	return actionir.Destination{Kind: actionir.ShareEmailDomain, ID: id}
 }

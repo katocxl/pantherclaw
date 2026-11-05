@@ -23,7 +23,7 @@ pclaw seal --connection <connection id> --google-service-account key.json \
   --subject ops@example.com --scope https://www.googleapis.com/auth/gmail.send
 ```
 
-The connection's allowed hosts must include `oauth2.googleapis.com` and the API host (`gmail.googleapis.com`, `www.googleapis.com`). The gateway signs a five-minute assertion per dispatch and exchanges it for one token; nothing is cached. A call that names another mailbox than `--subject` is refused before anything is minted (`TARGET_NOT_CREDENTIAL_SUBJECT`). Delegation itself is granted in Google, so keep its scopes to what the packages need (residual risk R-75).
+The connection's allowed hosts must include `oauth2.googleapis.com` and the API host (`gmail.googleapis.com`, `www.googleapis.com`). The gateway signs a five-minute assertion per dispatch and exchanges it for one token; nothing is cached. A call that names another mailbox than `--subject` is refused before anything is minted (`TARGET_NOT_CREDENTIAL_SUBJECT`). Delegation itself is granted in Google, so keep its scopes to what the packages need (residual risk R-95).
 
 ## Microsoft 365 and Salesforce: token endpoints from a closed list
 
@@ -66,7 +66,7 @@ Reads are built from the package's allow-list with typed binds; a key-pair JWT i
 pclaw package draft openapi spec.yaml --name acme.widgets --version 0.1.0 --out acme-widgets.yaml
 ```
 
-The draft starts with `review_required`, and every place a person must decide is marked `# review:` (targets, units, extraction). The importer refuses Swagger 2, external `$ref`s, `$ref` chains deeper than 16, and names starting `pc.`. Writes are drafted as irreversible with every param in the approval.
+The draft starts with `review_required`, and every place a person must decide is marked `# review:` (targets, units, extraction). The importer refuses Swagger 2, external `$ref`s, `$ref` chains deeper than 16, and names starting `pc.`. Writes are drafted as irreversible and never retried, an unknown outcome is reconciled, and every param is in the approval.
 
 Importing the draft as it is fails with `DRAFT_NOT_REVIEWED`. Review it, delete the `review_required` line, then sign and import it with your org's package key:
 

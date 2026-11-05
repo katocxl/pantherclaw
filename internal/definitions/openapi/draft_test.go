@@ -118,6 +118,28 @@ func TestHR720_ADraftNeverLoadsUntilAPersonRemovesReviewRequired(t *testing.T) {
 	}
 }
 
+// A reviewed drafted write decodes: it is irreversible, never retried and
+// reconciles an unknown outcome, as M4 requires of every irreversible
+// operation (HR-720, HR-007, G0 M31 D1208).
+func TestHR720_AReviewedDraftedWriteDecodes(t *testing.T) {
+	raw, err := draft(t, writeSpec, "acme.widgets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manifest.Decode(raw); !errors.Is(err, manifest.ErrDraftNotReviewed) {
+		t.Fatalf("a draft decoded: %v", err)
+	}
+	p, err := manifest.Decode(reviewed(t, raw))
+	if err != nil {
+		t.Fatalf("the reviewed write: %v\n%s", err, reviewed(t, raw))
+	}
+	d, ok := p.Definition("acme.widgets.get_widget_safely")
+	if !ok || d.Access != domain.AccessWrite || d.Reversibility != domain.Irreversible || d.Retry.Safe ||
+		d.Retry.OnUnknown != domain.OnUnknownReconcile || len(d.Dedupe) == 0 || len(d.Approval.Fields) == 0 {
+		t.Fatalf("drafted %+v", d)
+	}
+}
+
 // stripComments drops the draft's leading comment lines.
 func stripComments(raw []byte) string {
 	var out []string

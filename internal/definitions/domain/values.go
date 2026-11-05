@@ -282,7 +282,9 @@ func ambiguous(format string, args ...any) error {
 // DedupeKey computes the semantic dedupe key of an action (HR-007):
 // "sha256:" + SHA-256 of the canonical JSON of the operation and the
 // declared fields' canonical values. It is empty when the definition
-// declares no key. A declared field without a value is ambiguous.
+// declares no key. An optional param the action leaves out is null in the
+// key, which no value equals (G0 M31 D1208); any other declared field
+// without a value is ambiguous.
 func (d *Definition) DedupeKey(target actionir.Target, vals Values) (string, error) {
 	if len(d.Dedupe) == 0 {
 		return "", nil
@@ -300,6 +302,10 @@ func (d *Definition) DedupeKey(target actionir.Target, vals Values) (string, err
 		default:
 			name, _ := strings.CutPrefix(f, "params.")
 			pv, ok := vals[name]
+			if p, declared := d.Params[name]; !ok && declared && !p.Required {
+				fields[f] = nil
+				continue
+			}
 			if !ok || d.Params[name].Type != pv.Type {
 				return "", ambiguous("dedupe key field %s has no value", f)
 			}

@@ -8,7 +8,7 @@
 1. **Shared dispatch contracts** (HR-723, HR-724). JSON body keys gain array indices and `[*]` (one object per identifier-list item, at most 64); a `graphql` dispatch sends a fixed document with the mapping as its variables; `rfc5322-raw` builds a plain-text message whose header values can never carry a line break. Everything the agent sends still reaches the target only through the reviewed template (HR-075).
 2. **Token endpoints from a closed list** (HR-722). An `oauth_client` credential names Microsoft's or Salesforce's token endpoint, or a loopback simulator's.
 3. **Google service accounts minted per dispatch** (HR-721). The key never leaves the gateway; only a token minted for one dispatch is placed.
-4. **An importer that drafts, never imports** (HR-720). `pclaw package draft openapi` writes a draft whose `review_required` key the decoder refuses; a person reviews it, removes the key and signs it with an org key.
+4. **An importer that drafts, never imports** (HR-720). `pclaw package draft openapi` writes a draft whose `review_required` key the decoder refuses; a person reviews it, removes the key and signs it with an org key. Every drafted write is irreversible and never retried, and its unknown outcomes are reconciled (D1208).
 5. **Packages on these contracts** (HR-725..727): `pc.gmail`, `pc.google-workspace`, `pc.m365`, `pc.salesforce`, `pc.notion`, `pc.linear`, `pc.bedrock`, `pc.vertex`, `pc.snowflake`, each with a simulator.
 
 **How it works.**
