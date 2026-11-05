@@ -185,6 +185,20 @@ func TestMapClasses(t *testing.T) {
 			},
 		},
 		{
+			name: "refused workload proof", class: 3002, category: 3, ty: 300299, severity: 1, status: 2,
+			ev: func() Event {
+				e := event("audit." + auditkind.SecurityWorkloadProofRefused)
+				e.ActorType, e.Outcome = "gateway", "DENIED"
+				e.Subjects = []reflexdomain.Subject{{Type: reflexdomain.SubjectInstance, ID: "i1"}, {Type: reflexdomain.SubjectAgent, ID: "a1"}}
+				return e
+			},
+			check: func(t *testing.T, r Record) {
+				if r.ClassName != "Authentication" || r.ActivityName != "Other" || r.User == nil || r.User.UID != "i1" || r.Status != "Failure" {
+					t.Errorf("class %q activity %q user %+v status %q", r.ClassName, r.ActivityName, r.User, r.Status)
+				}
+			},
+		},
+		{
 			name: "trusted issuer activated", class: 3004, category: 3, ty: 300410, severity: 1, status: 1,
 			ev: func() Event {
 				e := event("audit." + auditkind.IdentityIssuerActivated)
