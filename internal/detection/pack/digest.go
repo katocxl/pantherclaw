@@ -6,4 +6,4 @@
 package pack
 
 // PackDigest is the hex SHA-256 of builtin/manifest.json.
-const PackDigest = "06a7f877bd72a00593ff671dd27b7006dc05e63360028906d96232ae20f75874"
+const PackDigest = "8f45aff2a64de064db1c761f3ce4413f1307f1d986b0fa467003cd102aa19c91"

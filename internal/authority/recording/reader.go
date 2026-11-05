@@ -552,6 +552,26 @@ func (r *Reader) ContentSignals(_ context.Context, org ids.OrgID, run ids.UUID) 
 	return pipeline.ContentState{Mode: x.Mode, Kinds: x.Kinds}, nil
 }
 
+// BrowserSites implements pipeline.BrowserSites. Only a recording of
+// pipeline version 9 or later replays this read (G0 M33 D977).
+func (r *Reader) BrowserSites(_ context.Context, org ids.OrgID) ([]pipeline.BrowserSite, error) {
+	if err := r.otherOrg(org, "browser sites", pipeline.StepFacts); err != nil {
+		return nil, err
+	}
+	x := r.rec.Reads.BrowserSites
+	if x == nil {
+		return nil, r.gap("browser sites", pipeline.StepFacts, "the org's browser sites were not read")
+	}
+	if x.Err != "" {
+		return nil, errors.New("recording: the browser sites could not be read")
+	}
+	out := make([]pipeline.BrowserSite, 0, len(x.Sites))
+	for _, s := range x.Sites {
+		out = append(out, pipeline.BrowserSite{Host: s.Host, IncludeSubdomains: s.IncludeSubdomains})
+	}
+	return out, nil
+}
+
 // OwnedAccounts implements pipeline.OwnedAccounts. Only a recording of
 // pipeline version 8 or later replays this read (G0 M30 D935a).
 func (r *Reader) OwnedAccounts(_ context.Context, org ids.OrgID, kind string) ([]string, error) {

@@ -39,6 +39,9 @@ type Configuration struct {
 	// authorization is on (G0 M26 D402); the gateway serves the OAuth route
 	// of its MCP face only then.
 	McpIssuer string
+	// CompareSites are the org's browser sites marked for the cloaking
+	// compare (G0 M33 D986).
+	CompareSites []dbq.ListBrowserCompareSitesRow
 }
 
 // Configuration returns the calling gateway's configuration: its
@@ -93,6 +96,9 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 			return err
 		}
 		if out.Captures, err = q.GatewayCaptureProfiles(ctx, id.Org, id.Gateway); err != nil {
+			return err
+		}
+		if out.CompareSites, err = q.ListBrowserCompareSites(ctx, id.Org); err != nil { // G0 M33 D986
 			return err
 		}
 		out.McpIssuer, err = s.mcpIssuer(ctx, q, id.Org)

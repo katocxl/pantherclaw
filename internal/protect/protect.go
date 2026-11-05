@@ -139,6 +139,11 @@ const (
 	// second person, whatever the CONSEQUENCE_RULES mode (AlwaysProtected).
 	// Removing one applies directly.
 	SurfaceOwnedAccountAdd Surface = "org.owned_account.add"
+	// SurfaceBrowserSiteAdd adds a site to the org's browser site list, so
+	// browser actions on it stop holding (G0 M33 D976, HR-749): always held
+	// for a second person, as an owned account is (AlwaysProtected).
+	// Removing one applies directly.
+	SurfaceBrowserSiteAdd Surface = "browser.site.add"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -174,7 +179,7 @@ func (s Surface) Permission() td.Permission {
 		return td.PermContentManage
 	case SurfaceCustomRuleConfirm:
 		return td.PermDetectionManage
-	case SurfaceOwnedAccountAdd:
+	case SurfaceOwnedAccountAdd, SurfaceBrowserSiteAdd:
 		return td.PermOwnedAccountsManage
 	case SurfaceSettings:
 		return td.PermProtectedChangeManage
@@ -193,7 +198,7 @@ func (s Surface) AlwaysProtected() bool {
 		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient ||
 		s == SurfaceSCIMTokenActivate || s == SurfaceSAMLConnectionPut || s == SurfaceSAMLDisable ||
 		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove || s == SurfaceModelCapture ||
-		s == SurfaceOwnedAccountAdd
+		s == SurfaceOwnedAccountAdd || s == SurfaceBrowserSiteAdd
 }
 
 // Change domains and kinds of internal/changes (D6).

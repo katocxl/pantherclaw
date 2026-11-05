@@ -898,6 +898,9 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	if p.at(8) {
 		p.shares(ctx, s) // G0 M30 D935, D935a (shares.go)
 	}
+	if p.at(9) {
+		p.browser(ctx, s) // G0 M33 D977 (browser.go)
+	}
 	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	s.contentHold()         // G0 M27 D507, D512 (content.go)
 	s.vectorWriterHold()    // G0 M30 D924 (vectorstore_m30.go)

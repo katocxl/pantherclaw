@@ -204,6 +204,8 @@ func decide(res dispatch.Result) Answer {
 		a.Decision, a.Held = "deny", true
 		a.Reason = "PantherClaw holds this call for an approval or a step-up by an eligible person, not by you." + txn +
 			" Once it is approved in PantherClaw, run the same command again."
+	case res.Code == dispatch.CodeBrowserSecretField: // G0 M33 D978, HR-747
+		a.Decision, a.Reason = "deny", dispatch.BrowserSecretFieldReason+txn
 	default:
 		a.Decision = "deny"
 		a.Reason = "PantherClaw denied this call: " + string(res.Class)

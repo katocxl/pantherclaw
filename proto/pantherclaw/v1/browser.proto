@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// BrowserService is the org's list of browser sites for its agents'
+// managed browsers (G0 M33 D976, D977; HR-745, HR-749).
+//
+// A pc.browser action whose target host matches no site holds for a person
+// (SITE_NOT_LISTED), and an empty list holds every site. Adding a site
+// loosens that hold, so it files a protected change that applies only when
+// a second person confirms it with a security key. Removing one applies at
+// once. At most 500 sites per org.
+service BrowserService {
+  // ListBrowserSites lists the org's browser sites.
+  // permission: org.owned_accounts.read
+  rpc ListBrowserSites(ListBrowserSitesRequest) returns (ListBrowserSitesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AddBrowserSite files the protected change that adds a site (a person).
+  // Nothing changes until a second person confirms it.
+  // permission: org.owned_accounts.manage
+  rpc AddBrowserSite(AddBrowserSiteRequest) returns (AddBrowserSiteResponse);
+  // RemoveBrowserSite removes a site at once (a person): actions on it hold
+  // again.
+  // permission: org.owned_accounts.manage
+  rpc RemoveBrowserSite(RemoveBrowserSiteRequest) returns (RemoveBrowserSiteResponse);
+}
+
+// BrowserSite is one site the org listed.
+message BrowserSite {
+  string id = 1;
+  // A lower-case DNS name of at least two labels (no IP, no port).
+  string host = 2;
+  // Whether every name under host matches too.
+  bool include_subdomains = 3;
+  // Whether the gateway's cloaking compare covers the site (D986).
+  bool compare = 4;
+  // The admin's marked-click selectors (D980).
+  repeated string click_selectors = 5;
+  string note = 6;
+  string created_by = 7;
+  google.protobuf.Timestamp create_time = 8;
+}
+
+// ListBrowserSitesRequest asks for the list.
+message ListBrowserSitesRequest {}
+
+// ListBrowserSitesResponse is the list, by host.
+message ListBrowserSitesResponse {
+  repeated BrowserSite sites = 1;
+}
+
+// AddBrowserSiteRequest names a site to add.
+message AddBrowserSiteRequest {
+  string host = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 253
+  }];
+  bool include_subdomains = 2;
+  bool compare = 3;
+  repeated string click_selectors = 4 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {
+        min_len: 1
+        max_len: 256
+      }
+    }
+  }];
+  string note = 5 [(buf.validate.field).string.max_len = 256];
+  string reason = 6 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// AddBrowserSiteResponse names the protected change filed.
+message AddBrowserSiteResponse {
+  string protected_change_id = 1;
+}
+
+// RemoveBrowserSiteRequest names a site to remove.
+message RemoveBrowserSiteRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// RemoveBrowserSiteResponse is empty.
+message RemoveBrowserSiteResponse {}

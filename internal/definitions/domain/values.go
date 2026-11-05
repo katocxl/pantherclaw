@@ -95,7 +95,7 @@ func (p ParamSpec) decode(name string, raw jsontext.Value) (Value, error) {
 		v.Floats, err = p.decodeFloats(raw)
 	case TypeStringMap:
 		v.Map, err = p.decodeStringMap(raw)
-	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath:
+	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath, TypeURL:
 		if err = json.Unmarshal(raw, &v.Str); err == nil {
 			err = p.str(v.Str)
 		}
@@ -167,6 +167,14 @@ func (p ParamSpec) str(s string) error {
 		}
 		if n, err := actionir.NormalizePath(s); err != nil || n != s {
 			return fmt.Errorf("not a normalized absolute path (HR-187)")
+		}
+		return nil
+	case TypeURL:
+		if len(s) > limitOr(p.MaxLength, actionir.MaxURL) {
+			return fmt.Errorf("longer than %d bytes", limitOr(p.MaxLength, actionir.MaxURL))
+		}
+		if n := actionir.NormalizeURL(s); n == "" || n != s {
+			return fmt.Errorf("not an absolute http or https url in its normalized spelling (HR-748)")
 		}
 		return nil
 	case TypeText, TypeCommand, TypeContent:
@@ -248,7 +256,7 @@ func (v Value) wire() any {
 		return v.Floats
 	case TypeStringMap:
 		return v.Map
-	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath:
+	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath, TypeURL:
 		return v.Str
 	}
 	return nil
