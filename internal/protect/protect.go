@@ -144,6 +144,11 @@ const (
 	// for a second person, as an owned account is (AlwaysProtected).
 	// Removing one applies directly.
 	SurfaceBrowserSiteAdd Surface = "browser.site.add"
+	// SurfaceIntelConsume loosens an org's shared intel consume mode (HOLD
+	// to ALERT_ONLY, or either to OFF; G0 M38 D1104a, HR-820): always held
+	// for a second person, as leaving content signals ACTIVE is
+	// (AlwaysProtected). Tightening applies directly.
+	SurfaceIntelConsume Surface = "intel.consume"
 	// SurfaceSettings turns a category OFF (a change request of kind
 	// SETTINGS, D42).
 	SurfaceSettings Surface = "protect.settings"
@@ -177,6 +182,8 @@ func (s Surface) Permission() td.Permission {
 		return td.PermCatalogManage
 	case SurfaceContentSignalMode:
 		return td.PermContentManage
+	case SurfaceIntelConsume:
+		return td.PermIntelManage
 	case SurfaceCustomRuleConfirm:
 		return td.PermDetectionManage
 	case SurfaceOwnedAccountAdd, SurfaceBrowserSiteAdd:
@@ -198,7 +205,7 @@ func (s Surface) AlwaysProtected() bool {
 		s == SurfaceAssertionIssuer || s == SurfaceAssertionClient || s == SurfaceMcpAccess || s == SurfaceMcpClient ||
 		s == SurfaceSCIMTokenActivate || s == SurfaceSAMLConnectionPut || s == SurfaceSAMLDisable ||
 		s == SurfaceGroupMappingAdd || s == SurfaceGroupMappingRemove || s == SurfaceModelCapture ||
-		s == SurfaceOwnedAccountAdd || s == SurfaceBrowserSiteAdd
+		s == SurfaceOwnedAccountAdd || s == SurfaceBrowserSiteAdd || s == SurfaceIntelConsume
 }
 
 // Change domains and kinds of internal/changes (D6).

@@ -23,7 +23,7 @@ var m38IntelCatalog = []Permission{PermIntelRead, PermIntelManage, PermIntelCont
 
 func init() {
 	catalog = append(catalog, m38IntelCatalog...)
-	humanOnly = append(humanOnly, PermIntelContribute)
+	humanOnly = append(humanOnly, PermIntelManage, PermIntelContribute) // D1104a
 	for i := range roles {
 		r := &roles[i]
 		switch r.Name { //nolint:exhaustive // only these roles gain the M38 intel permissions
