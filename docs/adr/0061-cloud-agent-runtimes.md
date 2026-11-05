@@ -9,7 +9,7 @@
 2. **AgentCore through the customer's own gateway** (HR-764..766; founder decisions FQ34-1, FQ34-2). An interceptor Lambda, one per AgentCore gateway, enrols with `aws_iam` attestation and asks the customer's PantherClaw gateway, so raw tool arguments stay in the customer's network. Each AgentCore gateway is one PantherClaw agent. A connection is bound to an AgentCore target by `runtime_target` (HR-762), and the Authority checks that the target's account is the attested one (HR-765).
 3. **Runtime runs** (HR-761). An instance enrolled by cloud attestation starts its run under its issuer entry's run grant.
 4. **ADK and Foundry helpers** (HR-767). A callback and an approvals helper in the customer's code, both failing closed.
-5. **Deploy and admin-command operations** (HR-763). Vertex and Foundry agent deploys and Azure Run Command through PantherClaw are irreversible operations that no template grants. AgentCore is reads only for now, and SSM waits for a founder decision (D993a).
+5. **Deploy and admin-command operations** (HR-763). Vertex and Foundry agent deploys, SSM commands and Azure Run Command through PantherClaw are irreversible operations that no template grants. AgentCore is reads only for now (D993a). An SSM command's session names the instance and the document, so HR-525 allows up to 3 more exact ARNs per action (founder FQ34-4, D1002).
 6. **Daily discovery** (HR-768, HR-769; FQ34-3). Agents deployed in the three runtimes are found daily through the gateway, and a new one raises an alert only.
 
 **Consequences.**

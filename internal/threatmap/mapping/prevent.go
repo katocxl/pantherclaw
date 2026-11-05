@@ -418,14 +418,15 @@ var Prevent = []PreventControl{
 		},
 	},
 	{
-		// G0 M34 D999, D993a: no reason code of its own; the evidence is the
-		// transactions of azure.vm.run_command (SSM waits for the founder).
+		// G0 M34 D999, D993a, D1002: no reason code of its own; the evidence
+		// is the transactions of aws.ssm.send_command,
+		// aws.ssm.send_powershell_command and azure.vm.run_command.
 		ID: "prevent.cloud_admin_command", Title: "An agent runs a command through a cloud's management service only through a decided, reviewed operation", Surface: SurfaceGateway,
 		HR:         []string{"HR-763"},
 		Requires:   RequiresAlways,
 		Techniques: []string{"T1651"},
 		Why: map[string]string{
-			"T1651": "Cloud administration command (T1651): azure.vm.run_command through PantherClaw is an irreversible code.execute operation, decided on its command id, target VM and script.",
+			"T1651": "Cloud administration command (T1651): aws.ssm.send_command, aws.ssm.send_powershell_command and azure.vm.run_command through PantherClaw are irreversible code.execute operations, decided on their target instance or VM and their commands.",
 		},
 	},
 }
