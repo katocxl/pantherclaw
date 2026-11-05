@@ -98,8 +98,9 @@ var ErrOAuthProvider = fmt.Errorf("%w: the token endpoint is not a known provide
 
 var (
 	// microsoftTokenRe is Microsoft Entra's v2.0 token endpoint for one
-	// tenant: a tenant id, a verified domain, or botframework.com.
-	microsoftTokenRe  = regexp.MustCompile(`^https://login\.microsoftonline\.com/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9.-]{0,252})/oauth2/v2\.0/token$`)
+	// tenant: a tenant id (in either case, as credentials sealed before
+	// D951 may hold it), a verified domain, or botframework.com.
+	microsoftTokenRe  = regexp.MustCompile(`^https://login\.microsoftonline\.com/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[a-z0-9][a-z0-9.-]{0,252})/oauth2/v2\.0/token$`)
 	salesforceTokenRe = regexp.MustCompile(`^https://[a-z0-9-]+\.my\.salesforce\.com/services/oauth2/token$`)
 )
 
