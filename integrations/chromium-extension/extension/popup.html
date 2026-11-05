@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 Joshua Kato -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PantherClaw</title>
+  <style>
+    body { font: 13px/1.4 system-ui, sans-serif; width: 300px; margin: 0; padding: 12px; background: #f5f7fa; color: #1f2933; }
+    p { margin: 0 0 10px; }
+    button { font: inherit; padding: 6px 10px; }
+    @media (prefers-color-scheme: dark) { body { background: #1f2933; color: #f5f7fa; } }
+  </style>
+</head>
+<body>
+  <p id="status">Asking the PantherClaw native host.</p>
+  <p id="tab"></p>
+  <button id="take" type="button" hidden>Take over this tab</button>
+  <button id="give" type="button" hidden>Give back</button>
+  <script src="popup.js"></script>
+</body>
+</html>

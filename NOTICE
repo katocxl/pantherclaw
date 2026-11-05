@@ -23,6 +23,7 @@ their own agents and target systems:
   sdk/typescript/          TypeScript SDK and framework integrations
   integrations/claude-code/ Claude Code plugin and Agent SDK integration
   integrations/claude-agent-sdk/ Claude Agent SDK integrations (TypeScript, Python)
+  integrations/chromium-extension/ Browser extension for agent browsers (Chromium)
   integrations/crewai/     CrewAI integration (Python)
   integrations/langchain/  LangChain integration (Python)
   integrations/mcp/        MCP TypeScript SDK integration

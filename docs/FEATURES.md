@@ -977,6 +977,23 @@ Agent pods in a customer's own cluster get one route out, through the edge as a 
 | F1028 | Pod runs under a run grant | `KubernetesService.StartPodRun`: a pod's run starts under its issuer entry's approved run grant, launched by the entry. | Next | Community | M32 | new |
 | F1029 | Kubernetes threat-map controls | `prevent.kubernetes_closure` (T1552.005, T1613) and `prevent.kubernetes_admission` (T1610). | Next | Community | M32 | F960 |
 
+### M33 rows: Browser and computer-use agents
+
+An agent's browser asks PantherClaw, through `pclaw` on the same machine, before it opens a page, submits a form, saves a download or clicks a marked element; secret and challenge fields are left to a person in a takeover; computer-use actions are asked through the SDKs ([G0 M33](g0/M33.md), [ADR-0060](adr/0060-browser-and-computer-use-agents.md)). The extension is cooperative (PARTIAL). Each row takes its parent feature's edition, or Community where the parent is ungated.
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1030 | Managed browser extension | `integrations/chromium-extension`: a Manifest V3 extension that holds every top-level navigation, form submit, download and marked click until PantherClaw allows it, and fails closed (`pc.browser`). | Next | Community | M33 | new |
+| F1031 | Browser site list | `BrowserService` and `pclaw browser sites`: the org's sites, with subdomains, marked-click selectors and the compare mark; a `pc.browser` action on an unlisted site is held for a person. | Next | Community | M33 | F998 |
+| F1032 | Secret and challenge fields | The extension refuses agent input into password, one-time-code and payment fields and challenge frames; the gateway refuses a submit with a secret field (`BROWSER_SECRET_FIELD`). | Next | Community | M33 | new |
+| F1033 | Browser takeover | "Take over this tab" in the toolbar popup: always held for an approver, at most 10 minutes, nothing decided on that tab until it ends. | Next | Community | M33 | new |
+| F1034 | Native messaging host | `pclaw browser host` and `pclaw browser install-host`: the extension's only route to PantherClaw, signing each question with the desktop workload key; no key in the browser. | Next | Community | M33 | new |
+| F1035 | Chrome policy generator | `pclaw browser policy generate`: Chrome policy (JSON and .reg) that force-installs the extension, turns off incognito and guest mode, and carries the sites' click rules; it installs nothing. | Next | Community | M33 | new |
+| F1036 | SDK computer-use wrappers | `ComputerUseGuard` in the Python and TypeScript SDKs (Anthropic and OpenAI computer-use actions as `pc.computer` `computer.input`) and `guard_computer` for the OpenAI Agents SDK. | Next | Community | M33 | new |
+| F1037 | Model-route computer-use gate | A model call declaring computer use is refused unless the model connection allows `computer_use` (`MODEL_COMPUTER_USE_NOT_ALLOWED`). | Next | Community | M33 | F980 |
+| F1038 | Capture without images | Opt-in prompt capture replaces image, document and screenshot blocks by their type, size and digest. | Next | Business | M33 | F1002 |
+| F1039 | Cloaking compare | For compare sites, the gateway fetches an allowed page as the agent and as a plain browser, and reports a mismatch as digests and numbers; the `pc.browser.cloaking` alert (PARTIAL, alert only). | Next | Community | M33 | new |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.

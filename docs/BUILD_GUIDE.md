@@ -848,6 +848,18 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Threat map:** `prevent.kubernetes_closure` and `prevent.kubernetes_admission`; T1610 and T1613 leave Outside.
 - Migrations `00360`–`00363`.
 
+### M33 — Browser and computer-use agents
+**HR:** HR-745..759 · **F:** F1030–F1039 · **ADR:** 0060 · **G0:** [g0/M33.md](g0/M33.md).
+- **Code first**, like M30–M32: three streams on pushed branches, assembled on `code/m33` from `code/m32`; tests come in the testing phase.
+- **Packages:** `pc.browser` (navigate, form submit, download, marked click, takeover) and `pc.computer` (`computer.input`), with the `url` param type and `normurl`, `urlhost`, `urlquery`.
+- **Extension and host** (FQ33-1): a managed Manifest V3 extension that reaches PantherClaw only through `pclaw browser host` over native messaging; it fails closed and sends no page content. Cooperative (PARTIAL).
+- **Site list** (FQ33-2): an action on an unlisted site holds for a person, and an empty list holds every site; a takeover always holds.
+- **Secret fields** (FQ33-4): no agent input into password, one-time-code, payment or challenge fields, refused in the page and at the gateway; a person does it in a takeover.
+- **Computer use:** SDK wrappers ask before each action; the model route gates declaring computer use; capture keeps no images.
+- **Cloaking compare** (FQ33-3): on the customer's gateway for marked sites only, alert only, PARTIAL.
+- **Threat map:** `prevent.browser_sites` and `prevent.browser_secret_fields`.
+- Migration `00370`.
+
 ---
 
 ## 9. CI/CD summary

@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "properties": {
+    "host_name": {
+      "title": "Native host name",
+      "description": "The native messaging host the extension asks (default dev.pantherclaw.browser).",
+      "type": "string"
+    },
+    "click_rules": {
+      "title": "Marked clicks",
+      "description": "Elements whose clicks PantherClaw decides, by site. It can only add.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "host": { "type": "string" },
+          "include_subdomains": { "type": "boolean" },
+          "selectors": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "extra_secret_hosts": {
+      "title": "Extra secret-field hosts",
+      "description": "Hosts whose frames hold only secret fields, beside the built-in payment hosts. \"*.\" also covers the subdomains. It can only add.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

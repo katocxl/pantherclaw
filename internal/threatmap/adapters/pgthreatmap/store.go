@@ -50,6 +50,9 @@ func (Store) Records(ctx context.Context, tx db.TenantTx, org ids.OrgID, now tim
 		return out, err
 	}
 	out.MCPCatalogEnforcing = mcp == "ENFORCE"
+	if out.BrowserExtensionDeployed, err = q.ThreatMapBrowserExtensionDeployed(ctx, org); err != nil {
+		return out, err
+	}
 	if out.Agents, err = agents(ctx, q, org, now); err != nil {
 		return out, err
 	}

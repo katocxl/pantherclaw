@@ -290,6 +290,8 @@ func (e *eval) applies(c mapping.PreventControl) bool {
 		return e.in.ContentMode == "ACTIVE" && e.in.Editions.ContentSignals
 	case mapping.RequiresMCPCatalogEnforcing:
 		return e.in.MCPCatalogEnforcing
+	case mapping.RequiresBrowserExtensionDeployed:
+		return e.in.BrowserExtensionDeployed
 	}
 	return false
 }
@@ -771,6 +773,8 @@ func (e *eval) preventFix(p PreventLane) Fix {
 				return Fix{Kind: FixTurnOnSetting, TargetID: "content_signals", Label: labelContentActive}
 			case mapping.RequiresMCPCatalogEnforcing:
 				return Fix{Kind: FixTurnOnSetting, TargetID: "mcp_catalog", Label: labelMCPEnforce}
+			case mapping.RequiresBrowserExtensionDeployed:
+				return Fix{Kind: FixTurnOnSetting, TargetID: "browser_extension", Label: labelBrowserExtension}
 			case mapping.RequiresAlways:
 			}
 		}
