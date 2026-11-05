@@ -56,6 +56,9 @@ Usage:
   pantherclaw-sim snowflake [--addr 127.0.0.1:9109] [--public-key-file FILE] [--async 0] [--rate-limit 0] [--unauthorized]
   pantherclaw-sim aws --secret-file FILE [--addr 127.0.0.1:9099] [--external-id ID] [--role-actions *] [--throttle 0] [--deny-assume-role]
                       [--long-sessions]
+  pantherclaw-sim agentcore --secret-file FILE [--addr 127.0.0.1:9113] [--external-id ID] [--role-actions *] [--throttle 0]
+  pantherclaw-sim vertex-agent-engine [--addr 127.0.0.1:9114] [--service-account-file FILE] [--rate-limit 0] [--invalid-grant]
+  pantherclaw-sim azure [--addr 127.0.0.1:9115] [--client-file FILE] [--rate-limit 0] [--invalid-client]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
   pantherclaw-sim a2a [--addr 127.0.0.1:9093] [--base-url URL] [--name NAME] [--token-file FILE] [--sign-key FILE [--jwks-out FILE]]
@@ -70,28 +73,31 @@ Usage:
 // canary, --query-addr). No two simulators share one, so any set of them
 // runs side by side on their defaults (TestDefaultAddrsUnique).
 var defaultAddrs = map[string]string{
-	"payments":           "127.0.0.1:9090",
-	"mcp":                "127.0.0.1:9091",
-	"github":             "127.0.0.1:9092",
-	"a2a":                "127.0.0.1:9093",
-	"stripe":             "127.0.0.1:9094",
-	"slack":              "127.0.0.1:9095",
-	"jira":               "127.0.0.1:9096",
-	"gitlab":             "127.0.0.1:9097",
-	"teams":              "127.0.0.1:9098",
-	"aws":                "127.0.0.1:9099",
-	"copilot-studio":     "127.0.0.1:9100",
-	"okta":               "127.0.0.1:9101",
-	"chatgpt-enterprise": "127.0.0.1:9102",
-	"google":             "127.0.0.1:9104",
-	"m365":               "127.0.0.1:9105",
-	"model":              "127.0.0.1:9103",
-	"salesforce":         "127.0.0.1:9106",
-	"notion":             "127.0.0.1:9107",
-	"linear":             "127.0.0.1:9108",
-	"snowflake":          "127.0.0.1:9109",
-	"openapi":            "127.0.0.1:9112", // G0 M31 D954
-	"canary":             "127.0.0.1:18433",
+	"payments":            "127.0.0.1:9090",
+	"mcp":                 "127.0.0.1:9091",
+	"github":              "127.0.0.1:9092",
+	"a2a":                 "127.0.0.1:9093",
+	"stripe":              "127.0.0.1:9094",
+	"slack":               "127.0.0.1:9095",
+	"jira":                "127.0.0.1:9096",
+	"gitlab":              "127.0.0.1:9097",
+	"teams":               "127.0.0.1:9098",
+	"aws":                 "127.0.0.1:9099",
+	"copilot-studio":      "127.0.0.1:9100",
+	"okta":                "127.0.0.1:9101",
+	"chatgpt-enterprise":  "127.0.0.1:9102",
+	"google":              "127.0.0.1:9104",
+	"m365":                "127.0.0.1:9105",
+	"model":               "127.0.0.1:9103",
+	"salesforce":          "127.0.0.1:9106",
+	"notion":              "127.0.0.1:9107",
+	"linear":              "127.0.0.1:9108",
+	"snowflake":           "127.0.0.1:9109",
+	"openapi":             "127.0.0.1:9112", // G0 M31 D954
+	"agentcore":           "127.0.0.1:9113", // G0 M34 D998
+	"vertex-agent-engine": "127.0.0.1:9114",
+	"azure":               "127.0.0.1:9115",
+	"canary":              "127.0.0.1:18433",
 }
 
 // Run executes pantherclaw-sim.
@@ -143,6 +149,12 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runLinear(ctx, args[1:], stderr)
 	case "snowflake":
 		err = runSnowflake(ctx, args[1:], stderr)
+	case "agentcore":
+		err = runAgentCore(ctx, args[1:], stderr)
+	case "vertex-agent-engine":
+		err = runVertexAgent(ctx, args[1:], stderr)
+	case "azure":
+		err = runAzure(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	case "a2a":

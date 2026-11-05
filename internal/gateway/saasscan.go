@@ -29,7 +29,7 @@ func (g *Gateway) saasScan(ctx context.Context, conn *control.Connection, l disp
 		Source string `json:"source"`
 		Tenant string `json:"tenant"`
 	}
-	if json.Unmarshal(l.Request, &req) != nil || req.Run == "" || domain.KindOf(req.Source) == "" || !domain.TenantOK(req.Tenant) {
+	if json.Unmarshal(l.Request, &req) != nil || req.Run == "" || domain.KindOf(req.Source) == "" || !domain.SourceTenantOK(req.Source, req.Tenant) {
 		g.log.ErrorContext(ctx, "gateway.saas_scan_refused", slog.String("task_id", l.Task))
 		return
 	}

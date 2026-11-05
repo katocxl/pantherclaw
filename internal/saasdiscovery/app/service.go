@@ -16,6 +16,7 @@ import (
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -98,7 +99,7 @@ func (s *Service) Import(ctx context.Context, r agents.SaaSReport) (Scan, agents
 	if _, err := s.caller(ctx, td.PermAgentManage); err != nil {
 		return Scan{}, agents.ScanResult{}, err
 	}
-	if domain.KindOf(r.Source) == "" || !domain.TenantOK(r.Tenant) {
+	if domain.KindOf(r.Source) == "" || !domain.SourceTenantOK(r.Source, r.Tenant) {
 		return Scan{}, agents.ScanResult{}, errBadRequest
 	}
 	res, err := s.Inventory.ImportSaaS(ctx, r)
@@ -119,50 +120,73 @@ func (s *Service) Start(ctx context.Context, connection ids.UUID, source, tenant
 		return Scan{}, ErrHumanOnly
 	}
 	want, ok := domain.CollectorOf(source)
-	if !ok || !domain.TenantOK(tenant) {
+	if !ok || !domain.SourceTenantOK(source, tenant) {
 		return Scan{}, errBadRequest
 	}
 	run := ids.NewV7()
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		conn, err := q.ScanConnection(ctx, c.Org, connection)
-		if db.IsNoRows(err) || (err == nil && (conn.State != "ACTIVE" || conn.Kind != "http" || conn.Package != want.Package ||
-			conn.CredentialKind != want.CredentialKind)) {
-			return ErrConnection
-		} else if err != nil {
-			return err
-		}
-		if open, err := q.OpenSaasScan(ctx, c.Org, connection); err != nil {
-			return err
-		} else if open {
-			return ErrScanRunning
-		}
-		request, err := json.Marshal(map[string]string{"run": run.String(), "source": source, "tenant": tenant}, json.Deterministic(true))
-		if err != nil {
-			return err
-		}
-		lease := ids.NewV7()
-		if err := q.ScheduleSaasScan(ctx, dbq.ScheduleSaasScanParams{
-			OrgID: c.Org, ID: lease, ConnectionID: connection, Operation: domain.OperationScan, Request: request,
-		}); err != nil {
-			return err
-		}
-		if err := q.InsertSaasRun(ctx, dbq.InsertSaasRunParams{
-			OrgID: c.Org, ID: run, Source: source, Origin: "gateway", Tenant: tenant, ConnectionID: &connection, VerificationID: &lease,
-			StartedBy: c.Principal.String(),
-		}); err != nil {
-			return err
-		}
-		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: auditkind.SaasScanStarted, Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: connection.String()},
-			Details: map[string]string{"scan": run.String(), "source": source, "tenant": tenant},
+		return startTx(ctx, tx, scanStart{
+			org: c.Org, run: run, connection: connection, source: source, tenant: tenant, want: want, origin: "gateway",
+			startedBy: c.Principal.String(), actor: c.Actor(),
 		})
-		return err
 	})
 	if err != nil {
 		return Scan{}, err
 	}
 	return s.Get(ctx, run)
+}
+
+// scanStart is one scan to schedule on a gateway.
+type scanStart struct {
+	org               ids.OrgID
+	run, connection   ids.UUID
+	source, tenant    string
+	want              domain.Collector
+	origin, startedBy string
+	actor             evdomain.Actor
+	details           map[string]string
+}
+
+// startTx checks the connection and that no scan of it is running, then
+// leases a scan to its gateway, records the run and audits it, in tx.
+func startTx(ctx context.Context, tx db.TenantTx, st scanStart) error {
+	q := dbq.New(tx)
+	conn, err := q.ScanConnection(ctx, st.org, st.connection)
+	if db.IsNoRows(err) || (err == nil && (conn.State != "ACTIVE" || conn.Kind != "http" || conn.Package != st.want.Package ||
+		conn.CredentialKind != st.want.CredentialKind)) {
+		return ErrConnection
+	} else if err != nil {
+		return err
+	}
+	if open, err := q.OpenSaasScan(ctx, st.org, st.connection); err != nil {
+		return err
+	} else if open {
+		return ErrScanRunning
+	}
+	request, err := json.Marshal(map[string]string{"run": st.run.String(), "source": st.source, "tenant": st.tenant}, json.Deterministic(true))
+	if err != nil {
+		return err
+	}
+	lease := ids.NewV7()
+	if err := q.ScheduleSaasScan(ctx, dbq.ScheduleSaasScanParams{
+		OrgID: st.org, ID: lease, ConnectionID: st.connection, Operation: domain.OperationScan, Request: request,
+	}); err != nil {
+		return err
+	}
+	connection := st.connection
+	if err := q.InsertSaasRun(ctx, dbq.InsertSaasRunParams{
+		OrgID: st.org, ID: st.run, Source: st.source, Origin: st.origin, Tenant: st.tenant, ConnectionID: &connection, VerificationID: &lease,
+		StartedBy: st.startedBy,
+	}); err != nil {
+		return err
+	}
+	details := map[string]string{"scan": st.run.String(), "source": st.source, "tenant": st.tenant}
+	maps.Copy(details, st.details)
+	_, err = audit.Record(ctx, tx, audit.Event{
+		Name: auditkind.SaasScanStarted, Actor: st.actor, Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: st.connection.String()},
+		Details: details,
+	})
+	return err
 }
 
 func scanView(r dbq.GetSaasRunRow) Scan {

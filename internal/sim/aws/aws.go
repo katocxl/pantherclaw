@@ -11,7 +11,14 @@
 //   - IAM GetRole, ListAttachedRolePolicies, GetRolePolicy and
 //     GetAccountSummary (aws-query, answered in XML as IAM does);
 //   - ECS UpdateService and DescribeServices (aws-json) for three services,
-//     whose rollout state a test sets.
+//     whose rollout state a test sets;
+//   - STS GetCallerIdentity (aws-query) for any known key, as the aws_iam
+//     attestation preset sends it (G0 M34 D998);
+//   - SSM SendCommand (aws-json) on the simulated instances (G0 M34 D998).
+//
+// Simulators of other services in this account (agentcore) embed a Server
+// and call Authorize, so their requests are checked against the same keys,
+// role and sessions.
 //
 // Every request must be signed with SigV4 by a key the simulator knows, and
 // is verified by signing it again. The base key may call only
@@ -87,6 +94,7 @@ type grant struct{ action, resource string }
 
 type session struct {
 	secret, token string
+	name          string // its RoleSessionName
 	expires       time.Time
 	grants        []grant
 }
@@ -115,6 +123,7 @@ type Server struct {
 	calls    []Call
 	now      func() time.Time
 	ecs      map[string]*ecsService
+	commands []Command
 }
 
 // New returns a simulator whose base key has baseSecret and whose role
@@ -162,7 +171,7 @@ func (s *Server) Handler() http.Handler {
 		switch {
 		case r.URL.Path == "/__sim/calls" && r.Method == http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.MarshalWrite(w, map[string]any{"calls": s.Calls(), "sessions": s.Sessions()})
+			_ = json.MarshalWrite(w, map[string]any{"calls": s.Calls(), "sessions": s.Sessions(), "commands": s.Commands()})
 		case r.URL.Path == "/__sim/faults" && r.Method == http.MethodPost:
 			var f Faults
 			if err := json.UnmarshalRead(io.LimitReader(r.Body, maxBody), &f); err != nil {
@@ -189,32 +198,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.faults.Throttle > 0 {
-		s.faults.Throttle--
-		writeError(w, http.StatusBadRequest, "Throttling", "Rate exceeded")
+	p, aerr := s.authenticate(r, body)
+	if aerr != nil {
+		writeError(w, aerr.Status, aerr.Code, aerr.Message)
 		return
 	}
-	m := credRe.FindStringSubmatch(r.Header.Get("Authorization"))
-	if m == nil {
-		writeError(w, http.StatusForbidden, "MissingAuthenticationToken", "the request is not signed with SigV4")
-		return
-	}
-	keyID, region, service := m[1], m[3], m[4]
-	secret, sess, key := s.secretOf(keyID)
-	if secret == "" {
-		writeError(w, http.StatusForbidden, "InvalidClientTokenId", "the security token included in the request is invalid")
-		return
-	}
-	now := s.now()
-	if sess != nil && (!now.Before(sess.expires) || r.Header.Get("X-Amz-Security-Token") != sess.token) {
-		writeError(w, http.StatusForbidden, "ExpiredToken", "the security token included in the request is expired or invalid")
-		return
-	}
-	if !s.verify(r, body, m, secret, sess, now) {
-		writeError(w, http.StatusForbidden, "SignatureDoesNotMatch", "the request signature we calculated does not match")
-		return
-	}
+	service, key, sess, region, now := p.service, p.key, p.sess, p.region, p.now
 	if target := r.Header.Get("X-Amz-Target"); target != "" {
+		if strings.HasPrefix(target, ssmTargetPrefix) {
+			s.serveSSM(w, body, target, p)
+			return
+		}
 		s.serveECS(w, body, target, service, key, sess)
 		return
 	}
@@ -241,6 +235,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	switch service + ":" + action {
 	case "sts:AssumeRole":
 		s.assumeRole(w, in, region, now)
+	case "sts:GetCallerIdentity":
+		s.getCallerIdentity(w, sess)
 	case "iam:GetRole":
 		s.getRole(w, in)
 	case "iam:ListAttachedRolePolicies":
@@ -252,6 +248,77 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusBadRequest, "InvalidAction", "unknown action "+action)
 	}
+}
+
+// AuthError is why a request was not authenticated or not authorized: an
+// HTTP status, an AWS error code and a message.
+type AuthError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+func (e *AuthError) Error() string { return e.Code + ": " + e.Message }
+
+// principal is who signed a request, and for which service and region.
+type principal struct {
+	key             string // base or session
+	sess            *session
+	service, region string
+	now             time.Time
+}
+
+// authenticate applies the throttling fault and verifies a request's SigV4
+// signature. The caller holds s.mu.
+func (s *Server) authenticate(r *http.Request, body []byte) (principal, *AuthError) {
+	if s.faults.Throttle > 0 {
+		s.faults.Throttle--
+		return principal{}, &AuthError{http.StatusBadRequest, "Throttling", "Rate exceeded"}
+	}
+	m := credRe.FindStringSubmatch(r.Header.Get("Authorization"))
+	if m == nil {
+		return principal{}, &AuthError{http.StatusForbidden, "MissingAuthenticationToken", "the request is not signed with SigV4"}
+	}
+	keyID, region, service := m[1], m[3], m[4]
+	secret, sess, key := s.secretOf(keyID)
+	if secret == "" {
+		return principal{}, &AuthError{http.StatusForbidden, "InvalidClientTokenId", "the security token included in the request is invalid"}
+	}
+	now := s.now()
+	if sess != nil && (!now.Before(sess.expires) || r.Header.Get("X-Amz-Security-Token") != sess.token) {
+		return principal{}, &AuthError{http.StatusForbidden, "ExpiredToken", "the security token included in the request is expired or invalid"}
+	}
+	if !s.verify(r, body, m, secret, sess, now) {
+		return principal{}, &AuthError{http.StatusForbidden, "SignatureDoesNotMatch", "the request signature we calculated does not match"}
+	}
+	return principal{key: key, sess: sess, service: service, region: region, now: now}, nil
+}
+
+// Authorize checks a request another simulator serves for this account
+// (G0 M34 D998): its SigV4 signature, by a key this account knows, must be
+// for service, and the role and the session's policy must allow
+// service:action on at least one of resources (none given: "*"). It records
+// the call either way. body is the request body the caller already read.
+func (s *Server) Authorize(r *http.Request, body []byte, service, action string, resources ...string) *AuthError {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, aerr := s.authenticate(r, body)
+	if aerr != nil {
+		return aerr
+	}
+	if len(resources) == 0 {
+		resources = []string{"*"}
+	}
+	call := Call{Service: p.service, Action: action, Key: p.key, Resource: resources[0]}
+	if p.sess != nil {
+		call.Policy = p.sess.actions()
+	}
+	call.Allowed = p.service == service && slices.ContainsFunc(resources, func(res string) bool { return s.allowed(service, action, res, p.sess) })
+	s.calls = append(s.calls, call)
+	if !call.Allowed {
+		return &AuthError{http.StatusForbidden, "AccessDeniedException", fmt.Sprintf("not authorized to perform %s:%s", service, action)}
+	}
+	return nil
 }
 
 // secretOf returns a key's secret, its session (nil for the base key) and
@@ -305,6 +372,9 @@ func (s *Server) verify(r *http.Request, body []byte, m []string, secret string,
 // on the call's resource.
 func (s *Server) allowed(service, action, resource string, sess *session) bool {
 	full := service + ":" + action
+	if full == "sts:GetCallerIdentity" {
+		return true // it needs no permission, as in AWS
+	}
 	if sess == nil {
 		return full == "sts:AssumeRole"
 	}
@@ -383,13 +453,28 @@ func (s *Server) assumeRole(w http.ResponseWriter, in url.Values, region string,
 		secs = 3600
 	}
 	id := "ASIA" + strings.ToUpper(random(8))
-	sess := &session{secret: random(20), token: "simtoken" + random(24), expires: now.Add(time.Duration(secs) * time.Second), grants: grants}
+	sess := &session{
+		secret: random(20), token: "simtoken" + random(24), expires: now.Add(time.Duration(secs) * time.Second), grants: grants,
+		name: in.Get("RoleSessionName"),
+	}
 	s.sessions[id] = sess
 	s.log.Info("sim.aws_assumed_role", slog.String("session", id), slog.Any("policy", sess.actions()))
 	writeXML(w, "AssumeRole", "sts", fmt.Sprintf(
 		`<Credentials><AccessKeyId>%s</AccessKeyId><SecretAccessKey>%s</SecretAccessKey><SessionToken>%s</SessionToken><Expiration>%s</Expiration></Credentials>`+
 			`<AssumedRoleUser><Arn>arn:aws:sts::%s:assumed-role/%s/%s</Arn><AssumedRoleId>AROASIMULATED:%s</AssumedRoleId></AssumedRoleUser>`,
 		id, sess.secret, sess.token, sess.expires.UTC().Format(time.RFC3339), Account, RoleName, xmlText(in.Get("RoleSessionName")), xmlText(in.Get("RoleSessionName"))))
+}
+
+// getCallerIdentity answers who signed: a session is its assumed role, the
+// shape the aws_iam attestation preset accepts; the base key is a user,
+// which the preset refuses.
+func (s *Server) getCallerIdentity(w http.ResponseWriter, sess *session) {
+	arn, userID := "arn:aws:iam::"+Account+":user/pantherclaw", "AIDASIMULATEDUSER0001"
+	if sess != nil {
+		arn = "arn:aws:sts::" + Account + ":assumed-role/" + RoleName + "/" + sess.name
+		userID = "AROASIMULATEDROLE0001:" + sess.name
+	}
+	writeXML(w, "GetCallerIdentity", "sts", fmt.Sprintf(`<Arn>%s</Arn><UserId>%s</UserId><Account>%s</Account>`, xmlText(arn), xmlText(userID), Account))
 }
 
 // policyGrants reads a session policy's grants: every statement must
