@@ -3,7 +3,7 @@
 
 # PantherClaw Authority Protocol — PAP/1
 
-**Status:** Draft 1 (2026-10-08; §3.3 and §5 revised 2026-10-09 for ADR-0018; §3.2–§5 clarified 2026-10-09 by the M3 G0 brief; §5 `PAP-Run-Id` added in M3 slice 13; §6–§8 and §10 clarified 2026-10-09 by the M6 G0 brief; §3.3 revised 2026-11-05 for ADR-0062) · **License:** Apache-2.0 (this directory) · **Normative language:** MUST, MUST NOT, SHOULD, MAY per RFC 2119/8174.
+**Status:** Draft 1 (2026-10-08; §3.3 and §5 revised 2026-10-09 for ADR-0018; §3.2–§5 clarified 2026-10-09 by the M3 G0 brief; §5 `PAP-Run-Id` added in M3 slice 13; §6–§8 and §10 clarified 2026-10-09 by the M6 G0 brief; §3.3 revised, §9 `sigs[]` defined and §15 Federation added 2026-11-05 for ADR-0062) · **License:** Apache-2.0 (this directory) · **Normative language:** MUST, MUST NOT, SHOULD, MAY per RFC 2119/8174.
 
 PAP/1 defines how an AI agent workload proves *who it is*, how a run is bound to *whose authority* it uses, how a requested action is expressed *exactly*, and how authorization, dispatch and evidence are represented so that any party can verify them. It is open so that SDKs, gateways and target-side verifiers interoperate.
 
