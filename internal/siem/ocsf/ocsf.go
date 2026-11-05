@@ -493,6 +493,7 @@ var agentIdentityKinds = map[string]identityEvent{
 	auditkind.IdaccessRefreshReuse:           {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
 	auditkind.SecurityEnrollmentTokenReused:  {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
 	auditkind.IdentityWorkloadDiscovered:     {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
+	auditkind.SecurityWorkloadProofRefused:   {class: classAuthentication, activity: activityOther, activityName: "Other", refused: true},
 	auditkind.SecurityInstanceNetworkChanged: {class: classAuthentication, activity: activityOther, activityName: "Other"},
 
 	auditkind.IdentityIssuerProposed:        {class: classEntityMgmt, activity: entityCreate, activityName: "Create", entity: "trusted_issuer"},

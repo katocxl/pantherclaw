@@ -63,6 +63,8 @@ type Service struct {
 	att    Attestors
 	ents   Entitlements
 	floods floods
+	// refusals limits the refused-proof records (HR-850).
+	refusals refusals
 }
 
 // New returns the identity use cases. issuer is the server's public URL,

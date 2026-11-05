@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.identity.workload_proof_refused
+version: "1"
+title: Workload proof refused
+description: >-
+  The Authority refused a workload request whose PAP/1 credentials did not
+  verify: a replayed proof, a proof signed with another key than the
+  token's, a bad signature or a key no admitted instance holds (HR-850). A
+  stolen or copied workload token is the usual cause. Refusals that are
+  only about time (an expired token, clock skew, a stale nonce) are not
+  recorded.
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+owasp: [ASI03]
+atlas: [AML.T0091.000]
+attack: [T1550.001]
+edition: community
+on: [audit.security.workload_proof_refused]
+group: agent
+tests:
+  - name: replayed proof
+    fires: true
+    events:
+      - kind: audit.security.workload_proof_refused
+        actor_type: gateway
+        actor_id: gw-1
+        outcome: denied
+        subjects: {instance: 01930000-0000-7000-8000-0000000000i1, agent: 01930000-0000-7000-8000-0000000000a1}
+        attrs: {object_type: instance, pap_code: proof_replay, jkt: NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs, gateway: gw-1, suppressed: "0"}
+  - name: unknown key
+    fires: true
+    events:
+      - kind: audit.security.workload_proof_refused
+        actor_type: gateway
+        actor_id: gw-1
+        outcome: denied
+        attrs: {pap_code: invalid_token, jkt: NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs, gateway: gw-1, suppressed: "3"}
+  - name: an ordinary token
+    fires: false
+    events:
+      - kind: audit.authn.token_issued
+        actor_type: instance
+        actor_id: 01930000-0000-7000-8000-0000000000i1
+        outcome: success
+        subjects: {instance: 01930000-0000-7000-8000-0000000000i1}

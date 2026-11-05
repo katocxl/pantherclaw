@@ -1035,5 +1035,25 @@
     "digest": "1a67293366eecbb9a52ab60351d4fd18f970af0c565ff270c43509805ff56fb1",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own permissions: a caller with no permission gets a refusal, not data."
+  },
+  "RT-260": {
+    "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a stolen token is replayed again and again with a used proof and with another key."
+    },
+    "atlas": [
+      "AML.T0091.000"
+    ],
+    "attack": [
+      "T1550.001"
+    ],
+    "technique_why": {
+      "AML.T0091.000": "Application access token (AML.T0091.000): a stolen token is replayed in a burst with a used proof and without its key.",
+      "T1550.001": "Application access token (T1550.001): the replayed token and proofs stand in for the agent's own sign-in."
+    }
   }
 }

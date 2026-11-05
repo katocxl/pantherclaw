@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `84f0ba76b24cf306427ee740c53e30317e6f272dfdf57b270d652038fec87143`.
+Mapping digest: `548cbfb079f91152cbdf37332bcfbcf0d3d95d0539a2625c1e6b9b4488acf581`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -189,7 +189,7 @@ Mapping digest: `84f0ba76b24cf306427ee740c53e30317e6f272dfdf57b270d652038fec8714
 | [AML.T0122](https://atlas.mitre.org/techniques/AML.T0122) | Exploitation of Remote Services | Outside PantherClaw: covered by network security | It needs a network. |
 | [AML.T0143](https://atlas.mitre.org/techniques/AML.T0143) | LLM Prompt Propagation | No PantherClaw control yet | LLM prompt propagation (AML.T0143): instructions carried onward between stores and agents have no control of their own yet. |
 | [AML.T0052](https://atlas.mitre.org/techniques/AML.T0052) | Phishing | Outside PantherClaw: covered by email security | It needs a mailbox. |
-| [AML.T0091](https://atlas.mitre.org/techniques/AML.T0091) | Use Alternate Authentication Material | Mapped | AML.T0091.000: prevent `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153` |
+| [AML.T0091](https://atlas.mitre.org/techniques/AML.T0091) | Use Alternate Authentication Material | Mapped | AML.T0091.000: prevent `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.identity.workload_proof_refused`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153`, `RT-260` |
 | [AML.T0012](https://atlas.mitre.org/techniques/AML.T0012) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 
 ### Collection (AML.TA0009)
@@ -495,7 +495,7 @@ Mapping digest: `84f0ba76b24cf306427ee740c53e30317e6f272dfdf57b270d652038fec8714
 | [T1091](https://attack.mitre.org/techniques/T1091) | Replication Through Removable Media | Outside PantherClaw: covered by physical security | It needs physical access. |
 | [T1072](https://attack.mitre.org/techniques/T1072) | Software Deployment Tools | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1080](https://attack.mitre.org/techniques/T1080) | Taint Shared Content | No PantherClaw control yet | Taint shared content (T1080): granted writes to a shared repository are allowed; PantherClaw does not judge their content. |
-| [T1550](https://attack.mitre.org/techniques/T1550) | Use Alternate Authentication Material | Mapped | T1550.001: prevent `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153` |
+| [T1550](https://attack.mitre.org/techniques/T1550) | Use Alternate Authentication Material | Mapped | T1550.001: prevent `prevent.workload_proof`; rules `pc.identity.key_new_network`, `pc.identity.workload_proof_refused`, `pc.integrity.effect_without_receipt`; Hub playbooks `pc.playbook.leaked-key`; scenarios `RT-012`, `RT-013`, `RT-032`, `RT-036`, `RT-048`, `RT-151`, `RT-152`, `RT-153`, `RT-260` |
 
 ### Collection (TA0009)
 
