@@ -101,7 +101,22 @@ type hookAnswer struct {
 	Decision      string `json:"decision"`
 	Reason        string `json:"reason"`
 	TransactionID string `json:"transaction_id"`
+	// Held: the action waits for a person in PantherClaw (G0 M33 D979).
+	Held bool   `json:"held"`
+	Code string `json:"code"`
 }
+
+// hookTarget is where a hook call goes and what signs it (G0 M33 D979).
+type hookTarget struct {
+	gateway, conn, keyFile, run, tokenFile string
+	// token, when set, supplies the workload token instead of hookToken's
+	// file cache (the browser host keeps its token in memory).
+	token func(ctx context.Context, kf workloadclient.KeyFile) (string, error)
+}
+
+// headerActionID is the PAP action-id header the hook face reads
+// (internal/gateway/dispatch.HeaderActionID).
+const headerActionID = "PC-Action-Id"
 
 func hookClaudeCode(ctx context.Context, a *app, args []string) error {
 	ctx, cancel := context.WithTimeout(ctx, hookDeadline)
@@ -189,11 +204,29 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 		_, _ = rand.Read(b[:])
 		call = "pc-" + hex.EncodeToString(b[:])
 	}
-	base, err := checkServer(*gateway)
+	tool := "shell"
+	if input != nil {
+		tool, input["call"] = "agent_config", call
+	} else {
+		input = map[string]string{"shell": shell, "command": in.ToolInput.Command, "cwd": cwd, "call": call}
+	}
+	return a.hookPost(ctx, hookTarget{gateway: *gateway, conn: *conn, keyFile: *keyFile, run: *runFlag, tokenFile: *tokenFile}, tool, input, "")
+}
+
+// hookPost signs a PAP/1 hook call with the desktop workload key in the
+// target's run and posts it to the gateway's /hook/{connection} (G0 M33
+// D979). actionID, when set, is sent as the PAP action id, so a call asked
+// again after a hold is the same action. Any answer other than an HTTP 200
+// with a decision is an error or a deny (fail closed).
+func (a *app) hookPost(ctx context.Context, t hookTarget, tool string, input any, actionID string) (hookAnswer, error) {
+	if t.gateway == "" || t.conn == "" || t.keyFile == "" {
+		return hookAnswer{}, errors.New("no gateway, connection or key file is configured")
+	}
+	base, err := checkServer(t.gateway)
 	if err != nil {
 		return hookAnswer{}, errors.New("--gateway must be a base URL using https (http only for localhost)")
 	}
-	kf, err := workloadclient.ReadKeyFile(*keyFile)
+	kf, err := workloadclient.ReadKeyFile(t.keyFile)
 	if err != nil {
 		return hookAnswer{}, err
 	}
@@ -201,33 +234,35 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 	if err != nil {
 		return hookAnswer{}, err
 	}
-	run := *runFlag
+	run := t.run
 	if run == "" {
 		run = kf.RunID
 	}
 	if _, err := ids.ParseUUID(run); err != nil {
 		return hookAnswer{}, errors.New("no run: set --run or PANTHERCLAW_RUN (pclaw run start)")
 	}
-	token, err := a.hookToken(ctx, kf, *keyFile, *tokenFile)
+	var token string
+	if t.token != nil {
+		token, err = t.token(ctx, kf)
+	} else {
+		token, err = a.hookToken(ctx, kf, t.keyFile, t.tokenFile)
+	}
 	if err != nil {
 		return hookAnswer{}, err
-	}
-	tool := "shell"
-	if input != nil {
-		tool, input["call"] = "agent_config", call
-	} else {
-		input = map[string]string{"shell": shell, "command": in.ToolInput.Command, "cwd": cwd, "call": call}
 	}
 	body, err := json.Marshal(map[string]any{"tool": tool, "input": input}, json.Deterministic(true))
 	if err != nil {
 		return hookAnswer{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/hook/"+url.PathEscape(*conn), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/hook/"+url.PathEscape(t.conn), bytes.NewReader(body))
 	if err != nil {
 		return hookAnswer{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("PAP-Run-Id", run)
+	if actionID != "" {
+		req.Header.Set(headerActionID, actionID)
+	}
 	rt := a.http.Transport
 	if rt == nil {
 		rt = http.DefaultTransport
@@ -307,6 +342,16 @@ func (a *app) hookToken(ctx context.Context, kf workloadclient.KeyFile, keyFile,
 			return tok, nil
 		}
 	}
+	tok, err := a.issueHookToken(ctx, kf)
+	if err != nil {
+		return "", err
+	}
+	_ = os.WriteFile(cache, []byte(tok+"\n"), 0o600) // a cache: a failed write only costs the next command a token
+	return tok, nil
+}
+
+// issueHookToken issues a new workload token for an enrolled key file.
+func (a *app) issueHookToken(ctx context.Context, kf workloadclient.KeyFile) (string, error) {
 	if kf.Server == "" || kf.Identifier == "" {
 		return "", errors.New("the key file is not enrolled yet: run pclaw workload enroll")
 	}
@@ -318,9 +363,7 @@ func (a *app) hookToken(ctx context.Context, kf workloadclient.KeyFile, keyFile,
 	if err != nil {
 		return "", fmt.Errorf("workload token: %w", err)
 	}
-	tok := res.GetWorkloadToken()
-	_ = os.WriteFile(cache, []byte(tok+"\n"), 0o600) // a cache: a failed write only costs the next command a token
-	return tok, nil
+	return res.GetWorkloadToken(), nil
 }
 
 // tokenExpiry reads, without verifying, a workload token's expiry (its
