@@ -1268,32 +1268,33 @@ type PcCompromisedPublisher struct {
 }
 
 type PcConnection struct {
-	OrgID            ids.OrgID
-	ID               ids.UUID
-	Name             string
-	Kind             string
-	GatewayID        ids.UUID
-	Package          string
-	BaseUrl          *string
-	AllowedHosts     []string
-	DestinationClass string
-	AccessMode       string
-	CredentialHeader *string
-	CredentialScheme *string
-	DefaultMode      string
-	MaxResponseBytes int32
-	TimeoutMs        int32
-	State            string
-	QuarantineReason *string
-	Revision         int32
-	CreatedBy        string
-	CreatedAt        time.Time
-	UpdatedBy        string
-	UpdatedAt        time.Time
-	AgentHosts       []string
-	Simulated        bool
-	ModelRelay       bool
-	RuntimeTarget    *string
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	Name               string
+	Kind               string
+	GatewayID          ids.UUID
+	Package            string
+	BaseUrl            *string
+	AllowedHosts       []string
+	DestinationClass   string
+	AccessMode         string
+	CredentialHeader   *string
+	CredentialScheme   *string
+	DefaultMode        string
+	MaxResponseBytes   int32
+	TimeoutMs          int32
+	State              string
+	QuarantineReason   *string
+	Revision           int32
+	CreatedBy          string
+	CreatedAt          time.Time
+	UpdatedBy          string
+	UpdatedAt          time.Time
+	AgentHosts         []string
+	Simulated          bool
+	ModelRelay         bool
+	RuntimeTarget      *string
+	UpstreamServerInfo []byte
 }
 
 type PcConnectionCapability struct {
@@ -2870,6 +2871,62 @@ type PcIncidentEvent struct {
 	AlertID    *ids.UUID
 	Note       *string
 	CreatedAt  time.Time
+}
+
+type PcIntelContribution struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	Kind       string
+	Sha256     *string
+	Shingles   []string
+	Severity   string
+	Techniques []string
+	CreatedDay pgtype.Date
+	State      string
+}
+
+type PcIntelIndicator struct {
+	ID          string
+	Kind        string
+	Sha256      *string
+	Shingles    []string
+	Severity    string
+	Techniques  []string
+	FirstSeen   pgtype.Date
+	Summary     string
+	FeedVersion int64
+}
+
+type PcIntelMatch struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	IndicatorID  string
+	Kind         string
+	ObjectType   string
+	ObjectRef    string
+	ConnectionID *ids.UUID
+	Tool         *string
+	Mode         string
+	At           time.Time
+}
+
+type PcIntelSetting struct {
+	OrgID     ids.OrgID
+	Consume   string
+	Share     bool
+	UpdatedBy string
+	UpdatedAt time.Time
+}
+
+type PcIntelState struct {
+	ID          int16
+	FeedVersion int64
+	FeedDigest  string
+	Kid         string
+	IssuedAt    time.Time
+	ExpiresAt   time.Time
+	Source      string
+	UpdatedAt   time.Time
 }
 
 type PcInvitation struct {

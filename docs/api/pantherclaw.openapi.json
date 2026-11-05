@@ -22041,6 +22041,330 @@
         }
       }
     },
+    "/pantherclaw.v1.IntelService/GetIntelSettings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "GetIntelSettings",
+        "description": "GetIntelSettings returns the org's consume mode and share switch, and\n the deployment's current feed.\n permission: intel.read",
+        "operationId": "pantherclaw.v1.IntelService.GetIntelSettings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetIntelSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetIntelSettingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/SetIntelSettings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "SetIntelSettings",
+        "description": "SetIntelSettings sets the consume mode and the share switch.\n Consuming needs the Business edition or above. Audited\n (intel.settings_changed).\n permission: intel.manage",
+        "operationId": "pantherclaw.v1.IntelService.SetIntelSettings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetIntelSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetIntelSettingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/ListIntelMatches": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "ListIntelMatches",
+        "description": "ListIntelMatches lists the org's indicator matches, newest first.\n permission: intel.read",
+        "operationId": "pantherclaw.v1.IntelService.ListIntelMatches",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListIntelMatchesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListIntelMatchesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/ContributeIndicator": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "ContributeIndicator",
+        "description": "ContributeIndicator makes an indicator from a confirmed finding and\n queues it (a person, with share on). Only its hash or shingles are kept,\n computed here. Audited (intel.contributed).\n permission: intel.contribute",
+        "operationId": "pantherclaw.v1.IntelService.ContributeIndicator",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ContributeIndicatorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ContributeIndicatorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/ListIntelContributions": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "ListIntelContributions",
+        "description": "ListIntelContributions lists the org's contributions, newest first.\n permission: intel.read",
+        "operationId": "pantherclaw.v1.IntelService.ListIntelContributions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListIntelContributionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListIntelContributionsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/ExportIntelSTIX": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "ExportIntelSTIX",
+        "description": "ExportIntelSTIX returns the current indicators as a STIX 2.1 bundle of\n indicator objects.\n permission: intel.read",
+        "operationId": "pantherclaw.v1.IntelService.ExportIntelSTIX",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ExportIntelSTIXRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ExportIntelSTIXResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ModelUsageService/GetTokenReport": {
       "post": {
         "tags": [
@@ -75375,6 +75699,41 @@
         "additionalProperties": false,
         "description": "GatewayConnection is a connection as its gateway sees it."
       },
+      "pantherclaw.v1.GatewayIntel": {
+        "type": "object",
+        "properties": {
+          "texts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.GatewayIntelText"
+            },
+            "title": "texts",
+            "description": "The injection_text indicators."
+          }
+        },
+        "title": "GatewayIntel",
+        "additionalProperties": false,
+        "description": "GatewayIntel is what the gateway's content scan matches of the shared\n intel feed (G0 M38 D1104)."
+      },
+      "pantherclaw.v1.GatewayIntelText": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "shingles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "shingles"
+          }
+        },
+        "title": "GatewayIntelText",
+        "additionalProperties": false,
+        "description": "GatewayIntelText is one injection_text indicator: its id and the hex\n SHA-256 of its normalized 8-word shingles. A body matches when it holds\n at least min(3, n) of them."
+      },
       "pantherclaw.v1.GatewayKubernetesBinding": {
         "type": "object",
         "properties": {
@@ -75739,6 +76098,11 @@
             },
             "title": "browser_compare_sites",
             "description": "The org's browser sites marked for the cloaking compare (G0 M33 D986):\n only these are compared, and none means the compare is off."
+          },
+          "intel": {
+            "title": "intel",
+            "description": "The shared injection_text indicators the gateway's content scan matches\n (G0 M38 D1104), set only while the org consumes the intel feed: hashes\n only, never text (HR-818).",
+            "$ref": "#/components/schemas/pantherclaw.v1.GatewayIntel"
           }
         },
         "title": "GetConfigurationResponse",
@@ -76929,6 +77293,18 @@
             "title": "resource_templates",
             "maxItems": 1000,
             "description": "Resource templates."
+          },
+          "serverInfo": {
+            "title": "server_info",
+            "description": "What the upstream server said of itself in serverInfo when the gateway\n initialized its session (G0 M38 D1104, HR-822): UNTRUSTED, recorded on\n the connection for indicator matching only. Unset: not learned.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.UpstreamServerInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "ReportInventoryRequest",
@@ -77874,6 +78250,30 @@
         "required": [
           "objectRef"
         ]
+      },
+      "pantherclaw.v1.UpstreamServerInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "name",
+            "maxLength": 256
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "version",
+            "maxLength": 128
+          }
+        },
+        "title": "UpstreamServerInfo",
+        "additionalProperties": false,
+        "description": "UpstreamServerInfo is an upstream MCP server's serverInfo."
       },
       "pantherclaw.v1.VerificationLease": {
         "type": "object",
@@ -82749,6 +83149,407 @@
         "title": "Suppression",
         "additionalProperties": false,
         "description": "Suppression is one suppression (D16)."
+      },
+      "pantherclaw.v1.IntelConsumeMode": {
+        "type": "string",
+        "title": "IntelConsumeMode",
+        "enum": [
+          "INTEL_CONSUME_MODE_UNSPECIFIED",
+          "INTEL_CONSUME_MODE_OFF",
+          "INTEL_CONSUME_MODE_HOLD",
+          "INTEL_CONSUME_MODE_ALERT_ONLY"
+        ],
+        "description": "IntelConsumeMode is what an org does with a match."
+      },
+      "pantherclaw.v1.IntelContributionSource": {
+        "type": "string",
+        "title": "IntelContributionSource",
+        "enum": [
+          "INTEL_CONTRIBUTION_SOURCE_UNSPECIFIED",
+          "INTEL_CONTRIBUTION_SOURCE_QUARANTINED_SERVER",
+          "INTEL_CONTRIBUTION_SOURCE_QUARANTINED_PACKAGE",
+          "INTEL_CONTRIBUTION_SOURCE_QUARANTINED_TOOL",
+          "INTEL_CONTRIBUTION_SOURCE_FLAGGED_DESCRIPTION"
+        ],
+        "description": "IntelContributionSource names the confirmed finding an indicator is made\n from."
+      },
+      "pantherclaw.v1.IntelIndicatorKind": {
+        "type": "string",
+        "title": "IntelIndicatorKind",
+        "enum": [
+          "INTEL_INDICATOR_KIND_UNSPECIFIED",
+          "INTEL_INDICATOR_KIND_MCP_SERVER",
+          "INTEL_INDICATOR_KIND_TOOL_DESCRIPTION",
+          "INTEL_INDICATOR_KIND_INJECTION_TEXT"
+        ],
+        "description": "IntelIndicatorKind is what an indicator is a hash of."
+      },
+      "pantherclaw.v1.ContributeIndicatorRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "title": "source",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelContributionSource",
+            "not": {
+              "enum": [
+                "INTEL_CONTRIBUTION_SOURCE_UNSPECIFIED"
+              ]
+            }
+          },
+          "sourceId": {
+            "type": "string",
+            "title": "source_id",
+            "format": "uuid",
+            "description": "The connection id (QUARANTINED_SERVER), the package version id\n (QUARANTINED_PACKAGE) or the inventory item id (QUARANTINED_TOOL,\n FLAGGED_DESCRIPTION)."
+          },
+          "severity": {
+            "type": "string",
+            "title": "severity",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "description": "LOW, MEDIUM or HIGH."
+          },
+          "techniques": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "techniques",
+            "maxItems": 16,
+            "description": "MITRE ATT\u0026CK or ATLAS technique ids."
+          }
+        },
+        "title": "ContributeIndicatorRequest",
+        "additionalProperties": false,
+        "description": "ContributeIndicatorRequest names the finding.",
+        "required": [
+          "source",
+          "sourceId",
+          "severity"
+        ]
+      },
+      "pantherclaw.v1.ContributeIndicatorResponse": {
+        "type": "object",
+        "properties": {
+          "contribution": {
+            "title": "contribution",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelContribution"
+          }
+        },
+        "title": "ContributeIndicatorResponse",
+        "additionalProperties": false,
+        "description": "ContributeIndicatorResponse holds the queued contribution."
+      },
+      "pantherclaw.v1.ExportIntelSTIXRequest": {
+        "type": "object",
+        "title": "ExportIntelSTIXRequest",
+        "additionalProperties": false,
+        "description": "ExportIntelSTIXRequest asks for the bundle."
+      },
+      "pantherclaw.v1.ExportIntelSTIXResponse": {
+        "type": "object",
+        "properties": {
+          "bundle": {
+            "type": "string",
+            "title": "bundle",
+            "format": "byte"
+          }
+        },
+        "title": "ExportIntelSTIXResponse",
+        "additionalProperties": false,
+        "description": "ExportIntelSTIXResponse is a STIX 2.1 bundle (application/stix+json)."
+      },
+      "pantherclaw.v1.GetIntelSettingsRequest": {
+        "type": "object",
+        "title": "GetIntelSettingsRequest",
+        "additionalProperties": false,
+        "description": "GetIntelSettingsRequest asks for the settings."
+      },
+      "pantherclaw.v1.GetIntelSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "title": "settings",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelSettings"
+          },
+          "feed": {
+            "title": "feed",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelFeed"
+          },
+          "consumeAvailable": {
+            "type": "boolean",
+            "title": "consume_available",
+            "description": "Whether the edition allows consuming."
+          }
+        },
+        "title": "GetIntelSettingsResponse",
+        "additionalProperties": false,
+        "description": "GetIntelSettingsResponse holds the settings and the current feed; feed is\n unset while none was accepted."
+      },
+      "pantherclaw.v1.IntelContribution": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelIndicatorKind"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "sha256"
+          },
+          "shingles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "shingles"
+          },
+          "severity": {
+            "type": "string",
+            "title": "severity"
+          },
+          "techniques": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "techniques"
+          },
+          "createdDay": {
+            "type": "string",
+            "title": "created_day",
+            "description": "YYYY-MM-DD."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "QUEUED or EXPORTED."
+          }
+        },
+        "title": "IntelContribution",
+        "additionalProperties": false,
+        "description": "IntelContribution is one contributed indicator, hashes only."
+      },
+      "pantherclaw.v1.IntelFeed": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64"
+          },
+          "kid": {
+            "type": "string",
+            "title": "kid"
+          },
+          "issueTime": {
+            "title": "issue_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "indicators": {
+            "type": "integer",
+            "title": "indicators",
+            "format": "int32"
+          }
+        },
+        "title": "IntelFeed",
+        "additionalProperties": false,
+        "description": "IntelFeed is the feed the deployment accepted last."
+      },
+      "pantherclaw.v1.IntelMatch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "indicatorId": {
+            "type": "string",
+            "title": "indicator_id"
+          },
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelIndicatorKind"
+          },
+          "objectType": {
+            "type": "string",
+            "title": "object_type",
+            "description": "connection, inventory_item, run or transaction."
+          },
+          "objectRef": {
+            "type": "string",
+            "title": "object_ref"
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id"
+          },
+          "tool": {
+            "type": "string",
+            "title": "tool"
+          },
+          "mode": {
+            "title": "mode",
+            "description": "The consume mode at the time.",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelConsumeMode"
+          },
+          "matchTime": {
+            "title": "match_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "IntelMatch",
+        "additionalProperties": false,
+        "description": "IntelMatch is one indicator an org's object matched."
+      },
+      "pantherclaw.v1.IntelSettings": {
+        "type": "object",
+        "properties": {
+          "consume": {
+            "title": "consume",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelConsumeMode"
+          },
+          "share": {
+            "type": "boolean",
+            "title": "share"
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "IntelSettings",
+        "additionalProperties": false,
+        "description": "IntelSettings are an org's choices."
+      },
+      "pantherclaw.v1.ListIntelContributionsRequest": {
+        "type": "object",
+        "title": "ListIntelContributionsRequest",
+        "additionalProperties": false,
+        "description": "ListIntelContributionsRequest asks for the contributions."
+      },
+      "pantherclaw.v1.ListIntelContributionsResponse": {
+        "type": "object",
+        "properties": {
+          "contributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.IntelContribution"
+            },
+            "title": "contributions"
+          }
+        },
+        "title": "ListIntelContributionsResponse",
+        "additionalProperties": false,
+        "description": "ListIntelContributionsResponse lists them, newest first (at most 500)."
+      },
+      "pantherclaw.v1.ListIntelMatchesRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "The last id of the previous page."
+          }
+        },
+        "title": "ListIntelMatchesRequest",
+        "additionalProperties": false,
+        "description": "ListIntelMatchesRequest pages the matches."
+      },
+      "pantherclaw.v1.ListIntelMatchesResponse": {
+        "type": "object",
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.IntelMatch"
+            },
+            "title": "matches"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListIntelMatchesResponse",
+        "additionalProperties": false,
+        "description": "ListIntelMatchesResponse is one page."
+      },
+      "pantherclaw.v1.SetIntelSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "consume": {
+            "title": "consume",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelConsumeMode",
+            "not": {
+              "enum": [
+                "INTEL_CONSUME_MODE_UNSPECIFIED"
+              ]
+            }
+          },
+          "share": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "share"
+          }
+        },
+        "title": "SetIntelSettingsRequest",
+        "additionalProperties": false,
+        "description": "SetIntelSettingsRequest sets both choices.",
+        "required": [
+          "consume"
+        ]
+      },
+      "pantherclaw.v1.SetIntelSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "title": "settings",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelSettings"
+          }
+        },
+        "title": "SetIntelSettingsResponse",
+        "additionalProperties": false,
+        "description": "SetIntelSettingsResponse holds the new settings."
       },
       "pantherclaw.v1.TokenReportGroupBy": {
         "type": "string",
@@ -110797,6 +111598,10 @@
     {
       "name": "pantherclaw.v1.IncidentService",
       "description": "IncidentService serves Reflex's alerts, incidents, suppressions and owned\n operational failures (G0 M10 D14–D18; F603, F607, F616, F641; HR-242,\n HR-243). Alert and incident history is append-only: repeats add evidence\n and changes add events. Lists show only what the caller may read: an\n alert or incident about agents is listed when the caller holds\n incident.read where those agents live, and counts never include hidden\n rows (D8)."
+    },
+    {
+      "name": "pantherclaw.v1.IntelService",
+      "description": "IntelService is shared threat-intel indicators (G0 M38 D1103..D1105; FD13,\n FQ38-2; HR-817..822).\n\n The deployment imports a feed signed offline by the PantherClaw intel\n root: hashes of known-bad MCP servers and tool descriptions, and hashed\n shingles of injection text. Only hashes enter or leave. An org that\n consumes the feed (Business and above; OFF by default) has a call to a\n matched server or tool, or a payload carrying matched injection text,\n held for a person (HOLD) or only alerted on (ALERT_ONLY). A match never\n refuses. An org with share on (every edition; off by default) may\n contribute indicators made from its confirmed findings; the operator's\n export of them carries no org identity."
     },
     {
       "name": "pantherclaw.v1.ModelUsageService",
