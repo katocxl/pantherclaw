@@ -33,7 +33,6 @@ var Unaddressed = []UnaddressedEntry{
 	{ID: "AML.T0121", Why: "AI agent environment reconstruction (AML.T0121): an agent rebuilding its own environment has no PantherClaw control yet."},
 	{ID: "AML.T0129", Why: "Triggers in multimodal inputs (AML.T0129): content signals read text; images and audio have no control yet."},
 	{ID: "AML.T0130", Why: "AI agent response biasing (AML.T0130): bias in what an assistant recommends never reaches a PantherClaw decision."},
-	{ID: "AML.T0134", Why: "AI targeted cloaking (AML.T0134): PantherClaw does not compare what a site shows agents and people."},
 	{ID: "AML.T0136", Why: "Exfiltration via AI user interface (AML.T0136): disclosure in an assistant's own answers has no PantherClaw control."},
 	{ID: "AML.T0143", Why: "LLM prompt propagation (AML.T0143): instructions carried onward between stores and agents have no control of their own yet."},
 	// ATT&CK

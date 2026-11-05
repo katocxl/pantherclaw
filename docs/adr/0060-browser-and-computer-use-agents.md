@@ -18,7 +18,7 @@
 - During a takeover nothing on that tab is decided or recorded (R-79).
 - The compare sees header-based cloaking only (R-80).
 - Computer use is decided only where the SDK wrappers are used (R-81).
-- AML.T0100, AML.T0131 and T1696.001 leave Unaddressed on the threat map.
+- AML.T0100, AML.T0131, T1696.001 and AML.T0134 (detect, PARTIAL) leave Unaddressed on the threat map.
 
 **Alternatives.**
 - A key in the extension, calling the gateway directly (FQ33-1 chose the native host).

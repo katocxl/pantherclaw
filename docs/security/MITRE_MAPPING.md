@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `508d551958c862b381feca4476a6cccff4010b397554e91089dc07ea6cc4593b`.
+Mapping digest: `1ddd45f6ff89d0db2724c4e0d1c2faa5c9c39204191164bd37cf382c34185621`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -134,7 +134,7 @@ Mapping digest: `508d551958c862b381feca4476a6cccff4010b397554e91089dc07ea6cc4593
 | [AML.T0141](https://atlas.mitre.org/techniques/AML.T0141) | AI Service Request Metadata Sanitization | Outside PantherClaw: covered by threat intelligence | It happens before compromise. |
 | [AML.T0111](https://atlas.mitre.org/techniques/AML.T0111) | AI Supply Chain Reputation Inflation | Outside PantherClaw: covered by threat intelligence | It happens before compromise. Inflated stars and downloads live on public registries; the MCP catalog approves by exact match, not by reputation. |
 | [AML.T0109](https://atlas.mitre.org/techniques/AML.T0109) | AI Supply Chain Rug Pull | Mapped | prevent `prevent.tool_package_review`; rules `pc.tools.drift`; Hub playbooks `pc.playbook.poisoned-mcp-server`, `pc.playbook.poisoned-mcp-server-contain`; scenarios `RT-029` |
-| [AML.T0134](https://atlas.mitre.org/techniques/AML.T0134) | AI Targeted Cloaking | No PantherClaw control yet | AI targeted cloaking (AML.T0134): PantherClaw does not compare what a site shows agents and people. |
+| [AML.T0134](https://atlas.mitre.org/techniques/AML.T0134) | AI Targeted Cloaking | Mapped | rules `pc.browser.cloaking` |
 | [AML.T0140](https://atlas.mitre.org/techniques/AML.T0140) | Centralized AI Service Request Routing | Outside PantherClaw: covered by threat intelligence | It happens before compromise. |
 | [AML.T0076](https://atlas.mitre.org/techniques/AML.T0076) | Corrupt AI Model | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0094](https://atlas.mitre.org/techniques/AML.T0094) | Delay Execution of LLM Instructions | No PantherClaw control yet | Delay execution of LLM instructions (AML.T0094): a delayed instruction is only seen when it turns into an action. |
