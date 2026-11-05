@@ -16,7 +16,7 @@ import (
 // (AP2 v0.2 {"checkout_mandate", "payment_mandate"}, each one presentation
 // or [open, closed]) or the AP2 v0.1 mandate objects. Only printable ASCII
 // is accepted. It is gateway-bound like a float_array or a string_map: the
-// gateway verifies it (paymentfacts) and sends it to the merchant from the
+// server's Authority verifies it (D1124d) and the gateway sends it to the merchant from the
 // payment operation's dispatch template, policies never see it, and
 // approvals show its verified facts and "mandate (N bytes)", never its
 // text. A definition declares it only as its payment block's mandate_param.
@@ -26,7 +26,7 @@ const TypeMandate ParamType = "mandate"
 const MaxMandateBytes = 32 << 10
 
 // mandate checks a mandate value: printable ASCII, a JSON object, within
-// MaxMandateBytes. Whether it verifies is the gateway's (paymentfacts).
+// MaxMandateBytes. Whether it verifies is the Authority's payment step (D1124d).
 func (p ParamSpec) mandate(s string) error {
 	if s == "" || len(s) > MaxMandateBytes {
 		return fmt.Errorf("must be 1..%d bytes", MaxMandateBytes)

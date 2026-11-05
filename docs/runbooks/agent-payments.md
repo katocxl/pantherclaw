@@ -72,7 +72,8 @@ A merchant backend calls `PaymentsService.VerifyAgentSignature` with the request
 
 | Seen | Check |
 |---|---|
-| Every payment `MANDATE_INVALID` | Both anchors ACTIVE; the mandate not expired; the KB-JWT's audience is one PantherClaw accepts; the clock |
+| Every payment `MANDATE_INVALID` | Both anchors ACTIVE; the mandate not expired; the connection's merchant audience set and equal to the KB-JWT's `aud`; the clock |
+| `MANDATE_REPLAYED` | The agent reused a mandate; ask the credentials provider for a new one |
 | `MANDATE_MISMATCH` | The agent's amount (minor units), currency and merchant against the mandate's; an alert is raised for each |
 | `PAYMENTS_LIVE_REFUSED` and a quarantined connection | An anchor that is not a sandbox anchor or a host outside the allow-list; fix the anchor, then restore the connection |
 | Payments still wait for a person with a cap | The cap ACTIVE (not DRAFT); the same merchant id and currency; the amount and the day's total within the limits |
