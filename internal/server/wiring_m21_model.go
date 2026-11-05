@@ -28,6 +28,7 @@ import (
 	pcawsagentcore "github.com/katocxl/pantherclaw/packages/pc-aws-agentcore"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
+	pcawsssm "github.com/katocxl/pantherclaw/packages/pc-aws-ssm"
 	pcazurecompute "github.com/katocxl/pantherclaw/packages/pc-azure-compute"
 	pcazurefoundry "github.com/katocxl/pantherclaw/packages/pc-azure-foundry"
 	pcbedrock "github.com/katocxl/pantherclaw/packages/pc-bedrock"
@@ -85,6 +86,7 @@ func builtinPackages() ([]*defsdomain.Package, error) {
 		pcbrowser.Package, pccomputer.Package,
 		pcvertexagentengine.Package,                                            // G0 M34 D993
 		pcawsagentcore.Package, pcazurefoundry.Package, pcazurecompute.Package, // G0 M34 D993a
+		pcawsssm.Package, // G0 M34 D1002
 	}
 	pkgs := make([]*defsdomain.Package, 0, len(raws))
 	for _, raw := range raws {

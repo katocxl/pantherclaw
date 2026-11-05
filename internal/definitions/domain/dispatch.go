@@ -85,6 +85,12 @@ type HTTPDispatch struct {
 	// on exactly this ARN. Its references are the decision's target and the
 	// connection's own account, region and partition, never a param.
 	AWSResource string `json:"aws_resource,omitzero"`
+	// AWSExtraResources are up to MaxAWSExtraResources more exact ARN
+	// templates beside AWSResource (G0 M34 D993a item 3, FQ34-4): the
+	// session stays one action, on exactly AWSResource and these. Each is
+	// checked as AWSResource is: no wildcard, references only from the
+	// target and the connection.
+	AWSExtraResources []string `json:"aws_extra_resources,omitzero"`
 	// GraphQL, when set, is the fixed document of a GraphQL POST (G0 M31
 	// D950 c): the body is {"query": <document>, "variables": <the body
 	// mapping>}, so the agent supplies only the mapped values.
@@ -487,6 +493,9 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 	}
 	if h.AWSResource != "" && !h.Encoding.AWS() {
 		return invalid("%s.aws_resource belongs to aws-json, aws-query and aws-rest templates", at)
+	}
+	if len(h.AWSExtraResources) > 0 && (!h.Encoding.AWS() || h.AWSResource == "") {
+		return invalid("%s.aws_extra_resources sit beside an aws template's aws_resource", at)
 	}
 	if h.SubjectTarget && (h.Encoding.AWS() || h.GraphQL != nil) {
 		// The acting user is a Google service account's subject (G0 M31

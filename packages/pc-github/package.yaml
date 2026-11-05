@@ -797,6 +797,7 @@ definitions:
       - kind: repository.visibility.change
         description: Changes who can see the repository; public makes it visible to anyone
     reversibility: irreversible
+    dedupe_key: [target.id, params.visibility]
     retry:
       safe: false
       on_unknown: reconcile
@@ -864,6 +865,7 @@ definitions:
       - kind: repository.transfer
         description: Moves the repository, its issues and its history to another account
     reversibility: irreversible
+    dedupe_key: [target.id, params.new_owner]
     retry:
       safe: false
       on_unknown: reconcile

@@ -31,6 +31,7 @@ import (
 	pcawsagentcore "github.com/katocxl/pantherclaw/packages/pc-aws-agentcore"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
+	pcawsssm "github.com/katocxl/pantherclaw/packages/pc-aws-ssm"
 	pcazurecompute "github.com/katocxl/pantherclaw/packages/pc-azure-compute"
 	pcazurefoundry "github.com/katocxl/pantherclaw/packages/pc-azure-foundry"
 	pcbedrock "github.com/katocxl/pantherclaw/packages/pc-bedrock"
@@ -120,6 +121,7 @@ func builtin() [][]byte {
 		pcbrowser.Package, pccomputer.Package,
 		pcvertexagentengine.Package,                                            // G0 M34 D993
 		pcawsagentcore.Package, pcazurefoundry.Package, pcazurecompute.Package, // G0 M34 D993a
+		pcawsssm.Package, // G0 M34 D1002
 	}
 }
 

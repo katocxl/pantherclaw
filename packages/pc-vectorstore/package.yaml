@@ -98,7 +98,6 @@ definitions:
             embedding:
               type: array
               description: The query embedding
-              minItems: 1
               maxItems: 16000
               items:
                 type: number
@@ -207,7 +206,6 @@ definitions:
             embedding:
               type: array
               description: The record's embedding
-              minItems: 1
               maxItems: 16000
               items:
                 type: number

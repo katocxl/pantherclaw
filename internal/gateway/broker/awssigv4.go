@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -107,6 +108,30 @@ func SessionPolicy(service, action, resource string) (string, error) {
 	b, err := json.Marshal(map[string]any{
 		"Version":   "2012-10-17",
 		"Statement": []map[string]any{{"Effect": "Allow", "Action": service + ":" + action, "Resource": resource}},
+	}, json.Deterministic(true))
+	return string(b), err
+}
+
+// SessionPolicyResources is the session policy of one action on exactly
+// resources (G0 M34 D993a item 3, FQ34-4): one resource is SessionPolicy's;
+// two to 1+defs.MaxAWSExtraResources are distinct exact ARNs, never "*" or
+// a wildcard, listed in order. Anything else is refused.
+func SessionPolicyResources(service, action string, resources []string) (string, error) {
+	if len(resources) == 1 {
+		return SessionPolicy(service, action, resources[0])
+	}
+	if len(resources) < 2 || len(resources) > 1+defs.MaxAWSExtraResources ||
+		!awsActionRe.MatchString(action) || !awsServiceRe.MatchString(service) {
+		return "", ErrAWSAction
+	}
+	for i, r := range resources {
+		if !strings.HasPrefix(r, "arn:") || !defs.ARNValueRe.MatchString(r) || slices.Contains(resources[:i], r) {
+			return "", ErrAWSAction
+		}
+	}
+	b, err := json.Marshal(map[string]any{
+		"Version":   "2012-10-17",
+		"Statement": []map[string]any{{"Effect": "Allow", "Action": service + ":" + action, "Resource": resources}},
 	}, json.Deterministic(true))
 	return string(b), err
 }

@@ -13,14 +13,21 @@ import (
 // receive in tools/list (HR-081). It is a small JSON Schema subset: objects
 // with closed properties, strings with patterns or enums, integers,
 // booleans and arrays. There is no $ref, no composition and no format;
-// every other keyword is refused when the package is decoded.
+// every other keyword is refused when the package is decoded. Two narrow
+// forms serve gateway-bound params (G0 M34 D1002a): a number array for a
+// float_array and a string map for a string_map.
 type Schema struct {
-	Type        string `json:"type"`
+	Type        string `json:"type,omitzero"` // empty only on propertyNames (G0 M34 D1002a)
 	Description string `json:"description,omitzero"`
-	// Objects.
+	// Objects. additionalProperties is false, or, on a string map, a string
+	// schema (AdditionalSchema); see MarshalJSON and UnmarshalJSON.
 	Properties           map[string]*Schema `json:"properties,omitzero"`
 	Required             []string           `json:"required,omitzero"`
-	AdditionalProperties *bool              `json:"additionalProperties,omitzero"`
+	AdditionalProperties *bool              `json:"-"`
+	AdditionalSchema     *Schema            `json:"-"`
+	// String maps (G0 M34 D1002a).
+	PropertyNames *Schema `json:"propertyNames,omitzero"`
+	MaxProperties int     `json:"maxProperties,omitzero"`
 	// Strings.
 	Enum      []string `json:"enum,omitzero"`
 	Pattern   string   `json:"pattern,omitzero"`
@@ -51,16 +58,21 @@ const (
 // schemaCheck is the state of one input schema's validation.
 type schemaCheck struct {
 	nodes int
+	// forms are the root properties whose mapped param is a float_array or
+	// a string_map, by their path: only they may take the number-array or
+	// string-map form (G0 M34 D1002a).
+	forms map[string]ParamType
 	// headers are the x-mcp-header names declared so far, in lower case.
 	headers map[string]bool
 }
 
-// validateSchema checks an input schema: the root is an object.
-func validateSchema(at string, s *Schema) error {
+// validateSchema checks an input schema: the root is an object. forms
+// names the root properties, by path, that may take a gateway-bound form.
+func validateSchema(at string, s *Schema, forms map[string]ParamType) error {
 	if s == nil || s.Type != "object" {
 		return invalid("%s: the root of an input schema is an object", at)
 	}
-	return s.validate(at, 0, true, &schemaCheck{headers: map[string]bool{}})
+	return s.validate(at, 0, true, &schemaCheck{headers: map[string]bool{}, forms: forms})
 }
 
 // validate checks one node; reachable says it is reached from the root
@@ -82,6 +94,15 @@ func (s *Schema) validate(at string, depth int, reachable bool, c *schemaCheck) 
 		if err := text(at+".description", s.Description); err != nil {
 			return err
 		}
+	}
+	if s.Type == "array" && s.Items != nil && s.Items.Type == "number" {
+		return s.validateNumberArray(at, c)
+	}
+	if s.Type == "object" && s.stringMap() {
+		return s.validateStringMap(at, c)
+	}
+	if s.stringMap() {
+		return invalid("%s: propertyNames, maxProperties and an additionalProperties schema belong to a string map", at)
 	}
 	object := len(s.Properties) > 0 || len(s.Required) > 0 || s.AdditionalProperties != nil
 	str := len(s.Enum) > 0 || s.Pattern != "" || s.MinLength != 0 || s.MaxLength != 0
