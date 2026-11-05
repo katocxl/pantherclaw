@@ -25,8 +25,11 @@ import (
 	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
 	pcanthropic "github.com/katocxl/pantherclaw/packages/pc-anthropic"
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
+	pcawsagentcore "github.com/katocxl/pantherclaw/packages/pc-aws-agentcore"
 	pcawsecs "github.com/katocxl/pantherclaw/packages/pc-aws-ecs"
 	pcawss3 "github.com/katocxl/pantherclaw/packages/pc-aws-s3"
+	pcazurecompute "github.com/katocxl/pantherclaw/packages/pc-azure-compute"
+	pcazurefoundry "github.com/katocxl/pantherclaw/packages/pc-azure-foundry"
 	pcbedrock "github.com/katocxl/pantherclaw/packages/pc-bedrock"
 	pcbrowser "github.com/katocxl/pantherclaw/packages/pc-browser"
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
@@ -80,7 +83,8 @@ func builtinPackages() ([]*defsdomain.Package, error) {
 		pcgmail.Package, pcgoogleworkspace.Package, pcm365.Package,
 		pcsalesforce.Package, pcnotion.Package, pclinear.Package, pcvertex.Package, pcbedrock.Package, pcsnowflake.Package,
 		pcbrowser.Package, pccomputer.Package,
-		pcvertexagentengine.Package, // G0 M34 D993
+		pcvertexagentengine.Package,                                            // G0 M34 D993
+		pcawsagentcore.Package, pcazurefoundry.Package, pcazurecompute.Package, // G0 M34 D993a
 	}
 	pkgs := make([]*defsdomain.Package, 0, len(raws))
 	for _, raw := range raws {

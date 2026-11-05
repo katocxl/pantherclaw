@@ -109,7 +109,7 @@ const ModelRelayPackage = "model-relay"
 // can never shadow them. "model" is not one: the gateway sends
 // /model/{name}/… to the model face only when {name} is a model relay, by
 // its mark, and otherwise to the connection named model (D525 L5).
-var reservedNames = []string{"mcp", "hook", "sdk", "a2a", "healthz", "readyz", "metrics"}
+var reservedNames = []string{"mcp", "hook", "sdk", "a2a", "healthz", "readyz", "metrics", "runtime"}
 
 // Notifier queues a notification in the caller's transaction (M5).
 type Notifier interface {
