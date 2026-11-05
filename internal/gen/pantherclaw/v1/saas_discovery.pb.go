@@ -350,9 +350,10 @@ type SaasScan struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Run id.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// "copilot_studio" or "chatgpt_enterprise".
+	// "copilot_studio", "chatgpt_enterprise", "aws_agentcore",
+	// "vertex_agent_engine" or "azure_foundry".
 	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
-	// "import" or "gateway".
+	// "import", "gateway" or "schedule" (a daily scan, G0 M34 D997).
 	Origin string `protobuf:"bytes,3,opt,name=origin,proto3" json:"origin,omitempty"`
 	// The tenant it covers.
 	Tenant string `protobuf:"bytes,4,opt,name=tenant,proto3" json:"tenant,omitempty"`
@@ -495,9 +496,12 @@ type StartSaasScanRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// A connection of the source's package.
 	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
-	// "copilot_studio" or "chatgpt_enterprise".
+	// "copilot_studio", "chatgpt_enterprise", "aws_agentcore",
+	// "vertex_agent_engine" or "azure_foundry" (G0 M34 D997).
 	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
 	// The Dataverse organization id, or the ChatGPT workspace id.
+	// For the runtime sources (G0 M34 D997a): an AgentCore account, a Vertex
+	// <project>/<location>, a Foundry project.
 	Tenant        string `protobuf:"bytes,3,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1151,6 +1155,217 @@ func (x *SetSaasAgentOwnerRequest) GetReason() string {
 	return ""
 }
 
+// SaaSScanSchedule is a daily scan of one connection (G0 M34 D997).
+type SaaSScanSchedule struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The source.
+	Source string `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// The connection scanned.
+	ConnectionId string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// The person who set it; each scan is started as them.
+	CreatedBy string `protobuf:"bytes,3,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// When it was set.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// When the daily job last started a scan of it; unset before the first.
+	LastStartTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_start_time,json=lastStartTime,proto3" json:"last_start_time,omitempty"`
+	// The tenant each scan covers (G0 M34 D997a).
+	Tenant        string `protobuf:"bytes,6,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaaSScanSchedule) Reset() {
+	*x = SaaSScanSchedule{}
+	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaaSScanSchedule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaaSScanSchedule) ProtoMessage() {}
+
+func (x *SaaSScanSchedule) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaaSScanSchedule.ProtoReflect.Descriptor instead.
+func (*SaaSScanSchedule) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_saas_discovery_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SaaSScanSchedule) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *SaaSScanSchedule) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *SaaSScanSchedule) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *SaaSScanSchedule) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *SaaSScanSchedule) GetLastStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastStartTime
+	}
+	return nil
+}
+
+func (x *SaaSScanSchedule) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+// SetSaaSScanScheduleRequest sets or stops a daily scan.
+type SetSaaSScanScheduleRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The source.
+	Source string `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// A connection of the source's package.
+	ConnectionId string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// True asks for a daily scan; false stops it.
+	Daily bool `protobuf:"varint,3,opt,name=daily,proto3" json:"daily,omitempty"`
+	// The tenant each scan covers, as StartSaasScan's (G0 M34 D997a): an
+	// AgentCore account, a Vertex <project>/<location>, a Foundry project.
+	Tenant        string `protobuf:"bytes,4,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSaaSScanScheduleRequest) Reset() {
+	*x = SetSaaSScanScheduleRequest{}
+	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSaaSScanScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSaaSScanScheduleRequest) ProtoMessage() {}
+
+func (x *SetSaaSScanScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSaaSScanScheduleRequest.ProtoReflect.Descriptor instead.
+func (*SetSaaSScanScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_saas_discovery_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SetSaaSScanScheduleRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *SetSaaSScanScheduleRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *SetSaaSScanScheduleRequest) GetDaily() bool {
+	if x != nil {
+		return x.Daily
+	}
+	return false
+}
+
+func (x *SetSaaSScanScheduleRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
+// SetSaaSScanScheduleResponse returns the schedule.
+type SetSaaSScanScheduleResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The schedule; unset when daily was false.
+	Schedule      *SaaSScanSchedule `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSaaSScanScheduleResponse) Reset() {
+	*x = SetSaaSScanScheduleResponse{}
+	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSaaSScanScheduleResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSaaSScanScheduleResponse) ProtoMessage() {}
+
+func (x *SetSaaSScanScheduleResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSaaSScanScheduleResponse.ProtoReflect.Descriptor instead.
+func (*SetSaaSScanScheduleResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_saas_discovery_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SetSaaSScanScheduleResponse) GetSchedule() *SaaSScanSchedule {
+	if x != nil {
+		return x.Schedule
+	}
+	return nil
+}
+
 // SetSaasAgentOwnerResponse returns the agent.
 type SetSaasAgentOwnerResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1162,7 +1377,7 @@ type SetSaasAgentOwnerResponse struct {
 
 func (x *SetSaasAgentOwnerResponse) Reset() {
 	*x = SetSaasAgentOwnerResponse{}
-	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1174,7 +1389,7 @@ func (x *SetSaasAgentOwnerResponse) String() string {
 func (*SetSaasAgentOwnerResponse) ProtoMessage() {}
 
 func (x *SetSaasAgentOwnerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_saas_discovery_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1187,7 +1402,7 @@ func (x *SetSaasAgentOwnerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSaasAgentOwnerResponse.ProtoReflect.Descriptor instead.
 func (*SetSaasAgentOwnerResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_saas_discovery_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_saas_discovery_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SetSaasAgentOwnerResponse) GetAgent() *SaasAgent {
@@ -1256,11 +1471,11 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\x1a=\n" +
 	"\x0fNotScannedEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xcb\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xff\x01\n" +
 	"\x14StartSaasScanRequest\x12-\n" +
-	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12A\n" +
-	"\x06source\x18\x02 \x01(\tB)\xbaH&r$R\x0ecopilot_studioR\x12chatgpt_enterpriseR\x06source\x12A\n" +
-	"\x06tenant\x18\x03 \x01(\tB)\xbaH&r$2\"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$R\x06tenant\"E\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12t\n" +
+	"\x06source\x18\x02 \x01(\tB\\\xbaHYrWR\x0ecopilot_studioR\x12chatgpt_enterpriseR\raws_agentcoreR\x13vertex_agent_engineR\razure_foundryR\x06source\x12B\n" +
+	"\x06tenant\x18\x03 \x01(\tB*\xbaH'r%2#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$R\x06tenant\"E\n" +
 	"\x15StartSaasScanResponse\x12,\n" +
 	"\x04scan\x18\x01 \x01(\v2\x18.pantherclaw.v1.SaasScanR\x04scan\".\n" +
 	"\x12GetSaasScanRequest\x12\x18\n" +
@@ -1310,7 +1525,23 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"\rowner_user_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\vownerUserId\x12<\n" +
 	"\x14backup_owner_user_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x11backupOwnerUserId\x12\"\n" +
 	"\x06reason\x18\x04 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"L\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"\x87\x02\n" +
+	"\x10SaaSScanSchedule\x12\x16\n" +
+	"\x06source\x18\x01 \x01(\tR\x06source\x12#\n" +
+	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\x03 \x01(\tR\tcreatedBy\x12;\n" +
+	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12B\n" +
+	"\x0flast_start_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\rlastStartTime\x12\x16\n" +
+	"\x06tenant\x18\x06 \x01(\tR\x06tenant\"\x9b\x02\n" +
+	"\x1aSetSaaSScanScheduleRequest\x12t\n" +
+	"\x06source\x18\x01 \x01(\tB\\\xbaHYrWR\x0ecopilot_studioR\x12chatgpt_enterpriseR\raws_agentcoreR\x13vertex_agent_engineR\razure_foundryR\x06source\x12-\n" +
+	"\rconnection_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12\x14\n" +
+	"\x05daily\x18\x03 \x01(\bR\x05daily\x12B\n" +
+	"\x06tenant\x18\x04 \x01(\tB*\xbaH'r%2#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$R\x06tenant\"[\n" +
+	"\x1bSetSaaSScanScheduleResponse\x12<\n" +
+	"\bschedule\x18\x01 \x01(\v2 .pantherclaw.v1.SaaSScanScheduleR\bschedule\"L\n" +
 	"\x19SetSaasAgentOwnerResponse\x12/\n" +
 	"\x05agent\x18\x01 \x01(\v2\x19.pantherclaw.v1.SaasAgentR\x05agent*\xa0\x01\n" +
 	"\rSaasScanState\x12\x1f\n" +
@@ -1318,14 +1549,15 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"\x17SAAS_SCAN_STATE_PENDING\x10\x01\x12\x1b\n" +
 	"\x17SAAS_SCAN_STATE_RUNNING\x10\x02\x12\x18\n" +
 	"\x14SAAS_SCAN_STATE_DONE\x10\x03\x12\x1a\n" +
-	"\x16SAAS_SCAN_STATE_FAILED\x10\x042\xdc\x04\n" +
+	"\x16SAAS_SCAN_STATE_FAILED\x10\x042\xcc\x05\n" +
 	"\x14SaasDiscoveryService\x12e\n" +
 	"\x10ImportSaasReport\x12'.pantherclaw.v1.ImportSaasReportRequest\x1a(.pantherclaw.v1.ImportSaasReportResponse\x12\\\n" +
 	"\rStartSaasScan\x12$.pantherclaw.v1.StartSaasScanRequest\x1a%.pantherclaw.v1.StartSaasScanResponse\x12V\n" +
 	"\vGetSaasScan\x12\".pantherclaw.v1.GetSaasScanRequest\x1a#.pantherclaw.v1.GetSaasScanResponse\x12\\\n" +
 	"\rListSaasScans\x12$.pantherclaw.v1.ListSaasScansRequest\x1a%.pantherclaw.v1.ListSaasScansResponse\x12_\n" +
 	"\x0eListSaasAgents\x12%.pantherclaw.v1.ListSaasAgentsRequest\x1a&.pantherclaw.v1.ListSaasAgentsResponse\x12h\n" +
-	"\x11SetSaasAgentOwner\x12(.pantherclaw.v1.SetSaasAgentOwnerRequest\x1a).pantherclaw.v1.SetSaasAgentOwnerResponseB\xcb\x01\n" +
+	"\x11SetSaasAgentOwner\x12(.pantherclaw.v1.SetSaasAgentOwnerRequest\x1a).pantherclaw.v1.SetSaasAgentOwnerResponse\x12n\n" +
+	"\x13SetSaaSScanSchedule\x12*.pantherclaw.v1.SetSaaSScanScheduleRequest\x1a+.pantherclaw.v1.SetSaaSScanScheduleResponseB\xcb\x01\n" +
 	"\x12com.pantherclaw.v1B\x12SaasDiscoveryProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1341,70 +1573,78 @@ func file_pantherclaw_v1_saas_discovery_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_saas_discovery_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pantherclaw_v1_saas_discovery_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_pantherclaw_v1_saas_discovery_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_pantherclaw_v1_saas_discovery_proto_goTypes = []any{
-	(SaasScanState)(0),                // 0: pantherclaw.v1.SaasScanState
-	(*SaasReportFinding)(nil),         // 1: pantherclaw.v1.SaasReportFinding
-	(*ImportSaasReportRequest)(nil),   // 2: pantherclaw.v1.ImportSaasReportRequest
-	(*ImportSaasReportResponse)(nil),  // 3: pantherclaw.v1.ImportSaasReportResponse
-	(*SaasScan)(nil),                  // 4: pantherclaw.v1.SaasScan
-	(*StartSaasScanRequest)(nil),      // 5: pantherclaw.v1.StartSaasScanRequest
-	(*StartSaasScanResponse)(nil),     // 6: pantherclaw.v1.StartSaasScanResponse
-	(*GetSaasScanRequest)(nil),        // 7: pantherclaw.v1.GetSaasScanRequest
-	(*GetSaasScanResponse)(nil),       // 8: pantherclaw.v1.GetSaasScanResponse
-	(*ListSaasScansRequest)(nil),      // 9: pantherclaw.v1.ListSaasScansRequest
-	(*ListSaasScansResponse)(nil),     // 10: pantherclaw.v1.ListSaasScansResponse
-	(*ListSaasAgentsRequest)(nil),     // 11: pantherclaw.v1.ListSaasAgentsRequest
-	(*SaasAgent)(nil),                 // 12: pantherclaw.v1.SaasAgent
-	(*ListSaasAgentsResponse)(nil),    // 13: pantherclaw.v1.ListSaasAgentsResponse
-	(*SetSaasAgentOwnerRequest)(nil),  // 14: pantherclaw.v1.SetSaasAgentOwnerRequest
-	(*SetSaasAgentOwnerResponse)(nil), // 15: pantherclaw.v1.SetSaasAgentOwnerResponse
-	nil,                               // 16: pantherclaw.v1.SaasReportFinding.AttributesEntry
-	nil,                               // 17: pantherclaw.v1.ImportSaasReportRequest.NotScannedEntry
-	nil,                               // 18: pantherclaw.v1.ImportSaasReportRequest.CountsEntry
-	nil,                               // 19: pantherclaw.v1.SaasScan.CountsEntry
-	nil,                               // 20: pantherclaw.v1.SaasScan.NotScannedEntry
-	nil,                               // 21: pantherclaw.v1.SaasAgent.AttributesEntry
-	(*timestamppb.Timestamp)(nil),     // 22: google.protobuf.Timestamp
-	(CoverageState)(0),                // 23: pantherclaw.v1.CoverageState
+	(SaasScanState)(0),                  // 0: pantherclaw.v1.SaasScanState
+	(*SaasReportFinding)(nil),           // 1: pantherclaw.v1.SaasReportFinding
+	(*ImportSaasReportRequest)(nil),     // 2: pantherclaw.v1.ImportSaasReportRequest
+	(*ImportSaasReportResponse)(nil),    // 3: pantherclaw.v1.ImportSaasReportResponse
+	(*SaasScan)(nil),                    // 4: pantherclaw.v1.SaasScan
+	(*StartSaasScanRequest)(nil),        // 5: pantherclaw.v1.StartSaasScanRequest
+	(*StartSaasScanResponse)(nil),       // 6: pantherclaw.v1.StartSaasScanResponse
+	(*GetSaasScanRequest)(nil),          // 7: pantherclaw.v1.GetSaasScanRequest
+	(*GetSaasScanResponse)(nil),         // 8: pantherclaw.v1.GetSaasScanResponse
+	(*ListSaasScansRequest)(nil),        // 9: pantherclaw.v1.ListSaasScansRequest
+	(*ListSaasScansResponse)(nil),       // 10: pantherclaw.v1.ListSaasScansResponse
+	(*ListSaasAgentsRequest)(nil),       // 11: pantherclaw.v1.ListSaasAgentsRequest
+	(*SaasAgent)(nil),                   // 12: pantherclaw.v1.SaasAgent
+	(*ListSaasAgentsResponse)(nil),      // 13: pantherclaw.v1.ListSaasAgentsResponse
+	(*SetSaasAgentOwnerRequest)(nil),    // 14: pantherclaw.v1.SetSaasAgentOwnerRequest
+	(*SaaSScanSchedule)(nil),            // 15: pantherclaw.v1.SaaSScanSchedule
+	(*SetSaaSScanScheduleRequest)(nil),  // 16: pantherclaw.v1.SetSaaSScanScheduleRequest
+	(*SetSaaSScanScheduleResponse)(nil), // 17: pantherclaw.v1.SetSaaSScanScheduleResponse
+	(*SetSaasAgentOwnerResponse)(nil),   // 18: pantherclaw.v1.SetSaasAgentOwnerResponse
+	nil,                                 // 19: pantherclaw.v1.SaasReportFinding.AttributesEntry
+	nil,                                 // 20: pantherclaw.v1.ImportSaasReportRequest.NotScannedEntry
+	nil,                                 // 21: pantherclaw.v1.ImportSaasReportRequest.CountsEntry
+	nil,                                 // 22: pantherclaw.v1.SaasScan.CountsEntry
+	nil,                                 // 23: pantherclaw.v1.SaasScan.NotScannedEntry
+	nil,                                 // 24: pantherclaw.v1.SaasAgent.AttributesEntry
+	(*timestamppb.Timestamp)(nil),       // 25: google.protobuf.Timestamp
+	(CoverageState)(0),                  // 26: pantherclaw.v1.CoverageState
 }
 var file_pantherclaw_v1_saas_discovery_proto_depIdxs = []int32{
-	16, // 0: pantherclaw.v1.SaasReportFinding.attributes:type_name -> pantherclaw.v1.SaasReportFinding.AttributesEntry
+	19, // 0: pantherclaw.v1.SaasReportFinding.attributes:type_name -> pantherclaw.v1.SaasReportFinding.AttributesEntry
 	1,  // 1: pantherclaw.v1.ImportSaasReportRequest.findings:type_name -> pantherclaw.v1.SaasReportFinding
-	17, // 2: pantherclaw.v1.ImportSaasReportRequest.not_scanned:type_name -> pantherclaw.v1.ImportSaasReportRequest.NotScannedEntry
-	18, // 3: pantherclaw.v1.ImportSaasReportRequest.counts:type_name -> pantherclaw.v1.ImportSaasReportRequest.CountsEntry
+	20, // 2: pantherclaw.v1.ImportSaasReportRequest.not_scanned:type_name -> pantherclaw.v1.ImportSaasReportRequest.NotScannedEntry
+	21, // 3: pantherclaw.v1.ImportSaasReportRequest.counts:type_name -> pantherclaw.v1.ImportSaasReportRequest.CountsEntry
 	4,  // 4: pantherclaw.v1.ImportSaasReportResponse.scan:type_name -> pantherclaw.v1.SaasScan
 	0,  // 5: pantherclaw.v1.SaasScan.state:type_name -> pantherclaw.v1.SaasScanState
-	19, // 6: pantherclaw.v1.SaasScan.counts:type_name -> pantherclaw.v1.SaasScan.CountsEntry
-	20, // 7: pantherclaw.v1.SaasScan.not_scanned:type_name -> pantherclaw.v1.SaasScan.NotScannedEntry
-	22, // 8: pantherclaw.v1.SaasScan.create_time:type_name -> google.protobuf.Timestamp
-	22, // 9: pantherclaw.v1.SaasScan.finish_time:type_name -> google.protobuf.Timestamp
+	22, // 6: pantherclaw.v1.SaasScan.counts:type_name -> pantherclaw.v1.SaasScan.CountsEntry
+	23, // 7: pantherclaw.v1.SaasScan.not_scanned:type_name -> pantherclaw.v1.SaasScan.NotScannedEntry
+	25, // 8: pantherclaw.v1.SaasScan.create_time:type_name -> google.protobuf.Timestamp
+	25, // 9: pantherclaw.v1.SaasScan.finish_time:type_name -> google.protobuf.Timestamp
 	4,  // 10: pantherclaw.v1.StartSaasScanResponse.scan:type_name -> pantherclaw.v1.SaasScan
 	4,  // 11: pantherclaw.v1.GetSaasScanResponse.scan:type_name -> pantherclaw.v1.SaasScan
 	4,  // 12: pantherclaw.v1.ListSaasScansResponse.scans:type_name -> pantherclaw.v1.SaasScan
-	23, // 13: pantherclaw.v1.SaasAgent.coverage:type_name -> pantherclaw.v1.CoverageState
-	21, // 14: pantherclaw.v1.SaasAgent.attributes:type_name -> pantherclaw.v1.SaasAgent.AttributesEntry
-	22, // 15: pantherclaw.v1.SaasAgent.first_seen_time:type_name -> google.protobuf.Timestamp
-	22, // 16: pantherclaw.v1.SaasAgent.last_seen_time:type_name -> google.protobuf.Timestamp
+	26, // 13: pantherclaw.v1.SaasAgent.coverage:type_name -> pantherclaw.v1.CoverageState
+	24, // 14: pantherclaw.v1.SaasAgent.attributes:type_name -> pantherclaw.v1.SaasAgent.AttributesEntry
+	25, // 15: pantherclaw.v1.SaasAgent.first_seen_time:type_name -> google.protobuf.Timestamp
+	25, // 16: pantherclaw.v1.SaasAgent.last_seen_time:type_name -> google.protobuf.Timestamp
 	12, // 17: pantherclaw.v1.ListSaasAgentsResponse.agents:type_name -> pantherclaw.v1.SaasAgent
-	12, // 18: pantherclaw.v1.SetSaasAgentOwnerResponse.agent:type_name -> pantherclaw.v1.SaasAgent
-	2,  // 19: pantherclaw.v1.SaasDiscoveryService.ImportSaasReport:input_type -> pantherclaw.v1.ImportSaasReportRequest
-	5,  // 20: pantherclaw.v1.SaasDiscoveryService.StartSaasScan:input_type -> pantherclaw.v1.StartSaasScanRequest
-	7,  // 21: pantherclaw.v1.SaasDiscoveryService.GetSaasScan:input_type -> pantherclaw.v1.GetSaasScanRequest
-	9,  // 22: pantherclaw.v1.SaasDiscoveryService.ListSaasScans:input_type -> pantherclaw.v1.ListSaasScansRequest
-	11, // 23: pantherclaw.v1.SaasDiscoveryService.ListSaasAgents:input_type -> pantherclaw.v1.ListSaasAgentsRequest
-	14, // 24: pantherclaw.v1.SaasDiscoveryService.SetSaasAgentOwner:input_type -> pantherclaw.v1.SetSaasAgentOwnerRequest
-	3,  // 25: pantherclaw.v1.SaasDiscoveryService.ImportSaasReport:output_type -> pantherclaw.v1.ImportSaasReportResponse
-	6,  // 26: pantherclaw.v1.SaasDiscoveryService.StartSaasScan:output_type -> pantherclaw.v1.StartSaasScanResponse
-	8,  // 27: pantherclaw.v1.SaasDiscoveryService.GetSaasScan:output_type -> pantherclaw.v1.GetSaasScanResponse
-	10, // 28: pantherclaw.v1.SaasDiscoveryService.ListSaasScans:output_type -> pantherclaw.v1.ListSaasScansResponse
-	13, // 29: pantherclaw.v1.SaasDiscoveryService.ListSaasAgents:output_type -> pantherclaw.v1.ListSaasAgentsResponse
-	15, // 30: pantherclaw.v1.SaasDiscoveryService.SetSaasAgentOwner:output_type -> pantherclaw.v1.SetSaasAgentOwnerResponse
-	25, // [25:31] is the sub-list for method output_type
-	19, // [19:25] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	25, // 18: pantherclaw.v1.SaaSScanSchedule.create_time:type_name -> google.protobuf.Timestamp
+	25, // 19: pantherclaw.v1.SaaSScanSchedule.last_start_time:type_name -> google.protobuf.Timestamp
+	15, // 20: pantherclaw.v1.SetSaaSScanScheduleResponse.schedule:type_name -> pantherclaw.v1.SaaSScanSchedule
+	12, // 21: pantherclaw.v1.SetSaasAgentOwnerResponse.agent:type_name -> pantherclaw.v1.SaasAgent
+	2,  // 22: pantherclaw.v1.SaasDiscoveryService.ImportSaasReport:input_type -> pantherclaw.v1.ImportSaasReportRequest
+	5,  // 23: pantherclaw.v1.SaasDiscoveryService.StartSaasScan:input_type -> pantherclaw.v1.StartSaasScanRequest
+	7,  // 24: pantherclaw.v1.SaasDiscoveryService.GetSaasScan:input_type -> pantherclaw.v1.GetSaasScanRequest
+	9,  // 25: pantherclaw.v1.SaasDiscoveryService.ListSaasScans:input_type -> pantherclaw.v1.ListSaasScansRequest
+	11, // 26: pantherclaw.v1.SaasDiscoveryService.ListSaasAgents:input_type -> pantherclaw.v1.ListSaasAgentsRequest
+	14, // 27: pantherclaw.v1.SaasDiscoveryService.SetSaasAgentOwner:input_type -> pantherclaw.v1.SetSaasAgentOwnerRequest
+	16, // 28: pantherclaw.v1.SaasDiscoveryService.SetSaaSScanSchedule:input_type -> pantherclaw.v1.SetSaaSScanScheduleRequest
+	3,  // 29: pantherclaw.v1.SaasDiscoveryService.ImportSaasReport:output_type -> pantherclaw.v1.ImportSaasReportResponse
+	6,  // 30: pantherclaw.v1.SaasDiscoveryService.StartSaasScan:output_type -> pantherclaw.v1.StartSaasScanResponse
+	8,  // 31: pantherclaw.v1.SaasDiscoveryService.GetSaasScan:output_type -> pantherclaw.v1.GetSaasScanResponse
+	10, // 32: pantherclaw.v1.SaasDiscoveryService.ListSaasScans:output_type -> pantherclaw.v1.ListSaasScansResponse
+	13, // 33: pantherclaw.v1.SaasDiscoveryService.ListSaasAgents:output_type -> pantherclaw.v1.ListSaasAgentsResponse
+	18, // 34: pantherclaw.v1.SaasDiscoveryService.SetSaasAgentOwner:output_type -> pantherclaw.v1.SetSaasAgentOwnerResponse
+	17, // 35: pantherclaw.v1.SaasDiscoveryService.SetSaaSScanSchedule:output_type -> pantherclaw.v1.SetSaaSScanScheduleResponse
+	29, // [29:36] is the sub-list for method output_type
+	22, // [22:29] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_saas_discovery_proto_init() }
@@ -1419,7 +1659,7 @@ func file_pantherclaw_v1_saas_discovery_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_saas_discovery_proto_rawDesc), len(file_pantherclaw_v1_saas_discovery_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

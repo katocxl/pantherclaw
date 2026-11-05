@@ -124,8 +124,9 @@ type MCPDispatch struct {
 }
 
 var (
-	fieldRe     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
-	queryRe     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}(\[[a-z]{1,16}\])?$`)
+	fieldRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
+	// queryRe allows "-" for Azure's api-version (G0 M34 D993a).
+	queryRe     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]{0,63}(\[[a-z]{1,16}\])?$`)
 	headerRe    = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,63}$`)
 	digestRe    = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	scopeName   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
@@ -395,6 +396,10 @@ func (d *Definition) validateHTTPDispatch(at string, h *HTTPDispatch) error {
 	segs := strings.Split(h.Path[1:], "/")
 	if h.Path == RootPath && h.Encoding.AWS() {
 		segs = nil // an AWS protocol posts to the service root (D254)
+	} else if h.Encoding == EncodingAWSRest && h.Subresource == "" && strings.HasSuffix(h.Path, "/") {
+		// An aws-rest route keeps its trailing "/" (G0 M34 D993a); the
+		// route table names its exact path.
+		segs = segs[:len(segs)-1]
 	}
 	for i, seg := range segs {
 		if ref, ok := strings.CutSuffix(seg, "*}"); ok && strings.HasPrefix(seg, "{") {

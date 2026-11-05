@@ -230,3 +230,16 @@ LIMIT sqlc.arg(page)::integer;
 -- name: DriftTransactionRun :one
 SELECT run_id FROM pc.transactions
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND connection_id = sqlc.arg(connection_id);
+
+-- Sets or (NULL) clears a live connection's runtime target (G0 M34 D991,
+-- migration 00381), bumping its revision so its gateway refetches.
+-- name: SetConnectionRuntimeTarget :one
+UPDATE pc.connections
+SET runtime_target = sqlc.narg(runtime_target), revision = revision + 1, updated_by = sqlc.arg(updated_by), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'RETIRED'
+RETURNING *;
+
+-- The live connection bound to a runtime target, if any (G0 M34 D991).
+-- name: ConnectionByRuntimeTarget :one
+SELECT * FROM pc.connections
+WHERE org_id = sqlc.arg(org_id) AND runtime_target = sqlc.arg(runtime_target)::text AND state <> 'RETIRED';

@@ -89,6 +89,15 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 		}}}, "")
 		return out, nil
 	}
+	// G0 M34 D994a (HR-765): a runtime action's AgentCore account check.
+	if out, err := h.refusedRuntime(ctx, gw, req.GetActionIr()); err != nil {
+		return nil, err
+	} else if out != nil {
+		out.AgentExplanation = agentExplanation(h.svc.consoleURL, Result{Decision: domain.CannotAuthorize, Reasons: []domain.Reason{{
+			Code: ReasonRuntimeAccountMismatch, Check: "scope", Decisive: true,
+		}}}, "")
+		return out, nil
+	}
 	creds := credentials(req.GetWorkload())
 	var findings []pipeline.PayloadFinding
 	for _, f := range req.GetPayloadFindings() {

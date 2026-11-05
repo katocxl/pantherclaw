@@ -90,7 +90,7 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 		if err != nil {
 			return Request{}, err
 		}
-		if t.Encoding == defs.EncodingAWSRest && !defs.S3BucketRe.MatchString(v) {
+		if defs.AWSRestS3(t) && !defs.S3BucketRe.MatchString(v) {
 			return Request{}, fmt.Errorf("%w: %q is not an S3 bucket name", ErrBuild, v) // G0 M30 D934a
 		}
 		path.WriteString(url.PathEscape(v))
@@ -178,6 +178,9 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 // subresource is the whole query (?policy, ?acl), the body param is the raw
 // body, and each header param's enum value goes in its header.
 func awsRest(out *Request, t *defs.HTTPDispatch, vals defs.Values) {
+	if t.Subresource == "" {
+		return // a route of the route table (G0 M34 D993a): its query and body are the normal ones
+	}
 	out.URL.RawQuery = t.Subresource
 	if t.BodyParam != "" {
 		if v, ok := vals[t.BodyParam]; ok {

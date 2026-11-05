@@ -50,14 +50,16 @@ definitions:
       - kind: storage.bucket.policy.change
         description: Replaces the bucket's policy, which can let other accounts or anyone read or write it
     reversibility: irreversible
+    dedupe_key: [target.id, params.policy]
     retry:
       safe: false
       on_unknown: reconcile
     approval:
       title: Replace the policy of S3 bucket {target.id}
+      # The policy is content: it shows in the untrusted block, never among
+      # the canonical fields (HR-034, G0 M34 D993a).
       fields:
         - target.id
-        - params.policy
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]
@@ -114,6 +116,7 @@ definitions:
       - kind: storage.bucket.acl.change
         description: Sets the bucket's canned ACL, which can let anyone read or write it
     reversibility: irreversible
+    dedupe_key: [target.id, params.canned_acl]
     retry:
       safe: false
       on_unknown: reconcile

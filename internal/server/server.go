@@ -997,6 +997,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err := registerKubernetesClosure(rs, d, workload, runs); err != nil {
 		return nil, err
 	}
+	registerM34Runtimes(rs, d, workload, runs)
 	if err := registerAutomationTemplates(rs, d, autos); err != nil {
 		return nil, err
 	}
