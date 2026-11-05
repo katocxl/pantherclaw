@@ -328,7 +328,9 @@ func (s *Server) patch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
 		return
 	}
-	set := func(path string) bool { return len(mask) == 0 || slices.ContainsFunc(mask, func(p string) bool { return strings.HasPrefix(p, path) }) }
+	set := func(path string) bool {
+		return len(mask) == 0 || slices.ContainsFunc(mask, func(p string) bool { return strings.HasPrefix(p, path) })
+	}
 	if set("displayName") && in.DisplayName != "" {
 		e.DisplayName = in.DisplayName
 	}
