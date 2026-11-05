@@ -850,8 +850,9 @@ message ReportCircuitRequest {
     lte: 1000000
   }];
   // Why the gateway opened the circuit; empty for the UNKNOWN-threshold
-  // breaker (G0 M14 D76).
-  string reason = 4 [(buf.validate.field).string.pattern = "^(stripe_livemode)?$"];
+  // breaker (G0 M14 D76); payments_live_refused when an agent payment
+  // left the sandbox (G0 M39 D1120).
+  string reason = 4 [(buf.validate.field).string.pattern = "^(stripe_livemode|payments_live_refused)?$"];
 }
 
 // ReportCircuitResponse says what the server did.

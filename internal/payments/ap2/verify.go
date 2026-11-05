@@ -366,7 +366,7 @@ func digestOf(b []byte) string {
 }
 
 // reclaim re-decodes a processed claim into a typed value.
-func reclaim(v any, dst any) error {
+func reclaim(v, dst any) error {
 	raw, err := json.Marshal(v)
 	if err != nil {
 		return err

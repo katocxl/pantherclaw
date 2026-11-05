@@ -26739,6 +26739,330 @@
         }
       }
     },
+    "/pantherclaw.v1.PaymentsService/CreatePaymentTrustAnchor": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentsService"
+        ],
+        "summary": "CreatePaymentTrustAnchor",
+        "description": "CreatePaymentTrustAnchor adds a PENDING anchor (a person only).\n permission: payments.manage",
+        "operationId": "pantherclaw.v1.PaymentsService.CreatePaymentTrustAnchor",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CreatePaymentTrustAnchorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CreatePaymentTrustAnchorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PaymentsService/ActivatePaymentTrustAnchor": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentsService"
+        ],
+        "summary": "ActivatePaymentTrustAnchor",
+        "description": "ActivatePaymentTrustAnchor is refused over the API (STEP_UP_REQUIRED):\n a person activates an anchor on its page with a security key.\n permission: payments.manage",
+        "operationId": "pantherclaw.v1.PaymentsService.ActivatePaymentTrustAnchor",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ActivatePaymentTrustAnchorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ActivatePaymentTrustAnchorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PaymentsService/RevokePaymentTrustAnchor": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentsService"
+        ],
+        "summary": "RevokePaymentTrustAnchor",
+        "description": "RevokePaymentTrustAnchor stops using an anchor for good (a person\n only).\n permission: payments.manage",
+        "operationId": "pantherclaw.v1.PaymentsService.RevokePaymentTrustAnchor",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokePaymentTrustAnchorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokePaymentTrustAnchorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PaymentsService/ListPaymentTrustAnchors": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentsService"
+        ],
+        "summary": "ListPaymentTrustAnchors",
+        "description": "ListPaymentTrustAnchors lists anchors that are not revoked.\n permission: payments.read",
+        "operationId": "pantherclaw.v1.PaymentsService.ListPaymentTrustAnchors",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPaymentTrustAnchorsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPaymentTrustAnchorsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PaymentsService/GetPaymentTrustAnchor": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentsService"
+        ],
+        "summary": "GetPaymentTrustAnchor",
+        "description": "GetPaymentTrustAnchor returns one anchor.\n permission: payments.read",
+        "operationId": "pantherclaw.v1.PaymentsService.GetPaymentTrustAnchor",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPaymentTrustAnchorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPaymentTrustAnchorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PaymentsService/VerifyAgentSignature": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentsService"
+        ],
+        "summary": "VerifyAgentSignature",
+        "description": "VerifyAgentSignature checks an agent's RFC 9421 request signature (Web\n Bot Auth, Visa Trusted Agent Protocol) with the keys of the org's\n ACTIVE agent directory anchors, for a merchant backend. Each nonce is\n accepted once.\n permission: payments.read",
+        "operationId": "pantherclaw.v1.PaymentsService.VerifyAgentSignature",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.VerifyAgentSignatureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.VerifyAgentSignatureResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.PolicyService/CreatePolicyVersion": {
       "post": {
         "tags": [
@@ -76735,10 +77059,10 @@
               "null"
             ],
             "title": "reason",
-            "description": "Why the gateway opened the circuit; empty for the UNKNOWN-threshold\n breaker (G0 M14 D76).",
+            "description": "Why the gateway opened the circuit; empty for the UNKNOWN-threshold\n breaker (G0 M14 D76); payments_live_refused when an agent payment\n left the sandbox (G0 M39 D1120).",
             "anyOf": [
               {
-                "pattern": "^(stripe_livemode)?$"
+                "pattern": "^(stripe_livemode|payments_live_refused)?$"
               },
               {
                 "maxLength": 0
@@ -91290,6 +91614,444 @@
         "title": "PackBaseline",
         "additionalProperties": false,
         "description": "PackBaseline is the grant a person may issue an agent from the pack."
+      },
+      "pantherclaw.v1.ActivatePaymentTrustAnchorRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Anchor id."
+          }
+        },
+        "title": "ActivatePaymentTrustAnchorRequest",
+        "additionalProperties": false,
+        "description": "ActivatePaymentTrustAnchorRequest names an anchor.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ActivatePaymentTrustAnchorResponse": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "title": "anchor",
+            "description": "The anchor.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PaymentTrustAnchor"
+          }
+        },
+        "title": "ActivatePaymentTrustAnchorResponse",
+        "additionalProperties": false,
+        "description": "ActivatePaymentTrustAnchorResponse returns it."
+      },
+      "pantherclaw.v1.CreatePaymentTrustAnchorRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "enum": [
+              "MANDATE_ISSUER",
+              "MERCHANT",
+              "AGENT_DIRECTORY"
+            ],
+            "description": "\"MANDATE_ISSUER\", \"MERCHANT\" or \"AGENT_DIRECTORY\"."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+            "description": "Lowercase letters, digits and dashes."
+          },
+          "jwks": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "jwks",
+            "maxLength": 65536,
+            "description": "A static JWKS (ES256 P-256 or Ed25519 keys)."
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "url",
+            "maxLength": 2048,
+            "description": "An https key URL on a sandbox host.",
+            "anyOf": [
+              {
+                "pattern": "^(https://.*)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "sandbox": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "sandbox",
+            "description": "Must be true: a live anchor is refused (PAYMENTS_LIVE_REFUSED)."
+          }
+        },
+        "title": "CreatePaymentTrustAnchorRequest",
+        "additionalProperties": false,
+        "description": "CreatePaymentTrustAnchorRequest describes an anchor: exactly one of jwks\n and url.",
+        "required": [
+          "kind",
+          "name"
+        ]
+      },
+      "pantherclaw.v1.CreatePaymentTrustAnchorResponse": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "title": "anchor",
+            "description": "The anchor, PENDING.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PaymentTrustAnchor"
+          }
+        },
+        "title": "CreatePaymentTrustAnchorResponse",
+        "additionalProperties": false,
+        "description": "CreatePaymentTrustAnchorResponse returns the new anchor."
+      },
+      "pantherclaw.v1.GetPaymentTrustAnchorRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Anchor id."
+          }
+        },
+        "title": "GetPaymentTrustAnchorRequest",
+        "additionalProperties": false,
+        "description": "GetPaymentTrustAnchorRequest names an anchor.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPaymentTrustAnchorResponse": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "title": "anchor",
+            "description": "The anchor.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PaymentTrustAnchor"
+          }
+        },
+        "title": "GetPaymentTrustAnchorResponse",
+        "additionalProperties": false,
+        "description": "GetPaymentTrustAnchorResponse returns it."
+      },
+      "pantherclaw.v1.HTTPHeaderField": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "maxLength": 128,
+            "minLength": 1,
+            "description": "The header name."
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "value",
+            "maxLength": 8192,
+            "description": "The header value."
+          }
+        },
+        "title": "HTTPHeaderField",
+        "additionalProperties": false,
+        "description": "HTTPHeaderField is one request header as the merchant received it.",
+        "required": [
+          "name"
+        ]
+      },
+      "pantherclaw.v1.ListPaymentTrustAnchorsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListPaymentTrustAnchorsRequest",
+        "additionalProperties": false,
+        "description": "ListPaymentTrustAnchorsRequest pages anchors."
+      },
+      "pantherclaw.v1.ListPaymentTrustAnchorsResponse": {
+        "type": "object",
+        "properties": {
+          "anchors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PaymentTrustAnchor"
+            },
+            "title": "anchors",
+            "description": "Anchors, by id."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPaymentTrustAnchorsResponse",
+        "additionalProperties": false,
+        "description": "ListPaymentTrustAnchorsResponse is one page."
+      },
+      "pantherclaw.v1.PaymentTrustAnchor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Anchor id."
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "\"MANDATE_ISSUER\", \"MERCHANT\" or \"AGENT_DIRECTORY\"."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Name."
+          },
+          "jwks": {
+            "type": "string",
+            "title": "jwks",
+            "description": "The static JWKS, when the anchor has one."
+          },
+          "url": {
+            "type": "string",
+            "title": "url",
+            "description": "The https key URL, when the anchor has one: a JWKS for issuers and\n merchants, a Web Bot Auth directory or a key service for agents."
+          },
+          "sandbox": {
+            "type": "boolean",
+            "title": "sandbox",
+            "description": "Always true: agent payments run in sandbox only."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"ACTIVE\" or \"REVOKED\"."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who created it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was created.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activatedBy": {
+            "type": "string",
+            "title": "activated_by",
+            "description": "Who activated it with a security key; empty while PENDING."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "revokeTime": {
+            "title": "revoke_time",
+            "description": "When it was revoked.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmUrl": {
+            "type": "string",
+            "title": "confirm_url",
+            "description": "The page where a person activates it."
+          }
+        },
+        "title": "PaymentTrustAnchor",
+        "additionalProperties": false,
+        "description": "PaymentTrustAnchor is one trust anchor."
+      },
+      "pantherclaw.v1.RevokePaymentTrustAnchorRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Anchor id."
+          }
+        },
+        "title": "RevokePaymentTrustAnchorRequest",
+        "additionalProperties": false,
+        "description": "RevokePaymentTrustAnchorRequest names an anchor.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RevokePaymentTrustAnchorResponse": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "title": "anchor",
+            "description": "The anchor, REVOKED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PaymentTrustAnchor"
+          }
+        },
+        "title": "RevokePaymentTrustAnchorResponse",
+        "additionalProperties": false,
+        "description": "RevokePaymentTrustAnchorResponse returns it."
+      },
+      "pantherclaw.v1.VerifyAgentSignatureRequest": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string",
+            "title": "method",
+            "maxLength": 16,
+            "minLength": 1,
+            "pattern": "^[A-Z]+$",
+            "description": "The HTTP method."
+          },
+          "authority": {
+            "type": "string",
+            "title": "authority",
+            "maxLength": 255,
+            "minLength": 1,
+            "description": "The request's authority (host and optional port)."
+          },
+          "path": {
+            "type": "string",
+            "title": "path",
+            "maxLength": 4096,
+            "minLength": 1,
+            "description": "The request path, with the query after \"?\" when there is one."
+          },
+          "headers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.HTTPHeaderField"
+            },
+            "title": "headers",
+            "maxItems": 64,
+            "description": "The request headers, Signature-Input and Signature among them."
+          },
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "body",
+            "maxLength": 65536,
+            "format": "byte",
+            "description": "The request body, for the Trusted Agent Protocol objects."
+          }
+        },
+        "title": "VerifyAgentSignatureRequest",
+        "additionalProperties": false,
+        "description": "VerifyAgentSignatureRequest is the request a merchant backend received.",
+        "required": [
+          "method",
+          "authority",
+          "path"
+        ]
+      },
+      "pantherclaw.v1.VerifyAgentSignatureResponse": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "title": "valid",
+            "description": "True when a signature with an agent tag verified with an ACTIVE\n anchor's key, inside its window, with a nonce not seen before."
+          },
+          "anchorId": {
+            "type": "string",
+            "title": "anchor_id",
+            "description": "The anchor whose key verified it."
+          },
+          "keyid": {
+            "type": "string",
+            "title": "keyid",
+            "description": "The signature's keyid."
+          },
+          "tag": {
+            "type": "string",
+            "title": "tag",
+            "description": "The signature's tag (\"agent-browser-auth\", \"agent-payer-auth\" or\n \"agent-pay-auth\")."
+          },
+          "agentClaims": {
+            "type": "object",
+            "title": "agent_claims",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "What the agent's verified request carried: the signature agent and,\n for Trusted Agent Protocol bodies, which objects verified and the\n payment credentials hash (kept, never resolved)."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why it did not verify, when valid is false (\"no_agent_signature\",\n \"window\", \"key_unavailable\", \"signature\", \"nonce_replayed\", ...)."
+          }
+        },
+        "title": "VerifyAgentSignatureResponse",
+        "additionalProperties": false,
+        "description": "VerifyAgentSignatureResponse says whether the signature verified."
+      },
+      "pantherclaw.v1.VerifyAgentSignatureResponse.AgentClaimsEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "AgentClaimsEntry",
+        "additionalProperties": false
       },
       "pantherclaw.v1.CreatePolicyVersionRequest": {
         "type": "object",
@@ -110853,6 +111615,10 @@
     {
       "name": "pantherclaw.v1.PackService",
       "description": "PackService serves the reference workflow packs (G0 M11 part 2, D41;\n F762, F764, F767, HR-291): coding-to-production (GitHub) and\n read-only-diagnostics (shell). A pack is a policy template with its\n allow, hold and deny scenario tests, a grant baseline per agent and,\n optionally, the automation template that launches its agents.\n\n ApplyPack only drafts: it stores the published policy with the pack's\n rules and tests as a new DRAFT policy version, which then goes through\n validation, tests and the publish gate like any draft. Nothing is\n published, issued or promoted. Needs the Team edition."
+    },
+    {
+      "name": "pantherclaw.v1.PaymentsService",
+      "description": "PaymentsService manages the trust anchors of agent payments and checks\n agent request signatures for merchant backends (G0 M39 D1120, D1121,\n D1123; FQ39-1; HR-830..832, HR-838; Business). PantherClaw verifies\n mandates and signatures and never signs them; it holds no card or payment\n credential. Agent payments run in sandbox only: every anchor is marked\n sandbox and names only a sandbox host, and anything else is refused\n (PAYMENTS_LIVE_REFUSED). An anchor is created PENDING and is used only\n once a person activates it on its page (confirm_url) with a security key."
     },
     {
       "name": "pantherclaw.v1.PolicyService",

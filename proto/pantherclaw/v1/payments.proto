@@ -1,0 +1,227 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// PaymentsService manages the trust anchors of agent payments and checks
+// agent request signatures for merchant backends (G0 M39 D1120, D1121,
+// D1123; FQ39-1; HR-830..832, HR-838; Business). PantherClaw verifies
+// mandates and signatures and never signs them; it holds no card or payment
+// credential. Agent payments run in sandbox only: every anchor is marked
+// sandbox and names only a sandbox host, and anything else is refused
+// (PAYMENTS_LIVE_REFUSED). An anchor is created PENDING and is used only
+// once a person activates it on its page (confirm_url) with a security key.
+service PaymentsService {
+  // CreatePaymentTrustAnchor adds a PENDING anchor (a person only).
+  // permission: payments.manage
+  rpc CreatePaymentTrustAnchor(CreatePaymentTrustAnchorRequest) returns (CreatePaymentTrustAnchorResponse);
+  // ActivatePaymentTrustAnchor is refused over the API (STEP_UP_REQUIRED):
+  // a person activates an anchor on its page with a security key.
+  // permission: payments.manage
+  rpc ActivatePaymentTrustAnchor(ActivatePaymentTrustAnchorRequest) returns (ActivatePaymentTrustAnchorResponse);
+  // RevokePaymentTrustAnchor stops using an anchor for good (a person
+  // only).
+  // permission: payments.manage
+  rpc RevokePaymentTrustAnchor(RevokePaymentTrustAnchorRequest) returns (RevokePaymentTrustAnchorResponse);
+  // ListPaymentTrustAnchors lists anchors that are not revoked.
+  // permission: payments.read
+  rpc ListPaymentTrustAnchors(ListPaymentTrustAnchorsRequest) returns (ListPaymentTrustAnchorsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetPaymentTrustAnchor returns one anchor.
+  // permission: payments.read
+  rpc GetPaymentTrustAnchor(GetPaymentTrustAnchorRequest) returns (GetPaymentTrustAnchorResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // VerifyAgentSignature checks an agent's RFC 9421 request signature (Web
+  // Bot Auth, Visa Trusted Agent Protocol) with the keys of the org's
+  // ACTIVE agent directory anchors, for a merchant backend. Each nonce is
+  // accepted once.
+  // permission: payments.read
+  rpc VerifyAgentSignature(VerifyAgentSignatureRequest) returns (VerifyAgentSignatureResponse);
+}
+
+// PaymentTrustAnchor is one trust anchor.
+message PaymentTrustAnchor {
+  // Anchor id.
+  string id = 1;
+  // "MANDATE_ISSUER", "MERCHANT" or "AGENT_DIRECTORY".
+  string kind = 2;
+  // Name.
+  string name = 3;
+  // The static JWKS, when the anchor has one.
+  string jwks = 4;
+  // The https key URL, when the anchor has one: a JWKS for issuers and
+  // merchants, a Web Bot Auth directory or a key service for agents.
+  string url = 5;
+  // Always true: agent payments run in sandbox only.
+  bool sandbox = 6;
+  // "PENDING", "ACTIVE" or "REVOKED".
+  string state = 7;
+  // Who created it.
+  string created_by = 8;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 9;
+  // Who activated it with a security key; empty while PENDING.
+  string activated_by = 10;
+  // When it was activated.
+  google.protobuf.Timestamp activate_time = 11;
+  // When it was revoked.
+  google.protobuf.Timestamp revoke_time = 12;
+  // The page where a person activates it.
+  string confirm_url = 13;
+}
+
+// CreatePaymentTrustAnchorRequest describes an anchor: exactly one of jwks
+// and url.
+message CreatePaymentTrustAnchorRequest {
+  // "MANDATE_ISSUER", "MERCHANT" or "AGENT_DIRECTORY".
+  string kind = 1 [(buf.validate.field).string = {
+    in: [
+      "MANDATE_ISSUER",
+      "MERCHANT",
+      "AGENT_DIRECTORY"
+    ]
+  }];
+  // Lowercase letters, digits and dashes.
+  string name = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // A static JWKS (ES256 P-256 or Ed25519 keys).
+  string jwks = 3 [(buf.validate.field).string.max_len = 65536];
+  // An https key URL on a sandbox host.
+  string url = 4 [(buf.validate.field).string = {
+    max_len: 2048
+    pattern: "^(https://.*)?$"
+  }];
+  // Must be true: a live anchor is refused (PAYMENTS_LIVE_REFUSED).
+  bool sandbox = 5;
+}
+
+// CreatePaymentTrustAnchorResponse returns the new anchor.
+message CreatePaymentTrustAnchorResponse {
+  // The anchor, PENDING.
+  PaymentTrustAnchor anchor = 1;
+}
+
+// ActivatePaymentTrustAnchorRequest names an anchor.
+message ActivatePaymentTrustAnchorRequest {
+  // Anchor id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ActivatePaymentTrustAnchorResponse returns it.
+message ActivatePaymentTrustAnchorResponse {
+  // The anchor.
+  PaymentTrustAnchor anchor = 1;
+}
+
+// RevokePaymentTrustAnchorRequest names an anchor.
+message RevokePaymentTrustAnchorRequest {
+  // Anchor id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RevokePaymentTrustAnchorResponse returns it.
+message RevokePaymentTrustAnchorResponse {
+  // The anchor, REVOKED.
+  PaymentTrustAnchor anchor = 1;
+}
+
+// ListPaymentTrustAnchorsRequest pages anchors.
+message ListPaymentTrustAnchorsRequest {
+  // Maximum results (default and at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListPaymentTrustAnchorsResponse is one page.
+message ListPaymentTrustAnchorsResponse {
+  // Anchors, by id.
+  repeated PaymentTrustAnchor anchors = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// GetPaymentTrustAnchorRequest names an anchor.
+message GetPaymentTrustAnchorRequest {
+  // Anchor id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetPaymentTrustAnchorResponse returns it.
+message GetPaymentTrustAnchorResponse {
+  // The anchor.
+  PaymentTrustAnchor anchor = 1;
+}
+
+// HTTPHeaderField is one request header as the merchant received it.
+message HTTPHeaderField {
+  // The header name.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // The header value.
+  string value = 2 [(buf.validate.field).string.max_len = 8192];
+}
+
+// VerifyAgentSignatureRequest is the request a merchant backend received.
+message VerifyAgentSignatureRequest {
+  // The HTTP method.
+  string method = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 16
+    pattern: "^[A-Z]+$"
+  }];
+  // The request's authority (host and optional port).
+  string authority = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+  }];
+  // The request path, with the query after "?" when there is one.
+  string path = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 4096
+    prefix: "/"
+  }];
+  // The request headers, Signature-Input and Signature among them.
+  repeated HTTPHeaderField headers = 4 [(buf.validate.field).repeated.max_items = 64];
+  // The request body, for the Trusted Agent Protocol objects.
+  bytes body = 5 [(buf.validate.field).bytes.max_len = 65536];
+}
+
+// VerifyAgentSignatureResponse says whether the signature verified.
+message VerifyAgentSignatureResponse {
+  // True when a signature with an agent tag verified with an ACTIVE
+  // anchor's key, inside its window, with a nonce not seen before.
+  bool valid = 1;
+  // The anchor whose key verified it.
+  string anchor_id = 2;
+  // The signature's keyid.
+  string keyid = 3;
+  // The signature's tag ("agent-browser-auth", "agent-payer-auth" or
+  // "agent-pay-auth").
+  string tag = 4;
+  // What the agent's verified request carried: the signature agent and,
+  // for Trusted Agent Protocol bodies, which objects verified and the
+  // payment credentials hash (kept, never resolved).
+  map<string, string> agent_claims = 5;
+  // Why it did not verify, when valid is false ("no_agent_signature",
+  // "window", "key_unavailable", "signature", "nonce_replayed", ...).
+  string reason = 6;
+}

@@ -3535,6 +3535,31 @@ type PcPayloadCapture struct {
 	RemoveAt      time.Time
 }
 
+type PcPaymentSigNonce struct {
+	OrgID    ids.OrgID
+	AnchorID ids.UUID
+	Nonce    string
+	SeenAt   time.Time
+}
+
+type PcPaymentTrustAnchor struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Kind                string
+	Name                string
+	Jwks                []byte
+	Url                 *string
+	Sandbox             bool
+	State               string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	RevokedAt           *time.Time
+	UpdatedAt           time.Time
+}
+
 type PcPermit struct {
 	OrgID              ids.OrgID
 	ID                 ids.UUID
