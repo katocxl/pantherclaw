@@ -58,12 +58,28 @@ func TestHR710_TheServerTakesDigestsNotContents(t *testing.T) {
 	}
 	for name, attrs := range map[string]map[string]string{
 		"a value":        with(secret, "value", "ghp_x"),
-		"unknown format": with(secret, "secret_kind", "anthropic"),
+		"unknown format": with(secret, "secret_kind", "stripe_key"),
 		"no class":       with(secret, "path_class", ""),
 		"unknown source": with(secret, "source", "clipboard"),
 	} {
 		if domain.ScanAttributesOK(domain.ScanKindEnvSecret, attrs) {
 			t.Errorf("%s: accepted %v", name, attrs)
+		}
+	}
+}
+
+// TestHR710_ModelProviderKeysInConfigFilesAreTakenByKind (G0 M30 D942,
+// D1211): an anthropic or openai key found in a configuration file is
+// taken as its kind, with no value; a value next to the kind is refused.
+func TestHR710_ModelProviderKeysInConfigFilesAreTakenByKind(t *testing.T) {
+	for _, kind := range []string{"anthropic", "openai"} {
+		attrs := map[string]string{"secret_kind": kind, "source": domain.SourceConfigFile, "path_class": "settings"}
+		if !domain.ScanAttributesOK(domain.ScanKindEnvSecret, attrs) {
+			t.Errorf("%s refused", kind)
+		}
+		attrs["value"] = "sk-x"
+		if domain.ScanAttributesOK(domain.ScanKindEnvSecret, attrs) {
+			t.Errorf("%s with a value accepted", kind)
 		}
 	}
 }

@@ -12,7 +12,7 @@ Project files (relative to the repository): each client's settings, MCP and hook
 
 - `pclaw scan` reports each listed file by client, scope, class, SHA-256 digest and size. **Never its contents.** A file over 1 MiB reports `too_large` (HR-710).
 - A credential format found in such a file (a GitHub token, a private key, an AWS access key, a Slack token, a PantherClaw token) is reported as an `env_secret` finding with `source=config_file` and its format, **never the value**. Rotate the credential and move it out of the file.
-- When a submitted scan shows a different digest for the same file, the server writes `agent.config_changed` with the old and new digests, and the built-in rule `pc.agent.config_changed` raises one alert. It holds nothing (HR-711). A first sighting writes nothing new.
+- When a submitted scan shows a different digest for the same file, the server writes `agent.config_changed` with the old and new digests, and the built-in rule `pc.agent.config_changed` raises one alert, basis OBSERVED. It holds nothing (HR-711). A first sighting writes nothing new.
 - **What to do with the alert:** look at the file on the machine, compare it with what you expect (version control, the managed settings), and revert anything you did not make.
 
 ## 3. The hook: writes ask the gateway

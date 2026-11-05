@@ -242,6 +242,11 @@ func (v Value) wire() any {
 	case TypeQueryFilter:
 		return v.Filter
 	case TypeFloatArray:
+		// The canonical string (G0 M30 D1211); values with no such form
+		// stay numbers, which the ActionIR refuses (HR-101).
+		if s, err := EncodeFloat32s(v.Floats); err == nil {
+			return s
+		}
 		return v.Floats
 	case TypeStringMap:
 		return v.Map

@@ -44,3 +44,16 @@ func TestHR708_OwnedAccountValueFormats(t *testing.T) {
 		t.Error("an unknown kind is valid")
 	}
 }
+
+// TestHR708_AGitHubOrgIsStoredInLowerCase (G0 M30 D1211): "Acme" is listed
+// as "acme"; other kinds keep their value.
+//
+// Covers: HR-708
+func TestHR708_AGitHubOrgIsStoredInLowerCase(t *testing.T) {
+	if got := Normalize(KindGitHubOrg, "Acme-Corp"); got != "acme-corp" || !ValidValue(KindGitHubOrg, "Acme-Corp") {
+		t.Fatalf("github org %q", got)
+	}
+	if got := Normalize(KindAWSAccount, "111122223333"); got != "111122223333" {
+		t.Fatalf("aws account %q", got)
+	}
+}

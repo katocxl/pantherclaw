@@ -26,7 +26,7 @@ pclaw org accounts add github_org acme --reason "our GitHub organization"
 pclaw org accounts remove <id> --reason "account closed"
 ```
 
-Kinds and formats: `aws_account` (12 digits), `github_org` (1–39 letters, digits and `-`; write it in lower case, as GitHub owners in actions are lower case), `email_domain` (a lower-case host name), `gcp_project` and `azure_tenant` (a UUID). Both commands need `org.owned_accounts.manage`, which only people hold.
+Kinds and formats: `aws_account` (12 digits), `github_org` (1–39 letters, digits and `-`; stored in lower case and compared without case, as GitHub compares names), `email_domain` (a lower-case host name), `gcp_project` and `azure_tenant` (a UUID). Both commands need `org.owned_accounts.manage`, which only people hold.
 
 - **Adding loosens the check**, so it is a protected change: a second person confirms it with a security key before it applies (HR-708). The author cannot confirm their own.
 - **Removing is immediate.** Shares to that account hold again at once.
@@ -59,5 +59,4 @@ They raise alerts and never hold or refuse by themselves (HR-709). Targets are c
 | Symptom | Cause | Fix |
 |---|---|---|
 | Every transfer or policy change holds | The owned list is empty | Add your accounts (§2) |
-| A transfer to your own GitHub organization holds | The listed name differs in case | List it in lower case |
 | An addition does not take effect | It waits for a second person | Have another admin confirm it with a security key |

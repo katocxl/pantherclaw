@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 )
 
 func ambiguous(format string, args ...any) error {
@@ -29,6 +30,16 @@ var integer = regexp.MustCompile(`^-?(0|[1-9][0-9]{0,18})$`)
 // any non-integer number are ambiguous. Integers become int64; there are no
 // floats, so an amount sent as a number can never become money (HR-101).
 func DecodeInput(raw []byte) (map[string]any, error) {
+	return decodeInput(raw, nil)
+}
+
+// decodeInput is DecodeInput where floats names the top-level fields the
+// mapping extracts into a float_array param (G0 M30 D1211): only there is
+// a list of numbers read, and it becomes the param's canonical string
+// (domain.EncodeFloat32s). HR-101 covers material params, and a
+// float_array is never material; every other number stays an integer or
+// is refused.
+func decodeInput(raw []byte, floats map[string]bool) (map[string]any, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return map[string]any{}, nil
 	}
@@ -36,7 +47,13 @@ func DecodeInput(raw []byte) (map[string]any, error) {
 		return nil, ambiguous("input larger than %d bytes", actionir.MaxBytes)
 	}
 	d := jsontext.NewDecoder(bytes.NewReader(raw))
-	v, err := decodeValue(d)
+	var v any
+	var err error
+	if len(floats) > 0 && d.PeekKind() == '{' {
+		v, err = decodeTop(d, floats)
+	} else {
+		v, err = decodeValue(d)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +120,70 @@ func decodeValue(d *jsontext.Decoder) (any, error) {
 		return nil, ambiguous("input: unexpected %v", tok.Kind())
 	}
 	return nil, ambiguous("input: unexpected %v", tok.Kind())
+}
+
+// decodeTop decodes the input object, reading the fields in floats as
+// float arrays.
+func decodeTop(d *jsontext.Decoder, floats map[string]bool) (map[string]any, error) {
+	if _, err := d.ReadToken(); err != nil {
+		return nil, ambiguous("input: %v", err)
+	}
+	obj := map[string]any{}
+	for d.PeekKind() != '}' {
+		k, err := d.ReadToken()
+		if err != nil {
+			return nil, ambiguous("input: %v", err)
+		}
+		name := k.String()
+		var v any
+		if floats[name] {
+			v, err = decodeFloatArray(d, name)
+		} else {
+			v, err = decodeValue(d)
+		}
+		if err != nil {
+			return nil, err
+		}
+		obj[name] = v
+	}
+	_, err := d.ReadToken()
+	return obj, wrap(err)
+}
+
+// decodeFloatArray reads a list of 1..MaxFloatItems JSON numbers, each
+// finite and within float32 range, as its canonical string. Anything else
+// at that field is ambiguous.
+func decodeFloatArray(d *jsontext.Decoder, name string) (string, error) {
+	tok, err := d.ReadToken()
+	if err != nil {
+		return "", ambiguous("input: %v", err)
+	}
+	if tok.Kind() != '[' {
+		return "", ambiguous("input %s must be a list of numbers", name)
+	}
+	var fs []float64
+	for d.PeekKind() != ']' {
+		tok, err := d.ReadToken()
+		if err != nil {
+			return "", ambiguous("input: %v", err)
+		}
+		if tok.Kind() != '0' || len(fs) == domain.MaxFloatItems {
+			return "", ambiguous("input %s must be a list of at most %d numbers", name, domain.MaxFloatItems)
+		}
+		f, err := strconv.ParseFloat(tok.String(), 64)
+		if err != nil {
+			return "", ambiguous("input %s: a number out of range", name)
+		}
+		fs = append(fs, f)
+	}
+	if _, err := d.ReadToken(); err != nil {
+		return "", ambiguous("input: %v", err)
+	}
+	s, err := domain.EncodeFloat32s(fs)
+	if err != nil {
+		return "", ambiguous("input %s: %v", name, err)
+	}
+	return s, nil
 }
 
 func wrap(err error) error {

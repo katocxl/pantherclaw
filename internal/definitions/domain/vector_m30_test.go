@@ -5,9 +5,11 @@ package domain_test
 
 import (
 	"encoding/json/jsontext"
+	"math"
 	"strings"
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
 )
@@ -21,7 +23,7 @@ func TestHR704_VectorParamsAndSchemasDecodeWithinBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	def, _ := pkg.Definition("vectorstore.records.upsert")
-	vals, err := def.DecodeParams(jsontext.Value(`{"id":"a","content":"c","embedding":[0.5,-1,2e-3],"metadata":{"source.kind":"wiki"}}`))
+	vals, err := def.DecodeParams(jsontext.Value(`{"id":"a","content":"c","embedding":` + canon(t, 0.5, -1, 2e-3) + `,"metadata":{"source.kind":"wiki"}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,11 +59,11 @@ func TestHR704_VectorParamsAndSchemasOutOfBoundsAreRefused(t *testing.T) {
 	}
 	def, _ := pkg.Definition("vectorstore.records.upsert")
 	for name, params := range map[string]string{
-		"empty embedding": `{"id":"a","content":"c","embedding":[]}`,
-		"string in list":  `{"id":"a","content":"c","embedding":["1"]}`,
-		"bad key":         `{"id":"a","content":"c","embedding":[1],"metadata":{"1x":"v"}}`,
-		"long value":      `{"id":"a","content":"c","embedding":[1],"metadata":{"k":"` + strings.Repeat("v", 1025) + `"}}`,
-		"over 8 KiB":      `{"id":"a","content":"c","embedding":[1],"metadata":{` + bigMap(9) + `}}`,
+		"empty embedding": `{"id":"a","content":"c","embedding":""}`,
+		"a number list":   `{"id":"a","content":"c","embedding":[1]}`,
+		"bad key":         `{"id":"a","content":"c","embedding":` + canon(t, 1) + `,"metadata":{"1x":"v"}}`,
+		"long value":      `{"id":"a","content":"c","embedding":` + canon(t, 1) + `,"metadata":{"k":"` + strings.Repeat("v", 1025) + `"}}`,
+		"over 8 KiB":      `{"id":"a","content":"c","embedding":` + canon(t, 1) + `,"metadata":{` + bigMap(9) + `}}`,
 	} {
 		if _, err := def.DecodeParams(jsontext.Value(params)); err == nil {
 			t.Errorf("%s: decoded", name)
@@ -76,4 +78,62 @@ func bigMap(n int) string {
 		m = append(m, `"k`+string(rune('a'+i))+`":"`+strings.Repeat("v", 1000)+`"`)
 	}
 	return strings.Join(m, ",")
+}
+
+// canon is the canonical ActionIR form of fs, quoted (G0 M30 D1211).
+func canon(t *testing.T, fs ...float64) string {
+	t.Helper()
+	return `"` + canonOf(t, fs) + `"`
+}
+
+func canonOf(t *testing.T, fs []float64) string {
+	t.Helper()
+	s, err := domain.EncodeFloat32s(fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// TestHR704_AFloatArrayIsOneCanonicalString (G0 M30 D1211): the canonical
+// form round-trips byte for byte; NaN, infinities, a float32 overflow, an
+// empty list and too many items have no form, and a string that is not
+// exactly the canonical form is refused.
+func TestHR704_AFloatArrayIsOneCanonicalString(t *testing.T) {
+	if got := canonOf(t, []float64{math.MaxFloat32}); got != "//9/fw==" {
+		t.Fatalf("MaxFloat32 is %q", got)
+	}
+	in := []float64{0.5, -1, 2e-3, 3.4e38, -1.5e-45}
+	s := canonOf(t, in)
+	back, err := domain.DecodeFloat32s(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again := canonOf(t, back); again != s || len(back) != len(in) || back[0] != 0.5 || back[1] != -1 {
+		t.Fatalf("round trip %q -> %v -> %q", s, back, again)
+	}
+	for name, fs := range map[string][]float64{
+		"NaN":         {math.NaN()},
+		"+Inf":        {math.Inf(1)},
+		"-Inf":        {math.Inf(-1)},
+		"overflow":    {3.5e38},
+		"empty":       {},
+		"16001 items": make([]float64, domain.MaxFloatItems+1),
+	} {
+		if _, err := domain.EncodeFloat32s(fs); err == nil {
+			t.Errorf("%s: encoded", name)
+		}
+	}
+	for name, bad := range map[string]string{
+		"no padding":        strings.TrimRight(canonOf(t, []float64{1}), "="),
+		"url alphabet":      "__9_fw==", // MaxFloat32 is "//9/fw=="
+		"ragged length":     "AAAAAAA=",
+		"NaN bits":          "AADAfw==",
+		"not base64":        "!!!!",
+		"non-zero pad bits": "AAAAAB==",
+	} {
+		if _, err := domain.DecodeFloat32s(bad); err == nil {
+			t.Errorf("%s: %q decoded", name, bad)
+		}
+	}
 }

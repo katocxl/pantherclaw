@@ -106,6 +106,23 @@ func TestHR707_PublicAndUnlistedSharesHold(t *testing.T) {
 	}
 }
 
+// TestHR707_AGitHubOrgMatchesWithoutCase (G0 M30 D1211): a share to "Acme"
+// is owned when "acme" is listed, as GitHub compares names; another org
+// still holds, and an AWS account still matches exactly.
+//
+// Covers: HR-707
+func TestHR707_AGitHubOrgMatchesWithoutCase(t *testing.T) {
+	r := ownedReader{owned: map[string][]string{actionir.ShareGitHubOrg: {"acme"}}}
+	for _, id := range []string{"Acme", "acme", "ACME"} {
+		if got := codes(runShares(r, nil, nil, actionir.Destination{Kind: actionir.ShareGitHubOrg, ID: id})); len(got) != 0 {
+			t.Errorf("%s: %+v", id, got)
+		}
+	}
+	if got := codes(runShares(r, nil, nil, actionir.Destination{Kind: actionir.ShareGitHubOrg, ID: "Acme-Evil"})); got[ReasonShareAccountNotOwned] != adomain.RequireApproval {
+		t.Errorf("another org: %+v", got)
+	}
+}
+
 // TestHR707_PinnedDefinitionSharesCountWithoutTheMapper: the Authority also
 // reads shares from the pinned definition's extractors, so an action that
 // left its shares out still holds; an unparseable bucket policy is public

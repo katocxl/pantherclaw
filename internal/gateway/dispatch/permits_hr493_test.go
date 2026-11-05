@@ -25,7 +25,7 @@ func TestHR493_PermitKeysRefetchAtMostOnceASecond(t *testing.T) {
 	pv.now = func() time.Time { return now }
 	want := newWant()
 	for range 3 {
-		if _, err := pv.verify(context.Background(), j.sign(t, keys.PurposePermits, permitType, validClaims(want)), want); err != nil {
+		if err := pv.verify(context.Background(), j.sign(t, keys.PurposePermits, permitType, validClaims(want)), want); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -35,10 +35,10 @@ func TestHR493_PermitKeysRefetchAtMostOnceASecond(t *testing.T) {
 	j.mu.Unlock()
 	tok := j.sign(t, keys.PurposePermits, permitType, validClaims(want))
 	for range 3 {
-		_, _ = pv.verify(context.Background(), tok, want)
+		_ = pv.verify(context.Background(), tok, want)
 	}
 	now = now.Add(jwksRefreshEvery)
-	if _, err := pv.verify(context.Background(), tok, want); err != nil {
+	if err := pv.verify(context.Background(), tok, want); err != nil {
 		t.Fatalf("an unknown key id a second after the fetch: %v", err)
 	}
 	j.mu.Lock()

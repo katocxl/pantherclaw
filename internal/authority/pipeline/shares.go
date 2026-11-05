@@ -63,6 +63,16 @@ func (s *state) actionShares() ([]actionir.Destination, error) {
 	return slices.Compact(out), nil
 }
 
+// ownedListed reports whether d is on the owned list: a GitHub organization
+// compared without case, as GitHub compares it (G0 M30 D1211), every other
+// kind exactly.
+func ownedListed(list []string, d actionir.Destination) bool {
+	if d.Kind == actionir.ShareGitHubOrg {
+		return slices.ContainsFunc(list, func(v string) bool { return strings.EqualFold(v, d.ID) })
+	}
+	return slices.Contains(list, d.ID)
+}
+
 // shares holds an action that shares to the public or to an account the org
 // does not own (D935).
 func (p *Pipeline) shares(ctx context.Context, s *state) {
@@ -91,7 +101,7 @@ func (p *Pipeline) shares(ctx context.Context, s *state) {
 			}
 			owned[d.Kind] = list
 		}
-		if !slices.Contains(list, d.ID) {
+		if !ownedListed(list, d) {
 			notOwned = append(notOwned, d.Kind+" "+d.ID)
 		}
 	}

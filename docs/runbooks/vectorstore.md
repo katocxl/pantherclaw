@@ -44,9 +44,7 @@ pclaw connection create kb --kind vectorstore --gateway <gw> --package pc.vector
 | `filter` | a flat string map, at most 16 keys |
 | `metadata` | a flat string map, at most 32 keys |
 
-Map keys match `^[A-Za-z_][A-Za-z0-9_.-]{0,63}$`, values are at most 1 KiB, and a map is at most 8 KiB in all. Embeddings and maps are bound by the gateway and hidden from policy. Content signals scan `content`, map values and query results in the organization's mode.
-
-**Known limit (open in the testing phase).** A tool call's embedding is a JSON number array, and the action format refuses JSON numbers in params (HR-101). Until that is settled, `vector_query` and `vector_upsert` from an MCP or HTTP tool call are refused before a decision.
+A tool call sends `embedding` as a JSON number array; numbers are taken there and nowhere else, and the gateway turns the array into one canonical string (base64 of little-endian float32) before the decision, so a value outside float32 range is refused. Map keys match `^[A-Za-z_][A-Za-z0-9_.-]{0,63}$`, values are at most 1 KiB, and a map is at most 8 KiB in all. Embeddings and maps are bound by the gateway and hidden from policy. Content signals scan `content`, map values and query results in the organization's mode.
 
 ## 5. When something goes wrong
 

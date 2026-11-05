@@ -4,6 +4,7 @@
 package mcpauth_test
 
 import (
+	"encoding/base64"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -113,4 +114,37 @@ func (f *nonceFace) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(dispatch.HeaderNonce, f.nonce)
 	}
 	w.WriteHeader(http.StatusUnauthorized)
+}
+
+// boundToken is an MCP access token that names a DPoP key (cnf.jkt and
+// pap.proof dpop), unsigned: the relay only peeks at it.
+func boundToken(run string) string {
+	p, _ := json.Marshal(map[string]any{"sub": "x", "cnf": map[string]any{"jkt": "jkt-0"}, "pap": map[string]any{"run": run, "env": "e", "proof": "dpop"}})
+	return "eyJ0eXAiOiJwYXAtbWNwK2p3dCJ9." + base64.RawURLEncoding.EncodeToString(p) + ".sig"
+}
+
+// TestHR700_ABoundTokenIsInvalidTokenAsBearerAndInvalidDPoPProofWithoutAProof
+// (G0 M30 D911, D913, D1211): a bound token sent under the Bearer scheme
+// reaches the Authority with no proof, which refuses it, and the client
+// gets invalid_token under the DPoP challenge; the same token sent under
+// the DPoP scheme without a proof never reaches the Authority and gets
+// invalid_dpop_proof.
+func TestHR700_ABoundTokenIsInvalidTokenAsBearerAndInvalidDPoPProofWithoutAProof(t *testing.T) {
+	f := &nonceFace{code: string(pap.CodeInvalidToken)}
+	h := mcpauth.New(f, cfg(true), gw)
+	tok := boundToken(ids.NewV7().String())
+
+	w := serve(h, http.MethodPost, "/mcp-oauth/github", map[string]string{"Authorization": "Bearer " + tok})
+	if www := w.Header().Get("WWW-Authenticate"); w.Code != http.StatusUnauthorized ||
+		!strings.HasPrefix(www, "DPoP ") || !strings.HasSuffix(www, `error="invalid_token"`) {
+		t.Fatalf("bearer: %d %q", w.Code, www)
+	}
+
+	nobody := &face{status: http.StatusOK}
+	h = mcpauth.New(nobody, cfg(true), gw)
+	w = serve(h, http.MethodPost, "/mcp-oauth/github", map[string]string{"Authorization": "DPoP " + tok})
+	if www := w.Header().Get("WWW-Authenticate"); w.Code != http.StatusUnauthorized || nobody.got != nil ||
+		!strings.HasPrefix(www, "DPoP ") || !strings.HasSuffix(www, `error="invalid_dpop_proof"`) {
+		t.Fatalf("DPoP without a proof: %d %q forwarded=%v", w.Code, www, nobody.got != nil)
+	}
 }

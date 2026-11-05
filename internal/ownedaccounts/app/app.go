@@ -96,6 +96,7 @@ func (s *Service) Add(ctx context.Context, kind domain.Kind, value, reason strin
 	if !domain.ValidValue(kind, value) {
 		return nil, ErrValue
 	}
+	value = domain.Normalize(kind, value)
 	if err := validReason(reason); err != nil {
 		return nil, err
 	}
@@ -146,6 +147,7 @@ func (s *Service) ApplyAdd(ctx context.Context, tx db.TenantTx, author tenancy.C
 	if err := json.Unmarshal(payload, &p); err != nil || !p.Kind.Valid() || !domain.ValidValue(p.Kind, p.Value) {
 		return protect.ErrInvalid
 	}
+	p.Value = domain.Normalize(p.Kind, p.Value)
 	if err := author.Require(td.PermOwnedAccountsManage, td.OrgPath(author.Org)); err != nil {
 		return err
 	}
