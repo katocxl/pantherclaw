@@ -1,0 +1,203 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// OTLPDestinationService manages an org's own OpenTelemetry collectors (G0
+// M36 D1061, D1062; FQ36-1, FQ36-2; HR-786..788; every edition). A
+// destination is an OTLP/HTTP traces endpoint that receives the spans of
+// the org's agents' decisions, tool calls and model calls, in the agent's
+// own trace when the agent sent a traceparent. Spans carry metadata only:
+// operation, decision, timings, model, token counts, ids and links, never
+// prompts, arguments or answers. A destination is created PENDING and sends
+// nothing until a person activates it on its page (confirm_url) with a
+// security key; its URL and headers never change. The operator's own
+// telemetry is separate and unchanged.
+service OTLPDestinationService {
+  // CreateOTLPDestination adds a PENDING destination (a person only). Its
+  // headers are sealed and never shown again.
+  // permission: otlp.manage
+  rpc CreateOTLPDestination(CreateOTLPDestinationRequest) returns (CreateOTLPDestinationResponse);
+  // ActivateOTLPDestination is refused over the API (STEP_UP_REQUIRED): a
+  // person activates a destination on its page with a security key.
+  // permission: otlp.manage
+  rpc ActivateOTLPDestination(ActivateOTLPDestinationRequest) returns (ActivateOTLPDestinationResponse);
+  // DisableOTLPDestination stops a destination for good (a person only).
+  // permission: otlp.manage
+  rpc DisableOTLPDestination(DisableOTLPDestinationRequest) returns (DisableOTLPDestinationResponse);
+  // ListOTLPDestinations lists destinations that are not disabled.
+  // permission: otlp.read
+  rpc ListOTLPDestinations(ListOTLPDestinationsRequest) returns (ListOTLPDestinationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetOTLPDestination returns one destination and its export health.
+  // permission: otlp.read
+  rpc GetOTLPDestination(GetOTLPDestinationRequest) returns (GetOTLPDestinationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // TestOTLPDestination sends one test span, which carries no agent data,
+  // to an ACTIVE destination and says how the collector answered (a person
+  // only).
+  // permission: otlp.manage
+  rpc TestOTLPDestination(TestOTLPDestinationRequest) returns (TestOTLPDestinationResponse);
+}
+
+// OTLPDestination is one destination.
+message OTLPDestination {
+  // Destination id.
+  string id = 1;
+  // Name.
+  string name = 2;
+  // The OTLP/HTTP traces endpoint spans are posted to.
+  string url = 3;
+  // The names of the sealed headers sent with each export; never values.
+  repeated string header_names = 4;
+  // "PENDING", "ACTIVE" or "DISABLED".
+  string state = 5;
+  // Who created it.
+  string created_by = 6;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 7;
+  // Who activated it with a security key; empty while PENDING.
+  string activated_by = 8;
+  // When it was activated.
+  google.protobuf.Timestamp activate_time = 9;
+  // When it was disabled.
+  google.protobuf.Timestamp disable_time = 10;
+  // The page where a person activates it.
+  string confirm_url = 11;
+  // The evidence feed sequence export has reached.
+  int64 cursor_seq = 12;
+  // When an export last got a 2xx.
+  google.protobuf.Timestamp last_success_time = 13;
+  // Failed attempts in a row.
+  int32 failure_count = 14;
+  // Since when attempts fail; unset when healthy. After 24 hours of
+  // failures the destination is disabled.
+  google.protobuf.Timestamp failing_since = 15;
+  // The last failure's code ("http_503", "timeout", "destination_denied").
+  string last_failure_code = 16;
+}
+
+// OTLPHeader is one request header the collector needs, such as
+// DD-API-KEY or Authorization.
+message OTLPHeader {
+  // The header name.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,63}$"
+  }];
+  // The header value; sealed and never shown again.
+  string value = 2 [
+    debug_redact = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 4096
+    }
+  ];
+}
+
+// CreateOTLPDestinationRequest describes a destination.
+message CreateOTLPDestinationRequest {
+  // Lowercase letters, digits and dashes.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // The https OTLP/HTTP traces endpoint, such as
+  // https://collector.example.com/v1/traces.
+  string url = 2 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    prefix: "https://"
+  }];
+  // The headers sent with each export, at most 8.
+  repeated OTLPHeader headers = 3 [(buf.validate.field).repeated.max_items = 8];
+}
+
+// CreateOTLPDestinationResponse returns the new destination.
+message CreateOTLPDestinationResponse {
+  // The destination, PENDING.
+  OTLPDestination destination = 1;
+}
+
+// ActivateOTLPDestinationRequest names a destination.
+message ActivateOTLPDestinationRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ActivateOTLPDestinationResponse returns it.
+message ActivateOTLPDestinationResponse {
+  // The destination.
+  OTLPDestination destination = 1;
+}
+
+// DisableOTLPDestinationRequest names a destination.
+message DisableOTLPDestinationRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DisableOTLPDestinationResponse returns it.
+message DisableOTLPDestinationResponse {
+  // The destination, DISABLED.
+  OTLPDestination destination = 1;
+}
+
+// ListOTLPDestinationsRequest pages destinations.
+message ListOTLPDestinationsRequest {
+  // Maximum results (default and at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListOTLPDestinationsResponse is one page.
+message ListOTLPDestinationsResponse {
+  // Destinations, by id.
+  repeated OTLPDestination destinations = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// GetOTLPDestinationRequest names a destination.
+message GetOTLPDestinationRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetOTLPDestinationResponse returns it.
+message GetOTLPDestinationResponse {
+  // The destination.
+  OTLPDestination destination = 1;
+}
+
+// TestOTLPDestinationRequest names a destination.
+message TestOTLPDestinationRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// TestOTLPDestinationResponse says how the collector answered.
+message TestOTLPDestinationResponse {
+  // True when the collector answered 2xx.
+  bool delivered = 1;
+  // The HTTP status; 0 when there was no answer.
+  int32 status = 2;
+  // The failure code when not delivered ("http_401", "timeout").
+  string code = 3;
+}

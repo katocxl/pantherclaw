@@ -3377,6 +3377,29 @@ type PcOrgTermsAcceptance struct {
 	AcceptedAt   time.Time
 }
 
+type PcOtlpDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Url                 string
+	HeaderSecretRef     []byte
+	HeaderNames         []string
+	State               string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	DisabledAt          *time.Time
+	UpdatedAt           time.Time
+	CursorSeq           int64
+	LastSuccessAt       *time.Time
+	FailureCount        int32
+	FailingSince        *time.Time
+	LastFailureCode     *string
+	NextAttemptAt       time.Time
+}
+
 type PcOutcomeCollection struct {
 	OrgID     ids.OrgID
 	StartedAt time.Time
@@ -4796,6 +4819,9 @@ type PcTransaction struct {
 	DownstreamNotVerifiable bool
 	ConsequenceRoot         *ids.UUID
 	ConsequencePosition     *int32
+	TraceID                 []byte
+	ParentSpanID            []byte
+	TraceFlags              pgtype.Int2
 }
 
 type PcTransactionLink struct {

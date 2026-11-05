@@ -186,7 +186,7 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, cfg *control.Con
 	st := &answerState{}
 	res := h.engine.DispatchModel(ctx, dispatch.ModelCall{
 		Connection: conn, Action: action, Workload: in.Creds, Request: req, Method: method, URL: target,
-		Header: requestHeaders(rt.api, r.Header, req != nil), Answer: h.answer(w, rt.api, st),
+		Header: requestHeaders(rt.api, r.Header, req != nil), Answer: h.answer(w, rt.api, st), Trace: in.Trace,
 	})
 	if st.started {
 		if st.abort {

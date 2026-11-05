@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 
 	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
@@ -445,12 +447,18 @@ func (s *Store) idempotency(ctx context.Context, q *dbq.Queries, org ids.OrgID, 
 			dedupe = &k
 		}
 		channel, ttype, tid := ev.Channel, ev.Target.Type, ev.Target.ID
-		return q.InsertDecision(ctx, dbq.InsertDecisionParams{
+		p := dbq.InsertDecisionParams{
 			OrgID: org, ID: w.TransactionID, RunID: ev.RunID, ActionID: ev.ActionID, ActionHash: act, Operation: ev.Operation,
 			Decision: string(ev.Decision), ReasonCode: w.Reason, GatewayID: w.GatewayID, State: state,
 			GrantID: grantID, GrantRevision: grantRev, BasisDigest: &basis, EffectiveHash: effective, DedupeKey: dedupe,
 			Mode: ev.Mode, ConnectionID: connectionOf(ev), Channel: &channel, TargetType: &ttype, TargetID: &tid, ReadClass: readClass,
-		})
+		}
+		if t := w.Trace; t != nil {
+			// The agent's trace context: correlation only (G0 M36 D1060, HR-785).
+			p.TraceID, p.ParentSpanID = t.TraceID[:], t.ParentSpanID[:]
+			p.TraceFlags = pgtype.Int2{Int16: int16(t.Flags), Valid: true}
+		}
+		return q.InsertDecision(ctx, p)
 	}
 	return expect(q.UpdateDecision(ctx, dbq.UpdateDecisionParams{
 		Decision: string(ev.Decision), ReasonCode: w.Reason, State: state, Evaluations: int32(w.Evaluation), //nolint:gosec // ≤ 33

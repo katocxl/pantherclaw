@@ -112,6 +112,10 @@ type ModelCall struct {
 	// says how it ended. The engine calls it at most once, after the
 	// request is sent, and records the outcome after it returns.
 	Answer func(ModelStart) ModelAnswer
+	// Trace is the agent's W3C trace context, read before the headers were
+	// narrowed for the provider (G0 M36 D1060); it is sent to the Authority
+	// only and never forwarded upstream. Nil when the request had none.
+	Trace *pb.TraceContext
 }
 
 // ModelStart is what Answer gets: the provider's response, whose body it
@@ -184,7 +188,7 @@ func (e *Engine) dispatchModel(ctx context.Context, c ModelCall, t *timer) Resul
 	if code != "" {
 		return cannot(code)
 	}
-	call := Call{Connection: conn, Action: c.Action, Workload: c.Workload}
+	call := Call{Connection: conn, Action: c.Action, Workload: c.Workload, Trace: c.Trace}
 	ctx, content, scan := e.outboundContent(ctx, call)
 	ctx, d, r, ok := e.decide(ctx, call, findings, content, scan, t)
 	if !ok {
