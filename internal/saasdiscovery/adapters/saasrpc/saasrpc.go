@@ -183,3 +183,23 @@ func (h *Handler) SetSaasAgentOwner(ctx context.Context, req *pantherclawv1.SetS
 	}
 	return &pantherclawv1.SetSaasAgentOwnerResponse{Agent: agentProto(a)}, nil
 }
+
+// SetSaaSScanSchedule implements SaasDiscoveryServiceHandler (G0 M34 D997).
+func (h *Handler) SetSaaSScanSchedule(ctx context.Context, req *pantherclawv1.SetSaaSScanScheduleRequest) (*pantherclawv1.SetSaaSScanScheduleResponse, error) {
+	connection, err := idOf(req.GetConnectionId())
+	if err != nil {
+		return nil, err
+	}
+	sch, err := h.s.SetSchedule(ctx, req.GetSource(), connection, req.GetDaily())
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.SetSaaSScanScheduleResponse{}
+	if sch != nil {
+		out.Schedule = &pantherclawv1.SaaSScanSchedule{
+			Source: sch.Source, ConnectionId: sch.ConnectionID.String(), CreatedBy: sch.CreatedBy,
+			CreateTime: timestamppb.New(sch.CreatedAt), LastStartTime: tsp(sch.LastStartedAt),
+		}
+	}
+	return out, nil
+}

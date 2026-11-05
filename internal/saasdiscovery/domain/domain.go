@@ -22,15 +22,29 @@ import (
 const (
 	SourceCopilotStudio     = "copilot_studio"
 	SourceChatGPTEnterprise = "chatgpt_enterprise"
+	// The cloud agent runtimes (G0 M34 D997): agents deployed in Amazon
+	// Bedrock AgentCore, Vertex AI Agent Engine and Azure AI Foundry.
+	SourceAWSAgentCore      = "aws_agentcore"
+	SourceVertexAgentEngine = "vertex_agent_engine"
+	SourceAzureFoundry      = "azure_foundry"
 )
 
 // Sources lists them.
-var Sources = []string{SourceChatGPTEnterprise, SourceCopilotStudio}
+var Sources = []string{
+	SourceAWSAgentCore, SourceAzureFoundry, SourceChatGPTEnterprise, SourceCopilotStudio, SourceVertexAgentEngine,
+}
+
+// RuntimeSources are the cloud agent runtimes, scanned daily by default
+// (FQ34-3).
+var RuntimeSources = []string{SourceAWSAgentCore, SourceAzureFoundry, SourceVertexAgentEngine}
 
 // Kinds of finding, one to a source.
 const (
-	KindCopilotAgent = "copilot_studio_agent"
-	KindCustomGPT    = "chatgpt_gpt"
+	KindCopilotAgent          = "copilot_studio_agent"
+	KindCustomGPT             = "chatgpt_gpt"
+	KindAgentCoreRuntime      = "agentcore_runtime"
+	KindVertexReasoningEngine = "vertex_reasoning_engine"
+	KindFoundryAgent          = "foundry_agent"
 )
 
 // KindOf is the kind a source's findings are, "" for no source.
@@ -40,6 +54,12 @@ func KindOf(source string) string {
 		return KindCopilotAgent
 	case SourceChatGPTEnterprise:
 		return KindCustomGPT
+	case SourceAWSAgentCore:
+		return KindAgentCoreRuntime
+	case SourceVertexAgentEngine:
+		return KindVertexReasoningEngine
+	case SourceAzureFoundry:
+		return KindFoundryAgent
 	}
 	return ""
 }
@@ -61,6 +81,13 @@ func CollectorOf(source string) (Collector, bool) {
 		return Collector{Package: "pc.copilot-studio", CredentialKind: "oauth_client"}, true //nolint:gosec // G101: a credential kind's name, not a credential
 	case SourceChatGPTEnterprise:
 		return Collector{Package: "pc.chatgpt-enterprise", CredentialKind: "static"}, true
+	// The runtimes' read-only collectors are the D993 packages (G0 M34 D997).
+	case SourceAWSAgentCore:
+		return Collector{Package: "pc.aws-agentcore", CredentialKind: "aws_sigv4"}, true
+	case SourceVertexAgentEngine:
+		return Collector{Package: "pc.vertex-agent-engine", CredentialKind: "google_service_account"}, true //nolint:gosec // G101: a credential kind's name, not a credential
+	case SourceAzureFoundry:
+		return Collector{Package: "pc.azure-foundry", CredentialKind: "oauth_client"}, true //nolint:gosec // G101: a credential kind's name, not a credential
 	}
 	return Collector{}, false
 }
@@ -129,6 +156,11 @@ var attributes = map[string][]string{
 		"tenant", "agent_id", "name", "visibility", "created_at", "owner_ref", "tool_kinds", "action_domains",
 		"tools_incomplete",
 	},
+	// The runtimes keep metadata only: never an agent's code, container,
+	// instructions, environment or role (G0 M34 D997).
+	KindAgentCoreRuntime:      {"tenant", "agent_id", "name", "region", "created_at", "updated_at", "status", "gateway_count", "target_names"},
+	KindVertexReasoningEngine: {"tenant", "agent_id", "name", "location", "created_at", "updated_at", "status"},
+	KindFoundryAgent:          {"tenant", "agent_id", "name", "location", "created_at", "updated_at", "status"},
 }
 
 // AttrUnread is how a gateway's finding, which reaches the server ahead of
