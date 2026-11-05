@@ -56,6 +56,10 @@ const (
 	// PurposeDevHub is the development Hub key. It is not a root: only a
 	// server or a source on loopback trusts it (D101).
 	PurposeDevHub Purpose = "hub-dev"
+	// PurposePublisher is a bundle publisher's signing key (G0 M37 D1084a),
+	// created by pclaw on the publisher's machine. It is not a PantherClaw
+	// root: the key id a bundle names is format.KID(publisher, key).
+	PurposePublisher Purpose = "publisher"
 	// PurposeIntel is the offline root that signs the shared threat-intel
 	// feed (G0 M38 D1103, HR-817). It is separate from the package and Hub
 	// roots: a feed never verifies as another document, or the reverse.
@@ -69,7 +73,7 @@ const (
 func (p Purpose) Valid() bool {
 	return slices.Contains([]Purpose{
 		PurposeLicence, PurposePackages, PurposeOrgPackages, PurposeDevPackages, PurposeHub, PurposeDevHub,
-		PurposeIntel, PurposeDevIntel,
+		PurposePublisher, PurposeIntel, PurposeDevIntel,
 	}, p)
 }
 
@@ -95,7 +99,7 @@ var ErrKeyFile = errors.New("rootkey: invalid key file")
 // key (equal to trust.DevKID), "hub-dev-<thumbprint>" for the development
 // Hub key and "intel-dev-<thumbprint>" for the development intel key.
 func KID(p Purpose, pub ed25519.PublicKey) string {
-	if p == PurposeOrgPackages || p == PurposeDevPackages || p == PurposeDevHub || p == PurposeDevIntel {
+	if p == PurposeOrgPackages || p == PurposeDevPackages || p == PurposeDevHub || p == PurposePublisher || p == PurposeDevIntel {
 		return string(p) + "-" + jws.Thumbprint(pub)[:22]
 	}
 	return string(p) + "-root-" + jws.Thumbprint(pub)[:22]

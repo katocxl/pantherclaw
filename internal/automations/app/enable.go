@@ -183,6 +183,11 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 	if err != nil {
 		return err
 	}
+	if revoked, err := bundleRevoked(ctx, q, r.Org, v.AutomationID); err != nil {
+		return err
+	} else if revoked {
+		return &changes.VoidError{Reason: VoidBundleRevoked}
+	}
 	// Serialize with the kill switch (D91 K5): an enabling applied while
 	// it is engaged leaves the automation PAUSED (KILL_SWITCH). The
 	// containment row is locked before the automation, the order Engage
@@ -407,6 +412,11 @@ func (s *Service) RequestEnable(ctx context.Context, version ids.UUID, rollout a
 		v, err := loadVersion(ctx, q, c.Org, version, false)
 		if err != nil {
 			return err
+		}
+		if revoked, err := bundleRevoked(ctx, q, c.Org, v.AutomationID); err != nil {
+			return err
+		} else if revoked {
+			return ErrBundleRevoked
 		}
 		a, err := loadAutomation(ctx, q, c.Org, v.AutomationID, true)
 		if err != nil {

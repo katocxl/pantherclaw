@@ -1,0 +1,31 @@
+apiVersion: automations.pantherclaw.dev/v1
+kind: Automation
+purpose: "Open a case when an agent's ticket comments are refused in a burst, so a person reviews the run."
+work_kind: SECURITY_WORK
+when:
+  event:
+    on: alert.raised
+    where: event.attrs["rule"] == "ext.example.comment_refusals"
+    params:
+      signal: {from: attrs.id, type: uuid}
+  dedupe:
+    key: "{{params.signal}}"
+    window: 1d
+authority:
+  principal: self
+  platform:
+    - step: open_case
+      scopes: [TRIGGER_SUBJECTS]
+do:
+  - id: case
+    step: open_case
+    with:
+      title: "Review the refused ticket comments behind signal {{params.signal}}"
+      questions:
+        - Which comments did the agent try to post, and why were they refused?
+        - Does the agent's grant for the Example Tickets API still fit its task?
+finish_when:
+  - step: case
+    condition: CASE_OPENED
+limits:
+  deadline: 1h

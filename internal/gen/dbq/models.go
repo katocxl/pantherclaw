@@ -989,6 +989,56 @@ type PcBudgetLedger struct {
 	CreatedAt     time.Time
 }
 
+type PcBundleInstall struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Publisher    string
+	Name         string
+	Version      string
+	BundleSha256 string
+	PinID        *ids.UUID
+	State        string
+	InstalledBy  ids.UUID
+	CreatedAt    time.Time
+	FinishedAt   *time.Time
+	FailureCode  *string
+}
+
+type PcBundleItem struct {
+	OrgID      ids.OrgID
+	InstallID  ids.UUID
+	Kind       string
+	Name       string
+	Sha256     string
+	TargetType string
+	TargetID   string
+	State      string
+}
+
+type PcBundleRevocation struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Publisher       string
+	StatementSha256 *string
+	Scope           string
+	Kid             *string
+	Name            *string
+	MaxVersion      *string
+	SignedAt        *time.Time
+	ReceivedAt      time.Time
+	AppliedAt       time.Time
+	Source          string
+}
+
+type PcBundleState struct {
+	OrgID      ids.OrgID
+	Publisher  string
+	Name       string
+	MaxVersion string
+	MaxSha256  string
+	UpdatedAt  time.Time
+}
+
 type PcBusinessUnit struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -4078,6 +4128,25 @@ type PcProtectedChangeSetting struct {
 	Mode      string
 	UpdatedBy ids.UUID
 	UpdatedAt time.Time
+}
+
+type PcPublisherPin struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Publisher           string
+	Kid                 string
+	PublicKey           []byte
+	Fingerprint         string
+	AllowedKinds        []string
+	RevocationsUrl      *string
+	State               string
+	RevokeReason        *string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	RevokedAt           *time.Time
 }
 
 type PcPushSubscription struct {

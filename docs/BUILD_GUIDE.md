@@ -889,12 +889,21 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Threat map:** no change (T1621 is outside PantherClaw; the pinned ATLAS catalogue has no approval-fatigue technique).
 - Migrations `00400`–`00405`.
 
+### M37 — Ecosystem: publishers, bundles, marketplace
+**HR:** HR-795..803 · **F:** F1070–F1079 · **ADR:** 0064 · **G0:** [g0/M37.md](g0/M37.md).
+- **Code first**, like M30–M36: two streams on pushed branches, assembled on `code/m37` from `code/m36`; tests come in the testing phase.
+- **Publishers and bundles** (FQ37-1, FQ37-2; Community, each item kind keeps its edition): `ext.<publisher>.…` namespaces, signed data-only `.pcbundle` files, publisher key pins confirmed with a security key, installs that create drafts and templates only, refuse rollback and equivocation and fit one 960 KiB upload; runbook [bundles.md](runbooks/bundles.md).
+- **Revocation** (FQ37-3): by an admin or a publisher-signed statement, stopping use at once in one transaction with the alert-only `pc.bundles.revoked` detection.
+- **SDK and marketplace:** `pclaw publisher` and `pclaw bundle`, the [publisher guide](extensions/publishing.md) and the example bundle `ext.example.starter`; a static, listing-only marketplace (`task marketplace:build`); hosting is a Phase C founder step.
+- **Threat map:** `pc.bundles.revoked` adds a mapping to AML.T0010 and T1195.002; both techniques were already mapped.
+- Migrations `00410`–`00412`.
+
 ### M38 — Partners and shared indicators
 **HR:** HR-810..822 · **F:** F1080–F1089 · **ADR:** 0065 · **G0:** [g0/M38.md](g0/M38.md).
-- **Code first**, like M30–M36: two streams on pushed branches, assembled on `code/m38` from `code/m36`; tests come in the testing phase.
+- **Code first**, like M30–M37: two streams on pushed branches, assembled on `code/m38` from `code/m36` and then stacked on `code/m37`; tests come in the testing phase.
 - **MSSP partners** (FQ38-1, Enterprise on the partner org): partner links each customer approves with a security key for at most 90 days and revokes at any time, read-only partner sessions re-checked and audited on every call, a counts-only cross-customer summary, and rollout proposals that only draft, with two customer people for partner-origin changes; runbook [partners.md](runbooks/partners.md).
 - **Shared indicators** (FQ38-2): a signed, hash-only feed of MCP server, tool description and injection text indicators, matched with HOLD or ALERT_ONLY and never a refusal (Business), local contributions and a STIX 2.1 export; runbook [intel.md](runbooks/intel.md).
-- **Threat map:** run `task docs:mitre` at assembly; a technique leaves the gap list only if the merged code maps it.
+- **Threat map:** the content signal kind `content.intel_injection_text` adds a mapping to AML.T0051.001 and T1698.
 - Migrations `00420`–`00425`.
 
 ---
