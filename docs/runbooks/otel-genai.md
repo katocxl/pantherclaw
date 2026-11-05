@@ -21,7 +21,7 @@ Without a `traceparent`, PantherClaw uses one trace per run (SHA-256 of the run 
 A destination is an OTLP/HTTP traces endpoint (for example `https://otel.example.com/v1/traces`) with optional headers such as an API key. Use `OTLPDestinationService` (permission `otlp.manage`):
 
 1. **Create** it with a name, the URL and its headers. The headers are sealed and never shown again. It starts PENDING and exports nothing.
-2. **Activate** it with your security key (a fresh WebAuthn step-up, as for SIEM destinations).
+2. **Activate** it in the browser at `<server URL>/integrations/otlp-destinations/<id>/confirm`, which shows the URL and the header names and asks for your security key (a fresh WebAuthn step-up, as for SIEM destinations). `ActivateOTLPDestination` over the API always answers `STEP_UP_REQUIRED`.
 3. **Test** it: one test request through the egress client, which reports the collector's answer.
 
 The URL must pass the same checks as SIEM destinations: https, a public host, no redirects (HR-786).
@@ -36,7 +36,7 @@ Every 30 seconds each ACTIVE destination receives the new finalized records from
 | `execute_tool <operation>` | Tool dispatch, for its dispatch time | `gen_ai.operation.name=execute_tool`, `gen_ai.tool.name`, `pantherclaw.outcome`; on MCP also `mcp.method.name=tools/call` |
 | `chat <model>` | A model call | `gen_ai.operation.name=chat`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens` |
 
-Effects are `pantherclaw.effect` span events with their state. Target ids that could be personal data are never sent, only the operation and the target type.
+Effects are `pantherclaw.effect` span events with their state. Every span and event of a simulated transaction also carries `pantherclaw.simulated`. Target ids that could be personal data are never sent, only the operation and the target type.
 
 Span ids are derived from the transaction id and the span kind, so a re-export sends the same spans and the collector can deduplicate them (HR-788).
 

@@ -884,7 +884,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 **HR:** HR-785..794 · **F:** F1060–F1069 · **ADR:** 0063 · **G0:** [g0/M36.md](g0/M36.md).
 - **Code first**, like M30–M35: three streams on pushed branches, assembled on `code/m36` from `code/m35`; tests come in the testing phase.
 - **Telemetry** (FQ36-1, FQ36-2): W3C trace context read on every face and stored on transactions, OTLP destinations per org activated with a security key (Business, like SIEM export), metadata-only GenAI spans exported every 30 seconds; operator telemetry unchanged; runbook [otel-genai.md](runbooks/otel-genai.md).
-- **Approvals reach** (FQ36-3; Team): fatigue metrics, flags and last-in-line routing, deputies that route only when eligible, digests, quiet hours and preferences, read-only approval groups and Web Push with link-only payloads; no new path approves anything; runbook [approvals.md](runbooks/approvals.md).
+- **Approvals reach** (FQ36-3): fatigue metrics, flags and last-in-line routing (Team), deputies that route only when eligible, digests, quiet hours and preferences, read-only approval groups and Web Push with link-only payloads (Team); no new path approves anything; runbook [approvals.md](runbooks/approvals.md).
 - **Editor** (FQ36-4): a read-only VS Code extension through `pclaw editor status` and `open`; Marketplace publishing is a founder step.
 - **Threat map:** no change (T1621 is outside PantherClaw; the pinned ATLAS catalogue has no approval-fatigue technique).
 - Migrations `00400`–`00405`.

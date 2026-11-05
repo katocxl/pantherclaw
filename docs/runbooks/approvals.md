@@ -12,15 +12,15 @@ G0 M36; [ADR-0063](../adr/0063-telemetry-and-approval-reach.md); HR-789..794. No
 
 Every 15 minutes PantherClaw flags a decider when, in the last hour, they approved 30 or more requests, or their median time to approve was under 5 seconds over at least 10 approvals, or, in the last 24 hours, they approved every request over at least 50. The flag clears after 4 hours. It is audited as `approval.fatigue_flagged`, and the built-in detection `pc.approvals.fatigue` raises a MEDIUM alert (alert only).
 
-With the org setting `fatigue_routing: route` (the default), a flagged decider is routed and notified last: other eligible deciders first, the flagged person only at the final escalation step. Set it to `off` to keep routing unchanged. A flag never changes who is eligible (HR-791).
+With the org's fatigue routing set to ROUTE (the default), a flagged decider is routed and notified last: other eligible deciders first, the flagged person only at the final escalation step, or at an earlier step when every decider there is flagged, so no step goes untold. `ApprovalService.SetApprovalFatigueRouting` (permission `waitlist.manage`, audited) sets it to OFF to keep routing unchanged. A flag never changes who is eligible (HR-791).
 
-### Deputies (Team)
+### Deputies
 
 A person going away names a deputy with `SetApprovalDeputy`: a start and an end at most 30 days later. Windows of the same person cannot overlap. The deputy must be an ACTIVE member with `approval.respond` and not the person. People with `waitlist.manage` can set a deputy for someone else. `CancelApprovalDeputy` ends it; `ListApprovalDeputies` lists them. Both are audited (`approval.deputy_set`, `approval.deputy_cancelled`).
 
 During the window, a request routed to the person is also routed to the deputy, but only when the deputy is already eligible for that request. Otherwise the deputy is skipped and `approval.deputy_not_eligible` is audited. A deputy never becomes eligible because of the window (founder decision FQ36-3; HR-790).
 
-### Preferences, digests and quiet hours (Team)
+### Preferences, digests and quiet hours
 
 Each person sets their own preferences with `NotificationService.SetMyNotificationPreferences`:
 
@@ -43,7 +43,7 @@ A person can receive approval notices on a browser or phone:
 
 A push carries only a title ("Approval waiting" or "N approvals waiting") and the approval page link, encrypted to the subscription (HR-793). The push service still sees when a notice is sent (R-90). The installable console app comes in M40.
 
-The VAPID key (key purpose `web_push`) is one per deployment. Operators set the contact (`mailto:` or a URL) sent in the VAPID token in the server configuration.
+The VAPID key (key purpose `web_push`) is one per deployment. Operators set the contact sent in the VAPID token (`mailto:` or a URL) as `notifications.web_push_subject` in the server configuration; without it the server's public URL is sent.
 
 ### The VS Code extension
 
