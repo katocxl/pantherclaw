@@ -226,7 +226,7 @@ func (d *Definition) validateMapping(i int) error {
 			}
 		}
 		if m.InputSchema != nil {
-			if err := validateSchema(at+".input_schema", m.InputSchema); err != nil {
+			if err := validateSchema(at+".input_schema", m.InputSchema, d.schemaForms(at+".input_schema", m)); err != nil {
 				return err
 			}
 		}

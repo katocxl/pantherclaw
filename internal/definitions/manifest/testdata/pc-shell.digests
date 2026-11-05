@@ -1,1 +1,2 @@
 shell.command.run sha256:06a11be18a2ce1d2edc3a63eb45dec008f0ef4d0158890a255f1b4f047961327
+agent_config.write sha256:adeea44f2bfdf825b3df24ea76a1a544873ccd4d0c6c89c6909ccfc66192ecaa
