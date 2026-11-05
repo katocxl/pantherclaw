@@ -502,10 +502,14 @@ func (x *SetIntelSettingsRequest) GetShare() bool {
 	return false
 }
 
-// SetIntelSettingsResponse holds the new settings.
+// SetIntelSettingsResponse holds the settings as they now stand. A
+// loosening of the consume mode (HOLD to ALERT_ONLY, or either to OFF) is
+// filed for a second person (D1104a): change names it and settings keep
+// the old mode until it is confirmed. A tightening applies at once.
 type SetIntelSettingsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Settings      *IntelSettings         `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	Change        *ProtectedChangeFiled  `protobuf:"bytes,2,opt,name=change,proto3" json:"change,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -543,6 +547,13 @@ func (*SetIntelSettingsResponse) Descriptor() ([]byte, []int) {
 func (x *SetIntelSettingsResponse) GetSettings() *IntelSettings {
 	if x != nil {
 		return x.Settings
+	}
+	return nil
+}
+
+func (x *SetIntelSettingsResponse) GetChange() *ProtectedChangeFiled {
+	if x != nil {
+		return x.Change
 	}
 	return nil
 }
@@ -1155,7 +1166,7 @@ var File_pantherclaw_v1_intel_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_intel_proto_rawDesc = "" +
 	"\n" +
-	"\x1apantherclaw/v1/intel.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcf\x01\n" +
+	"\x1apantherclaw/v1/intel.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'pantherclaw/v1/identity_providers.proto\"\xcf\x01\n" +
 	"\tIntelFeed\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x04R\aversion\x12\x10\n" +
 	"\x03kid\x18\x02 \x01(\tR\x03kid\x129\n" +
@@ -1181,9 +1192,10 @@ const file_pantherclaw_v1_intel_proto_rawDesc = "" +
 	"\x17SetIntelSettingsRequest\x12F\n" +
 	"\aconsume\x18\x01 \x01(\x0e2 .pantherclaw.v1.IntelConsumeModeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\aconsume\x12\x14\n" +
-	"\x05share\x18\x02 \x01(\bR\x05share\"U\n" +
+	"\x05share\x18\x02 \x01(\bR\x05share\"\x93\x01\n" +
 	"\x18SetIntelSettingsResponse\x129\n" +
-	"\bsettings\x18\x01 \x01(\v2\x1d.pantherclaw.v1.IntelSettingsR\bsettings\"\xe1\x02\n" +
+	"\bsettings\x18\x01 \x01(\v2\x1d.pantherclaw.v1.IntelSettingsR\bsettings\x12<\n" +
+	"\x06change\x18\x02 \x01(\v2$.pantherclaw.v1.ProtectedChangeFiledR\x06change\"\xe1\x02\n" +
 	"\n" +
 	"IntelMatch\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
@@ -1295,6 +1307,7 @@ var file_pantherclaw_v1_intel_proto_goTypes = []any{
 	(*ExportIntelSTIXRequest)(nil),         // 17: pantherclaw.v1.ExportIntelSTIXRequest
 	(*ExportIntelSTIXResponse)(nil),        // 18: pantherclaw.v1.ExportIntelSTIXResponse
 	(*timestamppb.Timestamp)(nil),          // 19: google.protobuf.Timestamp
+	(*ProtectedChangeFiled)(nil),           // 20: pantherclaw.v1.ProtectedChangeFiled
 }
 var file_pantherclaw_v1_intel_proto_depIdxs = []int32{
 	19, // 0: pantherclaw.v1.IntelFeed.issue_time:type_name -> google.protobuf.Timestamp
@@ -1305,31 +1318,32 @@ var file_pantherclaw_v1_intel_proto_depIdxs = []int32{
 	3,  // 5: pantherclaw.v1.GetIntelSettingsResponse.feed:type_name -> pantherclaw.v1.IntelFeed
 	0,  // 6: pantherclaw.v1.SetIntelSettingsRequest.consume:type_name -> pantherclaw.v1.IntelConsumeMode
 	4,  // 7: pantherclaw.v1.SetIntelSettingsResponse.settings:type_name -> pantherclaw.v1.IntelSettings
-	1,  // 8: pantherclaw.v1.IntelMatch.kind:type_name -> pantherclaw.v1.IntelIndicatorKind
-	0,  // 9: pantherclaw.v1.IntelMatch.mode:type_name -> pantherclaw.v1.IntelConsumeMode
-	19, // 10: pantherclaw.v1.IntelMatch.match_time:type_name -> google.protobuf.Timestamp
-	9,  // 11: pantherclaw.v1.ListIntelMatchesResponse.matches:type_name -> pantherclaw.v1.IntelMatch
-	2,  // 12: pantherclaw.v1.ContributeIndicatorRequest.source:type_name -> pantherclaw.v1.IntelContributionSource
-	1,  // 13: pantherclaw.v1.IntelContribution.kind:type_name -> pantherclaw.v1.IntelIndicatorKind
-	13, // 14: pantherclaw.v1.ContributeIndicatorResponse.contribution:type_name -> pantherclaw.v1.IntelContribution
-	13, // 15: pantherclaw.v1.ListIntelContributionsResponse.contributions:type_name -> pantherclaw.v1.IntelContribution
-	5,  // 16: pantherclaw.v1.IntelService.GetIntelSettings:input_type -> pantherclaw.v1.GetIntelSettingsRequest
-	7,  // 17: pantherclaw.v1.IntelService.SetIntelSettings:input_type -> pantherclaw.v1.SetIntelSettingsRequest
-	10, // 18: pantherclaw.v1.IntelService.ListIntelMatches:input_type -> pantherclaw.v1.ListIntelMatchesRequest
-	12, // 19: pantherclaw.v1.IntelService.ContributeIndicator:input_type -> pantherclaw.v1.ContributeIndicatorRequest
-	15, // 20: pantherclaw.v1.IntelService.ListIntelContributions:input_type -> pantherclaw.v1.ListIntelContributionsRequest
-	17, // 21: pantherclaw.v1.IntelService.ExportIntelSTIX:input_type -> pantherclaw.v1.ExportIntelSTIXRequest
-	6,  // 22: pantherclaw.v1.IntelService.GetIntelSettings:output_type -> pantherclaw.v1.GetIntelSettingsResponse
-	8,  // 23: pantherclaw.v1.IntelService.SetIntelSettings:output_type -> pantherclaw.v1.SetIntelSettingsResponse
-	11, // 24: pantherclaw.v1.IntelService.ListIntelMatches:output_type -> pantherclaw.v1.ListIntelMatchesResponse
-	14, // 25: pantherclaw.v1.IntelService.ContributeIndicator:output_type -> pantherclaw.v1.ContributeIndicatorResponse
-	16, // 26: pantherclaw.v1.IntelService.ListIntelContributions:output_type -> pantherclaw.v1.ListIntelContributionsResponse
-	18, // 27: pantherclaw.v1.IntelService.ExportIntelSTIX:output_type -> pantherclaw.v1.ExportIntelSTIXResponse
-	22, // [22:28] is the sub-list for method output_type
-	16, // [16:22] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	20, // 8: pantherclaw.v1.SetIntelSettingsResponse.change:type_name -> pantherclaw.v1.ProtectedChangeFiled
+	1,  // 9: pantherclaw.v1.IntelMatch.kind:type_name -> pantherclaw.v1.IntelIndicatorKind
+	0,  // 10: pantherclaw.v1.IntelMatch.mode:type_name -> pantherclaw.v1.IntelConsumeMode
+	19, // 11: pantherclaw.v1.IntelMatch.match_time:type_name -> google.protobuf.Timestamp
+	9,  // 12: pantherclaw.v1.ListIntelMatchesResponse.matches:type_name -> pantherclaw.v1.IntelMatch
+	2,  // 13: pantherclaw.v1.ContributeIndicatorRequest.source:type_name -> pantherclaw.v1.IntelContributionSource
+	1,  // 14: pantherclaw.v1.IntelContribution.kind:type_name -> pantherclaw.v1.IntelIndicatorKind
+	13, // 15: pantherclaw.v1.ContributeIndicatorResponse.contribution:type_name -> pantherclaw.v1.IntelContribution
+	13, // 16: pantherclaw.v1.ListIntelContributionsResponse.contributions:type_name -> pantherclaw.v1.IntelContribution
+	5,  // 17: pantherclaw.v1.IntelService.GetIntelSettings:input_type -> pantherclaw.v1.GetIntelSettingsRequest
+	7,  // 18: pantherclaw.v1.IntelService.SetIntelSettings:input_type -> pantherclaw.v1.SetIntelSettingsRequest
+	10, // 19: pantherclaw.v1.IntelService.ListIntelMatches:input_type -> pantherclaw.v1.ListIntelMatchesRequest
+	12, // 20: pantherclaw.v1.IntelService.ContributeIndicator:input_type -> pantherclaw.v1.ContributeIndicatorRequest
+	15, // 21: pantherclaw.v1.IntelService.ListIntelContributions:input_type -> pantherclaw.v1.ListIntelContributionsRequest
+	17, // 22: pantherclaw.v1.IntelService.ExportIntelSTIX:input_type -> pantherclaw.v1.ExportIntelSTIXRequest
+	6,  // 23: pantherclaw.v1.IntelService.GetIntelSettings:output_type -> pantherclaw.v1.GetIntelSettingsResponse
+	8,  // 24: pantherclaw.v1.IntelService.SetIntelSettings:output_type -> pantherclaw.v1.SetIntelSettingsResponse
+	11, // 25: pantherclaw.v1.IntelService.ListIntelMatches:output_type -> pantherclaw.v1.ListIntelMatchesResponse
+	14, // 26: pantherclaw.v1.IntelService.ContributeIndicator:output_type -> pantherclaw.v1.ContributeIndicatorResponse
+	16, // 27: pantherclaw.v1.IntelService.ListIntelContributions:output_type -> pantherclaw.v1.ListIntelContributionsResponse
+	18, // 28: pantherclaw.v1.IntelService.ExportIntelSTIX:output_type -> pantherclaw.v1.ExportIntelSTIXResponse
+	23, // [23:29] is the sub-list for method output_type
+	17, // [17:23] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_intel_proto_init() }
@@ -1337,6 +1351,7 @@ func file_pantherclaw_v1_intel_proto_init() {
 	if File_pantherclaw_v1_intel_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_identity_providers_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

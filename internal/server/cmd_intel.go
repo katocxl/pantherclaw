@@ -114,21 +114,32 @@ func cmdIntelExport(ctx context.Context, args []string, stdout, stderr io.Writer
 		return err
 	}
 	defer pool.Close()
-	// The file is taken first: nothing is marked exported that has nowhere to go.
+	// The file is taken first (O_EXCL), and written and synced before any
+	// row is marked exported: a failed write leaves every row QUEUED (D1104a).
 	out, err := os.OpenFile(*outPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // G304: operator-chosen path
 	if err != nil {
 		return err
 	}
-	b, err := intelapp.ExportContributions(ctx, pool, time.Now())
+	saved := false
+	n, err := intelapp.ExportContributions(ctx, pool, time.Now(), func(b []byte) error {
+		if _, err := out.Write(append(b, '\n')); err != nil {
+			return err
+		}
+		if err := out.Sync(); err != nil {
+			return err
+		}
+		if err := out.Close(); err != nil {
+			return err
+		}
+		saved = true
+		return nil
+	})
 	if err != nil {
-		return errors.Join(err, out.Close(), os.Remove(*outPath))
+		if !saved {
+			return errors.Join(err, out.Close(), os.Remove(*outPath))
+		}
+		return fmt.Errorf("intel export-contributions: %s was written, but marking its rows exported failed; the rows not marked stay QUEUED and are exported again next time: %w", *outPath, err)
 	}
-	if _, err := out.Write(append(b, '\n')); err != nil {
-		return errors.Join(err, out.Close())
-	}
-	if err := out.Close(); err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(stdout, "Wrote intel contributions to %s\n", *outPath)
+	_, _ = fmt.Fprintf(stdout, "Wrote %d intel contributions to %s\n", n, *outPath)
 	return nil
 }

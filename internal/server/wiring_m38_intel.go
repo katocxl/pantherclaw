@@ -87,13 +87,15 @@ func withIntelContent(s *contentapp.Sink, bill *billing.Service) *contentapp.Sin
 	return s
 }
 
-// registerM38Intel serves IntelService. The procedure permissions are in
+// registerM38Intel serves IntelService and holds a loosening of the consume
+// mode behind the Gate (D1104a). The procedure permissions are in
 // procedures_m38_intel.go.
 func registerM38Intel(rs *connect.Server, d apiDeps) {
 	svc := &intelapp.Service{Pool: d.pool}
 	if d.billing != nil {
 		svc.Ents = d.billing
 	}
+	svc.RegisterProtect(d.m11protect.gate) // a loosening waits for a second person (D1104a)
 	pantherclawv1connect.RegisterIntelServiceHandler(rs, intelrpc.New(svc))
 }
 

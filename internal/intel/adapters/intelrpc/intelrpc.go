@@ -86,11 +86,15 @@ func (h *Handler) GetIntelSettings(ctx context.Context, _ *pb.GetIntelSettingsRe
 
 // SetIntelSettings implements IntelServiceHandler.
 func (h *Handler) SetIntelSettings(ctx context.Context, req *pb.SetIntelSettingsRequest) (*pb.SetIntelSettingsResponse, error) {
-	s, err := h.s.Set(ctx, modeFrom(req.GetConsume()), req.GetShare())
+	r, err := h.s.Set(ctx, modeFrom(req.GetConsume()), req.GetShare())
 	if err != nil {
 		return nil, err
 	}
-	return &pb.SetIntelSettingsResponse{Settings: settings(s)}, nil
+	out := &pb.SetIntelSettingsResponse{Settings: settings(r.Settings)}
+	if r.Held != nil {
+		out.Change = &pb.ProtectedChangeFiled{ProtectedChangeId: r.Held.Change.String(), ChangeRequestId: r.Held.Request.String()}
+	}
+	return out, nil
 }
 
 // ListIntelMatches implements IntelServiceHandler.

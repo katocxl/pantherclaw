@@ -12,6 +12,15 @@ ON CONFLICT (org_id) DO UPDATE SET consume = EXCLUDED.consume, share = EXCLUDED.
     updated_by = EXCLUDED.updated_by, updated_at = now()
 RETURNING consume, share, updated_by, updated_at;
 
+-- name: EnsureIntelSettings :exec
+-- Creates the org's row at the defaults (OFF, not shared) so it can be locked.
+INSERT INTO pc.intel_settings (org_id, updated_by) VALUES (sqlc.arg(org_id), sqlc.arg(updated_by))
+ON CONFLICT (org_id) DO NOTHING;
+
+-- name: LockIntelSettings :one
+-- Serializes changes of an org's settings (D1104a).
+SELECT consume, share, updated_by, updated_at FROM pc.intel_settings WHERE org_id = sqlc.arg(org_id) FOR UPDATE;
+
 -- name: GetIntelState :one
 SELECT feed_version, feed_digest, kid, issued_at, expires_at, source, updated_at FROM pc.intel_state WHERE id = 1;
 

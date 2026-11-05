@@ -36,6 +36,17 @@ func (q *Queries) DeleteIntelIndicators(ctx context.Context) error {
 	return err
 }
 
+const ensureIntelSettings = `-- name: EnsureIntelSettings :exec
+INSERT INTO pc.intel_settings (org_id, updated_by) VALUES ($1, $2)
+ON CONFLICT (org_id) DO NOTHING
+`
+
+// Creates the org's row at the defaults (OFF, not shared) so it can be locked.
+func (q *Queries) EnsureIntelSettings(ctx context.Context, orgID ids.OrgID, updatedBy string) error {
+	_, err := q.db.Exec(ctx, ensureIntelSettings, orgID, updatedBy)
+	return err
+}
+
 const getIntelIndicator = `-- name: GetIntelIndicator :one
 SELECT id, kind, severity FROM pc.intel_indicators WHERE id = $1
 `
@@ -579,6 +590,30 @@ func (q *Queries) ListIntelMatches(ctx context.Context, orgID ids.OrgID, before 
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockIntelSettings = `-- name: LockIntelSettings :one
+SELECT consume, share, updated_by, updated_at FROM pc.intel_settings WHERE org_id = $1 FOR UPDATE
+`
+
+type LockIntelSettingsRow struct {
+	Consume   string
+	Share     bool
+	UpdatedBy string
+	UpdatedAt time.Time
+}
+
+// Serializes changes of an org's settings (D1104a).
+func (q *Queries) LockIntelSettings(ctx context.Context, orgID ids.OrgID) (LockIntelSettingsRow, error) {
+	row := q.db.QueryRow(ctx, lockIntelSettings, orgID)
+	var i LockIntelSettingsRow
+	err := row.Scan(
+		&i.Consume,
+		&i.Share,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const lockIntelState = `-- name: LockIntelState :one

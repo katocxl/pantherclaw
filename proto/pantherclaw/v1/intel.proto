@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/identity_providers.proto";
 
 // IntelService is shared threat-intel indicators (G0 M38 D1103..D1105; FD13,
 // FQ38-2; HR-817..822).
@@ -116,9 +117,13 @@ message SetIntelSettingsRequest {
   bool share = 2;
 }
 
-// SetIntelSettingsResponse holds the new settings.
+// SetIntelSettingsResponse holds the settings as they now stand. A
+// loosening of the consume mode (HOLD to ALERT_ONLY, or either to OFF) is
+// filed for a second person (D1104a): change names it and settings keep
+// the old mode until it is confirmed. A tightening applies at once.
 message SetIntelSettingsResponse {
   IntelSettings settings = 1;
+  ProtectedChangeFiled change = 2;
 }
 
 // IntelMatch is one indicator an org's object matched.

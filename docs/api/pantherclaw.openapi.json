@@ -83545,11 +83545,15 @@
           "settings": {
             "title": "settings",
             "$ref": "#/components/schemas/pantherclaw.v1.IntelSettings"
+          },
+          "change": {
+            "title": "change",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
           }
         },
         "title": "SetIntelSettingsResponse",
         "additionalProperties": false,
-        "description": "SetIntelSettingsResponse holds the new settings."
+        "description": "SetIntelSettingsResponse holds the settings as they now stand. A\n loosening of the consume mode (HOLD to ALERT_ONLY, or either to OFF) is\n filed for a second person (D1104a): change names it and settings keep\n the old mode until it is confirmed. A tightening applies at once."
       },
       "pantherclaw.v1.TokenReportGroupBy": {
         "type": "string",

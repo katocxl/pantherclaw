@@ -15,19 +15,17 @@ package app
 import (
 	"context"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	bdomain "github.com/katocxl/pantherclaw/internal/billing/domain"
-	"github.com/katocxl/pantherclaw/internal/evidence/audit"
-	"github.com/katocxl/pantherclaw/internal/evidence/auditkind"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/intel/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -61,6 +59,9 @@ type Service struct {
 	Ents Editions
 	// Now is the clock of the STIX export; nil is time.Now.
 	Now func() time.Time
+	// Protect holds a loosening of the consume mode for a second person
+	// (RegisterProtect, D1104a); nil refuses it.
+	Protect *protect.Gate
 }
 
 // Settings are an org's choices; no row is OFF and not shared.
@@ -152,58 +153,6 @@ func (s *Service) Get(ctx context.Context) (Overview, error) {
 		}
 		return nil
 	}, db.ReadOnly())
-	return out, err
-}
-
-// Set sets the consume mode and the share switch. Consuming needs the
-// Business edition or above. The org's gateways get a new configuration,
-// so their content scan starts or stops matching. Audited.
-func (s *Service) Set(ctx context.Context, consume domain.Mode, share bool) (Settings, error) {
-	if !consume.Valid() {
-		return Settings{}, ErrMode
-	}
-	c, err := caller(ctx, td.PermIntelManage)
-	if err != nil {
-		return Settings{}, err
-	}
-	if consume.Consumes() {
-		ok, err := s.consumeAvailable(ctx)
-		if err != nil {
-			return Settings{}, err
-		}
-		if !ok {
-			return Settings{}, ErrEdition
-		}
-	}
-	var out Settings
-	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		from, err := ReadSettings(ctx, q, c.Org)
-		if err != nil {
-			return err
-		}
-		row, err := q.UpsertIntelSettings(ctx, dbq.UpsertIntelSettingsParams{
-			OrgID: c.Org, Consume: string(consume), Share: share, UpdatedBy: c.Actor().Type + ":" + c.Actor().ID,
-		})
-		if err != nil {
-			return err
-		}
-		out = Settings{Consume: domain.Mode(row.Consume), Share: row.Share, UpdatedBy: row.UpdatedBy, UpdatedAt: row.UpdatedAt}
-		if from.Consume != consume {
-			if err := q.BumpOrgGateways(ctx, c.Org); err != nil {
-				return err
-			}
-		}
-		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: auditkind.IntelSettingsChanged, Actor: c.Actor(), Outcome: audit.Success,
-			Object: &audit.Object{Type: "intel_settings", ID: c.Org.String()},
-			Details: map[string]string{
-				"from_consume": string(from.Consume), "to_consume": string(consume),
-				"from_share": strconv.FormatBool(from.Share), "to_share": strconv.FormatBool(share),
-			},
-		})
-		return err
-	})
 	return out, err
 }
 

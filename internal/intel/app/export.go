@@ -45,28 +45,33 @@ type Contributions struct {
 	Indicators  []ExportedIndicator `json:"indicators"`
 }
 
-// ExportContributions collects every org's queued contributions and marks
-// them exported. now gives the export's day.
-func ExportContributions(ctx context.Context, pool *db.Pool, now time.Time) ([]byte, error) {
+// ExportContributions collects every org's queued contributions into one
+// document and hands it to save, which must write it durably (fsync) and
+// return nil only then. Only after save succeeds are exactly the collected
+// rows marked EXPORTED (D1104a, HR-821): a failed save marks nothing and
+// the rows stay QUEUED. Contributions are org rows read in each org's own
+// transaction, so the marking is a second transaction per org; a run that
+// stops after save and before every mark exports the unmarked rows again
+// next time rather than losing them. now gives the export's day.
+func ExportContributions(ctx context.Context, pool *db.Pool, now time.Time, save func([]byte) error) (int, error) {
 	doc := Contributions{Spec: ContributionsSpec, ExportedDay: now.UTC().Format(time.DateOnly), Indicators: []ExportedIndicator{}}
+	collected := map[ids.OrgID][]ids.UUID{}
 	err := pool.CrossOrgPages(ctx, db.ListActiveOrgs, 500, func(page []db.OrgRef) error {
 		for _, o := range page {
 			err := pool.InTenantTx(ctx, o.Org, func(ctx context.Context, tx db.TenantTx) error {
-				q := dbq.New(tx)
-				rows, err := q.QueuedIntelContributions(ctx, o.Org)
+				rows, err := dbq.New(tx).QueuedIntelContributions(ctx, o.Org)
 				if err != nil || len(rows) == 0 {
 					return err
 				}
-				done := make([]ids.UUID, 0, len(rows))
 				for _, r := range rows {
 					doc.Indicators = append(doc.Indicators, ExportedIndicator{
 						Kind: r.Kind, SHA256: deref(r.Sha256), Shingles: r.Shingles, Severity: r.Severity,
 						Techniques: r.Techniques, CreatedDay: dayOf(r.CreatedDay),
 					})
-					done = append(done, r.ID)
+					collected[o.Org] = append(collected[o.Org], r.ID)
 				}
-				return q.MarkIntelContributionsExported(ctx, o.Org, done)
-			})
+				return nil
+			}, db.ReadOnly())
 			if err != nil {
 				return err
 			}
@@ -74,12 +79,27 @@ func ExportContributions(ctx context.Context, pool *db.Pool, now time.Time) ([]b
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	slices.SortFunc(doc.Indicators, func(a, b ExportedIndicator) int {
 		return strings.Compare(a.Kind+a.SHA256+strings.Join(a.Shingles, ",")+a.CreatedDay, b.Kind+b.SHA256+strings.Join(b.Shingles, ",")+b.CreatedDay)
 	})
-	return json.Marshal(doc, json.Deterministic(true))
+	b, err := json.Marshal(doc, json.Deterministic(true))
+	if err != nil {
+		return 0, err
+	}
+	if err := save(b); err != nil {
+		return 0, err // nothing is marked: the rows stay QUEUED
+	}
+	for org, done := range collected {
+		err := pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			return dbq.New(tx).MarkIntelContributionsExported(ctx, org, done)
+		})
+		if err != nil {
+			return 0, err
+		}
+	}
+	return len(doc.Indicators), nil
 }
 
 // FetchInterval is how often the feed is fetched.
