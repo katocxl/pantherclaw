@@ -860,6 +860,17 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Threat map:** `prevent.browser_sites` and `prevent.browser_secret_fields`.
 - Migration `00370`.
 
+### M34 — Cloud agent runtimes
+**HR:** HR-760..769 · **F:** F1040–F1049 · **ADR:** 0061 · **G0:** [g0/M34.md](g0/M34.md).
+- **Code first**, like M30–M33: three streams on pushed branches, assembled on `code/m34` from `code/m33`; tests come in the testing phase.
+- **Channel `runtime`:** cooperative (PARTIAL), DELEGATED, never forwarded; content signals scan it.
+- **AgentCore** (FQ34-1, FQ34-2): the gateway's `/runtime/agentcore` face and the `pc-agentcore-interceptor` Lambda, one per AgentCore gateway, which asks the customer's own gateway and fails closed; connections bound by `runtime_target`; runs under the issuer entry's run grant.
+- **ADK and Foundry:** `pantherclaw_adk.before_tool_callback` (Vertex AI Agent Engine too) and `pantherclaw.foundry.FoundryApprovals`, both failing closed.
+- **Packages:** `pc.aws-agentcore`, `pc.vertex-agent-engine`, `pc.azure-foundry` (`agent.deploy`), `pc.aws-ssm` and `pc.azure-compute` (`code.execute`).
+- **Discovery** (FQ34-3): AgentCore, Vertex and Foundry agents, daily scan schedules, the `pc.runtime.agent_deployed` alert.
+- **Threat map:** `prevent.agent_deploy` (AML.T0103) and `prevent.cloud_admin_command` (T1651); both leave Unaddressed.
+- Migrations `00380`–`00382`.
+
 ---
 
 ## 9. CI/CD summary
