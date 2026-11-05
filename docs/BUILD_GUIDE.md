@@ -866,7 +866,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Channel `runtime`:** cooperative (PARTIAL), DELEGATED, never forwarded; content signals scan it.
 - **AgentCore** (FQ34-1, FQ34-2): the gateway's `/runtime/agentcore` face and the `pc-agentcore-interceptor` Lambda, one per AgentCore gateway, which asks the customer's own gateway and fails closed; connections bound by `runtime_target`; runs under the issuer entry's run grant.
 - **ADK and Foundry:** `pantherclaw_adk.before_tool_callback` (Vertex AI Agent Engine too) and `pantherclaw.foundry.FoundryApprovals`, both failing closed.
-- **Packages:** `pc.aws-agentcore`, `pc.vertex-agent-engine`, `pc.azure-foundry` (`agent.deploy`), `pc.aws-ssm` and `pc.azure-compute` (`code.execute`).
+- **Packages:** `pc.vertex-agent-engine` and `pc.azure-foundry` (`agent.deploy`), `pc.azure-compute` (`code.execute`), and `pc.aws-agentcore` (reads only; AgentCore deploys are seen by discovery). SSM waits for a founder decision.
 - **Discovery** (FQ34-3): AgentCore, Vertex and Foundry agents, daily scan schedules, the `pc.runtime.agent_deployed` alert.
 - **Threat map:** `prevent.agent_deploy` (AML.T0103) and `prevent.cloud_admin_command` (T1651); both leave Unaddressed.
 - Migrations `00380`–`00382`.

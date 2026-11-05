@@ -356,7 +356,15 @@ type Result struct {
 	// Explanation is the Authority's agent-safe explanation (F330,
 	// HR-400); nil when no decision was asked for.
 	Explanation *pb.AgentExplanation
+	// SafeDetail is the decisive reason's detail when the Authority writes
+	// it as an agent-safe sentence (agentSafeDetails); "" otherwise.
+	SafeDetail string
 }
+
+// agentSafeDetails are the decisive reason codes whose detail the Authority
+// writes as an agent-safe sentence, which a face may show the agent as is
+// (G0 M34 D994a: RUNTIME_ACCOUNT_MISMATCH).
+var agentSafeDetails = map[string]bool{"RUNTIME_ACCOUNT_MISMATCH": true}
 
 // Lap is one step's duration.
 type Lap struct {
@@ -521,6 +529,9 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	}
 	for _, rs := range ar.GetReasons() {
 		r.Reasons = append(r.Reasons, rs.GetCode())
+	}
+	if rs := ar.GetReasons(); len(rs) > 0 && agentSafeDetails[rs[0].GetCode()] {
+		r.SafeDetail = rs[0].GetDetail()
 	}
 	if rs := ar.GetReasons(); r.Decision == pb.Decision_DECISION_CANNOT_AUTHORIZE && len(rs) > 0 && rs[0].GetCode() == "IDENTITY_UNVERIFIED" {
 		// The workload could not be verified: a PAP-Error, so it can retry

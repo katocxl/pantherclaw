@@ -19,7 +19,7 @@ on: [audit.agent.discovered]
 match: event.attrs.?source.orValue("") in ["aws_agentcore", "vertex_agent_engine", "azure_foundry"]
 group: agent
 tests:
-  - name: an AgentCore runtime found
+  - name: an agentcore runtime found
     fires: true
     events:
       - kind: audit.agent.discovered
@@ -28,7 +28,7 @@ tests:
         outcome: success
         subjects: {agent: 01930000-0000-7000-8000-0000000000a1}
         attrs: {object_type: agent, discovery_id: 01930000-0000-7000-8000-0000000000d1, source: aws_agentcore}
-  - name: a Vertex reasoning engine found again after a dismissal
+  - name: a vertex reasoning engine found again after a dismissal
     fires: true
     events:
       - kind: audit.agent.discovered
@@ -37,7 +37,7 @@ tests:
         outcome: success
         subjects: {agent: 01930000-0000-7000-8000-0000000000a1}
         attrs: {object_type: agent, discovery_id: 01930000-0000-7000-8000-0000000000d1, source: vertex_agent_engine, reopened: "true"}
-  - name: a Copilot Studio agent found
+  - name: a copilot studio agent found
     fires: false
     events:
       - kind: audit.agent.discovered

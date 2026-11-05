@@ -295,6 +295,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		output(w, passOutput(original))
 	case res.Class == dispatch.Held:
 		output(w, denyOutput(id, HeldText+txn(res.TransactionID)))
+	case res.SafeDetail != "":
+		// The Authority's agent-safe sentence (D994a: RUNTIME_ACCOUNT_MISMATCH).
+		output(w, denyOutput(id, res.SafeDetail+txn(res.TransactionID)))
 	default:
 		reason := "PantherClaw denied this call: " + string(res.Class)
 		if res.Code != "" {

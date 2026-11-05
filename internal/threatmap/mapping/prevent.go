@@ -403,27 +403,29 @@ var Prevent = []PreventControl{
 		},
 	},
 	{
-		// G0 M34 D999: no reason code of its own, like sandbox_closure; the
-		// evidence is the transactions of the agent.deploy operations of
-		// pc.aws-agentcore, pc.vertex-agent-engine and pc.azure-foundry,
-		// which no template grants and which are irreversible.
+		// G0 M34 D999, D993a: no reason code of its own, like
+		// sandbox_closure; the evidence is the transactions of the
+		// agent.deploy writes of pc.vertex-agent-engine and pc.azure-foundry,
+		// which no template grants and which are irreversible. pc.aws-agentcore
+		// is reads only in M34: AgentCore deploys are seen by the daily scan
+		// and the pc.runtime.agent_deployed alert.
 		ID: "prevent.agent_deploy", Title: "An agent deploys or changes a cloud runtime's agent only through a decided, reviewed operation", Surface: SurfaceGateway,
 		HR:         []string{"HR-763"},
 		Requires:   RequiresAlways,
 		Techniques: []string{"AML.T0103"},
 		Why: map[string]string{
-			"AML.T0103": "Deploy AI agent (AML.T0103): creating or updating an AgentCore runtime, a Vertex reasoning engine or a Foundry agent through PantherClaw is an irreversible agent.deploy operation that no template grants.",
+			"AML.T0103": "Deploy AI agent (AML.T0103): creating or patching a Vertex reasoning engine and creating or updating a Foundry agent through PantherClaw are irreversible agent.deploy operations that no template grants.",
 		},
 	},
 	{
-		// G0 M34 D999: no reason code of its own; the evidence is the
-		// transactions of aws.ssm.send_command and azure.vm.run_command.
+		// G0 M34 D999, D993a: no reason code of its own; the evidence is the
+		// transactions of azure.vm.run_command (SSM waits for the founder).
 		ID: "prevent.cloud_admin_command", Title: "An agent runs a command through a cloud's management service only through a decided, reviewed operation", Surface: SurfaceGateway,
 		HR:         []string{"HR-763"},
 		Requires:   RequiresAlways,
 		Techniques: []string{"T1651"},
 		Why: map[string]string{
-			"T1651": "Cloud administration command (T1651): aws.ssm.send_command and azure.vm.run_command through PantherClaw are irreversible code.execute operations, decided on their document, instances and commands.",
+			"T1651": "Cloud administration command (T1651): azure.vm.run_command through PantherClaw is an irreversible code.execute operation, decided on its command id, target VM and script.",
 		},
 	},
 }

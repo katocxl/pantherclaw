@@ -1007,8 +1007,8 @@ A cloud agent runtime asks the customer's own PantherClaw gateway before it runs
 | F1044 | Foundry approvals | `pantherclaw.foundry.FoundryApprovals` answers Azure AI Foundry MCP approval requests from PantherClaw's decision. | Next | Community | M34 | PN-016.3 |
 | F1045 | Runtime discovery | Discovery of AgentCore runtimes, Vertex reasoning engines and Foundry agents through the gateway with a read-only collector credential. | Next | Business | M34 | F929 |
 | F1046 | Daily scans | SaaS scan schedules set by a person; the daily job starts one scan per schedule (origin `schedule`). | Next | Business | M34 | F929 |
-| F1047 | Agent deploy operations | `pc.aws-agentcore`, `pc.vertex-agent-engine` and `pc.azure-foundry`: list reads and irreversible `agent.deploy` create and update operations. | Next | Community | M34 | new |
-| F1048 | Cloud admin commands | `pc.aws-ssm` `aws.ssm.send_command` and `pc.azure-compute` `azure.vm.run_command`: irreversible `code.execute` operations with closed documents and bounded scripts. | Next | Community | M34 | new |
+| F1047 | Agent deploy operations | `pc.vertex-agent-engine` and `pc.azure-foundry`: list reads and irreversible `agent.deploy` create and update operations. `pc.aws-agentcore` is reads only (runtimes, gateways, targets): AgentCore deploys are seen by the daily scan and the `pc.runtime.agent_deployed` alert, and deciding them is a follow-up. | Next | Community | M34 | new |
+| F1048 | Cloud admin commands | `pc.azure-compute` `azure.vm.run_command`: an irreversible `code.execute` operation with a closed command id and a bounded script. SSM waits for a founder decision. | Next | Community | M34 | new |
 | F1049 | Runtime simulators and seeds | `pantherclaw-sim` agentcore, vertex-agent-engine and azure, SSM and GetCallerIdentity in the aws sim, and the M34 dev seeds. | Next | Community | M34 | new |
 
 ## Product boundaries (non-goals, kept verbatim in spirit)

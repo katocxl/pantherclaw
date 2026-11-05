@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `d0473cbfd281bd2fb580073dd7bcce71ae61781121baaa9e1cf7b3afb79144d4`.
+Mapping digest: `5f17159191c3bfad55e03de8d66963ba5406ecdbe1668c1d3199b6a3737ba7f9`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -96,7 +96,7 @@ Mapping digest: `d0473cbfd281bd2fb580073dd7bcce71ae61781121baaa9e1cf7b3afb79144d
 | [AML.T0100](https://atlas.mitre.org/techniques/AML.T0100) | AI Agent Clickbait | Mapped | prevent `prevent.browser_sites` |
 | [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
 | [AML.T0050](https://atlas.mitre.org/techniques/AML.T0050) | Command and Scripting Interpreter | Mapped | Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003` |
-| [AML.T0103](https://atlas.mitre.org/techniques/AML.T0103) | Deploy AI Agent | Mapped | prevent `prevent.agent_deploy` |
+| [AML.T0103](https://atlas.mitre.org/techniques/AML.T0103) | Deploy AI Agent | Mapped | prevent `prevent.agent_deploy`; rules `pc.runtime.agent_deployed` |
 | [AML.T0051](https://atlas.mitre.org/techniques/AML.T0051) | LLM Prompt Injection | Mapped | AML.T0051.001: prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-154`, `RT-158`, `RT-159`, `RT-163`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
 | [AML.T0011](https://atlas.mitre.org/techniques/AML.T0011) | User Execution | Outside PantherClaw: covered by security awareness | It needs a person. |
 
