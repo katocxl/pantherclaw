@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"slices"
 	"strconv"
@@ -138,10 +139,10 @@ func Draft(s *Spec, o DraftOptions) ([]byte, error) {
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
 	if err := enc.Encode(doc); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDraft, err)
+		return nil, fmt.Errorf("%w: %w", ErrDraft, err)
 	}
 	if err := enc.Close(); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDraft, err)
+		return nil, fmt.Errorf("%w: %w", ErrDraft, err)
 	}
 	return b.Bytes(), nil
 }
@@ -221,7 +222,7 @@ func definition(prefix, publisher string, op Operation, now time.Time) (*yaml.No
 			return nil, notes, fmt.Errorf("path parameter %q is not declared", targetVar)
 		}
 	}
-	write := op.Method != "GET"
+	write := op.Method != http.MethodGet
 	access := "read"
 	if write {
 		access = "write"

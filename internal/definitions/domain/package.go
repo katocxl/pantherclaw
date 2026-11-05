@@ -253,7 +253,7 @@ func (d *Definition) validateMapping(i int) error {
 				return invalid("%s: path variable %s appears twice", at, v)
 			}
 		}
-		switch m.Encoding {
+		switch m.Encoding { //nolint:exhaustive // outbound-only encodings are refused by default
 		case EncodingDefault, EncodingJSON:
 		case EncodingForm:
 			if slices.Contains(bodiless, m.Method) {

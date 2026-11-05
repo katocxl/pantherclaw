@@ -147,7 +147,7 @@ func TestHR721_AServiceAccountMintsOnlyAtABoundGoogleEndpoint(t *testing.T) {
 		t.Fatalf("the token endpoint was called %d times", n)
 	}
 	_, short := func() (*rsa.PrivateKey, []byte) {
-		k, err := rsa.GenerateKey(rand.Reader, 1024) //nolint:gosec // the short key under test
+		k, err := rsa.GenerateKey(rand.Reader, 1024)
 		if err != nil {
 			t.Fatal(err)
 		}
