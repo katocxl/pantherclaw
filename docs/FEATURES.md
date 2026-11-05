@@ -46,6 +46,7 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M26 | Enterprise identity: IdP access, MCP client authorization, SCIM, SAML, SaaS agent discovery |
 | M27 | Agent Detection & Response: behaviour profiles, content signals, playbooks, SIEM packs, the read-only MCP server |
 | M28 | Threat map: MITRE ATLAS and ATT&CK Enterprise lanes from evidence, labels on signals and exports, signed report, Navigator export, history |
+| M29 | Model connections and token budgets: the agent reaches its model through the gateway, token caps on grants, envelopes and runs, a fake model, estimates and the monthly token report |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -900,7 +901,7 @@ The map shows PantherClaw's controls per MITRE technique and the evidence for th
 
 ### M29 rows: Model connections and token budgets
 
-An agent reaches its model through the gateway, which holds the key, checks each call and counts tokens against caps. Estimates come only from prices the organization sets and are never a bill ([G0 M29](g0/M29.md)).
+An agent reaches its model through the gateway, which holds the key, checks each call and counts tokens against caps. Estimates come only from prices the organization sets and are never a bill ([G0 M29](g0/M29.md), [ADR-0056](adr/0056-model-connections.md), [model connections runbook](runbooks/model-connections.md)). The gateway checks the prompt as strict JSON and forwards exactly what it checked, a written exception to HR-075 for model connections only (HR-691). PantherClaw captures no prompt or reply; records keep metadata and token counts. Caps are counted in tokens, reserved by estimate before a call and settled at the usage the provider reported. Model connections, token caps, the run cap, `--env`, the fake model and every token view are on every edition; cost estimates and the monthly token report need Team. The console rows (F989, and the console parts of F987 and F988) come in a private stream after the API is on `main`.
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |

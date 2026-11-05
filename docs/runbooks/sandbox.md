@@ -54,6 +54,27 @@ The run, in order:
 10. writes the agent's changes to `--out`;
 11. ends the session and removes everything it created, also on Ctrl-C.
 
+### An agent that calls its model
+
+An agent reaches its model provider (Anthropic, OpenAI, …) through a model connection (M29, [model connections runbook](model-connections.md)). Map the connection like any other: `--connection <model connection>`. The edge maps the connection's agent host, such as `api.anthropic.com`.
+
+```bash
+pclaw sandbox run --agent <agent> --connection <repo connection> --connection <model connection> --grant <grant> \
+  --gateway https://gateway.example.com --image registry.example.com/acme/coder@sha256:<digest> \
+  --workspace ./repo --out ./sandbox-out --max-tokens 2000000 --env LOG_LEVEL=debug -- <command> <args>
+```
+
+- **The key.** The agent never holds the provider key. The gateway holds it and places it. When the session maps a model connection, `pclaw` sets `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in the agent to one random placeholder for the session (`pc-placeholder-…`), so SDKs start. The edge strips it, and does not report it. Any other key the agent sends is stripped and reported, as on every route.
+- **Node.** `pclaw` sets `NODE_USE_ENV_PROXY=1`, so Node's built-in `fetch` uses the proxy variables and reaches the edge.
+- **Limits.** Model connections take bodies up to 16 MiB each way, stream answers, and allow 10 minutes a call. Other connections keep 64 KiB and 2 minutes.
+- **`--max-tokens N`** sets a token cap for this run (1 to 10^12), shared by any child runs it starts. It only restricts: grant and guardrail token caps still apply. A call that would pass it is refused with `TOKEN_BUDGET_EXHAUSTED`. See the run's token lines with `pclaw run inspect <run> --section budget` (there is no `pclaw run show`).
+- **`--env NAME=VALUE`** passes a setting to the agent. It is repeatable, up to 64 times. NAME matches `^[A-Za-z_][A-Za-z0-9_]{0,127}$`; VALUE is at most 4096 bytes, with no NUL or newline. Values are never logged and never sent to the server.
+  - Refused names (any case): `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`, `NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_USE_ENV_PROXY`, `HOME`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `OPENAI_API_KEY`, and any name starting `PC_` or `PANTHERCLAW_`.
+  - Refused values: anything the edge's detector names as a credential, and anything containing `-----BEGIN`. The error names the variable and never prints the value.
+- **Held calls.** A model call held for a person (`SECRET_IN_PAYLOAD`, a secret in the prompt) cannot be resumed from the sandbox after approval: the edge gives each request a new action id. The agent gets a 403 naming the hold and the transaction, and you see the hold. Remove the secret from the workspace and the agent's conversation, then run again.
+
+Red-team campaigns keep their own model route ([The model route](pclaw-redteam-campaign.md#the-model-route)).
+
 ## 3. What goes in, what comes back (patch only)
 
 The founder's decision of 2026-10-11:

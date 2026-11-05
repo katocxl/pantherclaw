@@ -1,0 +1,24 @@
+apiVersion: pantherclaw.range/v1
+id: RT-194
+title: A model request body over 16 MiB is refused before it is read whole
+category: boundary
+suite: coding-agent
+tier: community
+attacker: A1
+threats: [T-312]
+rules: [HR-692]
+atlas: [AML.T0029]
+attack: [T1499.003]
+technique_why:
+  AML.T0029: "Denial of AI service (AML.T0029): an oversized request ties up the model route."
+  T1499.003: "Application exhaustion flood (T1499.003): the body is sized to exhaust the gateway's memory."
+requires: [model]
+harness_only: true
+steps:
+  - id: big-body
+    do: model.call
+    with: {attack: big_body}
+    expect:
+      outcome: REFUSED
+      code: body_too_large
+      decisive_control: HR-692
