@@ -440,7 +440,7 @@ func bundleSign(_ context.Context, a *app, args []string) error {
 		if err := rootkey.WriteNew(*out, signed); err != nil {
 			return err
 		}
-	} else if err := replaceFile(file, signed); err != nil {
+	} else if err := replaceBundleFile(file, signed); err != nil {
 		return err
 	}
 	dest := file
@@ -452,8 +452,8 @@ func bundleSign(_ context.Context, a *app, args []string) error {
 	return nil
 }
 
-// replaceFile writes data to a new file next to p and renames it over p.
-func replaceFile(p string, data []byte) error {
+// replaceBundleFile writes data to a new file next to p and renames it over p.
+func replaceBundleFile(p string, data []byte) error {
 	st, err := os.Lstat(p)
 	if err != nil {
 		return err
