@@ -1011,6 +1011,23 @@ A cloud agent runtime asks the customer's own PantherClaw gateway before it runs
 | F1048 | Cloud admin commands | `pc.aws-ssm` `aws.ssm.send_command` (AWS-RunShellScript) and `aws.ssm.send_powershell_command` (AWS-RunPowerShellScript) on one EC2 instance, and `pc.azure-compute` `azure.vm.run_command`: irreversible `code.execute` operations with fixed documents or a closed command id and bounded commands. | Next | Community | M34 | new |
 | F1049 | Runtime simulators and seeds | `pantherclaw-sim` agentcore, vertex-agent-engine and azure, SSM and GetCallerIdentity in the aws sim, and the M34 dev seeds. | Next | Community | M34 | new |
 
+### M35 rows: Federation and attestation
+
+Two organizations that trust each other let their agents message each other's listed agents, each side deciding every call under its own grants and keeping a minimal signed receipt; a workload whose infrastructure attests its exact PAP key reaches level 3; evidence verifiers fetch Sigstore trust through TUF, witnesses cosign the deployment's global log, and receipts can carry an ML-DSA-65 co-signature ([G0 M35](g0/M35.md), [ADR-0062](adr/0062-federation-and-infrastructure-attestation.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1050 | Federation key and document | A per-org Ed25519 federation key rotated with a step-up, and the signed public `federation.json` naming the org, its endpoints, keys and listed agents; `pclaw federation doc`, `endpoint` and `rotate`. | Next | Enterprise | M35 | N28 |
+| F1051 | Pairwise trust | Trust proposed from a peer's document, a safety code compared out of band, confirmation by both admins with security keys, daily refresh, signed rotation, stale and revoked states; `pclaw federation trust`. | Next | Enterprise | M35 | N28 |
+| F1052 | Listings and verified peer agents | The agents a peer may message, with their a2a connection and skills, and their cards signed with the org's federation key; a peer's listed agents verified under the pinned keys; `pclaw federation listing` and `peers`. | Next | Enterprise | M35 | N28 |
+| F1053 | Federated A2A messages | Outbound sends to a peer's listed agent with a token bound to the exact request, and the gateway's `/fed/a2a/{listing}` face admitting, deciding (channel `federation`, `pc.federation`) and forwarding a peer's message after an allow. | Next | Enterprise | M35 | N28 |
+| F1054 | Cross-org grants | Grants whose principal is a peer org's agent: one listing, the federation operations, limits, a minimum attestation level and at most 90 days; `pclaw federation grant`. | Next | Enterprise | M35 | N28 |
+| F1055 | Federation receipts | The minimal signed receipt on every federated answer, the peer's receipts and tokens checked and stored both ways, a peer hold or refusal shown to our agent; `pclaw federation receipts`. | Next | Enterprise | M35 | N28 |
+| F1056 | L3 infrastructure attestation | Attestation level 3 for SPIFFE X.509-SVIDs from the operator's trust domain and GCE identity tokens bound to the PAP key and a one-time nonce; `pclaw issuer propose-spiffe-x509`, `propose-gcp-instance` and `--attest spiffe-x509` or `gcp-instance`. | Next | Enterprise | M35 | new |
+| F1057 | TUF for Sigstore trust | `pclaw verify --sigstore-tuf` and `anchoring.trust: tuf` fetch and check Sigstore's trusted root through go-tuf v2; offline verification stays possible. | Next | Community | M35 | new |
+| F1058 | Witnessed global log | Independent C2SP witnesses cosign the deployment-wide global log, the public global checkpoint, and `pclaw verify --witnesses --witness-threshold`. | Next | Business | M35 | new |
+| F1059 | ML-DSA-65 on receipts | Decision, execution and effect receipts co-signed with ML-DSA-65 in `sigs[]` when `mldsa_cosign` is on, checked by `pclaw verify`. | Next | Enterprise | M35 | new |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.
