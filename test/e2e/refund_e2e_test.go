@@ -113,6 +113,11 @@ type stack struct {
 	// m20_connectors_e2e_test.go).
 	jira   *jiraSim
 	gitlab *gitlabSim
+	// google and linear are the Google and Linear simulators and the seeded
+	// connections to them (G0 M31, options.google and options.linear;
+	// m31_connectors_e2e_test.go).
+	google *googleSim
+	linear *linearSim
 	// aws is the AWS simulator and the seeded connection to it (options.awsECS).
 	aws *awsSim
 	// a2a is the A2A simulator acting as the peer agent, the seeded a2a
@@ -183,6 +188,11 @@ type options struct {
 	// their credentials held by the gateway (dev seed --jira-url and
 	// --gitlab-url, G0 M20 D254).
 	jira, gitlab bool
+	// google and linear also start the Google and Linear simulators and seed
+	// pc.gmail, pc.google-workspace and pc.linear and the connections
+	// "gmail", "google-workspace" and "linear" to them, their credentials
+	// held by the gateway (dev seed --google-url and --linear-url, G0 M31).
+	google, linear bool
 	// awsECS also starts the AWS simulator and seeds pc.aws.ecs and the
 	// connection "aws-ecs" to it, its base key held by the gateway (dev seed
 	// --aws-ecs-url, G0 M20 D286).
@@ -363,6 +373,14 @@ func start(t *testing.T, o options) *stack {
 		s.aws = startAWSSim(t)
 		args = append(args, "--aws-ecs-url", s.aws.url)
 	}
+	if o.google {
+		s.google = startGoogleSim(t)
+		args = append(args, "--google-url", s.google.url)
+	}
+	if o.linear {
+		s.linear = startLinearSim(t)
+		args = append(args, "--linear-url", s.linear.url)
+	}
 	if o.postgres != nil {
 		args = append(args, "--postgres", s.postgresSeedFile(t, dir, o.postgres))
 	}
@@ -399,6 +417,12 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.awsECS {
 		s.aws.seeded(t, out.String())
+	}
+	if o.google {
+		s.google.seeded(t, out.String())
+	}
+	if o.linear {
+		s.linear.seeded(t, out.String())
 	}
 	if o.a2a {
 		s.a2aSeeded(t, out.String())
@@ -466,7 +490,8 @@ func start(t *testing.T, o options) *stack {
 		// GitHub the stack calls (github.api_url).
 		gc.GitHub.APIURL = s.gh.url
 	}
-	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.jira || o.gitlab || o.awsECS || o.postgres != nil || o.brokerKey {
+	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.jira || o.gitlab || o.awsECS || o.google || o.linear ||
+		o.postgres != nil || o.brokerKey {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -513,6 +538,12 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.awsECS {
 		s.waitConfig(t, s.sealAWSECS(t))
+	}
+	if o.google {
+		s.sealGoogleConnections(t)
+	}
+	if o.linear {
+		s.waitConfig(t, s.sealFor(t, s.linear.conn, linearKey))
 	}
 	if o.postgres != nil {
 		s.postgresReady(t)

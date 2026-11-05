@@ -85,6 +85,11 @@ type rangeDriver struct {
 	// exit journey).
 	hubKey   string
 	business bool
+
+	// importKey is the org package key package.import steps sign with, and
+	// importSeq counts their imports (G0 M31).
+	importKey ed25519.PrivateKey
+	importSeq int
 }
 
 type reviewer struct {
@@ -120,6 +125,7 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	maps.Copy(caps, a2aCapabilities())
 	maps.Copy(caps, pgCapabilities())
 	maps.Copy(caps, m20ConnectorCapabilities())
+	maps.Copy(caps, m31Capabilities())
 	caps[capAWSECS] = true
 	return caps
 }
@@ -156,7 +162,8 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	// CX-90002 is the Hub seed's customer-authored form of RT-009.
 	ownGrant := sc.ID == "RT-009" || sc.ID == "CX-90002"
 	if requires(sc, "person") || ownGrant || slackScenario(sc) || needsBrowser(sc) ||
-		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) {
+		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) ||
+		needsM31(sc) {
 		p = inProcessIdP(t)
 		o.people = &p
 	}
@@ -164,6 +171,8 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	o.slack = slackScenario(sc)
 	o.jira, o.gitlab = requires(sc, string(capJiraComment)), requires(sc, string(capGitLabMerge))
 	o.awsECS = requires(sc, string(capAWSECS))
+	o.google = requires(sc, string(capGmailSend)) || requires(sc, string(capDriveShare))
+	o.linear = requires(sc, string(capLinearIssue))
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
@@ -206,6 +215,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.setupSlack()
 	}
 	d.setupM20Connectors()
+	d.setupM31Connectors()
 	d.setupAWSECS()
 	if requires(sc, "mcp") {
 		d.setupMCPUpstream()
@@ -355,6 +365,9 @@ func (d *rangeDriver) Do(ctx context.Context, sc domain.Scenario, st domain.Step
 		return d.extra.probe(d, st, vars)
 	}
 	if obs, ok, err := d.uiStep(st); ok {
+		return obs, err
+	}
+	if obs, ok, err := d.m31Step(st); ok {
 		return obs, err
 	}
 	return domain.Observation{}, fmt.Errorf("the harness driver does not run %s", st.Do)

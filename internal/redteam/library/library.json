@@ -1035,5 +1035,54 @@
     "digest": "1a67293366eecbb9a52ab60351d4fd18f970af0c565ff270c43509805ff56fb1",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own permissions: a caller with no permission gets a refusal, not data."
+  },
+  "RT-210": {
+    "digest": "0080f5f0878df90f38a8a63cec678fa609642886edbb01945f2523a7a8594fed",
+    "tier": "business",
+    "techniques_none": "Tests PantherClaw's own importer: a drafted package still carrying review_required is refused by the decoder, whoever signed it."
+  },
+  "RT-211": {
+    "digest": "5dc5d4f36c62921b679eed46a6b51353ef06dc0ff55a5c2d5e75849bf05bde61",
+    "tier": "business",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent calls its own Gmail send tool with a crafted subject."
+    }
+  },
+  "RT-212": {
+    "digest": "37c07c0c4540dcea3f2aec34dde41ce1c876db558f58cc21c00c043b0512ab8f",
+    "tier": "business",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "attack": [
+      "T1567.002"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent calls its own Drive share tool.",
+      "T1567.002": "Exfiltration to cloud storage (T1567.002): sharing a file to anyone or an outside account takes it out of the organization."
+    }
+  },
+  "RT-213": {
+    "digest": "4125c3bc6350e260e8c32016b832ed8d3210a7e8ffd364d447582097f8065f8c",
+    "tier": "business",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent passes its own GraphQL document to the Linear create tool."
+    }
+  },
+  "RT-214": {
+    "digest": "c0f82c5c43ec73afd44832576196c732e48b0a0eb3335b98794451cf7a66425d",
+    "tier": "business",
+    "atlas": [
+      "AML.T0053"
+    ],
+    "technique_why": {
+      "AML.T0053": "AI agent tool invocation (AML.T0053): the agent calls its own Gmail send tool naming another mailbox."
+    }
   }
 }

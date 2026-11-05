@@ -33,9 +33,11 @@ func TestCustomerStepKindsAreTheLiveKinds(t *testing.T) {
 // run: sandbox (sandbox.probe), second_org (server.read), browser
 // (browser.call), the simulator swaps and slack.interaction_post
 // (sim.mutate), billing (a stack with hosted plans), aws.ecs.deploy (on a
-// live range, a real deploy).
+// live range, a real deploy), gmail.send, drive.share and linear.issue (on
+// a live range, real mail, shares and issues).
 var harnessCapabilities = []string{
 	"sandbox", "second_org", "browser", "stripe.key_swap", "pg.role_swap", "a2a.card_swap", "slack.interaction_post", "billing", "aws.ecs.deploy",
+	"gmail.send", "drive.share", "linear.issue",
 }
 
 // TestCustomerCapabilitiesAreWhatALiveRangeProvides: every capability is
