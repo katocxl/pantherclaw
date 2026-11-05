@@ -44,7 +44,16 @@ Permissions: `identity_provider.manage` for changes, `identity_provider.read` fo
 
 - `pap-mcp+jwt` lives 5 minutes, names one gateway server, and is re-verified by the Authority on every call. It is signed with the `mcp_tokens` key purpose and is never accepted as a workload token.
 - The code flow needs PKCE S256, a signed-in person, and their consent on a page that names the client, the agent and the server. Codes last 60 seconds and are single use. The page warns when the redirect is a plain-HTTP loopback address.
-- A `pap-mcp+jwt` is not sender-constrained: a stolen one works from anywhere for up to 5 minutes, at the one server it names (R-69).
+- A bearer `pap-mcp+jwt` is not sender-constrained: a stolen one works from anywhere for up to 5 minutes, at the one server it names (R-69). Clients that hold a key can bind their tokens to it (below).
+
+### Bound tokens (DPoP, M30)
+
+Agent identity protection ([G0 M30](../g0/M30.md) D910–D915, HR-700..702), every edition.
+- A client opts in with `"dpop_bound_access_tokens": true` in its metadata document. The MCP client read shows `dpop_bound`.
+- At the token endpoint and the ID-JAG exchange, a valid DPoP proof (RFC 9449) binds the token to the proof's key (`cnf.jkt`, `token_type` `DPoP`). A bound refresh token refreshes only with a proof of the same key, and a code issued for a `dpop_jkt` is redeemed only with that key. An invalid proof, or no proof from a client that asked for bound tokens, is `invalid_dpop_proof`.
+- At use, the client sends `Authorization: DPoP <token>` and a fresh proof for that method and URL, with the token's hash, a time within 60 seconds, the organization's current nonce and a new id. A missing or stale nonce answers `use_dpop_nonce` with the current one in `DPoP-Nonce`; retry with it. A reused proof is refused.
+- **A bound token is never a bearer token**: sent as `Bearer` it is refused `invalid_token`; sent as `DPoP` without a proof, the gateway refuses it `invalid_dpop_proof`.
+- Issuance audit entries name `binding` = `dpop` or `bearer`. Clients without a key keep the 5-minute bearer token.
 - Refresh tokens exist only for the code flow. They rotate on every use and end with the run.
 - **A reused code or refresh token ends its run.** A spent code presented again, or a rotated refresh token used again, revokes the run and its descendants (end reason `authorization_code_reused` or `refresh_token_reused`). A refresh reuse also kills the whole token family. Each raises an audited event, and the notice says the run was ended.
 

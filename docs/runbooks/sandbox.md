@@ -67,6 +67,7 @@ The founder's decision of 2026-10-11:
   - `changes.txt`: every change. `binary` marks binary files and `review` marks dotfiles, editor and task files.
   - `binary/`: the new content of changed binary files, never executable, for you to copy. git applies binary patches only by SHA-1 ids, which PantherClaw's code does not use (SB-3).
     - **Never copy `binary/` wholesale over your checkout.** Copy only the files `changes.txt` marks `binary` that you mean to take, one by one, after looking at each. A binary is as untrusted as any file the agent wrote: an executable, a library or a compiled hook runs if anything on your host picks it up.
+- **Agent configuration and memory files** (M30, HR-713): the workspace's settings, MCP, hook, skill and memory files are bound read-only, and a change under them stays out of `changes.patch` until you review it and run again with `--include-protected`. See [agent-config.md](agent-config.md).
 - **Review before running anything.** `pclaw` lists the dotfiles, editor and task files the agent changed, such as `.envrc`, `.vscode/`, `.idea/`, `.githooks/`, `Makefile`, `package.json` and `Taskfile.yml`. Tools run or load these on their own: read them before you open the project in an editor, run a build, or let direnv load.
 
 ## 4. Read the outcome

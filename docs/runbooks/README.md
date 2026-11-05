@@ -64,3 +64,6 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [pclaw-mcp-self.md](pclaw-mcp-self.md) | M27 | `pclaw mcp self`: a read-only MCP server for a SOC agent, the Investigator role and the server's audit of each read (Team) |
 | [siem-forwarder.md](siem-forwarder.md) | M27 | `pclaw siem forward`: verify SIEM export batches and write one OCSF event per line for Sentinel's Azure Monitor Agent or Wazuh (Business) |
 | [threat-map.md](threat-map.md) | M28 | The threat map: MITRE ATLAS and ATT&CK Enterprise lanes, gaps and fixes, `pclaw threats`, the signed report, the Navigator layer and history |
+| [shares-and-read-limits.md](shares-and-read-limits.md) | M30 | Share checks on bucket policies, ACLs, repository visibility and transfers; owned accounts as a protected change; read limits; enumeration and scheduled-send alerts |
+| [agent-config.md](agent-config.md) | M30 | Agent configuration and memory files: digests and drift alerts from scans, the hook's `agent_config.write`, read-only files in the sandbox |
+| [vectorstore.md](vectorstore.md) | M30 | The pgvector connector: the table DDL, writers and holds, provenance from the permit, a fixed endpoint, bounds |

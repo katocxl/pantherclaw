@@ -510,7 +510,7 @@ M21 is a post-1.0 milestone that lands after M20, in migration-number order ([G0
 M22, M23 and M24 are post-1.0 milestones built in parallel as one wave (founder, 2026-10-31: all coding comes before live testing and founder steps); they land in migration-number order.
 M25, M26 and M27 are the second such wave: they build in parallel after M24 has landed, and land in migration-number order.
 M28 is a post-1.0 milestone that lands after M27 ([G0 M28](g0/M28.md)); its streams build in parallel and land as one exit pull request.
-M30 is a post-1.0 milestone coded beside M29 and assembled on M29's exit branch ([G0 M30](g0/M30.md)); it is tested and lands after all coding (founder, 2026-11-04).
+M30 is a post-1.0 milestone coded beside M29 and assembled on M29's exit branch ([G0 M30](g0/M30.md)); it is tested after all coding (founder, 2026-11-04) and lands right after M29.
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -828,10 +828,11 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Console** (private stream): Evidence › Threat map and technique chips.
 - Migrations `00320`–`00322` (`00323`–`00329` spare); new permission `threatmap.read` (Go only).
 
-### M30 — Firewall gaps from the threat map
-**HR:** HR-700..717 · **F:** F990–F1004 · **ADR:** 0057 · **G0:** [g0/M30.md](g0/M30.md).
-- **Code first** (founder, 2026-11-04): every stream codes on a pushed branch with no tests and no pull requests; `code/m30` assembles them on M29's exit branch; tests and landing come in the testing phase.
-- **Bound MCP tokens** (FD4): DPoP at the token endpoint and at use for clients with a registered key; standard clients keep the 5-minute bearer.
+### M30 — Gaps from the threat map
+**HR:** HR-700..717 · **T:** T-320..326 · **RT:** RT-200..203 · **F:** F990–F1004 · **ADR:** 0057 · **G0:** [g0/M30.md](g0/M30.md).
+- **Code first** (founder, 2026-11-04): every stream coded on a pushed branch with no tests and no pull requests; `code/m30` assembled them on M29's exit branch. The testing phase added the tests, RT-200..203 and the exit e2e (`TestE2E_M30_GapsFromTheThreatMapHoldWhatTheyShould`), and M30 lands as one pull request after M29.
+- **Two groups** (founder, 2026-11-05): agent identity protection is the bound MCP tokens; every other item below is runtime firewall.
+- **Bound MCP tokens** (FD4, agent identity protection): DPoP at the token endpoint and at use for clients with a registered key; standard clients keep the 5-minute bearer.
 - **Reads and shares** (FD6, answer S): read limits on count rules, off by default; enumeration and scheduled-send alerts; owned accounts and holds for shares to the public or unlisted accounts.
 - **Agent configuration** (FD5, answer C): digests and a drift alert from scans, a hook route and read-only sandbox binds; never contents or values.
 - **Content and retrieval** (FD7): decoding before content signals; `pc.vectorstore` on pgvector with a writer list and provenance.
