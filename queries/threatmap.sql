@@ -126,6 +126,13 @@ SELECT coalesce((SELECT s.mode FROM pc.content_signal_settings s WHERE s.org_id 
 -- name: ThreatMapMCPCatalogMode :one
 SELECT coalesce((SELECT s.mode FROM pc.mcp_catalog_settings s WHERE s.org_id = sqlc.arg(org_id)), 'WATCH')::text;
 
+-- name: ThreatMapBrowserExtensionDeployed :one
+-- Whether the org has an ACTIVE connection that pins pc.browser (G0 M33 D987a).
+SELECT EXISTS (
+    SELECT 1 FROM pc.connections c
+    WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'ACTIVE' AND c.package = 'pc.browser'
+)::bool;
+
 -- name: ThreatMapAlertGroups :many
 -- Non-test alerts first seen since since, grouped by their ATLAS and ATT&CK
 -- techniques (G0 M28 D720a: both once signals carry attack), in

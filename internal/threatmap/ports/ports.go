@@ -21,12 +21,14 @@ import (
 type Records struct {
 	ContentMode         string
 	MCPCatalogEnforcing bool
-	Agents              []domain.Agent
-	Routes              []domain.Route
-	Rules               []domain.Rule
-	Cursor              domain.Cursor
-	Automations         []domain.Automation
-	Results             []domain.Result
+	// BrowserExtensionDeployed: an ACTIVE connection pins pc.browser (G0 M33 D987a).
+	BrowserExtensionDeployed bool
+	Agents                   []domain.Agent
+	Routes                   []domain.Route
+	Rules                    []domain.Rule
+	Cursor                   domain.Cursor
+	Automations              []domain.Automation
+	Results                  []domain.Result
 }
 
 // Seen is the scope's Seen counts' inputs (D713).

@@ -238,6 +238,21 @@ func (q *Queries) ThreatMapAutomations(ctx context.Context, orgID ids.OrgID) ([]
 	return items, nil
 }
 
+const threatMapBrowserExtensionDeployed = `-- name: ThreatMapBrowserExtensionDeployed :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.connections c
+    WHERE c.org_id = $1 AND c.state = 'ACTIVE' AND c.package = 'pc.browser'
+)::bool
+`
+
+// Whether the org has an ACTIVE connection that pins pc.browser (G0 M33 D987a).
+func (q *Queries) ThreatMapBrowserExtensionDeployed(ctx context.Context, orgID ids.OrgID) (bool, error) {
+	row := q.db.QueryRow(ctx, threatMapBrowserExtensionDeployed, orgID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const threatMapContentMode = `-- name: ThreatMapContentMode :one
 SELECT coalesce((SELECT s.mode FROM pc.content_signal_settings s WHERE s.org_id = $1), 'OFF')::text
 `
