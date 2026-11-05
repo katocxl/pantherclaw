@@ -5,6 +5,7 @@ package outbound
 
 import (
 	"errors"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -55,9 +56,37 @@ func ScanModel(body []byte, model string, held [][]byte) (Result, error) {
 	}
 	res := scanParts(c, held)
 	for i := range res.Findings {
-		res.Findings[i].Location = clip(res.Findings[i].Location)
+		res.Findings[i].Location = clip(redact(res.Findings[i].Location))
 	}
 	return res, nil
+}
+
+// Format names the first known credential format found anywhere in s, or ""
+// (unanchored; pclaw's --env check, G0 M29 D823, D1214).
+func Format(s string) string {
+	for _, f := range formats {
+		if f.re.MatchString(s) {
+			return f.kind
+		}
+	}
+	return ""
+}
+
+// redact replaces each pointer segment of a finding location that holds a
+// credential format with <redacted>: a member name may be the credential
+// itself, and a location reaches the decision, the approval and the receipt
+// (G0 M29 D1214).
+func redact(loc string) string {
+	segs := strings.Split(loc, "/")
+	for i, s := range segs {
+		for _, f := range formats {
+			if f.re.MatchString(s) {
+				segs[i] = "<redacted>"
+				break
+			}
+		}
+	}
+	return strings.Join(segs, "/")
 }
 
 // clip cuts a location to maxLocation bytes on a rune boundary.

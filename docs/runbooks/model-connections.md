@@ -97,7 +97,10 @@ Some tools run on the provider's servers, not in the agent: web search and fetch
 
 - Anthropic: a `tools[]` entry with a `type` other than `custom` and the client-run types (`computer_…`, `text_editor_…`, `bash_…`, `memory_…`), `mcp_servers`, or `container`.
 - Chat Completions: a `tools[]` type other than `function` or `custom`, or `web_search_options`.
-- Responses: a `tools[]` type other than `function`, `custom`, `local_shell` or `computer_use_preview`, or `background: true`.
+- Responses: a `tools[]` type other than `function`, `custom`, `local_shell` or `computer_use_preview`, or `background: true`. A stored prompt (`prompt`) is named `stored_prompt`, and a stored response or conversation (`previous_response_id`, `conversation`) is named `stored_context`: the provider adds tools or input the gateway never sees.
+- Chat Completions and Responses: a model id that contains `search` or `deep-research` (any case) is named `web_search`, since those models search the web with no tool field.
+
+Allowing `stored_context` lets a call pass its token reservation by the whole stored context (R-73).
 
 A type the gateway does not know counts as provider-side. The name to allow is the tool's `type` string exactly as the request sends it (at most 32 per connection). Policies see the request's provider-side tools as `server_tools`.
 

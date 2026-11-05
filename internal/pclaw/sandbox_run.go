@@ -24,6 +24,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/katocxl/pantherclaw/internal/gateway/outbound"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
@@ -121,7 +122,7 @@ const (
 var refusedAgentEnv = []string{
 	"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE",
 	"REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "GIT_SSL_CAINFO", "NODE_TLS_REJECT_UNAUTHORIZED", "NODE_USE_ENV_PROXY",
-	"HOME", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY",
+	"HOME", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "OPENAI_ADMIN_KEY", "AZURE_OPENAI_API_KEY",
 }
 
 // checkAgentEnv checks --env entries (G0 M29 D823). An error names the
@@ -142,11 +143,29 @@ func checkAgentEnv(entries []string) error {
 		if len(value) > maxAgentEnvValue || strings.ContainsAny(value, "\x00\r\n") {
 			return fmt.Errorf("--env %s: the value must be at most %d bytes on one line", name, maxAgentEnvValue)
 		}
-		if edge.TokenKind(value) != "" || strings.Contains(value, "-----BEGIN") {
+		if credentialValue(value) {
 			return fmt.Errorf("--env %s: the value looks like a credential; the sandbox never passes one to the agent", name)
 		}
 	}
 	return nil
+}
+
+// credentialValue reports whether an --env value holds a credential
+// anywhere (G0 M29 D823, D1214): a known format found by the gateway's
+// scanner, a PEM block, or a token the edge's detector names, after a
+// scheme, a prefix, "key=" or in URL userinfo.
+func credentialValue(v string) bool {
+	if outbound.Format(v) != "" || strings.Contains(v, "-----BEGIN") {
+		return true
+	}
+	for _, tok := range strings.FieldsFunc(v, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '=' || r == ':' || r == '@' || r == '/' || r == '?' || r == '&' || r == ',' || r == ';' || r == '"' || r == '\''
+	}) {
+		if edge.TokenKind(tok) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // agentEnvName matches ^[A-Za-z_][A-Za-z0-9_]{0,127}$.

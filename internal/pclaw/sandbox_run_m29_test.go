@@ -76,6 +76,11 @@ func TestT317_AKeyOrAProxyOverrideCannotBeSmuggledIntoTheSandbox(t *testing.T) {
 		"Anthropic_Auth_Token=x", "Pc_anything=x",
 		"K=" + "sk-" + "proj-" + strings.Repeat("a", 40),
 		"K=" + "sk-" + strings.Repeat("A1", 20),
+		// A key after a prefix, in URL userinfo, after key= (D1214).
+		"AUTH=Bearer " + "sk-" + "ant-" + "api03-" + strings.Repeat("Q", 40),
+		"URL=https://u:" + "sk-" + "proj-" + strings.Repeat("b", 40) + "@h.example",
+		"X=key=" + "gh" + "p_" + strings.Repeat("c", 36),
+		"AZURE_OPENAI_API_KEY=0123456789abcdef0123456789abcdef", "openai_admin_key=x",
 	} {
 		if _, err := parseSandboxRun(a, sandboxRunArgs("--env", entry)); err == nil {
 			t.Errorf("--env %q passed", entry)

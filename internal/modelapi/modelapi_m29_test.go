@@ -141,6 +141,14 @@ func TestT316_UnknownAndDisguisedProviderToolsCountAsProviderSide(t *testing.T) 
 		{AnthropicMessages, `{"model":"m","tools":[{"type":"code_execution_20250825"}]}`, []string{"code_execution_20250825"}},
 		{OpenAIChat, `{"model":"m","tools":[{"type":"Function"}]}`, []string{"Function"}},
 		{OpenAIResponses, `{"model":"m","tools":[{"type":"image_generation"}]}`, []string{"image_generation"}},
+		// A search or deep-research model searches with no tool field; a
+		// stored prompt or context is provider state (D1214).
+		{OpenAIChat, `{"model":"gpt-4o-SEARCH-preview","messages":[]}`, []string{"web_search"}},
+		{OpenAIResponses, `{"model":"o3-deep-research","input":"x"}`, []string{"web_search"}},
+		{OpenAIResponses, `{"model":"m","prompt":{"id":"pmpt_1"}}`, []string{"stored_prompt"}},
+		{OpenAIResponses, `{"model":"m","prompt":null,"previous_response_id":"resp_1"}`, []string{"stored_context"}},
+		{OpenAIResponses, `{"model":"m","conversation":"conv_1"}`, []string{"stored_context"}},
+		{AnthropicMessages, `{"model":"search-anything","max_tokens":5}`, []string{}},
 	} {
 		r, err := Parse(tc.api, []byte(tc.body), 77)
 		if err != nil || !slices.Equal(r.ServerTools, tc.want) {

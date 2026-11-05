@@ -309,6 +309,11 @@ func TestT314_ASecretHiddenInAPromptIsStillFound(t *testing.T) {
 			t.Errorf("%s: %d %s, findings %v", name, r.code, r.body, h.auth.findings)
 		}
 	}
+	// A key used as a member name never reaches the location (D1214).
+	h.call(t, "/v1/messages", `{"model":"sim-model","max_tokens":5,"metadata":{"`+key+`":1}}`, nil)
+	if len(h.auth.findings) != 1 || h.auth.findings[0].GetLocation() != "body:/metadata/<redacted>" {
+		t.Fatalf("member name: findings %v", h.auth.findings)
+	}
 	_, url := fakeModel(t, simmodel.Faults{})
 	o := setup(t, withModel(t, "pc-openai", url, []string{"127.0.0.1"}, "Authorization", "Bearer"))
 	okey := "sk-" + "proj-" + strings.Repeat("Ab3-", 10)
