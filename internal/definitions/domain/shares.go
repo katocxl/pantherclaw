@@ -112,13 +112,15 @@ func policyPrincipals(policy string) []actionir.Destination {
 	if err := json.Unmarshal([]byte(policy), &doc); err != nil || len(doc.Statement) == 0 {
 		return []actionir.Destination{public}
 	}
-	var stmts []struct {
-		Principal jsontext.Value `json:"Principal"`
+	// NotPrincipal grants to everyone but the accounts it names, so a
+	// statement with it is public (fail closed, G0 M30 D934).
+	type statement struct {
+		Principal    jsontext.Value `json:"Principal"`
+		NotPrincipal jsontext.Value `json:"NotPrincipal"`
 	}
+	var stmts []statement
 	if doc.Statement.Kind() == '{' {
-		var one struct {
-			Principal jsontext.Value `json:"Principal"`
-		}
+		var one statement
 		if err := json.Unmarshal(doc.Statement, &one); err != nil {
 			return []actionir.Destination{public}
 		}
@@ -133,8 +135,12 @@ func policyPrincipals(policy string) []actionir.Destination {
 		}
 	}
 	for _, s := range stmts {
+		if len(s.NotPrincipal) != 0 {
+			add(public)
+			continue
+		}
 		if len(s.Principal) == 0 {
-			continue // NotPrincipal or none: no principal to share to here
+			continue // no principal: nothing to share to here
 		}
 		if s.Principal.Kind() == '"' {
 			add(public) // "*", or a string that names no account

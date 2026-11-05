@@ -151,7 +151,7 @@ message ContentFinding {
   // The decoding layers a hit was found through, joined by "+" in
   // application order (base64, hex, url, escape, entity, confusable,
   // zero_width); empty for a plain hit (G0 M30 D921).
-  string encoding = 3 [(buf.validate.field).string.pattern = "^[a-z_+]{0,64}$"];
+  string encoding = 3 [(buf.validate.field).string.pattern = "^[a-z0-9_+]{0,64}$"];
 }
 
 // ContentScan is whether the gateway scanned a body for content signals (G0

@@ -531,16 +531,32 @@ func stringList(v ref.Val) ([]string, bool) {
 
 var reflectStrings = reflect.TypeOf([]string(nil))
 
+// floatList reads a list of numbers: DecodeInput gives whole numbers as
+// ints, so each element is an int or a double (G0 M30 D927).
 func floatList(v ref.Val) ([]float64, bool) {
-	native, err := v.ConvertToNative(reflectFloats)
+	native, err := v.ConvertToNative(reflectAnys)
 	if err != nil {
 		return nil, false
 	}
-	l, ok := native.([]float64)
-	return l, ok
+	l, ok := native.([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]float64, len(l))
+	for i, e := range l {
+		switch n := e.(type) {
+		case int64:
+			out[i] = float64(n)
+		case float64:
+			out[i] = n
+		default:
+			return nil, false
+		}
+	}
+	return out, true
 }
 
-var reflectFloats = reflect.TypeOf([]float64(nil))
+var reflectAnys = reflect.TypeOf([]any(nil))
 
 func stringMap(v ref.Val) (map[string]string, bool) {
 	native, err := v.ConvertToNative(reflectStringMap)

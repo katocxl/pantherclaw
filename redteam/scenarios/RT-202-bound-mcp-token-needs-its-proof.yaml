@@ -1,0 +1,31 @@
+apiVersion: pantherclaw.range/v1
+id: RT-202
+title: An MCP access token bound to a client's key is refused as a bearer token or without a proof
+category: boundary
+suite: platform
+tier: business
+attacker: A4
+threats: [T-320]
+rules: [HR-700]
+atlas: [AML.T0091.000]
+attack: [T1550.001]
+technique_why:
+  AML.T0091.000: "Application access token (AML.T0091.000): a copied MCP token bound to a client's key is used without that key."
+  T1550.001: "Application access token (T1550.001): the bound token is sent as a bearer token, or under DPoP with no proof."
+requires: [payments]
+harness_only: true
+steps:
+  - id: bound-token-as-bearer
+    do: idp.probe
+    with: {attack: bound_token_as_bearer}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_TOKEN
+      decisive_control: HR-700
+  - id: bound-token-without-proof
+    do: idp.probe
+    with: {attack: bound_token_without_proof}
+    expect:
+      outcome: REFUSED
+      reason: INVALID_DPOP_PROOF
+      decisive_control: HR-700

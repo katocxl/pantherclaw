@@ -371,8 +371,9 @@ func TestF015_AConfigNamedTwiceIsReadOnce(t *testing.T) {
 		t.Skip("case-sensitive file system")
 	}
 	got := scan.Run(scan.Options{Host: "h", Home: home, ConfigDir: upper})
-	if len(got) != 1 {
-		t.Fatalf("findings %v, want the one server once", got)
+	// The file is also reported by its digest, once (G0 M30 D941).
+	if len(got) != 2 || got[0].Kind != scan.KindAgentConfig || got[1].Kind != scan.KindMCPServer {
+		t.Fatalf("findings %v, want the one server and the one file once", got)
 	}
 }
 
@@ -383,10 +384,11 @@ func TestF015_LongAttributesStayValidUTF8(t *testing.T) {
 	name := "a" + strings.Repeat("ü", 200) // 401 bytes: a 256-byte cut lands inside a character
 	write(t, filepath.Join(dir, ".mcp.json"), `{"mcpServers": {"`+name+`": {"command": "python"}}}`)
 	got := scan.Run(scan.Options{Host: "h", Paths: []string{dir}})
-	if len(got) != 1 {
+	// The server and the file's digest (agent_config, G0 M30 D941).
+	if len(got) != 2 || got[1].Kind != scan.KindMCPServer {
 		t.Fatalf("findings %v", got)
 	}
-	for k, v := range got[0].Attributes {
+	for k, v := range got[1].Attributes {
 		if !utf8.ValidString(v) || len(v) > 256 {
 			t.Errorf("attribute %s: %d bytes, valid UTF-8 %v", k, len(v), utf8.ValidString(v))
 		}

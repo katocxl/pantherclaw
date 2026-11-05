@@ -279,8 +279,10 @@ var Prevent = []PreventControl{
 	// G0 M30 D947, D948: the M30 controls.
 	{
 		ID: "prevent.mcp_token_binding", Title: "An MCP token bound to a client's key is refused without a fresh proof of that key", Surface: SurfaceCredential,
-		ReasonCodes: []string{"invalid_dpop_proof", "use_dpop_nonce"},
-		HR:          []string{"HR-700", "HR-701", "HR-702"}, Requires: RequiresAlways,
+		// No reason codes: invalid_dpop_proof and use_dpop_nonce are OAuth
+		// authentication errors, not decision codes (D1205, D1208).
+		HR:         []string{"HR-700", "HR-701", "HR-702"},
+		Requires:   RequiresAlways,
 		Techniques: []string{"AML.T0091.000", "T1550.001"},
 		Why: map[string]string{
 			"AML.T0091.000": "Application access token (AML.T0091.000): a copied MCP token bound to a client's key is refused without a fresh proof of that key.",

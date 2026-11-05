@@ -235,6 +235,9 @@ func (d *rangeDriver) idpProbe(st domain.Step) (domain.Observation, error) {
 		}
 		return idpRefused(reuse), nil
 	}
+	if obs, ok, err := d.idpProbeM30(a, w.Attack); ok {
+		return obs, err
+	}
 	if w.Attack == "" {
 		return domain.Observation{}, errors.New("idp.probe needs an attack")
 	}

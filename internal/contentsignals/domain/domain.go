@@ -121,7 +121,7 @@ var (
 		KindPIINationalID, KindClassifierFlag, KindScanIncomplete,
 	}
 	locationRe = regexp.MustCompile(`^[!-~]{1,128}$`)
-	encodingRe = regexp.MustCompile(`^[a-z_+]{0,64}$`)
+	encodingRe = regexp.MustCompile(`^[a-z0-9_+]{0,64}$`) // layer names include base64 (G0 M30 D921)
 )
 
 // ValidKind reports whether k is a known finding kind.
