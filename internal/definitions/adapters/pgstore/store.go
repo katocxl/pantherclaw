@@ -96,6 +96,9 @@ func (s *Store) Import(ctx context.Context, org ids.OrgID, rec app.Record) error
 		if err := q.LockPackageImports(ctx, org.String()); err != nil {
 			return err
 		}
+		if err := checkBundlePackage(ctx, q, org, rec); err != nil {
+			return err
+		}
 		if err := checkOperations(ctx, q, org, rec); err != nil {
 			return err
 		}

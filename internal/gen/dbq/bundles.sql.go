@@ -722,6 +722,65 @@ func (q *Queries) LockBundleState(ctx context.Context, orgID ids.OrgID, name str
 	return i, err
 }
 
+const lockBundleTargetStates = `-- name: LockBundleTargetStates :many
+SELECT state FROM pc.bundle_items
+WHERE org_id = $1 AND target_type = $2 AND target_id = $3
+ORDER BY install_id
+FOR SHARE
+`
+
+// The states of the bundle items that drafted one object, locked so that a
+// revocation running at the same time waits (D1083a: revoked stays off).
+func (q *Queries) LockBundleTargetStates(ctx context.Context, orgID ids.OrgID, targetType string, targetID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, lockBundleTargetStates, orgID, targetType, targetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var state string
+		if err := rows.Scan(&state); err != nil {
+			return nil, err
+		}
+		items = append(items, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockDraftedBundlePackage = `-- name: LockDraftedBundlePackage :many
+SELECT install_id FROM pc.bundle_items
+WHERE org_id = $1 AND kind = 'tool_package' AND target_type = 'package_draft'
+  AND target_id = $2 AND sha256 = $3 AND state = 'DRAFTED'
+ORDER BY install_id
+FOR SHARE
+`
+
+// The DRAFTED tool_package items for name@version with exactly these
+// package.yaml bytes, locked for the import's transaction (D1082b).
+func (q *Queries) LockDraftedBundlePackage(ctx context.Context, orgID ids.OrgID, targetID string, sha256 string) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, lockDraftedBundlePackage, orgID, targetID, sha256)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var install_id ids.UUID
+		if err := rows.Scan(&install_id); err != nil {
+			return nil, err
+		}
+		items = append(items, install_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const publisherKeysEver = `-- name: PublisherKeysEver :many
 SELECT id, kid, public_key, state FROM pc.publisher_pins
 WHERE org_id = $1 AND publisher = $2

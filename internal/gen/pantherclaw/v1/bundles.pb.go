@@ -966,7 +966,8 @@ func (x *BundleInstall) GetItems() []*BundleItem {
 // InstallBundleRequest carries a .pcbundle file.
 type InstallBundleRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The .pcbundle file (a zip).
+	// The .pcbundle file (a zip), at most 960 KiB so that it fits one
+	// request.
 	Bundle        []byte `protobuf:"bytes,1,opt,name=bundle,proto3" json:"bundle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1539,9 +1540,9 @@ const file_pantherclaw_v1_bundles_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"finishTime\x12!\n" +
 	"\ffailure_code\x18\v \x01(\tR\vfailureCode\x120\n" +
-	"\x05items\x18\f \x03(\v2\x1a.pantherclaw.v1.BundleItemR\x05items\"<\n" +
-	"\x14InstallBundleRequest\x12$\n" +
-	"\x06bundle\x18\x01 \x01(\fB\f\xbaH\tz\a\x10\x01\x18\x80\x80\x80\x04R\x06bundle\"P\n" +
+	"\x05items\x18\f \x03(\v2\x1a.pantherclaw.v1.BundleItemR\x05items\";\n" +
+	"\x14InstallBundleRequest\x12#\n" +
+	"\x06bundle\x18\x01 \x01(\fB\v\xbaH\bz\x06\x10\x01\x18\x80\x80<R\x06bundle\"P\n" +
 	"\x15InstallBundleResponse\x127\n" +
 	"\ainstall\x18\x01 \x01(\v2\x1d.pantherclaw.v1.BundleInstallR\ainstall\"~\n" +
 	"\x19ListBundleInstallsRequest\x12'\n" +

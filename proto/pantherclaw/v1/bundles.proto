@@ -253,10 +253,11 @@ message BundleInstall {
 
 // InstallBundleRequest carries a .pcbundle file.
 message InstallBundleRequest {
-  // The .pcbundle file (a zip).
+  // The .pcbundle file (a zip), at most 960 KiB so that it fits one
+  // request.
   bytes bundle = 1 [(buf.validate.field).bytes = {
     min_len: 1
-    max_len: 8388608
+    max_len: 983040
   }];
 }
 

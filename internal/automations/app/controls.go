@@ -292,6 +292,11 @@ func (s *Service) ResumeAutomation(ctx context.Context, automation ids.UUID) (Au
 	var replayed int
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if revoked, err := bundleRevoked(ctx, q, c.Org, automation); err != nil {
+			return err
+		} else if revoked {
+			return ErrBundleRevoked
+		}
 		killed, err := lockKillSwitch(ctx, q, c.Org)
 		if err != nil {
 			return err
@@ -343,6 +348,11 @@ func (s *Service) ResumePaused(ctx context.Context, ptx pgx.Tx, org ids.OrgID, a
 		return false, err
 	}
 	q := dbq.New(tx)
+	if revoked, err := bundleRevoked(ctx, q, org, automation); err != nil {
+		return false, err
+	} else if revoked {
+		return false, ErrBundleRevoked
+	}
 	killed, err := lockKillSwitch(ctx, q, org)
 	if err != nil {
 		return false, err

@@ -59,14 +59,18 @@ const (
 	ItemsDir      = "items"
 )
 
-// Limits (D1080).
+// Limits (D1080, D1080a).
 const (
 	// MaxItems bounds a bundle's items.
 	MaxItems = 64
-	// MaxItemBytes bounds one item file.
+	// MaxFileBytes bounds the .pcbundle file itself, so that it fits one
+	// API request (the 1 MiB request cap; D1080a). Chunked upload is a
+	// follow-up.
+	MaxFileBytes = 960 << 10
+	// MaxItemBytes bounds one uncompressed item file (a zip-bomb limit).
 	MaxItemBytes = 1 << 20
-	// MaxBundleBytes bounds the .pcbundle file and the sum of its
-	// uncompressed contents.
+	// MaxBundleBytes bounds the sum of the uncompressed contents (a
+	// zip-bomb limit).
 	MaxBundleBytes = 8 << 20
 	// MaxManifestBytes bounds bundle.json.
 	MaxManifestBytes = 256 << 10
@@ -140,7 +144,7 @@ func (e *Error) Is(target error) bool {
 // Errors. Each wraps one *Error; match with errors.Is.
 var (
 	ErrFormat        = &Error{"BUNDLE_FORMAT", "the file is not a pc-bundle/1 bundle"}
-	ErrLimit         = &Error{"BUNDLE_LIMIT", "the bundle exceeds a limit: 64 items, 1 MiB per item, 8 MiB in total"}
+	ErrLimit         = &Error{"BUNDLE_LIMIT", "the bundle exceeds a limit: a 960 KiB file, 64 items, 1 MiB per item, 8 MiB uncompressed in total"}
 	ErrPath          = &Error{"BUNDLE_PATH", "a bundle holds only bundle.json, bundle.jws and items/<kind>/<file> regular files"}
 	ErrNamespace     = &Error{"BUNDLE_NAMESPACE", "every name in a bundle is ext.<publisher>.<name>, in its own publisher's namespace"}
 	ErrKind          = &Error{"BUNDLE_KIND", "the item kind is not one a bundle may carry"}
@@ -443,8 +447,8 @@ func textOnly(b []byte) bool {
 // it is executed. The result is not trusted until Verify passes.
 func Decode(zipBytes []byte) (Bundle, error) {
 	var b Bundle
-	if len(zipBytes) == 0 || len(zipBytes) > MaxBundleBytes {
-		return b, fail(ErrLimit, "the file is %d bytes, 1..%d", len(zipBytes), MaxBundleBytes)
+	if len(zipBytes) == 0 || len(zipBytes) > MaxFileBytes {
+		return b, fail(ErrLimit, "the file is %d bytes, 1..%d", len(zipBytes), MaxFileBytes)
 	}
 	sum := sha256.Sum256(zipBytes)
 	b.SHA256 = hex.EncodeToString(sum[:])

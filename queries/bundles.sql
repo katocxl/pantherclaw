@@ -102,6 +102,23 @@ INSERT INTO pc.bundle_items (org_id, install_id, kind, name, sha256, target_type
 VALUES (sqlc.arg(org_id), sqlc.arg(install_id), sqlc.arg(kind), sqlc.arg(name), sqlc.arg(sha256), sqlc.arg(target_type),
         sqlc.arg(target_id), sqlc.arg(state));
 
+-- name: LockBundleTargetStates :many
+-- The states of the bundle items that drafted one object, locked so that a
+-- revocation running at the same time waits (D1083a: revoked stays off).
+SELECT state FROM pc.bundle_items
+WHERE org_id = sqlc.arg(org_id) AND target_type = sqlc.arg(target_type) AND target_id = sqlc.arg(target_id)
+ORDER BY install_id
+FOR SHARE;
+
+-- name: LockDraftedBundlePackage :many
+-- The DRAFTED tool_package items for name@version with exactly these
+-- package.yaml bytes, locked for the import's transaction (D1082b).
+SELECT install_id FROM pc.bundle_items
+WHERE org_id = sqlc.arg(org_id) AND kind = 'tool_package' AND target_type = 'package_draft'
+  AND target_id = sqlc.arg(target_id) AND sha256 = sqlc.arg(sha256) AND state = 'DRAFTED'
+ORDER BY install_id
+FOR SHARE;
+
 -- name: ListBundleItems :many
 SELECT kind, name, sha256, target_type, target_id, state FROM pc.bundle_items
 WHERE org_id = sqlc.arg(org_id) AND install_id = sqlc.arg(install_id)

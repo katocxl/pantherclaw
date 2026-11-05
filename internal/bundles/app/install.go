@@ -195,8 +195,10 @@ func (s *Service) draft(ctx context.Context, tx db.TenantTx, c tenancy.Caller, m
 	case format.KindToolPackage:
 		// A package draft like the OpenAPI importer's (FD8): nothing loads
 		// on the server. A person reviews the package file, signs it with an
-		// org package key (ext. names are not reserved) and imports it; a
-		// revocation withdraws that name@version.
+		// org package key (ext. names are not reserved) and imports it. The
+		// import is refused unless this DRAFTED item has the same
+		// name@version and bytes (D1082b); a revocation withdraws that
+		// name@version.
 		out.TargetType, out.TargetID, out.State = bdomain.TargetPackageDraft, it.Package.Name+"@"+it.Package.Version, bdomain.ItemDrafted
 	case format.KindDetectionRule:
 		if s.deps.Rules == nil {
