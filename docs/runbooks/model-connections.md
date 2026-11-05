@@ -175,7 +175,11 @@ pantherclaw-sim model [--addr 127.0.0.1:9103] [--key KEY] [--stream-delay 0s] [-
 
 `--stream-delay` waits before each stream event; `--status` answers every model call with that HTTP status, in the API's error shape.
 
-Create a simulated model connection with base URL `http://127.0.0.1:9103/v1` and seal the sim's key. The model id picks a behaviour:
+Create a simulated model connection with base URL `http://127.0.0.1:9103/v1` and seal the sim's key. `dev seed … --gateway-out … --model-url` creates two (BUILD_GUIDE §4), `anthropic` and `openai`, and they are simulated too.
+
+Only a range agent's runs can use a simulated connection (HR-220, [range.md](range.md)). An ordinary agent's run that reaches one is denied `SIMULATION_MISMATCH`. To try the fake model, use a range agent (`range_agent = true`; `pclaw redteam setup` creates one, see range.md).
+
+The model id picks a behaviour:
 
 | Model id | Behaviour |
 |---|---|
