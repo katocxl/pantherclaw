@@ -361,6 +361,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	wireM29Model(m14core)
 	wireM30Vectorstore(m14core, m6)
 	wireM31Snowflake(m14core)
+	if err := wireM32Gateways(cfg, m6); err != nil { // G0 M32 D968
+		return err
+	}
 	// Sealing a GitHub App credential schedules an org scan, and a daily one
 	// follows, so coverage reads its installation's permissions (F048).
 	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}

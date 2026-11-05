@@ -47,8 +47,23 @@ func Enroll(ctx context.Context, hc *http.Client, apiURL string, token pclog.Sec
 	if err != nil {
 		return nil, err
 	}
+	return enrollWith(ctx, hc, apiURL, &pb.GatewayServiceEnrollRequest{Token: token.Reveal(), Csr: csr}, key, pin)
+}
+
+// EnrollKubernetes is Enroll with the projected service-account token of a
+// gateway pod bound to the gateway (audience pantherclaw-gateway:<org>, G0
+// M32 D968) instead of a `pcg_` token.
+func EnrollKubernetes(ctx context.Context, hc *http.Client, apiURL string, token pclog.Secret[string], pin string) (*Identity, error) {
+	key, csr, err := request()
+	if err != nil {
+		return nil, err
+	}
+	return enrollWith(ctx, hc, apiURL, &pb.GatewayServiceEnrollRequest{KubernetesToken: token.Reveal(), Csr: csr}, key, pin)
+}
+
+func enrollWith(ctx context.Context, hc *http.Client, apiURL string, req *pb.GatewayServiceEnrollRequest, key ed25519.PrivateKey, pin string) (*Identity, error) {
 	client := pantherclawv1connect.NewGatewayServiceClient(connect.NewClient(connecthttp.NewTransport(hc, strings.TrimSuffix(apiURL, "/"))))
-	res, err := client.Enroll(ctx, &pb.GatewayServiceEnrollRequest{Token: token.Reveal(), Csr: csr})
+	res, err := client.Enroll(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("control: enroll: %w", err)
 	}

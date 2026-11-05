@@ -31,6 +31,12 @@ spec:
       from:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+    {{- if $.Values.admission.enabled }}
+    # The cluster's API server calls the admission webhook (G0 M32 D967);
+    # its source address depends on the control plane.
+    - ports:
+        - port: {{ $.Values.admission.port }}
+    {{- end }}
     {{- else }}
     # The worker's health listener only.
     - ports:
@@ -45,6 +51,14 @@ spec:
     {{- range $np.egressPorts }}
     - ports:
         - port: {{ . }}
+    {{- end }}
+    {{- if $.Values.identity.kubernetesClusters }}
+    # The cluster's API server for TokenReview and pod reads (G0 M32 D969),
+    # by its endpoint port after the Service's translation.
+    {{- range $np.kubernetesAPIPorts }}
+    - ports:
+        - port: {{ . }}
+    {{- end }}
     {{- end }}
 {{- end }}
 {{- end }}

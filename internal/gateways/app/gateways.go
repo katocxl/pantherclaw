@@ -69,6 +69,8 @@ type Service struct {
 	kinds *ports.KindConfigs
 	// mcpIssuerBase is the server's public URL for MCP authorization (mcp_access_m26.go).
 	mcpIssuerBase string
+	// kube lets bound gateways enroll from projected tokens (kube_m32.go).
+	kube *gatewayKube
 }
 
 // New returns the gateway use cases. gatewayAPIURL is the URL of the

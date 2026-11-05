@@ -39,6 +39,12 @@ api:
   service:
     type: ClusterIP
     port: 8080
+    # A fixed address in the cluster's Service range: the edges of agent
+    # pods reach the API there through hostAliases, with no DNS. Required
+    # when agentNamespaces is set (G0 M32 D965a).
+    clusterIP: ""
+    # The hostname the edges call; api.tls's certificate must name it.
+    agentHostname: pantherclaw-api.pantherclaw.internal
   # TLS on the API listener from a kubernetes.io/tls Secret. Without it the
   # listener is plain HTTP for a TLS-terminating ingress or mesh
   # (http.plaintext_behind_proxy); name the proxies' addresses below.
@@ -67,6 +73,128 @@ gatewayAPI:
   service:
     type: LoadBalancer
     annotations: {}
+
+# Workload identity on this cluster (G0 M32 D969). Each entry becomes one
+# identity.kubernetes_clusters entry of the server: the server calls the
+# cluster's TokenReview API and reads pods with its own projected service
+# account token (bound to system:auth-delegator). The chart generates one
+# webhook secret per cluster for the admission webhook path (D969a).
+identity:
+  kubernetesClusters: []
+  # - name: home
+  #   # The org ids that may bind issuer entries to this cluster.
+  #   orgs: [00000000-0000-0000-0000-000000000000]
+  #   # The private ranges the API server resolves to (the Service range
+  #   # of kubernetes.default.svc and the control plane's addresses).
+  #   allowedPrefixes: [10.96.0.0/12]
+  #   # Default: the in-cluster API server.
+  #   apiServer: https://kubernetes.default.svc
+  # The lifetime of the server's own projected reviewer token.
+  reviewerTokenExpirationSeconds: 3600
+
+# An in-cluster gateway for agent pods (G0 M32 D968, D969): off by default.
+# It enrolls from a projected service account token (audience
+# pantherclaw-gateway:<org>) bound to the gateway in PantherClaw, keeps its
+# identity in an emptyDir and enrolls again on every restart.
+gateway:
+  enabled: false
+  # The org the gateway serves (its token audience).
+  org: ""
+  image:
+    repository: ghcr.io/katocxl/pantherclaw-gateway
+    # Pin the digest from the release notes; it wins over the tag.
+    digest: ""
+    tag: ""  # default: the chart's appVersion
+  replicas: 1
+  port: 8090
+  # The hostname agent pods call; they resolve it through hostAliases to
+  # service.clusterIP (agent pods get no DNS, FQ32-3).
+  hostname: pantherclaw-gateway.pantherclaw.internal
+  service:
+    # A fixed address in the cluster's Service range; required when
+    # agentNamespaces is set (D965).
+    clusterIP: ""
+  # kubernetes.io/tls Secret for the agent-facing listener (its certificate
+  # names hostname). Required when the gateway is enabled.
+  tls:
+    existingSecret: ""
+  # The server's API the gateway enrolls with; default publicURL.
+  controlAPIURL: ""
+  # The internal CA pin ("sha256:<hex>") from the gateway's enrollment page.
+  caSHA256: ""
+  # Private ranges the gateway's targets live in (egress.allowed_prefixes).
+  egressAllowedPrefixes: []
+  # The edge pins the CA of the agent-facing certificate ("sha256:<hex>");
+  # empty: the edge image's system roots.
+  tlsCAPin: ""
+  # At most 3600: the server accepts a projected token of at most an hour,
+  # once (G0 M32 D968a).
+  tokenExpirationSeconds: 3600
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+# The admission webhook (G0 M32 D967, D969): off by default. It fails
+# closed (failurePolicy Fail, FQ32-1): while the API is down, no pod starts
+# in a protected namespace.
+admission:
+  enabled: false
+  port: 8444
+  # The identity.kubernetesClusters entry that is this cluster.
+  cluster: ""
+  tls:
+    # kubernetes.io/tls Secret for the webhook listener; its certificate
+    # names <release>-pantherclaw-api.<namespace>.svc. Required when enabled.
+    existingSecret: ""
+    # "<namespace>/<certificate>": cert-manager injects the CA bundle.
+    certManagerCertificate: ""
+    # Otherwise the CA bundle (base64 PEM) the API server verifies with.
+    caBundle: ""
+  # The edge and probe images admitted ("sha256:<hex>").
+  edgeImageDigests: []
+  probeImageDigests: []
+  # The webhook secret in the webhook path is generated into a Secret the
+  # chart owns (kept on uninstall) and reused on upgrade; the API stages it
+  # (0400) at start. A GitOps re-render (helm template) generates a new one
+  # and rolls the API pods (checksum/admission-webhook): until the new pods
+  # are ready, pods in protected namespaces may be denied (failing closed,
+  # FQ32-1).
+
+# Agent namespaces (G0 M32 D965, D969). For each one the chart renders the
+# agent NetworkPolicy (egress only to the gateway, no DNS), the reviewer's
+# Role, one ValidatingWebhookConfiguration per org and a daily probe
+# CronJob. Label each namespace pantherclaw.dev/protect=enforce and
+# pantherclaw.dev/org=<org>. See examples/agent-pod.yaml for an agent pod.
+agentNamespaces: []
+# - name: agents
+#   org: 00000000-0000-0000-0000-000000000000
+#   # NetworkPolicy ingress peers; empty: no ingress.
+#   ingressFrom: []
+#   # For a server outside this cluster: the CIDRs its API is at. The API
+#   # egress rule then names them instead of the api pods (D965a).
+#   apiEgressCIDRs: []
+#   # The edge's hosts map (agent host -> connection), rendered into the
+#   # namespace's pantherclaw-edge ConfigMap (D966).
+#   hosts: {api.github.com: github}
+
+# The daily containment probe in each agent namespace (G0 M32 D970).
+probe:
+  schedule: "17 3 * * *"
+  image:
+    repository: ghcr.io/katocxl/pantherclaw-probe
+    digest: ""
+  edgeImage:
+    repository: ghcr.io/katocxl/pantherclaw-edge
+    digest: ""
+  # The canary in the release namespace (G0 M32 D970a): the probe expects
+  # it not to answer from an agent pod. It listens on TCP 8080.
+  canary:
+    # A fixed address in the Service range (the probe's PC_CANARY_IP).
+    clusterIP: ""
+    image:
+      repository: ""
+      digest: ""
+    args: []
 
 database:
   host: postgres.example.internal
@@ -112,6 +240,8 @@ networkPolicy:
   # Outbound: DNS, the database, HTTPS (identity providers, notifications)
   # and SMTP submission.
   egressPorts: [443, 587]
+  # With identity.kubernetesClusters: the API server's endpoint ports.
+  kubernetesAPIPorts: [443, 6443]
 
 podDisruptionBudget:
   enabled: true
