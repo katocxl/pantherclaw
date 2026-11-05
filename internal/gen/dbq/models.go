@@ -2303,21 +2303,24 @@ type PcFederationAgent struct {
 }
 
 type PcFederationCall struct {
-	OrgID      ids.OrgID
-	ID         ids.UUID
-	TrustID    ids.UUID
-	PeerAgent  string
-	RunID      ids.UUID
-	AgentID    ids.UUID
-	InstanceID ids.UUID
-	Listing    string
-	Htu        string
-	BodySha256 []byte
-	ReceiptID  ids.UUID
-	CreatedAt  time.Time
-	ExpiresAt  time.Time
-	UsedAt     *time.Time
-	ActionID   *ids.UUID
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	TrustID      ids.UUID
+	PeerAgent    string
+	RunID        ids.UUID
+	AgentID      ids.UUID
+	InstanceID   ids.UUID
+	Listing      string
+	Htu          string
+	BodySha256   []byte
+	ReceiptID    ids.UUID
+	PeerActionID string
+	PeerToken    string
+	PeerAttLvl   int16
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	UsedAt       *time.Time
+	ActionID     *ids.UUID
 }
 
 type PcFederationKey struct {

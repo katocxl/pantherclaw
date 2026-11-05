@@ -1021,7 +1021,10 @@ type RecordFederationReceiptRequest struct {
 	// Our action.
 	ActionId string `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
 	// The PC-Fed-Receipt header value; empty when the peer sent none.
-	Receipt       string `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	Receipt string `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	// SHA-256 of the exact request body sent (the token's bh), which the
+	// receipt's req_digest must equal.
+	BodySha256    []byte `protobuf:"bytes,3,opt,name=body_sha256,json=bodySha256,proto3" json:"body_sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1068,6 +1071,13 @@ func (x *RecordFederationReceiptRequest) GetReceipt() string {
 		return x.Receipt
 	}
 	return ""
+}
+
+func (x *RecordFederationReceiptRequest) GetBodySha256() []byte {
+	if x != nil {
+		return x.BodySha256
+	}
+	return nil
 }
 
 // RecordFederationReceiptResponse says what was recorded.
@@ -1657,8 +1667,13 @@ type AuthorizeResponse struct {
 	// The agent-safe explanation (F330, HR-400). Without a transaction it
 	// has no transaction id and no recovery action.
 	AgentExplanation *AgentExplanation `protobuf:"bytes,20,opt,name=agent_explanation,json=agentExplanation,proto3" json:"agent_explanation,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// For channel federation, on every decision: the compact JWS (typ
+	// pap-fed-receipt+jwt) signed by this org's federation key at decision
+	// time, which the gateway returns to the peer in PC-Fed-Receipt (G0 M35
+	// D1024d). Empty for any other channel.
+	FederationReceipt string `protobuf:"bytes,21,opt,name=federation_receipt,json=federationReceipt,proto3" json:"federation_receipt,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AuthorizeResponse) Reset() {
@@ -1829,6 +1844,13 @@ func (x *AuthorizeResponse) GetAgentExplanation() *AgentExplanation {
 		return x.AgentExplanation
 	}
 	return nil
+}
+
+func (x *AuthorizeResponse) GetFederationReceipt() string {
+	if x != nil {
+		return x.FederationReceipt
+	}
+	return ""
 }
 
 // Consequence is what one consequence rule said about an action (F405).
@@ -4348,10 +4370,12 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x1cIssueFederationTokenResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12;\n" +
 	"\vexpire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"l\n" +
+	"expireTime\"\x96\x01\n" +
 	"\x1eRecordFederationReceiptRequest\x12%\n" +
 	"\taction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bactionId\x12#\n" +
-	"\areceipt\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x01R\areceipt\"\x8a\x01\n" +
+	"\areceipt\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x01R\areceipt\x12(\n" +
+	"\vbody_sha256\x18\x03 \x01(\fB\a\xbaH\x04z\x02h R\n" +
+	"bodySha256\"\x8a\x01\n" +
 	"\x1fRecordFederationReceiptResponse\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12\x1a\n" +
 	"\bdecision\x18\x02 \x01(\tR\bdecision\x12\x16\n" +
@@ -4387,7 +4411,7 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\bencoding\x18\x03 \x01(\tB\x16\xbaH\x13r\x112\x0f^[a-z_+]{0,64}$R\bencoding\"U\n" +
 	"\x0ePayloadFinding\x12\x1d\n" +
 	"\x04kind\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18 R\x04kind\x12$\n" +
-	"\blocation\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\blocation\"\xea\x06\n" +
+	"\blocation\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\blocation\"\x99\a\n" +
 	"\x11AuthorizeResponse\x124\n" +
 	"\bdecision\x18\x01 \x01(\x0e2\x18.pantherclaw.v1.DecisionR\bdecision\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12\x1f\n" +
@@ -4413,7 +4437,8 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\vaccess_mode\x18\x12 \x01(\tR\n" +
 	"accessMode\x12?\n" +
 	"\fconsequences\x18\x13 \x03(\v2\x1b.pantherclaw.v1.ConsequenceR\fconsequences\x12M\n" +
-	"\x11agent_explanation\x18\x14 \x01(\v2 .pantherclaw.v1.AgentExplanationR\x10agentExplanation\"\xdd\x03\n" +
+	"\x11agent_explanation\x18\x14 \x01(\v2 .pantherclaw.v1.AgentExplanationR\x10agentExplanation\x12-\n" +
+	"\x12federation_receipt\x18\x15 \x01(\tR\x11federationReceipt\"\xdd\x03\n" +
 	"\vConsequence\x12\x17\n" +
 	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1f\n" +

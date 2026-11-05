@@ -361,8 +361,12 @@ func (s *snapshot) Run(ctx context.Context, org ids.OrgID, id ids.UUID) (pipelin
 	out := pipeline.Run{
 		AgentID: row.AgentID, EnvironmentID: row.EnvironmentID, Active: row.Live, TaskRef: row.TaskRef, Simulated: row.Simulated,
 		Principal:       principal(row.PrincipalUserID, row.PrincipalSaID, nil),
+		PeerOrgName:     row.PeerOrgName,
 		Launcher:        principal(row.LauncherUserID, row.LauncherSaID, row.LauncherInstanceID),
 		ScopeOperations: row.ScopeOperations,
+	}
+	if row.PeerOrgID != nil && row.PeerAgent != nil { // a federated run (G0 M35 D1024a)
+		out.Principal = gdomain.Principal{Kind: gdomain.PrincipalFederated, ID: *row.PeerOrgID, Peer: *row.PeerAgent}
 	}
 	if row.MaxTokens.Valid {
 		capTokens := row.MaxTokens.Int64

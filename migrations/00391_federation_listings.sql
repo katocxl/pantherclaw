@@ -194,8 +194,14 @@ CREATE TABLE pc.federation_calls (
     listing     text        NOT NULL CHECK (listing ~ '^[a-z0-9-]{1,63}$'),
     htu         text        NOT NULL CHECK (char_length(htu) BETWEEN 9 AND 2048),
     body_sha256 bytea       NOT NULL CHECK (octet_length(body_sha256) = 32),
-    -- The IN receipt: the peer's pap-fed+jwt this call was admitted on.
+    -- The IN receipt id: the peer token, written with our decision (D1024d).
     receipt_id  uuid        NOT NULL,
+    -- The peer's own action id (pap.action), stated in our receipt.
+    peer_action_id text     NOT NULL CHECK (char_length(peer_action_id) BETWEEN 1 AND 128),
+    -- The peer's pap-fed+jwt, stored as the IN receipt with the decision.
+    peer_token  text        NOT NULL CHECK (char_length(peer_token) BETWEEN 1 AND 8192),
+    -- The attestation level the trusted peer claimed for its agent (R-86).
+    peer_att_lvl smallint   NOT NULL CHECK (peer_att_lvl BETWEEN 0 AND 3),
     created_at  timestamptz NOT NULL DEFAULT now(),
     expires_at  timestamptz NOT NULL,
     used_at     timestamptz,

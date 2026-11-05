@@ -103,7 +103,9 @@ type FederationKeys struct {
 type cachedFederationKeys struct {
 	// signers are the live keys, the ACTIVE one first.
 	signers []*jws.Signer
-	at      time.Time
+	// card is the ACTIVE key, for the listing cards (a2a.Sign, D1023).
+	card ed25519.PrivateKey
+	at   time.Time
 }
 
 // NewFederationKeys returns the per-org federation key store.
@@ -240,6 +242,22 @@ func (f *FederationKeys) ListFederationKeys(ctx context.Context, org ids.OrgID) 
 	return out, err
 }
 
+// FederationCardKey returns org's ACTIVE federation key and its kid, for
+// signing its listing cards (G0 M35 D1023); nothing else uses it.
+func (f *FederationKeys) FederationCardKey(ctx context.Context, org ids.OrgID) (string, ed25519.PrivateKey, error) {
+	signers, err := f.FederationSigners(ctx, org)
+	if err != nil {
+		return "", nil, err
+	}
+	f.mu.Lock()
+	c := f.cache[org]
+	f.mu.Unlock()
+	if c.card == nil || len(signers) == 0 || len(c.signers) == 0 {
+		return "", nil, ErrNoFederationKey
+	}
+	return c.signers[0].KeyID(), c.card, nil
+}
+
 // FederationSigners returns signers for org's live federation keys, the
 // ACTIVE one first: the document is signed by every one of them, anything
 // else by the first only. An org without an ACTIVE key gets one.
@@ -257,6 +275,7 @@ func (f *FederationKeys) FederationSigners(ctx context.Context, org ids.OrgID) (
 		return nil, err
 	}
 	var signers []*jws.Signer
+	var card ed25519.PrivateKey
 	err := f.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		rows, err := dbq.New(tx).ListFederationKeys(ctx, federationOverlapSeconds(), org)
 		if err != nil {
@@ -283,7 +302,7 @@ func (f *FederationKeys) FederationSigners(ctx context.Context, org ids.OrgID) (
 				return err
 			}
 			if r.State == FederationKeyActive {
-				active = s
+				active, card = s, priv
 			} else {
 				signers = append(signers, s)
 			}
@@ -301,7 +320,7 @@ func (f *FederationKeys) FederationSigners(ctx context.Context, org ids.OrgID) (
 	if len(f.cache) >= maxCachedJWKS {
 		f.cache = map[ids.OrgID]cachedFederationKeys{}
 	}
-	f.cache[org] = cachedFederationKeys{signers: signers, at: f.now()}
+	f.cache[org] = cachedFederationKeys{signers: signers, card: card, at: f.now()}
 	f.mu.Unlock()
 	return signers, nil
 }

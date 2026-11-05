@@ -687,6 +687,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM18FleetJobs(evidenceJobs, jreg, m6.fleet, log); err != nil {
 			return err
 		}
+		if evidenceJobs, err = registerM35FederationJobs(evidenceJobs, jreg, pool, kp, cfg.Auth.PublicURL, log); err != nil {
+			return err
+		}
 		if evidenceJobs, err = registerM20WebhookJobs(evidenceJobs, jreg, pool, kp, log); err != nil {
 			return err
 		}
@@ -1001,6 +1004,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerM34Runtimes(rs, d, workload, runs)
+	federation := registerM35Federation(rs, d, grants)
 	if err := registerAutomationTemplates(rs, d, autos); err != nil {
 		return nil, err
 	}
@@ -1050,6 +1054,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mountM14Data(mux, d)
 	mountM16External(mux, d)
 	mountWebhookJWKS(mux, webhookJWKSOf(d), d.clientIP, log)
+	mountM35Federation(mux, federation, d)
 	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})
 	mux.HandleFunc("GET /.well-known/pantherclaw/jwks.json", func(w http.ResponseWriter, _ *http.Request) {

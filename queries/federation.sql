@@ -235,12 +235,13 @@ SELECT * FROM pc.federation_agents
 WHERE org_id = sqlc.arg(org_id) AND trust_id = sqlc.arg(trust_id)
 ORDER BY created_at, peer_agent;
 
--- name: InsertFederationCall :exec
+-- name: InsertFederationCall :one
 INSERT INTO pc.federation_calls (org_id, id, trust_id, peer_agent, run_id, agent_id, instance_id, listing, htu,
-                                 body_sha256, receipt_id, expires_at)
+                                 body_sha256, receipt_id, peer_action_id, peer_token, peer_att_lvl, expires_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(trust_id), sqlc.arg(peer_agent), sqlc.arg(run_id), sqlc.arg(agent_id),
         sqlc.arg(instance_id), sqlc.arg(listing), sqlc.arg(htu), sqlc.arg(body_sha256), sqlc.arg(receipt_id),
-        sqlc.arg(expires_at));
+        sqlc.arg(peer_action_id), sqlc.arg(peer_token), sqlc.arg(peer_att_lvl), now() + interval '60 seconds')
+RETURNING expires_at;
 
 -- name: UseFederationCall :one
 -- Authorize's single use of an admitted call (D1024c).
@@ -255,3 +256,26 @@ WHERE org_id = sqlc.arg(org_id) AND action_id = sqlc.arg(action_id);
 -- name: DeleteExpiredFederationCalls :execrows
 DELETE FROM pc.federation_calls
 WHERE org_id = sqlc.arg(org_id) AND expires_at < now() - interval '1 day';
+
+-- name: GetFederationReceipt :one
+SELECT * FROM pc.federation_receipts WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: FederationOutboundAction :one
+-- An outbound federation action (D1025): our decided action on a
+-- connection whose ACTIVE pin is a federated peer's listing.
+SELECT x.id AS transaction_id, x.decision, x.gateway_id, p.federation_trust_id, p.federation_listing,
+       r.agent_id, r.instance_id, COALESCE(dr.receipt_jws, '')::text AS decision_receipt
+FROM pc.transactions x
+JOIN pc.a2a_pins p ON p.org_id = x.org_id AND p.connection_id = x.connection_id AND p.state = 'ACTIVE'
+JOIN pc.runs r ON r.org_id = x.org_id AND r.id = x.run_id
+LEFT JOIN pc.decision_receipts dr ON dr.org_id = x.org_id AND dr.transaction_id = x.id
+WHERE x.org_id = sqlc.arg(org_id) AND x.action_id = sqlc.arg(action_id) AND p.federation_trust_id IS NOT NULL
+ORDER BY x.created_at DESC
+LIMIT 1;
+
+-- name: SuspendFederationAgentsOfTrust :execrows
+-- A revoked trust's federated agents (D1024c).
+UPDATE pc.agents a SET state = 'SUSPENDED', suspended_from = a.state, updated_at = now()
+FROM pc.federation_agents f
+WHERE a.org_id = sqlc.arg(org_id) AND f.org_id = a.org_id AND f.trust_id = sqlc.arg(trust_id) AND f.agent_id = a.id
+  AND a.state NOT IN ('SUSPENDED', 'RETIRED');

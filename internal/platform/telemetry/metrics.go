@@ -30,6 +30,9 @@ const (
 	// MetricKubernetesAdmission counts admission webhook decisions by
 	// outcome and code (G0 M32 D967).
 	MetricKubernetesAdmission = "pc_kubernetes_admission_total"
+	// MetricFederationReceiptProblems counts peer answer receipts that were
+	// missing or did not verify, by state (G0 M35 D1025).
+	MetricFederationReceiptProblems = "pc_federation_receipt_problems_total"
 )
 
 // Rate-limit scopes, the fixed values of the scope attribute.
@@ -56,6 +59,7 @@ type instruments struct {
 	jobs        metric.Int64Counter
 	rateLimited metric.Int64Counter
 	admission   metric.Int64Counter
+	fedReceipts metric.Int64Counter
 }
 
 var (
@@ -77,6 +81,8 @@ func get() *instruments {
 		inst.rateLimited, _ = m.Int64Counter(MetricRateLimited, metric.WithDescription("Requests refused by a rate limit, by scope."))
 		inst.admission, _ = m.Int64Counter(MetricKubernetesAdmission,
 			metric.WithDescription("Kubernetes admission webhook decisions, by outcome (allowed, denied) and code."))
+		inst.fedReceipts, _ = m.Int64Counter(MetricFederationReceiptProblems,
+			metric.WithDescription("Federation answer receipts that were missing or did not verify, by state."))
 	})
 	return &inst
 }
@@ -106,6 +112,12 @@ func RateLimited(ctx context.Context, scope string) {
 // (allowed or denied) and code (G0 M32 D967).
 func KubernetesAdmission(ctx context.Context, outcome, code string) {
 	get().admission.Add(ctx, 1, metric.WithAttributes(attribute.String(KeyOutcome, outcome), attribute.String(KeyCode, code)))
+}
+
+// FederationReceiptProblem counts one peer answer receipt that was missing
+// or did not verify, by state (MISSING, INVALID; G0 M35 D1025).
+func FederationReceiptProblem(ctx context.Context, state string) {
+	get().fedReceipts.Add(ctx, 1, metric.WithAttributes(attribute.String(KeyState, state)))
 }
 
 // PoolStats are a connection pool's counters.
