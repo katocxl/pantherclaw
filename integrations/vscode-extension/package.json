@@ -1,0 +1,93 @@
+{
+  "name": "pantherclaw-vscode",
+  "displayName": "PantherClaw",
+  "description": "Read-only view of an agent's coverage, waiting approvals and recent decisions, through the signed-in pclaw.",
+  "version": "0.1.0",
+  "publisher": "pantherclaw",
+  "license": "Apache-2.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In an untrusted workspace the extension reads the agent id only from user settings, never from the workspace.",
+      "restrictedConfigurations": [
+        "pantherclaw.agent"
+      ]
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "configuration": {
+      "title": "PantherClaw",
+      "properties": {
+        "pantherclaw.pclawPath": {
+          "type": "string",
+          "default": "pclaw",
+          "scope": "machine",
+          "description": "The pclaw program to run (a path, or a name on PATH). Machine setting only: a workspace cannot change it."
+        },
+        "pantherclaw.agent": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$",
+          "description": "The agent id to show. When empty, the extension reads .pantherclaw/agent in the workspace."
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "pantherclaw.status",
+          "name": "PantherClaw"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pantherclaw.refresh",
+        "title": "Refresh",
+        "category": "PantherClaw",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pantherclaw.openInConsole",
+        "title": "Open in console",
+        "category": "PantherClaw",
+        "icon": "$(link-external)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "pantherclaw.refresh",
+          "when": "view == pantherclaw.status",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pantherclaw.openInConsole",
+          "when": "view == pantherclaw.status && viewItem =~ /^pantherclaw\\.(approval|transaction)$/",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "pantherclaw.openInConsole",
+          "when": "false"
+        }
+      ]
+    }
+  }
+}
