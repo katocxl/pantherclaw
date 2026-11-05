@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/bundles/format"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/rootkey"
 )
@@ -34,7 +36,64 @@ func init() {
 func publisherCommands() map[string]command {
 	return map[string]command{
 		"publisher key create": {"publisher key create --publisher ID --out FILE [--passphrase-file FILE]", createPublisherKey},
+		"publisher pin":        {"publisher pin --publisher ID --key-file FILE.pub [--fingerprint HEX] [--allowed-kind KIND]... [--revocations-url URL]", pinPublisherKey},
 	}
+}
+
+// pinPublisherKey creates a PENDING pin of a publisher's key (D1081,
+// D1084b) and prints the page where a person activates it with a security
+// key. The pin trusts nothing until then (HR-795).
+func pinPublisherKey(ctx context.Context, a *app, args []string) error {
+	fs := flag.NewFlagSet("publisher pin", flag.ContinueOnError)
+	fs.SetOutput(a.stderr)
+	publisher := fs.String("publisher", "", "publisher id")
+	keyFile := fs.String("key-file", "", "the publisher's .pub file")
+	fingerprint := fs.String("fingerprint", "", "the fingerprint the publisher announced (hex SHA-256); refused if the key differs")
+	var kinds list
+	fs.Var(&kinds, "allowed-kind", "an item kind the pin allows (repeatable; default: every kind)")
+	revURL := fs.String("revocations-url", "", "https URL where the publisher posts signed revocation statements")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || *publisher == "" {
+		return errUsage
+	}
+	if *keyFile == "" {
+		if *fingerprint != "" {
+			return errors.New("a fingerprint alone cannot pin a key: give --key-file FILE.pub, and --fingerprint to check that file")
+		}
+		return errUsage
+	}
+	pub, keyPublisher, err := loadPublisherKey(*keyFile, *fingerprint)
+	if err != nil {
+		return err
+	}
+	if keyPublisher != *publisher {
+		return fmt.Errorf("%s is a key of publisher %s, not %s", *keyFile, keyPublisher, *publisher)
+	}
+	for _, k := range kinds {
+		if !format.Kind(k).Valid() {
+			return fmt.Errorf("--allowed-kind %q is not an item kind", k)
+		}
+	}
+	s, err := a.session()
+	if err != nil {
+		return err
+	}
+	res, err := pantherclawv1connect.NewBundleServiceClient(s.connect()).PinPublisherKey(ctx, &pantherclawv1.PinPublisherKeyRequest{
+		Publisher: *publisher, PublicKey: pub, AllowedKinds: kinds, RevocationsUrl: *revURL,
+		ExpectedFingerprint: format.Fingerprint(pub),
+	})
+	if err != nil {
+		return err
+	}
+	if err := a.print(res); err != nil {
+		return err
+	}
+	if u := res.GetPin().GetConfirmUrl(); u != "" {
+		_, _ = fmt.Fprintf(a.stderr, "The pin is PENDING and trusts nothing yet. A person with publisher.manage activates it with a security key at:\n  %s\n", u)
+	}
+	return nil
 }
 
 // maxPubFileBytes bounds a .pub file.

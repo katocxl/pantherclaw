@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/bundles/format"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/rootkey"
 )
@@ -48,7 +50,47 @@ func bundleCommands() map[string]command {
 		"bundle sign":    {"bundle sign FILE.pcbundle --key FILE [--passphrase-file FILE] [--expires-days N] [--out FILE]", bundleSign},
 		"bundle verify":  {"bundle verify FILE.pcbundle --public-key FILE.pub [--fingerprint HEX]", bundleVerify},
 		"bundle inspect": {"bundle inspect FILE.pcbundle", bundleInspect},
+		"bundle install": {"bundle install FILE.pcbundle", bundleInstall},
 	}
+}
+
+// maxUploadBytes is the largest .pcbundle file one InstallBundle request
+// carries under the 1 MiB RPC cap (G0 M37 D1080a).
+const maxUploadBytes = 960 << 10
+
+// bundleInstall uploads a signed bundle (D1082). The server verifies it
+// against the org's ACTIVE pins and drafts its items; nothing is activated
+// (HR-796, HR-798). pclaw decodes it first, which executes nothing.
+func bundleInstall(ctx context.Context, a *app, args []string) error {
+	fs := flag.NewFlagSet("bundle install", flag.ContinueOnError)
+	fs.SetOutput(a.stderr)
+	file, err := parseOneArg(fs, args)
+	if err != nil {
+		return err
+	}
+	raw, err := readRegular(file, format.MaxBundleBytes)
+	if err != nil {
+		return err
+	}
+	if len(raw) > maxUploadBytes {
+		return fmt.Errorf("%s is %d bytes; a bundle upload is at most %d bytes (960 KiB)", file, len(raw), maxUploadBytes)
+	}
+	if _, err := format.Decode(raw); err != nil {
+		return err
+	}
+	s, err := a.session()
+	if err != nil {
+		return err
+	}
+	res, err := pantherclawv1connect.NewBundleServiceClient(s.connect()).InstallBundle(ctx, &pantherclawv1.InstallBundleRequest{Bundle: raw})
+	if err != nil {
+		return err
+	}
+	if err := a.print(res); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(a.stderr, "Installed as drafts and templates: nothing is active. Review each item; sign tool packages with an org package key.")
+	return nil
 }
 
 const (

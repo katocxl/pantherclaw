@@ -8,8 +8,8 @@
 1. **Publisher namespaces** (HR-796; D1080). A publisher id owns `ext.<publisher>.…`; `pc.`, `org.` and other publishers' names are refused.
 2. **Signed bundles of data only** (HR-797, HR-803; FQ37-2). A `.pcbundle` zip holds a manifest, its EdDSA signature and item files of a closed list of data kinds, under strict decoding and fixed limits. The only simulator is the existing data-driven OpenAPI one. Nothing in a bundle is executed by pclaw, the server or the gateway.
 3. **Pins confirmed with a security key** (HR-795; FQ37-1). An org admin pins a publisher's key; the pin is trusted only after a person confirms it with a WebAuthn step-up on the core page.
-4. **Install as drafts** (HR-796, HR-798; FD8). An install is verified against an ACTIVE pin, its allowed kinds and the digests, refuses rollback and equivocation, and turns each item into a draft through the kind's existing path. The org still reviews and signs every tool package, and publishing a rule keeps its two-person confirm.
-5. **Revocation stops use at once** (HR-799, HR-800; FQ37-3). An admin, or a statement signed by a key of that publisher the org pinned, revokes a key or a bundle. In one transaction installs and items are revoked, packages quarantined, rules disabled and automations paused, and admins are alerted.
+4. **Install as drafts** (HR-796, HR-798; FD8). An install is verified against an ACTIVE pin, its allowed kinds and the digests, refuses rollback and equivocation, and turns each item into a draft through the kind's existing path, or a template record for facts declarations and channel templates. The org still reviews and signs every tool package, which imports only when it matches its install item, and publishing a rule keeps its two-person confirm.
+5. **Revocation stops use at once** (HR-799, HR-800; FQ37-3). An admin, or a statement signed by a key of that publisher the org pinned, revokes a key or a bundle; unpinning a key only stops new installs. In one transaction installs and items are revoked, packages quarantined, rules disabled and automations paused, and admins are alerted. A revoked item cannot be turned back on.
 6. **Templates without secrets** (HR-801). A channel template carries only non-secret fields; an admin creates the channel and its secrets through the existing flow.
 7. **A listing-only marketplace** (HR-802). Static pages list publishers, key fingerprints, digests and commands to copy; no endorsement, payment or install action.
 
@@ -17,6 +17,7 @@
 - An org must check a publisher's fingerprint through a channel it trusts; the marketplace cannot do that for it (T-364).
 - A publisher's `revocations_url` may go silent; revocation then relies on the org's own action (R-91).
 - Content that needs code (other simulators, fact readers, channel kinds) still ships only with PantherClaw.
+- One upload carries a bundle of at most 960 KiB under the 1 MiB RPC cap; chunked upload is a follow-up.
 - Hosting the marketplace is a Phase C founder step.
 
 **Alternatives.**
