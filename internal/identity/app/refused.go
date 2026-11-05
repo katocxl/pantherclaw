@@ -25,62 +25,80 @@ const (
 	RefusalWindow = time.Minute
 	// MaxRefusalRecordsPerOrg bounds the records one org writes per window
 	// across all its keys, so a flood of made-up keys cannot grow the
-	// ledger; the rest are counted on their own key.
+	// ledger; the rest are counted on their own key when it is already
+	// tracked, else on the org (org_suppressed on its next record).
 	MaxRefusalRecordsPerOrg = 60
 	// maxRefusalKeys bounds the limiter's memory.
 	maxRefusalKeys = 10_000
 )
 
 // refusals is the in-process limiter of refused-proof records (HR-850).
+// keys never holds more than maxRefusalKeys entries.
 type refusals struct {
 	mu   sync.Mutex
 	keys map[string]refusalSlot
-	orgs map[ids.OrgID]refusalSlot
+	orgs map[ids.OrgID]orgSlot
 }
 
 type refusalSlot struct {
 	at time.Time
-	n  int // suppressed since the last record (keys) or records this window (orgs)
+	n  int // refusals of this key suppressed since its last record
+}
+
+type orgSlot struct {
+	at      time.Time
+	records int // records this window
+	dropped int // refusals of keys the limiter did not track, since the org's last record
 }
 
 // take reports whether a refusal of key in org may be recorded at now and,
-// if so, how many refusals of key were suppressed since its last record.
-func (r *refusals) take(org ids.OrgID, key string, now time.Time) (bool, int) {
+// if so, how many refusals of key were suppressed since its last record
+// and how many refusals of untracked keys the org had since its last
+// record. A key first seen while the org is over its cap, or while the map
+// is full, is never added: it is counted on the org instead, so a flood of
+// made-up keys cannot grow the map.
+func (r *refusals) take(org ids.OrgID, key string, now time.Time) (ok bool, suppressed, orgSuppressed int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.keys == nil {
-		r.keys, r.orgs = map[string]refusalSlot{}, map[ids.OrgID]refusalSlot{}
+		r.keys, r.orgs = map[string]refusalSlot{}, map[ids.OrgID]orgSlot{}
 	}
 	k := org.String() + "|" + key
 	s, seen := r.keys[k]
 	if seen && now.Sub(s.at) < RefusalWindow {
 		s.n++
 		r.keys[k] = s
-		return false, 0
+		return false, 0, 0
 	}
 	o := r.orgs[org]
 	if now.Sub(o.at) >= RefusalWindow {
-		o = refusalSlot{at: now}
+		o.at, o.records = now, 0
 	}
-	if o.n >= MaxRefusalRecordsPerOrg {
-		s.n++
-		if !seen {
-			s.at = now
+	if o.records >= MaxRefusalRecordsPerOrg {
+		if seen {
+			s.n++
+			r.keys[k] = s
+		} else {
+			o.dropped++
 		}
-		r.keys[k] = s
-		return false, 0
+		r.orgs[org] = o
+		return false, 0, 0
 	}
-	o.n++
-	r.orgs[org] = o
-	if len(r.keys) >= maxRefusalKeys {
+	if !seen && len(r.keys) >= maxRefusalKeys {
 		r.prune(now)
 	}
-	r.keys[k] = refusalSlot{at: now}
-	return true, s.n
+	if seen || len(r.keys) < maxRefusalKeys {
+		r.keys[k] = refusalSlot{at: now}
+	}
+	orgSuppressed, o.dropped = o.dropped, 0
+	o.records++
+	r.orgs[org] = o
+	return true, s.n, orgSuppressed
 }
 
 // prune drops the keys whose window ended with nothing suppressed, then,
-// if the map is still full, every key older than an hour.
+// if the map is still full, every key older than an hour, and the orgs
+// whose window ended with nothing to carry.
 func (r *refusals) prune(now time.Time) {
 	for k, s := range r.keys {
 		if now.Sub(s.at) >= RefusalWindow && s.n == 0 {
@@ -96,7 +114,7 @@ func (r *refusals) prune(now time.Time) {
 		}
 	}
 	for o, s := range r.orgs {
-		if now.Sub(s.at) >= RefusalWindow {
+		if now.Sub(s.at) >= RefusalWindow && s.dropped == 0 {
 			delete(r.orgs, o)
 		}
 	}
@@ -135,11 +153,15 @@ func (s *Service) RecordRefusedProof(ctx context.Context, org ids.OrgID, in Iden
 	if inst != nil {
 		key = "instance:" + inst.Instance.String()
 	}
-	ok, suppressed := s.refusals.take(org, key+"|"+string(pe.Code), now)
+	ok, suppressed, orgSuppressed := s.refusals.take(org, key+"|"+string(pe.Code), now)
 	if !ok {
 		return nil
 	}
 	details := map[string]string{"pap_code": string(pe.Code), "suppressed": strconv.Itoa(suppressed)}
+	if orgSuppressed > 0 {
+		// Refusals of keys over the org cap that the limiter did not track.
+		details["org_suppressed"] = strconv.Itoa(orgSuppressed)
+	}
 	if jkt != "" {
 		details["jkt"] = jkt
 	}
