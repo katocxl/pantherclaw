@@ -363,6 +363,9 @@ type Result struct {
 	// SafeDetail is the decisive reason's detail when the Authority writes
 	// it as an agent-safe sentence (agentSafeDetails); "" otherwise.
 	SafeDetail string
+	// FederationReceipt is our minimal signed receipt for a federated call
+	// (G0 M35 D1024d): the face sends it as PC-Fed-Receipt on every answer.
+	FederationReceipt string
 }
 
 // agentSafeDetails are the decisive reason codes whose detail the Authority
@@ -532,7 +535,7 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	r := Result{
 		Decision: ar.GetDecision(), TransactionID: ar.GetTransactionId(), Nonce: ar.GetNonce(),
 		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR, Wait: ar.GetWait(),
-		Explanation: ar.GetAgentExplanation(),
+		Explanation: ar.GetAgentExplanation(), FederationReceipt: ar.GetFederationReceipt(),
 	}
 	for _, rs := range ar.GetReasons() {
 		r.Reasons = append(r.Reasons, rs.GetCode())

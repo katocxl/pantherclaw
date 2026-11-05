@@ -420,6 +420,7 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 		req.Header.Set(HeaderAction, tok)
 	}
 	fed := conn.GetA2A().GetFederation() != nil
+	bodySum := sha256.Sum256(out.body) // the token's bh and the receipt's req_digest
 	if fed {
 		// A peer org's listed agent (G0 M35 D1023): the server signs a
 		// pap-fed+jwt bound to this exact request and our ALLOWED action;
@@ -428,9 +429,8 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 			e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), slog.String("why", "federation takes no stream"))
 			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 		}
-		sum := sha256.Sum256(out.body)
 		ft, err := e.authority.IssueFederationToken(ctx, &pb.IssueFederationTokenRequest{
-			ActionId: a.Action.ActionID, BodySha256: sum[:], Htu: out.url,
+			ActionId: a.Action.ActionID, BodySha256: bodySum[:], Htu: out.url,
 		})
 		t.lap("federation_token")
 		if err != nil || ft.GetToken() == "" {
@@ -461,7 +461,7 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 		// sent. A peer DENY or HELD fails it with PEER_DENIED or PEER_HELD
 		// and the agent-safe text.
 		rec, err := e.authority.RecordFederationReceipt(ctx, &pb.RecordFederationReceiptRequest{
-			ActionId: a.Action.ActionID, Receipt: res.FedReceipt,
+			ActionId: a.Action.ActionID, Receipt: res.FedReceipt, BodySha256: bodySum[:],
 		})
 		t.lap("federation_receipt")
 		if err != nil {

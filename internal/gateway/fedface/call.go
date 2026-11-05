@@ -76,6 +76,15 @@ func (h *Handler) call(ctx context.Context, c *call) answer {
 	})
 	h.log.InfoContext(ctx, "federation.decided", "listing", c.listing, "class", string(res.Class), "code", res.Code,
 		"transaction", res.TransactionID)
+	// Our minimal signed receipt goes with every answer to a decided call
+	// (D1024d, FQ35-2).
+	a := h.answerOf(res)
+	a.receipt = res.FederationReceipt
+	return a
+}
+
+// answerOf is the answer for a dispatched federated call.
+func (h *Handler) answerOf(res dispatch.Result) answer {
 	switch {
 	case res.Class == "" && res.Response != nil:
 		return answer{result: jsontext.Value(res.Response.Body)}
