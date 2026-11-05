@@ -1,0 +1,41 @@
+{{define "index.html.tmpl"}}{{template "head" "Marketplace"}}<link rel="stylesheet" href="{{.Prefix}}style.css">
+</head>
+<body>
+<header><h1>PantherClaw marketplace</h1></header>
+<main>
+{{template "notice"}}
+<section>
+<h2>Publishers</h2>
+{{if .Listings}}<table>
+<thead><tr><th>Publisher id</th><th>Name given by the publisher</th><th>Bundles</th><th>Key fingerprints</th></tr></thead>
+<tbody>
+{{range .Listings}}<tr>
+<td><a href="publishers/{{.Publisher}}.html"><code>{{.Publisher}}</code></a></td>
+<td>{{.DisplayName}}</td>
+<td>{{len .Bundles}}</td>
+<td>{{range .KeyFingerprints}}<code class="digest">{{.}}</code> {{end}}</td>
+</tr>
+{{end}}</tbody>
+</table>
+<p>Compare the publisher id, not the name: names can look alike. Every bundle of a publisher is named <code>ext.&lt;publisher id&gt;.…</code>.</p>
+{{else}}<p>No publisher listings yet.</p>
+{{end}}</section>
+{{with .Hub}}<section>
+<h2>PantherClaw Hub items</h2>
+<p>Published by the PantherClaw project and signed with the Hub key (index version {{.Version}}, expires {{.ExpiresAt}}). Installing one creates a draft in your org.</p>
+<table>
+<thead><tr><th>Item</th><th>Kind</th><th>Version</th><th>Summary</th><th>SHA-256</th><th>Install</th></tr></thead>
+<tbody>
+{{range .Items}}<tr>
+<td><code>{{.Name}}</code><br>{{.Title}}</td>
+<td>{{.Kind}}</td>
+<td>{{.Version}}</td>
+<td>{{.Summary}}</td>
+<td><code class="digest">{{.SHA256}}</code></td>
+<td><pre><code>pclaw hub install {{.Name}}@{{.Version}}</code></pre></td>
+</tr>
+{{end}}</tbody>
+</table>
+</section>
+{{end}}</main>
+{{template "foot"}}{{end}}

@@ -1045,6 +1045,23 @@ An agent's own trace continues through PantherClaw into the org's own OTLP colle
 | F1068 | Web Push | A deployment VAPID key, push subscriptions to allow-listed push services, RFC 8291 encrypted link-only notices with an RFC 8292 VAPID JWT, and subscriptions removed on 404 or 410. | Next | Team | M36 | N25 |
 | F1069 | VS Code extension | A read-only tree view and status bar of an agent's coverage, waiting approvals and recent decisions through the signed-in `pclaw` (`pclaw editor status` and `open`), with Open in console and no token in VS Code. | Next | Community | M36 | new |
 
+### M37 rows: Ecosystem
+
+People outside the PantherClaw project publish data-only bundles under their own namespace and key; an org pins the key with a security key, installs bundles as drafts it reviews and signs, and a revoked key or bundle stops being used at once; a static marketplace lists publishers and vouches for nobody ([G0 M37](g0/M37.md), [ADR-0064](adr/0064-publishers-and-bundles.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1070 | Publisher namespaces | Publisher ids and `ext.<publisher>.…` names, with `pc.`, `org.` and other publishers' names refused at lint and install. | Next | Community | M37 | new |
+| F1071 | Signed bundle format | One `.pcbundle` zip: a strict `bundle.json` manifest, an EdDSA `bundle.jws` and data-only items of a closed list of kinds, within fixed limits. | Next | Community | M37 | new |
+| F1072 | Publisher key pins | `PinPublisherKey` creates a PENDING pin with allowed kinds and a revocations URL; a person activates it with a security key on the confirm page; `ListPublisherPins`, `GetPublisherPin`, `RevokePublisherPin`. | Next | Community | M37 | new |
+| F1073 | Bundle install as drafts | `InstallBundle` verifies the pin, kinds, digests and namespace and turns each item into a draft through its kind's own path, which keeps its edition; `ListBundleInstalls`, `GetBundleInstall`. | Next | Community | M37 | new |
+| F1074 | Rollback and equivocation refusal | The highest installed version per bundle; a lower version or the same version with another digest is refused. | Next | Community | M37 | new |
+| F1075 | Bundle revocation | An admin's revocation, `SubmitRevocation` and a daily fetch of each pin's revocations URL stop use at once in one transaction: installs revoked, packages quarantined, rules disabled, automations paused, admins notified and the alert-only `pc.bundles.revoked` detection. | Next | Community | M37 | new |
+| F1076 | `pclaw publisher` | `pclaw publisher key create` writes an Ed25519 publisher key, encrypted with an optional passphrase, and prints its kid and fingerprint; `pclaw publisher pin` creates a pending pin and prints the confirm link. | Next | Community | M37 | new |
+| F1077 | `pclaw bundle` | `init`, `lint`, `build`, `sign`, `verify`, `inspect` offline with the server's decoders, and `install` to upload. | Next | Community | M37 | new |
+| F1078 | Listing-only marketplace | `task marketplace:build`: static pages from the Hub build and publisher listings with digests, fingerprints and commands to copy; no endorsement, payment or install action. | Next | Community | M37 | new |
+| F1079 | Publisher guide and example | `docs/extensions/publishing.md` and the example bundle `ext.example.starter` with a detection rule, a playbook and an OpenAPI tool package. | Next | Community | M37 | new |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.

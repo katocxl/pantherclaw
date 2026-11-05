@@ -67,4 +67,5 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [federation.md](federation.md) | M35 | Federate with a peer org: the federation endpoint and key, pairwise trust with the safety code and security keys, listings, cross-org grants, federated A2A connections and receipts (Enterprise) |
 | [otel-genai.md](otel-genai.md) | M36 | Send metadata-only GenAI spans to the org's own OTLP collector: trace context from agents, destinations activated with a security key, span shapes and failures |
 | [approvals.md](approvals.md) | M36 | Approvals reaching the right person: fatigue metrics and routing, deputies, preferences, digests and quiet hours, approval groups, Web Push and the read-only VS Code extension |
+| [bundles.md](bundles.md) | M37 | Use publisher bundles: pin a publisher's key with a security key, install a bundle as drafts, and revoke a key or a bundle |
 | [threat-map.md](threat-map.md) | M28 | The threat map: MITRE ATLAS and ATT&CK Enterprise lanes, gaps and fixes, `pclaw threats`, the signed report, the Navigator layer and history |

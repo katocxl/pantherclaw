@@ -1,0 +1,41 @@
+{{define "publisher.html.tmpl"}}{{template "head" .L.Publisher}}<link rel="stylesheet" href="{{.Prefix}}style.css">
+</head>
+<body>
+<header><p><a href="{{.Prefix}}index.html">PantherClaw marketplace</a></p><h1>Publisher <code>{{.L.Publisher}}</code></h1></header>
+<main>
+{{template "notice"}}
+{{with .L}}<section>
+<h2>About this listing</h2>
+<dl>
+<dt>Publisher id</dt><dd><code>{{.Publisher}}</code></dd>
+<dt>Name given by the publisher</dt><dd>{{.DisplayName}}</dd>
+<dt>Homepage given by the publisher</dt><dd><a href="{{.Homepage}}" rel="nofollow noopener noreferrer">{{.Homepage}}</a></dd>
+</dl>
+</section>
+<section>
+<h2>1. Pin the publisher's key</h2>
+<p>Check each fingerprint with the publisher through a channel you already trust, not only through this page. Pinning creates a pending pin; an org admin confirms it with a security key on the link <code>pclaw</code> prints.</p>
+{{range .KeyFingerprints}}<pre><code>pclaw publisher pin --publisher {{$.L.Publisher}} --fingerprint {{.}}</code></pre>
+{{end}}</section>
+<section>
+<h2>2. Install a bundle</h2>
+{{if .Bundles}}<table>
+<thead><tr><th>Bundle</th><th>Version</th><th>Summary</th><th>Download</th><th>SHA-256</th></tr></thead>
+<tbody>
+{{range .Bundles}}<tr>
+<td><code>{{.Name}}</code></td>
+<td>{{.Version}}</td>
+<td>{{.Summary}}</td>
+<td><a href="{{.URL}}" rel="nofollow noopener noreferrer">{{.URL}}</a></td>
+<td><code class="digest">{{.SHA256}}</code></td>
+</tr>
+{{end}}</tbody>
+</table>
+<p>Download the file, check its SHA-256 against the digest above, then:</p>
+{{range .Bundles}}<pre><code>pclaw bundle verify {{.Name}}-{{.Version}}.pcbundle --fingerprint FINGERPRINT
+pclaw bundle install {{.Name}}-{{.Version}}.pcbundle</code></pre>
+{{end}}<p>The install is refused unless the bundle is signed by a key your org pinned and confirmed for this publisher. What it installs lands as drafts; nothing runs until your org reviews and signs it.</p>
+{{else}}<p>This publisher lists no bundles yet.</p>
+{{end}}</section>
+{{end}}</main>
+{{template "foot"}}{{end}}
