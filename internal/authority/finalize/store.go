@@ -172,6 +172,9 @@ type Receipt struct {
 	// CoverageSnapshot is the snapshot the receipt's coverage claim names,
 	// stored with it for lookups (HR-217); nil without a claim.
 	CoverageSnapshot *ids.UUID
+	// Sigs is the receipt's PAP-1 §9.4 sigs[] (the ML-DSA-65 co-signature,
+	// G0 M35 D1042), stored beside it; nil when co-signing is off.
+	Sigs []byte
 }
 
 // Outcome of a dispatched permit (PAP-1 §7.4).

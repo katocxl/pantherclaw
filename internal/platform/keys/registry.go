@@ -34,9 +34,11 @@ const (
 	PurposeEvidencePacks  Purpose = "evidence_packs"  // evidence-pack manifests (G0 M7)
 	PurposeA2ACard        Purpose = "a2a_card"        // A2A cards a gateway serves (G0 M24 D232)
 	PurposeMcpTokens      Purpose = "mcp_tokens"      // pap-mcp+jwt bearer tokens of standard MCP clients (G0 M26 D402); never published
-	// The anchors and checkpoints_pq keys are not Ed25519 (AltKey).
+	PurposeGlobalLog      Purpose = "global_log"      // checkpoints of the deployment-wide root log that witnesses cosign (G0 M35 D1041)
+	// The anchors, checkpoints_pq and receipts_pq keys are not Ed25519 (AltKey).
 	PurposeAnchors       Purpose = "anchors"        // ECDSA P-256: the anchored global root (G0 M7, HR-195)
 	PurposeCheckpointsPQ Purpose = "checkpoints_pq" // ML-DSA-65: optional checkpoint and pack co-signatures
+	PurposeReceiptsPQ    Purpose = "receipts_pq"    // ML-DSA-65: optional receipt co-signatures, PAP-1 sigs[] (G0 M35 D1042)
 	// The webhooks key is per organization, never a platform key (G0 M20 D251).
 	PurposeWebhooks Purpose = "webhooks" // Ed25519: the `v1a,` signature of opted-in webhooks
 )
@@ -45,12 +47,12 @@ const (
 func Purposes() []Purpose {
 	return []Purpose{
 		PurposeReceipts, PurposePermits, PurposeWorkloadTokens, PurposeCheckpoints, PurposeAccessTokens,
-		PurposeGatewayCA, PurposeActionTokens, PurposeEvidencePacks, PurposeA2ACard, PurposeMcpTokens,
+		PurposeGatewayCA, PurposeActionTokens, PurposeEvidencePacks, PurposeA2ACard, PurposeMcpTokens, PurposeGlobalLog,
 	}
 }
 
 // AltPurposes lists the purposes whose keys use another algorithm.
-func AltPurposes() []Purpose { return []Purpose{PurposeAnchors, PurposeCheckpointsPQ} }
+func AltPurposes() []Purpose { return []Purpose{PurposeAnchors, PurposeCheckpointsPQ, PurposeReceiptsPQ} }
 
 // OrgPurposes lists the Ed25519 purposes whose keys belong to each
 // organization rather than to the platform: the platform registry never
@@ -63,7 +65,10 @@ func (p Purpose) OrgScoped() bool { return slices.Contains(OrgPurposes(), p) }
 // EvidencePurposes lists the purposes of the keys published in
 // evidence-keys.json (PAP-1 §11): what offline verifiers pin.
 func EvidencePurposes() []Purpose {
-	return []Purpose{PurposeReceipts, PurposeCheckpoints, PurposeCheckpointsPQ, PurposeAnchors, PurposeEvidencePacks}
+	return []Purpose{
+		PurposeReceipts, PurposeCheckpoints, PurposeCheckpointsPQ, PurposeAnchors, PurposeEvidencePacks,
+		PurposeGlobalLog, PurposeReceiptsPQ, // G0 M35 D1041, D1042
+	}
 }
 
 // Valid reports whether p is a known purpose.
@@ -86,7 +91,7 @@ func (p Purpose) Algorithm() Algorithm {
 	if p == PurposeAnchors {
 		return AlgES256
 	}
-	if p == PurposeCheckpointsPQ {
+	if p == PurposeCheckpointsPQ || p == PurposeReceiptsPQ {
 		return AlgMLDSA65
 	}
 	return AlgEdDSA

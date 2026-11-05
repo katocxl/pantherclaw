@@ -18,6 +18,7 @@ import (
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/receiptsig"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
@@ -195,7 +196,11 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 	if err != nil {
 		return Receipt{}, err
 	}
-	return Receipt{JWS: jws, Body: body}, nil
+	sigs, err := receiptsig.Of(a.Receipts, jws) // G0 M35 D1042: PAP-1 sigs[] when co-signing is on
+	if err != nil {
+		return Receipt{}, err
+	}
+	return Receipt{JWS: jws, Body: body, Sigs: sigs}, nil
 }
 
 // fit marshals r, dropping passed and not-applicable checklist items (then
@@ -469,7 +474,11 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 	if err != nil {
 		return Receipt{}, err
 	}
-	return Receipt{JWS: jws, Body: body}, nil
+	sigs, err := receiptsig.Of(a.Receipts, jws) // G0 M35 D1042: PAP-1 sigs[] when co-signing is on
+	if err != nil {
+		return Receipt{}, err
+	}
+	return Receipt{JWS: jws, Body: body, Sigs: sigs}, nil
 }
 
 // TargetDigest is the decision event's target_digest (G0 M30 D931a): the
