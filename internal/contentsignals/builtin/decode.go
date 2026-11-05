@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -100,7 +101,7 @@ func (d *decoder) expand(s string, path []string, out *[]candidate) {
 				return
 			}
 			d.left -= len(t)
-			next := append(path[:len(path):len(path)], l.name)
+			next := slices.Concat(path, []string{l.name})
 			*out = append(*out, candidate{text: t, enc: encoding(next)})
 			d.expand(t, next, out)
 		}
@@ -206,12 +207,16 @@ func unescapeBackslash(s string) string {
 		return s
 	}
 	out := backslashRe.ReplaceAllStringFunc(s, func(m string) string {
-		v, err := strconv.ParseUint(m[2:], 16, 32)
+		if m[1] == 'x' {
+			v, err := strconv.ParseUint(m[2:], 16, 8)
+			if err != nil {
+				return m
+			}
+			return string([]byte{uint8(v)})
+		}
+		v, err := strconv.ParseInt(m[2:], 16, 32)
 		if err != nil {
 			return m
-		}
-		if m[1] == 'x' {
-			return string([]byte{byte(v)})
 		}
 		return string(rune(v))
 	})

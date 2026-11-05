@@ -41,7 +41,7 @@ func TestHR712_AConfigWriteMapsToAgentConfigWrite(t *testing.T) {
 		"unknown class": in("write", "CLAUDE.md", "secrets", "toolu_01"),
 		"no call":       in("write", "CLAUDE.md", "memory", ""),
 	} {
-		if _, err := m.Hook(ctx, tc, "agent_config", raw); err == nil || !(errors.Is(err, actionir.ErrAmbiguous) || errors.Is(err, ErrUnmapped)) {
+		if _, err := m.Hook(ctx, tc, "agent_config", raw); err == nil || (!errors.Is(err, actionir.ErrAmbiguous) && !errors.Is(err, ErrUnmapped)) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}

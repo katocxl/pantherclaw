@@ -86,16 +86,20 @@ func TestHR702_AProofNeedsALiveNonceAndIsUsedOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := app.IdentifyInput{Request: pap.Request{Method: "POST", URL: oauthURL, Token: bound},
-		Proof: dpopProof(t, r.key, dpopClaims{Method: "POST", URL: oauthURL, Token: bound, Nonce: n, At: time.Now()})}
+	in := app.IdentifyInput{
+		Request: pap.Request{Method: "POST", URL: oauthURL, Token: bound},
+		Proof:   dpopProof(t, r.key, dpopClaims{Method: "POST", URL: oauthURL, Token: bound, Nonce: n, At: time.Now()}),
+	}
 	if _, err := w.svc.Identify(ctx, w.org, in); err != nil {
 		t.Fatalf("first use: %v", err)
 	}
 	if _, err := w.svc.Identify(ctx, w.org, in); papCode(err) != pap.CodeProofReplay {
 		t.Fatalf("a replayed proof: %v", err)
 	}
-	stale := app.IdentifyInput{Request: in.Request,
-		Proof: dpopProof(t, r.key, dpopClaims{Method: "POST", URL: oauthURL, Token: bound, Nonce: "never-issued-nonce-0123456789", At: time.Now()})}
+	stale := app.IdentifyInput{
+		Request: in.Request,
+		Proof:   dpopProof(t, r.key, dpopClaims{Method: "POST", URL: oauthURL, Token: bound, Nonce: "never-issued-nonce-0123456789", At: time.Now()}),
+	}
 	if _, err := w.svc.Identify(ctx, w.org, stale); papCode(err) != pap.CodeUseNonce {
 		t.Fatalf("an unknown nonce: %v", err)
 	}
@@ -131,8 +135,10 @@ func TestT320_AStolenBoundTokenIsUselessWithoutTheClientsKey(t *testing.T) {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	if _, err := w.svc.Identify(ctx, w.org, app.IdentifyInput{Request: req,
-		Proof: dpopProof(t, r.key, dpopClaims{Method: "POST", URL: oauthURL, Token: bound, Nonce: nonce(), At: time.Now()})}); err != nil {
+	if _, err := w.svc.Identify(ctx, w.org, app.IdentifyInput{
+		Request: req,
+		Proof:   dpopProof(t, r.key, dpopClaims{Method: "POST", URL: oauthURL, Token: bound, Nonce: nonce(), At: time.Now()}),
+	}); err != nil {
 		t.Fatalf("the client's next call: %v", err)
 	}
 }

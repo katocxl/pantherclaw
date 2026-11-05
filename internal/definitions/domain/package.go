@@ -263,8 +263,8 @@ func (d *Definition) validateMapping(i int) error {
 			if m.Method != methodPost || m.Path != RootPath {
 				return invalid("%s: aws-json is a POST to %s", at, RootPath)
 			}
-		case EncodingAWSQuery:
-			return invalid("%s: aws-query is outbound only", at)
+		case EncodingAWSQuery, EncodingAWSRest:
+			return invalid("%s: %s is outbound only", at, m.Encoding)
 		default:
 			return invalid("%s: encoding must be json, form or aws-json", at)
 		}

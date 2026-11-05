@@ -7,6 +7,7 @@ package e2e
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -56,7 +57,7 @@ func TestE2E_M30_GapsFromTheThreatMapHoldWhatTheyShould(t *testing.T) {
 			// Held means not sent: GitHub saw no visibility change and no
 			// transfer.
 			for _, r := range d.s.gh.sim.Requests() {
-				if (r.Method == "PATCH" && strings.Count(r.Path, "/") == 3 && strings.HasPrefix(r.Path, "/repos/")) ||
+				if (r.Method == http.MethodPatch && strings.Count(r.Path, "/") == 3 && strings.HasPrefix(r.Path, "/repos/")) ||
 					strings.HasSuffix(r.Path, "/transfer") {
 					t.Errorf("a held share reached GitHub: %s %s", r.Method, r.Path)
 				}
