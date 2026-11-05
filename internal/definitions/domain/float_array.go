@@ -26,7 +26,7 @@ import (
 const TypeFloatArray ParamType = "float_array"
 
 // MaxFloatItems bounds a float_array's declared max_items.
-const MaxFloatItems = 16000
+const MaxFloatItems = 12288
 
 // ErrFloatArray reports values that have no canonical float_array form.
 var ErrFloatArray = fmt.Errorf("a float_array holds 1..%d finite numbers within float32 range", MaxFloatItems)

@@ -38,9 +38,9 @@ func TestHR704_VectorParamsAndSchemasDecodeWithinBounds(t *testing.T) {
 func TestHR704_VectorParamsAndSchemasOutOfBoundsAreRefused(t *testing.T) {
 	src := string(pcvectorstore.Package)
 	for name, edit := range map[string][2]string{
-		"max_items over 16000":        {"max_items: 16000", "max_items: 16001"},
+		"max_items over 12288":        {"max_items: 12288", "max_items: 12289"},
 		"max_keys over 32":            {"max_keys: 32", "max_keys: 33"},
-		"minItems in number array":    {"maxItems: 16000\n", "maxItems: 16000\n              minItems: 1\n"},
+		"minItems in number array":    {"maxItems: 12288\n", "maxItems: 12288\n              minItems: 1\n"},
 		"maxProperties over 32":       {"maxProperties: 16", "maxProperties: 33"},
 		"long string map values":      {"maxLength: 1024", "maxLength: 1025"},
 		"number array of a non-float": {"            top_k:\n              type: integer", "            top_k:\n              type: array\n              maxItems: 3\n              items:\n                type: number"},
@@ -112,13 +112,18 @@ func TestHR704_AFloatArrayIsOneCanonicalString(t *testing.T) {
 	if again := canonOf(t, back); again != s || len(back) != len(in) || back[0] != 0.5 || back[1] != -1 {
 		t.Fatalf("round trip %q -> %v -> %q", s, back, again)
 	}
+	// The most items has a canonical form of exactly 64 KiB (G0 M30 D1213).
+	most := make([]float64, domain.MaxFloatItems)
+	if s := canonOf(t, most); len(s) != 65536 {
+		t.Fatalf("%d items encode to %d bytes", len(most), len(s))
+	}
 	for name, fs := range map[string][]float64{
 		"NaN":         {math.NaN()},
 		"+Inf":        {math.Inf(1)},
 		"-Inf":        {math.Inf(-1)},
 		"overflow":    {3.5e38},
 		"empty":       {},
-		"16001 items": make([]float64, domain.MaxFloatItems+1),
+		"12289 items": make([]float64, domain.MaxFloatItems+1),
 	} {
 		if _, err := domain.EncodeFloat32s(fs); err == nil {
 			t.Errorf("%s: encoded", name)

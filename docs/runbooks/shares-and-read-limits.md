@@ -43,7 +43,7 @@ A grant's count rule can count reads only, or writes only, with `access`:
 - `access` needs `max_count` and refuses `limit` and `currency` (`BUDGET_ACCESS_NEEDS_COUNT`).
 - `"*"` is allowed only with `access`, and only alone (`BUDGET_WILDCARD_NEEDS_ACCESS`).
 - The 501st read in the period is refused `COUNT_LIMIT_REACHED`.
-- Nothing applies a read limit unless a grant names it. The `read-limits` grant template is an example to copy and adjust.
+- Nothing applies a read limit unless a grant names it. The `read-limits` template is an example to copy and adjust: its grant counts 500 reads a day, and its policy clamps a `pc.postgres` row read to 500 rows (`READ_ROWS_CLAMPED`).
 
 ## 4. Alerts for bulk reads and scheduled sends (Business)
 

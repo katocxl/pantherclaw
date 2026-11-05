@@ -38,7 +38,7 @@ pclaw connection create kb --kind vectorstore --gateway <gw> --package pc.vector
 
 | Param | Limit |
 |---|---|
-| `embedding` | 1 to 16000 numbers, all finite |
+| `embedding` | 1 to 12288 numbers, all finite and within float32 range (the canonical string is then at most 64 KiB) |
 | `top_k` | 1 to 100, default 10 |
 | `content` | at most 8 KiB |
 | `filter` | a flat string map, at most 16 keys |

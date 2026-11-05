@@ -212,8 +212,13 @@ func TestHR704_NumbersOnlyWhereAFloatArrayIsExtracted(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// The same call with a whole-number embedding maps.
+	// The same call with a whole-number embedding maps, and so does one of
+	// the most items, whose canonical string is exactly 64 KiB (D1213).
 	if err := vecMapMCP(t, "vector_upsert", `{"table":"rag.docs","id":"x","content":"c","embedding":[1,2,3]}`); err != nil {
 		t.Fatal(err)
+	}
+	most := strings.Repeat("-0.5,", defs.MaxFloatItems-1) + "3.4e38"
+	if err := vecMapMCP(t, "vector_upsert", `{"table":"rag.docs","id":"x","content":"c","embedding":[`+most+`]}`); err != nil {
+		t.Fatalf("%d items: %v", defs.MaxFloatItems, err)
 	}
 }
