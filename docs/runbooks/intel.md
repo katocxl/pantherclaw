@@ -31,7 +31,7 @@ A feed is refused when its signature does not verify, its version is not above t
 
 ## 3. Turn on matching (org)
 
-With `intel.manage` (Security Admin), set consume to:
+A person with `intel.manage` (Security Admin, a person only) sets consume with `SetIntelSettings`. The consume mode is an always-protected surface, `intel.consume`, like `content.signals.mode`: tightening it applies at once, and loosening it (toward ALERT_ONLY or OFF) files a protected change that waits for a second person (the response's `protected_change_filed` says so). Turning sharing on or off applies at once. The modes are:
 
 - `OFF` (the default): nothing is matched.
 - `HOLD`: a matching call waits for a person's approval with reason `INTEL_MATCH_HOLD`, and an alert is raised.
@@ -52,7 +52,7 @@ With the org's share switch on (`intel.manage`), a person with `intel.contribute
 | `QUARANTINED_TOOL` | A tool of such a connection: its listed description | `tool_description` |
 | `FLAGGED_DESCRIPTION` | An inventory item whose description the injection scan flagged: its shingles | `injection_text` |
 
-The hash or shingles are computed in your org; the text never leaves. `ListIntelContributions` shows them. The operator collects contributions offline with `pantherclaw-server intel export-contributions --out <file>`, which writes no org, account or time finer than a day.
+The hash or shingles are computed in your org; the text never leaves. `ListIntelContributions` shows them. The operator collects contributions offline with `pantherclaw-server intel export-contributions --out <file>`, which writes no org, account or time finer than a day. The file is written and synced before rows are marked exported: a failed write marks nothing, and a crash after the save can export the same rows again, so the maintainer may see duplicates but nothing is lost.
 
 ## 5. STIX
 
