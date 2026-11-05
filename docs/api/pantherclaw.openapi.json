@@ -76129,7 +76129,7 @@
           "runGrantId": {
             "type": "string",
             "title": "run_grant_id",
-            "description": "Kubernetes only: the grant a pod's run is started under (G0 M32\n D973); empty: none."
+            "description": "Kubernetes and the cloud presets only: the grant a pod's run (G0 M32\n D973) or a cloud agent runtime's run (G0 M34 D992) is started under;\n empty: none."
           }
         },
         "title": "IssuerRevision",
@@ -76564,7 +76564,7 @@
               "null"
             ],
             "title": "run_grant_id",
-            "description": "Kubernetes only: the grant a pod's run is started under\n (KubernetesService.StartPodRun, G0 M32 D973). Part of the revision, so\n it changes only through a new revision and its approval; empty: the\n entry starts no runs.",
+            "description": "Kubernetes and the cloud presets only: the grant a pod's run\n (KubernetesService.StartPodRun, G0 M32 D973) or a cloud agent runtime's\n run (RuntimeService.StartRuntimeRun, G0 M34 D992) is started under. Part\n of the revision, so\n it changes only through a new revision and its approval; empty: the\n entry starts no runs.",
             "anyOf": [
               {
                 "format": "uuid"
@@ -76584,7 +76584,7 @@
         },
         "title": "ProposeIssuerEntryRequest",
         "additionalProperties": false,
-        "description": "ProposeIssuerEntryRequest proposes a new entry or a new revision.\nrun_grant_id is only for a kubernetes binding:\n```\nthis.run_grant_id == '' || has(this.kubernetes)\n```\n\n",
+        "description": "ProposeIssuerEntryRequest proposes a new entry or a new revision.\nrun_grant_id is only for a kubernetes, gcp, aws, azure_mi or entra_agent binding:\n```\nthis.run_grant_id == '' || has(this.kubernetes) || has(this.gcp) || has(this.aws) || has(this.azure_mi) || has(this.entra_agent)\n```\n\n",
         "required": [
           "agentId",
           "reason"
@@ -96245,6 +96245,11 @@
             "title": "last_start_time",
             "description": "When the daily job last started a scan of it; unset before the first.",
             "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "description": "The tenant each scan covers (G0 M34 D997a)."
           }
         },
         "title": "SaaSScanSchedule",
@@ -96544,6 +96549,12 @@
             ],
             "title": "daily",
             "description": "True asks for a daily scan; false stops it."
+          },
+          "tenant": {
+            "type": "string",
+            "title": "tenant",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$",
+            "description": "The tenant each scan covers, as StartSaasScan's (G0 M34 D997a): an\n AgentCore account, a Vertex \u003cproject\u003e/\u003clocation\u003e, a Foundry project."
           }
         },
         "title": "SetSaaSScanScheduleRequest",
@@ -96551,7 +96562,8 @@
         "description": "SetSaaSScanScheduleRequest sets or stops a daily scan.",
         "required": [
           "source",
-          "connectionId"
+          "connectionId",
+          "tenant"
         ]
       },
       "pantherclaw.v1.SetSaaSScanScheduleResponse": {
@@ -96652,8 +96664,8 @@
           "tenant": {
             "type": "string",
             "title": "tenant",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
-            "description": "The Dataverse organization id, or the ChatGPT workspace id."
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$",
+            "description": "The Dataverse organization id, or the ChatGPT workspace id.\n For the runtime sources (G0 M34 D997a): an AgentCore account, a Vertex\n \u003cproject\u003e/\u003clocation\u003e, a Foundry project."
           }
         },
         "title": "StartSaasScanRequest",

@@ -50,6 +50,7 @@ import (
 	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
 	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
 	pcvertex "github.com/katocxl/pantherclaw/packages/pc-vertex"
+	pcvertexagentengine "github.com/katocxl/pantherclaw/packages/pc-vertex-agent-engine"
 )
 
 // newModel builds model drafting's service (G0 M21 D304, D309). Without the
@@ -79,6 +80,7 @@ func builtinPackages() ([]*defsdomain.Package, error) {
 		pcgmail.Package, pcgoogleworkspace.Package, pcm365.Package,
 		pcsalesforce.Package, pcnotion.Package, pclinear.Package, pcvertex.Package, pcbedrock.Package, pcsnowflake.Package,
 		pcbrowser.Package, pccomputer.Package,
+		pcvertexagentengine.Package, // G0 M34 D993
 	}
 	pkgs := make([]*defsdomain.Package, 0, len(raws))
 	for _, raw := range raws {

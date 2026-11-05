@@ -1,0 +1,285 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that deploy agents to Vertex AI Agent
+# Engine (G0 M34 D993; HR-763). It reaches the Vertex AI API (v1
+# projects/*/locations/*/reasoningEngines) at a regional host,
+# https://<location>-aiplatform.googleapis.com, through an http connection
+# whose credential is a google_service_account (D952): the gateway mints an
+# access token for every dispatch from a signed assertion and places that,
+# never the key; the connection's allowed hosts name the token endpoint's
+# host beside the base URL's. The agent holds neither.
+#
+# Deploying an agent puts new code where it runs with the engine's service
+# account: an irreversible agent.deploy. No template grants it.
+#
+# The display name and description are content: shown only in the untrusted
+# block of an approval (HR-023). The package's Cloud Storage URIs and Python
+# version are what an approval shows.
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.vertex-agent-engine
+version: 1.0.0
+publisher: pantherclaw
+summary: List, create and update agents (reasoning engines) in Vertex AI Agent Engine
+
+definitions:
+  - operation: vertex.reasoning_engines.list
+    summary: List the reasoning engines of a Vertex AI project and location
+    access: read
+    target:
+      type: vertex_location
+      id_pattern: '^(?P<project>[a-z][a-z0-9-]{5,29})/(?P<location>[a-z]+-[a-z]+[0-9]+)$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: vertex_list_reasoning_engines
+        route: vertex-reasoning-engines-list
+        description: >-
+          List the agents (reasoning engines) deployed to Vertex AI Agent
+          Engine in one project and location.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [project, location]
+          properties:
+            project:
+              type: string
+              description: The Google Cloud project id
+              pattern: '^[a-z][a-z0-9-]{5,29}$'
+            location:
+              type: string
+              description: The region, such as us-central1
+              pattern: '^[a-z]+-[a-z]+[0-9]+$'
+        extract:
+          target_id: input.project + '/' + input.location
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /v1/projects/{target.id.project}/locations/{target.id.location}/reasoningEngines
+
+  - operation: vertex.reasoning_engine.create
+    summary: Deploy a new agent (reasoning engine) to Vertex AI Agent Engine
+    access: write
+    target:
+      type: vertex_location
+      id_pattern: '^(?P<project>[a-z][a-z0-9-]{5,29})/(?P<location>[a-z]+-[a-z]+[0-9]+)$'
+      account: none
+    params:
+      display_name:
+        type: content
+        material: true
+        required: true
+        max_length: 128
+      description:
+        type: content
+        material: true
+        max_length: 1024
+      package_uri:
+        type: identifier
+        material: true
+        required: true
+        max_length: 1024
+        pattern: '^gs://[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]/[A-Za-z0-9._/-]{1,800}$'
+      requirements_uri:
+        type: identifier
+        material: true
+        max_length: 1024
+        pattern: '^gs://[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]/[A-Za-z0-9._/-]{1,800}$'
+      python_version:
+        type: enum
+        material: true
+        required: true
+        values: ['3.9', '3.10', '3.11', '3.12', '3.13']
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: agent.deploy
+        description: Deploys agent code that runs with the engine's service account
+    reversibility: irreversible
+    dedupe_key: [target.id, params.display_name, params.package_uri]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Deploy an agent to Vertex AI Agent Engine in {target.id}
+      fields:
+        - target.id
+        - params.package_uri
+        - params.requirements_uri
+        - params.python_version
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: vertex_create_reasoning_engine
+        route: vertex-reasoning-engine-create
+        description: >-
+          Deploy a new agent to Vertex AI Agent Engine from a pickled agent
+          and its requirements in Cloud Storage. Every deploy holds for a
+          person unless a grant names it.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [project, location, display_name, package_uri, python_version]
+          properties:
+            project:
+              type: string
+              description: The Google Cloud project id
+              pattern: '^[a-z][a-z0-9-]{5,29}$'
+            location:
+              type: string
+              description: The region, such as us-central1
+              pattern: '^[a-z]+-[a-z]+[0-9]+$'
+            display_name:
+              type: string
+              description: The agent's display name
+              maxLength: 128
+            description:
+              type: string
+              description: What the agent does
+              maxLength: 1024
+            package_uri:
+              type: string
+              description: The gs:// URI of the pickled agent
+              maxLength: 1024
+            requirements_uri:
+              type: string
+              description: The gs:// URI of its requirements.txt
+              maxLength: 1024
+            python_version:
+              type: string
+              enum: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        extract:
+          target_id: input.project + '/' + input.location
+          params:
+            display_name: input.display_name
+            description: input.description
+            package_uri: input.package_uri
+            requirements_uri: input.requirements_uri
+            python_version: input.python_version
+    dispatch:
+      http:
+        method: POST
+        path: /v1/projects/{target.id.project}/locations/{target.id.location}/reasoningEngines
+        body:
+          displayName: params.display_name
+          description: params.description
+          spec[packageSpec][pickleObjectGcsUri]: params.package_uri
+          spec[packageSpec][requirementsGcsUri]: params.requirements_uri
+          spec[packageSpec][pythonVersion]: params.python_version
+
+  - operation: vertex.reasoning_engine.patch
+    summary: Deploy new code to an agent (reasoning engine) in Vertex AI Agent Engine
+    access: write
+    target:
+      type: vertex_reasoning_engine
+      id_pattern: '^(?P<project>[a-z][a-z0-9-]{5,29})/(?P<location>[a-z]+-[a-z]+[0-9]+)/(?P<engine>[0-9]{1,19})$'
+      account: none
+    params:
+      package_uri:
+        type: identifier
+        material: true
+        required: true
+        max_length: 1024
+        pattern: '^gs://[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]/[A-Za-z0-9._/-]{1,800}$'
+      requirements_uri:
+        type: identifier
+        material: true
+        max_length: 1024
+        pattern: '^gs://[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]/[A-Za-z0-9._/-]{1,800}$'
+      python_version:
+        type: enum
+        material: true
+        required: true
+        values: ['3.9', '3.10', '3.11', '3.12', '3.13']
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: agent.deploy
+        description: Replaces the code an agent runs with the engine's service account
+    reversibility: irreversible
+    dedupe_key: [target.id, params.package_uri]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Deploy new code to Vertex AI agent {target.id}
+      fields:
+        - target.id
+        - params.package_uri
+        - params.requirements_uri
+        - params.python_version
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: vertex_patch_reasoning_engine
+        route: vertex-reasoning-engine-patch
+        description: >-
+          Replace the code an existing Vertex AI Agent Engine agent runs with
+          a pickled agent and its requirements in Cloud Storage.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [project, location, engine_id, package_uri, python_version]
+          properties:
+            project:
+              type: string
+              description: The Google Cloud project id
+              pattern: '^[a-z][a-z0-9-]{5,29}$'
+            location:
+              type: string
+              description: The region, such as us-central1
+              pattern: '^[a-z]+-[a-z]+[0-9]+$'
+            engine_id:
+              type: string
+              description: The reasoning engine's numeric id
+              pattern: '^[0-9]{1,19}$'
+            package_uri:
+              type: string
+              description: The gs:// URI of the pickled agent
+              maxLength: 1024
+            requirements_uri:
+              type: string
+              description: The gs:// URI of its requirements.txt
+              maxLength: 1024
+            python_version:
+              type: string
+              enum: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        extract:
+          target_id: input.project + '/' + input.location + '/' + input.engine_id
+          params:
+            package_uri: input.package_uri
+            requirements_uri: input.requirements_uri
+            python_version: input.python_version
+    dispatch:
+      http:
+        method: PATCH
+        path: /v1/projects/{target.id.project}/locations/{target.id.location}/reasoningEngines/{target.id.engine}
+        query:
+          updateMask: literal.spec
+        body:
+          spec[packageSpec][pickleObjectGcsUri]: params.package_uri
+          spec[packageSpec][requirementsGcsUri]: params.requirements_uri
+          spec[packageSpec][pythonVersion]: params.python_version
