@@ -109,7 +109,7 @@ func (e *Engine) scanAgentCore(ctx context.Context, conn *control.Connection, c 
 	if account != tenant {
 		return saascollect.Result{}, errRuntimeTenant
 	}
-	s, err := e.awsSession(ctx, conn, def, actionir.Target{Type: def.Target.Type, ID: tenant, Account: tenant})
+	s, err := e.awsSession(ctx, conn, def, actionir.Target{Type: def.Target.Type, ID: "agentcore", Account: tenant})
 	if err != nil {
 		return saascollect.Result{}, err
 	}
