@@ -155,6 +155,56 @@ func TestMapClasses(t *testing.T) {
 			},
 		},
 		{
+			// Agent identity protection is IAM, not API Activity (D1205).
+			name: "agent instance revoked", class: 3001, category: 3, ty: 300106, severity: 1, status: 1,
+			ev: func() Event {
+				e := event("audit." + auditkind.IdentityInstanceRevoked)
+				e.ActorType, e.Outcome = "user", "SUCCESS"
+				e.Subjects = []reflexdomain.Subject{{Type: reflexdomain.SubjectAgent, ID: "a1"}, {Type: reflexdomain.SubjectInstance, ID: "i1"}}
+				return e
+			},
+			check: func(t *testing.T, r Record) {
+				if r.ClassName != "Account Change" || r.ActivityName != "Delete" || r.User == nil || r.User.UID != "i1" || r.User.Type != "instance" ||
+					r.User.TypeID != 99 || r.API != nil {
+					t.Errorf("class %q activity %q user %+v api %+v", r.ClassName, r.ActivityName, r.User, r.API)
+				}
+			},
+		},
+		{
+			name: "refused code reuse", class: 3002, category: 3, ty: 300299, severity: 1, status: 2,
+			ev: func() Event {
+				e := event("audit." + auditkind.IdaccessCodeReuse)
+				e.ActorType, e.Outcome = "system", "DENIED"
+				e.Subjects = []reflexdomain.Subject{{Type: reflexdomain.SubjectAgent, ID: "a1"}}
+				return e
+			},
+			check: func(t *testing.T, r Record) {
+				if r.ClassName != "Authentication" || r.User == nil || r.User.UID != "a1" || r.Status != "Failure" {
+					t.Errorf("class %q user %+v status %q", r.ClassName, r.User, r.Status)
+				}
+			},
+		},
+		{
+			name: "trusted issuer activated", class: 3004, category: 3, ty: 300410, severity: 1, status: 1,
+			ev: func() Event {
+				e := event("audit." + auditkind.IdentityIssuerActivated)
+				e.ActorType, e.Outcome = "user", "SUCCESS"
+				e.Attrs = map[string]string{"object_type": "trusted_issuer", "object_id": "ti-1"}
+				return e
+			},
+			check: func(t *testing.T, r Record) {
+				if r.ClassName != "Entity Management" || r.ActivityName != "Activate" || r.Entity == nil || r.Entity.UID != "ti-1" ||
+					r.Entity.Type != "trusted_issuer" || r.User != nil {
+					t.Errorf("class %q activity %q entity %+v user %+v", r.ClassName, r.ActivityName, r.Entity, r.User)
+				}
+			},
+		},
+		{
+			// A firewall change stays API Activity.
+			name: "guardrail audit", class: 6003, category: 6, ty: 600303, severity: 1, status: 0,
+			ev: func() Event { return event("audit." + auditkind.GuardrailsChanged) },
+		},
+		{
 			name: "other audit", class: 6003, category: 6, ty: 600301, severity: 1, status: 0,
 			ev: func() Event { return event("audit.siem.destination_created") },
 		},
@@ -281,6 +331,25 @@ func mustUUID(s string) ids.UUID {
 		panic(err)
 	}
 	return u
+}
+
+// TestAgentIdentityKindsAreWritten: every agent identity protection kind
+// is an audit kind the core writes and maps to an Identity & Access
+// Management class, never API Activity (D1205).
+func TestAgentIdentityKindsAreWritten(t *testing.T) {
+	kinds := auditkind.All()
+	for k, m := range agentIdentityKinds {
+		if !slices.Contains(kinds, k) {
+			t.Errorf("%q is not an audit kind the core writes", k)
+		}
+		r := Map(event("audit."+k), "")
+		if r.CategoryUID != categoryIAM || r.ClassUID != m.class || r.ActivityName == "" || r.TypeUID != m.class*100+m.activity {
+			t.Errorf("%s maps to class %d category %d type %d activity %q", k, r.ClassUID, r.CategoryUID, r.TypeUID, r.ActivityName)
+		}
+		if (m.class == classEntityMgmt) != (r.Entity != nil && m.entity != "") {
+			t.Errorf("%s: entity %+v for class %d", k, r.Entity, m.class)
+		}
+	}
 }
 
 // TestIAMPrefixesMatchKinds: every prefix of the Account Change and
