@@ -481,11 +481,11 @@ func (q *Queries) InsertEnvelopeRevision(ctx context.Context, arg InsertEnvelope
 const insertGrant = `-- name: InsertGrant :exec
 INSERT INTO pc.grants (org_id, id, agent_id, instance_id, principal_user_id, principal_sa_id, environment_id,
                        parent_id, depth, current_revision, grantor_kind, grantor_id, basis, ceiling_id,
-                       automation_execution_id)
+                       automation_execution_id, peer_org_id, peer_agent)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9,
         $10, $11, $12, $13, $14,
-        $15)
+        $15, $16, $17)
 `
 
 type InsertGrantParams struct {
@@ -504,6 +504,8 @@ type InsertGrantParams struct {
 	Basis                 string
 	CeilingID             *ids.UUID
 	AutomationExecutionID *ids.UUID
+	PeerOrgID             *ids.UUID
+	PeerAgent             *string
 }
 
 func (q *Queries) InsertGrant(ctx context.Context, arg InsertGrantParams) error {
@@ -523,6 +525,8 @@ func (q *Queries) InsertGrant(ctx context.Context, arg InsertGrantParams) error 
 		arg.Basis,
 		arg.CeilingID,
 		arg.AutomationExecutionID,
+		arg.PeerOrgID,
+		arg.PeerAgent,
 	)
 	return err
 }

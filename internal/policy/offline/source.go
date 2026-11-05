@@ -39,6 +39,7 @@ import (
 	pcchatgptenterprise "github.com/katocxl/pantherclaw/packages/pc-chatgpt-enterprise"
 	pccomputer "github.com/katocxl/pantherclaw/packages/pc-computer"
 	pccopilotstudio "github.com/katocxl/pantherclaw/packages/pc-copilot-studio"
+	pcfederation "github.com/katocxl/pantherclaw/packages/pc-federation"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcgitlab "github.com/katocxl/pantherclaw/packages/pc-gitlab"
 	pcgmail "github.com/katocxl/pantherclaw/packages/pc-gmail"
@@ -121,7 +122,8 @@ func builtin() [][]byte {
 		pcbrowser.Package, pccomputer.Package,
 		pcvertexagentengine.Package,                                            // G0 M34 D993
 		pcawsagentcore.Package, pcazurefoundry.Package, pcazurecompute.Package, // G0 M34 D993a
-		pcawsssm.Package, // G0 M34 D1002
+		pcawsssm.Package,     // G0 M34 D1002
+		pcfederation.Package, // G0 M35 D1024
 	}
 }
 

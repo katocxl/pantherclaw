@@ -46,6 +46,12 @@ const (
 	// AuthorityServiceRecordToolObservationProcedure is the procedure name of the AuthorityService's
 	// RecordToolObservation RPC.
 	AuthorityServiceRecordToolObservationProcedure = "/pantherclaw.v1.AuthorityService/RecordToolObservation"
+	// AuthorityServiceIssueFederationTokenProcedure is the procedure name of the AuthorityService's
+	// IssueFederationToken RPC.
+	AuthorityServiceIssueFederationTokenProcedure = "/pantherclaw.v1.AuthorityService/IssueFederationToken"
+	// AuthorityServiceRecordFederationReceiptProcedure is the procedure name of the AuthorityService's
+	// RecordFederationReceipt RPC.
+	AuthorityServiceRecordFederationReceiptProcedure = "/pantherclaw.v1.AuthorityService/RecordFederationReceipt"
 )
 
 var (
@@ -98,6 +104,20 @@ var (
 			Procedure:  AuthorityServiceRecordToolObservationProcedure,
 		}
 	})
+	authorityServiceIssueFederationTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_authority_proto.Services().ByName("AuthorityService").Methods().ByName("IssueFederationToken"),
+			Procedure:  AuthorityServiceIssueFederationTokenProcedure,
+		}
+	})
+	authorityServiceRecordFederationReceiptSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_authority_proto.Services().ByName("AuthorityService").Methods().ByName("RecordFederationReceipt"),
+			Procedure:  AuthorityServiceRecordFederationReceiptProcedure,
+		}
+	})
 )
 
 // AuthorityServiceClient is a client for the pantherclaw.v1.AuthorityService service.
@@ -138,6 +158,19 @@ type AuthorityServiceClient interface {
 	// nothing is recorded.
 	// permission: gateway.observe
 	RecordToolObservation(context.Context, *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error)
+	// IssueFederationToken signs the pap-fed+jwt the gateway sends with a
+	// message to a trusted peer org's agent (G0 M35 D1023): bound to the exact
+	// request (method POST, htu, body digest) and to this org's ALLOWED
+	// action on a federation connection, signed with the org's federation
+	// key, valid for 60 seconds. Anything else is refused.
+	// permission: gateway.dispatch
+	IssueFederationToken(context.Context, *v1.IssueFederationTokenRequest) (*v1.IssueFederationTokenResponse, error)
+	// RecordFederationReceipt records the minimal receipt a peer org returned
+	// for a federated message (D1023, FQ35-2), checked with the pinned peer
+	// keys: VALID, or INVALID; an empty receipt is MISSING. A peer DENY or
+	// HELD fails the dispatch's outcome with PEER_DENIED or PEER_HELD.
+	// permission: gateway.dispatch
+	RecordFederationReceipt(context.Context, *v1.RecordFederationReceiptRequest) (*v1.RecordFederationReceiptResponse, error)
 }
 
 // NewAuthorityServiceClient constructs a client for the pantherclaw.v1.AuthorityService service.
@@ -184,6 +217,19 @@ type AuthorityServiceHandler interface {
 	// nothing is recorded.
 	// permission: gateway.observe
 	RecordToolObservation(context.Context, *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error)
+	// IssueFederationToken signs the pap-fed+jwt the gateway sends with a
+	// message to a trusted peer org's agent (G0 M35 D1023): bound to the exact
+	// request (method POST, htu, body digest) and to this org's ALLOWED
+	// action on a federation connection, signed with the org's federation
+	// key, valid for 60 seconds. Anything else is refused.
+	// permission: gateway.dispatch
+	IssueFederationToken(context.Context, *v1.IssueFederationTokenRequest) (*v1.IssueFederationTokenResponse, error)
+	// RecordFederationReceipt records the minimal receipt a peer org returned
+	// for a federated message (D1023, FQ35-2), checked with the pinned peer
+	// keys: VALID, or INVALID; an empty receipt is MISSING. A peer DENY or
+	// HELD fails the dispatch's outcome with PEER_DENIED or PEER_HELD.
+	// permission: gateway.dispatch
+	RecordFederationReceipt(context.Context, *v1.RecordFederationReceiptRequest) (*v1.RecordFederationReceiptResponse, error)
 }
 
 // RegisterAuthorityServiceHandler registers svc as the pantherclaw.v1.AuthorityService
@@ -198,6 +244,8 @@ func RegisterAuthorityServiceHandler(server *connect.Server, svc AuthorityServic
 		connect.Method{Spec: authorityServiceReportUnknownWorkloadSpec(), Handler: adapter.reportUnknownWorkload},
 		connect.Method{Spec: authorityServiceVerifyWorkloadSpec(), Handler: adapter.verifyWorkload},
 		connect.Method{Spec: authorityServiceRecordToolObservationSpec(), Handler: adapter.recordToolObservation},
+		connect.Method{Spec: authorityServiceIssueFederationTokenSpec(), Handler: adapter.issueFederationToken},
+		connect.Method{Spec: authorityServiceRecordFederationReceiptSpec(), Handler: adapter.recordFederationReceipt},
 	)
 }
 
@@ -230,6 +278,14 @@ func (UnimplementedAuthorityServiceHandler) VerifyWorkload(context.Context, *v1.
 
 func (UnimplementedAuthorityServiceHandler) RecordToolObservation(context.Context, *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AuthorityService.RecordToolObservation is not implemented")
+}
+
+func (UnimplementedAuthorityServiceHandler) IssueFederationToken(context.Context, *v1.IssueFederationTokenRequest) (*v1.IssueFederationTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AuthorityService.IssueFederationToken is not implemented")
+}
+
+func (UnimplementedAuthorityServiceHandler) RecordFederationReceipt(context.Context, *v1.RecordFederationReceiptRequest) (*v1.RecordFederationReceiptResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AuthorityService.RecordFederationReceipt is not implemented")
 }
 
 type authorityServiceClient struct {
@@ -287,6 +343,22 @@ func (c *authorityServiceClient) VerifyWorkload(ctx context.Context, req *v1.Ver
 func (c *authorityServiceClient) RecordToolObservation(ctx context.Context, req *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error) {
 	var res v1.RecordToolObservationResponse
 	if err := c.client.CallUnary(ctx, authorityServiceRecordToolObservationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *authorityServiceClient) IssueFederationToken(ctx context.Context, req *v1.IssueFederationTokenRequest) (*v1.IssueFederationTokenResponse, error) {
+	var res v1.IssueFederationTokenResponse
+	if err := c.client.CallUnary(ctx, authorityServiceIssueFederationTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *authorityServiceClient) RecordFederationReceipt(ctx context.Context, req *v1.RecordFederationReceiptRequest) (*v1.RecordFederationReceiptResponse, error) {
+	var res v1.RecordFederationReceiptResponse
+	if err := c.client.CallUnary(ctx, authorityServiceRecordFederationReceiptSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -372,6 +444,30 @@ func (h authorityServiceHandler) recordToolObservation(ctx context.Context, _ co
 		return err
 	}
 	res, err := h.svc.RecordToolObservation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h authorityServiceHandler) issueFederationToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.IssueFederationTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.IssueFederationToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h authorityServiceHandler) recordFederationReceipt(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RecordFederationReceiptRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RecordFederationReceipt(ctx, &req)
 	if err != nil {
 		return err
 	}

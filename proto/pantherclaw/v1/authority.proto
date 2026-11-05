@@ -48,6 +48,61 @@ service AuthorityService {
   // nothing is recorded.
   // permission: gateway.observe
   rpc RecordToolObservation(RecordToolObservationRequest) returns (RecordToolObservationResponse);
+  // IssueFederationToken signs the pap-fed+jwt the gateway sends with a
+  // message to a trusted peer org's agent (G0 M35 D1023): bound to the exact
+  // request (method POST, htu, body digest) and to this org's ALLOWED
+  // action on a federation connection, signed with the org's federation
+  // key, valid for 60 seconds. Anything else is refused.
+  // permission: gateway.dispatch
+  rpc IssueFederationToken(IssueFederationTokenRequest) returns (IssueFederationTokenResponse);
+  // RecordFederationReceipt records the minimal receipt a peer org returned
+  // for a federated message (D1023, FQ35-2), checked with the pinned peer
+  // keys: VALID, or INVALID; an empty receipt is MISSING. A peer DENY or
+  // HELD fails the dispatch's outcome with PEER_DENIED or PEER_HELD.
+  // permission: gateway.dispatch
+  rpc RecordFederationReceipt(RecordFederationReceiptRequest) returns (RecordFederationReceiptResponse);
+}
+
+// IssueFederationTokenRequest names the action and the exact request.
+message IssueFederationTokenRequest {
+  // Our action, ALLOWED for dispatch on a federation connection.
+  string action_id = 1 [(buf.validate.field).string.uuid = true];
+  // SHA-256 of the exact request body.
+  bytes body_sha256 = 2 [(buf.validate.field).bytes.len = 32];
+  // The exact URL the gateway POSTs to: the peer's federation face plus
+  // /fed/a2a/{listing}.
+  string htu = 3 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    pattern: "^https://"
+  }];
+}
+
+// IssueFederationTokenResponse is the token.
+message IssueFederationTokenResponse {
+  // Compact JWS, typ pap-fed+jwt; sent as "Authorization: PAP-Fed <token>".
+  string token = 1;
+  google.protobuf.Timestamp expire_time = 2;
+}
+
+// RecordFederationReceiptRequest is the peer's answer receipt.
+message RecordFederationReceiptRequest {
+  // Our action.
+  string action_id = 1 [(buf.validate.field).string.uuid = true];
+  // The PC-Fed-Receipt header value; empty when the peer sent none.
+  string receipt = 2 [(buf.validate.field).string.max_len = 16384];
+}
+
+// RecordFederationReceiptResponse says what was recorded.
+message RecordFederationReceiptResponse {
+  // "VALID", "MISSING" or "INVALID".
+  string state = 1;
+  // The peer's decision in a VALID receipt: "ALLOW", "DENY" or "HELD".
+  string decision = 2;
+  // PEER_DENIED or PEER_HELD when the dispatch outcome failed for it.
+  string reason = 3;
+  // The agent-safe text for a peer refusal or hold; empty otherwise.
+  string agent_text = 4;
 }
 
 // Decision is an authorization decision (PAP-1 §7.1).
