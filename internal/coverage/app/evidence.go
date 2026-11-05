@@ -122,6 +122,13 @@ func (s *Service) evidence(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 		if err != nil {
 			return e, err
 		}
+		if c.KubeClosureID != nil {
+			kc, err := q.GetKubeClosure(ctx, org, *c.KubeClosureID)
+			if err != nil {
+				return e, err
+			}
+			rec.Kube = &domain.KubeScope{Cluster: kc.Cluster, Namespace: kc.Namespace}
+		}
 		e.Closure = rec
 		changes, err := q.CoverageInvalidationsSince(ctx, dbq.CoverageInvalidationsSinceParams{
 			OrgID: org, ConnectionID: sc.Connection, AgentID: &sc.Agent, Since: c.SessionStartedAt,
@@ -158,6 +165,19 @@ func (s *Service) evidence(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 			inst.SandboxSession = &session
 		}
 		e.Instances = append(e.Instances, inst)
+	}
+	// Instances enrolled by Kubernetes attestation carry their cluster and
+	// namespace, which a kube closure must match (G0 M32 D970).
+	kubes, err := q.CoverageKubeInstancesOfAgent(ctx, org, sc.Agent)
+	if err != nil {
+		return e, err
+	}
+	for _, k := range kubes {
+		for i := range e.Instances {
+			if e.Instances[i].ID == k.ID && k.Cluster != "" && k.Namespace != "" {
+				e.Instances[i].Kube = &domain.KubeScope{Cluster: k.Cluster, Namespace: k.Namespace}
+			}
+		}
 	}
 	if s.Verifier != nil {
 		if e.VerifiedAt, err = s.Verifier.LastPassed(ctx, tx, sc.Connection, sc.Operation); err != nil {

@@ -494,7 +494,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
 				cfg.Auth.PublicURL, limiter),
 			device:    device,
-			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects, identity: cfg.Identity,
+			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, admission: cfg.Admission, subjects: subjects, identity: cfg.Identity,
 			logOrigin:    cfg.logOrigin(),
 			packageRoots: roots,
 			hubRoots:     trustedHub,
@@ -814,6 +814,9 @@ type apiDeps struct {
 	clientIP httpx.ClientIPFunc
 	// clusters are the configured Kubernetes clusters (identity.kubernetes_clusters).
 	clusters *kube.Directory
+	// admission is the M32 admission configuration: its edge and probe
+	// image digests check kube closures (wiring_m32_closure.go).
+	admission AdmissionConfig
 	// identity is the workload identity configuration (presets, M17).
 	identity IdentityConfig
 	// subjects are the providers configured for subject tokens (HR-145).
@@ -983,6 +986,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	if err := registerAutomationsEngine(rs, d, workload, autos); err != nil {
+		return nil, err
+	}
+	if err := registerKubernetesClosure(rs, d, workload, runs); err != nil {
 		return nil, err
 	}
 	if err := registerAutomationTemplates(rs, d, autos); err != nil {

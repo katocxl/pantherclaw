@@ -108,6 +108,9 @@ type ClosureRecord struct {
 	// Containment is the profile the closure is evaluated under; empty is
 	// ContainmentSandbox (G0 M32 D970).
 	Containment Containment
+	// Kube is a kube closure's cluster and namespace; nil for a sandbox
+	// closure.
+	Kube *KubeScope
 }
 
 // Change is a recorded invalidation event of the scope.
@@ -129,6 +132,9 @@ type Exclusion struct {
 type Instance struct {
 	ID             ids.UUID
 	SandboxSession *ids.UUID
+	// Kube is set for an instance enrolled by Kubernetes attestation: the
+	// cluster and namespace of its binding (G0 M32 D970).
+	Kube *KubeScope
 }
 
 // Evidence is everything a scope's state is computed from, and nothing
@@ -248,6 +254,11 @@ func Compute(e Evidence) Result {
 			}
 		}
 		if closure != nil && slices.ContainsFunc(e.Instances, func(i Instance) bool {
+			if closure.Kube != nil {
+				// A kube closure covers the pods of its cluster and namespace
+				// only (G0 M32 D970).
+				return i.Kube == nil || *i.Kube != *closure.Kube
+			}
 			return i.SandboxSession == nil || *i.SandboxSession != closure.SandboxSession
 		}) {
 			reasons = append(reasons, ReasonInstance)

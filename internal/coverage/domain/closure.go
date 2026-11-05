@@ -76,6 +76,10 @@ type Closure struct {
 	Agent          ids.UUID
 	Connection     ids.UUID
 	SandboxSession ids.UUID
+	// KubeClosure is the Kubernetes closure the evidence rests on instead
+	// of a sandbox session (G0 M32 D970): exactly one of the two is set,
+	// and its Engine.Runtime is RuntimeKubernetes.
+	KubeClosure ids.UUID
 	// SessionStartedAt is when the session opened, by the database clock:
 	// a change to the scope at or after it makes the closure unusable.
 	SessionStartedAt time.Time

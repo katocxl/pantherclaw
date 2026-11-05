@@ -53,7 +53,7 @@ func (q *Queries) ConsumeKubeClosureNonce(ctx context.Context, arg ConsumeKubeCl
 }
 
 const getKubeClosure = `-- name: GetKubeClosure :one
-SELECT org_id, id, cluster, namespace, instance_id, kind, report_digest, result, evaluated_at, expires_at FROM pc.kube_closures WHERE org_id = $1 AND id = $2
+SELECT org_id, id, cluster, namespace, instance_id, kind, report_digest, result, evaluated_at, expires_at, results FROM pc.kube_closures WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetKubeClosure(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcKubeClosure, error) {
@@ -70,6 +70,7 @@ func (q *Queries) GetKubeClosure(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.Result,
 		&i.EvaluatedAt,
 		&i.ExpiresAt,
+		&i.Results,
 	)
 	return i, err
 }
@@ -81,7 +82,7 @@ INSERT INTO pc.kube_closures (org_id, id, cluster, namespace, instance_id, kind,
 VALUES ($1, $2, $3, $4, $5, $6,
     $7, $8, $9, $9::timestamptz + interval '24 hours')
 ON CONFLICT (org_id, report_digest) DO NOTHING
-RETURNING org_id, id, cluster, namespace, instance_id, kind, report_digest, result, evaluated_at, expires_at
+RETURNING org_id, id, cluster, namespace, instance_id, kind, report_digest, result, evaluated_at, expires_at, results
 `
 
 type InsertKubeClosureParams struct {
@@ -126,6 +127,7 @@ func (q *Queries) InsertKubeClosure(ctx context.Context, arg InsertKubeClosurePa
 		&i.Result,
 		&i.EvaluatedAt,
 		&i.ExpiresAt,
+		&i.Results,
 	)
 	return i, err
 }
@@ -170,7 +172,7 @@ func (q *Queries) IssueKubeClosureNonce(ctx context.Context, arg IssueKubeClosur
 }
 
 const latestKubeClosure = `-- name: LatestKubeClosure :one
-SELECT org_id, id, cluster, namespace, instance_id, kind, report_digest, result, evaluated_at, expires_at FROM pc.kube_closures
+SELECT org_id, id, cluster, namespace, instance_id, kind, report_digest, result, evaluated_at, expires_at, results FROM pc.kube_closures
 WHERE org_id = $1 AND cluster = $2 AND namespace = $3
   AND kind = $4 AND expires_at > now()
 ORDER BY evaluated_at DESC
@@ -204,6 +206,7 @@ func (q *Queries) LatestKubeClosure(ctx context.Context, arg LatestKubeClosurePa
 		&i.Result,
 		&i.EvaluatedAt,
 		&i.ExpiresAt,
+		&i.Results,
 	)
 	return i, err
 }

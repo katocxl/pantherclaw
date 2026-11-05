@@ -93,6 +93,13 @@ var profiles = map[Containment]profile{
 	},
 }
 
+// KubeScope is the cluster and namespace a kube closure was taken in, or
+// a Kubernetes-attested instance runs in.
+type KubeScope struct {
+	Cluster   string
+	Namespace string
+}
+
 // containment is the record's profile; a record without one is a Docker
 // sandbox's.
 func (c *ClosureRecord) containment() Containment {
