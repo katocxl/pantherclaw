@@ -50,7 +50,7 @@ definitions:
       - kind: code.execute
         description: Runs shell commands on the instance with the SSM agent's privileges
     reversibility: irreversible
-    dedupe_key: [params.commands]
+    dedupe_key: [target.id, params.commands]
     retry:
       safe: false
       on_unknown: reconcile
@@ -122,7 +122,7 @@ definitions:
       - kind: code.execute
         description: Runs PowerShell commands on the instance with the SSM agent's privileges
     reversibility: irreversible
-    dedupe_key: [params.commands]
+    dedupe_key: [target.id, params.commands]
     retry:
       safe: false
       on_unknown: reconcile
