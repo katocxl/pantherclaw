@@ -45,6 +45,12 @@ service SaasDiscoveryService {
   // owner later is how an external agent's owner changes.
   // permission: agent.manage
   rpc SetSaasAgentOwner(SetSaasAgentOwnerRequest) returns (SetSaasAgentOwnerResponse);
+  // SetSaaSScanSchedule asks for, or (daily false) stops, a daily scan of a
+  // connection (G0 M34 D997, HR-768). A daily job then starts one scan per
+  // schedule, with origin schedule, initiated by the person who set it. People
+  // only. Audited (saas.scan_schedule_set / saas.scan_schedule_cleared).
+  // permission: agent.manage
+  rpc SetSaaSScanSchedule(SetSaaSScanScheduleRequest) returns (SetSaaSScanScheduleResponse);
 }
 
 // SaasReportFinding is one finding of a report.
@@ -155,9 +161,10 @@ enum SaasScanState {
 message SaasScan {
   // Run id.
   string id = 1;
-  // "copilot_studio" or "chatgpt_enterprise".
+  // "copilot_studio", "chatgpt_enterprise", "aws_agentcore",
+  // "vertex_agent_engine" or "azure_foundry".
   string source = 2;
-  // "import" or "gateway".
+  // "import", "gateway" or "schedule" (a daily scan, G0 M34 D997).
   string origin = 3;
   // The tenant it covers.
   string tenant = 4;
@@ -183,11 +190,15 @@ message SaasScan {
 message StartSaasScanRequest {
   // A connection of the source's package.
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
-  // "copilot_studio" or "chatgpt_enterprise".
+  // "copilot_studio", "chatgpt_enterprise", "aws_agentcore",
+  // "vertex_agent_engine" or "azure_foundry" (G0 M34 D997).
   string source = 2 [(buf.validate.field).string = {
     in: [
       "copilot_studio",
-      "chatgpt_enterprise"
+      "chatgpt_enterprise",
+      "aws_agentcore",
+      "vertex_agent_engine",
+      "azure_foundry"
     ]
   }];
   // The Dataverse organization id, or the ChatGPT workspace id.
@@ -301,6 +312,44 @@ message SetSaasAgentOwnerRequest {
     min_len: 1
     max_len: 1000
   }];
+}
+
+// SaaSScanSchedule is a daily scan of one connection (G0 M34 D997).
+message SaaSScanSchedule {
+  // The source.
+  string source = 1;
+  // The connection scanned.
+  string connection_id = 2;
+  // The person who set it; each scan is started as them.
+  string created_by = 3;
+  // When it was set.
+  google.protobuf.Timestamp create_time = 4;
+  // When the daily job last started a scan of it; unset before the first.
+  google.protobuf.Timestamp last_start_time = 5;
+}
+
+// SetSaaSScanScheduleRequest sets or stops a daily scan.
+message SetSaaSScanScheduleRequest {
+  // The source.
+  string source = 1 [(buf.validate.field).string = {
+    in: [
+      "copilot_studio",
+      "chatgpt_enterprise",
+      "aws_agentcore",
+      "vertex_agent_engine",
+      "azure_foundry"
+    ]
+  }];
+  // A connection of the source's package.
+  string connection_id = 2 [(buf.validate.field).string.uuid = true];
+  // True asks for a daily scan; false stops it.
+  bool daily = 3;
+}
+
+// SetSaaSScanScheduleResponse returns the schedule.
+message SetSaaSScanScheduleResponse {
+  // The schedule; unset when daily was false.
+  SaaSScanSchedule schedule = 1;
 }
 
 // SetSaasAgentOwnerResponse returns the agent.

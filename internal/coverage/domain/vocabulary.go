@@ -74,13 +74,16 @@ const (
 	ChannelAuthZEN Channel = "authzen"
 	// ChannelA2A is a call to a peer agent the gateway mediates (G0 M14 D4).
 	ChannelA2A Channel = "a2a"
+	// ChannelRuntime is a cloud agent runtime's gateway asking before it
+	// runs the tool itself (G0 M34 D990, HR-760): cooperative, like authzen.
+	ChannelRuntime Channel = "runtime"
 )
 
 // Cooperative reports whether the agent itself, or an enforcement point
 // outside PantherClaw, calls PantherClaw on the channel and could skip it
 // (HR-024): PARTIAL unless a target verifier lifts it.
 func (c Channel) Cooperative() bool {
-	return c == ChannelSDK || c == ChannelHook || c == ChannelAuthZEN
+	return c == ChannelSDK || c == ChannelHook || c == ChannelAuthZEN || c == ChannelRuntime
 }
 
 // Scope names one agent, connection and operation.

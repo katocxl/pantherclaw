@@ -603,7 +603,7 @@ var (
 	// ErrNotCooperative refuses delegated on a channel where the gateway
 	// dispatches (HR-186).
 	ErrNotCooperative = pcerr.New(pcerr.FailedPrecondition, "OUTCOME_NOT_DELEGABLE",
-		"only a cooperative channel (hook, sdk, authzen) reports delegated")
+		"only a cooperative channel (hook, sdk, authzen, runtime) reports delegated")
 	// ErrCredentialNotOfConnection refuses a reported credential that is no
 	// version of the permit's connection's credential, or one reported for
 	// a permit without a connection (HR-660).
@@ -621,7 +621,9 @@ func Delegable(channel, accessMode string) bool {
 	switch channel {
 	case "hook", "sdk":
 		return true
-	case "authzen":
+	case "authzen", "runtime":
+		// A cloud agent runtime's gateway runs the tool itself, like an
+		// enforcement point (G0 M34 D990, HR-760).
 		return accessMode == AccessAgentHeld || accessMode == AccessTargetEnforced
 	}
 	return false
