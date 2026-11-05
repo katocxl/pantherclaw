@@ -61,6 +61,7 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			MaxResponseBytes: conn.MaxResponseBytes, TimeoutMs: conn.TimeoutMs, State: conn.State, Revision: conn.Revision,
 			AgentHosts: conn.AgentHosts, Connector: specs[conn.ID.String()],
 			Github: github[conn.ID.String()], Simulated: conn.Simulated, ModelRelay: conn.ModelRelay,
+			RuntimeTarget: deref(conn.RuntimeTarget), // G0 M34 D991
 		})
 		switch cfg := c.KindConfigs[conn.ID].(type) {
 		case *pb.PostgresConfig:

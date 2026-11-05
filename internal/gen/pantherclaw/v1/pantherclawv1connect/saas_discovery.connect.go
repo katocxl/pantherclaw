@@ -45,6 +45,9 @@ const (
 	// SaasDiscoveryServiceSetSaasAgentOwnerProcedure is the procedure name of the
 	// SaasDiscoveryService's SetSaasAgentOwner RPC.
 	SaasDiscoveryServiceSetSaasAgentOwnerProcedure = "/pantherclaw.v1.SaasDiscoveryService/SetSaasAgentOwner"
+	// SaasDiscoveryServiceSetSaaSScanScheduleProcedure is the procedure name of the
+	// SaasDiscoveryService's SetSaaSScanSchedule RPC.
+	SaasDiscoveryServiceSetSaaSScanScheduleProcedure = "/pantherclaw.v1.SaasDiscoveryService/SetSaaSScanSchedule"
 )
 
 var (
@@ -90,6 +93,13 @@ var (
 			Procedure:  SaasDiscoveryServiceSetSaasAgentOwnerProcedure,
 		}
 	})
+	saasDiscoveryServiceSetSaaSScanScheduleSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_saas_discovery_proto.Services().ByName("SaasDiscoveryService").Methods().ByName("SetSaaSScanSchedule"),
+			Procedure:  SaasDiscoveryServiceSetSaaSScanScheduleProcedure,
+		}
+	})
 )
 
 // SaasDiscoveryServiceClient is a client for the pantherclaw.v1.SaasDiscoveryService service.
@@ -120,6 +130,12 @@ type SaasDiscoveryServiceClient interface {
 	// owner later is how an external agent's owner changes.
 	// permission: agent.manage
 	SetSaasAgentOwner(context.Context, *v1.SetSaasAgentOwnerRequest) (*v1.SetSaasAgentOwnerResponse, error)
+	// SetSaaSScanSchedule asks for, or (daily false) stops, a daily scan of a
+	// connection (G0 M34 D997, HR-768). A daily job then starts one scan per
+	// schedule, with origin schedule, initiated by the person who set it. People
+	// only. Audited (saas.scan_schedule_set / saas.scan_schedule_cleared).
+	// permission: agent.manage
+	SetSaaSScanSchedule(context.Context, *v1.SetSaaSScanScheduleRequest) (*v1.SetSaaSScanScheduleResponse, error)
 }
 
 // NewSaasDiscoveryServiceClient constructs a client for the pantherclaw.v1.SaasDiscoveryService
@@ -157,6 +173,12 @@ type SaasDiscoveryServiceHandler interface {
 	// owner later is how an external agent's owner changes.
 	// permission: agent.manage
 	SetSaasAgentOwner(context.Context, *v1.SetSaasAgentOwnerRequest) (*v1.SetSaasAgentOwnerResponse, error)
+	// SetSaaSScanSchedule asks for, or (daily false) stops, a daily scan of a
+	// connection (G0 M34 D997, HR-768). A daily job then starts one scan per
+	// schedule, with origin schedule, initiated by the person who set it. People
+	// only. Audited (saas.scan_schedule_set / saas.scan_schedule_cleared).
+	// permission: agent.manage
+	SetSaaSScanSchedule(context.Context, *v1.SetSaaSScanScheduleRequest) (*v1.SetSaaSScanScheduleResponse, error)
 }
 
 // RegisterSaasDiscoveryServiceHandler registers svc as the pantherclaw.v1.SaasDiscoveryService
@@ -170,6 +192,7 @@ func RegisterSaasDiscoveryServiceHandler(server *connect.Server, svc SaasDiscove
 		connect.Method{Spec: saasDiscoveryServiceListSaasScansSpec(), Handler: adapter.listSaasScans},
 		connect.Method{Spec: saasDiscoveryServiceListSaasAgentsSpec(), Handler: adapter.listSaasAgents},
 		connect.Method{Spec: saasDiscoveryServiceSetSaasAgentOwnerSpec(), Handler: adapter.setSaasAgentOwner},
+		connect.Method{Spec: saasDiscoveryServiceSetSaaSScanScheduleSpec(), Handler: adapter.setSaaSScanSchedule},
 	)
 }
 
@@ -198,6 +221,10 @@ func (UnimplementedSaasDiscoveryServiceHandler) ListSaasAgents(context.Context, 
 
 func (UnimplementedSaasDiscoveryServiceHandler) SetSaasAgentOwner(context.Context, *v1.SetSaasAgentOwnerRequest) (*v1.SetSaasAgentOwnerResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SaasDiscoveryService.SetSaasAgentOwner is not implemented")
+}
+
+func (UnimplementedSaasDiscoveryServiceHandler) SetSaaSScanSchedule(context.Context, *v1.SetSaaSScanScheduleRequest) (*v1.SetSaaSScanScheduleResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SaasDiscoveryService.SetSaaSScanSchedule is not implemented")
 }
 
 type saasDiscoveryServiceClient struct {
@@ -247,6 +274,14 @@ func (c *saasDiscoveryServiceClient) ListSaasAgents(ctx context.Context, req *v1
 func (c *saasDiscoveryServiceClient) SetSaasAgentOwner(ctx context.Context, req *v1.SetSaasAgentOwnerRequest) (*v1.SetSaasAgentOwnerResponse, error) {
 	var res v1.SetSaasAgentOwnerResponse
 	if err := c.client.CallUnary(ctx, saasDiscoveryServiceSetSaasAgentOwnerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *saasDiscoveryServiceClient) SetSaaSScanSchedule(ctx context.Context, req *v1.SetSaaSScanScheduleRequest) (*v1.SetSaaSScanScheduleResponse, error) {
+	var res v1.SetSaaSScanScheduleResponse
+	if err := c.client.CallUnary(ctx, saasDiscoveryServiceSetSaaSScanScheduleSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -320,6 +355,18 @@ func (h saasDiscoveryServiceHandler) setSaasAgentOwner(ctx context.Context, _ co
 		return err
 	}
 	res, err := h.svc.SetSaasAgentOwner(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h saasDiscoveryServiceHandler) setSaaSScanSchedule(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetSaaSScanScheduleRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetSaaSScanSchedule(ctx, &req)
 	if err != nil {
 		return err
 	}

@@ -206,7 +206,8 @@ message CoverageRoute {
   string id = 1;
   // Kind.
   CoverageRouteKind kind = 2;
-  // For a channel: "http", "mcp", "sdk", "hook", "authzen" or "a2a".
+  // For a channel: "http", "mcp", "sdk", "hook", "authzen", "a2a" or
+  // "runtime" (G0 M34 D990).
   string channel = 3;
   // Where it goes (a host, a file, an identity); untrusted text.
   string locator = 4;

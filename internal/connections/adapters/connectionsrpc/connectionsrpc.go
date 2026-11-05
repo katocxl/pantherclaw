@@ -98,6 +98,7 @@ func connectionOf(c capp.Connection) *pb.Connection {
 		QuarantineReason: deref(c.QuarantineReason), Revision: c.Revision, CreatedBy: c.CreatedBy,
 		CreateTime: timestamppb.New(c.CreatedAt), UpdatedBy: c.UpdatedBy, UpdateTime: timestamppb.New(c.UpdatedAt), AgentHosts: c.AgentHosts,
 		Connector: connectorOf(c.Connector), Simulated: c.Simulated, ModelRelay: c.ModelRelay,
+		RuntimeTarget: deref(c.RuntimeTarget), // G0 M34 D991
 	}
 	for _, r := range c.Routes {
 		out.Routes = append(out.Routes, routeOf(r))

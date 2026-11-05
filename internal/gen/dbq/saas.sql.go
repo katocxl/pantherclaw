@@ -15,6 +15,26 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const deleteSaasScanSchedule = `-- name: DeleteSaasScanSchedule :one
+DELETE FROM pc.saas_scan_schedules
+WHERE org_id = $1 AND source = $2 AND connection_id = $3
+RETURNING org_id, source, connection_id, created_by, created_at, last_started_at
+`
+
+func (q *Queries) DeleteSaasScanSchedule(ctx context.Context, orgID ids.OrgID, source string, connectionID ids.UUID) (PcSaasScanSchedule, error) {
+	row := q.db.QueryRow(ctx, deleteSaasScanSchedule, orgID, source, connectionID)
+	var i PcSaasScanSchedule
+	err := row.Scan(
+		&i.OrgID,
+		&i.Source,
+		&i.ConnectionID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.LastStartedAt,
+	)
+	return i, err
+}
+
 const failExpiredSaasScans = `-- name: FailExpiredSaasScans :execrows
 UPDATE pc.saas_scan_runs r
 SET state = 'FAILED', finished_at = now()
@@ -473,6 +493,71 @@ func (q *Queries) ListSaasRuns(ctx context.Context, arg ListSaasRunsParams) ([]L
 	return items, nil
 }
 
+const listSaasScanSchedules = `-- name: ListSaasScanSchedules :many
+SELECT org_id, source, connection_id, created_by, created_at, last_started_at FROM pc.saas_scan_schedules
+WHERE org_id = $1
+ORDER BY source, connection_id
+`
+
+// The org's schedules, for the daily job and the CLI.
+func (q *Queries) ListSaasScanSchedules(ctx context.Context, orgID ids.OrgID) ([]PcSaasScanSchedule, error) {
+	rows, err := q.db.Query(ctx, listSaasScanSchedules, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcSaasScanSchedule{}
+	for rows.Next() {
+		var i PcSaasScanSchedule
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.Source,
+			&i.ConnectionID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.LastStartedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockSaasScanSchedule = `-- name: LockSaasScanSchedule :one
+SELECT org_id, source, connection_id, created_by, created_at, last_started_at FROM pc.saas_scan_schedules
+WHERE org_id = $1 AND source = $2 AND connection_id = $3
+FOR UPDATE
+`
+
+// Locks one schedule, so two daily jobs start one scan.
+func (q *Queries) LockSaasScanSchedule(ctx context.Context, orgID ids.OrgID, source string, connectionID ids.UUID) (PcSaasScanSchedule, error) {
+	row := q.db.QueryRow(ctx, lockSaasScanSchedule, orgID, source, connectionID)
+	var i PcSaasScanSchedule
+	err := row.Scan(
+		&i.OrgID,
+		&i.Source,
+		&i.ConnectionID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.LastStartedAt,
+	)
+	return i, err
+}
+
+const markSaasScanScheduleStarted = `-- name: MarkSaasScanScheduleStarted :exec
+UPDATE pc.saas_scan_schedules SET last_started_at = now()
+WHERE org_id = $1 AND source = $2 AND connection_id = $3
+`
+
+func (q *Queries) MarkSaasScanScheduleStarted(ctx context.Context, orgID ids.OrgID, source string, connectionID ids.UUID) error {
+	_, err := q.db.Exec(ctx, markSaasScanScheduleStarted, orgID, source, connectionID)
+	return err
+}
+
 const missSaasDiscoveries = `-- name: MissSaasDiscoveries :many
 UPDATE pc.discoveries
 SET missed_scans = missed_scans + 1
@@ -721,6 +806,41 @@ func (q *Queries) SetExternalOwner(ctx context.Context, arg SetExternalOwnerPara
 		&i.AiActRole,
 		&i.AiActRisk,
 		&i.External,
+	)
+	return i, err
+}
+
+const upsertSaasScanSchedule = `-- name: UpsertSaasScanSchedule :one
+INSERT INTO pc.saas_scan_schedules (org_id, source, connection_id, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (org_id, source, connection_id) DO UPDATE SET created_by = excluded.created_by
+RETURNING org_id, source, connection_id, created_by, created_at, last_started_at
+`
+
+type UpsertSaasScanScheduleParams struct {
+	OrgID        ids.OrgID
+	Source       string
+	ConnectionID ids.UUID
+	CreatedBy    string
+}
+
+// Daily scan schedules (G0 M34 D997, migration 00382). Setting one again
+// keeps it and names the person who set it last.
+func (q *Queries) UpsertSaasScanSchedule(ctx context.Context, arg UpsertSaasScanScheduleParams) (PcSaasScanSchedule, error) {
+	row := q.db.QueryRow(ctx, upsertSaasScanSchedule,
+		arg.OrgID,
+		arg.Source,
+		arg.ConnectionID,
+		arg.CreatedBy,
+	)
+	var i PcSaasScanSchedule
+	err := row.Scan(
+		&i.OrgID,
+		&i.Source,
+		&i.ConnectionID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.LastStartedAt,
 	)
 	return i, err
 }

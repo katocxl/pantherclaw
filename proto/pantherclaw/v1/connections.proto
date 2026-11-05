@@ -140,6 +140,19 @@ service ConnectionService {
   // flags stay as they are (HR-582).
   // permission: connection.manage
   rpc AddInventoryNote(AddInventoryNoteRequest) returns (AddInventoryNoteResponse);
+  // SetConnectionRuntimeTarget binds an mcp connection whose credential the
+  // agent holds to one target of a cloud agent runtime's gateway (G0 M34
+  // D991, HR-762): the gateway's runtime face decides that target's tool
+  // calls through it. The target is "agentcore:<gateway ARN>/<target name>",
+  // unique in the org. It replaces any earlier target and is audited
+  // (connection.runtime_target_set).
+  // permission: connection.manage
+  rpc SetConnectionRuntimeTarget(SetConnectionRuntimeTargetRequest) returns (SetConnectionRuntimeTargetResponse);
+  // ClearConnectionRuntimeTarget removes a connection's runtime target; the
+  // runtime face then finds no connection for that target. Audited
+  // (connection.runtime_target_cleared).
+  // permission: connection.manage
+  rpc ClearConnectionRuntimeTarget(ClearConnectionRuntimeTargetRequest) returns (ClearConnectionRuntimeTargetResponse);
 }
 
 // ConnectionKind is what a connection reaches.
@@ -301,6 +314,9 @@ message Connection {
   // snowflake is a snowflake connection's configuration and manifest (G0
   // M31 D962).
   SnowflakeConfig snowflake = 37;
+  // The cloud agent runtime target the connection is bound to (G0 M34
+  // D991), "agentcore:<gateway ARN>/<target name>"; empty when unbound.
+  string runtime_target = 38;
 }
 
 // SnowflakeConfig is a snowflake connection (G0 M31 D962): the account,
@@ -1004,6 +1020,38 @@ message QuarantineConnectionRequest {
 
 // QuarantineConnectionResponse returns the connection.
 message QuarantineConnectionResponse {
+  // The connection.
+  Connection connection = 1;
+}
+
+// SetConnectionRuntimeTargetRequest binds a connection to a runtime target
+// (G0 M34 D991).
+message SetConnectionRuntimeTargetRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // "agentcore:<gateway ARN>/<target name>"; the server checks the ARN and
+  // the target name.
+  string runtime_target = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+    pattern: "^agentcore:arn:aws[a-z-]*:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:gateway/[A-Za-z0-9-]{1,100}/[A-Za-z0-9-]{1,100}$"
+  }];
+}
+
+// SetConnectionRuntimeTargetResponse returns the connection.
+message SetConnectionRuntimeTargetResponse {
+  // The connection.
+  Connection connection = 1;
+}
+
+// ClearConnectionRuntimeTargetRequest unbinds a connection's runtime target.
+message ClearConnectionRuntimeTargetRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ClearConnectionRuntimeTargetResponse returns the connection.
+message ClearConnectionRuntimeTargetResponse {
   // The connection.
   Connection connection = 1;
 }
