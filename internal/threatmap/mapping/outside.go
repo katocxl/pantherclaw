@@ -206,8 +206,6 @@ var Outside = []OutsideEntry{
 	{ID: "T1578", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
 	{ID: "T1580", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
 	{ID: "T1609", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
-	{ID: "T1610", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
-	{ID: "T1613", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
 	{ID: "T1619", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
 	{ID: "T1648", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},
 	{ID: "T1666", Reason: OutsideCloudInfrastructure, CoveredBy: ToolCloudSecurity},

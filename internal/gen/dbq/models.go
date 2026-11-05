@@ -2743,6 +2743,7 @@ type PcKubeClosure struct {
 	Result       string
 	EvaluatedAt  time.Time
 	ExpiresAt    time.Time
+	Results      []byte
 }
 
 type PcKubeClosureNonce struct {
