@@ -88,6 +88,8 @@ type Client struct {
 	Agents pantherclawv1connect.AgentServiceClient
 	// Stream is GatewayService for server streams (no request timeout).
 	Stream pantherclawv1connect.GatewayServiceClient
+	// Federation signs the federation face's listing cards (G0 M35 D1024).
+	Federation pantherclawv1connect.FederationServiceClient
 }
 
 // NewClient returns the mTLS client for id. baseURL overrides the gateway
@@ -109,6 +111,7 @@ func NewClient(id *Identity, dir, baseURL string, timeout time.Duration, log *sl
 	c.Authority = pantherclawv1connect.NewAuthorityServiceClient(connect.NewClient(connecthttp.NewTransport(c.hc, c.baseURL)))
 	c.Gateway = pantherclawv1connect.NewGatewayServiceClient(connect.NewClient(connecthttp.NewTransport(c.hc, c.baseURL)))
 	c.Agents = pantherclawv1connect.NewAgentServiceClient(connect.NewClient(connecthttp.NewTransport(c.hc, c.baseURL)))
+	c.Federation = pantherclawv1connect.NewFederationServiceClient(connect.NewClient(connecthttp.NewTransport(c.hc, c.baseURL)))
 	// Streams share the transport (and so the certificate) but have no
 	// whole-request timeout: they end with their context.
 	stream := httpx.StreamingClient(c.hc)

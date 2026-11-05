@@ -871,6 +871,15 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Threat map:** `prevent.agent_deploy` (AML.T0103) and `prevent.cloud_admin_command` (T1651); both leave Unaddressed.
 - Migrations `00380`–`00382`.
 
+### M35 — Federation and attestation
+**HR:** HR-770..784 · **F:** F1050–F1059 · **ADR:** 0062 · **G0:** [g0/M35.md](g0/M35.md).
+- **Code first**, like M30–M34: four streams on pushed branches, assembled on `code/m35` from `code/m34`; tests come in the testing phase.
+- **Federation** (FD10, FQ35-1, FQ35-2; Enterprise): per-org federation keys and signed documents, pairwise trust confirmed by both admins with security keys, listings, cross-org grants, the gateway's `/fed/a2a/{listing}` face and federated a2a connections, minimal receipts both ways, `pclaw federation`, a two-org dev seed; runbook [federation.md](runbooks/federation.md).
+- **L3 "Infrastructure-attested"** (Enterprise): `spiffe_x509` and `gcp_instance` bound to the PAP key and a one-time nonce; PAP/1 stays v1.
+- **Trail** (FQ35-3, FQ35-4): go-tuf v2 for Sigstore trust, C2SP witnesses on the global log only, ML-DSA-65 co-signatures on receipts.
+- **Threat map:** no new control (T1199 stays outside PantherClaw).
+- Migrations `00390`–`00397`.
+
 ---
 
 ## 9. CI/CD summary

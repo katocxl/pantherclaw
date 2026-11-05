@@ -324,3 +324,37 @@ Agent identities get Entra access tokens like managed identities, so the same `e
 - **Revoke an instance**: `pclaw instance revoke INSTANCE --reason …`. Outstanding permits fail at `BeginDispatch`.
 - **Unknown keys** reaching the gateway appear as discovered agents (`pclaw agent list --state discovered`); claim, merge or retire them. A `security.discovery_flood` audit event means the per-gateway rate or the per-org cap was reached.
 - **Network change alerts** (`security.instance_network_changed`) mean the same key was used from a new network: check whether the key was copied.
+
+## 11. Infrastructure-attested workloads (L3, M35)
+
+Level 3, "Infrastructure-attested", needs an attestation from the workload's infrastructure that is bound to this enrollment: it proves the PAP key's thumbprint and a fresh server nonce, as `pantherclaw-l3:v1:<org>:<nonce>:<jkt>`, so it cannot be used for another key (G0 M35; HR-777..779). Two sources set it in M35; Azure, AWS and TPM do not yet (R-88). Enterprise edition.
+
+### SPIFFE X.509-SVIDs (`spiffe_x509`)
+
+1. The X.509 bundle comes only from a trust domain the operator configured in `identity.spiffe_trust_domains` (section 5), whose bundle carries `x509-svid` keys. A tenant never supplies a bundle: the issuer entry has no bundle flags.
+2. An admin proposes an entry that pins the workload's exact SPIFFE ID, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-spiffe-x509 --agent <agent> --trust-domain prod.acme.example \
+     --spiffe-id spiffe://prod.acme.example/ns/agents/sa/runner --auto-admit --reason "L3 service agent"
+   ```
+   Add `--run-grant <grant id>` when the instance starts its own runs.
+3. The workload signs the binding with its SVID key; pass the SVID chain (PEM, leaf first) and key to `enroll`, `token` or `renew`:
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json \
+     --attest spiffe-x509 --svid-cert /run/spiffe/svid.pem --svid-key /run/spiffe/svid_key.pem
+   ```
+   Both files are read again at each renewal. Level 3 lasts until the SVID's `notAfter` or one hour, whichever comes first; then the workload attests again with a fresh nonce.
+
+### Compute Engine instances (`gcp_instance`)
+
+1. Nothing to configure on the server: the identity token is verified with Google's keys.
+2. An admin proposes an entry that pins the project and, optionally, the instance and zone, and an **Identity Publisher** activates it:
+   ```bash
+   pclaw issuer propose-gcp-instance --agent <agent> --project acme-prod --instance-id 4519870034811532512 \
+     --zone europe-west1-b --auto-admit --reason "L3 service agent"
+   ```
+3. On the instance, pclaw asks the metadata server for an identity token (`format=full`) whose audience carries the binding:
+   ```bash
+   pclaw workload renew --key-file workload.json --out token.json --attest gcp-instance
+   ```
+   Level 3 lasts until the token expires.

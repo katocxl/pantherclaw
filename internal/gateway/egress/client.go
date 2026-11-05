@@ -43,7 +43,14 @@ type Response struct {
 	Truncated   bool
 	ContentType string
 	RequestID   string
+	// FedReceipt is a peer org's PC-Fed-Receipt header (G0 M35 D1023);
+	// empty when it sent none.
+	FedReceipt string
 }
+
+// HeaderFedReceipt carries a peer org's minimal signed receipt on its
+// federation face's answers (G0 M35 D1023, D1024).
+const HeaderFedReceipt = "PC-Fed-Receipt"
 
 // Client sends a connection's requests.
 type Client struct {
@@ -112,7 +119,10 @@ func (c *Client) Do(req *http.Request) (Response, error) {
 		return Response{}, err
 	}
 	defer func() { _ = res.Body.Close() }()
-	out := Response{Status: res.StatusCode, ContentType: res.Header.Get("Content-Type"), RequestID: requestID(res.Header)}
+	out := Response{
+		Status: res.StatusCode, ContentType: res.Header.Get("Content-Type"), RequestID: requestID(res.Header),
+		FedReceipt: res.Header.Get(HeaderFedReceipt),
+	}
 	raw, truncated, err := readCapped(res.Body, c.maxBytes)
 	if err != nil {
 		return out, err

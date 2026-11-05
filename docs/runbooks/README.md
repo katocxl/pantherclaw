@@ -64,4 +64,5 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [pclaw-mcp-self.md](pclaw-mcp-self.md) | M27 | `pclaw mcp self`: a read-only MCP server for a SOC agent, the Investigator role and the server's audit of each read (Team) |
 | [siem-forwarder.md](siem-forwarder.md) | M27 | `pclaw siem forward`: verify SIEM export batches and write one OCSF event per line for Sentinel's Azure Monitor Agent or Wazuh (Business) |
 | [agentcore.md](agentcore.md) | M34 | Connect an AgentCore gateway: the interceptor Lambda, its issuer entry and run grant, a connection per target with its runtime target (`PARTIAL`) |
+| [federation.md](federation.md) | M35 | Federate with a peer org: the federation endpoint and key, pairwise trust with the safety code and security keys, listings, cross-org grants, federated A2A connections and receipts (Enterprise) |
 | [threat-map.md](threat-map.md) | M28 | The threat map: MITRE ATLAS and ATT&CK Enterprise lanes, gaps and fixes, `pclaw threats`, the signed report, the Navigator layer and history |
