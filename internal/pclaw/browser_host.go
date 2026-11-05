@@ -236,7 +236,7 @@ func (h *browserHostState) serve(ctx context.Context, in io.Reader) error {
 func (h *browserHostState) decide(ctx context.Context, msg browserHostIn) browserDecideOut {
 	out := browserDecideOut{V: 1, ID: msg.ID, Decision: "deny", Code: browserCannotDecide}
 	fail := func(why string) browserDecideOut {
-		out.Reason = "PantherClaw cannot decide this call, so it is blocked: " + why
+		out.Reason = "PantherClaw cannot decide this call, so it does not happen: " + why
 		return out
 	}
 	switch {

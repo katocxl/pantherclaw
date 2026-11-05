@@ -15,7 +15,7 @@
  */
 
 export const CANNOT_DECIDE = "CANNOT_DECIDE";
-const CANNOT_DECIDE_REASON = "PantherClaw cannot decide this call, so it is blocked.";
+const CANNOT_DECIDE_REASON = "PantherClaw cannot decide this call, so it does not happen.";
 /** The host's own deadline is 8 s; this one also covers the port. */
 const ANSWER_TIMEOUT_MS = 12_000;
 const MAX_BACKOFF_MS = 30_000;

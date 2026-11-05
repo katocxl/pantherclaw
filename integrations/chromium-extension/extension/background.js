@@ -7,7 +7,7 @@
 // a form, saves a download or clicks an element an admin marked, and it
 // runs the takeover. Without an answer nothing happens: navigations stay on
 // the hold page, downloads are cancelled, and submits and marked clicks
-// stay blocked (fail closed, HR-751). Only the D974 inputs leave the
+// do not happen (fail closed, HR-751). Only the D974 inputs leave the
 // browser: no screenshot, DOM, field value or page text (HR-754).
 // Cooperative (PARTIAL, R-78).
 
@@ -145,7 +145,7 @@ async function decideNavigate(tabId, m) {
     return cannotDecide("PantherClaw decides http and https pages only.");
   }
   if (url.length > MAX_URL) {
-    return { ...cannotDecide("The address is too long for PantherClaw to decide, so it is blocked."), code: "BROWSER_URL_TOO_LONG" };
+    return { ...cannotDecide("The address is too long for PantherClaw to decide, so the page stays closed."), code: "BROWSER_URL_TOO_LONG" };
   }
   const input = {
     url, user_agent: String(m.user_agent || ""), accept_language: String(m.accept_language || ""), call: String(m.call || ""),
@@ -158,7 +158,7 @@ async function decideNavigate(tabId, m) {
 }
 
 /**
- * Decides a form submit. A submit with a secret field stays blocked
+ * Decides a form submit. A submit with a secret field never goes ahead
  * whatever the answer (D981); the question is still asked so the gateway
  * records the refusal.
  * @param {number} tabId
