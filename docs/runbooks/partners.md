@@ -59,6 +59,7 @@ From the draft, the usual publish and rollout flow applies, with one difference:
 
 ## 7. Troubleshooting
 
-- **`PERMISSION_DENIED` on every partner call:** the partner org lacks the Enterprise edition, the link has ended, or your account lost `partner.operate`. Open the customer again after fixing it.
+- **`UNAUTHENTICATED` on every partner call:** the session ended, the link has ended, the partner org lacks the Enterprise edition, or your account was disabled or lost `partner.operate`. Open the customer again after fixing it.
+- **`NO_PARTNER_LINK` when opening a customer:** there is no ACTIVE link to that customer.
 - **The decide page shows no buttons:** you lack `partner.approve` or the link is no longer REQUESTED.
 - **A change request stays waiting:** it publishes a partner-origin version and needs a second customer person.

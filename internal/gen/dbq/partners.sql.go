@@ -701,7 +701,9 @@ SELECT o.name,
        (SELECT count(*) FROM pc.approval_requests a
         WHERE a.org_id = o.id AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED'))::bigint AS waiting_approvals,
        (SELECT count(*) FROM pc.alerts al WHERE al.org_id = o.id AND al.state = 'OPEN' AND NOT al.test)::bigint AS open_alerts,
-       (SELECT max(t.created_at) FROM pc.transactions t WHERE t.org_id = o.id)::timestamptz AS last_decision_at
+       -- The epoch when no decision was recorded.
+       COALESCE((SELECT max(t.created_at) FROM pc.transactions t WHERE t.org_id = o.id), 'epoch'::timestamptz)::timestamptz
+           AS last_decision_at
 FROM pc.orgs o
 WHERE o.id = $1
 `

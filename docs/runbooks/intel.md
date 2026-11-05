@@ -16,10 +16,16 @@ Each indicator also has an id, a severity, techniques, a first-seen date and a s
 
 ## 2. Load the feed (operator)
 
-The feed is a compact JWS (`pc-intel-feed+jwt`) signed with an offline root key of purpose `intel` (`intel-dev` on loopback only); the roots are in `internal/intel/roots.json`. Load it either way:
+The feed is a compact JWS (`pc-intel-feed+jwt`) signed with an offline root key of purpose `intel`; the roots are in `internal/intel/roots.json`.
 
-- `pclaw-admin` with the feed file (ImportIntelFeed), or
-- set `intel.feed_url` and the server fetches it once a day through the egress client. Empty means no fetch.
+**Founder step:** generate the intel root with `pclaw-admin keygen intel` and add it to `internal/intel/roots.json`. Until then every feed is refused with `INTEL_NO_ROOT`.
+
+Build and check a feed offline with `pclaw-admin intel build` and `pclaw-admin intel verify`. Load it either way:
+
+- `pantherclaw-server intel import --in <feed file>`, or
+- set `intel.feed_url` (`PC_INTEL_FEED_URL`, https only) and the server fetches it once a day through the egress client. Empty means no fetch.
+
+For development, `dev.intel_key_file` names the `.pub.json` file of a development key (purpose `intel-dev`); it is refused outside development.
 
 A feed is refused when its signature does not verify, its version is not above the loaded one (no rollback), or it has expired (at most 30 days after issue). An accepted feed replaces the whole set at once.
 
@@ -37,7 +43,16 @@ The server's `serverInfo` is recorded on the connection's inventory for matching
 
 ## 4. Contribute
 
-With the org's share switch on (`intel.manage`), a person with `intel.contribute` turns a confirmed finding into an indicator with `ContributeIndicator`. The hash or shingles are computed in your org; the text never leaves. The operator collects contributions with `ExportIntelContributions`, which carries no org, account or time finer than a day.
+With the org's share switch on (`intel.manage`), a person with `intel.contribute` turns a confirmed finding into an indicator with `ContributeIndicator`, naming its source:
+
+| Source | Finding | Indicator |
+|---|---|---|
+| `QUARANTINED_SERVER` | A connection whose pinned package version is QUARANTINED: its server's reported name and version | `mcp_server` |
+| `QUARANTINED_PACKAGE` | A QUARANTINED package version: `package@version` | `mcp_server` |
+| `QUARANTINED_TOOL` | A tool of such a connection: its listed description | `tool_description` |
+| `FLAGGED_DESCRIPTION` | An inventory item whose description the injection scan flagged: its shingles | `injection_text` |
+
+The hash or shingles are computed in your org; the text never leaves. `ListIntelContributions` shows them. The operator collects contributions offline with `pantherclaw-server intel export-contributions --out <file>`, which writes no org, account or time finer than a day.
 
 ## 5. STIX
 
