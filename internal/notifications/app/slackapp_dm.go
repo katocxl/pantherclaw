@@ -489,7 +489,9 @@ func (s *Service) sendSlackDM(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 // dmRecipientsFor adds the DM deliveries of a decider notice (HR-529): the
 // personal recipients of a notice the waitlist router marked as going to
 // eligible deciders, who have a confirmed link.
-func (s *Service) dmRecipientsFor(ctx context.Context, tx db.TenantTx, q *dbq.Queries, m Message, note ids.UUID) (int, error) {
+func (s *Service) dmRecipientsFor(ctx context.Context, tx db.TenantTx, q *dbq.Queries, m Message, note ids.UUID,
+	holds map[ids.UUID]hold,
+) (int, error) {
 	if !m.Deciders || len(m.Personal) == 0 || !domain.DMEvent(m.Type) {
 		return 0, nil
 	}
@@ -497,12 +499,20 @@ func (s *Service) dmRecipientsFor(ctx context.Context, tx db.TenantTx, q *dbq.Qu
 	if err != nil || len(users) == 0 {
 		return 0, err
 	}
+	n := 0
 	for _, u := range users {
-		if err := s.addDelivery(ctx, tx, q, m.Org, note, &channel, &u, domain.KindSlackDM, "PENDING"); err != nil {
+		// A person's digest carries the notice; their quiet hours delay it
+		// (G0 M36 D1065, HR-792).
+		h := holds[u]
+		if h.skip {
+			continue
+		}
+		if err := s.addDeliveryAt(ctx, tx, q, m.Org, note, &channel, &u, domain.KindSlackDM, "PENDING", h.at); err != nil {
 			return 0, err
 		}
+		n++
 	}
-	return len(users), nil
+	return n, nil
 }
 
 // maxEmailDomains bounds a DM channel's email domains (D265).

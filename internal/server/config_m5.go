@@ -34,6 +34,9 @@ type NotificationsConfig struct {
 	AllowedPrivateRanges []string `json:"allowed_private_ranges" env:"PC_NOTIFICATIONS_ALLOWED_PRIVATE_RANGES"`
 	// Concurrency is the number of deliveries one worker sends at once.
 	Concurrency int `json:"concurrency" env:"PC_NOTIFICATIONS_CONCURRENCY"`
+	// WebPushSubject is the VAPID subject (a mailto: or https: URL) Web
+	// Push services may contact; empty uses auth.public_url (G0 M36 D1066).
+	WebPushSubject string `json:"web_push_subject" env:"PC_NOTIFICATIONS_WEB_PUSH_SUBJECT"`
 }
 
 // SMTPConfig is the email relay. The password is read from a file (SB-7).

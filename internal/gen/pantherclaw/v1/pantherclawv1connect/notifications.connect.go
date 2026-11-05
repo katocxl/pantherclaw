@@ -66,6 +66,24 @@ const (
 	// NotificationServiceListChatLinksProcedure is the procedure name of the NotificationService's
 	// ListChatLinks RPC.
 	NotificationServiceListChatLinksProcedure = "/pantherclaw.v1.NotificationService/ListChatLinks"
+	// NotificationServiceGetMyNotificationPreferencesProcedure is the procedure name of the
+	// NotificationService's GetMyNotificationPreferences RPC.
+	NotificationServiceGetMyNotificationPreferencesProcedure = "/pantherclaw.v1.NotificationService/GetMyNotificationPreferences"
+	// NotificationServiceSetMyNotificationPreferencesProcedure is the procedure name of the
+	// NotificationService's SetMyNotificationPreferences RPC.
+	NotificationServiceSetMyNotificationPreferencesProcedure = "/pantherclaw.v1.NotificationService/SetMyNotificationPreferences"
+	// NotificationServiceGetWebPushKeyProcedure is the procedure name of the NotificationService's
+	// GetWebPushKey RPC.
+	NotificationServiceGetWebPushKeyProcedure = "/pantherclaw.v1.NotificationService/GetWebPushKey"
+	// NotificationServiceRegisterPushSubscriptionProcedure is the procedure name of the
+	// NotificationService's RegisterPushSubscription RPC.
+	NotificationServiceRegisterPushSubscriptionProcedure = "/pantherclaw.v1.NotificationService/RegisterPushSubscription"
+	// NotificationServiceRemovePushSubscriptionProcedure is the procedure name of the
+	// NotificationService's RemovePushSubscription RPC.
+	NotificationServiceRemovePushSubscriptionProcedure = "/pantherclaw.v1.NotificationService/RemovePushSubscription"
+	// NotificationServiceListMyPushSubscriptionsProcedure is the procedure name of the
+	// NotificationService's ListMyPushSubscriptions RPC.
+	NotificationServiceListMyPushSubscriptionsProcedure = "/pantherclaw.v1.NotificationService/ListMyPushSubscriptions"
 )
 
 var (
@@ -164,6 +182,51 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	notificationServiceGetMyNotificationPreferencesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("GetMyNotificationPreferences"),
+			Procedure:        NotificationServiceGetMyNotificationPreferencesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	notificationServiceSetMyNotificationPreferencesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("SetMyNotificationPreferences"),
+			Procedure:  NotificationServiceSetMyNotificationPreferencesProcedure,
+		}
+	})
+	notificationServiceGetWebPushKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("GetWebPushKey"),
+			Procedure:        NotificationServiceGetWebPushKeyProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	notificationServiceRegisterPushSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("RegisterPushSubscription"),
+			Procedure:  NotificationServiceRegisterPushSubscriptionProcedure,
+		}
+	})
+	notificationServiceRemovePushSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("RemovePushSubscription"),
+			Procedure:  NotificationServiceRemovePushSubscriptionProcedure,
+		}
+	})
+	notificationServiceListMyPushSubscriptionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_notifications_proto.Services().ByName("NotificationService").Methods().ByName("ListMyPushSubscriptions"),
+			Procedure:        NotificationServiceListMyPushSubscriptionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // NotificationServiceClient is a client for the pantherclaw.v1.NotificationService service.
@@ -217,6 +280,33 @@ type NotificationServiceClient interface {
 	// ListChatLinks lists the caller's own links, newest first.
 	// permission: authenticated
 	ListChatLinks(context.Context, *v1.ListChatLinksRequest) (*v1.ListChatLinksResponse, error)
+	// GetMyNotificationPreferences returns the caller's own preferences: how
+	// approval notices reach them (at once or as a digest) and their quiet
+	// hours (G0 M36 D1065).
+	// permission: authenticated
+	GetMyNotificationPreferences(context.Context, *v1.GetMyNotificationPreferencesRequest) (*v1.GetMyNotificationPreferencesResponse, error)
+	// SetMyNotificationPreferences sets them. A digest and quiet hours delay
+	// only the caller's own emails, direct messages and pushes; routing and
+	// escalation to other people are unchanged (HR-792). Audited.
+	// permission: authenticated
+	SetMyNotificationPreferences(context.Context, *v1.SetMyNotificationPreferencesRequest) (*v1.SetMyNotificationPreferencesResponse, error)
+	// GetWebPushKey returns the deployment's VAPID public key, the
+	// applicationServerKey a browser subscribes with (G0 M36 D1066).
+	// permission: authenticated
+	GetWebPushKey(context.Context, *v1.GetWebPushKeyRequest) (*v1.GetWebPushKeyResponse, error)
+	// RegisterPushSubscription registers a browser push subscription of the
+	// signed-in caller (Team edition). A push carries a title and a link
+	// only (HR-793). Audited.
+	// permission: authenticated
+	RegisterPushSubscription(context.Context, *v1.RegisterPushSubscriptionRequest) (*v1.RegisterPushSubscriptionResponse, error)
+	// RemovePushSubscription removes one of the caller's own subscriptions.
+	// Audited.
+	// permission: authenticated
+	RemovePushSubscription(context.Context, *v1.RemovePushSubscriptionRequest) (*v1.RemovePushSubscriptionResponse, error)
+	// ListMyPushSubscriptions lists the caller's own live subscriptions,
+	// newest first.
+	// permission: authenticated
+	ListMyPushSubscriptions(context.Context, *v1.ListMyPushSubscriptionsRequest) (*v1.ListMyPushSubscriptionsResponse, error)
 }
 
 // NewNotificationServiceClient constructs a client for the pantherclaw.v1.NotificationService
@@ -277,6 +367,33 @@ type NotificationServiceHandler interface {
 	// ListChatLinks lists the caller's own links, newest first.
 	// permission: authenticated
 	ListChatLinks(context.Context, *v1.ListChatLinksRequest) (*v1.ListChatLinksResponse, error)
+	// GetMyNotificationPreferences returns the caller's own preferences: how
+	// approval notices reach them (at once or as a digest) and their quiet
+	// hours (G0 M36 D1065).
+	// permission: authenticated
+	GetMyNotificationPreferences(context.Context, *v1.GetMyNotificationPreferencesRequest) (*v1.GetMyNotificationPreferencesResponse, error)
+	// SetMyNotificationPreferences sets them. A digest and quiet hours delay
+	// only the caller's own emails, direct messages and pushes; routing and
+	// escalation to other people are unchanged (HR-792). Audited.
+	// permission: authenticated
+	SetMyNotificationPreferences(context.Context, *v1.SetMyNotificationPreferencesRequest) (*v1.SetMyNotificationPreferencesResponse, error)
+	// GetWebPushKey returns the deployment's VAPID public key, the
+	// applicationServerKey a browser subscribes with (G0 M36 D1066).
+	// permission: authenticated
+	GetWebPushKey(context.Context, *v1.GetWebPushKeyRequest) (*v1.GetWebPushKeyResponse, error)
+	// RegisterPushSubscription registers a browser push subscription of the
+	// signed-in caller (Team edition). A push carries a title and a link
+	// only (HR-793). Audited.
+	// permission: authenticated
+	RegisterPushSubscription(context.Context, *v1.RegisterPushSubscriptionRequest) (*v1.RegisterPushSubscriptionResponse, error)
+	// RemovePushSubscription removes one of the caller's own subscriptions.
+	// Audited.
+	// permission: authenticated
+	RemovePushSubscription(context.Context, *v1.RemovePushSubscriptionRequest) (*v1.RemovePushSubscriptionResponse, error)
+	// ListMyPushSubscriptions lists the caller's own live subscriptions,
+	// newest first.
+	// permission: authenticated
+	ListMyPushSubscriptions(context.Context, *v1.ListMyPushSubscriptionsRequest) (*v1.ListMyPushSubscriptionsResponse, error)
 }
 
 // RegisterNotificationServiceHandler registers svc as the pantherclaw.v1.NotificationService
@@ -297,6 +414,12 @@ func RegisterNotificationServiceHandler(server *connect.Server, svc Notification
 		connect.Method{Spec: notificationServiceConfirmChatLinkSpec(), Handler: adapter.confirmChatLink},
 		connect.Method{Spec: notificationServiceRevokeChatLinkSpec(), Handler: adapter.revokeChatLink},
 		connect.Method{Spec: notificationServiceListChatLinksSpec(), Handler: adapter.listChatLinks},
+		connect.Method{Spec: notificationServiceGetMyNotificationPreferencesSpec(), Handler: adapter.getMyNotificationPreferences},
+		connect.Method{Spec: notificationServiceSetMyNotificationPreferencesSpec(), Handler: adapter.setMyNotificationPreferences},
+		connect.Method{Spec: notificationServiceGetWebPushKeySpec(), Handler: adapter.getWebPushKey},
+		connect.Method{Spec: notificationServiceRegisterPushSubscriptionSpec(), Handler: adapter.registerPushSubscription},
+		connect.Method{Spec: notificationServiceRemovePushSubscriptionSpec(), Handler: adapter.removePushSubscription},
+		connect.Method{Spec: notificationServiceListMyPushSubscriptionsSpec(), Handler: adapter.listMyPushSubscriptions},
 	)
 }
 
@@ -353,6 +476,30 @@ func (UnimplementedNotificationServiceHandler) RevokeChatLink(context.Context, *
 
 func (UnimplementedNotificationServiceHandler) ListChatLinks(context.Context, *v1.ListChatLinksRequest) (*v1.ListChatLinksResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.ListChatLinks is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) GetMyNotificationPreferences(context.Context, *v1.GetMyNotificationPreferencesRequest) (*v1.GetMyNotificationPreferencesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.GetMyNotificationPreferences is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) SetMyNotificationPreferences(context.Context, *v1.SetMyNotificationPreferencesRequest) (*v1.SetMyNotificationPreferencesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.SetMyNotificationPreferences is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) GetWebPushKey(context.Context, *v1.GetWebPushKeyRequest) (*v1.GetWebPushKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.GetWebPushKey is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) RegisterPushSubscription(context.Context, *v1.RegisterPushSubscriptionRequest) (*v1.RegisterPushSubscriptionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.RegisterPushSubscription is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) RemovePushSubscription(context.Context, *v1.RemovePushSubscriptionRequest) (*v1.RemovePushSubscriptionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.RemovePushSubscription is not implemented")
+}
+
+func (UnimplementedNotificationServiceHandler) ListMyPushSubscriptions(context.Context, *v1.ListMyPushSubscriptionsRequest) (*v1.ListMyPushSubscriptionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.NotificationService.ListMyPushSubscriptions is not implemented")
 }
 
 type notificationServiceClient struct {
@@ -458,6 +605,54 @@ func (c *notificationServiceClient) RevokeChatLink(ctx context.Context, req *v1.
 func (c *notificationServiceClient) ListChatLinks(ctx context.Context, req *v1.ListChatLinksRequest) (*v1.ListChatLinksResponse, error) {
 	var res v1.ListChatLinksResponse
 	if err := c.client.CallUnary(ctx, notificationServiceListChatLinksSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) GetMyNotificationPreferences(ctx context.Context, req *v1.GetMyNotificationPreferencesRequest) (*v1.GetMyNotificationPreferencesResponse, error) {
+	var res v1.GetMyNotificationPreferencesResponse
+	if err := c.client.CallUnary(ctx, notificationServiceGetMyNotificationPreferencesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) SetMyNotificationPreferences(ctx context.Context, req *v1.SetMyNotificationPreferencesRequest) (*v1.SetMyNotificationPreferencesResponse, error) {
+	var res v1.SetMyNotificationPreferencesResponse
+	if err := c.client.CallUnary(ctx, notificationServiceSetMyNotificationPreferencesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) GetWebPushKey(ctx context.Context, req *v1.GetWebPushKeyRequest) (*v1.GetWebPushKeyResponse, error) {
+	var res v1.GetWebPushKeyResponse
+	if err := c.client.CallUnary(ctx, notificationServiceGetWebPushKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) RegisterPushSubscription(ctx context.Context, req *v1.RegisterPushSubscriptionRequest) (*v1.RegisterPushSubscriptionResponse, error) {
+	var res v1.RegisterPushSubscriptionResponse
+	if err := c.client.CallUnary(ctx, notificationServiceRegisterPushSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) RemovePushSubscription(ctx context.Context, req *v1.RemovePushSubscriptionRequest) (*v1.RemovePushSubscriptionResponse, error) {
+	var res v1.RemovePushSubscriptionResponse
+	if err := c.client.CallUnary(ctx, notificationServiceRemovePushSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *notificationServiceClient) ListMyPushSubscriptions(ctx context.Context, req *v1.ListMyPushSubscriptionsRequest) (*v1.ListMyPushSubscriptionsResponse, error) {
+	var res v1.ListMyPushSubscriptionsResponse
+	if err := c.client.CallUnary(ctx, notificationServiceListMyPushSubscriptionsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -615,6 +810,78 @@ func (h notificationServiceHandler) listChatLinks(ctx context.Context, _ connect
 		return err
 	}
 	res, err := h.svc.ListChatLinks(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) getMyNotificationPreferences(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetMyNotificationPreferencesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetMyNotificationPreferences(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) setMyNotificationPreferences(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetMyNotificationPreferencesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetMyNotificationPreferences(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) getWebPushKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWebPushKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWebPushKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) registerPushSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RegisterPushSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RegisterPushSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) removePushSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RemovePushSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RemovePushSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h notificationServiceHandler) listMyPushSubscriptions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMyPushSubscriptionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMyPushSubscriptions(ctx, &req)
 	if err != nil {
 		return err
 	}

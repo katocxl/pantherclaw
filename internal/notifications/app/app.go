@@ -109,6 +109,11 @@ type Service struct {
 	// webhookKeys signs opted-in webhooks with the org's Ed25519 key (G0
 	// M20 D251); nil leaves every destination on HMAC only.
 	webhookKeys domain.WebhookKeys
+	// vapid signs Web Push requests with the deployment's web_push key, and
+	// vapidSubject is the contact they name (G0 M36 D1066); nil pushes
+	// nothing.
+	vapid        VAPIDKey
+	vapidSubject string
 }
 
 // New returns the service. jc may be an insert-only client (API role).
@@ -225,22 +230,37 @@ func (s *Service) Enqueue(ctx context.Context, tx db.TenantTx, m Message) (Enque
 	if n == 0 {
 		return Enqueued{Duplicate: true}, nil
 	}
+	// A person's digest and quiet hours delay only their own deliveries
+	// (G0 M36 D1065, HR-792).
+	holds, err := s.personalHolds(ctx, q, m)
+	if err != nil {
+		return Enqueued{}, err
+	}
 	emailed := map[ids.UUID]bool{}
 	for _, u := range m.Personal {
 		if emailed[u] {
 			continue
 		}
 		emailed[u] = true
-		if err := s.addDelivery(ctx, tx, q, m.Org, out.Notification, nil, &u, domain.KindEmail, "PENDING"); err != nil {
+		h := holds[u]
+		if h.skip {
+			continue // the person's digest carries it
+		}
+		if err := s.addDeliveryAt(ctx, tx, q, m.Org, out.Notification, nil, &u, domain.KindEmail, "PENDING", h.at); err != nil {
 			return Enqueued{}, err
 		}
 		out.Deliveries++
 	}
-	dms, err := s.dmRecipientsFor(ctx, tx, q, m, out.Notification)
+	dms, err := s.dmRecipientsFor(ctx, tx, q, m, out.Notification, holds)
 	if err != nil {
 		return Enqueued{}, err
 	}
 	out.Deliveries += dms
+	pushes, err := s.pushRecipientsFor(ctx, tx, q, m, out.Notification, holds)
+	if err != nil {
+		return Enqueued{}, err
+	}
+	out.Deliveries += pushes
 	if m.PersonalOnly {
 		return out, nil
 	}
@@ -314,6 +334,14 @@ func (s *Service) route(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org
 func (s *Service) addDelivery(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, note ids.UUID,
 	channel, user *ids.UUID, kind domain.Kind, state string,
 ) error {
+	return s.addDeliveryAt(ctx, tx, q, org, note, channel, user, kind, state, time.Time{})
+}
+
+// addDeliveryAt adds a delivery whose first attempt waits until at (a
+// person's quiet hours, G0 M36 D1065); the zero time sends it at once.
+func (s *Service) addDeliveryAt(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, note ids.UUID,
+	channel, user *ids.UUID, kind domain.Kind, state string, at time.Time,
+) error {
 	id := ids.NewV7()
 	var reason *string
 	switch state {
@@ -338,7 +366,11 @@ func (s *Service) addDelivery(ctx context.Context, tx db.TenantTx, q *dbq.Querie
 	if err != nil {
 		return err
 	}
-	return jobs.InsertTx(ctx, s.jobs, tx, DeliverArgs{Org: org, Delivery: did}, nil)
+	var opts *river.InsertOpts
+	if !at.IsZero() {
+		opts = &river.InsertOpts{ScheduledAt: at}
+	}
+	return jobs.InsertTx(ctx, s.jobs, tx, DeliverArgs{Org: org, Delivery: did}, opts)
 }
 
 // SecurityNotice implements authn/app.SecurityNotifier: the user is emailed
