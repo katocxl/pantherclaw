@@ -420,7 +420,7 @@ func (r refs) value(ref string) (any, error) {
 		return v.Bool, nil
 	case defs.TypeIdentifierList:
 		return v.List, nil
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeURL:
 		return v.Str, nil
 	case defs.TypeText, defs.TypeQueryFilter, defs.TypeFloatArray, defs.TypeStringMap:
 	}

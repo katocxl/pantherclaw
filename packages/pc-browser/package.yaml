@@ -1,0 +1,324 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for what an agent's managed browser asks before it
+# acts (G0 M33 D974): the PantherClaw extension asks the gateway's hook face
+# through `pclaw browser host` (Chrome native messaging) before it opens a
+# page, sends a form, saves a download, clicks an element an admin marked,
+# or lets a person take over a tab. The browser acts on an allowed one
+# itself, so nothing is dispatched and receipts say delegated. The target is
+# the URL's host; an action on a host that is not on the org's site list
+# holds for a person (D977, HR-745), and a takeover always holds (HR-746).
+# Form field values never leave the browser: only field names and whether a
+# secret field is among them (D978, HR-747, HR-754). URLs are in their one
+# spelling (normurl, HR-748). The route is cooperative (PARTIAL, R-78). No
+# template or default grant names any of these operations. Any change here
+# needs the golden tests in internal/definitions to be updated deliberately.
+format: 1
+name: pc.browser
+version: 1.0.0
+publisher: pantherclaw
+summary: What an agent's managed browser asks before it acts
+
+definitions:
+  - operation: browser.navigate
+    summary: Open a page in the agent's browser
+    access: read
+    target:
+      type: browser.site
+      id_pattern: '^([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}$|^\d{1,3}(\.\d{1,3}){3}$|^\[[0-9a-f:.]{2,45}\]$'
+      account: none
+    params:
+      url:
+        type: url
+        material: true
+        required: true
+        max_length: 2048
+      # The query's size: an address can carry data out in its query.
+      query_bytes:
+        type: integer
+        unit: bytes
+        material: true
+      user_agent:
+        type: text
+        max_length: 512
+      accept_language:
+        type: text
+        max_length: 64
+      # The client's id of this request. It is the dedupe key: the same
+      # request asked twice is one action (HR-007).
+      call:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+    effects:
+      - kind: browser.navigate
+        description: Opens a page; the address itself can carry data out
+    reversibility: irreversible
+    dedupe_key: [params.call]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Open {target.id} in the agent's browser
+      fields: [target.id, params.url, params.query_bytes]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-08
+    mappings:
+      - channel: hook
+        tool: browser_navigate
+        route: browser-navigate
+        extract:
+          target_id: urlhost(input.url)
+          params:
+            url: normurl(input.url)
+            query_bytes: size(urlquery(input.url))
+            user_agent: "has(input.user_agent) ? optional.of(input.user_agent) : optional.none()"
+            accept_language: "has(input.accept_language) ? optional.of(input.accept_language) : optional.none()"
+            call: input.call
+
+  - operation: browser.form.submit
+    summary: Send a form from the agent's browser
+    access: write
+    target:
+      type: browser.site
+      id_pattern: '^([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}$|^\d{1,3}(\.\d{1,3}){3}$|^\[[0-9a-f:.]{2,45}\]$'
+      account: none
+    params:
+      # The form's absolute action URL: its host is the target.
+      url:
+        type: url
+        material: true
+        required: true
+        max_length: 2048
+      page_url:
+        type: url
+        material: true
+        max_length: 2048
+      method:
+        type: enum
+        material: true
+        values: [get, post]
+      # Field NAMES only, never values.
+      fields:
+        type: identifier_list
+        material: true
+        max_items: 64
+        pattern: '^[A-Za-z0-9_.:\[\]-]{1,64}$'
+      # Whether a password, one-time-code or payment field is among them:
+      # the gateway refuses such a submit before the Authority is asked
+      # (D978, HR-747).
+      secret_fields:
+        type: boolean
+        material: true
+        required: true
+      call:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+    effects:
+      - kind: browser.submit
+        description: Sends a form to a site
+    reversibility: irreversible
+    dedupe_key: [params.call]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Send a {params.method} form to {target.id} from the agent's browser
+      fields: [target.id, params.url, params.page_url, params.method, params.fields, params.secret_fields]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-08
+    mappings:
+      - channel: hook
+        tool: browser_submit
+        route: browser-submit
+        extract:
+          target_id: urlhost(input.url)
+          params:
+            url: normurl(input.url)
+            page_url: "has(input.page_url) ? optional.of(normurl(input.page_url)) : optional.none()"
+            method: "has(input.method) ? optional.of(input.method) : optional.none()"
+            fields: "has(input.fields) ? optional.of(input.fields) : optional.none()"
+            secret_fields: input.secret_fields
+            call: input.call
+
+  - operation: browser.download
+    summary: Save a file from a site in the agent's browser
+    access: write
+    target:
+      type: browser.site
+      id_pattern: '^([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}$|^\d{1,3}(\.\d{1,3}){3}$|^\[[0-9a-f:.]{2,45}\]$'
+      account: none
+    params:
+      url:
+        type: url
+        material: true
+        required: true
+        max_length: 2048
+      page_url:
+        type: url
+        material: true
+        max_length: 2048
+      filename:
+        type: content
+        material: true
+        max_length: 255
+      mime:
+        type: text
+        max_length: 127
+      # -1 or absent: the size is unknown, and the param is omitted.
+      bytes:
+        type: integer
+        unit: bytes
+        min: '0'
+      call:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+    effects:
+      - kind: file.download
+        description: Saves a file from a site
+    reversibility: irreversible
+    dedupe_key: [params.call]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Save a file from {target.id} in the agent's browser
+      fields: [target.id, params.url, params.page_url]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-08
+    mappings:
+      - channel: hook
+        tool: browser_download
+        route: browser-download
+        extract:
+          target_id: urlhost(input.url)
+          params:
+            url: normurl(input.url)
+            page_url: "has(input.page_url) ? optional.of(normurl(input.page_url)) : optional.none()"
+            filename: "has(input.filename) ? optional.of(input.filename) : optional.none()"
+            mime: "has(input.mime) ? optional.of(input.mime) : optional.none()"
+            bytes: "has(input.bytes) && int(input.bytes) >= 0 ? optional.of(int(input.bytes)) : optional.none()"
+            call: input.call
+
+  - operation: browser.click
+    summary: Click an element an admin marked in the agent's browser
+    access: write
+    target:
+      type: browser.site
+      id_pattern: '^([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}$|^\d{1,3}(\.\d{1,3}){3}$|^\[[0-9a-f:.]{2,45}\]$'
+      account: none
+    params:
+      # The page's URL: its host is the target.
+      page_url:
+        type: url
+        material: true
+        required: true
+        max_length: 2048
+      # The admin's rule as configured.
+      selector:
+        type: content
+        material: true
+        required: true
+        max_length: 256
+      # The element's accessible name or text, trimmed.
+      label:
+        type: content
+        material: true
+        max_length: 128
+      call:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+    effects:
+      - kind: browser.click
+        description: Clicks an element an admin marked
+    reversibility: irreversible
+    dedupe_key: [params.call]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Click a marked element on {target.id} in the agent's browser
+      fields: [target.id, params.page_url]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-08
+    mappings:
+      - channel: hook
+        tool: browser_click
+        route: browser-click
+        extract:
+          target_id: urlhost(input.page_url)
+          params:
+            page_url: normurl(input.page_url)
+            selector: input.selector
+            label: "has(input.label) ? optional.of(input.label) : optional.none()"
+            call: input.call
+
+  # A person controls the tab while the takeover lasts; nothing on it is
+  # decided or recorded until it ends (R-79). It always holds for a person,
+  # whatever grant, policy or exception applies (D977, HR-746).
+  - operation: browser.takeover
+    summary: Let a person take over the agent's browser tab
+    access: write
+    target:
+      type: browser.site
+      id_pattern: '^([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}$|^\d{1,3}(\.\d{1,3}){3}$|^\[[0-9a-f:.]{2,45}\]$'
+      account: none
+    params:
+      page_url:
+        type: url
+        material: true
+        required: true
+        max_length: 2048
+      minutes:
+        type: integer
+        unit: count
+        material: true
+        required: true
+        min: '1'
+        max: '10'
+      call:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+    effects:
+      - kind: browser.takeover
+        description: A person controls this tab; nothing on it is decided or recorded until it ends
+    reversibility: irreversible
+    dedupe_key: [params.call]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: A person takes over the agent's browser tab on {target.id} for up to {params.minutes} minutes (approve only if a person is at that browser)
+      fields: [target.id, params.page_url, params.minutes]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-08
+    mappings:
+      - channel: hook
+        tool: browser_takeover
+        route: browser-takeover
+        extract:
+          target_id: urlhost(input.page_url)
+          params:
+            page_url: normurl(input.page_url)
+            minutes: int(input.minutes)
+            call: input.call

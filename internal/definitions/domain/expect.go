@@ -66,7 +66,7 @@ func referenceText(ref string, target actionir.Target, vals Values) (string, boo
 		return strconv.FormatBool(v.Bool), part == ""
 	case TypeEnum, TypeIdentifier:
 		return v.Str, part == ""
-	case TypeIdentifierList, TypeText, TypeCommand, TypeContent, TypePath, TypeQueryFilter, TypeFloatArray, TypeStringMap:
+	case TypeIdentifierList, TypeText, TypeCommand, TypeContent, TypePath, TypeURL, TypeQueryFilter, TypeFloatArray, TypeStringMap:
 		// Lists and filters have no single value; text, commands, content
 		// and paths are never compared with what a target reports.
 	}
