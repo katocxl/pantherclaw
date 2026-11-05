@@ -1,0 +1,475 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// PartnerService links an MSSP partner org to its customer orgs on the
+// same deployment (G0 M38 D1100–D1102; FQ38-1; HR-810..816). The partner
+// org needs the Enterprise edition (PartnerAccess); the customer org needs
+// none.
+//
+// A partner person holding partner.manage asks a customer for a link: READ
+// always, PROPOSE optionally, for 1 to 90 days. A customer person holding
+// partner.approve decides it only on its page (decide_url) with a security
+// key; the API refuses (STEP_UP_REQUIRED). The customer revokes a link at
+// any time. Under an ACTIVE link a partner person holding partner.operate
+// opens a partner session in the customer org on its page (open_url), with
+// a security key: it reads what a support session reads, and may propose
+// rollouts, nothing else. Every call of a partner session is recorded in
+// the customer's audit log first. A proposal only ever becomes a DRAFT, by
+// a customer person's acceptance; a loosening that came from a partner
+// always needs two customer people.
+service PartnerService {
+  // RequestPartnerLink asks a customer org for a link (partner side, a
+  // person only).
+  // permission: partner.manage
+  rpc RequestPartnerLink(RequestPartnerLinkRequest) returns (RequestPartnerLinkResponse);
+  // RenewPartnerLink asks again with the scopes of an earlier link of the
+  // same customer: a new REQUESTED link (partner side, a person only).
+  // permission: partner.manage
+  rpc RenewPartnerLink(RenewPartnerLinkRequest) returns (RenewPartnerLinkResponse);
+  // ListPartnerLinks lists the org's links, as partner and as customer.
+  // permission: partner.read
+  rpc ListPartnerLinks(ListPartnerLinksRequest) returns (ListPartnerLinksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetPartnerLink returns one link of the org's.
+  // permission: partner.read
+  rpc GetPartnerLink(GetPartnerLinkRequest) returns (GetPartnerLinkResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DecidePartnerLink is refused over the API (STEP_UP_REQUIRED): a
+  // customer person decides a link on its page with a security key.
+  // permission: partner.approve
+  rpc DecidePartnerLink(DecidePartnerLinkRequest) returns (DecidePartnerLinkResponse);
+  // RevokePartnerLink ends a requested or active link at once (customer
+  // side, a person only) and ends its partner sessions.
+  // permission: partner.approve
+  rpc RevokePartnerLink(RevokePartnerLinkRequest) returns (RevokePartnerLinkResponse);
+  // ListPartnerCustomers lists the customers of the partner's active links
+  // with counts only (partner side). Each customer records the read.
+  // permission: partner.read
+  rpc ListPartnerCustomers(ListPartnerCustomersRequest) returns (ListPartnerCustomersResponse);
+  // OpenPartnerSession is refused over the API (STEP_UP_REQUIRED): a
+  // partner person opens a partner session on the customer's open page
+  // with a security key.
+  // permission: partner.operate
+  rpc OpenPartnerSession(OpenPartnerSessionRequest) returns (OpenPartnerSessionResponse);
+  // GetCurrentPartnerSession describes the caller's partner session.
+  // permission: authenticated
+  rpc GetCurrentPartnerSession(GetCurrentPartnerSessionRequest) returns (GetCurrentPartnerSessionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ProposeRollout proposes a policy version or a reference pack to
+  // customers over links with the PROPOSE scope: from a partner session
+  // (its own customer only), or from the partner org by a person holding
+  // partner.manage (one proposal per named customer).
+  // permission: authenticated
+  rpc ProposeRollout(ProposeRolloutRequest) returns (ProposeRolloutResponse);
+  // ListPartnerProposals lists the org's proposals, as partner and as
+  // customer.
+  // permission: partner.read
+  rpc ListPartnerProposals(ListPartnerProposalsRequest) returns (ListPartnerProposalsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetPartnerProposal returns one proposal with its body.
+  // permission: partner.read
+  rpc GetPartnerProposal(GetPartnerProposalRequest) returns (GetPartnerProposalResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AcceptPartnerProposal makes the proposal a DRAFT policy version
+  // (customer side, a person holding policy.author). Nothing is published.
+  // permission: policy.author
+  rpc AcceptPartnerProposal(AcceptPartnerProposalRequest) returns (AcceptPartnerProposalResponse);
+  // DeclinePartnerProposal declines a proposal (customer side).
+  // permission: policy.author
+  rpc DeclinePartnerProposal(DeclinePartnerProposalRequest) returns (DeclinePartnerProposalResponse);
+  // WithdrawPartnerProposal withdraws a proposal (partner side).
+  // permission: partner.manage
+  rpc WithdrawPartnerProposal(WithdrawPartnerProposalRequest) returns (WithdrawPartnerProposalResponse);
+}
+
+// PartnerLinkScope is what a link allows.
+enum PartnerLinkScope {
+  // Unspecified.
+  PARTNER_LINK_SCOPE_UNSPECIFIED = 0;
+  // Read what a support session reads. Every link has it.
+  PARTNER_LINK_SCOPE_READ = 1;
+  // Propose policy versions and reference packs, which only become drafts.
+  PARTNER_LINK_SCOPE_PROPOSE = 2;
+}
+
+// PartnerLink is one link between a partner org and a customer org.
+message PartnerLink {
+  // Link id.
+  string id = 1;
+  // The partner org.
+  string partner_org_id = 2;
+  // The partner org's name when it asked.
+  string partner_name = 3;
+  // The customer org.
+  string customer_org_id = 4;
+  // "REQUESTED", "ACTIVE", "DENIED", "REVOKED" or "EXPIRED".
+  string state = 5;
+  // What the link allows.
+  repeated PartnerLinkScope scopes = 6;
+  // The window asked for, in days (1 to 90).
+  int32 duration_days = 7;
+  // Why the partner asks (untrusted text).
+  string reason = 8;
+  // The earlier link this one renews, if any.
+  string renews = 9;
+  // The partner person who asked.
+  string requested_by = 10;
+  // When it was asked.
+  google.protobuf.Timestamp request_time = 11;
+  // When an undecided request expires.
+  google.protobuf.Timestamp request_expire_time = 12;
+  // The customer person who decided it.
+  string decided_by = 13;
+  // When it was decided.
+  google.protobuf.Timestamp decide_time = 14;
+  // The window in force: from the approval, at most 90 days.
+  google.protobuf.Timestamp start_time = 15;
+  // The end of the window.
+  google.protobuf.Timestamp end_time = 16;
+  // Who revoked it.
+  string revoked_by = 17;
+  // When it was revoked.
+  google.protobuf.Timestamp revoke_time = 18;
+  // Why it was revoked (untrusted text).
+  string end_reason = 19;
+  // The customer's page where a person decides it.
+  string decide_url = 20;
+  // The partner's page where a person opens a partner session.
+  string open_url = 21;
+}
+
+// RequestPartnerLinkRequest asks a customer for a link.
+message RequestPartnerLinkRequest {
+  // The customer org.
+  string customer_org_id = 1 [(buf.validate.field).string.uuid = true];
+  // What the link allows; READ is always included.
+  repeated PartnerLinkScope scopes = 2 [(buf.validate.field).repeated = {
+    max_items: 2
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // The window, in days, from the approval.
+  int32 duration_days = 3 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 90
+  }];
+  // Why the partner asks, shown to the customer.
+  string reason = 4 [(buf.validate.field).string.max_len = 500];
+}
+
+// RequestPartnerLinkResponse returns the new link.
+message RequestPartnerLinkResponse {
+  // The link, REQUESTED.
+  PartnerLink link = 1;
+}
+
+// RenewPartnerLinkRequest names the earlier link.
+message RenewPartnerLinkRequest {
+  // Link id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // The new window, in days.
+  int32 duration_days = 2 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 90
+  }];
+  // Why the partner asks again.
+  string reason = 3 [(buf.validate.field).string.max_len = 500];
+}
+
+// RenewPartnerLinkResponse returns the new link.
+message RenewPartnerLinkResponse {
+  // The new link, REQUESTED.
+  PartnerLink link = 1;
+}
+
+// ListPartnerLinksRequest pages links.
+message ListPartnerLinksRequest {
+  // Maximum results (default and at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListPartnerLinksResponse is one page.
+message ListPartnerLinksResponse {
+  // Links, by id.
+  repeated PartnerLink links = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// GetPartnerLinkRequest names a link.
+message GetPartnerLinkRequest {
+  // Link id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetPartnerLinkResponse returns it.
+message GetPartnerLinkResponse {
+  // The link.
+  PartnerLink link = 1;
+}
+
+// DecidePartnerLinkRequest names a link and the decision.
+message DecidePartnerLinkRequest {
+  // Link id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // True approves, false denies.
+  bool approve = 2;
+}
+
+// DecidePartnerLinkResponse is never returned over the API.
+message DecidePartnerLinkResponse {
+  // The link.
+  PartnerLink link = 1;
+}
+
+// RevokePartnerLinkRequest names a link.
+message RevokePartnerLinkRequest {
+  // Link id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Why, kept with the link.
+  string reason = 2 [(buf.validate.field).string.max_len = 500];
+}
+
+// RevokePartnerLinkResponse returns it.
+message RevokePartnerLinkResponse {
+  // The link, REVOKED.
+  PartnerLink link = 1;
+}
+
+// ListPartnerCustomersRequest lists the partner's customers.
+message ListPartnerCustomersRequest {}
+
+// PartnerCustomer is one customer of an active link, with counts only.
+message PartnerCustomer {
+  // The customer org.
+  string customer_org_id = 1;
+  // Its name.
+  string name = 2;
+  // The link in force.
+  string link_id = 3;
+  // When the link ends.
+  google.protobuf.Timestamp link_end_time = 4;
+  // Approvals waiting for a person.
+  int64 waiting_approvals = 5;
+  // Open alerts.
+  int64 open_alerts = 6;
+  // When the last decision was recorded; unset when none was.
+  google.protobuf.Timestamp last_decision_time = 7;
+  // The partner's page where a person opens a partner session.
+  string open_url = 8;
+}
+
+// ListPartnerCustomersResponse lists them.
+message ListPartnerCustomersResponse {
+  // Customers, by org id.
+  repeated PartnerCustomer customers = 1;
+}
+
+// OpenPartnerSessionRequest names a customer.
+message OpenPartnerSessionRequest {
+  // The customer org.
+  string customer_org_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// OpenPartnerSessionResponse is never returned over the API.
+message OpenPartnerSessionResponse {}
+
+// GetCurrentPartnerSessionRequest asks about the caller's partner session.
+message GetCurrentPartnerSessionRequest {}
+
+// GetCurrentPartnerSessionResponse describes it.
+message GetCurrentPartnerSessionResponse {
+  // Session id.
+  string session_id = 1;
+  // The link it runs under.
+  string link_id = 2;
+  // The partner org.
+  string partner_org_id = 3;
+  // The partner person.
+  string partner_user_id = 4;
+  // What the link allows.
+  repeated PartnerLinkScope scopes = 5;
+  // When the session ends at the latest.
+  google.protobuf.Timestamp expire_time = 6;
+}
+
+// PartnerProposalKind is what a proposal would draft.
+enum PartnerProposalKind {
+  // Unspecified.
+  PARTNER_PROPOSAL_KIND_UNSPECIFIED = 0;
+  // A policy document, drafted as a new policy version.
+  PARTNER_PROPOSAL_KIND_POLICY_VERSION = 1;
+  // A reference pack with its parameters, drafted through ApplyPack.
+  PARTNER_PROPOSAL_KIND_PACK = 2;
+}
+
+// PartnerProposal is one proposal to one customer.
+message PartnerProposal {
+  // Proposal id.
+  string id = 1;
+  // The link it was sent over.
+  string link_id = 2;
+  // The partner org.
+  string partner_org_id = 3;
+  // The customer org.
+  string customer_org_id = 4;
+  // What it would draft.
+  PartnerProposalKind kind = 5;
+  // Its title (untrusted text).
+  string title = 6;
+  // The body: a policy document, or {pack, environment, agents, cohort,
+  // parameters} as JSON. Only in GetPartnerProposal.
+  bytes body = 7;
+  // Groups the proposals of one send to many customers.
+  string template_id = 8;
+  // "PROPOSED", "ACCEPTED", "DECLINED", "WITHDRAWN" or "EXPIRED".
+  string state = 9;
+  // partner/<partner org>/<user>.
+  string proposed_by = 10;
+  // When it was proposed.
+  google.protobuf.Timestamp create_time = 11;
+  // When an undecided proposal expires (30 days).
+  google.protobuf.Timestamp expire_time = 12;
+  // Who decided it.
+  string decided_by = 13;
+  // When it was decided.
+  google.protobuf.Timestamp decide_time = 14;
+  // Why it was declined (untrusted text).
+  string decline_reason = 15;
+  // The DRAFT policy version an acceptance made.
+  string draft_version_id = 16;
+}
+
+// ProposeRolloutRequest proposes one change to customers.
+message ProposeRolloutRequest {
+  // The customer orgs. From a partner session, only its own customer.
+  repeated string customer_org_ids = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 100
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  // What it would draft.
+  PartnerProposalKind kind = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // A title shown to the customer.
+  string title = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // The body: a policy document (POLICY_VERSION) or {pack, environment,
+  // agents, cohort, parameters} (PACK), as JSON, at most 256 KiB.
+  bytes body = 4 [(buf.validate.field).bytes = {
+    min_len: 2
+    max_len: 262144
+  }];
+}
+
+// ProposeRolloutResponse returns one proposal per customer.
+message ProposeRolloutResponse {
+  // The proposals, PROPOSED.
+  repeated PartnerProposal proposals = 1;
+  // Groups them.
+  string template_id = 2;
+}
+
+// ListPartnerProposalsRequest pages proposals.
+message ListPartnerProposalsRequest {
+  // Maximum results (default and at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListPartnerProposalsResponse is one page.
+message ListPartnerProposalsResponse {
+  // Proposals, by id, without bodies.
+  repeated PartnerProposal proposals = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// GetPartnerProposalRequest names a proposal.
+message GetPartnerProposalRequest {
+  // Proposal id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetPartnerProposalResponse returns it with its body.
+message GetPartnerProposalResponse {
+  // The proposal.
+  PartnerProposal proposal = 1;
+}
+
+// AcceptPartnerProposalRequest names a proposal.
+message AcceptPartnerProposalRequest {
+  // Proposal id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// AcceptPartnerProposalResponse returns it with its draft.
+message AcceptPartnerProposalResponse {
+  // The proposal, ACCEPTED.
+  PartnerProposal proposal = 1;
+}
+
+// DeclinePartnerProposalRequest names a proposal.
+message DeclinePartnerProposalRequest {
+  // Proposal id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Why, shown to the partner.
+  string reason = 2 [(buf.validate.field).string.max_len = 500];
+}
+
+// DeclinePartnerProposalResponse returns it.
+message DeclinePartnerProposalResponse {
+  // The proposal, DECLINED.
+  PartnerProposal proposal = 1;
+}
+
+// WithdrawPartnerProposalRequest names a proposal.
+message WithdrawPartnerProposalRequest {
+  // Proposal id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// WithdrawPartnerProposalResponse returns it.
+message WithdrawPartnerProposalResponse {
+  // The proposal, WITHDRAWN.
+  PartnerProposal proposal = 1;
+}

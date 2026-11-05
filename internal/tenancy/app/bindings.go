@@ -47,6 +47,9 @@ func (a *Access) ListRoleBindings(ctx context.Context, pr page.Request, principa
 				// principal has no binding rows; never fall through to an
 				// unfiltered listing of every binding.
 				return nil
+			case td.KindPartner:
+				// Nor is a partner role (G0 M38 D1101).
+				return nil
 			}
 		}
 		rows, err := q.ListRoleBindings(ctx, arg)

@@ -989,6 +989,56 @@ type PcBudgetLedger struct {
 	CreatedAt     time.Time
 }
 
+type PcBundleInstall struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Publisher    string
+	Name         string
+	Version      string
+	BundleSha256 string
+	PinID        *ids.UUID
+	State        string
+	InstalledBy  ids.UUID
+	CreatedAt    time.Time
+	FinishedAt   *time.Time
+	FailureCode  *string
+}
+
+type PcBundleItem struct {
+	OrgID      ids.OrgID
+	InstallID  ids.UUID
+	Kind       string
+	Name       string
+	Sha256     string
+	TargetType string
+	TargetID   string
+	State      string
+}
+
+type PcBundleRevocation struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Publisher       string
+	StatementSha256 *string
+	Scope           string
+	Kid             *string
+	Name            *string
+	MaxVersion      *string
+	SignedAt        *time.Time
+	ReceivedAt      time.Time
+	AppliedAt       time.Time
+	Source          string
+}
+
+type PcBundleState struct {
+	OrgID      ids.OrgID
+	Publisher  string
+	Name       string
+	MaxVersion string
+	MaxSha256  string
+	UpdatedAt  time.Time
+}
+
 type PcBusinessUnit struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -1268,32 +1318,33 @@ type PcCompromisedPublisher struct {
 }
 
 type PcConnection struct {
-	OrgID            ids.OrgID
-	ID               ids.UUID
-	Name             string
-	Kind             string
-	GatewayID        ids.UUID
-	Package          string
-	BaseUrl          *string
-	AllowedHosts     []string
-	DestinationClass string
-	AccessMode       string
-	CredentialHeader *string
-	CredentialScheme *string
-	DefaultMode      string
-	MaxResponseBytes int32
-	TimeoutMs        int32
-	State            string
-	QuarantineReason *string
-	Revision         int32
-	CreatedBy        string
-	CreatedAt        time.Time
-	UpdatedBy        string
-	UpdatedAt        time.Time
-	AgentHosts       []string
-	Simulated        bool
-	ModelRelay       bool
-	RuntimeTarget    *string
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	Name               string
+	Kind               string
+	GatewayID          ids.UUID
+	Package            string
+	BaseUrl            *string
+	AllowedHosts       []string
+	DestinationClass   string
+	AccessMode         string
+	CredentialHeader   *string
+	CredentialScheme   *string
+	DefaultMode        string
+	MaxResponseBytes   int32
+	TimeoutMs          int32
+	State              string
+	QuarantineReason   *string
+	Revision           int32
+	CreatedBy          string
+	CreatedAt          time.Time
+	UpdatedBy          string
+	UpdatedAt          time.Time
+	AgentHosts         []string
+	Simulated          bool
+	ModelRelay         bool
+	RuntimeTarget      *string
+	UpstreamServerInfo []byte
 }
 
 type PcConnectionAgentpay struct {
@@ -2880,6 +2931,62 @@ type PcIncidentEvent struct {
 	CreatedAt  time.Time
 }
 
+type PcIntelContribution struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	Kind       string
+	Sha256     *string
+	Shingles   []string
+	Severity   string
+	Techniques []string
+	CreatedDay pgtype.Date
+	State      string
+}
+
+type PcIntelIndicator struct {
+	ID          string
+	Kind        string
+	Sha256      *string
+	Shingles    []string
+	Severity    string
+	Techniques  []string
+	FirstSeen   pgtype.Date
+	Summary     string
+	FeedVersion int64
+}
+
+type PcIntelMatch struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	IndicatorID  string
+	Kind         string
+	ObjectType   string
+	ObjectRef    string
+	ConnectionID *ids.UUID
+	Tool         *string
+	Mode         string
+	At           time.Time
+}
+
+type PcIntelSetting struct {
+	OrgID     ids.OrgID
+	Consume   string
+	Share     bool
+	UpdatedBy string
+	UpdatedAt time.Time
+}
+
+type PcIntelState struct {
+	ID          int16
+	FeedVersion int64
+	FeedDigest  string
+	Kid         string
+	IssuedAt    time.Time
+	ExpiresAt   time.Time
+	Source      string
+	UpdatedAt   time.Time
+}
+
 type PcInvitation struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
@@ -3529,6 +3636,67 @@ type PcPackageVersion struct {
 	SigningKeyID *ids.UUID
 }
 
+type PcPartnerLink struct {
+	ID                ids.UUID
+	PartnerOrg        ids.UUID
+	CustomerOrg       ids.UUID
+	PartnerName       string
+	State             string
+	Scopes            []string
+	DurationDays      int32
+	Reason            string
+	Renews            *ids.UUID
+	RequestedBy       ids.UUID
+	RequestedAccount  *ids.UUID
+	RequestedAt       time.Time
+	RequestExpiresAt  time.Time
+	DecidedBy         *ids.UUID
+	DecidedCredential *ids.UUID
+	DecidedAt         *time.Time
+	StartsAt          *time.Time
+	EndsAt            *time.Time
+	RevokedBy         *string
+	RevokedAt         *time.Time
+	EndReason         *string
+}
+
+type PcPartnerProposal struct {
+	ID            ids.UUID
+	LinkID        ids.UUID
+	PartnerOrg    ids.UUID
+	CustomerOrg   ids.UUID
+	Kind          string
+	Title         string
+	Body          []byte
+	TemplateID    *ids.UUID
+	State         string
+	ProposedBy    string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedBy     *string
+	DecidedAt     *time.Time
+	DeclineReason *string
+	DraftRef      *ids.UUID
+}
+
+type PcPartnerSession struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	LinkID            ids.UUID
+	PartnerOrg        ids.UUID
+	PartnerUser       ids.UUID
+	PartnerCredential ids.UUID
+	SecretHash        []byte
+	State             string
+	EndReason         *string
+	UserAgent         string
+	ClientIp          string
+	CreatedAt         time.Time
+	LastSeenAt        time.Time
+	ExpiresAt         time.Time
+	EndedAt           *time.Time
+}
+
 type PcPayloadCapture struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID
@@ -4022,6 +4190,25 @@ type PcProtectedChangeSetting struct {
 	Mode      string
 	UpdatedBy ids.UUID
 	UpdatedAt time.Time
+}
+
+type PcPublisherPin struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Publisher           string
+	Kid                 string
+	PublicKey           []byte
+	Fingerprint         string
+	AllowedKinds        []string
+	RevocationsUrl      *string
+	State               string
+	RevokeReason        *string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	RevokedAt           *time.Time
 }
 
 type PcPushSubscription struct {

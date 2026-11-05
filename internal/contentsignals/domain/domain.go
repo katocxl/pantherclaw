@@ -45,7 +45,25 @@ const (
 	// KindScanIncomplete is a scan that could not finish: its location is
 	// one of the Incomplete reasons (D512, HR-650).
 	KindScanIncomplete = "scan_incomplete"
+	// KindIntelInjectionText is a body holding a shared injection_text
+	// indicator's shingles (G0 M38 D1104): its location is the scanned part
+	// and the indicator, "<part>/intel/<indicator id>". The org's intel
+	// consume mode decides what it does, not the content signal mode: it
+	// holds (HOLD) or alerts (ALERT_ONLY), and never refuses (HR-819).
+	KindIntelInjectionText = "intel_injection_text"
 )
+
+// IntelIndicator is the indicator id of an intel_injection_text finding's
+// location, or "".
+func IntelIndicator(f Finding) string {
+	if f.Kind != KindIntelInjectionText {
+		return ""
+	}
+	if i := strings.LastIndex(f.Location, "/intel/"); i >= 0 {
+		return f.Location[i+len("/intel/"):]
+	}
+	return ""
+}
 
 // Why a scan could not finish, the location of a KindScanIncomplete.
 const (
@@ -118,7 +136,7 @@ type Finding struct {
 var (
 	kinds = []string{
 		KindInjectionPhrase, KindSecretFormat, KindHighEntropy, KindPIIEmail, KindPIICard,
-		KindPIINationalID, KindClassifierFlag, KindScanIncomplete,
+		KindPIINationalID, KindClassifierFlag, KindScanIncomplete, KindIntelInjectionText,
 	}
 	locationRe = regexp.MustCompile(`^[!-~]{1,128}$`)
 	encodingRe = regexp.MustCompile(`^[a-z_+]{0,64}$`)

@@ -73,6 +73,9 @@ func ResponderFrom(c tenancy.Caller) (Responder, error) {
 	case tenancy.CredSupportSession:
 		// A support session is read-only and is never an approver (G0 M13
 		// D32), whatever its principal.
+	case tenancy.CredPartnerSession:
+		// A partner session is never an approver either (G0 M38 D1101,
+		// HR-812): its principal is never a user.
 	}
 	return Responder{}, ErrHumanSession
 }

@@ -1,0 +1,16 @@
+{{template "head" .}}
+<h1>Open a partner session</h1>
+<dl>
+<dt>Customer</dt><dd>Organization <code>{{.Customer}}</code></dd>
+<dt>Link</dt><dd><code>{{.Link.ID}}</code>{{with .Link.EndsAt}}, in force until {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}</dd>
+<dt>Scope</dt><dd>Read{{if .Propose}}, and propose policy versions and reference packs as drafts{{end}}</dd>
+</dl>
+<p class="note">A partner session reads the customer's organization as a support session does and can propose rollouts, nothing else. It ends after 12 hours, after 30 idle minutes, or when the link ends. Every call is recorded in the customer's audit log. Opening it replaces this browser's session; sign in again to return to your own organization.</p>
+{{if .CanOpen}}
+<p><button type="button" class="danger" data-action="open" data-path="/partners/customers/{{.Customer}}/open">Open with your security key</button></p>
+{{else}}
+<p class="note">You cannot open a partner session: that needs partner.operate and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/support_access.js"></script>
+{{template "foot" .}}

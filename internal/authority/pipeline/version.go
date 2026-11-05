@@ -42,12 +42,17 @@ package pipeline
 // a site not listed, and every takeover (G0 M33 D977), which a recording
 // before it does not hold.
 //
+// 10: step 7 reads the org's shared intel consume mode and the indicators
+// the action's upstream server and tool match, and holds (HOLD) or notes
+// (ALERT_ONLY) a match, including a shared injection_text match from the
+// content scan, which no longer counts as a content flag (G0 M38 D1104), a
+// read a recording before it does not hold.
+//
 // 11: step 7 decides a payment-class action (G0 M39 D1124, D1124d): the
 // server verifies its mandate with no snapshot open, reads the mandate's
 // earlier uses and the merchant's ACTIVE cap, and holds every payment for
 // a person unless the cap allows it. A recording does not hold the
 // mandate's verification, so a replay of a payment is CANNOT_AUTHORIZE.
-// (10 is M38's.)
 const Version = 11
 
 // Replays reports whether this code replays inputs recorded by pipeline

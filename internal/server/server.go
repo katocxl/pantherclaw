@@ -69,6 +69,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/notifications/adapters/notificationsrpc"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/partners"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
@@ -138,6 +139,10 @@ Usage:
   pantherclaw-server hosting add-host --name N --domain D --capacity N --milli-cpus N --memory-mib N
                              --csr FILE --bundle-out FILE [--config FILE]
                                                      record a shared hosting host and issue its agent certificate
+  pantherclaw-server intel import --in FILE [--config FILE]
+                                                     verify a signed intel feed and import it when its version rises
+  pantherclaw-server intel export-contributions --out FILE [--config FILE]
+                                                     write every org's queued intel contributions, hashes only
   pantherclaw-server secrets stage --from DIR --to DIR
                                                      copy each regular file of DIR as a 0400 secret file
                                                      (Kubernetes init container; symlinks and others refused)
@@ -185,6 +190,8 @@ func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, en
 		err = cmdEvidence(ctx, args[1:], stdout, stderr, env)
 	case "hosting":
 		err = cmdHosting(ctx, args[1:], stdout, stderr, env)
+	case "intel":
+		err = cmdIntel(ctx, args[1:], stdout, stderr, env) // G0 M38 D1103, D1105
 	case "dev":
 		err = cmdDev(ctx, args[1:], stdout, stderr, env)
 	case "secrets":
@@ -317,7 +324,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 
 	authorityStore := &pgauthority.Store{
-		Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: contentSink(pool),
+		Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: withIntelContent(contentSink(pool), bill),
 		TokenCostReports: tokenCostReports(bill),
 	}
 	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, consoleBaseURL(cfg.Auth.PublicURL, ext), log)
@@ -371,6 +378,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	m6.credentials.OnGitHubInstallation(ghScans.InstallationRecorded)
 	svc.WithToolObservations(m6.connections)
 	m6.connections.WithEntitlements(bill)                                      // the inventory draft is Team and above (G0 M15 D23)
+	m6.connections.WithIntel(intelMatcher(bill))                               // shared intel matches (G0 M38 D1104)
 	m6.hosting = newHosting(cfg, pool, m6.ca, kp, bill).WithFleet(m6.gateways) // hosted gateways (G0 M19 D203)
 	m5p2, err := newM5p2(cfg, pool, bill, m5.notifications, log)
 	if err != nil {
@@ -482,6 +490,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		}
 		web.WithPlanGate(entitlements.NewGate(entsSvc, cfg.Billing.RequirePlan, procedureClass))
 		sup := newSupport(cfg, pool, entsSvc, m5.notifications, log)
+		partnerSvc := newPartners(pool, entsSvc, cfg.Auth.PublicURL, log) // G0 M38 D1101
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			scanLimits: cfg.Limits.Scan,
@@ -492,8 +501,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 				rpcauth.WithBrowserSessions(sessions, log),
 				rpcauth.WithAlternatePermissions(m24AlternatePermissions),
 				ui.accountSessions(web, sessions.PublicOrigin()),
-				supportSessions(sup)),
+				supportSessions(sup),
+				partnerSessions(partnerSvc)),
 			support:   sup,
+			partners:  partnerSvc,
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			model:     cfg.Model,
@@ -580,6 +591,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		defer closeData()
 		accountJobs, err := registerAccountDeletion(jreg, ui.deletion)
 		if err != nil {
+			return err
+		}
+		if err := newPartners(pool, entsSvc, cfg.Auth.PublicURL, log).Register(jreg); err != nil { // G0 M38 D1100
 			return err
 		}
 		if err := newSupport(cfg, pool, entsSvc, m5.notifications, log).Register(jreg); err != nil {
@@ -697,6 +711,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			consoleBaseURL(cfg.Auth.PublicURL, ext), log); err != nil { // G0 M36 D1061
 			return err
 		}
+		if evidenceJobs, err = registerM37BundlesJobs(evidenceJobs, jreg, pool, bill, cfg.CEL, autos, m5.notifications,
+			cfg.Auth.PublicURL, log); err != nil { // G0 M37 D1083
+			return err
+		}
 		if evidenceJobs, err = registerM20WebhookJobs(evidenceJobs, jreg, pool, kp, log); err != nil {
 			return err
 		}
@@ -726,6 +744,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM34DiscoveryJobs(evidenceJobs, jreg, pool, bill, log); err != nil { // G0 M34 D997
 			return err
 		}
+		if evidenceJobs, err = registerM38IntelJobs(ctx, evidenceJobs, jreg, cfg, pool, log); err != nil { // G0 M38 D1103
+			return err
+		}
 		if evidenceJobs, err = registerM36ApprovalJobs(evidenceJobs, jreg, m5p2.approvals, m5.notifications, log); err != nil { // G0 M36 D1063, D1065
 			return err
 		}
@@ -745,6 +766,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		client.PeriodicJobs().AddMany(supportPeriodicJobs())
+		client.PeriodicJobs().AddMany(m38PartnerPeriodicJobs())
 		client.PeriodicJobs().AddMany(evidenceJobs)
 		observeJobs(ctx, client)
 		client.PeriodicJobs().AddMany(dataJobs)
@@ -885,6 +907,9 @@ type apiDeps struct {
 	// support is customer-approved support access (wiring_m13_support.go);
 	// nil or off when not configured.
 	support supportService
+	// partners is MSSP partner access (wiring_m38_partners.go); nil when
+	// not built.
+	partners *partners.Service
 	// tickets is ticket sync (wiring_m20_tickets.go); nil: apiHandler builds
 	// one.
 	tickets *tsapp.Service
@@ -1019,6 +1044,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	mountM37Bundles := registerM37Bundles(rs, d, autos) // G0 M37 D1081–D1083
 	mountM39Payments, err := registerM39Payments(rs, d) // G0 M39 D1121, D1123
 	if err != nil {
 		return nil, err
@@ -1039,6 +1065,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM28ThreatMap(rs, d)
 	registerM30(rs, d)
 	registerM33Browser(rs, d)
+	registerM38Intel(rs, d) // G0 M38 D1103..D1105
 	d.extDeps = registerM26Provisioning(rs, d)
 	registerM26SaaS(rs, d)
 	authzen := registerAuthZEN(rs, d)
@@ -1048,6 +1075,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM20Webhooks(rs, d)
 	registerM20Tickets(rs, d)
 	registerSupport(rs, d)
+	mountM38Partners := registerM38Partners(rs, d) // G0 M38 D1100
 	registerM16External(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
@@ -1075,6 +1103,12 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mountM35Federation(mux, federation, d)
 	if mountM36OTel != nil {
 		mountM36OTel(mux)
+	}
+	if mountM37Bundles != nil {
+		mountM37Bundles(mux)
+	}
+	if mountM38Partners != nil {
+		mountM38Partners(mux)
 	}
 	if mountM39Payments != nil {
 		mountM39Payments(mux)

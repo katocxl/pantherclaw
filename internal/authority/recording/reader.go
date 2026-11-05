@@ -572,6 +572,30 @@ func (r *Reader) BrowserSites(_ context.Context, org ids.OrgID) ([]pipeline.Brow
 	return out, nil
 }
 
+// IntelMatches implements pipeline.IntelMatches. Only a recording of
+// pipeline version 10 or later replays this read (G0 M38 D1104).
+func (r *Reader) IntelMatches(_ context.Context, org ids.OrgID, conn ids.UUID, tool string) (pipeline.IntelState, error) {
+	if err := r.otherOrg(org, "shared intel", pipeline.StepFacts); err != nil {
+		return pipeline.IntelState{}, err
+	}
+	x := r.rec.Reads.Intel
+	want := ""
+	if !conn.IsZero() {
+		want = conn.String()
+	}
+	if x == nil || x.Connection != want || x.Tool != tool {
+		return pipeline.IntelState{}, r.gap("shared intel", pipeline.StepFacts, "the shared intel matches were not read for this connection and tool")
+	}
+	if x.Err != "" {
+		return pipeline.IntelState{}, errors.New("recording: the shared intel matches could not be read")
+	}
+	out := pipeline.IntelState{Mode: x.Mode}
+	for _, h := range x.Hits {
+		out.Hits = append(out.Hits, pipeline.IntelHit{ID: h.ID, Kind: h.Kind})
+	}
+	return out, nil
+}
+
 // OwnedAccounts implements pipeline.OwnedAccounts. Only a recording of
 // pipeline version 8 or later replays this read (G0 M30 D935a).
 func (r *Reader) OwnedAccounts(_ context.Context, org ids.OrgID, kind string) ([]string, error) {

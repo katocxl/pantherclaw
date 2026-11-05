@@ -935,6 +935,9 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	if p.at(9) {
 		p.browser(ctx, s) // G0 M33 D977 (browser.go)
 	}
+	if p.at(10) {
+		p.intel(ctx, s) // G0 M38 D1104 (intel_m38.go)
+	}
 	if p.at(11) {
 		p.payment(ctx, s) // G0 M39 D1124 (payment.go)
 	}

@@ -118,6 +118,42 @@ type Client struct {
 	version string
 	session string
 	next    uint64
+	// server is what the server said of itself in serverInfo (G0 M38
+	// D1104): UNTRUSTED, reported for matching only (HR-822).
+	server *ServerInfo
+}
+
+// ServerInfo is an upstream server's serverInfo.
+type ServerInfo struct {
+	Name, Version string
+}
+
+// ServerInfo is what the server said of itself in its initialize or
+// server/discover answer, or nil when it said nothing usable (G0 M38 D1104).
+func (c *Client) ServerInfo() *ServerInfo {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.server == nil {
+		return nil
+	}
+	s := *c.server
+	return &s
+}
+
+// learnServer keeps the serverInfo of an answer's result, if it has one.
+func (c *Client) learnServer(result jsontext.Value) {
+	var r struct {
+		ServerInfo *struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		} `json:"serverInfo"`
+	}
+	if json.Unmarshal(result, &r) != nil || r.ServerInfo == nil || r.ServerInfo.Name == "" {
+		return
+	}
+	c.mu.Lock()
+	c.server = &ServerInfo{Name: r.ServerInfo.Name, Version: r.ServerInfo.Version}
+	c.mu.Unlock()
 }
 
 // New returns the client of the MCP server at endpoint (the connection's
@@ -283,6 +319,7 @@ func (c *Client) negotiate(ctx context.Context, decorate Decorate) (string, erro
 	v := ""
 	switch {
 	case ex.reply != nil && ex.reply.Error == nil && ex.status == http.StatusOK:
+		c.learnServer(ex.reply.Result) // G0 M38 D1104
 		var d struct {
 			Supported []string `json:"supportedVersions"`
 		}
@@ -343,6 +380,7 @@ func (c *Client) ensureSession(ctx context.Context, decorate Decorate) (string, 
 	if json.Unmarshal(ex.reply.Result, &r) != nil || r.Version != Legacy {
 		return "", fmt.Errorf("%w: initialize agreed on another version", ErrProtocol)
 	}
+	c.learnServer(ex.reply.Result) // G0 M38 D1104
 	s = ex.header.Get(headerSession)
 	if s != "" && !visibleASCII(s) {
 		return "", fmt.Errorf("%w: a malformed session id", ErrProtocol)

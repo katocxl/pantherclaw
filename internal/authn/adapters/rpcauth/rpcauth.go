@@ -101,6 +101,15 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 		case hasAccount && !hasCookie:
 			// An account session (G0 UI D8): the allow list only (HR-350).
 			return o.accountCall(ctx, info, spec, accountCookie)
+		case hasCookie && isPartnerCookie(cookie):
+			// A partner session (G0 M38 D1101, partner.go).
+			if o.partner == nil {
+				return nil, errAuthRequired
+			}
+			var err error
+			if ctx, c, err = o.partnerCall(ctx, info, spec, cookie); err != nil {
+				return nil, err
+			}
 		case hasCookie && isSupportCookie(cookie):
 			if o.support == nil {
 				return nil, errAuthRequired
@@ -258,7 +267,10 @@ type options struct {
 	support         SupportSessions
 	supportReadOnly func(procedure string) bool
 	breakGlass      BreakGlassCalls
-	log             *slog.Logger
+	// Partner sessions (partner.go).
+	partner        PartnerSessions
+	partnerMayCall func(procedure string) bool
+	log            *slog.Logger
 	// alternates are the procedures with a second permission that admits.
 	alternates map[string]td.Permission
 }

@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `10d341258d4bc1923bc53f460680464c928fec292b59dd2cadad0a74d8ca6801`.
+Mapping digest: `071ad084c1a657d2777906fe8519df9e58ade60e2fd07a7da6ad1512293d0671`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -77,7 +77,7 @@ Mapping digest: `10d341258d4bc1923bc53f460680464c928fec292b59dd2cadad0a74d8ca680
 | [AML.T0132](https://atlas.mitre.org/techniques/AML.T0132) | Misconfigured or Publicly Exposed AI Services | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
 | [AML.T0052](https://atlas.mitre.org/techniques/AML.T0052) | Phishing | Outside PantherClaw: covered by email security | It needs a mailbox. |
 | [AML.T0093](https://atlas.mitre.org/techniques/AML.T0093) | Prompt Infiltration via Public-Facing Application | Mapped | prevent `prevent.content_hold`; scenarios `RT-154` |
-| [AML.T0010](https://atlas.mitre.org/techniques/AML.T0010) | Supply Chain Compromise | Mapped | AML.T0010.005: prevent `prevent.mcp_catalog`, `prevent.tool_package_review`; rules `pc.tools.drift`; Hub playbooks `pc.playbook.poisoned-mcp-server`, `pc.playbook.poisoned-mcp-server-contain` |
+| [AML.T0010](https://atlas.mitre.org/techniques/AML.T0010) | Supply Chain Compromise | Mapped | rules `pc.bundles.revoked`, `pc.intel.match`<br>AML.T0010.005: prevent `prevent.mcp_catalog`, `prevent.tool_package_review`; rules `pc.tools.drift`; Hub playbooks `pc.playbook.poisoned-mcp-server`, `pc.playbook.poisoned-mcp-server-contain` |
 | [AML.T0012](https://atlas.mitre.org/techniques/AML.T0012) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 
 ### AI Model Access (AML.TA0000)
@@ -97,7 +97,7 @@ Mapping digest: `10d341258d4bc1923bc53f460680464c928fec292b59dd2cadad0a74d8ca680
 | [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
 | [AML.T0050](https://atlas.mitre.org/techniques/AML.T0050) | Command and Scripting Interpreter | Mapped | Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003` |
 | [AML.T0103](https://atlas.mitre.org/techniques/AML.T0103) | Deploy AI Agent | Mapped | prevent `prevent.agent_deploy`; rules `pc.runtime.agent_deployed` |
-| [AML.T0051](https://atlas.mitre.org/techniques/AML.T0051) | LLM Prompt Injection | Mapped | AML.T0051.001: prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-154`, `RT-158`, `RT-159`, `RT-163`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
+| [AML.T0051](https://atlas.mitre.org/techniques/AML.T0051) | LLM Prompt Injection | Mapped | AML.T0051.001: prevent `prevent.content_hold`; rules `pc.intel.match`, `pc.tools.description_injection`; kinds `content.injection_phrase`, `content.intel_injection_text`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-154`, `RT-158`, `RT-159`, `RT-163`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
 | [AML.T0011](https://atlas.mitre.org/techniques/AML.T0011) | User Execution | Outside PantherClaw: covered by security awareness | It needs a person. |
 
 ### Persistence (AML.TA0006)
@@ -285,7 +285,7 @@ Mapping digest: `10d341258d4bc1923bc53f460680464c928fec292b59dd2cadad0a74d8ca680
 | [T1200](https://attack.mitre.org/techniques/T1200) | Hardware Additions | Outside PantherClaw: covered by physical security | It needs physical access. |
 | [T1566](https://attack.mitre.org/techniques/T1566) | Phishing | Outside PantherClaw: covered by email security | It needs a mailbox. |
 | [T1091](https://attack.mitre.org/techniques/T1091) | Replication Through Removable Media | Outside PantherClaw: covered by physical security | It needs physical access. |
-| [T1195](https://attack.mitre.org/techniques/T1195) | Supply Chain Compromise | Mapped | T1195.001: prevent `prevent.tool_package_review` |
+| [T1195](https://attack.mitre.org/techniques/T1195) | Supply Chain Compromise | Mapped | T1195.001: prevent `prevent.tool_package_review`<br>T1195.002: rules `pc.bundles.revoked`, `pc.intel.match` |
 | [T1199](https://attack.mitre.org/techniques/T1199) | Trusted Relationship | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 | [T1078](https://attack.mitre.org/techniques/T1078) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
 | [T1669](https://attack.mitre.org/techniques/T1669) | Wi-Fi Networks | Outside PantherClaw: covered by network security | It needs a network. |
@@ -303,7 +303,7 @@ Mapping digest: `10d341258d4bc1923bc53f460680464c928fec292b59dd2cadad0a74d8ca680
 | [T1675](https://attack.mitre.org/techniques/T1675) | ESXi Administration Command | Outside PantherClaw: covered by cloud security | It needs cloud infrastructure. |
 | [T1203](https://attack.mitre.org/techniques/T1203) | Exploitation for Client Execution | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1574](https://attack.mitre.org/techniques/T1574) | Hijack Execution Flow | Outside PantherClaw: covered by EDR | It needs an endpoint. |
-| [T1698](https://attack.mitre.org/techniques/T1698) | Indirect Prompt Injection | Mapped | prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-158`, `RT-159`, `RT-163`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
+| [T1698](https://attack.mitre.org/techniques/T1698) | Indirect Prompt Injection | Mapped | prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`, `content.intel_injection_text`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-158`, `RT-159`, `RT-163`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
 | [T1674](https://attack.mitre.org/techniques/T1674) | Input Injection | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1559](https://attack.mitre.org/techniques/T1559) | Inter-Process Communication | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [T1106](https://attack.mitre.org/techniques/T1106) | Native API | Outside PantherClaw: covered by EDR | It needs an endpoint. |

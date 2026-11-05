@@ -1055,6 +1055,40 @@ An agent's own trace continues through PantherClaw into the org's own OTLP colle
 | F1098 | AP2 simulator | `pantherclaw-sim agentpay`: a merchant and a credentials provider with fixed development keys on loopback, faults for a mismatched amount, an expired mandate and a decline, and `pantherclaw dev --agentpay-url`. | Next | Community | M39 | new |
 | F1099 | Payment evidence and alerts | `payments.effect` evidence and payment audits with digests and verified facts only, and the alert-only detection `pc.payments.mandate_mismatch`. | Next | Business | M39 | N23 |
 
+### M37 rows: Ecosystem
+
+People outside the PantherClaw project publish data-only bundles under their own namespace and key; an org pins the key with a security key, installs bundles as drafts it reviews and signs, and a revoked key or bundle stops being used at once; a static marketplace lists publishers and vouches for nobody ([G0 M37](g0/M37.md), [ADR-0064](adr/0064-publishers-and-bundles.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1070 | Publisher namespaces | Publisher ids and `ext.<publisher>.…` names, with `pc.`, `org.` and other publishers' names refused at lint and install. | Next | Community | M37 | new |
+| F1071 | Signed bundle format | One `.pcbundle` zip: a strict `bundle.json` manifest, an EdDSA `bundle.jws` and data-only items of a closed list of kinds, within fixed limits. | Next | Community | M37 | new |
+| F1072 | Publisher key pins | `PinPublisherKey` creates a PENDING pin with allowed kinds and a revocations URL; a person activates it with a security key on the confirm page; `ListPublisherPins`, `GetPublisherPin`, `RevokePublisherPin`. | Next | Community | M37 | new |
+| F1073 | Bundle install as drafts | `InstallBundle` (one upload of at most 960 KiB) verifies the pin, kinds, digests and namespace and turns each item into a draft through its kind's own path, which keeps its edition, or a template for facts declarations and channel templates; an `ext.` package imports only when it matches its install item; `ListBundleInstalls`, `GetBundleInstall`. | Next | Community | M37 | new |
+| F1074 | Rollback and equivocation refusal | The highest installed version per bundle; a lower version or the same version with another digest is refused. | Next | Community | M37 | new |
+| F1075 | Bundle revocation | An admin's `RevokeBundleInstall` or `RevokePublisherPin` (COMPROMISED; UNPINNED only stops new installs), `SubmitRevocation` and a daily fetch of each pin's revocations URL stop use at once in one transaction: installs revoked, packages quarantined, rules disabled, automations paused and kept off, admins notified and the alert-only `pc.bundles.revoked` detection. | Next | Community | M37 | new |
+| F1076 | `pclaw publisher` | `pclaw publisher key create` writes an Ed25519 publisher key, encrypted with an optional passphrase, and prints its kid and fingerprint; `pclaw publisher pin` sends the key file's key, checked against the announced fingerprint, creates a pending pin and prints the confirm link. | Next | Community | M37 | new |
+| F1077 | `pclaw bundle` | `init`, `lint`, `build`, `sign`, `verify` (with the publisher's key file and its fingerprint), `inspect` offline with the server's decoders, and `install` to upload. | Next | Community | M37 | new |
+| F1078 | Listing-only marketplace | `task marketplace:build`: static pages from the Hub build and publisher listings with digests, fingerprints checked against each inline key, `.pub` downloads and commands to copy; no endorsement, payment or install action. | Next | Community | M37 | new |
+| F1079 | Publisher guide and example | `docs/extensions/publishing.md` and the example bundle `ext.example.starter` with a detection rule, a playbook and an OpenAPI tool package. | Next | Community | M37 | new |
+
+### M38 rows: Partners and shared indicators
+
+An MSSP partner watches and helps many customers from one org under links each customer approves with a security key, reading what a support session reads and proposing rollouts that only become drafts; every org can use and share hash-only indicators of known-bad MCP servers, tool descriptions and injection text, which hold or alert and never refuse ([G0 M38](g0/M38.md), [ADR-0065](adr/0065-partners-and-shared-indicators.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1080 | Partner links | A partner org requests a link to a customer org for 1 to 90 days with READ and optional PROPOSE; a customer person with `partner.approve` decides on a step-up page; revoke at any time, renew, expiry of links and undecided requests; recorded in both orgs; `PartnerService`. | Next | Enterprise | M38 | N19 |
+| F1081 | Partner sessions | A partner person with `partner.operate` opens a customer under an ACTIVE link with a step-up, getting a read-only session scoped to that customer for at most 12 hours, re-checked and audited `partner.call` on every call. | Next | Enterprise | M38 | N19 |
+| F1082 | Cross-customer summary | `ListPartnerCustomers`: per ACTIVE link the customer's name, the link's end, waiting approvals, open alerts and the last decision time, each read recorded in that customer's audit log. | Next | Enterprise | M38 | N19 |
+| F1083 | Rollout proposals | A partner proposes a policy version or a pack with parameters to one or many customers (a template id groups them); the customer accepts into a draft or declines; the partner withdraws; proposals expire after 30 days. | Next | Enterprise | M38 | N19 |
+| F1084 | Two people for partner-origin changes | Publishing or rolling out a version drafted from a partner proposal always needs two customer people with security keys, and waits with `NEEDS_SECOND_PERSON` when the org has fewer. | Next | Enterprise | M38 | N19 |
+| F1085 | Signed indicator feed | A compact JWS feed of `mcp_server`, `tool_description` and `injection_text` indicators verified against offline roots, rollback refused, built with `pclaw-admin intel build`, imported with `pantherclaw-server intel import` or fetched daily from `intel.feed_url` (https only); `IntelService` settings and state. | Next | Business | M38 | N27 |
+| F1086 | Indicator matching | Matches at discovery, drift and on the decision path, and injected text in the content-signal scan; HOLD for a person or ALERT_ONLY, never a refusal; `pc.intel_matches`, `intel.matched` and the `pc.intel.match` detection. | Next | Business | M38 | N27 |
+| F1087 | Upstream server identity capture | The MCP `initialize` `serverInfo` recorded on the connection's inventory, used to compute server indicator hashes only. | Next | Community | M38 | N27 |
+| F1088 | Contribute indicators | A person with `intel.contribute`, with the org's share switch on, turns a confirmed finding (a quarantined server, package or tool, or a description the injection scan flagged) into a locally computed hash or shingles; the operator exports contributions offline without org, account or time finer than a day. | Next | Community | M38 | N27 |
+| F1089 | STIX export | `ExportIntelSTIX` returns a STIX 2.1 bundle of `indicator` objects with hash patterns, kind labels and kill chain phases from the techniques. | Next | Community | M38 | N27 |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.

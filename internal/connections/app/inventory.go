@@ -113,6 +113,9 @@ type InventoryReport struct {
 	Connection ids.UUID
 	Complete   bool
 	Entries    []InventoryEntry
+	// Server is the upstream server's serverInfo, nil when the gateway did
+	// not learn it (G0 M38 D1104).
+	Server *ServerInfo
 }
 
 func (r InventoryReport) check() error {
@@ -162,6 +165,9 @@ func (s *Service) ReportInventory(ctx context.Context, org ids.OrgID, gateway id
 		}
 		if conn.GatewayID != gateway || conn.Kind != KindMCP {
 			return ErrNotFound
+		}
+		if err := s.intelServer(ctx, tx, conn.ID, r.Server, c.Audit); err != nil { // G0 M38 D1104
+			return err
 		}
 		cov, err := pinnedCoverage(ctx, q, org, conn.Package)
 		if err != nil {
@@ -286,6 +292,11 @@ func (s *Service) discover(ctx context.Context, tx db.TenantTx, c actor, conn db
 		if err := injection.Record(ctx, tx, c.Audit, audit.Object{Type: "connection", ID: conn.ID.String()}, e.Name, "inventory", found, map[string]string{
 			"connection_id": conn.ID.String(), "item_id": id.String(), "kind": e.Kind,
 		}); err != nil {
+			return ids.UUID{}, false, err
+		}
+	}
+	if e.Kind == InventoryTool {
+		if err := s.intelTool(ctx, tx, conn.ID, id, e.Name, e.Description, c.Audit); err != nil { // G0 M38 D1104
 			return ids.UUID{}, false, err
 		}
 	}

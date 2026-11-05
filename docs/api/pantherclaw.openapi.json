@@ -6378,6 +6378,546 @@
         }
       }
     },
+    "/pantherclaw.v1.BundleService/PinPublisherKey": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "PinPublisherKey",
+        "description": "PinPublisherKey records a PENDING pin of a publisher's key (a person\n only). It trusts nothing until activated on its page.\n permission: publisher.manage",
+        "operationId": "pantherclaw.v1.BundleService.PinPublisherKey",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.PinPublisherKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.PinPublisherKeyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/ListPublisherPins": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "ListPublisherPins",
+        "description": "ListPublisherPins lists the org's publisher pins.\n permission: bundle.read",
+        "operationId": "pantherclaw.v1.BundleService.ListPublisherPins",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPublisherPinsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPublisherPinsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/GetPublisherPin": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "GetPublisherPin",
+        "description": "GetPublisherPin returns one pin.\n permission: bundle.read",
+        "operationId": "pantherclaw.v1.BundleService.GetPublisherPin",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPublisherPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPublisherPinResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/ActivatePublisherPin": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "ActivatePublisherPin",
+        "description": "ActivatePublisherPin is refused over the API (STEP_UP_REQUIRED): a\n person activates a pin on its page with a security key.\n permission: publisher.manage",
+        "operationId": "pantherclaw.v1.BundleService.ActivatePublisherPin",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ActivatePublisherPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ActivatePublisherPinResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/RevokePublisherPin": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "RevokePublisherPin",
+        "description": "RevokePublisherPin revokes a pin (a person only). COMPROMISED also\n revokes every install the key signed, at once.\n permission: publisher.manage",
+        "operationId": "pantherclaw.v1.BundleService.RevokePublisherPin",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokePublisherPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokePublisherPinResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/InstallBundle": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "InstallBundle",
+        "description": "InstallBundle verifies a .pcbundle file and drafts its items (a person\n signed in as themselves). Nothing is activated.\n permission: bundle.install",
+        "operationId": "pantherclaw.v1.BundleService.InstallBundle",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.InstallBundleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.InstallBundleResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/ListBundleInstalls": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "ListBundleInstalls",
+        "description": "ListBundleInstalls lists the org's bundle installs by id.\n permission: bundle.read",
+        "operationId": "pantherclaw.v1.BundleService.ListBundleInstalls",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListBundleInstallsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListBundleInstallsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/GetBundleInstall": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "GetBundleInstall",
+        "description": "GetBundleInstall returns one install and its items.\n permission: bundle.read",
+        "operationId": "pantherclaw.v1.BundleService.GetBundleInstall",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetBundleInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetBundleInstallResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/RevokeBundleInstall": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "RevokeBundleInstall",
+        "description": "RevokeBundleInstall revokes an install and every version of its bundle\n up to it (a person only).\n permission: bundle.install",
+        "operationId": "pantherclaw.v1.BundleService.RevokeBundleInstall",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokeBundleInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokeBundleInstallResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BundleService/SubmitRevocation": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BundleService"
+        ],
+        "summary": "SubmitRevocation",
+        "description": "SubmitRevocation applies a publisher-signed revocation statement,\n accepted only from a key the org has pinned for that publisher.\n permission: bundle.install",
+        "operationId": "pantherclaw.v1.BundleService.SubmitRevocation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SubmitRevocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SubmitRevocationResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.CaseService/OpenCase": {
       "post": {
         "tags": [
@@ -22041,6 +22581,330 @@
         }
       }
     },
+    "/pantherclaw.v1.IntelService/GetIntelSettings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "GetIntelSettings",
+        "description": "GetIntelSettings returns the org's consume mode and share switch, and\n the deployment's current feed.\n permission: intel.read",
+        "operationId": "pantherclaw.v1.IntelService.GetIntelSettings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetIntelSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetIntelSettingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/SetIntelSettings": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "SetIntelSettings",
+        "description": "SetIntelSettings sets the consume mode and the share switch.\n Consuming needs the Business edition or above. Audited\n (intel.settings_changed).\n permission: intel.manage",
+        "operationId": "pantherclaw.v1.IntelService.SetIntelSettings",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetIntelSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetIntelSettingsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/ListIntelMatches": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "ListIntelMatches",
+        "description": "ListIntelMatches lists the org's indicator matches, newest first.\n permission: intel.read",
+        "operationId": "pantherclaw.v1.IntelService.ListIntelMatches",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListIntelMatchesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListIntelMatchesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/ContributeIndicator": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "ContributeIndicator",
+        "description": "ContributeIndicator makes an indicator from a confirmed finding and\n queues it (a person, with share on). Only its hash or shingles are kept,\n computed here. Audited (intel.contributed).\n permission: intel.contribute",
+        "operationId": "pantherclaw.v1.IntelService.ContributeIndicator",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ContributeIndicatorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ContributeIndicatorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/ListIntelContributions": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "ListIntelContributions",
+        "description": "ListIntelContributions lists the org's contributions, newest first.\n permission: intel.read",
+        "operationId": "pantherclaw.v1.IntelService.ListIntelContributions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListIntelContributionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListIntelContributionsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.IntelService/ExportIntelSTIX": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.IntelService"
+        ],
+        "summary": "ExportIntelSTIX",
+        "description": "ExportIntelSTIX returns the current indicators as a STIX 2.1 bundle of\n indicator objects.\n permission: intel.read",
+        "operationId": "pantherclaw.v1.IntelService.ExportIntelSTIX",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ExportIntelSTIXRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ExportIntelSTIXResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ModelUsageService/GetTokenReport": {
       "post": {
         "tags": [
@@ -26729,6 +27593,816 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.ApplyPackResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/RequestPartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "RequestPartnerLink",
+        "description": "RequestPartnerLink asks a customer org for a link (partner side, a\n person only).\n permission: partner.manage",
+        "operationId": "pantherclaw.v1.PartnerService.RequestPartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RequestPartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RequestPartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/RenewPartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "RenewPartnerLink",
+        "description": "RenewPartnerLink asks again with the scopes of an earlier link of the\n same customer: a new REQUESTED link (partner side, a person only).\n permission: partner.manage",
+        "operationId": "pantherclaw.v1.PartnerService.RenewPartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RenewPartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RenewPartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/ListPartnerLinks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "ListPartnerLinks",
+        "description": "ListPartnerLinks lists the org's links, as partner and as customer.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.ListPartnerLinks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerLinksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerLinksResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/GetPartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "GetPartnerLink",
+        "description": "GetPartnerLink returns one link of the org's.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.GetPartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/DecidePartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "DecidePartnerLink",
+        "description": "DecidePartnerLink is refused over the API (STEP_UP_REQUIRED): a\n customer person decides a link on its page with a security key.\n permission: partner.approve",
+        "operationId": "pantherclaw.v1.PartnerService.DecidePartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DecidePartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DecidePartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/RevokePartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "RevokePartnerLink",
+        "description": "RevokePartnerLink ends a requested or active link at once (customer\n side, a person only) and ends its partner sessions.\n permission: partner.approve",
+        "operationId": "pantherclaw.v1.PartnerService.RevokePartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokePartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokePartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/ListPartnerCustomers": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "ListPartnerCustomers",
+        "description": "ListPartnerCustomers lists the customers of the partner's active links\n with counts only (partner side). Each customer records the read.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.ListPartnerCustomers",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerCustomersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerCustomersResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/OpenPartnerSession": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "OpenPartnerSession",
+        "description": "OpenPartnerSession is refused over the API (STEP_UP_REQUIRED): a\n partner person opens a partner session on the customer's open page\n with a security key.\n permission: partner.operate",
+        "operationId": "pantherclaw.v1.PartnerService.OpenPartnerSession",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.OpenPartnerSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.OpenPartnerSessionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/GetCurrentPartnerSession": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "GetCurrentPartnerSession",
+        "description": "GetCurrentPartnerSession describes the caller's partner session.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.PartnerService.GetCurrentPartnerSession",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetCurrentPartnerSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetCurrentPartnerSessionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/ProposeRollout": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "ProposeRollout",
+        "description": "ProposeRollout proposes a policy version or a reference pack to\n customers over links with the PROPOSE scope: from a partner session\n (its own customer only), or from the partner org by a person holding\n partner.manage (one proposal per named customer).\n permission: authenticated",
+        "operationId": "pantherclaw.v1.PartnerService.ProposeRollout",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ProposeRolloutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ProposeRolloutResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/ListPartnerProposals": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "ListPartnerProposals",
+        "description": "ListPartnerProposals lists the org's proposals, as partner and as\n customer.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.ListPartnerProposals",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerProposalsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerProposalsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/GetPartnerProposal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "GetPartnerProposal",
+        "description": "GetPartnerProposal returns one proposal with its body.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.GetPartnerProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPartnerProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPartnerProposalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/AcceptPartnerProposal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "AcceptPartnerProposal",
+        "description": "AcceptPartnerProposal makes the proposal a DRAFT policy version\n (customer side, a person holding policy.author). Nothing is published.\n permission: policy.author",
+        "operationId": "pantherclaw.v1.PartnerService.AcceptPartnerProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AcceptPartnerProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AcceptPartnerProposalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/DeclinePartnerProposal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "DeclinePartnerProposal",
+        "description": "DeclinePartnerProposal declines a proposal (customer side).\n permission: policy.author",
+        "operationId": "pantherclaw.v1.PartnerService.DeclinePartnerProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DeclinePartnerProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DeclinePartnerProposalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/WithdrawPartnerProposal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "WithdrawPartnerProposal",
+        "description": "WithdrawPartnerProposal withdraws a proposal (partner side).\n permission: partner.manage",
+        "operationId": "pantherclaw.v1.PartnerService.WithdrawPartnerProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.WithdrawPartnerProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.WithdrawPartnerProposalResponse"
                 }
               }
             }
@@ -52384,6 +54058,655 @@
         "additionalProperties": false,
         "description": "RemoveBrowserSiteResponse is empty."
       },
+      "pantherclaw.v1.ActivatePublisherPinRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Pin id."
+          }
+        },
+        "title": "ActivatePublisherPinRequest",
+        "additionalProperties": false,
+        "description": "ActivatePublisherPinRequest names a pin.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.ActivatePublisherPinResponse": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "title": "pin",
+            "description": "The pin.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+          }
+        },
+        "title": "ActivatePublisherPinResponse",
+        "additionalProperties": false,
+        "description": "ActivatePublisherPinResponse returns it."
+      },
+      "pantherclaw.v1.BundleInstall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Install id."
+          },
+          "publisher": {
+            "type": "string",
+            "title": "publisher",
+            "description": "The publisher id."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "The bundle name, ext.\u003cpublisher\u003e.\u003cslug\u003e."
+          },
+          "version": {
+            "type": "string",
+            "title": "version",
+            "description": "The bundle version."
+          },
+          "bundleSha256": {
+            "type": "string",
+            "title": "bundle_sha256",
+            "description": "The hex SHA-256 of the .pcbundle file."
+          },
+          "pinId": {
+            "type": "string",
+            "title": "pin_id",
+            "description": "The pin whose key verified it."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"INSTALLED\", \"FAILED\" or \"REVOKED\"."
+          },
+          "installedBy": {
+            "type": "string",
+            "title": "installed_by",
+            "description": "Who installed it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When the install started.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "finishTime": {
+            "title": "finish_time",
+            "description": "When it finished.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "failureCode": {
+            "type": "string",
+            "title": "failure_code",
+            "description": "The refusal's code when FAILED."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BundleItem"
+            },
+            "title": "items",
+            "description": "The items (GetBundleInstall only)."
+          }
+        },
+        "title": "BundleInstall",
+        "additionalProperties": false,
+        "description": "BundleInstall is one install."
+      },
+      "pantherclaw.v1.BundleItem": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "\"tool_package\", \"openapi_spec\", \"detection_rule\", \"playbook\",\n \"facts_declaration\" or \"channel_template\"."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "ext.\u003cpublisher\u003e.\u003cname\u003e."
+          },
+          "sha256": {
+            "type": "string",
+            "title": "sha256",
+            "description": "The hex SHA-256 of the item file."
+          },
+          "targetType": {
+            "type": "string",
+            "title": "target_type",
+            "description": "What the item became: \"package_draft\", \"custom_rule\", \"automation\" or\n \"template\"."
+          },
+          "targetId": {
+            "type": "string",
+            "title": "target_id",
+            "description": "Its id (a custom rule or automation id, or name@version of a package\n draft)."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"DRAFTED\", \"TEMPLATE\" or \"REVOKED\"."
+          }
+        },
+        "title": "BundleItem",
+        "additionalProperties": false,
+        "description": "BundleItem is one item of an install."
+      },
+      "pantherclaw.v1.GetBundleInstallRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Install id."
+          }
+        },
+        "title": "GetBundleInstallRequest",
+        "additionalProperties": false,
+        "description": "GetBundleInstallRequest names an install.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetBundleInstallResponse": {
+        "type": "object",
+        "properties": {
+          "install": {
+            "title": "install",
+            "description": "The install and its items.",
+            "$ref": "#/components/schemas/pantherclaw.v1.BundleInstall"
+          }
+        },
+        "title": "GetBundleInstallResponse",
+        "additionalProperties": false,
+        "description": "GetBundleInstallResponse returns it."
+      },
+      "pantherclaw.v1.GetPublisherPinRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Pin id."
+          }
+        },
+        "title": "GetPublisherPinRequest",
+        "additionalProperties": false,
+        "description": "GetPublisherPinRequest names a pin.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPublisherPinResponse": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "title": "pin",
+            "description": "The pin.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+          }
+        },
+        "title": "GetPublisherPinResponse",
+        "additionalProperties": false,
+        "description": "GetPublisherPinResponse returns it."
+      },
+      "pantherclaw.v1.InstallBundleRequest": {
+        "type": "object",
+        "properties": {
+          "bundle": {
+            "type": "string",
+            "title": "bundle",
+            "maxLength": 983040,
+            "minLength": 1,
+            "format": "byte",
+            "description": "The .pcbundle file (a zip), at most 960 KiB so that it fits one\n request."
+          }
+        },
+        "title": "InstallBundleRequest",
+        "additionalProperties": false,
+        "description": "InstallBundleRequest carries a .pcbundle file.",
+        "required": [
+          "bundle"
+        ]
+      },
+      "pantherclaw.v1.InstallBundleResponse": {
+        "type": "object",
+        "properties": {
+          "install": {
+            "title": "install",
+            "description": "The install, INSTALLED, with its items.",
+            "$ref": "#/components/schemas/pantherclaw.v1.BundleInstall"
+          }
+        },
+        "title": "InstallBundleResponse",
+        "additionalProperties": false,
+        "description": "InstallBundleResponse returns the install."
+      },
+      "pantherclaw.v1.ListBundleInstallsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListBundleInstallsRequest",
+        "additionalProperties": false,
+        "description": "ListBundleInstallsRequest pages installs."
+      },
+      "pantherclaw.v1.ListBundleInstallsResponse": {
+        "type": "object",
+        "properties": {
+          "installs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BundleInstall"
+            },
+            "title": "installs",
+            "description": "Installs, by id."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListBundleInstallsResponse",
+        "additionalProperties": false,
+        "description": "ListBundleInstallsResponse is one page."
+      },
+      "pantherclaw.v1.ListPublisherPinsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListPublisherPinsRequest",
+        "additionalProperties": false,
+        "description": "ListPublisherPinsRequest pages pins."
+      },
+      "pantherclaw.v1.ListPublisherPinsResponse": {
+        "type": "object",
+        "properties": {
+          "pins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+            },
+            "title": "pins",
+            "description": "Pins, by id."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPublisherPinsResponse",
+        "additionalProperties": false,
+        "description": "ListPublisherPinsResponse is one page."
+      },
+      "pantherclaw.v1.PinPublisherKeyRequest": {
+        "type": "object",
+        "properties": {
+          "publisher": {
+            "type": "string",
+            "title": "publisher",
+            "pattern": "^[a-z][a-z0-9-]{2,31}$",
+            "description": "The publisher id."
+          },
+          "publicKey": {
+            "type": "string",
+            "title": "public_key",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte",
+            "description": "The raw Ed25519 public key (32 bytes)."
+          },
+          "allowedKinds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxItems": 6,
+              "uniqueItems": true,
+              "enum": [
+                "tool_package",
+                "openapi_spec",
+                "detection_rule",
+                "playbook",
+                "facts_declaration",
+                "channel_template"
+              ]
+            },
+            "title": "allowed_kinds",
+            "maxItems": 6,
+            "uniqueItems": true,
+            "description": "The item kinds the pin allows; empty allows every kind."
+          },
+          "revocationsUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "revocations_url",
+            "maxLength": 2048,
+            "description": "An https URL of the publisher's revocation statements; optional.",
+            "anyOf": [
+              {
+                "pattern": "^(https://.+)?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "expectedFingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "expected_fingerprint",
+            "description": "Optional: the hex SHA-256 of public_key as the publisher gave it. The\n server computes the fingerprint and kid itself and refuses a mismatch.",
+            "anyOf": [
+              {
+                "pattern": "^([0-9a-f]{64})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "PinPublisherKeyRequest",
+        "additionalProperties": false,
+        "description": "PinPublisherKeyRequest names a publisher key.",
+        "required": [
+          "publisher",
+          "publicKey"
+        ]
+      },
+      "pantherclaw.v1.PinPublisherKeyResponse": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "title": "pin",
+            "description": "The pin, PENDING.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+          }
+        },
+        "title": "PinPublisherKeyResponse",
+        "additionalProperties": false,
+        "description": "PinPublisherKeyResponse returns the pin."
+      },
+      "pantherclaw.v1.PublisherPin": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Pin id."
+          },
+          "publisher": {
+            "type": "string",
+            "title": "publisher",
+            "description": "The publisher id."
+          },
+          "kid": {
+            "type": "string",
+            "title": "kid",
+            "description": "The key id, publisher-\u003cpublisher\u003e-\u003cthumb22\u003e."
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "fingerprint",
+            "description": "The hex SHA-256 of the raw Ed25519 public key."
+          },
+          "allowedKinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "allowed_kinds",
+            "description": "The item kinds the pin allows; empty allows every kind."
+          },
+          "revocationsUrl": {
+            "type": "string",
+            "title": "revocations_url",
+            "description": "Where the daily job fetches the publisher's revocation statements;\n empty when none."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PENDING\", \"ACTIVE\" or \"REVOKED\"."
+          },
+          "revokeReason": {
+            "type": "string",
+            "title": "revoke_reason",
+            "description": "\"UNPINNED\", \"COMPROMISED\" or \"PUBLISHER_REVOKED\" once revoked."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who pinned it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was pinned.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "activatedBy": {
+            "type": "string",
+            "title": "activated_by",
+            "description": "Who activated it with a security key."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "revokeTime": {
+            "title": "revoke_time",
+            "description": "When it was revoked.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "confirmUrl": {
+            "type": "string",
+            "title": "confirm_url",
+            "description": "The page where a person activates it."
+          }
+        },
+        "title": "PublisherPin",
+        "additionalProperties": false,
+        "description": "PublisherPin is one pinned publisher key."
+      },
+      "pantherclaw.v1.RevokeBundleInstallRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Install id."
+          }
+        },
+        "title": "RevokeBundleInstallRequest",
+        "additionalProperties": false,
+        "description": "RevokeBundleInstallRequest names an install.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RevokeBundleInstallResponse": {
+        "type": "object",
+        "properties": {
+          "revokedInstalls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "revoked_installs",
+            "description": "The installs revoked."
+          }
+        },
+        "title": "RevokeBundleInstallResponse",
+        "additionalProperties": false,
+        "description": "RevokeBundleInstallResponse returns what was revoked."
+      },
+      "pantherclaw.v1.RevokePublisherPinRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Pin id."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "enum": [
+              "UNPINNED",
+              "COMPROMISED"
+            ],
+            "description": "\"UNPINNED\" (no longer trusted for new installs) or \"COMPROMISED\"\n (someone else may hold the key: every install it signed is revoked)."
+          }
+        },
+        "title": "RevokePublisherPinRequest",
+        "additionalProperties": false,
+        "description": "RevokePublisherPinRequest names a pin and why.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RevokePublisherPinResponse": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "title": "pin",
+            "description": "The pin, REVOKED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PublisherPin"
+          },
+          "revokedInstalls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "revoked_installs",
+            "description": "The installs revoked with it."
+          }
+        },
+        "title": "RevokePublisherPinResponse",
+        "additionalProperties": false,
+        "description": "RevokePublisherPinResponse returns the pin and what was revoked."
+      },
+      "pantherclaw.v1.SubmitRevocationRequest": {
+        "type": "object",
+        "properties": {
+          "statement": {
+            "type": "string",
+            "title": "statement",
+            "maxLength": 65536,
+            "minLength": 16,
+            "description": "The compact JWS, typ pc-bundle-revocation+jwt."
+          }
+        },
+        "title": "SubmitRevocationRequest",
+        "additionalProperties": false,
+        "description": "SubmitRevocationRequest carries a statement.",
+        "required": [
+          "statement"
+        ]
+      },
+      "pantherclaw.v1.SubmitRevocationResponse": {
+        "type": "object",
+        "properties": {
+          "revokedInstalls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "revoked_installs",
+            "description": "The installs revoked."
+          },
+          "revokedPins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "revoked_pins",
+            "description": "The pins revoked (a KEY statement)."
+          },
+          "alreadyApplied": {
+            "type": "boolean",
+            "title": "already_applied",
+            "description": "True when the same statement was applied before."
+          }
+        },
+        "title": "SubmitRevocationResponse",
+        "additionalProperties": false,
+        "description": "SubmitRevocationResponse returns what was revoked."
+      },
       "pantherclaw.v1.AppendCaseEntryRequest": {
         "type": "object",
         "properties": {
@@ -75915,6 +78238,41 @@
         "additionalProperties": false,
         "description": "GatewayConnection is a connection as its gateway sees it."
       },
+      "pantherclaw.v1.GatewayIntel": {
+        "type": "object",
+        "properties": {
+          "texts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.GatewayIntelText"
+            },
+            "title": "texts",
+            "description": "The injection_text indicators."
+          }
+        },
+        "title": "GatewayIntel",
+        "additionalProperties": false,
+        "description": "GatewayIntel is what the gateway's content scan matches of the shared\n intel feed (G0 M38 D1104)."
+      },
+      "pantherclaw.v1.GatewayIntelText": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "shingles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "shingles"
+          }
+        },
+        "title": "GatewayIntelText",
+        "additionalProperties": false,
+        "description": "GatewayIntelText is one injection_text indicator: its id and the hex\n SHA-256 of its normalized 8-word shingles. A body matches when it holds\n at least min(3, n) of them."
+      },
       "pantherclaw.v1.GatewayKubernetesBinding": {
         "type": "object",
         "properties": {
@@ -76279,6 +78637,11 @@
             },
             "title": "browser_compare_sites",
             "description": "The org's browser sites marked for the cloaking compare (G0 M33 D986):\n only these are compared, and none means the compare is off."
+          },
+          "intel": {
+            "title": "intel",
+            "description": "The shared injection_text indicators the gateway's content scan matches\n (G0 M38 D1104), set only while the org consumes the intel feed: hashes\n only, never text (HR-818).",
+            "$ref": "#/components/schemas/pantherclaw.v1.GatewayIntel"
           }
         },
         "title": "GetConfigurationResponse",
@@ -77469,6 +79832,18 @@
             "title": "resource_templates",
             "maxItems": 1000,
             "description": "Resource templates."
+          },
+          "serverInfo": {
+            "title": "server_info",
+            "description": "What the upstream server said of itself in serverInfo when the gateway\n initialized its session (G0 M38 D1104, HR-822): UNTRUSTED, recorded on\n the connection for indicator matching only. Unset: not learned.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/pantherclaw.v1.UpstreamServerInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "ReportInventoryRequest",
@@ -78414,6 +80789,30 @@
         "required": [
           "objectRef"
         ]
+      },
+      "pantherclaw.v1.UpstreamServerInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "name",
+            "maxLength": 256
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "version",
+            "maxLength": 128
+          }
+        },
+        "title": "UpstreamServerInfo",
+        "additionalProperties": false,
+        "description": "UpstreamServerInfo is an upstream MCP server's serverInfo."
       },
       "pantherclaw.v1.VerificationLease": {
         "type": "object",
@@ -83289,6 +85688,411 @@
         "title": "Suppression",
         "additionalProperties": false,
         "description": "Suppression is one suppression (D16)."
+      },
+      "pantherclaw.v1.IntelConsumeMode": {
+        "type": "string",
+        "title": "IntelConsumeMode",
+        "enum": [
+          "INTEL_CONSUME_MODE_UNSPECIFIED",
+          "INTEL_CONSUME_MODE_OFF",
+          "INTEL_CONSUME_MODE_HOLD",
+          "INTEL_CONSUME_MODE_ALERT_ONLY"
+        ],
+        "description": "IntelConsumeMode is what an org does with a match."
+      },
+      "pantherclaw.v1.IntelContributionSource": {
+        "type": "string",
+        "title": "IntelContributionSource",
+        "enum": [
+          "INTEL_CONTRIBUTION_SOURCE_UNSPECIFIED",
+          "INTEL_CONTRIBUTION_SOURCE_QUARANTINED_SERVER",
+          "INTEL_CONTRIBUTION_SOURCE_QUARANTINED_PACKAGE",
+          "INTEL_CONTRIBUTION_SOURCE_QUARANTINED_TOOL",
+          "INTEL_CONTRIBUTION_SOURCE_FLAGGED_DESCRIPTION"
+        ],
+        "description": "IntelContributionSource names the confirmed finding an indicator is made\n from."
+      },
+      "pantherclaw.v1.IntelIndicatorKind": {
+        "type": "string",
+        "title": "IntelIndicatorKind",
+        "enum": [
+          "INTEL_INDICATOR_KIND_UNSPECIFIED",
+          "INTEL_INDICATOR_KIND_MCP_SERVER",
+          "INTEL_INDICATOR_KIND_TOOL_DESCRIPTION",
+          "INTEL_INDICATOR_KIND_INJECTION_TEXT"
+        ],
+        "description": "IntelIndicatorKind is what an indicator is a hash of."
+      },
+      "pantherclaw.v1.ContributeIndicatorRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "title": "source",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelContributionSource",
+            "not": {
+              "enum": [
+                "INTEL_CONTRIBUTION_SOURCE_UNSPECIFIED"
+              ]
+            }
+          },
+          "sourceId": {
+            "type": "string",
+            "title": "source_id",
+            "format": "uuid",
+            "description": "The connection id (QUARANTINED_SERVER), the package version id\n (QUARANTINED_PACKAGE) or the inventory item id (QUARANTINED_TOOL,\n FLAGGED_DESCRIPTION)."
+          },
+          "severity": {
+            "type": "string",
+            "title": "severity",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "description": "LOW, MEDIUM or HIGH."
+          },
+          "techniques": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^(T[0-9]{4}(\\.[0-9]{3})?|AML\\.T[0-9]{4}(\\.[0-9]{3})?)$",
+              "maxItems": 16
+            },
+            "title": "techniques",
+            "maxItems": 16,
+            "description": "MITRE ATT\u0026CK or ATLAS technique ids."
+          }
+        },
+        "title": "ContributeIndicatorRequest",
+        "additionalProperties": false,
+        "description": "ContributeIndicatorRequest names the finding.",
+        "required": [
+          "source",
+          "sourceId",
+          "severity"
+        ]
+      },
+      "pantherclaw.v1.ContributeIndicatorResponse": {
+        "type": "object",
+        "properties": {
+          "contribution": {
+            "title": "contribution",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelContribution"
+          }
+        },
+        "title": "ContributeIndicatorResponse",
+        "additionalProperties": false,
+        "description": "ContributeIndicatorResponse holds the queued contribution."
+      },
+      "pantherclaw.v1.ExportIntelSTIXRequest": {
+        "type": "object",
+        "title": "ExportIntelSTIXRequest",
+        "additionalProperties": false,
+        "description": "ExportIntelSTIXRequest asks for the bundle."
+      },
+      "pantherclaw.v1.ExportIntelSTIXResponse": {
+        "type": "object",
+        "properties": {
+          "bundle": {
+            "type": "string",
+            "title": "bundle",
+            "format": "byte"
+          }
+        },
+        "title": "ExportIntelSTIXResponse",
+        "additionalProperties": false,
+        "description": "ExportIntelSTIXResponse is a STIX 2.1 bundle (application/stix+json)."
+      },
+      "pantherclaw.v1.GetIntelSettingsRequest": {
+        "type": "object",
+        "title": "GetIntelSettingsRequest",
+        "additionalProperties": false,
+        "description": "GetIntelSettingsRequest asks for the settings."
+      },
+      "pantherclaw.v1.GetIntelSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "title": "settings",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelSettings"
+          },
+          "feed": {
+            "title": "feed",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelFeed"
+          },
+          "consumeAvailable": {
+            "type": "boolean",
+            "title": "consume_available",
+            "description": "Whether the edition allows consuming."
+          }
+        },
+        "title": "GetIntelSettingsResponse",
+        "additionalProperties": false,
+        "description": "GetIntelSettingsResponse holds the settings and the current feed; feed is\n unset while none was accepted."
+      },
+      "pantherclaw.v1.IntelContribution": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelIndicatorKind"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "sha256"
+          },
+          "shingles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "shingles"
+          },
+          "severity": {
+            "type": "string",
+            "title": "severity"
+          },
+          "techniques": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "techniques"
+          },
+          "createdDay": {
+            "type": "string",
+            "title": "created_day",
+            "description": "YYYY-MM-DD."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "QUEUED or EXPORTED."
+          }
+        },
+        "title": "IntelContribution",
+        "additionalProperties": false,
+        "description": "IntelContribution is one contributed indicator, hashes only."
+      },
+      "pantherclaw.v1.IntelFeed": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64"
+          },
+          "kid": {
+            "type": "string",
+            "title": "kid"
+          },
+          "issueTime": {
+            "title": "issue_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "indicators": {
+            "type": "integer",
+            "title": "indicators",
+            "format": "int32"
+          }
+        },
+        "title": "IntelFeed",
+        "additionalProperties": false,
+        "description": "IntelFeed is the feed the deployment accepted last."
+      },
+      "pantherclaw.v1.IntelMatch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "indicatorId": {
+            "type": "string",
+            "title": "indicator_id"
+          },
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelIndicatorKind"
+          },
+          "objectType": {
+            "type": "string",
+            "title": "object_type",
+            "description": "connection, inventory_item, run or transaction."
+          },
+          "objectRef": {
+            "type": "string",
+            "title": "object_ref"
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id"
+          },
+          "tool": {
+            "type": "string",
+            "title": "tool"
+          },
+          "mode": {
+            "title": "mode",
+            "description": "The consume mode at the time.",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelConsumeMode"
+          },
+          "matchTime": {
+            "title": "match_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "IntelMatch",
+        "additionalProperties": false,
+        "description": "IntelMatch is one indicator an org's object matched."
+      },
+      "pantherclaw.v1.IntelSettings": {
+        "type": "object",
+        "properties": {
+          "consume": {
+            "title": "consume",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelConsumeMode"
+          },
+          "share": {
+            "type": "boolean",
+            "title": "share"
+          },
+          "updatedBy": {
+            "type": "string",
+            "title": "updated_by"
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "IntelSettings",
+        "additionalProperties": false,
+        "description": "IntelSettings are an org's choices."
+      },
+      "pantherclaw.v1.ListIntelContributionsRequest": {
+        "type": "object",
+        "title": "ListIntelContributionsRequest",
+        "additionalProperties": false,
+        "description": "ListIntelContributionsRequest asks for the contributions."
+      },
+      "pantherclaw.v1.ListIntelContributionsResponse": {
+        "type": "object",
+        "properties": {
+          "contributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.IntelContribution"
+            },
+            "title": "contributions"
+          }
+        },
+        "title": "ListIntelContributionsResponse",
+        "additionalProperties": false,
+        "description": "ListIntelContributionsResponse lists them, newest first (at most 500)."
+      },
+      "pantherclaw.v1.ListIntelMatchesRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "The last id of the previous page."
+          }
+        },
+        "title": "ListIntelMatchesRequest",
+        "additionalProperties": false,
+        "description": "ListIntelMatchesRequest pages the matches."
+      },
+      "pantherclaw.v1.ListIntelMatchesResponse": {
+        "type": "object",
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.IntelMatch"
+            },
+            "title": "matches"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListIntelMatchesResponse",
+        "additionalProperties": false,
+        "description": "ListIntelMatchesResponse is one page."
+      },
+      "pantherclaw.v1.SetIntelSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "consume": {
+            "title": "consume",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelConsumeMode",
+            "not": {
+              "enum": [
+                "INTEL_CONSUME_MODE_UNSPECIFIED"
+              ]
+            }
+          },
+          "share": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "share"
+          }
+        },
+        "title": "SetIntelSettingsRequest",
+        "additionalProperties": false,
+        "description": "SetIntelSettingsRequest sets both choices.",
+        "required": [
+          "consume"
+        ]
+      },
+      "pantherclaw.v1.SetIntelSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "title": "settings",
+            "$ref": "#/components/schemas/pantherclaw.v1.IntelSettings"
+          },
+          "change": {
+            "title": "change",
+            "$ref": "#/components/schemas/pantherclaw.v1.ProtectedChangeFiled"
+          }
+        },
+        "title": "SetIntelSettingsResponse",
+        "additionalProperties": false,
+        "description": "SetIntelSettingsResponse holds the settings as they now stand. A\n loosening of the consume mode (HOLD to ALERT_ONLY, or either to OFF) is\n filed for a second person (D1104a): change names it and settings keep\n the old mode until it is confirmed. A tightening applies at once."
       },
       "pantherclaw.v1.TokenReportGroupBy": {
         "type": "string",
@@ -91830,6 +94634,919 @@
         "title": "PackBaseline",
         "additionalProperties": false,
         "description": "PackBaseline is the grant a person may issue an agent from the pack."
+      },
+      "pantherclaw.v1.PartnerLinkScope": {
+        "type": "string",
+        "title": "PartnerLinkScope",
+        "enum": [
+          "PARTNER_LINK_SCOPE_UNSPECIFIED",
+          "PARTNER_LINK_SCOPE_READ",
+          "PARTNER_LINK_SCOPE_PROPOSE"
+        ],
+        "description": "PartnerLinkScope is what a link allows."
+      },
+      "pantherclaw.v1.PartnerProposalKind": {
+        "type": "string",
+        "title": "PartnerProposalKind",
+        "enum": [
+          "PARTNER_PROPOSAL_KIND_UNSPECIFIED",
+          "PARTNER_PROPOSAL_KIND_POLICY_VERSION",
+          "PARTNER_PROPOSAL_KIND_PACK"
+        ],
+        "description": "PartnerProposalKind is what a proposal would draft."
+      },
+      "pantherclaw.v1.AcceptPartnerProposalRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Proposal id."
+          }
+        },
+        "title": "AcceptPartnerProposalRequest",
+        "additionalProperties": false,
+        "description": "AcceptPartnerProposalRequest names a proposal.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.AcceptPartnerProposalResponse": {
+        "type": "object",
+        "properties": {
+          "proposal": {
+            "title": "proposal",
+            "description": "The proposal, ACCEPTED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+          }
+        },
+        "title": "AcceptPartnerProposalResponse",
+        "additionalProperties": false,
+        "description": "AcceptPartnerProposalResponse returns it with its draft."
+      },
+      "pantherclaw.v1.DecidePartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Link id."
+          },
+          "approve": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "approve",
+            "description": "True approves, false denies."
+          }
+        },
+        "title": "DecidePartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "DecidePartnerLinkRequest names a link and the decision.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DecidePartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The link.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "DecidePartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "DecidePartnerLinkResponse is never returned over the API."
+      },
+      "pantherclaw.v1.DeclinePartnerProposalRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Proposal id."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "reason",
+            "maxLength": 500,
+            "description": "Why, shown to the partner."
+          }
+        },
+        "title": "DeclinePartnerProposalRequest",
+        "additionalProperties": false,
+        "description": "DeclinePartnerProposalRequest names a proposal.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DeclinePartnerProposalResponse": {
+        "type": "object",
+        "properties": {
+          "proposal": {
+            "title": "proposal",
+            "description": "The proposal, DECLINED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+          }
+        },
+        "title": "DeclinePartnerProposalResponse",
+        "additionalProperties": false,
+        "description": "DeclinePartnerProposalResponse returns it."
+      },
+      "pantherclaw.v1.GetCurrentPartnerSessionRequest": {
+        "type": "object",
+        "title": "GetCurrentPartnerSessionRequest",
+        "additionalProperties": false,
+        "description": "GetCurrentPartnerSessionRequest asks about the caller's partner session."
+      },
+      "pantherclaw.v1.GetCurrentPartnerSessionResponse": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "session_id",
+            "description": "Session id."
+          },
+          "linkId": {
+            "type": "string",
+            "title": "link_id",
+            "description": "The link it runs under."
+          },
+          "partnerOrgId": {
+            "type": "string",
+            "title": "partner_org_id",
+            "description": "The partner org."
+          },
+          "partnerUserId": {
+            "type": "string",
+            "title": "partner_user_id",
+            "description": "The partner person."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerLinkScope"
+            },
+            "title": "scopes",
+            "description": "What the link allows."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When the session ends at the latest.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetCurrentPartnerSessionResponse",
+        "additionalProperties": false,
+        "description": "GetCurrentPartnerSessionResponse describes it."
+      },
+      "pantherclaw.v1.GetPartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Link id."
+          }
+        },
+        "title": "GetPartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "GetPartnerLinkRequest names a link.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The link.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "GetPartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "GetPartnerLinkResponse returns it."
+      },
+      "pantherclaw.v1.GetPartnerProposalRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Proposal id."
+          }
+        },
+        "title": "GetPartnerProposalRequest",
+        "additionalProperties": false,
+        "description": "GetPartnerProposalRequest names a proposal.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPartnerProposalResponse": {
+        "type": "object",
+        "properties": {
+          "proposal": {
+            "title": "proposal",
+            "description": "The proposal.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+          }
+        },
+        "title": "GetPartnerProposalResponse",
+        "additionalProperties": false,
+        "description": "GetPartnerProposalResponse returns it with its body."
+      },
+      "pantherclaw.v1.ListPartnerCustomersRequest": {
+        "type": "object",
+        "title": "ListPartnerCustomersRequest",
+        "additionalProperties": false,
+        "description": "ListPartnerCustomersRequest lists the partner's customers."
+      },
+      "pantherclaw.v1.ListPartnerCustomersResponse": {
+        "type": "object",
+        "properties": {
+          "customers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerCustomer"
+            },
+            "title": "customers",
+            "description": "Customers, by org id."
+          }
+        },
+        "title": "ListPartnerCustomersResponse",
+        "additionalProperties": false,
+        "description": "ListPartnerCustomersResponse lists them."
+      },
+      "pantherclaw.v1.ListPartnerLinksRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListPartnerLinksRequest",
+        "additionalProperties": false,
+        "description": "ListPartnerLinksRequest pages links."
+      },
+      "pantherclaw.v1.ListPartnerLinksResponse": {
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+            },
+            "title": "links",
+            "description": "Links, by id."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPartnerLinksResponse",
+        "additionalProperties": false,
+        "description": "ListPartnerLinksResponse is one page."
+      },
+      "pantherclaw.v1.ListPartnerProposalsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListPartnerProposalsRequest",
+        "additionalProperties": false,
+        "description": "ListPartnerProposalsRequest pages proposals."
+      },
+      "pantherclaw.v1.ListPartnerProposalsResponse": {
+        "type": "object",
+        "properties": {
+          "proposals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+            },
+            "title": "proposals",
+            "description": "Proposals, by id, without bodies."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPartnerProposalsResponse",
+        "additionalProperties": false,
+        "description": "ListPartnerProposalsResponse is one page."
+      },
+      "pantherclaw.v1.OpenPartnerSessionRequest": {
+        "type": "object",
+        "properties": {
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "format": "uuid",
+            "description": "The customer org."
+          }
+        },
+        "title": "OpenPartnerSessionRequest",
+        "additionalProperties": false,
+        "description": "OpenPartnerSessionRequest names a customer.",
+        "required": [
+          "customerOrgId"
+        ]
+      },
+      "pantherclaw.v1.OpenPartnerSessionResponse": {
+        "type": "object",
+        "title": "OpenPartnerSessionResponse",
+        "additionalProperties": false,
+        "description": "OpenPartnerSessionResponse is never returned over the API."
+      },
+      "pantherclaw.v1.PartnerCustomer": {
+        "type": "object",
+        "properties": {
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "description": "The customer org."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Its name."
+          },
+          "linkId": {
+            "type": "string",
+            "title": "link_id",
+            "description": "The link in force."
+          },
+          "linkEndTime": {
+            "title": "link_end_time",
+            "description": "When the link ends.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "waitingApprovals": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "waiting_approvals",
+            "format": "int64",
+            "description": "Approvals waiting for a person."
+          },
+          "openAlerts": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "open_alerts",
+            "format": "int64",
+            "description": "Open alerts."
+          },
+          "lastDecisionTime": {
+            "title": "last_decision_time",
+            "description": "When the last decision was recorded; unset when none was.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "openUrl": {
+            "type": "string",
+            "title": "open_url",
+            "description": "The partner's page where a person opens a partner session."
+          }
+        },
+        "title": "PartnerCustomer",
+        "additionalProperties": false,
+        "description": "PartnerCustomer is one customer of an active link, with counts only."
+      },
+      "pantherclaw.v1.PartnerLink": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Link id."
+          },
+          "partnerOrgId": {
+            "type": "string",
+            "title": "partner_org_id",
+            "description": "The partner org."
+          },
+          "partnerName": {
+            "type": "string",
+            "title": "partner_name",
+            "description": "The partner org's name when it asked."
+          },
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "description": "The customer org."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"REQUESTED\", \"ACTIVE\", \"DENIED\", \"REVOKED\" or \"EXPIRED\"."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerLinkScope"
+            },
+            "title": "scopes",
+            "description": "What the link allows."
+          },
+          "durationDays": {
+            "type": "integer",
+            "title": "duration_days",
+            "format": "int32",
+            "description": "The window asked for, in days (1 to 90)."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why the partner asks (untrusted text)."
+          },
+          "renews": {
+            "type": "string",
+            "title": "renews",
+            "description": "The earlier link this one renews, if any."
+          },
+          "requestedBy": {
+            "type": "string",
+            "title": "requested_by",
+            "description": "The partner person who asked."
+          },
+          "requestTime": {
+            "title": "request_time",
+            "description": "When it was asked.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "requestExpireTime": {
+            "title": "request_expire_time",
+            "description": "When an undecided request expires.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "decidedBy": {
+            "type": "string",
+            "title": "decided_by",
+            "description": "The customer person who decided it."
+          },
+          "decideTime": {
+            "title": "decide_time",
+            "description": "When it was decided.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "startTime": {
+            "title": "start_time",
+            "description": "The window in force: from the approval, at most 90 days.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "description": "The end of the window.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "revokedBy": {
+            "type": "string",
+            "title": "revoked_by",
+            "description": "Who revoked it."
+          },
+          "revokeTime": {
+            "title": "revoke_time",
+            "description": "When it was revoked.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endReason": {
+            "type": "string",
+            "title": "end_reason",
+            "description": "Why it was revoked (untrusted text)."
+          },
+          "decideUrl": {
+            "type": "string",
+            "title": "decide_url",
+            "description": "The customer's page where a person decides it."
+          },
+          "openUrl": {
+            "type": "string",
+            "title": "open_url",
+            "description": "The partner's page where a person opens a partner session."
+          }
+        },
+        "title": "PartnerLink",
+        "additionalProperties": false,
+        "description": "PartnerLink is one link between a partner org and a customer org."
+      },
+      "pantherclaw.v1.PartnerProposal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Proposal id."
+          },
+          "linkId": {
+            "type": "string",
+            "title": "link_id",
+            "description": "The link it was sent over."
+          },
+          "partnerOrgId": {
+            "type": "string",
+            "title": "partner_org_id",
+            "description": "The partner org."
+          },
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "description": "The customer org."
+          },
+          "kind": {
+            "title": "kind",
+            "description": "What it would draft.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposalKind"
+          },
+          "title": {
+            "type": "string",
+            "title": "title",
+            "description": "Its title (untrusted text)."
+          },
+          "body": {
+            "type": "string",
+            "title": "body",
+            "format": "byte",
+            "description": "The body: a policy document, or {pack, environment, agents, cohort,\n parameters} as JSON. Only in GetPartnerProposal."
+          },
+          "templateId": {
+            "type": "string",
+            "title": "template_id",
+            "description": "Groups the proposals of one send to many customers."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PROPOSED\", \"ACCEPTED\", \"DECLINED\", \"WITHDRAWN\" or \"EXPIRED\"."
+          },
+          "proposedBy": {
+            "type": "string",
+            "title": "proposed_by",
+            "description": "partner/\u003cpartner org\u003e/\u003cuser\u003e."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was proposed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When an undecided proposal expires (30 days).",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "decidedBy": {
+            "type": "string",
+            "title": "decided_by",
+            "description": "Who decided it."
+          },
+          "decideTime": {
+            "title": "decide_time",
+            "description": "When it was decided.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "declineReason": {
+            "type": "string",
+            "title": "decline_reason",
+            "description": "Why it was declined (untrusted text)."
+          },
+          "draftVersionId": {
+            "type": "string",
+            "title": "draft_version_id",
+            "description": "The DRAFT policy version an acceptance made."
+          }
+        },
+        "title": "PartnerProposal",
+        "additionalProperties": false,
+        "description": "PartnerProposal is one proposal to one customer."
+      },
+      "pantherclaw.v1.ProposeRolloutRequest": {
+        "type": "object",
+        "properties": {
+          "customerOrgIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 100,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "title": "customer_org_ids",
+            "maxItems": 100,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "The customer orgs. From a partner session, only its own customer."
+          },
+          "kind": {
+            "title": "kind",
+            "description": "What it would draft.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposalKind",
+            "not": {
+              "enum": [
+                "PARTNER_PROPOSAL_KIND_UNSPECIFIED"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "title": "title",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "A title shown to the customer."
+          },
+          "body": {
+            "type": "string",
+            "title": "body",
+            "maxLength": 262144,
+            "minLength": 2,
+            "format": "byte",
+            "description": "The body: a policy document (POLICY_VERSION) or {pack, environment,\n agents, cohort, parameters} (PACK), as JSON, at most 256 KiB."
+          }
+        },
+        "title": "ProposeRolloutRequest",
+        "additionalProperties": false,
+        "description": "ProposeRolloutRequest proposes one change to customers.",
+        "required": [
+          "customerOrgIds",
+          "kind",
+          "title",
+          "body"
+        ]
+      },
+      "pantherclaw.v1.ProposeRolloutResponse": {
+        "type": "object",
+        "properties": {
+          "proposals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+            },
+            "title": "proposals",
+            "description": "The proposals, PROPOSED."
+          },
+          "templateId": {
+            "type": "string",
+            "title": "template_id",
+            "description": "Groups them."
+          }
+        },
+        "title": "ProposeRolloutResponse",
+        "additionalProperties": false,
+        "description": "ProposeRolloutResponse returns one proposal per customer."
+      },
+      "pantherclaw.v1.RenewPartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Link id."
+          },
+          "durationDays": {
+            "type": "integer",
+            "title": "duration_days",
+            "maximum": 90,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The new window, in days."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "reason",
+            "maxLength": 500,
+            "description": "Why the partner asks again."
+          }
+        },
+        "title": "RenewPartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "RenewPartnerLinkRequest names the earlier link.",
+        "required": [
+          "id",
+          "durationDays"
+        ]
+      },
+      "pantherclaw.v1.RenewPartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The new link, REQUESTED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "RenewPartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "RenewPartnerLinkResponse returns the new link."
+      },
+      "pantherclaw.v1.RequestPartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "format": "uuid",
+            "description": "The customer org."
+          },
+          "scopes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerLinkScope",
+              "not": {
+                "enum": [
+                  "PARTNER_LINK_SCOPE_UNSPECIFIED"
+                ]
+              }
+            },
+            "title": "scopes",
+            "maxItems": 2,
+            "uniqueItems": true,
+            "description": "What the link allows; READ is always included."
+          },
+          "durationDays": {
+            "type": "integer",
+            "title": "duration_days",
+            "maximum": 90,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The window, in days, from the approval."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "reason",
+            "maxLength": 500,
+            "description": "Why the partner asks, shown to the customer."
+          }
+        },
+        "title": "RequestPartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "RequestPartnerLinkRequest asks a customer for a link.",
+        "required": [
+          "customerOrgId",
+          "durationDays"
+        ]
+      },
+      "pantherclaw.v1.RequestPartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The link, REQUESTED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "RequestPartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "RequestPartnerLinkResponse returns the new link."
+      },
+      "pantherclaw.v1.RevokePartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Link id."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "reason",
+            "maxLength": 500,
+            "description": "Why, kept with the link."
+          }
+        },
+        "title": "RevokePartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "RevokePartnerLinkRequest names a link.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RevokePartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The link, REVOKED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "RevokePartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "RevokePartnerLinkResponse returns it."
+      },
+      "pantherclaw.v1.WithdrawPartnerProposalRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Proposal id."
+          }
+        },
+        "title": "WithdrawPartnerProposalRequest",
+        "additionalProperties": false,
+        "description": "WithdrawPartnerProposalRequest names a proposal.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.WithdrawPartnerProposalResponse": {
+        "type": "object",
+        "properties": {
+          "proposal": {
+            "title": "proposal",
+            "description": "The proposal, WITHDRAWN.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+          }
+        },
+        "title": "WithdrawPartnerProposalResponse",
+        "additionalProperties": false,
+        "description": "WithdrawPartnerProposalResponse returns it."
       },
       "pantherclaw.v1.ListPaymentCapsRequest": {
         "type": "object",
@@ -111928,6 +115645,10 @@
       "description": "BrowserService is the org's list of browser sites for its agents'\n managed browsers (G0 M33 D976, D977; HR-745, HR-749).\n\n A pc.browser action whose target host matches no site holds for a person\n (SITE_NOT_LISTED), and an empty list holds every site. Adding a site\n loosens that hold, so it files a protected change that applies only when\n a second person confirms it with a security key. Removing one applies at\n once. At most 500 sites per org."
     },
     {
+      "name": "pantherclaw.v1.BundleService",
+      "description": "BundleService pins publisher keys and installs, lists and revokes\n publisher bundles (G0 M37 D1081–D1083; FQ37-1..3; HR-795..801; every\n edition, each item kind keeps its own edition gate). A bundle is data\n only: tool packages, OpenAPI specs, detection rules, playbooks, fact\n declarations and channel templates, never code. A publisher key is\n trusted only once a person activates its pin on its page (confirm_url)\n with a security key. Installing verifies the bundle against the org's\n ACTIVE pins and creates drafts only: nothing is activated, published or\n enabled. A revoked publisher key or bundle stops being used at once."
+    },
+    {
       "name": "pantherclaw.v1.CaseService",
       "description": "CaseService manages investigation cases (G0 M10 D19; F237, F244, F248,\n F249, F251, F571, F299; HR-245–HR-247). Cases need the Team edition.\n\n A case is an append-only list of entries: facts with evidence,\n hypotheses with confidence and alternatives, questions with an owner,\n answers, notes, impact, links, owner and state changes. A later entry\n may supersede an earlier one; nothing is changed or deleted. Every entry\n is chained to the one before it and recorded in the evidence ledger.\n The database enforces the closure rules: CONTAINED needs every linked\n containment action confirmed or a reason none is needed; CLOSED needs an\n impact, a disposition, a fact, and a follow-up owner while questions are\n open, and straight from OPEN also the containment rule. A closed case\n never loses the owner of a question still open. A person's question names\n its owner; a link is superseded only by a link of the same kind, with a\n reason.\n\n A case is read with case.read and changed with case.manage (a person\n only) over the whole organization or over every agent the case is about.\n A case the caller may not read is reported as not found."
     },
@@ -112080,6 +115801,10 @@
       "description": "IncidentService serves Reflex's alerts, incidents, suppressions and owned\n operational failures (G0 M10 D14–D18; F603, F607, F616, F641; HR-242,\n HR-243). Alert and incident history is append-only: repeats add evidence\n and changes add events. Lists show only what the caller may read: an\n alert or incident about agents is listed when the caller holds\n incident.read where those agents live, and counts never include hidden\n rows (D8)."
     },
     {
+      "name": "pantherclaw.v1.IntelService",
+      "description": "IntelService is shared threat-intel indicators (G0 M38 D1103..D1105; FD13,\n FQ38-2; HR-817..822).\n\n The deployment imports a feed signed offline by the PantherClaw intel\n root: hashes of known-bad MCP servers and tool descriptions, and hashed\n shingles of injection text. Only hashes enter or leave. An org that\n consumes the feed (Business and above; OFF by default) has a call to a\n matched server or tool, or a payload carrying matched injection text,\n held for a person (HOLD) or only alerted on (ALERT_ONLY). A match never\n refuses. An org with share on (every edition; off by default) may\n contribute indicators made from its confirmed findings; the operator's\n export of them carries no org identity."
+    },
+    {
       "name": "pantherclaw.v1.ModelUsageService",
       "description": "ModelUsageService reports the tokens the org's model calls used (G0 M29\n D825; F988; HR-698). Every model call through a model connection leaves one\n usage row with the token counts the provider reported. Counts are what the\n model providers reported; a cost is an estimate from prices the\n organization set on its model connections, never a bill. Every response\n carries the fixed statement that says so. The report needs Team or higher."
     },
@@ -112134,6 +115859,10 @@
     {
       "name": "pantherclaw.v1.PackService",
       "description": "PackService serves the reference workflow packs (G0 M11 part 2, D41;\n F762, F764, F767, HR-291): coding-to-production (GitHub) and\n read-only-diagnostics (shell). A pack is a policy template with its\n allow, hold and deny scenario tests, a grant baseline per agent and,\n optionally, the automation template that launches its agents.\n\n ApplyPack only drafts: it stores the published policy with the pack's\n rules and tests as a new DRAFT policy version, which then goes through\n validation, tests and the publish gate like any draft. Nothing is\n published, issued or promoted. Needs the Team edition."
+    },
+    {
+      "name": "pantherclaw.v1.PartnerService",
+      "description": "PartnerService links an MSSP partner org to its customer orgs on the\n same deployment (G0 M38 D1100–D1102; FQ38-1; HR-810..816). The partner\n org needs the Enterprise edition (PartnerAccess); the customer org needs\n none.\n\n A partner person holding partner.manage asks a customer for a link: READ\n always, PROPOSE optionally, for 1 to 90 days. A customer person holding\n partner.approve decides it only on its page (decide_url) with a security\n key; the API refuses (STEP_UP_REQUIRED). The customer revokes a link at\n any time. Under an ACTIVE link a partner person holding partner.operate\n opens a partner session in the customer org on its page (open_url), with\n a security key: it reads what a support session reads, and may propose\n rollouts, nothing else. Every call of a partner session is recorded in\n the customer's audit log first. A proposal only ever becomes a DRAFT, by\n a customer person's acceptance; a loosening that came from a partner\n always needs two customer people."
     },
     {
       "name": "pantherclaw.v1.PaymentCapService",

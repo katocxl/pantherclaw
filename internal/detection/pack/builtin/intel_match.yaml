@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.intel.match
+version: "1"
+title: Shared threat-intel indicator matched
+description: >-
+  Something the org uses matched a shared threat-intel indicator (G0 M38
+  D1104): an upstream MCP server by its reported name and version or its
+  package, a tool by its listed description, or content by shingles of
+  known injection text. Indicators are hashes from the signed feed; a match
+  is a known hash, not proof, and a renamed or reworded item can pass. An
+  alert only: in HOLD the decision path also holds matched calls for a
+  person, and nothing is refused.
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+atlas: [AML.T0010, AML.T0051.001]
+attack: [T1195.002]
+edition: business
+on: [audit.intel.matched]
+group: connection
+tests:
+  - name: server matched
+    fires: true
+    events:
+      - kind: audit.intel.matched
+        actor_type: gateway
+        actor_id: 01930000-0000-7000-8000-0000000000e1
+        outcome: success
+        subjects: {connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {object_type: connection, indicator_id: pc-2026-0001, kind: mcp_server, severity: HIGH, mode: HOLD}
+  - name: settings changed
+    fires: false
+    events:
+      - kind: audit.intel.settings_changed
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        attrs: {object_type: intel_settings, to_consume: HOLD}

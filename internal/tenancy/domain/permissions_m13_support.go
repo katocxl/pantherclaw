@@ -88,6 +88,9 @@ func (s Subject) roleForCheck(n RoleName) (Role, bool) {
 	if r, ok := LookupRole(n); ok {
 		return r, true
 	}
+	if s.Partner() {
+		return partnerRoleForCheck(n) // G0 M38 D1101: a partner subject's own internal role only
+	}
 	if !s.Support() {
 		return Role{}, false
 	}

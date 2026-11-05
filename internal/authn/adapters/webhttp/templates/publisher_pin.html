@@ -1,0 +1,21 @@
+{{template "head" .}}
+<h1>Publisher key: {{.Publisher}}</h1>
+<p>State: <strong>{{.State}}</strong>{{with .RevokeReason}} ({{.}}){{end}}. Pinned by <code>{{.CreatedBy}}</code> at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}{{with .RevokedAt}}; revoked {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Pin</dt><dd><code>{{.ID}}</code></dd>
+<dt>Publisher</dt><dd class="untrusted"><code>{{.Publisher}}</code></dd>
+<dt>Key id</dt><dd class="untrusted"><code>{{.KID}}</code></dd>
+<dt>Key fingerprint (SHA-256)</dt><dd class="untrusted"><code>{{.Fingerprint}}</code></dd>
+<dt>Item kinds allowed</dt><dd>{{range $i, $k := .AllowedKinds}}{{if $i}}, {{end}}<code>{{$k}}</code>{{else}}every kind{{end}}</dd>
+<dt>Revocation statements</dt><dd class="untrusted">{{with .RevocationsURL}}<code>{{.}}</code> (fetched daily){{else}}none published{{end}}</dd>
+</dl>
+{{if .CanActivate}}
+<h2>Activate</h2>
+<p class="note">Once activated, bundles signed by this key can be installed in your organization. Installing still creates drafts only: each one is reviewed, and tool packages are signed with your organization's key, before anything is used. A listing in a marketplace is not an endorsement. Compare the fingerprint with the one the publisher gave you through another channel before you go on. Activating needs your security key.</p>
+<p><button type="button" class="danger" id="activate" data-path="/integrations/publisher-pins/{{.ID}}/confirm">Activate with your security key</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot activate this pin: that needs publisher.manage and a security key.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<script src="/static/integrations.js"></script>
+{{template "foot" .}}
