@@ -1,8 +1,12 @@
 # PantherClaw
 
-**The identity and runtime firewall for AI agents.**
+**Agent identity protection and a runtime firewall for AI agents.**
 
 PantherClaw verifies which AI agent is acting and for whom, gives it only the access its current task needs, and puts its actions behind a firewall that proves, route by route, where it cannot be bypassed, with evidence your auditors can check. It answers one question for every consequential action: can this agent run do this, for this task, through this route, right now, and can we prove the boundary held?
+
+**Agent identity protection** (Badge) is the actions that keep an agent's identity from being stolen, faked or misused: verifying which workload is acting and for whom, binding its tokens to its own key (DPoP), attesting where it runs, rotating and revoking its credentials, and detecting a stolen or replayed token. It answers "is this really that agent, and acting for whom?"
+
+**Runtime firewall** (Pass, Guardrails, Checkpoint, Stash) decides and enforces every action an agent takes on your systems: tool and API calls, egress and content. Each action is allowed, held for a person or refused, with route-by-route proof that it can't be bypassed. It answers "may this agent do this, here, now?" Reflex and Trail serve both: Reflex can revoke an identity or stop a run, and Trail proves both.
 
 > **Status: pre-alpha.** Under active development; not ready for production use. Everything below is planned.
 
