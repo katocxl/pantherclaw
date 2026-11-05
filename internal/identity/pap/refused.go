@@ -30,6 +30,8 @@ func Stale(err error) bool {
 		return e.detail == "iat"
 	case CodeInvalidToken:
 		return e.detail == "not yet valid"
+	case CodeProofReplay, CodeKeyMismatch, CodeBodyHashMismatch, CodeInstanceNotAdmitted, CodeAttestationLow, CodeRunMismatch:
+		return false
 	}
 	return false
 }

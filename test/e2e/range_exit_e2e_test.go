@@ -149,6 +149,7 @@ func TestE2E_M12_CodingAgentSuite(t *testing.T) {
 	// changes them (D42).
 	wantPass := []string{
 		"RT-001", "RT-002", "RT-006", "RT-007", "RT-009", "RT-010", "RT-011", "RT-012", "RT-013", "RT-016", "RT-019", "RT-020", "RT-022", "RT-023",
+		"RT-260", // HR-850: refused proofs stay refused and the agent's own calls go through.
 	}
 	if got := slices.Sorted(maps.Keys(passed)); !slices.Equal(got, wantPass) {
 		t.Errorf("PASS set %v, want %v\n%s", got, wantPass, out)

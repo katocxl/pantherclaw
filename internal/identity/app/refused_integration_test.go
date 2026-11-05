@@ -77,8 +77,10 @@ func TestHR850_RefusedProofsAreIdentityEvents(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"pap_code":"proof_replay"`, `"instance":"` + inst.Instance.String() + `"`, `"agent":"` + agent.String() + `"`,
-		`"jkt":"` + jws.Thumbprint(wl.pub) + `"`, `"gateway":"gw-1"`, `"suppressed":"0"`} {
+	for _, want := range []string{
+		`"pap_code":"proof_replay"`, `"instance":"` + inst.Instance.String() + `"`, `"agent":"` + agent.String() + `"`,
+		`"jkt":"` + jws.Thumbprint(wl.pub) + `"`, `"gateway":"gw-1"`, `"suppressed":"0"`,
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("record lacks %s: %s", want, body)
 		}
