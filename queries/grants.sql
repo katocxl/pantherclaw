@@ -30,11 +30,11 @@ ORDER BY l.distance DESC;
 -- name: InsertGrant :exec
 INSERT INTO pc.grants (org_id, id, agent_id, instance_id, principal_user_id, principal_sa_id, environment_id,
                        parent_id, depth, current_revision, grantor_kind, grantor_id, basis, ceiling_id,
-                       automation_execution_id)
+                       automation_execution_id, peer_org_id, peer_agent)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.narg(instance_id), sqlc.narg(principal_user_id),
         sqlc.narg(principal_sa_id), sqlc.arg(environment_id), sqlc.narg(parent_id), sqlc.arg(depth),
         sqlc.arg(current_revision), sqlc.arg(grantor_kind), sqlc.arg(grantor_id), sqlc.arg(basis), sqlc.narg(ceiling_id),
-        sqlc.narg(automation_execution_id));
+        sqlc.narg(automation_execution_id), sqlc.narg(peer_org_id), sqlc.narg(peer_agent));
 
 -- name: InsertGrantRevision :exec
 INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, task_ref, not_before, expires_at, bounds,

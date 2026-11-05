@@ -77,6 +77,10 @@ const (
 	// ChannelRuntime is a cloud agent runtime's gateway asking before it
 	// runs the tool itself (G0 M34 D990, HR-760): cooperative, like authzen.
 	ChannelRuntime Channel = "runtime"
+	// ChannelFederation is a trusted peer org's agent messaging a listed
+	// agent through the gateway's federation face (G0 M35 D1024): the
+	// gateway mediates it, so it is not cooperative (FULL).
+	ChannelFederation Channel = "federation"
 )
 
 // Cooperative reports whether the agent itself, or an enforcement point

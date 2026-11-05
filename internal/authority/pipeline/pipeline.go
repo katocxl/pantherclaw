@@ -471,10 +471,11 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 // face is its only mapper (HR-201) and always names the connection. An
 // authzen action names the connection its enforcement point fronts, and an
 // a2a action the peer agent's connection (G0 M14 D27, D31), and a runtime
-// action the connection bound to its runtime target (G0 M34 D991).
+// action the connection bound to its runtime target (G0 M34 D991), and a
+// federation action its listing's a2a connection (G0 M35 D1024).
 var gatewayChannels = []string{
 	string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK),
-	string(defs.ChannelAuthZEN), string(defs.ChannelA2A), string(defs.ChannelRuntime),
+	string(defs.ChannelAuthZEN), string(defs.ChannelA2A), string(defs.ChannelRuntime), string(defs.ChannelFederation),
 }
 
 // dispatches reports whether a connection of this kind serves the

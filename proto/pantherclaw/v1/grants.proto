@@ -121,6 +121,17 @@ message Grant {
   // Data flows allowed after a pii or secret read in the run tree (G0 M16
   // D75); none allows no flow.
   repeated FlowAllowance flows = 21;
+  // A cross-org grant's principal: an agent of a trusted peer org (G0 M35
+  // D1024), set instead of principal.
+  FederatedPrincipal federated_principal = 22;
+}
+
+// FederatedPrincipal is an agent of a trusted peer org (G0 M35 D1024).
+message FederatedPrincipal {
+  // The peer org's id, as its federation document states it.
+  string peer_org_id = 1;
+  // The peer agent's PAP subject (pc:org/<org>/agent/<a>[/inst/<i>]).
+  string peer_agent = 2;
 }
 
 // FlowAllowance lets data of its classes, read anywhere in the run tree, go

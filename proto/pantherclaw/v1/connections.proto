@@ -666,6 +666,19 @@ message A2AConfig {
   // cannot name its own host; without it the card stays unsigned (G0 M24
   // D247).
   string public_url = 11 [(buf.validate.field).string.max_len = 2048];
+  // A listed agent of a trusted peer org (G0 M35 D1023): its card and URL
+  // come from the peer's verified federation document, so no person pins
+  // the card; card_url must be the one the document names, and
+  // peer_agent_id stays empty.
+  A2AFederationPeer federation = 12;
+}
+
+// A2AFederationPeer names a peer org's listed agent through a trust.
+message A2AFederationPeer {
+  // The ACTIVE federation trust.
+  string trust_id = 1 [(buf.validate.field).string.uuid = true];
+  // The peer's listing name.
+  string listing = 2 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,63}$"];
 }
 
 // A2AInterface is one interface of an agent card.

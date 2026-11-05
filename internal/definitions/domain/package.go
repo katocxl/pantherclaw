@@ -63,6 +63,10 @@ const (
 	// runs a tool itself (G0 M34 D990). It has no mappings of its own: the
 	// gateway maps its calls through the mcp mappings.
 	ChannelRuntime Channel = "runtime"
+	// ChannelFederation is a trusted peer org's agent messaging one of this
+	// org's listed agents through the gateway's federation face (G0 M35
+	// D1024), mapped by JSON-RPC method name.
+	ChannelFederation Channel = "federation"
 )
 
 // Mapping maps one MCP tool, HTTP route or hook call onto the definition.
@@ -286,8 +290,13 @@ func (d *Definition) validateMapping(i int) error {
 		if m.Tool != "" || m.Path != "" || !slices.Contains(A2AMethods, m.Method) {
 			return invalid("%s: an a2a mapping names a method %v and no tool or path", at, A2AMethods)
 		}
+	case ChannelFederation:
+		// Mapped by the federation face's JSON-RPC method (G0 M35 D1024).
+		if m.Tool != "" || m.Path != "" || !slices.Contains(FederationMethods, m.Method) {
+			return invalid("%s: a federation mapping names a method %v and no tool or path", at, FederationMethods)
+		}
 	default:
-		return invalid("%s: channel must be mcp, mcp_resource, http, hook or a2a", at)
+		return invalid("%s: channel must be mcp, mcp_resource, http, hook, a2a or federation", at)
 	}
 	if !actionir.ValidRoute(m.Route) {
 		return invalid("%s: route %q", at, m.Route)
