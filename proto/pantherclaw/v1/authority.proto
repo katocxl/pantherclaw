@@ -138,6 +138,9 @@ message RecordFederationReceiptRequest {
   string action_id = 1 [(buf.validate.field).string.uuid = true];
   // The PC-Fed-Receipt header value; empty when the peer sent none.
   string receipt = 2 [(buf.validate.field).string.max_len = 16384];
+  // SHA-256 of the exact request body sent (the token's bh), which the
+  // receipt's req_digest must equal.
+  bytes body_sha256 = 3 [(buf.validate.field).bytes.len = 32];
 }
 
 // RecordFederationReceiptResponse says what was recorded.
@@ -352,6 +355,11 @@ message AuthorizeResponse {
   // The agent-safe explanation (F330, HR-400). Without a transaction it
   // has no transaction id and no recovery action.
   AgentExplanation agent_explanation = 20;
+  // For channel federation, on every decision: the compact JWS (typ
+  // pap-fed-receipt+jwt) signed by this org's federation key at decision
+  // time, which the gateway returns to the peer in PC-Fed-Receipt (G0 M35
+  // D1024d). Empty for any other channel.
+  string federation_receipt = 21;
 }
 
 // ConsequenceState is what a consequence rule said about an action

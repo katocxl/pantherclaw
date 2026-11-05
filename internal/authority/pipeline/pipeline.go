@@ -452,7 +452,16 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 	case c.Gateway.String() != s.req.Gateway:
 		return unknown()
 	}
-	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) ||
+	if s.a.Channel == string(defs.ChannelFederation) {
+		// A federation action comes through its listing's a2a connection
+		// to the listed agent, whose package is pc.a2a, and is decided as
+		// pc.federation (G0 M35 D1024).
+		if c.Kind != "a2a" || s.a.Definition.Package != federationPackage || !dispatches(c.Kind, d) {
+			s.cl.add(StepScope, adomain.CannotAuthorize, ReasonRouteUnknown,
+				"route "+s.a.Route+" of "+d.Operation+" is not served by this connection", "")
+			return false
+		}
+	} else if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) ||
 		(c.Kind == "a2a") != (s.a.Channel == string(defs.ChannelA2A)) || !dispatches(c.Kind, d) {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonRouteUnknown,
 			"route "+s.a.Route+" of "+d.Operation+" is not served by this connection", "")
@@ -473,6 +482,9 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 // a2a action the peer agent's connection (G0 M14 D27, D31), and a runtime
 // action the connection bound to its runtime target (G0 M34 D991), and a
 // federation action its listing's a2a connection (G0 M35 D1024).
+// federationPackage is the package of a federation action (G0 M35 D1024).
+const federationPackage = "pc.federation"
+
 var gatewayChannels = []string{
 	string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK),
 	string(defs.ChannelAuthZEN), string(defs.ChannelA2A), string(defs.ChannelRuntime), string(defs.ChannelFederation),
@@ -1326,7 +1338,7 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 			Run: s.ev.RunID.String(), Agent: s.run.AgentID.String(), Instance: s.req.Identity.InstanceID.String(),
 			Launcher: s.run.Launcher.String(), Principal: s.run.Principal.String(),
 		},
-		TaskLabel: s.run.TaskRef, Requirements: h.Requirements, Deadline: deadline, Variants: variants, Context: approved,
+		TaskLabel: s.run.TaskRef, PeerOrg: s.run.PeerOrgName, Requirements: h.Requirements, Deadline: deadline, Variants: variants, Context: approved,
 		Consequences: s.displayed(), PayloadFindings: s.payloadDisplayed(),
 	})
 	if err != nil {

@@ -233,7 +233,8 @@ const getGrant = `-- name: GetGrant :one
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows,
+       g.peer_org_id, g.peer_agent
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = $1 AND g.id = $2
@@ -266,6 +267,8 @@ type GetGrantRow struct {
 	CeilingID             *ids.UUID
 	AutomationExecutionID *ids.UUID
 	Flows                 []byte
+	PeerOrgID             *ids.UUID
+	PeerAgent             *string
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -305,6 +308,8 @@ func (q *Queries) GetGrant(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (G
 		&i.CeilingID,
 		&i.AutomationExecutionID,
 		&i.Flows,
+		&i.PeerOrgID,
+		&i.PeerAgent,
 	)
 	return i, err
 }
@@ -313,7 +318,8 @@ const getGrantChain = `-- name: GetGrantChain :many
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id, r.flows,
+       g.peer_org_id, g.peer_agent
 FROM pc.grant_lineage l
 JOIN pc.grants g ON g.org_id = l.org_id AND g.id = l.ancestor_id
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
@@ -348,6 +354,8 @@ type GetGrantChainRow struct {
 	CeilingID             *ids.UUID
 	AutomationExecutionID *ids.UUID
 	Flows                 []byte
+	PeerOrgID             *ids.UUID
+	PeerAgent             *string
 }
 
 // GetGrantChain returns a grant and every ancestor, root first.
@@ -387,6 +395,8 @@ func (q *Queries) GetGrantChain(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 			&i.CeilingID,
 			&i.AutomationExecutionID,
 			&i.Flows,
+			&i.PeerOrgID,
+			&i.PeerAgent,
 		); err != nil {
 			return nil, err
 		}
@@ -687,7 +697,7 @@ const listGrants = `-- name: ListGrants :many
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, r.flows
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, r.flows, g.peer_org_id, g.peer_agent
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = $1
@@ -733,6 +743,8 @@ type ListGrantsRow struct {
 	MinAttestation  int16
 	CreatedAt       time.Time
 	Flows           []byte
+	PeerOrgID       *ids.UUID
+	PeerAgent       *string
 }
 
 // ListGrants pages through an org's grants, newest first.
@@ -777,6 +789,8 @@ func (q *Queries) ListGrants(ctx context.Context, arg ListGrantsParams) ([]ListG
 			&i.MinAttestation,
 			&i.CreatedAt,
 			&i.Flows,
+			&i.PeerOrgID,
+			&i.PeerAgent,
 		); err != nil {
 			return nil, err
 		}
@@ -912,11 +926,13 @@ func (q *Queries) SubjectAgent(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 }
 
 const subjectRun = `-- name: SubjectRun :one
-SELECT agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id,
-       principal_user_id, principal_sa_id, parent_run_id, grant_id, state, expires_at, task_ref, simulated, scope_operations, max_tokens, token_cap_run_id,
-       (state = 'ACTIVE' AND expires_at > now())::boolean AS live
-FROM pc.runs
-WHERE org_id = $1 AND id = $2
+SELECT r.agent_id, r.instance_id, r.environment_id, r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id,
+       r.principal_user_id, r.principal_sa_id, r.parent_run_id, r.grant_id, r.state, r.expires_at, r.task_ref, r.simulated, r.scope_operations, r.max_tokens, r.token_cap_run_id,
+       (r.state = 'ACTIVE' AND r.expires_at > now())::boolean AS live,
+       r.peer_org_id, r.peer_agent,
+       COALESCE((SELECT t.peer_name FROM pc.federation_trusts t WHERE t.org_id = r.org_id AND t.id = r.federation_trust_id), '')::text AS peer_org_name
+FROM pc.runs r
+WHERE r.org_id = $1 AND r.id = $2
 `
 
 type SubjectRunRow struct {
@@ -938,6 +954,9 @@ type SubjectRunRow struct {
 	MaxTokens          pgtype.Int8
 	TokenCapRunID      *ids.UUID
 	Live               bool
+	PeerOrgID          *ids.UUID
+	PeerAgent          *string
+	PeerOrgName        string
 }
 
 func (q *Queries) SubjectRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (SubjectRunRow, error) {
@@ -962,6 +981,9 @@ func (q *Queries) SubjectRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) 
 		&i.MaxTokens,
 		&i.TokenCapRunID,
 		&i.Live,
+		&i.PeerOrgID,
+		&i.PeerAgent,
+		&i.PeerOrgName,
 	)
 	return i, err
 }

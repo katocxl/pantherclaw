@@ -138,6 +138,10 @@ func GrantProto(g domain.Grant) (*pantherclawv1.Grant, error) {
 		MinAttestationLevel: int32(g.MinAttestation), Depth: int32(g.Depth), //nolint:gosec // 0..4
 		Grantor: actor(g.Grantor), Basis: g.Basis, CreateTime: ts(g.RevisedAt), Flows: FlowsProto(g.Flows),
 	}
+	if g.Principal.Kind == domain.PrincipalFederated { // G0 M35 D1024c
+		out.Principal = nil
+		out.FederatedPrincipal = &pantherclawv1.FederatedPrincipal{PeerOrgId: g.Principal.ID.String(), PeerAgent: g.Principal.Peer}
+	}
 	if !g.InstanceID.IsZero() {
 		out.InstanceId = g.InstanceID.String()
 	}

@@ -65,6 +65,8 @@ type Service struct {
 	observations    ToolObservations
 	// held is the operator's maintenance hold (hold.go): no decision.
 	held bool
+	// federation admits federation calls and signs their receipts (G0 M35).
+	federation Federation
 	// consoleURL is the console base URL for recovery links (explain.go).
 	consoleURL string
 }

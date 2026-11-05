@@ -84,7 +84,7 @@ func (s *Service) Identify(ctx context.Context, org ids.OrgID, in IdentifyInput)
 	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		r, err := q.GetInstance(ctx, org, tok.Instance.Instance)
-		if db.IsNoRows(err) || (err == nil && (r.AgentID != tok.Instance.Agent || r.State != "ADMITTED" || r.EnrolledVia == EnrolledMcpClient)) {
+		if db.IsNoRows(err) || (err == nil && (r.AgentID != tok.Instance.Agent || r.State != "ADMITTED" || r.EnrolledVia == EnrolledMcpClient || r.EnrolledVia == EnrolledFederation)) {
 			return pap.Err(pap.CodeInstanceNotAdmitted)
 		} else if err != nil {
 			return err

@@ -83,10 +83,30 @@ func parseScope(kind, key string) (domain.Scope, error) {
 
 func principalCols(p domain.Principal) (user, sa *ids.UUID) {
 	id := p.ID
-	if p.Kind == domain.PrincipalServiceAccount {
+	switch p.Kind {
+	case domain.PrincipalServiceAccount:
 		return nil, &id
+	case domain.PrincipalFederated:
+		return nil, nil // peerCols (G0 M35 D1024c)
 	}
 	return &id, nil
+}
+
+// peerCols are a federated principal's peer_org_id and peer_agent.
+func peerCols(p domain.Principal) (*ids.UUID, *string) {
+	if p.Kind != domain.PrincipalFederated {
+		return nil, nil
+	}
+	id, peer := p.ID, p.Peer
+	return &id, &peer
+}
+
+// principalOfPeer is principalOf with a grant's federated columns.
+func principalOfPeer(user, sa, peerOrg *ids.UUID, peerAgent *string) domain.Principal {
+	if peerOrg != nil && peerAgent != nil {
+		return domain.Principal{Kind: domain.PrincipalFederated, ID: *peerOrg, Peer: *peerAgent}
+	}
+	return principalOf(user, sa)
 }
 
 func principalOf(user, sa *ids.UUID) domain.Principal {
@@ -119,6 +139,8 @@ type grantRow struct {
 	RevisedAt                                   time.Time
 	Ceiling, Execution                          *ids.UUID
 	Flows                                       []byte
+	PeerOrgID                                   *ids.UUID
+	PeerAgent                                   *string
 }
 
 func toGrant(org ids.OrgID, r grantRow) (domain.Grant, error) {
@@ -140,7 +162,7 @@ func toGrant(org ids.OrgID, r grantRow) (domain.Grant, error) {
 	}
 	g := domain.Grant{
 		Org: org, Revision: int(r.CurrentRevision), State: domain.State(r.State),
-		AgentID: r.AgentID, Principal: principalOf(r.PrincipalUserID, r.PrincipalSaID), EnvironmentID: r.EnvironmentID,
+		AgentID: r.AgentID, Principal: principalOfPeer(r.PrincipalUserID, r.PrincipalSaID, r.PeerOrgID, r.PeerAgent), EnvironmentID: r.EnvironmentID,
 		TaskRef: r.TaskRef, NotBefore: r.NotBefore, ExpiresAt: r.ExpiresAt, Bounds: b, Requirements: reqs, Limits: lim, Flows: flows,
 		Delegation:     domain.Delegation{Depth: int(r.DelegationDepth), MaxChildren: int(r.MaxChildren)},
 		MinAttestation: int(r.MinAtt), Depth: int(r.Depth),
@@ -172,7 +194,7 @@ func fromGetGrant(r dbq.GetGrantRow) grantRow {
 		r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 		r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
 		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, r.CeilingID,
-		r.AutomationExecutionID, r.Flows,
+		r.AutomationExecutionID, r.Flows, r.PeerOrgID, r.PeerAgent,
 	}
 }
 
@@ -181,7 +203,7 @@ func fromChain(r dbq.GetGrantChainRow) grantRow {
 		r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 		r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
 		r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, r.CeilingID,
-		r.AutomationExecutionID, r.Flows,
+		r.AutomationExecutionID, r.Flows, r.PeerOrgID, r.PeerAgent,
 	}
 }
 
@@ -340,7 +362,7 @@ func (s *Store) ListGrants(ctx context.Context, org ids.OrgID, f app.GrantFilter
 			g, err := toGrant(org, grantRow{
 				r.ID, r.AgentID, r.EnvironmentID, r.GrantorID, r.InstanceID, r.PrincipalUserID, r.PrincipalSaID, r.ParentID,
 				r.Depth, r.DelegationDepth, r.MaxChildren, r.MinAttestation, r.State, r.GrantorKind, r.Basis, r.TaskRef,
-				r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, nil, nil, r.Flows,
+				r.CurrentRevision, r.NotBefore, r.ExpiresAt, r.Bounds, r.Requirements, r.Limits, r.CreatedAt, nil, nil, r.Flows, r.PeerOrgID, r.PeerAgent,
 			})
 			if err != nil {
 				return err
@@ -493,6 +515,7 @@ func insertGrant(ctx context.Context, q *dbq.Queries, org ids.OrgID, g domain.Gr
 		return err
 	}
 	user, sa := principalCols(g.Principal)
+	peerOrg, peerAgent := peerCols(g.Principal)
 	if g.Revision == 1 {
 		var parent *ids.UUID
 		if !g.Parent.IsZero() {
@@ -501,7 +524,8 @@ func insertGrant(ctx context.Context, q *dbq.Queries, org ids.OrgID, g domain.Gr
 		}
 		if err := q.InsertGrant(ctx, dbq.InsertGrantParams{
 			OrgID: org, ID: g.ID.UUID(), AgentID: g.AgentID, InstanceID: optUUID(g.InstanceID), PrincipalUserID: user,
-			PrincipalSaID: sa, EnvironmentID: g.EnvironmentID, ParentID: parent, Depth: int16(g.Depth), //nolint:gosec // 0..4
+			PrincipalSaID: sa, PeerOrgID: peerOrg, PeerAgent: peerAgent,
+			EnvironmentID: g.EnvironmentID, ParentID: parent, Depth: int16(g.Depth), //nolint:gosec // 0..4
 			CurrentRevision: 1, GrantorKind: string(g.Grantor.Kind), GrantorID: g.Grantor.ID, Basis: g.Basis,
 			CeilingID: optUUID(g.Ceiling), AutomationExecutionID: optUUID(g.Execution),
 		}); err != nil {
@@ -808,7 +832,7 @@ func (s *Store) RunInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id i
 			return err
 		}
 		out = app.Run{
-			ID: id, AgentID: row.AgentID, Principal: principalOf(row.PrincipalUserID, row.PrincipalSaID),
+			ID: id, AgentID: row.AgentID, Principal: principalOfPeer(row.PrincipalUserID, row.PrincipalSaID, row.PeerOrgID, row.PeerAgent),
 			EnvironmentID: row.EnvironmentID, Active: row.Live, ExpiresAt: row.ExpiresAt,
 		}
 		if row.InstanceID != nil {
@@ -825,6 +849,16 @@ func (s *Store) RunInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id i
 	return out, err
 }
 
+// federatedActive reports a federated principal whose peer org has an
+// ACTIVE trust and whose peer agent is that org's (G0 M35 D1024c).
+func federatedActive(ctx context.Context, q *dbq.Queries, org ids.OrgID, p domain.Principal) (bool, error) {
+	t, err := q.GetLiveFederationTrustByPeer(ctx, org, p.ID)
+	if err != nil {
+		return false, err
+	}
+	return t.State == "ACTIVE" && strings.HasPrefix(p.Peer, "pc:org/"+p.ID.String()+"/agent/"), nil
+}
+
 // PrincipalActive implements app.Subjects.
 func (s *Store) PrincipalActive(ctx context.Context, org ids.OrgID, p domain.Principal) (bool, error) {
 	var active bool
@@ -836,6 +870,8 @@ func (s *Store) PrincipalActive(ctx context.Context, org ids.OrgID, p domain.Pri
 			active, err = q.SubjectUserActive(ctx, org, p.ID)
 		case domain.PrincipalServiceAccount:
 			active, err = q.SubjectServiceAccountActive(ctx, org, p.ID)
+		case domain.PrincipalFederated:
+			active, err = federatedActive(ctx, q, org, p)
 		case domain.PrincipalInstance:
 		}
 		if db.IsNoRows(err) {
