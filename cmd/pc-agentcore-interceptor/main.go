@@ -129,8 +129,38 @@ func loadConfig(local string) (config, error) {
 	if fn == "" || stream == "" {
 		return c, fmt.Errorf("%s and %s are not set", envFunction, envLogStream)
 	}
-	c.runName = "agentcore:" + fn + ":" + stream
+	c.runName = runName(fn, stream)
 	return c, nil
+}
+
+// maxRunName is the longest run name StartRuntimeRun takes (D992).
+const maxRunName = 200
+
+// runName is the Lambda's run name, agentcore:<function>:<log stream>
+// (G0 M34 D995a): every character outside [A-Za-z0-9._:/-] becomes "-"
+// (a log stream's "[$LATEST]" becomes "--LATEST-"), and a name over 200
+// characters loses the end of its function part, so the stream stays
+// whole.
+func runName(fn, stream string) string {
+	clean := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			switch {
+			case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', strings.ContainsRune("._:/-", r):
+				return r
+			}
+			return '-'
+		}, s)
+	}
+	fn, stream = clean(fn), clean(stream)
+	if over := len("agentcore:"+fn+":"+stream) - maxRunName; over > 0 {
+		fn = fn[:max(len(fn)-over, 0)]
+	}
+	name := "agentcore:" + fn + ":" + stream
+	if len(name) > maxRunName {
+		// Only a stream over 189 characters gets here; Lambda's are far shorter.
+		name = name[:maxRunName]
+	}
+	return name
 }
 
 // baseURL checks a base URL: https, or plain http to a loopback address.
