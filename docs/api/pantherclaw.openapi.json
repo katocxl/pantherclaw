@@ -40921,7 +40921,7 @@
             "description": "The decoding layers a hit was found through, joined by \"+\" in\n application order (base64, hex, url, escape, entity, confusable,\n zero_width); empty for a plain hit (G0 M30 D921).",
             "anyOf": [
               {
-                "pattern": "^[a-z_+]{0,64}$"
+                "pattern": "^[a-z0-9_+]{0,64}$"
               },
               {
                 "maxLength": 0
