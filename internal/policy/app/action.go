@@ -40,7 +40,7 @@ func celType(t defs.ParamType) *types.Type {
 		return cel.BoolType
 	case defs.TypeIdentifierList:
 		return cel.ListType(cel.StringType)
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeURL:
 		return cel.StringType
 	case defs.TypeText, defs.TypeQueryFilter, defs.TypeFloatArray, defs.TypeStringMap:
 		// Never visible to policy: untrusted prose, a query filter (its
@@ -155,7 +155,7 @@ func value(v defs.Value) ref.Val {
 		return types.Bool(v.Bool)
 	case defs.TypeIdentifierList:
 		return types.NewStringList(types.DefaultTypeAdapter, v.List)
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeURL:
 		return types.String(v.Str)
 	case defs.TypeText, defs.TypeQueryFilter, defs.TypeFloatArray, defs.TypeStringMap:
 	}
