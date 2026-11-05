@@ -8,10 +8,10 @@ package auditkind
 // revoked; a bundle installed as drafts or refused; an install revoked.
 // The ledger stores each as "audit." + the kind.
 const (
-	BundleInstallFailed      = "bundle.install_failed"
-	BundleInstalled          = "bundle.installed"
-	BundleRevoked            = "bundle.revoked"
-	PublisherPinActivated    = "publisher.pin_activated"
-	PublisherPinCreated      = "publisher.pin_created"
-	PublisherPinRevoked      = "publisher.pin_revoked"
+	BundleInstallFailed   = "bundle.install_failed"
+	BundleInstalled       = "bundle.installed"
+	BundleRevoked         = "bundle.revoked"
+	PublisherPinActivated = "publisher.pin_activated"
+	PublisherPinCreated   = "publisher.pin_created"
+	PublisherPinRevoked   = "publisher.pin_revoked"
 )

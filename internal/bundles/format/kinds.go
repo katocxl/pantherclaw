@@ -162,8 +162,10 @@ const (
 var (
 	settingKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	// secretWords make a setting name secret-shaped.
-	secretWords = []string{"token", "secret", "password", "passwd", "key", "credential", "auth", "cookie", "session",
-		"signing", "private", "bearer", "webhook", "url", "dsn"}
+	secretWords = []string{
+		"token", "secret", "password", "passwd", "key", "credential", "auth", "cookie", "session",
+		"signing", "private", "bearer", "webhook", "url", "dsn",
+	}
 	// secretValue matches values shaped like credentials: well-known token
 	// prefixes, PEM blocks, JWTs and long base64 or hex runs.
 	secretValue = regexp.MustCompile(`(?i)(xox[abposr]-|xapp-|ghp_|gho_|ghs_|github_pat_|glpat-|sk_live_|sk_test_|rk_live_|` +

@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.bundles.revoked
+version: "1"
+title: Publisher bundle revoked
+description: >-
+  A publisher bundle the org installed was revoked (G0 M37 D1083): an admin
+  revoked it or the publisher key that signed it as compromised, or the
+  publisher signed a revocation statement. Its package versions were
+  withdrawn, its detection rules disabled and its automations paused in the
+  same transaction; someone checks what the bundle did while it was in use.
+  An alert only: nothing more is contained.
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+atlas: [AML.T0010]
+attack: [T1195.002]
+edition: community
+on: [audit.bundle.revoked]
+tests:
+  - name: bundle revoked
+    fires: true
+    events:
+      - kind: audit.bundle.revoked
+        actor_type: system
+        outcome: success
+        attrs: {object_type: bundle_install, publisher: example, bundle: ext.example.starter, version: "1.0.0", source: STATEMENT}
+  - name: a bundle installed
+    fires: false
+    events:
+      - kind: audit.bundle.installed
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        attrs: {object_type: bundle_install, publisher: example, bundle: ext.example.starter, version: "1.0.0"}

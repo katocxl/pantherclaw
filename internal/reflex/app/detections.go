@@ -268,6 +268,9 @@ func (s *Detections) CreateCustomRule(ctx context.Context, content string) (Rule
 	if err != nil {
 		return Rule{}, err
 	}
+	if _, ext := rules.ExtensionPublisher(cr.Rule.ID); ext {
+		return Rule{}, errExtensionRule // G0 M37 D1080: only a bundle install stores ext. rules
+	}
 	sum := sha256.Sum256([]byte(content))
 	var out Rule
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
