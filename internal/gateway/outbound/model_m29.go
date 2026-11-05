@@ -4,6 +4,7 @@
 package outbound
 
 import (
+	"encoding/base64"
 	"errors"
 	"strings"
 	"unicode/utf8"
@@ -75,18 +76,31 @@ func Format(s string) string {
 // redact replaces each pointer segment of a finding location that holds a
 // credential format with <redacted>: a member name may be the credential
 // itself, and a location reaches the decision, the approval and the receipt
-// (G0 M29 D1214).
+// (G0 M29 D1214). A base64 member name, a segment ending "(base64)", is
+// redacted when what it decodes to holds one (D1214a).
 func redact(loc string) string {
 	segs := strings.Split(loc, "/")
 	for i, s := range segs {
-		for _, f := range formats {
-			if f.re.MatchString(s) {
-				segs[i] = "<redacted>"
-				break
-			}
+		if Format(s) != "" || Format(decodedSegment(s)) != "" {
+			segs[i] = "<redacted>"
 		}
 	}
 	return strings.Join(segs, "/")
+}
+
+// decodedSegment is what a "(base64)" pointer segment decodes to, or "".
+func decodedSegment(s string) string {
+	s, ok := strings.CutSuffix(s, "(base64)")
+	if !ok {
+		return ""
+	}
+	s = strings.NewReplacer("~1", "/", "~0", "~").Replace(s)
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if b, err := enc.DecodeString(s); err == nil {
+			return string(b)
+		}
+	}
+	return ""
 }
 
 // clip cuts a location to maxLocation bytes on a rune boundary.
