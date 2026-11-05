@@ -4,10 +4,7 @@
 package fedface
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -17,90 +14,65 @@ import (
 )
 
 const (
-	// cardTTL is how long a signed listing card is served from the cache
-	// (D1024).
+	// cardTTL is the longest a signed listing card is served from the
+	// cache (D1024).
 	cardTTL = time.Hour
 	// maxCards bounds the cache.
 	maxCards = 1024
-	// signTimeout bounds the call that signs a card.
+	// signTimeout bounds the call that fetches a signed card.
 	signTimeout = 3 * time.Second
 )
 
-// cachedCard is one signed card.
-type cachedCard struct {
-	card    []byte
-	expires time.Time
+// SignedCard is a listing's card as the server rewrote and signed it with
+// our org's federation key (FederationService.SignListingCard).
+type SignedCard struct {
+	Card []byte
+	// Expires is when the server says to stop serving it.
+	Expires time.Time
 }
 
-// cardCache caches signed cards by listing and the digest of the rewritten
-// card, so a changed card or skill list is signed again.
+// SignListingCard asks the server for a listing's signed card.
+type SignListingCard func(ctx context.Context, listing string) (SignedCard, error)
+
+// cardCache caches signed cards by listing.
 type cardCache struct {
-	mu   sync.Mutex
-	byID map[[32]byte]cachedCard
+	mu     sync.Mutex
+	byName map[string]SignedCard
 }
 
-func cardKey(listing string, card []byte) [32]byte {
-	h := sha256.New()
-	h.Write([]byte(listing))
-	h.Write([]byte{0})
-	h.Write(card)
-	var k [32]byte
-	copy(k[:], h.Sum(nil))
-	return k
-}
-
-func (s *cardCache) get(id [32]byte, now time.Time) ([]byte, bool) {
+func (s *cardCache) get(listing string, now time.Time) ([]byte, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c, ok := s.byID[id]
-	if !ok || !now.Before(c.expires) {
-		delete(s.byID, id)
+	c, ok := s.byName[listing]
+	if !ok || !now.Before(c.Expires) {
+		delete(s.byName, listing)
 		return nil, false
 	}
-	return c.card, true
+	return c.Card, true
 }
 
-func (s *cardCache) put(id [32]byte, card []byte, now time.Time) {
+func (s *cardCache) put(listing string, c SignedCard, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.byID == nil || len(s.byID) >= maxCards {
-		s.byID = map[[32]byte]cachedCard{}
+	if s.byName == nil || len(s.byName) >= maxCards {
+		s.byName = map[string]SignedCard{}
 	}
-	s.byID[id] = cachedCard{card: card, expires: now.Add(cardTTL)}
-}
-
-// rewrite is the listing's card as a peer sees it: one interface, this
-// face's JSON-RPC endpoint, and the listing's skills only.
-func (h *Handler) rewrite(l Listing) ([]byte, bool) {
-	if h.peerCard == nil {
-		return nil, false
+	if limit := now.Add(cardTTL); c.Expires.IsZero() || c.Expires.After(limit) {
+		c.Expires = limit
 	}
-	card, _, ok := h.peerCard(l.Connection)
-	if !ok {
-		return nil, false
-	}
-	out, err := wire.Rewrite(card, wire.BindingJSONRPC, h.URL(l.Name), l.Skills)
-	if err != nil {
-		return nil, false
-	}
-	return out, true
+	s.byName[listing] = c
 }
 
 // card serves the listing's signed card. Unlike the agent-facing A2A face,
 // it is never served unsigned: a peer accepts only a card our federation
-// key signed (D1022), so a card that cannot be signed is not served.
+// key signed (D1022), so a card that cannot be had signed is not served.
 func (h *Handler) card(ctx context.Context, w http.ResponseWriter, r *http.Request, l Listing) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		h.fail(w, nil, &faceError{status: http.StatusMethodNotAllowed, rpc: wire.CodeInvalidRequest, reason: CodeBadRequest, message: "the agent card is read with GET"})
 		return
 	}
-	out, ok := h.rewrite(l)
-	if !ok {
-		h.fail(w, nil, &faceError{status: http.StatusServiceUnavailable, rpc: codeUnavailable, reason: CodeUnavailable, message: "the listing's card cannot be served now"})
-		return
-	}
-	signed, ok := h.signed(ctx, l.Name, out)
+	signed, ok := h.signed(ctx, l.Name)
 	if !ok {
 		h.fail(w, nil, &faceError{status: http.StatusServiceUnavailable, rpc: codeUnavailable, reason: CodeUnavailable, message: "the listing's card cannot be served now"})
 		return
@@ -110,52 +82,24 @@ func (h *Handler) card(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	_, _ = w.Write(signed)
 }
 
-// signed returns card signed by our org's federation key, from the cache
-// when it can. The gateway checks the server's answer is the card it sent
-// and that the signature verifies under the answered keys (HR-590).
-func (h *Handler) signed(ctx context.Context, listing string, card []byte) ([]byte, bool) {
+// signed returns the listing's signed card, from the cache when it can.
+func (h *Handler) signed(ctx context.Context, listing string) ([]byte, bool) {
 	if h.sign == nil {
 		return nil, false
 	}
-	id := cardKey(listing, card)
-	if c, ok := h.cards.get(id, h.now()); ok {
+	if c, ok := h.cards.get(listing, h.now()); ok {
 		return c, true
 	}
 	sctx, cancel := context.WithTimeout(ctx, signTimeout)
 	defer cancel()
-	signed, jwks, err := h.sign(sctx, listing, card)
-	if err == nil {
-		err = checkSigned(card, signed, jwks)
+	c, err := h.sign(sctx, listing)
+	if _, perr := wire.ParseCard(c.Card); err == nil && perr != nil {
+		err = errCardInvalid
 	}
 	if err != nil {
-		h.log.WarnContext(ctx, "gateway.federation_card_unsigned", pclog.Err(err))
+		h.log.WarnContext(ctx, "gateway.federation_card_unavailable", pclog.Err(err))
 		return nil, false
 	}
-	h.cards.put(id, signed, h.now())
-	return signed, true
-}
-
-// checkSigned is the gateway's own proof that what the server answered is
-// what it asked for, signed: the card without its signatures is the card it
-// sent, and the signature verifies under the answered keys (HR-590).
-func checkSigned(card, signed, jwks []byte) error {
-	sent, err := wire.SigningPayload(card)
-	if err != nil {
-		return err
-	}
-	got, err := wire.SigningPayload(signed)
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(sent, got) {
-		return errors.New("fedface: the signed card is another card")
-	}
-	keys, err := wire.ParseKeys(jwks)
-	if err != nil {
-		return err
-	}
-	if len(keys) == 0 {
-		return wire.ErrCardKeysRequired
-	}
-	return wire.VerifySignatures(signed, keys)
+	h.cards.put(listing, c, h.now())
+	return c.Card, true
 }

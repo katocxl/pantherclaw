@@ -92,7 +92,8 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		"\"anthropic\", \"openai\", \"vertex\" and \"bedrock\" to this fake model (pantherclaw-sim model: "+devSimModelURL+
 		"; vertex and bedrock at its /vertex/models and /bedrock), held by the gateway (G0 M29 D811, G0 M31 D962a)")
 	saas := devSaaSFlags(fs)
-	runtimes := devRuntimesFlags(fs) // G0 M34 D998
+	runtimes := devRuntimesFlags(fs)     // G0 M34 D998
+	federation := devFederationFlags(fs) // G0 M35 D1046
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -128,7 +129,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 		hold = &h
 	}
-	for _, out := range []string{*workloadOut, *factsOut, *gatewayOut} {
+	for _, out := range []string{*workloadOut, *factsOut, *gatewayOut, *federation.peerGatewayOut} {
 		if out == "" {
 			continue
 		}
@@ -137,7 +138,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 	}
 	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "" ||
-		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "" || saas.any() || runtimes.any()) &&
+		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "" || saas.any() || runtimes.any() || federation.any()) &&
 		*gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
@@ -353,6 +354,11 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 		if err := runtimes.seed(ctx, cfg, pool, org, gw, stdout); err != nil {
 			return err
+		}
+		if federation.any() {
+			if err := federation.seed(ctx, cfg, pool, org, *name, stdout); err != nil {
+				return err
+			}
 		}
 		if *a2aURL != "" {
 			if err := seedA2A(ctx, cfg, pool, org, gw, w, *a2aURL, *a2aPeerOut, stdout); err != nil {

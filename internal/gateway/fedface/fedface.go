@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -114,19 +115,12 @@ type Listings interface {
 	Listing(name string) (Listing, bool)
 }
 
-// SignListingCard asks the server to sign a rewritten listing card with
-// our org's federation key, and returns the signed card and the JWKS that
-// verifies it.
-type SignListingCard func(ctx context.Context, listing string, card []byte) (signed, jwks []byte, err error)
-
-// PeerCard returns a connection's pinned card and the binding the gateway
-// calls our agent over; ok false for a connection that has none.
-type PeerCard func(conn *control.Connection) (card []byte, binding string, ok bool)
+// errCardInvalid is a signed card the server answered that is not a card.
+var errCardInvalid = errors.New("fedface: the signed listing card is not an agent card")
 
 // Handler serves /fed/a2a/{listing}.
 type Handler struct {
 	listings  Listings
-	peerCard  PeerCard
 	sign      SignListingCard
 	publicURL string
 	log       *slog.Logger
@@ -137,13 +131,14 @@ type Handler struct {
 }
 
 // New returns the federation face. publicURL is the gateway's public base
-// URL: a peer's token names it (htu), and the served card points at it.
-func New(listings Listings, peerCard PeerCard, sign SignListingCard, publicURL string, log *slog.Logger) *Handler {
+// URL: a peer's token names it (htu), and the server's signed card points
+// at it.
+func New(listings Listings, sign SignListingCard, publicURL string, log *slog.Logger) *Handler {
 	if log == nil {
 		log = pclog.Discard()
 	}
 	h := &Handler{
-		listings: listings, peerCard: peerCard, sign: sign,
+		listings: listings, sign: sign,
 		publicURL: strings.TrimSuffix(publicURL, "/"), log: log, now: time.Now,
 	}
 	h.decide = h.unwired

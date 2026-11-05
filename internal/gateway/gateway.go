@@ -25,6 +25,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	"github.com/katocxl/pantherclaw/internal/gateway/fedface"
 	"github.com/katocxl/pantherclaw/internal/gateway/hook"
 	"github.com/katocxl/pantherclaw/internal/gateway/httpproxy"
 	"github.com/katocxl/pantherclaw/internal/gateway/mcp"
@@ -72,7 +73,9 @@ type Gateway struct {
 	hook     *hook.Handler
 	sdk      *sdk.Handler
 	a2a      *a2aface.Handler
-	model    *modelface.Handler
+	// fed is the federation face for trusted peer orgs (G0 M35 D1024).
+	fed   *fedface.Handler
+	model *modelface.Handler
 	// runtime is the cloud agent runtime face (G0 M34 D994).
 	runtime *runtimeface.Handler
 	log     *slog.Logger
@@ -120,6 +123,10 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		if g.model.Serves(r.URL.EscapedPath()) {
 			g.model.ServeHTTP(w, r) // G0 M25 D313: only a connection marked as a model relay (D525 L5)
+			return
+		}
+		if _, _, ok := fedface.Path(r.URL.EscapedPath()); ok {
+			g.fed.ServeHTTP(w, r) // G0 M35 D1024
 			return
 		}
 		if _, _, ok := a2aface.Path(r.URL.EscapedPath()); ok {
@@ -180,6 +187,9 @@ type Deps struct {
 	// SignAgentCard asks the server to sign a rewritten A2A card (G0 M24
 	// D232); nil serves cards unsigned.
 	SignAgentCard a2aface.SignCard
+	// SignListingCard fetches a federation listing's card signed with the
+	// org's federation key (G0 M35 D1024); nil serves no listing card.
+	SignListingCard fedface.SignListingCard
 	// SubmitScan sends an organization scan's findings to the server (G0 M8,
 	// HR-209); nil submits none.
 	SubmitScan ScanSubmitter
@@ -251,6 +261,13 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 				return nil, nil, err
 			}
 			return res.GetSignedCard(), res.GetKeys(), nil
+		},
+		SignListingCard: func(ctx context.Context, listing string) (fedface.SignedCard, error) {
+			res, err := ctl.Federation.SignListingCard(ctx, &pb.SignListingCardRequest{Listing: listing})
+			if err != nil {
+				return fedface.SignedCard{}, err
+			}
+			return fedface.SignedCard{Card: res.GetCard(), Expires: res.GetExpireTime().AsTime()}, nil
 		},
 		ReportStatus: func(ctx context.Context, r *pb.ReportStatusRequest) (int32, error) {
 			res, err := ctl.Gateway.ReportStatus(ctx, r)
@@ -351,6 +368,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		runtime: runtimeface.New(engine, d.Configuration, cfg.PublicURL, log),
 		sdk:     sdk.New(engine, d.Configuration, cfg.PublicURL, log),
 		a2a:     a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log).WithCardSigner(d.SignAgentCard),
+		fed:     fedface.New(nil, d.SignListingCard, cfg.PublicURL, log),
 		model:   modelface.New(engine, d.ModelCalls, d.Configuration, cfg.PublicURL, log),
 		log:     log, reportDrift: d.ReportDrift, reportInventory: d.ReportInventory, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
