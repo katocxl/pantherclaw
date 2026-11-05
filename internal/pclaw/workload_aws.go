@@ -4,16 +4,11 @@
 package pclaw
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"net/http"
-	"slices"
 	"strings"
 	"time"
 
-	"github.com/katocxl/pantherclaw/internal/identity/issuers"
+	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 )
 
 // awsCredentials are the role session credentials pclaw signs with, from
@@ -40,61 +35,16 @@ func awsFromEnv(a *app) (awsCredentials, error) {
 
 // awsAttestation signs an sts:GetCallerIdentity request for audience with
 // SigV4 and encodes it, unsent: the server sends it to STS (D121). The
-// regional endpoint is used when a region is set, the global one
-// (us-east-1) otherwise.
+// signing is workloadclient's, shared with the AgentCore interceptor (G0
+// M34 D995).
 func awsAttestation(c awsCredentials, audience string, now time.Time) (string, error) {
-	host, region := "sts.amazonaws.com", "us-east-1"
-	if c.region != "" {
-		host, region = "sts."+c.region+".amazonaws.com", c.region
-	}
-	amzDate := now.UTC().Format("20060102T150405Z")
-	headers := map[string]string{
-		"content-type":           "application/x-www-form-urlencoded; charset=utf-8",
-		"host":                   host,
-		"x-amz-date":             amzDate,
-		"x-pantherclaw-audience": audience,
-	}
-	if c.sessionToken != "" {
-		headers["x-amz-security-token"] = c.sessionToken
-	}
-	auth := sigV4(c, region, "sts", http.MethodPost, "/", headers, issuers.AWSBody, amzDate)
-	headers["authorization"] = auth
-	return issuers.AWSRequest{Method: http.MethodPost, URL: "https://" + host + "/", Headers: headers, Body: issuers.AWSBody}.Encode()
-}
-
-// sigV4 returns the Authorization header value of a request with no query
-// string whose headers (lower-case names) are all signed.
-func sigV4(c awsCredentials, region, service, method, path string, headers map[string]string, body, amzDate string) string {
-	names := make([]string, 0, len(headers))
-	for k := range headers {
-		names = append(names, k)
-	}
-	slices.Sort(names)
-	var canon strings.Builder
-	for _, k := range names {
-		canon.WriteString(k + ":" + strings.Join(strings.Fields(headers[k]), " ") + "\n")
-	}
-	signed := strings.Join(names, ";")
-	bodySum := sha256.Sum256([]byte(body))
-	request := strings.Join([]string{method, path, "", canon.String(), signed, hex.EncodeToString(bodySum[:])}, "\n")
-	reqSum := sha256.Sum256([]byte(request))
-	scope := amzDate[:8] + "/" + region + "/" + service + "/aws4_request"
-	toSign := "AWS4-HMAC-SHA256\n" + amzDate + "\n" + scope + "\n" + hex.EncodeToString(reqSum[:])
-	sig := hex.EncodeToString(hmacSHA256(awsSigningKey(c.secretKey, amzDate[:8], region, service), toSign))
-	return "AWS4-HMAC-SHA256 Credential=" + c.accessKey + "/" + scope + ", SignedHeaders=" + signed + ", Signature=" + sig
+	return workloadclient.AWSAttestation(workloadclient.AWSCredentials{
+		AccessKey: c.accessKey, SecretKey: c.secretKey, SessionToken: c.sessionToken, Region: c.region,
+	}, audience, now)
 }
 
 // awsSigningKey derives the SigV4 signing key for one day, region and
 // service.
 func awsSigningKey(secret, date, region, service string) []byte {
-	k := hmacSHA256([]byte("AWS4"+secret), date)
-	k = hmacSHA256(k, region)
-	k = hmacSHA256(k, service)
-	return hmacSHA256(k, "aws4_request")
-}
-
-func hmacSHA256(key []byte, data string) []byte {
-	m := hmac.New(sha256.New, key)
-	m.Write([]byte(data))
-	return m.Sum(nil)
+	return workloadclient.AWSSigningKey(secret, date, region, service)
 }

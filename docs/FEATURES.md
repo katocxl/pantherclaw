@@ -994,6 +994,23 @@ An agent's browser asks PantherClaw, through `pclaw` on the same machine, before
 | F1038 | Capture without images | Opt-in prompt capture replaces image, document and screenshot blocks by their type, size and digest. | Next | Business | M33 | F1002 |
 | F1039 | Cloaking compare | For compare sites, the gateway fetches an allowed page as the agent and as a plain browser, and reports a mismatch as digests and numbers; the `pc.browser.cloaking` alert (PARTIAL, alert only). | Next | Community | M33 | new |
 
+### M34 rows: Cloud agent runtimes
+
+A cloud agent runtime asks the customer's own PantherClaw gateway before it runs a tool: AgentCore through its request interceptor, ADK agents (Vertex AI Agent Engine among them) through a callback, and Foundry through its MCP approvals; agents deployed in those runtimes are found by daily discovery ([G0 M34](g0/M34.md), [ADR-0061](adr/0061-cloud-agent-runtimes.md)). Every decision is cooperative (PARTIAL). Each row takes its parent feature's edition: AuthZEN (PN-023) for the face, the cloud attestation presets for runtime runs, SaaS discovery for discovery.
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1040 | AgentCore face | The gateway's `POST /runtime/agentcore`: an AgentCore interceptor event's `tools/call` decided through the connection bound to its target (channel `runtime`, recorded as delegated); other listed methods pass, the rest are refused. | Next | Community | M34 | PN-023 |
+| F1041 | AgentCore interceptor Lambda | `pc-agentcore-interceptor`: one Lambda per AgentCore gateway, enrolled by `aws_iam` attestation with an in-memory key, asking the customer's gateway and failing closed; `--local` for the simulator. | Next | Community | M34 | PN-023 |
+| F1042 | Runtime runs | `RuntimeService.StartRuntimeRun`: an instance enrolled by cloud attestation starts its run under its issuer entry's run grant. | Next | Enterprise | M34 | F1028 |
+| F1043 | ADK callback | `integrations/google-adk`: `pantherclaw_adk.before_tool_callback` asks PantherClaw before each ADK tool, including in Vertex AI Agent Engine, and returns a refusal on anything but an allow. | Next | Community | M34 | PN-016.3 |
+| F1044 | Foundry approvals | `pantherclaw.foundry.FoundryApprovals` answers Azure AI Foundry MCP approval requests from PantherClaw's decision. | Next | Community | M34 | PN-016.3 |
+| F1045 | Runtime discovery | Discovery of AgentCore runtimes, Vertex reasoning engines and Foundry agents through the gateway with a read-only collector credential. | Next | Business | M34 | F929 |
+| F1046 | Daily scans | SaaS scan schedules set by a person; the daily job starts one scan per schedule (origin `schedule`). | Next | Business | M34 | F929 |
+| F1047 | Agent deploy operations | `pc.aws-agentcore`, `pc.vertex-agent-engine` and `pc.azure-foundry`: list reads and irreversible `agent.deploy` create and update operations. | Next | Community | M34 | new |
+| F1048 | Cloud admin commands | `pc.aws-ssm` `aws.ssm.send_command` and `pc.azure-compute` `azure.vm.run_command`: irreversible `code.execute` operations with closed documents and bounded scripts. | Next | Community | M34 | new |
+| F1049 | Runtime simulators and seeds | `pantherclaw-sim` agentcore, vertex-agent-engine and azure, SSM and GetCallerIdentity in the aws sim, and the M34 dev seeds. | Next | Community | M34 | new |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.
