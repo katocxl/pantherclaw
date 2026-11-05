@@ -6,10 +6,12 @@
 -- - discoveries and SaaS scan runs gain the sources aws_agentcore,
 --   vertex_agent_engine and azure_foundry. Like the SaaS sources, each is
 --   keyed by scan_key and holds no key.
+-- - a scan run's tenant may hold a "/" (a Vertex <project>/<location>).
 -- - a scan run gains the origin schedule: a daily scan a schedule started,
 --   which holds a connection and a lease as a gateway scan does.
--- - pc.saas_scan_schedules lists the connections a person asked to be
---   scanned daily, one per (org, source, connection). The daily job starts
+-- - pc.saas_scan_schedules lists the connections and tenants a person asked
+--   to be scanned daily, one per (org, source, connection, tenant). The daily
+--   job starts
 --   one scan per schedule, initiated by the schedule's person, and records
 --   when it last started one.
 -- The unnamed checks of 00294 on the source and the origin are found by
@@ -66,7 +68,12 @@ ALTER TABLE pc.saas_scan_runs
     -- A gateway's or a schedule's scan holds a connection and a lease; an
     -- import holds neither.
     ADD CONSTRAINT saas_scan_runs_connection CHECK ((origin IN ('gateway', 'schedule')) = (connection_id IS NOT NULL)) NOT VALID,
-    ADD CONSTRAINT saas_scan_runs_lease CHECK (origin IN ('gateway', 'schedule') OR verification_id IS NULL) NOT VALID;
+    ADD CONSTRAINT saas_scan_runs_lease CHECK (origin IN ('gateway', 'schedule') OR verification_id IS NULL) NOT VALID,
+    -- A Vertex tenant is <project>/<location> (D997a).
+    DROP CONSTRAINT saas_scan_runs_tenant_check,
+    ADD CONSTRAINT saas_scan_runs_tenant_check CHECK (tenant ~ '^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$') NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.saas_scan_runs VALIDATE CONSTRAINT saas_scan_runs_tenant_check;
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.saas_scan_runs VALIDATE CONSTRAINT saas_scan_runs_source_check;
 -- squawk-ignore constraint-missing-not-valid
@@ -81,11 +88,13 @@ CREATE TABLE pc.saas_scan_schedules (
     source          text        NOT NULL CHECK (source IN ('copilot_studio', 'chatgpt_enterprise',
                                                            'aws_agentcore', 'vertex_agent_engine', 'azure_foundry')),
     connection_id   uuid        NOT NULL,
+    -- The tenant each scan covers, as saas_scan_runs.tenant (D997a).
+    tenant          text        NOT NULL CHECK (tenant ~ '^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$'),
     -- The person who asked for it; each daily scan is started as them.
     created_by      text        NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 128),
     created_at      timestamptz NOT NULL DEFAULT now(),
     last_started_at timestamptz,
-    PRIMARY KEY (org_id, source, connection_id),
+    PRIMARY KEY (org_id, source, connection_id, tenant),
     FOREIGN KEY (org_id, connection_id) REFERENCES pc.connections (org_id, id)
 );
 
@@ -98,7 +107,7 @@ CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.saas_scan_schedules
     FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 GRANT SELECT, INSERT, DELETE ON pc.saas_scan_schedules TO pc_app;
-GRANT UPDATE (last_started_at) ON pc.saas_scan_schedules TO pc_app;
+GRANT UPDATE (created_by, last_started_at) ON pc.saas_scan_schedules TO pc_app;
 GRANT SELECT ON pc.saas_scan_schedules TO pc_audit_ro;
 -- +goose StatementBegin
 DO $$ BEGIN
@@ -135,7 +144,9 @@ ALTER TABLE pc.saas_scan_runs
     ADD CONSTRAINT saas_scan_runs_source_check CHECK (source IN ('copilot_studio', 'chatgpt_enterprise')),
     ADD CONSTRAINT saas_scan_runs_origin_check CHECK (origin IN ('import', 'gateway')),
     ADD CONSTRAINT saas_scan_runs_connection CHECK ((origin = 'gateway') = (connection_id IS NOT NULL)),
-    ADD CONSTRAINT saas_scan_runs_lease CHECK (origin = 'gateway' OR verification_id IS NULL);
+    ADD CONSTRAINT saas_scan_runs_lease CHECK (origin = 'gateway' OR verification_id IS NULL),
+    DROP CONSTRAINT saas_scan_runs_tenant_check,
+    ADD CONSTRAINT saas_scan_runs_tenant_check CHECK (tenant ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$');
 ALTER TABLE pc.discoveries
     DROP CONSTRAINT discoveries_source_key,
     DROP CONSTRAINT discoveries_source,

@@ -18,16 +18,30 @@ import (
 const deleteSaasScanSchedule = `-- name: DeleteSaasScanSchedule :one
 DELETE FROM pc.saas_scan_schedules
 WHERE org_id = $1 AND source = $2 AND connection_id = $3
-RETURNING org_id, source, connection_id, created_by, created_at, last_started_at
+  AND tenant = $4
+RETURNING org_id, source, connection_id, tenant, created_by, created_at, last_started_at
 `
 
-func (q *Queries) DeleteSaasScanSchedule(ctx context.Context, orgID ids.OrgID, source string, connectionID ids.UUID) (PcSaasScanSchedule, error) {
-	row := q.db.QueryRow(ctx, deleteSaasScanSchedule, orgID, source, connectionID)
+type DeleteSaasScanScheduleParams struct {
+	OrgID        ids.OrgID
+	Source       string
+	ConnectionID ids.UUID
+	Tenant       string
+}
+
+func (q *Queries) DeleteSaasScanSchedule(ctx context.Context, arg DeleteSaasScanScheduleParams) (PcSaasScanSchedule, error) {
+	row := q.db.QueryRow(ctx, deleteSaasScanSchedule,
+		arg.OrgID,
+		arg.Source,
+		arg.ConnectionID,
+		arg.Tenant,
+	)
 	var i PcSaasScanSchedule
 	err := row.Scan(
 		&i.OrgID,
 		&i.Source,
 		&i.ConnectionID,
+		&i.Tenant,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.LastStartedAt,
@@ -494,9 +508,9 @@ func (q *Queries) ListSaasRuns(ctx context.Context, arg ListSaasRunsParams) ([]L
 }
 
 const listSaasScanSchedules = `-- name: ListSaasScanSchedules :many
-SELECT org_id, source, connection_id, created_by, created_at, last_started_at FROM pc.saas_scan_schedules
+SELECT org_id, source, connection_id, tenant, created_by, created_at, last_started_at FROM pc.saas_scan_schedules
 WHERE org_id = $1
-ORDER BY source, connection_id
+ORDER BY source, connection_id, tenant
 `
 
 // The org's schedules, for the daily job and the CLI.
@@ -513,6 +527,7 @@ func (q *Queries) ListSaasScanSchedules(ctx context.Context, orgID ids.OrgID) ([
 			&i.OrgID,
 			&i.Source,
 			&i.ConnectionID,
+			&i.Tenant,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.LastStartedAt,
@@ -528,19 +543,33 @@ func (q *Queries) ListSaasScanSchedules(ctx context.Context, orgID ids.OrgID) ([
 }
 
 const lockSaasScanSchedule = `-- name: LockSaasScanSchedule :one
-SELECT org_id, source, connection_id, created_by, created_at, last_started_at FROM pc.saas_scan_schedules
+SELECT org_id, source, connection_id, tenant, created_by, created_at, last_started_at FROM pc.saas_scan_schedules
 WHERE org_id = $1 AND source = $2 AND connection_id = $3
+  AND tenant = $4
 FOR UPDATE
 `
 
+type LockSaasScanScheduleParams struct {
+	OrgID        ids.OrgID
+	Source       string
+	ConnectionID ids.UUID
+	Tenant       string
+}
+
 // Locks one schedule, so two daily jobs start one scan.
-func (q *Queries) LockSaasScanSchedule(ctx context.Context, orgID ids.OrgID, source string, connectionID ids.UUID) (PcSaasScanSchedule, error) {
-	row := q.db.QueryRow(ctx, lockSaasScanSchedule, orgID, source, connectionID)
+func (q *Queries) LockSaasScanSchedule(ctx context.Context, arg LockSaasScanScheduleParams) (PcSaasScanSchedule, error) {
+	row := q.db.QueryRow(ctx, lockSaasScanSchedule,
+		arg.OrgID,
+		arg.Source,
+		arg.ConnectionID,
+		arg.Tenant,
+	)
 	var i PcSaasScanSchedule
 	err := row.Scan(
 		&i.OrgID,
 		&i.Source,
 		&i.ConnectionID,
+		&i.Tenant,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.LastStartedAt,
@@ -551,10 +580,23 @@ func (q *Queries) LockSaasScanSchedule(ctx context.Context, orgID ids.OrgID, sou
 const markSaasScanScheduleStarted = `-- name: MarkSaasScanScheduleStarted :exec
 UPDATE pc.saas_scan_schedules SET last_started_at = now()
 WHERE org_id = $1 AND source = $2 AND connection_id = $3
+  AND tenant = $4
 `
 
-func (q *Queries) MarkSaasScanScheduleStarted(ctx context.Context, orgID ids.OrgID, source string, connectionID ids.UUID) error {
-	_, err := q.db.Exec(ctx, markSaasScanScheduleStarted, orgID, source, connectionID)
+type MarkSaasScanScheduleStartedParams struct {
+	OrgID        ids.OrgID
+	Source       string
+	ConnectionID ids.UUID
+	Tenant       string
+}
+
+func (q *Queries) MarkSaasScanScheduleStarted(ctx context.Context, arg MarkSaasScanScheduleStartedParams) error {
+	_, err := q.db.Exec(ctx, markSaasScanScheduleStarted,
+		arg.OrgID,
+		arg.Source,
+		arg.ConnectionID,
+		arg.Tenant,
+	)
 	return err
 }
 
@@ -811,16 +853,17 @@ func (q *Queries) SetExternalOwner(ctx context.Context, arg SetExternalOwnerPara
 }
 
 const upsertSaasScanSchedule = `-- name: UpsertSaasScanSchedule :one
-INSERT INTO pc.saas_scan_schedules (org_id, source, connection_id, created_by)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (org_id, source, connection_id) DO UPDATE SET created_by = excluded.created_by
-RETURNING org_id, source, connection_id, created_by, created_at, last_started_at
+INSERT INTO pc.saas_scan_schedules (org_id, source, connection_id, tenant, created_by)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (org_id, source, connection_id, tenant) DO UPDATE SET created_by = excluded.created_by
+RETURNING org_id, source, connection_id, tenant, created_by, created_at, last_started_at
 `
 
 type UpsertSaasScanScheduleParams struct {
 	OrgID        ids.OrgID
 	Source       string
 	ConnectionID ids.UUID
+	Tenant       string
 	CreatedBy    string
 }
 
@@ -831,6 +874,7 @@ func (q *Queries) UpsertSaasScanSchedule(ctx context.Context, arg UpsertSaasScan
 		arg.OrgID,
 		arg.Source,
 		arg.ConnectionID,
+		arg.Tenant,
 		arg.CreatedBy,
 	)
 	var i PcSaasScanSchedule
@@ -838,6 +882,7 @@ func (q *Queries) UpsertSaasScanSchedule(ctx context.Context, arg UpsertSaasScan
 		&i.OrgID,
 		&i.Source,
 		&i.ConnectionID,
+		&i.Tenant,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.LastStartedAt,

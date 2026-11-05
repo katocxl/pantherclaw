@@ -4019,6 +4019,7 @@ type PcSaasScanSchedule struct {
 	OrgID         ids.OrgID
 	Source        string
 	ConnectionID  ids.UUID
+	Tenant        string
 	CreatedBy     string
 	CreatedAt     time.Time
 	LastStartedAt *time.Time

@@ -500,6 +500,8 @@ type StartSaasScanRequest struct {
 	// "vertex_agent_engine" or "azure_foundry" (G0 M34 D997).
 	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
 	// The Dataverse organization id, or the ChatGPT workspace id.
+	// For the runtime sources (G0 M34 D997a): an AgentCore account, a Vertex
+	// <project>/<location>, a Foundry project.
 	Tenant        string `protobuf:"bytes,3,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1166,6 +1168,8 @@ type SaaSScanSchedule struct {
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// When the daily job last started a scan of it; unset before the first.
 	LastStartTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_start_time,json=lastStartTime,proto3" json:"last_start_time,omitempty"`
+	// The tenant each scan covers (G0 M34 D997a).
+	Tenant        string `protobuf:"bytes,6,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1235,6 +1239,13 @@ func (x *SaaSScanSchedule) GetLastStartTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *SaaSScanSchedule) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
+}
+
 // SetSaaSScanScheduleRequest sets or stops a daily scan.
 type SetSaaSScanScheduleRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1243,7 +1254,10 @@ type SetSaaSScanScheduleRequest struct {
 	// A connection of the source's package.
 	ConnectionId string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	// True asks for a daily scan; false stops it.
-	Daily         bool `protobuf:"varint,3,opt,name=daily,proto3" json:"daily,omitempty"`
+	Daily bool `protobuf:"varint,3,opt,name=daily,proto3" json:"daily,omitempty"`
+	// The tenant each scan covers, as StartSaasScan's (G0 M34 D997a): an
+	// AgentCore account, a Vertex <project>/<location>, a Foundry project.
+	Tenant        string `protobuf:"bytes,4,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1297,6 +1311,13 @@ func (x *SetSaaSScanScheduleRequest) GetDaily() bool {
 		return x.Daily
 	}
 	return false
+}
+
+func (x *SetSaaSScanScheduleRequest) GetTenant() string {
+	if x != nil {
+		return x.Tenant
+	}
+	return ""
 }
 
 // SetSaaSScanScheduleResponse returns the schedule.
@@ -1450,11 +1471,11 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\x1a=\n" +
 	"\x0fNotScannedEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xfe\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xff\x01\n" +
 	"\x14StartSaasScanRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12t\n" +
-	"\x06source\x18\x02 \x01(\tB\\\xbaHYrWR\x0ecopilot_studioR\x12chatgpt_enterpriseR\raws_agentcoreR\x13vertex_agent_engineR\razure_foundryR\x06source\x12A\n" +
-	"\x06tenant\x18\x03 \x01(\tB)\xbaH&r$2\"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$R\x06tenant\"E\n" +
+	"\x06source\x18\x02 \x01(\tB\\\xbaHYrWR\x0ecopilot_studioR\x12chatgpt_enterpriseR\raws_agentcoreR\x13vertex_agent_engineR\razure_foundryR\x06source\x12B\n" +
+	"\x06tenant\x18\x03 \x01(\tB*\xbaH'r%2#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$R\x06tenant\"E\n" +
 	"\x15StartSaasScanResponse\x12,\n" +
 	"\x04scan\x18\x01 \x01(\v2\x18.pantherclaw.v1.SaasScanR\x04scan\".\n" +
 	"\x12GetSaasScanRequest\x12\x18\n" +
@@ -1504,7 +1525,7 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"\rowner_user_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\vownerUserId\x12<\n" +
 	"\x14backup_owner_user_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x11backupOwnerUserId\x12\"\n" +
 	"\x06reason\x18\x04 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"\xef\x01\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"\x87\x02\n" +
 	"\x10SaaSScanSchedule\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12\x1d\n" +
@@ -1512,11 +1533,13 @@ const file_pantherclaw_v1_saas_discovery_proto_rawDesc = "" +
 	"created_by\x18\x03 \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12B\n" +
-	"\x0flast_start_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\rlastStartTime\"\xd7\x01\n" +
+	"\x0flast_start_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\rlastStartTime\x12\x16\n" +
+	"\x06tenant\x18\x06 \x01(\tR\x06tenant\"\x9b\x02\n" +
 	"\x1aSetSaaSScanScheduleRequest\x12t\n" +
 	"\x06source\x18\x01 \x01(\tB\\\xbaHYrWR\x0ecopilot_studioR\x12chatgpt_enterpriseR\raws_agentcoreR\x13vertex_agent_engineR\razure_foundryR\x06source\x12-\n" +
 	"\rconnection_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12\x14\n" +
-	"\x05daily\x18\x03 \x01(\bR\x05daily\"[\n" +
+	"\x05daily\x18\x03 \x01(\bR\x05daily\x12B\n" +
+	"\x06tenant\x18\x04 \x01(\tB*\xbaH'r%2#^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$R\x06tenant\"[\n" +
 	"\x1bSetSaaSScanScheduleResponse\x12<\n" +
 	"\bschedule\x18\x01 \x01(\v2 .pantherclaw.v1.SaaSScanScheduleR\bschedule\"L\n" +
 	"\x19SetSaasAgentOwnerResponse\x12/\n" +

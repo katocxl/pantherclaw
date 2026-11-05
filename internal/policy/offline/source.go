@@ -53,6 +53,7 @@ import (
 	pcteams "github.com/katocxl/pantherclaw/packages/pc-teams"
 	pcvectorstore "github.com/katocxl/pantherclaw/packages/pc-vectorstore"
 	pcvertex "github.com/katocxl/pantherclaw/packages/pc-vertex"
+	pcvertexagentengine "github.com/katocxl/pantherclaw/packages/pc-vertex-agent-engine"
 )
 
 // Bounds of what one check reads. A check runs on a pull request's own
@@ -114,6 +115,7 @@ func builtin() [][]byte {
 		pcgmail.Package, pcgoogleworkspace.Package, pcm365.Package,
 		pcsalesforce.Package, pcnotion.Package, pclinear.Package, pcvertex.Package, pcbedrock.Package, pcsnowflake.Package,
 		pcbrowser.Package, pccomputer.Package,
+		pcvertexagentengine.Package, // G0 M34 D993
 	}
 }
 
