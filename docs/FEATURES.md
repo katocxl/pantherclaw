@@ -1028,6 +1028,23 @@ Two organizations that trust each other let their agents message each other's li
 | F1058 | Witnessed global log | Independent C2SP witnesses cosign the deployment-wide global log, the public global checkpoint, and `pclaw verify --witnesses --witness-threshold`. | Next | Business | M35 | new |
 | F1059 | ML-DSA-65 on receipts | Decision, execution and effect receipts co-signed with ML-DSA-65 in `sigs[]` when `mldsa_cosign` is on, checked by `pclaw verify`. | Next | Enterprise | M35 | new |
 
+### M36 rows: Reach
+
+An agent's own trace continues through PantherClaw into the org's own OTLP collector as metadata-only GenAI spans; approvals reach the right person without wearing them down, through fatigue routing, deputies, digests, quiet hours and Web Push; and a read-only VS Code extension shows an agent's coverage, waiting approvals and recent decisions ([G0 M36](g0/M36.md), [ADR-0063](adr/0063-telemetry-and-approval-reach.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1060 | Trace context capture | A strict W3C `traceparent` (and `tracestate` up to 512 bytes) read on every face, MCP `_meta.traceparent`, and model calls before headers are stripped; stored on the transaction, outside the ActionIR, digests and bindings; forwarded by the SDKs. | Next | Community | M36 | N26 |
+| F1061 | OTLP destinations per org | An org's own OTLP/HTTP traces endpoint with sealed headers, created PENDING and activated with a security key, checked like SIEM destinations, tested, disabled after 24 hours of failures; `OTLPDestinationService`. | Next | Business | M36 | N26 |
+| F1062 | GenAI spans | `pantherclaw.decide`, `execute_tool <operation>` and `chat <model>` spans with effects as events, under the agent's trace or one per run, idempotent ids and metadata only, exported every 30 seconds from a cursor. | Next | Community | M36 | N26 |
+| F1063 | Approval fatigue metrics | `GetApprovalFatigue` per decider over 1 hour, 24 hours or 7 days: peak approvals per hour, median time to approve, approve share, night approvals and the longest streak without a decline. | Next | Team | M36 | new |
+| F1064 | Fatigue flags and routing | A flag every 15 minutes on the D1063 thresholds, cleared after 4 hours, the alert-only `pc.approvals.fatigue` detection, and `fatigue_routing: route` notifying a flagged decider last without changing eligibility. | Next | Team | M36 | new |
+| F1065 | Approval deputies | A deputy for up to 30 days who gets the absent person's routing and notifications only when eligible for the request; `SetApprovalDeputy`, `CancelApprovalDeputy`, `ListApprovalDeputies`. | Next | Team | M36 | new |
+| F1066 | Notification preferences and digests | Immediate or digest delivery every 15, 30 or 60 minutes, quiet hours and a time zone per person, delaying only that person's notices; one link-only `approval.digest` per due person. | Next | Team | M36 | new |
+| F1067 | Approval groups | `ListApprovalGroups` by variant, agent, run or operation with counts, up to 25 request ids and batch eligibility; read only, approving stays on the page and the batch flow. | Next | Team | M36 | new |
+| F1068 | Web Push | A deployment VAPID key, push subscriptions to allow-listed push services, RFC 8291 encrypted link-only notices with an RFC 8292 VAPID JWT, and subscriptions removed on 404 or 410. | Next | Team | M36 | N25 |
+| F1069 | VS Code extension | A read-only tree view and status bar of an agent's coverage, waiting approvals and recent decisions through the signed-in `pclaw` (`pclaw editor status` and `open`), with Open in console and no token in VS Code. | Next | Community | M36 | new |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.

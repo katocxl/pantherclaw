@@ -65,4 +65,6 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [siem-forwarder.md](siem-forwarder.md) | M27 | `pclaw siem forward`: verify SIEM export batches and write one OCSF event per line for Sentinel's Azure Monitor Agent or Wazuh (Business) |
 | [agentcore.md](agentcore.md) | M34 | Connect an AgentCore gateway: the interceptor Lambda, its issuer entry and run grant, a connection per target with its runtime target (`PARTIAL`) |
 | [federation.md](federation.md) | M35 | Federate with a peer org: the federation endpoint and key, pairwise trust with the safety code and security keys, listings, cross-org grants, federated A2A connections and receipts (Enterprise) |
+| [otel-genai.md](otel-genai.md) | M36 | Send metadata-only GenAI spans to the org's own OTLP collector: trace context from agents, destinations activated with a security key, span shapes and failures |
+| [approvals.md](approvals.md) | M36 | Approvals reaching the right person: fatigue metrics and routing, deputies, preferences, digests and quiet hours, approval groups, Web Push and the read-only VS Code extension |
 | [threat-map.md](threat-map.md) | M28 | The threat map: MITRE ATLAS and ATT&CK Enterprise lanes, gaps and fixes, `pclaw threats`, the signed report, the Navigator layer and history |
