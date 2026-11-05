@@ -60,11 +60,11 @@ func (q *Queries) AdmitInstance(ctx context.Context, decidedBy *string, orgID id
 
 const attestInstance = `-- name: AttestInstance :one
 UPDATE pc.agent_instances SET attested_until = $1, updated_at = now()
-WHERE org_id = $2 AND id = $3 AND state = 'ADMITTED' AND att_level = 2
+WHERE org_id = $2 AND id = $3 AND state = 'ADMITTED' AND att_level >= 2
 RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
 
-// Renews L2 until a fresh attestation expires (HR-143).
+// Renews L2 or L3 until a fresh attestation expires (HR-143, G0 M35 D1030).
 func (q *Queries) AttestInstance(ctx context.Context, attestedUntil *time.Time, orgID ids.OrgID, iD ids.UUID) (PcAgentInstance, error) {
 	row := q.db.QueryRow(ctx, attestInstance, attestedUntil, orgID, iD)
 	var i PcAgentInstance
@@ -470,9 +470,9 @@ INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, en
     issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, last_network, last_seen_at,
     decided_by, decided_at, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, 2,
-    $11, $12, $13, $14, now(),
-    $15, CASE WHEN $6::text = 'ADMITTED' THEN now() END,
+    $7, $8, $9, $10, $11,
+    $12, $13, $14, $15, now(),
+    $16, CASE WHEN $6::text = 'ADMITTED' THEN now() END,
     CASE WHEN $6::text = 'ADMITTED' THEN NULL ELSE now() + interval '7 days' END)
 RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
@@ -488,6 +488,7 @@ type InsertAttestedInstanceParams struct {
 	EnrollmentTokenID *ids.UUID
 	IssuerRevisionID  *ids.UUID
 	Binding           []byte
+	AttLevel          int16
 	AttestedUntil     *time.Time
 	ReleaseState      *string
 	ReleaseDigest     *string
@@ -509,6 +510,7 @@ func (q *Queries) InsertAttestedInstance(ctx context.Context, arg InsertAttested
 		arg.EnrollmentTokenID,
 		arg.IssuerRevisionID,
 		arg.Binding,
+		arg.AttLevel,
 		arg.AttestedUntil,
 		arg.ReleaseState,
 		arg.ReleaseDigest,

@@ -627,7 +627,7 @@ type IssueGrantRequest struct {
 	Limits []byte `protobuf:"bytes,9,opt,name=limits,proto3" json:"limits,omitempty"`
 	// Delegation settings (default: no delegation).
 	Delegation *GrantDelegation `protobuf:"bytes,10,opt,name=delegation,proto3" json:"delegation,omitempty"`
-	// Lowest attestation level (0-2).
+	// Lowest attestation level (0-3; L3 since G0 M35 D1030).
 	MinAttestationLevel int32 `protobuf:"varint,11,opt,name=min_attestation_level,json=minAttestationLevel,proto3" json:"min_attestation_level,omitempty"`
 	// Data flows allowed after a sensitive read (G0 M16 D75); none allows no
 	// flow.
@@ -815,7 +815,7 @@ type ReviseGrantRequest struct {
 	Limits []byte `protobuf:"bytes,7,opt,name=limits,proto3" json:"limits,omitempty"`
 	// Delegation settings.
 	Delegation *GrantDelegation `protobuf:"bytes,8,opt,name=delegation,proto3" json:"delegation,omitempty"`
-	// Lowest attestation level (0-2).
+	// Lowest attestation level (0-3; L3 since G0 M35 D1030).
 	MinAttestationLevel int32 `protobuf:"varint,9,opt,name=min_attestation_level,json=minAttestationLevel,proto3" json:"min_attestation_level,omitempty"`
 	// The ACCESS_REQUEST waitlist entry this revision answers (F051); the
 	// revision closes it as approved. The entry must be open and about this
@@ -1686,7 +1686,7 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"delegation\x18\n" +
 	" \x01(\v2\x1f.pantherclaw.v1.GrantDelegationR\n" +
 	"delegation\x12=\n" +
-	"\x15min_attestation_level\x18\v \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\x12=\n" +
+	"\x15min_attestation_level\x18\v \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x03(\x00R\x13minAttestationLevel\x12=\n" +
 	"\x05flows\x18\f \x03(\v2\x1d.pantherclaw.v1.FlowAllowanceB\b\xbaH\x05\x92\x01\x02\x10\x10R\x05flowsB\x0e\n" +
 	"\f_instance_id\"A\n" +
 	"\x12IssueGrantResponse\x12+\n" +
@@ -1703,7 +1703,7 @@ const file_pantherclaw_v1_grants_proto_rawDesc = "" +
 	"\n" +
 	"delegation\x18\b \x01(\v2\x1f.pantherclaw.v1.GrantDelegationR\n" +
 	"delegation\x12=\n" +
-	"\x15min_attestation_level\x18\t \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\x129\n" +
+	"\x15min_attestation_level\x18\t \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x03(\x00R\x13minAttestationLevel\x129\n" +
 	"\x11access_request_id\x18\n" +
 	" \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x0faccessRequestId\x88\x01\x01\x12=\n" +
 	"\x05flows\x18\v \x03(\v2\x1d.pantherclaw.v1.FlowAllowanceB\b\xbaH\x05\x92\x01\x02\x10\x10R\x05flowsB\x14\n" +

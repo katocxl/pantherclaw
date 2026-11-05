@@ -211,10 +211,10 @@ message IssueGrantRequest {
   bytes limits = 9 [(buf.validate.field).bytes.max_len = 65536];
   // Delegation settings (default: no delegation).
   GrantDelegation delegation = 10;
-  // Lowest attestation level (0-2).
+  // Lowest attestation level (0-3; L3 since G0 M35 D1030).
   int32 min_attestation_level = 11 [(buf.validate.field).int32 = {
     gte: 0
-    lte: 2
+    lte: 3
   }];
   // Data flows allowed after a sensitive read (G0 M16 D75); none allows no
   // flow.
@@ -248,10 +248,10 @@ message ReviseGrantRequest {
   bytes limits = 7 [(buf.validate.field).bytes.max_len = 65536];
   // Delegation settings.
   GrantDelegation delegation = 8;
-  // Lowest attestation level (0-2).
+  // Lowest attestation level (0-3; L3 since G0 M35 D1030).
   int32 min_attestation_level = 9 [(buf.validate.field).int32 = {
     gte: 0
-    lte: 2
+    lte: 3
   }];
   // The ACCESS_REQUEST waitlist entry this revision answers (F051); the
   // revision closes it as approved. The entry must be open and about this

@@ -140,8 +140,8 @@ func (e Envelope) Validate() error {
 	if err := checkLabel("name", e.Name, 100); err != nil {
 		return err
 	}
-	if e.MinAttestation < 0 || e.MinAttestation > 2 {
-		return invalid("envelope: min_attestation is 0, 1 or 2")
+	if e.MinAttestation < 0 || e.MinAttestation > 3 { // L3: G0 M35 D1030
+		return invalid("envelope: min_attestation is 0 to 3")
 	}
 	if len(e.Requirements) > maxRequirements {
 		return invalid("envelope: at most %d requirements", maxRequirements)

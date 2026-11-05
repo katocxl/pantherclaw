@@ -27,6 +27,17 @@ import (
 type Attestation struct {
 	Kind  issuers.Kind
 	Token string
+	// bind is what an L3 preset's evidence must prove: the org, and the
+	// nonce and key of the request it arrived with (G0 M35 D1030). Enroll
+	// and IssueToken set it from the request's verified proof.
+	bind issuers.L3Bind
+}
+
+// boundTo returns a with the L3 binding of a request to org that carried
+// proof c.
+func (a Attestation) boundTo(org ids.OrgID, c pap.Checked) Attestation {
+	a.bind = issuers.L3Bind{Org: org, Nonce: c.Nonce(), JKT: c.JKT()}
+	return a
 }
 
 // Verifier checks one preset's attestation token with its issuer's keys
@@ -59,6 +70,16 @@ type Attestors struct {
 	AWS CallerVerifier
 	// Entra is the operator-pinned Entra apps of the Azure presets (D129).
 	Entra EntraDirectory
+	// SPIFFEX509 is the X.509 bundles of the operator-configured trust
+	// domains (G0 M35 D1030). The gcp_instance preset uses GCP.
+	SPIFFEX509 X509Directory
+}
+
+// X509Directory verifies X.509-SVID signed bindings with the X.509 bundle
+// of a trust domain configured for the org (issuerkeys.X509Directory).
+type X509Directory interface {
+	Allowed(trustDomain string, org ids.OrgID) bool
+	Verify(ctx context.Context, org ids.OrgID, token string) (issuers.X509SVID, error)
 }
 
 // IssuerDirectory is a preset's operator-configured issuers, each with its
@@ -140,6 +161,10 @@ func AttestationOrg(token string) ids.OrgID {
 // the one the operator pinned to the token's audience app
 // (identity.entra_apps), never a pantherclaw:<org> audience (HR-469).
 func (s *Service) AttestationOrg(a Attestation) ids.OrgID {
+	switch a.Kind {
+	case issuers.KindSPIFFEX509, issuers.KindGCPInstance:
+		return l3Org(a)
+	}
 	if a.Kind != issuers.KindAzureMI && a.Kind != issuers.KindEntraAgent {
 		return AttestationOrg(a.Token)
 	}
@@ -147,6 +172,31 @@ func (s *Service) AttestationOrg(a Attestation) ids.OrgID {
 		return ids.OrgID{}
 	}
 	return s.att.Entra.OrgOf(azureApp(a.Token))
+}
+
+// l3Org reads the org an L3 attestation names, without verifying
+// anything: the org of a spiffe_x509 token's signed binding string, or of
+// a gcp_instance token's single pantherclaw:<org>:l3:… audience. The
+// verified evidence must then bind the same org (G0 M35 D1030).
+func l3Org(a Attestation) ids.OrgID {
+	payload, err := unverifiedPayload(a.Token)
+	if err != nil {
+		return ids.OrgID{}
+	}
+	if a.Kind == issuers.KindSPIFFEX509 {
+		return issuers.L3OrgOfBinding(string(payload))
+	}
+	var c struct {
+		Aud jsontext.Value `json:"aud"`
+	}
+	if json.Unmarshal(payload, &c) != nil {
+		return ids.OrgID{}
+	}
+	auds := audiences(c.Aud)
+	if len(auds) != 1 {
+		return ids.OrgID{}
+	}
+	return issuers.L3OrgOfAudience(auds[0])
 }
 
 // azureApp is the app id an Entra token's unverified audience names, or "".
@@ -259,6 +309,10 @@ func (s *Service) attest(ctx context.Context, org ids.OrgID, a Attestation) ([]a
 		return s.attestAWS(ctx, org, a.Token, revs)
 	case issuers.KindAzureMI, issuers.KindEntraAgent:
 		return s.attestAzure(ctx, org, a, revs)
+	case issuers.KindSPIFFEX509:
+		return s.attestSPIFFEX509(ctx, org, a, revs)
+	case issuers.KindGCPInstance:
+		return s.attestGCPInstance(ctx, org, a, revs)
 	default:
 		return nil, attErr(fmt.Errorf("unknown preset %q", a.Kind))
 	}

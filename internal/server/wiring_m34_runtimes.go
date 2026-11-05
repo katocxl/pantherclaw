@@ -71,6 +71,7 @@ type runtimeRuns struct {
 // instance (D992).
 var runtimeIssuerKinds = []string{
 	string(issuers.KindAWS), string(issuers.KindGCP), string(issuers.KindAzureMI), string(issuers.KindEntraAgent),
+	string(issuers.KindSPIFFEX509), string(issuers.KindGCPInstance), // L3, G0 M35 D1030
 }
 
 // runtimeRunName is the name a caller gives its run.

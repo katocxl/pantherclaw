@@ -55,6 +55,12 @@ func bindingFromProto(req *pantherclawv1.ProposeIssuerEntryRequest) app.Binding 
 	if ea := req.GetEntraAgent(); ea != nil {
 		b.EntraAgent = &issuers.EntraAgentBinding{TenantID: ea.GetTenantId(), AppID: ea.GetAppId(), ObjectID: ea.GetObjectId()}
 	}
+	if sx := req.GetSpiffeX509(); sx != nil {
+		b.SPIFFEX509 = &issuers.SPIFFEBinding{TrustDomain: sx.GetTrustDomain(), SPIFFEID: sx.GetSpiffeId()}
+	}
+	if gi := req.GetGcpInstance(); gi != nil {
+		b.GCPInstance = &issuers.GCPInstanceBinding{ProjectID: gi.GetProjectId(), InstanceID: gi.GetInstanceId(), Zone: gi.GetZone()}
+	}
 	if gh != nil {
 		g := issuers.GitHubBinding{
 			RepositoryID: gh.GetRepositoryId(), RepositoryOwnerID: gh.GetRepositoryOwnerId(),
@@ -125,6 +131,16 @@ func revisionProto(r app.Revision) *pantherclawv1.IssuerRevision {
 		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_ENTRA_AGENT_ID
 		out.Binding = &pantherclawv1.IssuerRevision_EntraAgent{EntraAgent: &pantherclawv1.EntraAgentBinding{
 			TenantId: ea.TenantID, AppId: ea.AppID, ObjectId: ea.ObjectID,
+		}}
+	}
+	if sx := r.Binding.SPIFFEX509; sx != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_SPIFFE_X509
+		out.Binding = &pantherclawv1.IssuerRevision_SpiffeX509{SpiffeX509: &pantherclawv1.SpiffeBinding{TrustDomain: sx.TrustDomain, SpiffeId: sx.SPIFFEID}}
+	}
+	if gi := r.Binding.GCPInstance; gi != nil {
+		out.Kind = pantherclawv1.IssuerKind_ISSUER_KIND_GCP_INSTANCE
+		out.Binding = &pantherclawv1.IssuerRevision_GcpInstance{GcpInstance: &pantherclawv1.GcpInstanceBinding{
+			ProjectId: gi.ProjectID, InstanceId: gi.InstanceID, Zone: gi.Zone,
 		}}
 	}
 	if k := r.Binding.Kubernetes; k != nil {

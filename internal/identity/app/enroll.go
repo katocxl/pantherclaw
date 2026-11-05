@@ -17,6 +17,7 @@ import (
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/identity/issuers"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -179,7 +180,7 @@ func (s *Service) Enroll(ctx context.Context, in EnrollInput) (Enrolled, error) 
 	}
 	var cands []attested
 	if in.Attestation != nil {
-		if cands, err = s.attest(ctx, org, *in.Attestation); err != nil {
+		if cands, err = s.attest(ctx, org, in.Attestation.boundTo(org, in.Proof)); err != nil {
 			return Enrolled{}, err
 		}
 	}
@@ -257,11 +258,13 @@ func maxLevel(a dbq.PcAgent) int {
 func (s *Service) insertInstance(ctx context.Context, q *dbq.Queries, tx db.TenantTx, org ids.OrgID, a dbq.PcAgent,
 	in EnrollInput, enrollment *ids.UUID, pick *attested, pub ed25519.PublicKey,
 ) (Enrolled, error) {
+	// An L3 preset makes the instance L3, any other L2 (G0 M35 D1030),
+	// within the agent's context cap.
 	level := 1
 	if pick != nil && maxLevel(a) >= 2 {
-		level = 2
+		level = attestedLevel(pick.rev, a)
 	}
-	auto := pick != nil && pick.rev.AutoAdmit && level == 2
+	auto := pick != nil && pick.rev.AutoAdmit && level >= 2
 	if enrollment == nil && !auto {
 		return Enrolled{}, attErr(errors.New("without an enrollment token, only an auto-admitting entry enrolls an L2 agent"))
 	}
@@ -304,6 +307,7 @@ func (s *Service) insertInstance(ctx context.Context, q *dbq.Queries, tx db.Tena
 		r, err = q.InsertAttestedInstance(ctx, dbq.InsertAttestedInstanceParams{
 			OrgID: org, ID: id, AgentID: a.ID, Jkt: jkt, PublicJwk: canonical, State: state, EnrolledVia: via,
 			EnrollmentTokenID: enrollment, IssuerRevisionID: &pick.rev.ID, Binding: binding, AttestedUntil: &pick.window.ExpiresAt,
+			AttLevel:     int16(issuers.Level(issuers.Kind(pick.rev.Kind))), //nolint:gosec // G115: 2 or 3
 			ReleaseState: relState, ReleaseDigest: relDigest, LastNetwork: optString(network(in.ClientAddress)), DecidedBy: decidedBy,
 		})
 	}

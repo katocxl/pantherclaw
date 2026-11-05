@@ -269,8 +269,8 @@ func (g Grant) validate(lookup func(op string) *defs.Definition) error {
 		return invalid("grant: delegation settings cannot be negative")
 	case g.Delegation.Depth > 0 && g.Delegation.MaxChildren < 1:
 		return invalid("grant: a grant that may delegate needs max_children of at least 1")
-	case g.MinAttestation < 0 || g.MinAttestation > 2:
-		return invalid("grant: min_attestation is 0, 1 or 2")
+	case g.MinAttestation < 0 || g.MinAttestation > 3: // L3: G0 M35 D1030
+		return invalid("grant: min_attestation is 0 to 3")
 	case len(g.Requirements) > maxRequirements:
 		return invalid("grant: at most %d requirements", maxRequirements)
 	case g.Grantor.ID.IsZero() || g.Basis == "":

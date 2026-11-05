@@ -38,5 +38,5 @@ func presetAttestors(att *iapp.Attestors, cfg IdentityConfig) error {
 		return err
 	}
 	att.GitLab, att.SPIFFE, att.GCP, att.AWS, att.Entra = gitlab, spiffe, gcp, aws, entra
-	return nil
+	return l3Attestors(att, cfg)
 }

@@ -63,7 +63,7 @@ func (s *Service) IssueToken(ctx context.Context, in TokenInput) (Issued, error)
 	}
 	var cands []attested
 	if in.Attestation != nil {
-		if cands, err = s.attest(ctx, id.Org, *in.Attestation); err != nil {
+		if cands, err = s.attest(ctx, id.Org, in.Attestation.boundTo(id.Org, in.Proof)); err != nil {
 			return Issued{}, err
 		}
 	}
@@ -131,8 +131,10 @@ func (s *Service) IssueToken(ctx context.Context, in TokenInput) (Issued, error)
 		}
 		now := s.clk.Now()
 		level, notAfter := 1, time.Time{}
-		if r.AttLevel == 2 && active != nil && r.AttestedUntil != nil && r.AttestedUntil.After(now) && maxLevel(a) >= 2 {
-			level, notAfter = 2, *r.AttestedUntil
+		// L2, or L3 for an L3 preset (G0 M35 D1030), only while the
+		// attestation is current, capped by the agent's context.
+		if r.AttLevel >= 2 && active != nil && r.AttestedUntil != nil && r.AttestedUntil.After(now) && maxLevel(a) >= 2 {
+			level, notAfter = min(int(r.AttLevel), maxLevel(a)), *r.AttestedUntil
 		}
 		net := network(in.ClientAddress)
 		lastNet := deref(r.LastNetwork)
