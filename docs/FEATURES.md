@@ -1045,6 +1045,23 @@ An agent's own trace continues through PantherClaw into the org's own OTLP colle
 | F1068 | Web Push | A deployment VAPID key, push subscriptions to allow-listed push services, RFC 8291 encrypted link-only notices with an RFC 8292 VAPID JWT, and subscriptions removed on 404 or 410. | Next | Team | M36 | N25 |
 | F1069 | VS Code extension | A read-only tree view and status bar of an agent's coverage, waiting approvals and recent decisions through the signed-in `pclaw` (`pclaw editor status` and `open`), with Open in console and no token in VS Code. | Next | Community | M36 | new |
 
+### M38 rows: Partners and shared indicators
+
+An MSSP partner watches and helps many customers from one org under links each customer approves with a security key, reading what a support session reads and proposing rollouts that only become drafts; every org can use and share hash-only indicators of known-bad MCP servers, tool descriptions and injection text, which hold or alert and never refuse ([G0 M38](g0/M38.md), [ADR-0065](adr/0065-partners-and-shared-indicators.md)).
+
+| ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1080 | Partner links | A partner org requests a link to a customer org for 1 to 90 days with READ and optional PROPOSE; a customer person with `partner.approve` decides on a step-up page; revoke at any time, renew, expiry of links and undecided requests; recorded in both orgs; `PartnerService`. | Next | Enterprise | M38 | N19 |
+| F1081 | Partner sessions | A partner person with `partner.operate` opens a customer under an ACTIVE link with a step-up, getting a read-only session scoped to that customer for at most 12 hours, re-checked and audited `partner.call` on every call. | Next | Enterprise | M38 | N19 |
+| F1082 | Cross-customer summary | `ListPartnerCustomers`: per ACTIVE link the customer's name, the link's end, waiting approvals, open alerts and the last decision time, each read recorded in that customer's audit log. | Next | Enterprise | M38 | N19 |
+| F1083 | Rollout proposals | A partner proposes a policy version or a pack with parameters to one or many customers (a template id groups them); the customer accepts into a draft or declines; the partner withdraws; proposals expire after 30 days. | Next | Enterprise | M38 | N19 |
+| F1084 | Two people for partner-origin changes | Publishing or rolling out a version drafted from a partner proposal always needs two customer people with security keys, and waits with `NEEDS_SECOND_PERSON` when the org has fewer. | Next | Enterprise | M38 | N19 |
+| F1085 | Signed indicator feed | A compact JWS feed of `mcp_server`, `tool_description` and `injection_text` indicators verified against offline roots, rollback refused, imported with `pclaw-admin` or fetched daily from `intel.feed_url`; `IntelService` settings and state. | Next | Business | M38 | N27 |
+| F1086 | Indicator matching | Matches at discovery, drift and on the decision path, and injected text in the content-signal scan; HOLD for a person or ALERT_ONLY, never a refusal; `pc.intel_matches`, `intel.matched` and the `pc.intel.match` detection. | Next | Business | M38 | N27 |
+| F1087 | Upstream server identity capture | The MCP `initialize` `serverInfo` recorded on the connection's inventory, used to compute server indicator hashes only. | Next | Community | M38 | N27 |
+| F1088 | Contribute indicators | A person with `intel.contribute`, with the org's share switch on, turns a confirmed finding into a locally computed hash or shingles; the operator exports contributions without org, account or fine-grained time. | Next | Community | M38 | N27 |
+| F1089 | STIX export | `ExportIntelSTIX` returns a STIX 2.1 bundle of `indicator` objects with hash patterns, kind labels and kill chain phases from the techniques. | Next | Community | M38 | N27 |
+
 ## Product boundaries (non-goals, kept verbatim in spirit)
 
 These boundaries constrain every pillar above. A feature request that conflicts with one of them needs an explicit product decision; it is never a silent exception.

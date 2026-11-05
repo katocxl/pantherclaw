@@ -889,6 +889,14 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Threat map:** no change (T1621 is outside PantherClaw; the pinned ATLAS catalogue has no approval-fatigue technique).
 - Migrations `00400`–`00405`.
 
+### M38 — Partners and shared indicators
+**HR:** HR-810..822 · **F:** F1080–F1089 · **ADR:** 0065 · **G0:** [g0/M38.md](g0/M38.md).
+- **Code first**, like M30–M36: two streams on pushed branches, assembled on `code/m38` from `code/m36`; tests come in the testing phase.
+- **MSSP partners** (FQ38-1, Enterprise on the partner org): partner links each customer approves with a security key for at most 90 days and revokes at any time, read-only partner sessions re-checked and audited on every call, a counts-only cross-customer summary, and rollout proposals that only draft, with two customer people for partner-origin changes; runbook [partners.md](runbooks/partners.md).
+- **Shared indicators** (FQ38-2): a signed, hash-only feed of MCP server, tool description and injection text indicators, matched with HOLD or ALERT_ONLY and never a refusal (Business), local contributions and a STIX 2.1 export; runbook [intel.md](runbooks/intel.md).
+- **Threat map:** run `task docs:mitre` at assembly; a technique leaves the gap list only if the merged code maps it.
+- Migrations `00420`–`00425`.
+
 ---
 
 ## 9. CI/CD summary
