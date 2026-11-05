@@ -5730,6 +5730,168 @@
         }
       }
     },
+    "/pantherclaw.v1.BrowserService/ListBrowserSites": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BrowserService"
+        ],
+        "summary": "ListBrowserSites",
+        "description": "ListBrowserSites lists the org's browser sites.\n permission: org.owned_accounts.read",
+        "operationId": "pantherclaw.v1.BrowserService.ListBrowserSites",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListBrowserSitesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListBrowserSitesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BrowserService/AddBrowserSite": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BrowserService"
+        ],
+        "summary": "AddBrowserSite",
+        "description": "AddBrowserSite files the protected change that adds a site (a person).\n Nothing changes until a second person confirms it.\n permission: org.owned_accounts.manage",
+        "operationId": "pantherclaw.v1.BrowserService.AddBrowserSite",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AddBrowserSiteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AddBrowserSiteResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.BrowserService/RemoveBrowserSite": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.BrowserService"
+        ],
+        "summary": "RemoveBrowserSite",
+        "description": "RemoveBrowserSite removes a site at once (a person): actions on it hold\n again.\n permission: org.owned_accounts.manage",
+        "operationId": "pantherclaw.v1.BrowserService.RemoveBrowserSite",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemoveBrowserSiteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemoveBrowserSiteResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.CaseService/OpenCase": {
       "post": {
         "tags": [
@@ -16685,6 +16847,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pantherclaw.v1.SignAgentCardResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.GatewayService/ReportPageCompare": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.GatewayService"
+        ],
+        "summary": "ReportPageCompare",
+        "description": "ReportPageCompare reports a cloaking compare mismatch on a browser site\n marked for the compare (G0 M33 D986, HR-750): the page an agent's\n browser headers fetched differs from the plain fetch. It carries\n digests and sizes only, never page content, and only alerts. Accepted\n only for a connection the calling gateway serves and a host that\n matches one of the org's compare sites.\n permission: gateway.observe",
+        "operationId": "pantherclaw.v1.GatewayService.ReportPageCompare",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ReportPageCompareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ReportPageCompareResponse"
                 }
               }
             }
@@ -48414,6 +48630,175 @@
         "title": "GetBehaviorContextResponse",
         "additionalProperties": false
       },
+      "pantherclaw.v1.AddBrowserSiteRequest": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1
+          },
+          "includeSubdomains": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "include_subdomains"
+          },
+          "compare": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "compare"
+          },
+          "clickSelectors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1,
+              "maxItems": 16
+            },
+            "title": "click_selectors",
+            "maxItems": 16
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "note",
+            "maxLength": 256
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "AddBrowserSiteRequest",
+        "additionalProperties": false,
+        "description": "AddBrowserSiteRequest names a site to add.",
+        "required": [
+          "host",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.AddBrowserSiteResponse": {
+        "type": "object",
+        "properties": {
+          "protectedChangeId": {
+            "type": "string",
+            "title": "protected_change_id"
+          }
+        },
+        "title": "AddBrowserSiteResponse",
+        "additionalProperties": false,
+        "description": "AddBrowserSiteResponse names the protected change filed."
+      },
+      "pantherclaw.v1.BrowserSite": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "host": {
+            "type": "string",
+            "title": "host",
+            "description": "A lower-case DNS name of at least two labels (no IP, no port)."
+          },
+          "includeSubdomains": {
+            "type": "boolean",
+            "title": "include_subdomains",
+            "description": "Whether every name under host matches too."
+          },
+          "compare": {
+            "type": "boolean",
+            "title": "compare",
+            "description": "Whether the gateway's cloaking compare covers the site (D986)."
+          },
+          "clickSelectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "click_selectors",
+            "description": "The admin's marked-click selectors (D980)."
+          },
+          "note": {
+            "type": "string",
+            "title": "note"
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "BrowserSite",
+        "additionalProperties": false,
+        "description": "BrowserSite is one site the org listed."
+      },
+      "pantherclaw.v1.ListBrowserSitesRequest": {
+        "type": "object",
+        "title": "ListBrowserSitesRequest",
+        "additionalProperties": false,
+        "description": "ListBrowserSitesRequest asks for the list."
+      },
+      "pantherclaw.v1.ListBrowserSitesResponse": {
+        "type": "object",
+        "properties": {
+          "sites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.BrowserSite"
+            },
+            "title": "sites"
+          }
+        },
+        "title": "ListBrowserSitesResponse",
+        "additionalProperties": false,
+        "description": "ListBrowserSitesResponse is the list, by host."
+      },
+      "pantherclaw.v1.RemoveBrowserSiteRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "maxLength": 500,
+            "minLength": 1
+          }
+        },
+        "title": "RemoveBrowserSiteRequest",
+        "additionalProperties": false,
+        "description": "RemoveBrowserSiteRequest names a site to remove.",
+        "required": [
+          "id",
+          "reason"
+        ]
+      },
+      "pantherclaw.v1.RemoveBrowserSiteResponse": {
+        "type": "object",
+        "title": "RemoveBrowserSiteResponse",
+        "additionalProperties": false,
+        "description": "RemoveBrowserSiteResponse is empty."
+      },
       "pantherclaw.v1.AppendCaseEntryRequest": {
         "type": "object",
         "properties": {
@@ -68643,6 +69028,22 @@
         "additionalProperties": false,
         "description": "Gateway is one gateway record (one deployment; its replicas enroll\n separately and share the record)."
       },
+      "pantherclaw.v1.GatewayBrowserCompareSite": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "host"
+          },
+          "includeSubdomains": {
+            "type": "boolean",
+            "title": "include_subdomains"
+          }
+        },
+        "title": "GatewayBrowserCompareSite",
+        "additionalProperties": false,
+        "description": "GatewayBrowserCompareSite is one browser site marked for the cloaking\n compare (G0 M33 D986). A host matches it when it equals host, or with\n include_subdomains when it ends with \".\" + host."
+      },
       "pantherclaw.v1.GatewayCaptureProfile": {
         "type": "object",
         "properties": {
@@ -69242,6 +69643,14 @@
             "title": "content_signal_mode",
             "description": "The org's content signal mode (G0 M27 D507): the gateway scans nothing\n at OFF, and unset is OFF.",
             "$ref": "#/components/schemas/pantherclaw.v1.ContentSignalMode"
+          },
+          "browserCompareSites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.GatewayBrowserCompareSite"
+            },
+            "title": "browser_compare_sites",
+            "description": "The org's browser sites marked for the cloaking compare (G0 M33 D986):\n only these are compared, and none means the compare is off."
           }
         },
         "title": "GetConfigurationResponse",
@@ -70763,6 +71172,138 @@
         "title": "ReportObservationResponse",
         "additionalProperties": false,
         "description": "ReportObservationResponse says what the report changed."
+      },
+      "pantherclaw.v1.ReportPageCompareRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id."
+          },
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "run_id",
+            "description": "The run of the compared navigation.",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "transactionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "transaction_id",
+            "description": "The transaction of the compared navigation.",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "host": {
+            "type": "string",
+            "title": "host",
+            "maxLength": 253,
+            "minLength": 1,
+            "description": "The page's host."
+          },
+          "pathSha256": {
+            "type": "string",
+            "title": "path_sha256",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "Hex SHA-256 of the escaped path + \"?\" + the raw query."
+          },
+          "agentStatus": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "agent_status",
+            "maximum": 599,
+            "minimum": 0,
+            "format": "int32",
+            "description": "HTTP status of the fetch with the agent's headers (0: it failed)."
+          },
+          "plainStatus": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "plain_status",
+            "maximum": 599,
+            "minimum": 0,
+            "format": "int32",
+            "description": "HTTP status of the plain fetch (0: it failed)."
+          },
+          "agentBytes": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "agent_bytes",
+            "minimum": 0,
+            "format": "int64",
+            "description": "Body bytes of the fetch with the agent's headers."
+          },
+          "plainBytes": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "title": "plain_bytes",
+            "minimum": 0,
+            "format": "int64",
+            "description": "Body bytes of the plain fetch."
+          },
+          "similarityPermille": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "similarity_permille",
+            "maximum": 1000,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Text similarity of the two pages, in permille."
+          }
+        },
+        "title": "ReportPageCompareRequest",
+        "additionalProperties": false,
+        "description": "ReportPageCompareRequest is one cloaking compare mismatch (G0 M33 D986).",
+        "required": [
+          "connectionId",
+          "host",
+          "pathSha256"
+        ]
+      },
+      "pantherclaw.v1.ReportPageCompareResponse": {
+        "type": "object",
+        "properties": {
+          "recorded": {
+            "type": "boolean",
+            "title": "recorded",
+            "description": "False when the same (connection, host, path) was recorded within the\n hour."
+          }
+        },
+        "title": "ReportPageCompareResponse",
+        "additionalProperties": false,
+        "description": "ReportPageCompareResponse says whether the report was recorded."
       },
       "pantherclaw.v1.ReportRevocationFailureRequest": {
         "type": "object",
@@ -105043,6 +105584,10 @@
     {
       "name": "pantherclaw.v1.BehaviorService",
       "description": "BehaviorService reads what the behaviour analytics inferred from an org's\n own transactions (G0 M27 D501, D502, D506; F930-F935; HR-641 to HR-646;\n Business edition).\n\n Everything here is inference on unvalidated thresholds. It never reaches a\n decision: no authorization step and no approval binding reads it, and an\n inferred alert never contains anything by itself. Real and simulated\n activity stay apart. A profile that was not collected says so, never zero."
+    },
+    {
+      "name": "pantherclaw.v1.BrowserService",
+      "description": "BrowserService is the org's list of browser sites for its agents'\n managed browsers (G0 M33 D976, D977; HR-745, HR-749).\n\n A pc.browser action whose target host matches no site holds for a person\n (SITE_NOT_LISTED), and an empty list holds every site. Adding a site\n loosens that hold, so it files a protected change that applies only when\n a second person confirms it with a security key. Removing one applies at\n once. At most 500 sites per org."
     },
     {
       "name": "pantherclaw.v1.CaseService",

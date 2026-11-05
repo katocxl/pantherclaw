@@ -902,6 +902,18 @@ type PcBrokerKey struct {
 	RetiredAt    *time.Time
 }
 
+type PcBrowserSite struct {
+	ID                ids.UUID
+	OrgID             ids.OrgID
+	Host              string
+	IncludeSubdomains bool
+	Compare           bool
+	ClickSelectors    []string
+	Note              string
+	CreatedAt         time.Time
+	CreatedBy         string
+}
+
 type PcBudget struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID

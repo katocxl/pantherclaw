@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for computer-use actions a cooperative agent asks
+# to take on its own screen (G0 M33 D984, HR-758). The SDK wrappers
+# (ComputerUseGuard, guard_computer) ask the gateway through the hook face
+# before each click, key or typed text; the agent's own machine acts on an
+# allowed one itself, so nothing is dispatched and receipts say delegated.
+# Screenshots, waits, cursor reads and zooms are never sent. Coordinates are
+# not material: an approval binds what is done, not where on the screen.
+# No template or default grant names this operation. Any change here needs
+# the golden tests in internal/definitions to be updated deliberately.
+format: 1
+name: pc.computer
+version: 1.0.0
+publisher: pantherclaw
+summary: Computer-use actions a cooperative agent asks to take on its screen
+
+definitions:
+  - operation: computer.input
+    summary: Click, type or press keys on the agent's screen
+    access: write
+    target:
+      type: computer.desktop
+      id_pattern: '^local$'
+      account: none
+    params:
+      kind:
+        type: enum
+        material: true
+        required: true
+        values: [click, double_click, triple_click, drag, press, release, type, key, scroll, move]
+      button:
+        type: enum
+        values: [left, right, middle, back, forward]
+      x:
+        type: integer
+        unit: count
+        min: '0'
+        max: '100000'
+      y:
+        type: integer
+        unit: count
+        min: '0'
+        max: '100000'
+      text:
+        type: content
+        material: true
+        max_length: 4096
+      keys:
+        type: content
+        material: true
+        max_length: 256
+      # The client's id of this tool call (the tool_use id or call_id). It
+      # is the dedupe key: the same call asked twice is one action (HR-007).
+      call:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+    effects:
+      - kind: computer.input
+        description: Clicks or types on the agent's screen
+    reversibility: irreversible
+    dedupe_key: [params.call]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: 'Computer use: {params.kind}'
+      fields: [params.kind]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-08
+    mappings:
+      - channel: hook
+        tool: computer
+        route: computer-input
+        extract:
+          target_id: "'local'"
+          params:
+            kind: input.kind
+            button: "has(input.button) ? optional.of(input.button) : optional.none()"
+            x: "has(input.x) ? optional.of(int(input.x)) : optional.none()"
+            y: "has(input.y) ? optional.of(int(input.y)) : optional.none()"
+            text: "has(input.text) ? optional.of(input.text) : optional.none()"
+            keys: "has(input.keys) ? optional.of(input.keys) : optional.none()"
+            call: input.call
