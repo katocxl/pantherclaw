@@ -34,6 +34,7 @@ var m35FederationProcedures = map[string]td.Permission{
 	pantherclawv1connect.FederationServiceSignListingCardProcedure:         td.PermGatewayAuthorize,
 	pantherclawv1connect.AuthorityServiceIssueFederationTokenProcedure:     td.PermGatewayDispatch,
 	pantherclawv1connect.AuthorityServiceRecordFederationReceiptProcedure:  td.PermGatewayDispatch,
+	pantherclawv1connect.AuthorityServiceStartFederatedCallProcedure:       td.PermGatewayAuthorize,
 }
 
 // m35FederationClasses are their plan-gate classes: a lapsed org keeps

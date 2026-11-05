@@ -2292,6 +2292,34 @@ type PcFactProvider struct {
 	Builtin          bool
 }
 
+type PcFederationAgent struct {
+	OrgID      ids.OrgID
+	TrustID    ids.UUID
+	PeerAgent  string
+	AgentID    ids.UUID
+	InstanceID ids.UUID
+	CreatedBy  string
+	CreatedAt  time.Time
+}
+
+type PcFederationCall struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	TrustID    ids.UUID
+	PeerAgent  string
+	RunID      ids.UUID
+	AgentID    ids.UUID
+	InstanceID ids.UUID
+	Listing    string
+	Htu        string
+	BodySha256 []byte
+	ReceiptID  ids.UUID
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	UsedAt     *time.Time
+	ActionID   *ids.UUID
+}
+
 type PcFederationKey struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID

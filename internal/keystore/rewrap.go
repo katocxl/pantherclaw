@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -126,6 +127,13 @@ func RewrapOrg(ctx context.Context, pool, ks *db.Pool, kp keys.KeyProvider, org 
 		}
 		res.SigningKeys++
 	}
+	// The org's federation keys, wrapped the same way in their own table
+	// (G0 M35 D1020, D1024a).
+	n, err := rewrapFederationKeys(ctx, pool, ks, kp, org, cur)
+	res.SigningKeys += n
+	if err != nil {
+		return res, err
+	}
 	return res, nil
 }
 
@@ -137,6 +145,8 @@ func rewrappedKind(objType string) (string, error) {
 		return auditkind.DekRewrapped, nil
 	case "signing_key":
 		return auditkind.SigningKeyRewrapped, nil
+	case "federation_key":
+		return auditkind.FederationKeyRewrapped, nil
 	}
 	return "", fmt.Errorf("keystore: re-wrap: no audit kind for %q", objType)
 }
@@ -212,6 +222,15 @@ func reportUnroutable(ctx context.Context, pool *db.Pool, org ids.OrgID, r KEKRo
 		stored, err := dbq.New(tx).ListStoredKEKIDs(ctx, org)
 		if err != nil {
 			return err
+		}
+		fed, err := dbq.New(tx).ListFederationKeyKEKs(ctx, org) // G0 M35 D1020
+		if err != nil {
+			return err
+		}
+		for _, id := range fed {
+			if !slices.Contains(stored, id) {
+				stored = append(stored, id)
+			}
 		}
 		for _, id := range stored {
 			if r.Routes(id) {

@@ -201,9 +201,9 @@ WHERE org_id = sqlc.arg(org_id) AND principal_source = 'federation' AND state = 
 FOR UPDATE;
 
 -- name: InsertFederationRun :exec
-INSERT INTO pc.runs (org_id, id, agent_id, environment_id, principal_source, grant_id, task_ref, expires_at,
+INSERT INTO pc.runs (org_id, id, agent_id, instance_id, environment_id, principal_source, grant_id, task_ref, expires_at,
                      federation_trust_id, peer_org_id, peer_agent, federation_day)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(environment_id), 'federation', sqlc.arg(grant_id),
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(instance_id), sqlc.arg(environment_id), 'federation', sqlc.arg(grant_id),
         sqlc.arg(task_ref), sqlc.arg(expires_at), sqlc.arg(federation_trust_id), sqlc.arg(peer_org_id),
         sqlc.arg(peer_agent), sqlc.arg(federation_day)::date);
 
@@ -211,3 +211,47 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(environment
 -- A federated peer's pin, activated by the federation check (D1023).
 UPDATE pc.a2a_pins SET state = 'ACTIVE', confirmed_operator = 'federation'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PROPOSED' AND federation_trust_id IS NOT NULL;
+
+-- name: InsertFederatedInstance :exec
+-- The federated agent's one instance (D1024c): ADMITTED, no key; its jkt
+-- is a synthetic digest no key has, and Identify refuses it for PAP/1.
+INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, decided_by, decided_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(jkt), '\x7b7d'::bytea, 'ADMITTED', 'federation',
+        sqlc.arg(decided_by), now());
+
+-- name: InsertFederationAgent :exec
+INSERT INTO pc.federation_agents (org_id, trust_id, peer_agent, agent_id, instance_id, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(trust_id), sqlc.arg(peer_agent), sqlc.arg(agent_id), sqlc.arg(instance_id),
+        sqlc.arg(created_by));
+
+-- name: GetFederationAgent :one
+SELECT fa.*, a.state AS agent_state, a.environment_id AS environment_id
+FROM pc.federation_agents fa
+JOIN pc.agents a ON a.org_id = fa.org_id AND a.id = fa.agent_id
+WHERE fa.org_id = sqlc.arg(org_id) AND fa.trust_id = sqlc.arg(trust_id) AND fa.peer_agent = sqlc.arg(peer_agent);
+
+-- name: ListFederationAgentsOfTrust :many
+SELECT * FROM pc.federation_agents
+WHERE org_id = sqlc.arg(org_id) AND trust_id = sqlc.arg(trust_id)
+ORDER BY created_at, peer_agent;
+
+-- name: InsertFederationCall :exec
+INSERT INTO pc.federation_calls (org_id, id, trust_id, peer_agent, run_id, agent_id, instance_id, listing, htu,
+                                 body_sha256, receipt_id, expires_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(trust_id), sqlc.arg(peer_agent), sqlc.arg(run_id), sqlc.arg(agent_id),
+        sqlc.arg(instance_id), sqlc.arg(listing), sqlc.arg(htu), sqlc.arg(body_sha256), sqlc.arg(receipt_id),
+        sqlc.arg(expires_at));
+
+-- name: UseFederationCall :one
+-- Authorize's single use of an admitted call (D1024c).
+UPDATE pc.federation_calls SET used_at = now(), action_id = sqlc.arg(action_id)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND used_at IS NULL AND expires_at > now()
+RETURNING *;
+
+-- name: GetFederationCallOfAction :one
+SELECT * FROM pc.federation_calls
+WHERE org_id = sqlc.arg(org_id) AND action_id = sqlc.arg(action_id);
+
+-- name: DeleteExpiredFederationCalls :execrows
+DELETE FROM pc.federation_calls
+WHERE org_id = sqlc.arg(org_id) AND expires_at < now() - interval '1 day';

@@ -13,14 +13,27 @@
 -- through the gateway's federation face. It widens the channel lists of
 -- transactions and coverage routes, following 00150's pattern.
 --
+-- A federated agent stands for one peer agent of one trust in this org
+-- (D1024c): a pc.agents row (execution context federation, owned by the
+-- person who first issued it a cross-org grant, in the listing agent's
+-- team and environment) with one ADMITTED instance (enrolled via
+-- federation, no key: its jkt is a synthetic digest no key has, and it
+-- never verifies a PAP/1 proof). pc.federation_agents links them. The
+-- agent is suspended when the trust is revoked.
+--
 -- A cross-org grant's principal is federated: the peer org and the peer
 -- agent (its PAP subject), instead of a user or a service account. Its
--- agent is the listing's agent, and it is still issued by a person.
+-- agent is the federated agent, and it is still issued by a person.
 --
 -- A federation run is the run a peer agent's calls are decided in: one per
--- (trust, peer agent, UTC day) while active. It has no launcher and no
--- principal of this org; it names the trust, the peer org and peer agent,
--- and the cross-org grant.
+-- (trust, peer agent, UTC day) while active, of the federated agent and
+-- its instance. It has no launcher and no principal of this org; it names
+-- the trust, the peer org and peer agent, and the cross-org grant.
+--
+-- pc.federation_calls are the calls StartFederatedCall admitted: the
+-- verified peer token's request (listing, htu, body digest) bound to the
+-- run, for 60 seconds. Authorize on channel federation names one and uses
+-- it once.
 
 -- +goose Up
 CREATE TABLE pc.federation_listings (
@@ -64,6 +77,38 @@ END $$;
 
 -- squawk: each CHECK only widens a value list; goose runs each migration
 -- in one transaction, and NOT VALID then VALIDATE keeps the lock short.
+ALTER TABLE pc.agents
+    DROP CONSTRAINT agents_execution_context_check,
+    ADD CONSTRAINT agents_execution_context_check
+        CHECK (execution_context IN ('desktop', 'ci', 'kubernetes', 'service', 'federation')) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.agents VALIDATE CONSTRAINT agents_execution_context_check;
+ALTER TABLE pc.agent_instances
+    DROP CONSTRAINT agent_instances_enrolled_via_check,
+    ADD CONSTRAINT agent_instances_enrolled_via_check
+        CHECK (enrolled_via IN ('enrollment_token', 'attestation', 'discovery', 'mcp_client', 'federation')) NOT VALID,
+    ADD CONSTRAINT agent_instances_federation
+        CHECK (enrolled_via <> 'federation' OR (att_level = 1 AND issuer_revision_id IS NULL)) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.agent_instances VALIDATE CONSTRAINT agent_instances_enrolled_via_check;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.agent_instances VALIDATE CONSTRAINT agent_instances_federation;
+
+CREATE TABLE pc.federation_agents (
+    org_id      uuid        NOT NULL REFERENCES pc.orgs (id),
+    trust_id    uuid        NOT NULL,
+    peer_agent  text        NOT NULL CHECK (char_length(peer_agent) BETWEEN 1 AND 512),
+    agent_id    uuid        NOT NULL,
+    instance_id uuid        NOT NULL,
+    created_by  text        NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 128),
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, trust_id, peer_agent),
+    UNIQUE (org_id, agent_id),
+    FOREIGN KEY (org_id, trust_id) REFERENCES pc.federation_trusts (org_id, id),
+    FOREIGN KEY (org_id, agent_id) REFERENCES pc.agents (org_id, id),
+    FOREIGN KEY (org_id, instance_id) REFERENCES pc.agent_instances (org_id, id)
+);
+
 ALTER TABLE pc.transactions
     DROP CONSTRAINT transactions_channel_check,
     ADD CONSTRAINT transactions_channel_check
@@ -138,7 +183,60 @@ ALTER TABLE pc.runs VALIDATE CONSTRAINT runs_federation_trust_fkey;
 CREATE UNIQUE INDEX runs_federation_day ON pc.runs (org_id, federation_trust_id, peer_agent, federation_day)
     WHERE principal_source = 'federation' AND state = 'ACTIVE';
 
+CREATE TABLE pc.federation_calls (
+    org_id      uuid        NOT NULL REFERENCES pc.orgs (id),
+    id          uuid        NOT NULL,
+    trust_id    uuid        NOT NULL,
+    peer_agent  text        NOT NULL CHECK (char_length(peer_agent) BETWEEN 1 AND 512),
+    run_id      uuid        NOT NULL,
+    agent_id    uuid        NOT NULL,
+    instance_id uuid        NOT NULL,
+    listing     text        NOT NULL CHECK (listing ~ '^[a-z0-9-]{1,63}$'),
+    htu         text        NOT NULL CHECK (char_length(htu) BETWEEN 9 AND 2048),
+    body_sha256 bytea       NOT NULL CHECK (octet_length(body_sha256) = 32),
+    -- The IN receipt: the peer's pap-fed+jwt this call was admitted on.
+    receipt_id  uuid        NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    expires_at  timestamptz NOT NULL,
+    used_at     timestamptz,
+    -- The action Authorize decided on it (set with used_at).
+    action_id   uuid,
+    PRIMARY KEY (org_id, id),
+    FOREIGN KEY (org_id, trust_id) REFERENCES pc.federation_trusts (org_id, id),
+    FOREIGN KEY (org_id, run_id) REFERENCES pc.runs (org_id, id),
+    CONSTRAINT federation_calls_lifetime CHECK (expires_at > created_at AND expires_at <= created_at + interval '60 seconds'),
+    CONSTRAINT federation_calls_used CHECK ((used_at IS NULL) = (action_id IS NULL))
+);
+CREATE INDEX federation_calls_expiry ON pc.federation_calls (org_id, expires_at);
+CREATE INDEX federation_calls_action ON pc.federation_calls (org_id, action_id) WHERE action_id IS NOT NULL;
+
+-- +goose StatementBegin
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['federation_agents', 'federation_calls'] LOOP
+        EXECUTE format('ALTER TABLE pc.%I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format('ALTER TABLE pc.%I FORCE ROW LEVEL SECURITY', t);
+        EXECUTE format($p$CREATE POLICY tenant_isolation ON pc.%I
+            USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+            WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))$p$, t);
+        EXECUTE format('CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.%I
+            FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard()', t);
+        EXECUTE format('GRANT SELECT ON pc.%I TO pc_audit_ro', t);
+        IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+            EXECUTE format('GRANT SELECT, DELETE ON pc.%I TO pc_deleter', t);
+        END IF;
+    END LOOP;
+END
+$$;
+-- +goose StatementEnd
+GRANT SELECT, INSERT ON pc.federation_agents TO pc_app;
+GRANT SELECT, INSERT, DELETE ON pc.federation_calls TO pc_app;
+GRANT UPDATE (used_at, action_id) ON pc.federation_calls TO pc_app;
+
 -- +goose Down
+DROP TABLE pc.federation_calls;
 DROP INDEX pc.runs_federation_day;
 ALTER TABLE pc.runs
     DROP CONSTRAINT runs_federation_trust_fkey,
@@ -168,4 +266,14 @@ ALTER TABLE pc.coverage_routes
 ALTER TABLE pc.transactions
     DROP CONSTRAINT transactions_channel_check,
     ADD CONSTRAINT transactions_channel_check CHECK (channel IS NULL OR channel IN ('mcp', 'http', 'sdk', 'hook', 'authzen', 'a2a', 'runtime'));
+DROP TABLE pc.federation_agents;
+ALTER TABLE pc.agent_instances
+    DROP CONSTRAINT agent_instances_federation,
+    DROP CONSTRAINT agent_instances_enrolled_via_check,
+    ADD CONSTRAINT agent_instances_enrolled_via_check
+        CHECK (enrolled_via IN ('enrollment_token', 'attestation', 'discovery', 'mcp_client'));
+ALTER TABLE pc.agents
+    DROP CONSTRAINT agents_execution_context_check,
+    ADD CONSTRAINT agents_execution_context_check
+        CHECK (execution_context IN ('desktop', 'ci', 'kubernetes', 'service'));
 DROP TABLE pc.federation_listings;
