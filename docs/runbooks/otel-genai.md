@@ -1,6 +1,6 @@
 # Send GenAI spans to your own OTLP collector
 
-PantherClaw can continue your agents' traces into your own OpenTelemetry backend: each decision, tool dispatch and model call becomes a span in the org's own OTLP collector (G0 M36; [ADR-0063](../adr/0063-telemetry-and-approval-reach.md); HR-785..788). Spans carry metadata only, never prompts, tool arguments, answers or approval text (founder decision FQ36-2). Community edition.
+PantherClaw can continue your agents' traces into your own OpenTelemetry backend: each decision, tool dispatch and model call becomes a span in the org's own OTLP collector (G0 M36; [ADR-0063](../adr/0063-telemetry-and-approval-reach.md); HR-785..788). Spans carry metadata only, never prompts, tool arguments, answers or approval text (founder decision FQ36-2). OTLP destinations are in the Business edition, like SIEM export.
 
 This is separate from the operator's own telemetry ([observability.md](observability.md)), which is unchanged and keeps its allow-list (HR-380).
 
