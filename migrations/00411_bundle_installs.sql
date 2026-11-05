@@ -51,6 +51,7 @@ CREATE TABLE pc.bundle_items (
     PRIMARY KEY (org_id, install_id, name),
     FOREIGN KEY (org_id, install_id) REFERENCES pc.bundle_installs (org_id, id)
 );
+CREATE INDEX bundle_items_target ON pc.bundle_items (org_id, target_type, target_id);
 
 CREATE TABLE pc.bundle_state (
     org_id      uuid        NOT NULL REFERENCES pc.orgs (id),

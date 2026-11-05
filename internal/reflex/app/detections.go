@@ -350,6 +350,11 @@ func (s *Detections) PublishCustomRule(ctx context.Context, id ids.UUID) (Rule, 
 	var results []engine.TestResult
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if revoked, err := bundleRevoked(ctx, q, c.Org, id); err != nil {
+			return err
+		} else if revoked {
+			return ErrBundleRevoked // D1083a
+		}
 		// One publish at a time per org, so the cap holds (D59 L3).
 		if err := q.LockCustomRulePublishing(ctx, c.Org.UUID()); err != nil {
 			return err

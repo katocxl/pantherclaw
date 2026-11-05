@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"slices"
 
 	"github.com/katocxl/pantherclaw/internal/detection/rules"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -13,6 +14,7 @@ import (
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -83,4 +85,21 @@ func (s *Detections) DisableCustomRuleTx(ctx context.Context, tx db.TenantTx, ac
 		Object: &audit.Object{Type: "detection_rule", ID: row.RuleID}, Details: details,
 	})
 	return true, err
+}
+
+// ErrBundleRevoked refuses publishing a custom rule version a revoked
+// publisher bundle drafted, or confirming its publication: revoked stays
+// off (D1083a, HR-799).
+var ErrBundleRevoked = pcerr.New(pcerr.FailedPrecondition, "BUNDLE_REVOKED",
+	"the rule version came from a revoked bundle and stays off")
+
+// bundleRevoked reports whether a REVOKED bundle item drafted the custom
+// rule version row. It locks the item rows, so a revocation running at the
+// same time waits; callers check before they lock the rule.
+func bundleRevoked(ctx context.Context, q *dbq.Queries, org ids.OrgID, row ids.UUID) (bool, error) {
+	states, err := q.LockBundleTargetStates(ctx, org, "custom_rule", row.String())
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(states, "REVOKED"), nil
 }

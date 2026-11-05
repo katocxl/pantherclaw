@@ -52589,10 +52589,10 @@
           "bundle": {
             "type": "string",
             "title": "bundle",
-            "maxLength": 8388608,
+            "maxLength": 983040,
             "minLength": 1,
             "format": "byte",
-            "description": "The .pcbundle file (a zip)."
+            "description": "The .pcbundle file (a zip), at most 960 KiB so that it fits one\n request."
           }
         },
         "title": "InstallBundleRequest",
