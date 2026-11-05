@@ -90,6 +90,12 @@ const (
 	// ConnectionServiceAddInventoryNoteProcedure is the procedure name of the ConnectionService's
 	// AddInventoryNote RPC.
 	ConnectionServiceAddInventoryNoteProcedure = "/pantherclaw.v1.ConnectionService/AddInventoryNote"
+	// ConnectionServiceSetConnectionRuntimeTargetProcedure is the procedure name of the
+	// ConnectionService's SetConnectionRuntimeTarget RPC.
+	ConnectionServiceSetConnectionRuntimeTargetProcedure = "/pantherclaw.v1.ConnectionService/SetConnectionRuntimeTarget"
+	// ConnectionServiceClearConnectionRuntimeTargetProcedure is the procedure name of the
+	// ConnectionService's ClearConnectionRuntimeTarget RPC.
+	ConnectionServiceClearConnectionRuntimeTargetProcedure = "/pantherclaw.v1.ConnectionService/ClearConnectionRuntimeTarget"
 )
 
 var (
@@ -247,6 +253,20 @@ var (
 			Procedure:  ConnectionServiceAddInventoryNoteProcedure,
 		}
 	})
+	connectionServiceSetConnectionRuntimeTargetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("SetConnectionRuntimeTarget"),
+			Procedure:  ConnectionServiceSetConnectionRuntimeTargetProcedure,
+		}
+	})
+	connectionServiceClearConnectionRuntimeTargetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("ClearConnectionRuntimeTarget"),
+			Procedure:  ConnectionServiceClearConnectionRuntimeTargetProcedure,
+		}
+	})
 )
 
 // ConnectionServiceClient is a client for the pantherclaw.v1.ConnectionService service.
@@ -358,6 +378,19 @@ type ConnectionServiceClient interface {
 	// flags stay as they are (HR-582).
 	// permission: connection.manage
 	AddInventoryNote(context.Context, *v1.AddInventoryNoteRequest) (*v1.AddInventoryNoteResponse, error)
+	// SetConnectionRuntimeTarget binds an mcp connection whose credential the
+	// agent holds to one target of a cloud agent runtime's gateway (G0 M34
+	// D991, HR-762): the gateway's runtime face decides that target's tool
+	// calls through it. The target is "agentcore:<gateway ARN>/<target name>",
+	// unique in the org. It replaces any earlier target and is audited
+	// (connection.runtime_target_set).
+	// permission: connection.manage
+	SetConnectionRuntimeTarget(context.Context, *v1.SetConnectionRuntimeTargetRequest) (*v1.SetConnectionRuntimeTargetResponse, error)
+	// ClearConnectionRuntimeTarget removes a connection's runtime target; the
+	// runtime face then finds no connection for that target. Audited
+	// (connection.runtime_target_cleared).
+	// permission: connection.manage
+	ClearConnectionRuntimeTarget(context.Context, *v1.ClearConnectionRuntimeTargetRequest) (*v1.ClearConnectionRuntimeTargetResponse, error)
 }
 
 // NewConnectionServiceClient constructs a client for the pantherclaw.v1.ConnectionService service.
@@ -475,6 +508,19 @@ type ConnectionServiceHandler interface {
 	// flags stay as they are (HR-582).
 	// permission: connection.manage
 	AddInventoryNote(context.Context, *v1.AddInventoryNoteRequest) (*v1.AddInventoryNoteResponse, error)
+	// SetConnectionRuntimeTarget binds an mcp connection whose credential the
+	// agent holds to one target of a cloud agent runtime's gateway (G0 M34
+	// D991, HR-762): the gateway's runtime face decides that target's tool
+	// calls through it. The target is "agentcore:<gateway ARN>/<target name>",
+	// unique in the org. It replaces any earlier target and is audited
+	// (connection.runtime_target_set).
+	// permission: connection.manage
+	SetConnectionRuntimeTarget(context.Context, *v1.SetConnectionRuntimeTargetRequest) (*v1.SetConnectionRuntimeTargetResponse, error)
+	// ClearConnectionRuntimeTarget removes a connection's runtime target; the
+	// runtime face then finds no connection for that target. Audited
+	// (connection.runtime_target_cleared).
+	// permission: connection.manage
+	ClearConnectionRuntimeTarget(context.Context, *v1.ClearConnectionRuntimeTargetRequest) (*v1.ClearConnectionRuntimeTargetResponse, error)
 }
 
 // RegisterConnectionServiceHandler registers svc as the pantherclaw.v1.ConnectionService
@@ -503,6 +549,8 @@ func RegisterConnectionServiceHandler(server *connect.Server, svc ConnectionServ
 		connect.Method{Spec: connectionServiceDraftPackageFromInventorySpec(), Handler: adapter.draftPackageFromInventory},
 		connect.Method{Spec: connectionServiceGetConnectionInventoryItemSpec(), Handler: adapter.getConnectionInventoryItem},
 		connect.Method{Spec: connectionServiceAddInventoryNoteSpec(), Handler: adapter.addInventoryNote},
+		connect.Method{Spec: connectionServiceSetConnectionRuntimeTargetSpec(), Handler: adapter.setConnectionRuntimeTarget},
+		connect.Method{Spec: connectionServiceClearConnectionRuntimeTargetSpec(), Handler: adapter.clearConnectionRuntimeTarget},
 	)
 }
 
@@ -591,6 +639,14 @@ func (UnimplementedConnectionServiceHandler) GetConnectionInventoryItem(context.
 
 func (UnimplementedConnectionServiceHandler) AddInventoryNote(context.Context, *v1.AddInventoryNoteRequest) (*v1.AddInventoryNoteResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.AddInventoryNote is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) SetConnectionRuntimeTarget(context.Context, *v1.SetConnectionRuntimeTargetRequest) (*v1.SetConnectionRuntimeTargetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.SetConnectionRuntimeTarget is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) ClearConnectionRuntimeTarget(context.Context, *v1.ClearConnectionRuntimeTargetRequest) (*v1.ClearConnectionRuntimeTargetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.ClearConnectionRuntimeTarget is not implemented")
 }
 
 type connectionServiceClient struct {
@@ -760,6 +816,22 @@ func (c *connectionServiceClient) GetConnectionInventoryItem(ctx context.Context
 func (c *connectionServiceClient) AddInventoryNote(ctx context.Context, req *v1.AddInventoryNoteRequest) (*v1.AddInventoryNoteResponse, error) {
 	var res v1.AddInventoryNoteResponse
 	if err := c.client.CallUnary(ctx, connectionServiceAddInventoryNoteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) SetConnectionRuntimeTarget(ctx context.Context, req *v1.SetConnectionRuntimeTargetRequest) (*v1.SetConnectionRuntimeTargetResponse, error) {
+	var res v1.SetConnectionRuntimeTargetResponse
+	if err := c.client.CallUnary(ctx, connectionServiceSetConnectionRuntimeTargetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) ClearConnectionRuntimeTarget(ctx context.Context, req *v1.ClearConnectionRuntimeTargetRequest) (*v1.ClearConnectionRuntimeTargetResponse, error) {
+	var res v1.ClearConnectionRuntimeTargetResponse
+	if err := c.client.CallUnary(ctx, connectionServiceClearConnectionRuntimeTargetSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -1013,6 +1085,30 @@ func (h connectionServiceHandler) addInventoryNote(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.AddInventoryNote(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) setConnectionRuntimeTarget(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetConnectionRuntimeTargetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetConnectionRuntimeTarget(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) clearConnectionRuntimeTarget(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ClearConnectionRuntimeTargetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ClearConnectionRuntimeTarget(ctx, &req)
 	if err != nil {
 		return err
 	}

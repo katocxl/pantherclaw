@@ -387,7 +387,8 @@ type CoverageRoute struct {
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Kind.
 	Kind CoverageRouteKind `protobuf:"varint,2,opt,name=kind,proto3,enum=pantherclaw.v1.CoverageRouteKind" json:"kind,omitempty"`
-	// For a channel: "http", "mcp", "sdk", "hook", "authzen" or "a2a".
+	// For a channel: "http", "mcp", "sdk", "hook", "authzen", "a2a" or
+	// "runtime" (G0 M34 D990).
 	Channel string `protobuf:"bytes,3,opt,name=channel,proto3" json:"channel,omitempty"`
 	// Where it goes (a host, a file, an identity); untrusted text.
 	Locator string `protobuf:"bytes,4,opt,name=locator,proto3" json:"locator,omitempty"`

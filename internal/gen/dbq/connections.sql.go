@@ -87,6 +87,46 @@ func (q *Queries) CloseCircuits(ctx context.Context, orgID ids.OrgID, connection
 	return result.RowsAffected(), nil
 }
 
+const connectionByRuntimeTarget = `-- name: ConnectionByRuntimeTarget :one
+SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay, runtime_target FROM pc.connections
+WHERE org_id = $1 AND runtime_target = $2::text AND state <> 'RETIRED'
+`
+
+// The live connection bound to a runtime target, if any (G0 M34 D991).
+func (q *Queries) ConnectionByRuntimeTarget(ctx context.Context, orgID ids.OrgID, runtimeTarget string) (PcConnection, error) {
+	row := q.db.QueryRow(ctx, connectionByRuntimeTarget, orgID, runtimeTarget)
+	var i PcConnection
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Name,
+		&i.Kind,
+		&i.GatewayID,
+		&i.Package,
+		&i.BaseUrl,
+		&i.AllowedHosts,
+		&i.DestinationClass,
+		&i.AccessMode,
+		&i.CredentialHeader,
+		&i.CredentialScheme,
+		&i.DefaultMode,
+		&i.MaxResponseBytes,
+		&i.TimeoutMs,
+		&i.State,
+		&i.QuarantineReason,
+		&i.Revision,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.AgentHosts,
+		&i.Simulated,
+		&i.ModelRelay,
+		&i.RuntimeTarget,
+	)
+	return i, err
+}
+
 const connectionDeliveries = `-- name: ConnectionDeliveries :one
 SELECT count(*) FILTER (WHERE a.outcome = 'failed')::integer AS failed,
     count(*) FILTER (WHERE a.outcome = 'unknown')::integer AS unknown,
@@ -230,7 +270,7 @@ func (q *Queries) DriftTransactionRun(ctx context.Context, orgID ids.OrgID, iD i
 }
 
 const getConnection = `-- name: GetConnection :one
-SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay FROM pc.connections WHERE org_id = $1 AND id = $2
+SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay, runtime_target FROM pc.connections WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcConnection, error) {
@@ -262,6 +302,7 @@ func (q *Queries) GetConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 		&i.AgentHosts,
 		&i.Simulated,
 		&i.ModelRelay,
+		&i.RuntimeTarget,
 	)
 	return i, err
 }
@@ -276,7 +317,7 @@ VALUES ($1, $2, $3, $4, $5, $6,
         $11, $12, $13,
         $14, $15, $16::text[], $17,
         $17, $18, $19)
-RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay
+RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay, runtime_target
 `
 
 type InsertConnectionParams struct {
@@ -357,6 +398,7 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 		&i.AgentHosts,
 		&i.Simulated,
 		&i.ModelRelay,
+		&i.RuntimeTarget,
 	)
 	return i, err
 }
@@ -736,7 +778,7 @@ func (q *Queries) ListConnectionRoutes(ctx context.Context, orgID ids.OrgID, con
 }
 
 const listConnections = `-- name: ListConnections :many
-SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay FROM pc.connections
+SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay, runtime_target FROM pc.connections
 WHERE org_id = $1 AND ($2::boolean OR state <> 'RETIRED')
   AND ($3::uuid IS NULL OR gateway_id = $3::uuid)
   AND id > coalesce($4::uuid, '00000000-0000-0000-0000-000000000000')
@@ -793,6 +835,7 @@ func (q *Queries) ListConnections(ctx context.Context, arg ListConnectionsParams
 			&i.AgentHosts,
 			&i.Simulated,
 			&i.ModelRelay,
+			&i.RuntimeTarget,
 		); err != nil {
 			return nil, err
 		}
@@ -805,7 +848,7 @@ func (q *Queries) ListConnections(ctx context.Context, arg ListConnectionsParams
 }
 
 const lockConnection = `-- name: LockConnection :one
-SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay FROM pc.connections WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay, runtime_target FROM pc.connections WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcConnection, error) {
@@ -837,6 +880,7 @@ func (q *Queries) LockConnection(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.AgentHosts,
 		&i.Simulated,
 		&i.ModelRelay,
+		&i.RuntimeTarget,
 	)
 	return i, err
 }
@@ -941,6 +985,61 @@ func (q *Queries) SetConnectionRouteMode(ctx context.Context, arg SetConnectionR
 	return i, err
 }
 
+const setConnectionRuntimeTarget = `-- name: SetConnectionRuntimeTarget :one
+UPDATE pc.connections
+SET runtime_target = $1, revision = revision + 1, updated_by = $2, updated_at = now()
+WHERE org_id = $3 AND id = $4 AND state <> 'RETIRED'
+RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay, runtime_target
+`
+
+type SetConnectionRuntimeTargetParams struct {
+	RuntimeTarget *string
+	UpdatedBy     string
+	OrgID         ids.OrgID
+	ID            ids.UUID
+}
+
+// Sets or (NULL) clears a live connection's runtime target (G0 M34 D991,
+// migration 00381), bumping its revision so its gateway refetches.
+func (q *Queries) SetConnectionRuntimeTarget(ctx context.Context, arg SetConnectionRuntimeTargetParams) (PcConnection, error) {
+	row := q.db.QueryRow(ctx, setConnectionRuntimeTarget,
+		arg.RuntimeTarget,
+		arg.UpdatedBy,
+		arg.OrgID,
+		arg.ID,
+	)
+	var i PcConnection
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Name,
+		&i.Kind,
+		&i.GatewayID,
+		&i.Package,
+		&i.BaseUrl,
+		&i.AllowedHosts,
+		&i.DestinationClass,
+		&i.AccessMode,
+		&i.CredentialHeader,
+		&i.CredentialScheme,
+		&i.DefaultMode,
+		&i.MaxResponseBytes,
+		&i.TimeoutMs,
+		&i.State,
+		&i.QuarantineReason,
+		&i.Revision,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.AgentHosts,
+		&i.Simulated,
+		&i.ModelRelay,
+		&i.RuntimeTarget,
+	)
+	return i, err
+}
+
 const touchConnection = `-- name: TouchConnection :exec
 UPDATE pc.connections SET revision = revision + 1, updated_by = $1, updated_at = now()
 WHERE org_id = $2 AND id = $3
@@ -960,7 +1059,7 @@ SET gateway_id = $1, base_url = $2, allowed_hosts = $3::text[],
     quarantine_reason = $11,
     revision = revision + 1, updated_by = $12, updated_at = now()
 WHERE org_id = $13 AND id = $14 AND revision = $15
-RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay
+RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts, simulated, model_relay, runtime_target
 `
 
 type UpdateConnectionParams struct {
@@ -1029,6 +1128,7 @@ func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionPara
 		&i.AgentHosts,
 		&i.Simulated,
 		&i.ModelRelay,
+		&i.RuntimeTarget,
 	)
 	return i, err
 }

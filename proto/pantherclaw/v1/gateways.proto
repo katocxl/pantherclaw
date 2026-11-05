@@ -741,6 +741,10 @@ message GatewayConnection {
   // A snowflake connection's confirmed configuration and manifest (G0 M31
   // D962); unset until a first one is confirmed, and nothing is sent.
   SnowflakeConfig snowflake = 29;
+  // The cloud agent runtime target the connection is bound to (G0 M34
+  // D991), "agentcore:<gateway ARN>/<target name>": the runtime face finds
+  // the connection of a tool call by it. Empty when unbound.
+  string runtime_target = 30;
 }
 
 // RouteModeSetting is one route's mode.

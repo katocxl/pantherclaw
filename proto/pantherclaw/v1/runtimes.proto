@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+
+// RuntimeService is called by a cloud agent runtime's PantherClaw component,
+// for example the AgentCore interceptor (G0 M34 D992). Like WorkloadService
+// it is authenticated by PAP/1, never by user or service-account
+// credentials: the caller is an L2 instance enrolled by cloud attestation
+// (aws_iam, gcp_workload, azure_mi or entra_agent_id), and every call
+// carries a PAP-Proof signed with its workload key and its workload token.
+service RuntimeService {
+  // StartRuntimeRun starts a run of the caller's instance under the run
+  // grant of the issuer entry the instance was attested by (HR-761). An
+  // issuer entry without a run grant is refused (RUNTIME_NO_RUN_GRANT). The
+  // caller starts a new run when the previous one ended. Audited
+  // (runtime.run_started).
+  // permission: workload.run
+  rpc StartRuntimeRun(StartRuntimeRunRequest) returns (StartRuntimeRunResponse);
+}
+
+// StartRuntimeRunRequest names the run.
+message StartRuntimeRunRequest {
+  // A name the caller gives the run, for example
+  // "agentcore:<function name>:<log stream>".
+  string name = 1 [(buf.validate.field).string.pattern = "^[A-Za-z0-9._:/-]{1,200}$"];
+}
+
+// StartRuntimeRunResponse is the run.
+message StartRuntimeRunResponse {
+  // The run id.
+  string run_id = 1;
+}
