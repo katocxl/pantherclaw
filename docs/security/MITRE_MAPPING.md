@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `ebfa1843a5fd3905417b08b013e3944abbfa74effe869d57f5973f121ca49bf0`.
+Mapping digest: `508d551958c862b381feca4476a6cccff4010b397554e91089dc07ea6cc4593b`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -69,7 +69,7 @@ Mapping digest: `ebfa1843a5fd3905417b08b013e3944abbfa74effe869d57f5973f121ca49bf
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0131](https://atlas.mitre.org/techniques/AML.T0131) | Crafted AI Assistant Links | No PantherClaw control yet | Crafted AI assistant links (AML.T0131): a link that opens an assistant with input supplied has no PantherClaw control. |
+| [AML.T0131](https://atlas.mitre.org/techniques/AML.T0131) | Crafted AI Assistant Links | Mapped | prevent `prevent.browser_sites` |
 | [AML.T0078](https://atlas.mitre.org/techniques/AML.T0078) | Drive-by Compromise | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [AML.T0015](https://atlas.mitre.org/techniques/AML.T0015) | Evade AI Model | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0119](https://atlas.mitre.org/techniques/AML.T0119) | Exploit Automated Artifact Processing Pipeline | No PantherClaw control yet | Exploit automated artifact processing pipeline (AML.T0119): pipelines that process artifacts have no PantherClaw control. |
@@ -93,7 +93,7 @@ Mapping digest: `ebfa1843a5fd3905417b08b013e3944abbfa74effe869d57f5973f121ca49bf
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0100](https://atlas.mitre.org/techniques/AML.T0100) | AI Agent Clickbait | No PantherClaw control yet | AI agent clickbait (AML.T0100): clicks by computer-using agents in a browser have no PantherClaw control. |
+| [AML.T0100](https://atlas.mitre.org/techniques/AML.T0100) | AI Agent Clickbait | Mapped | prevent `prevent.browser_sites` |
 | [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
 | [AML.T0050](https://atlas.mitre.org/techniques/AML.T0050) | Command and Scripting Interpreter | Mapped | Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003` |
 | [AML.T0103](https://atlas.mitre.org/techniques/AML.T0103) | Deploy AI Agent | No PantherClaw control yet | Deploy AI agent (AML.T0103): an agent launched apart from PantherClaw is only found by discovery; it has no PantherClaw control. |
