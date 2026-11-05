@@ -111,3 +111,14 @@ UPDATE pc.org_containment
 SET kill_switch = false, epoch = epoch + 1, engaged_by = NULL, engaged_at = NULL, engage_reason = NULL, updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND kill_switch
 RETURNING epoch;
+
+-- What the runtime channel's account check reads (G0 M34 D994a, HR-765):
+-- the connection's runtime target, and the kind and bound AWS account of
+-- the trusted-issuer revision that launched the run. No row when the run
+-- was not launched by a trusted issuer.
+-- name: RuntimeAccountFacts :one
+SELECT c.runtime_target, ti.kind AS issuer_kind, coalesce(ti.binding #>> '{aws,account_id}', '')::text AS issuer_account
+FROM pc.runs r
+JOIN pc.trusted_issuers ti ON ti.org_id = r.org_id AND ti.id = r.launcher_issuer_id
+JOIN pc.connections c ON c.org_id = r.org_id AND c.id = sqlc.arg(connection_id)
+WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(run_id) AND r.principal_source = 'trusted_issuer';

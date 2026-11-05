@@ -396,6 +396,31 @@ func (q *Queries) RecordOutbound(ctx context.Context, arg RecordOutboundParams) 
 	return err
 }
 
+const runtimeAccountFacts = `-- name: RuntimeAccountFacts :one
+SELECT c.runtime_target, ti.kind AS issuer_kind, coalesce(ti.binding #>> '{aws,account_id}', '')::text AS issuer_account
+FROM pc.runs r
+JOIN pc.trusted_issuers ti ON ti.org_id = r.org_id AND ti.id = r.launcher_issuer_id
+JOIN pc.connections c ON c.org_id = r.org_id AND c.id = $1
+WHERE r.org_id = $2 AND r.id = $3 AND r.principal_source = 'trusted_issuer'
+`
+
+type RuntimeAccountFactsRow struct {
+	RuntimeTarget *string
+	IssuerKind    string
+	IssuerAccount string
+}
+
+// What the runtime channel's account check reads (G0 M34 D994a, HR-765):
+// the connection's runtime target, and the kind and bound AWS account of
+// the trusted-issuer revision that launched the run. No row when the run
+// was not launched by a trusted issuer.
+func (q *Queries) RuntimeAccountFacts(ctx context.Context, connectionID ids.UUID, orgID ids.OrgID, runID ids.UUID) (RuntimeAccountFactsRow, error) {
+	row := q.db.QueryRow(ctx, runtimeAccountFacts, connectionID, orgID, runID)
+	var i RuntimeAccountFactsRow
+	err := row.Scan(&i.RuntimeTarget, &i.IssuerKind, &i.IssuerAccount)
+	return i, err
+}
+
 const shareContainment = `-- name: ShareContainment :one
 SELECT epoch, kill_switch
 FROM pc.org_containment

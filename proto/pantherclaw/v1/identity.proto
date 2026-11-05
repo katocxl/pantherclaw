@@ -417,8 +417,9 @@ message IssuerRevision {
   string closed_by = 18;
   // When.
   google.protobuf.Timestamp close_time = 19;
-  // Kubernetes only: the grant a pod's run is started under (G0 M32
-  // D973); empty: none.
+  // Kubernetes and the cloud presets only: the grant a pod's run (G0 M32
+  // D973) or a cloud agent runtime's run (G0 M34 D992) is started under;
+  // empty: none.
   string run_grant_id = 26;
 }
 
@@ -542,8 +543,8 @@ message RevokeInstanceResponse {
 message ProposeIssuerEntryRequest {
   option (buf.validate.message).cel = {
     id: "run_grant_kubernetes_only"
-    message: "run_grant_id is only for a kubernetes binding"
-    expression: "this.run_grant_id == '' || has(this.kubernetes)"
+    message: "run_grant_id is only for a kubernetes, gcp, aws, azure_mi or entra_agent binding"
+    expression: "this.run_grant_id == '' || has(this.kubernetes) || has(this.gcp) || has(this.aws) || has(this.azure_mi) || has(this.entra_agent)"
   };
   // Existing entry to revise; empty for a new entry.
   string entry_id = 1 [(buf.validate.field).string = {
@@ -574,8 +575,10 @@ message ProposeIssuerEntryRequest {
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;
-  // Kubernetes only: the grant a pod's run is started under
-  // (KubernetesService.StartPodRun, G0 M32 D973). Part of the revision, so
+  // Kubernetes and the cloud presets only: the grant a pod's run
+  // (KubernetesService.StartPodRun, G0 M32 D973) or a cloud agent runtime's
+  // run (RuntimeService.StartRuntimeRun, G0 M34 D992) is started under. Part
+  // of the revision, so
   // it changes only through a new revision and its approval; empty: the
   // entry starts no runs.
   string run_grant_id = 13 [

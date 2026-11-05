@@ -466,6 +466,12 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return r
 	}
 	def, bound, want := d.def, d.bound, d.want
+	if runtimeChannel(c) {
+		// A cloud agent runtime's gateway runs the tool itself (G0 M34
+		// D990, HR-760): the action is always delegated, never forwarded
+		// upstream, whatever the connection's kind.
+		return e.delegate(ctx, r, want, t)
+	}
 	if cooperative(c) {
 		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
@@ -536,7 +542,7 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	// obligations applied) or, in monitor mode, the requested one.
 	bound := c.Action
 	if !r.Monitor {
-		if (conn.GetKind() == "local" || cooperative(c)) && len(ar.GetObligations()) > 0 {
+		if (conn.GetKind() == "local" || cooperative(c) || runtimeChannel(c)) && len(ar.GetObligations()) > 0 {
 			// A cooperative client runs the action as it asked: it can
 			// honor no obligation (HR-186).
 			return ctx, decided{}, r.fail(EnforcementFailed, CodeObligation), false

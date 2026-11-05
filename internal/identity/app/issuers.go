@@ -349,8 +349,8 @@ type ProposeInput struct {
 	Binding   Binding
 	AutoAdmit bool
 	Reason    string
-	// RunGrantID is a Kubernetes entry's run grant (G0 M32 D973); nil:
-	// none. Any change from the active revision's is a widening, so it
+	// RunGrantID is a Kubernetes or cloud entry's run grant (G0 M32 D973,
+	// G0 M34 D992); nil: none. Any change from the active revision's is a widening, so it
 	// takes effect only when a human activates the revision.
 	RunGrantID *ids.UUID
 }
@@ -368,8 +368,13 @@ func (s *Service) ProposeIssuer(ctx context.Context, in ProposeInput, clusters C
 	if err := adomain.ValidateReason(in.Reason); err != nil {
 		return Revision{}, pcerr.Wrap(err, pcerr.InvalidArgument, "REASON", err.Error())
 	}
-	if in.RunGrantID != nil && (in.Binding.Kubernetes == nil || in.RunGrantID.IsZero()) {
-		return Revision{}, pcerr.New(pcerr.InvalidArgument, "ISSUER_RUN_GRANT", "a run grant is only for a kubernetes binding")
+	// A run grant starts a pod's run (G0 M32 D973) or a cloud agent
+	// runtime's run (G0 M34 D992).
+	runs := in.Binding.Kubernetes != nil || in.Binding.GCP != nil || in.Binding.AWS != nil || in.Binding.AzureMI != nil ||
+		in.Binding.EntraAgent != nil
+	if in.RunGrantID != nil && (!runs || in.RunGrantID.IsZero()) {
+		return Revision{}, pcerr.New(pcerr.InvalidArgument, "ISSUER_RUN_GRANT",
+			"a run grant is only for a kubernetes, gcp, aws, azure_mi or entra_agent binding")
 	}
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
