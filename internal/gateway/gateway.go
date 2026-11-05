@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	"github.com/katocxl/pantherclaw/internal/gateway/a2aface"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/browsercompare"
 	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
@@ -32,6 +33,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 )
@@ -146,6 +148,9 @@ type Deps struct {
 	// ReportDrift tells the server an upstream MCP tool drifted (HR-081);
 	// nil reports nothing.
 	ReportDrift DriftReporter
+	// ReportPageCompare tells the server of a cloaking compare mismatch (G0
+	// M33 D986); nil turns the compare off.
+	ReportPageCompare browsercompare.Reporter
 	// ReportInventory tells the server what each kind-mcp connection's upstream
 	// server lists (F352, G0 M15 D20); nil reports nothing.
 	ReportInventory InventoryReporter
@@ -217,6 +222,10 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 		},
 		ReportDrift: func(ctx context.Context, conn string, d dispatch.Drift) error {
 			_, err := ctl.Gateway.ReportDrift(ctx, driftRequest(conn, d))
+			return err
+		},
+		ReportPageCompare: func(ctx context.Context, r browsercompare.Report) error {
+			_, err := ctl.Gateway.ReportPageCompare(ctx, pageCompareRequest(r))
 			return err
 		},
 		ReportInventory: func(ctx context.Context, conn string, inv dispatch.Inventory) error {
@@ -341,6 +350,16 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		status:     newStatus(d.ReportStatus),
 	}
 	g.mcpOAuth = mcpauth.New(g.mcp, d.Configuration, cfg.PublicURL)
+	// The cloaking compare (G0 M33 D986, HR-759): off while
+	// browser_compare.plain_user_agent is unset. Its fetches go through an
+	// egress client of their own (HR-070..072), redirects followed by hand.
+	if c := browsercompare.New(browsercompare.Options{
+		PlainUserAgent: cfg.BrowserCompare.PlainUserAgent, Report: d.ReportPageCompare, Log: log,
+		Client: httpx.NewEgressClient(httpx.EgressConfig{Timeout: browsercompare.FetchTimeout}),
+	}); c != nil {
+		g.hook.WithBrowserCompare(c)
+		g.run = append(g.run, c.Run)
+	}
 	if d.MCPState != nil {
 		var sealer mcp.Sealer
 		if d.Broker != nil {
@@ -425,6 +444,15 @@ func (g *Gateway) WaitReady(ctx context.Context, timeout time.Duration) error {
 		}
 	}
 	return nil
+}
+
+// pageCompareRequest is the ReportPageCompare request of one mismatch.
+func pageCompareRequest(r browsercompare.Report) *pb.ReportPageCompareRequest {
+	return &pb.ReportPageCompareRequest{
+		ConnectionId: r.Connection, RunId: r.Run, TransactionId: r.Transaction, Host: r.Host, PathSha256: r.PathSHA256,
+		AgentStatus: r.AgentStatus, PlainStatus: r.PlainStatus, AgentBytes: r.AgentBytes, PlainBytes: r.PlainBytes,
+		SimilarityPermille: r.SimilarityPermille,
+	}
 }
 
 // maxDriftDescription is the most of an observed tool description a drift

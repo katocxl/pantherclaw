@@ -93,6 +93,10 @@ func (r *Request) extractBedrock(top map[string]jsontext.Value) error {
 				if anth.providerSide(name, set && typ.Kind() != 'n') {
 					names[name] = true
 				}
+				if anth.computerTool(name, set && typ.Kind() != 'n') {
+					// Client-run, but declaring it needs computer_use allowed (D985a, HR-756).
+					names[ComputerUse] = true
+				}
 			}
 		}
 	}

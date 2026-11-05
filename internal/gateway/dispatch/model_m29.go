@@ -43,6 +43,10 @@ const (
 	// CodeServerToolNotAllowed: the request names a provider-side tool its
 	// connection does not allow (D813, HR-696); nothing was asked or sent.
 	CodeServerToolNotAllowed = "MODEL_SERVER_TOOL_NOT_ALLOWED"
+	// CodeComputerUseNotAllowed: the request declares a client-run
+	// computer tool and its connection does not allow computer_use (G0 M33
+	// D985, HR-756); nothing was asked or sent.
+	CodeComputerUseNotAllowed = "MODEL_COMPUTER_USE_NOT_ALLOWED"
 	// CodePayloadNotScannable: the prompt is past the model-path scan
 	// limits (D817); nothing was asked or sent.
 	CodePayloadNotScannable = "payload_not_scannable"
@@ -170,6 +174,9 @@ func (e *Engine) dispatchModel(ctx context.Context, c ModelCall, t *timer) Resul
 			e.log.WarnContext(ctx, "gateway.model_server_tool_refused", slog.String("connection_id", conn.GetId()),
 				slog.String("run_id", a.RunID), slog.String("operation", a.Operation), slog.Any("server_tools", tools))
 			e.reportLocalRefusal(ctx, conn, localModelServerTool, a, RefusalDetail{})
+			if slices.Contains(tools, modelapi.ComputerUse) {
+				return cannot(CodeComputerUseNotAllowed)
+			}
 			return cannot(CodeServerToolNotAllowed)
 		}
 	}
