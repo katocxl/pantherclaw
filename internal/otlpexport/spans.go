@@ -28,7 +28,9 @@ import (
 //
 // Attributes are metadata only: ids, operation, channel, decision and its
 // first reason code, coverage, outcome, model and token counts, timings and
-// links. Never a prompt, argument, answer, approval text or target id.
+// links, and pantherclaw.simulated on every span and event of a simulated
+// transaction (D1062a). Never a prompt, argument, answer, approval text or
+// target id.
 
 // Span kinds in the span id derivation.
 const (
@@ -114,6 +116,9 @@ func transactionSpans(consoleURL string, r dbq.OTLPSpanTransactionsRow, effects 
 	if c := coverageOf(r.ReceiptJws); c != "" {
 		attrs = append(attrs, str("pantherclaw.coverage", c))
 	}
+	if r.Simulated {
+		attrs = append(attrs, simulated())
+	}
 	if consoleURL != "" {
 		attrs = append(attrs, str("pantherclaw.console_url", strings.TrimSuffix(consoleURL, "/")+consoleTxnsPath+r.ID.String()))
 	}
@@ -155,12 +160,19 @@ func transactionSpans(consoleURL string, r dbq.OTLPSpanTransactionsRow, effects 
 		}
 	}
 	d.Attributes = append(d.Attributes, str("pantherclaw.outcome", r.DispatchOutcome), str("pantherclaw.transaction_id", r.ID.String()))
+	if r.Simulated {
+		d.Attributes = append(d.Attributes, simulated())
+	}
 	if r.DispatchOutcome == outcomeFailed {
 		d.Status = &tracev1.Status{Code: tracev1.Status_STATUS_CODE_ERROR}
 	}
 	for _, e := range effects {
+		ev := []*commonv1.KeyValue{str("state", e.State)}
+		if r.Simulated {
+			ev = append(ev, simulated())
+		}
 		d.Events = append(d.Events, &tracev1.Span_Event{
-			TimeUnixNano: unixNano(e.At), Name: eventEffect, Attributes: []*commonv1.KeyValue{str("state", e.State)},
+			TimeUnixNano: unixNano(e.At), Name: eventEffect, Attributes: ev,
 		})
 	}
 	return append(out, d)
@@ -225,6 +237,12 @@ func testTraces(org ids.OrgID, now time.Time) *tracev1.TracesData {
 
 func str(k, v string) *commonv1.KeyValue {
 	return &commonv1.KeyValue{Key: k, Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: v}}}
+}
+
+// simulated marks a span or span event built from a simulated transaction
+// (G0 M36 D1062a); real transactions never carry it.
+func simulated() *commonv1.KeyValue {
+	return &commonv1.KeyValue{Key: "pantherclaw.simulated", Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_BoolValue{BoolValue: true}}}
 }
 
 func num(k string, v int64) *commonv1.KeyValue {
