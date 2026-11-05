@@ -61,6 +61,48 @@ service ApprovalService {
   // (HR-175, Team edition).
   // permission: approval.respond
   rpc DeclineApprovalBatch(DeclineApprovalBatchRequest) returns (DeclineApprovalBatchResponse);
+  // GetApprovalFatigue reports, per decider, how they approved over the
+  // last hour, day or week: approvals per hour at the peak, the median
+  // seconds from the first notice to an approval, the approve share, the
+  // approvals between 22:00 and 06:00 in their time zone and the longest
+  // run of approvals with no decline, with any fatigue flag that has not
+  // cleared and the org's fatigue routing (G0 M36 D1063, Team edition).
+  // It reads; nothing here approves or declines.
+  // permission: waitlist.read
+  rpc GetApprovalFatigue(GetApprovalFatigueRequest) returns (GetApprovalFatigueResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetApprovalFatigueRouting sets the org's fatigue routing: ROUTE (the
+  // default) routes and notifies a flagged decider last, OFF routes them
+  // like anyone else. Neither changes who is eligible (G0 M36 D1063, Team
+  // edition). Audited.
+  // permission: waitlist.manage
+  rpc SetApprovalFatigueRouting(SetApprovalFatigueRoutingRequest) returns (SetApprovalFatigueRoutingResponse);
+  // SetApprovalDeputy names a deputy for a person's absence (at most 30
+  // days): holds routed to the person are also routed to and noticed by the
+  // deputy, only when the deputy is eligible for that request on their own
+  // (G0 M36 D1064, FQ36-3). A person sets their own; waitlist.manage sets
+  // one for someone else. The deputy is an active member holding
+  // approval.respond, never the person. Audited.
+  // permission: approval.respond
+  rpc SetApprovalDeputy(SetApprovalDeputyRequest) returns (SetApprovalDeputyResponse);
+  // CancelApprovalDeputy ends a deputy window at once. Audited.
+  // permission: approval.respond
+  rpc CancelApprovalDeputy(CancelApprovalDeputyRequest) returns (CancelApprovalDeputyResponse);
+  // ListApprovalDeputies lists the caller's deputy windows, or with
+  // waitlist.manage anyone's.
+  // permission: authenticated
+  rpc ListApprovalDeputies(ListApprovalDeputiesRequest) returns (ListApprovalDeputiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListApprovalGroups groups the requests the caller may see by variant,
+  // agent, run or operation, with whether each group could be reviewed as
+  // one batch (G0 M36 D1065). It is read only: approving still happens on
+  // the approval page, one request or one batch at a time (HR-175, HR-176).
+  // permission: authenticated
+  rpc ListApprovalGroups(ListApprovalGroupsRequest) returns (ListApprovalGroupsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ApprovalState is a request's state (HR-171). PENDING and
@@ -477,4 +519,199 @@ message DeclineApprovalBatchResponse {
   string batch_id = 1;
   // The declined requests.
   repeated ApprovalRequest requests = 2;
+}
+
+// FatigueWindow is the span GetApprovalFatigue measures.
+enum FatigueWindow {
+  FATIGUE_WINDOW_UNSPECIFIED = 0;
+  FATIGUE_WINDOW_HOUR = 1;
+  FATIGUE_WINDOW_DAY = 2;
+  FATIGUE_WINDOW_WEEK = 3;
+}
+
+// FatigueRouting is the org's fatigue routing (G0 M36 D1063).
+enum FatigueRouting {
+  FATIGUE_ROUTING_UNSPECIFIED = 0;
+  // A flagged decider is routed and notified last: the other eligible
+  // deciders first, the flagged one only at the final escalation step.
+  FATIGUE_ROUTING_ROUTE = 1;
+  // Flags are shown but routing ignores them.
+  FATIGUE_ROUTING_OFF = 2;
+}
+
+// FatigueFlag is a flag that has not cleared.
+message FatigueFlag {
+  // APPROVAL_RATE (30 or more approvals in an hour), FAST_APPROVALS (a
+  // median under 5 seconds over 10 or more in an hour) or NO_DECLINES (50
+  // or more in a day with no decline).
+  string reason = 1;
+  // The approvals measured when it was raised.
+  int32 approvals = 2;
+  google.protobuf.Timestamp flag_time = 3;
+  // 4 hours after it was raised.
+  google.protobuf.Timestamp clear_time = 4;
+}
+
+// DeciderFatigue is one decider's measures over the window.
+message DeciderFatigue {
+  string decider_id = 1;
+  int64 approvals = 2;
+  int64 declines = 3;
+  // The most approvals in one clock hour.
+  int64 peak_approvals_per_hour = 4;
+  // Median seconds from the decider's first notice of a request to their
+  // approval (0 when no approval had a notice).
+  double median_seconds_to_approve = 5;
+  // approvals / (approvals + declines); 0 without either.
+  double approve_share = 6;
+  // Approvals between 22:00 and 06:00 in the decider's time zone (UTC
+  // without one).
+  int64 night_approvals = 7;
+  // The longest run of approvals with no decline.
+  int64 longest_approval_streak = 8;
+  // Flags that have not cleared.
+  repeated FatigueFlag flags = 9;
+}
+
+// GetApprovalFatigueRequest names the window and, optionally, one decider.
+message GetApprovalFatigueRequest {
+  FatigueWindow window = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  optional string decider_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// GetApprovalFatigueResponse lists the deciders with responses in the
+// window, most approvals first (at most 200).
+message GetApprovalFatigueResponse {
+  repeated DeciderFatigue deciders = 1;
+  FatigueRouting routing = 2;
+  google.protobuf.Timestamp start_time = 3;
+}
+
+// SetApprovalFatigueRoutingRequest sets the routing.
+message SetApprovalFatigueRoutingRequest {
+  FatigueRouting routing = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+// SetApprovalFatigueRoutingResponse returns the routing now in effect.
+message SetApprovalFatigueRoutingResponse {
+  FatigueRouting routing = 1;
+}
+
+// ApprovalDeputyState is a deputy window's state.
+enum ApprovalDeputyState {
+  APPROVAL_DEPUTY_STATE_UNSPECIFIED = 0;
+  APPROVAL_DEPUTY_STATE_ACTIVE = 1;
+  APPROVAL_DEPUTY_STATE_CANCELLED = 2;
+}
+
+// ApprovalDeputy is a deputy window: routing and notices only (HR-173).
+message ApprovalDeputy {
+  string id = 1;
+  // The person who is away.
+  string person_id = 2;
+  // Who also gets that person's holds while the window is open.
+  string deputy_id = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  ApprovalDeputyState state = 6;
+  string created_by = 7;
+  google.protobuf.Timestamp create_time = 8;
+  string cancelled_by = 9;
+  google.protobuf.Timestamp cancel_time = 10;
+}
+
+// SetApprovalDeputyRequest names the deputy and the window.
+message SetApprovalDeputyRequest {
+  // The person who will be away; the caller when unset.
+  optional string person_id = 1 [(buf.validate.field).string.uuid = true];
+  string deputy_id = 2 [(buf.validate.field).string.uuid = true];
+  // When the window opens; now when unset.
+  google.protobuf.Timestamp start_time = 3;
+  // When it closes: after the start and at most 30 days later.
+  google.protobuf.Timestamp end_time = 4 [(buf.validate.field).required = true];
+}
+
+// SetApprovalDeputyResponse returns the window.
+message SetApprovalDeputyResponse {
+  ApprovalDeputy deputy = 1;
+}
+
+// CancelApprovalDeputyRequest names a window.
+message CancelApprovalDeputyRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// CancelApprovalDeputyResponse returns the cancelled window.
+message CancelApprovalDeputyResponse {
+  ApprovalDeputy deputy = 1;
+}
+
+// ListApprovalDeputiesRequest filters windows.
+message ListApprovalDeputiesRequest {
+  // Only this person's windows; the caller's when unset, unless all is set.
+  optional string person_id = 1 [(buf.validate.field).string.uuid = true];
+  // Everyone's windows (needs waitlist.manage).
+  bool all = 2;
+  // Also cancelled and ended windows.
+  bool include_ended = 3;
+}
+
+// ListApprovalDeputiesResponse lists windows, newest first (at most 200).
+message ListApprovalDeputiesResponse {
+  repeated ApprovalDeputy deputies = 1;
+}
+
+// ApprovalGroupBy is what ListApprovalGroups groups by.
+enum ApprovalGroupBy {
+  APPROVAL_GROUP_BY_UNSPECIFIED = 0;
+  // Requests for the same grant, operation and target (HR-037).
+  APPROVAL_GROUP_BY_VARIANT = 1;
+  APPROVAL_GROUP_BY_AGENT = 2;
+  APPROVAL_GROUP_BY_RUN = 3;
+  APPROVAL_GROUP_BY_OPERATION = 4;
+}
+
+// ApprovalGroup is one group of requests the caller may see.
+message ApprovalGroup {
+  // The agent, run or variant id, or the operation; empty for requests
+  // without one.
+  string key = 1;
+  int32 count = 2;
+  // Up to 25 request ids, newest first.
+  repeated string request_ids = 3;
+  // Whether those requests could be reviewed as one batch on the approval
+  // page: Team edition, held actions of one operation and definition, each
+  // batchable (HR-175, HR-176). It approves nothing.
+  bool batch_eligible = 4;
+}
+
+// ListApprovalGroupsRequest names the grouping.
+message ListApprovalGroupsRequest {
+  ApprovalGroupBy group_by = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Only requests in these states (PENDING and EVIDENCE_REQUESTED when
+  // empty).
+  repeated ApprovalState states = 2 [(buf.validate.field).repeated = {
+    max_items: 8
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+}
+
+// ListApprovalGroupsResponse lists groups, largest first.
+message ListApprovalGroupsResponse {
+  repeated ApprovalGroup groups = 1;
 }

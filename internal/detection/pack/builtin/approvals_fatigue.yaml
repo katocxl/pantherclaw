@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.approvals.fatigue
+version: "1"
+title: Approval fatigue
+description: >-
+  A person approved at a pace that suggests approval fatigue: 30 or more
+  approvals in an hour, a median under 5 seconds from first notice to
+  approval over at least 10, or 50 or more approvals in a day with no
+  decline (G0 M36 D1063). The flag only routes new holds to others first;
+  it approves nothing and changes no one's eligibility. Alert only.
+severity: MEDIUM
+attention: ALERT
+basis: OBSERVED
+owasp: [ASI09]
+techniques_none: "Reports PantherClaw's own measure of how a person approves, not an attacker technique."
+edition: community
+on: [audit.approval.fatigue_flagged]
+tests:
+  - name: approval rate flagged
+    fires: true
+    events:
+      - kind: audit.approval.fatigue_flagged
+        actor_type: system
+        actor_id: approval-fatigue
+        outcome: success
+        reason: APPROVAL_RATE
+        attrs: {object_type: user, reason: APPROVAL_RATE, approvals: "31"}
+  - name: an approval
+    fires: false
+    events:
+      - kind: audit.approval.approved
+        actor_type: user
+        actor_id: u1
+        outcome: success

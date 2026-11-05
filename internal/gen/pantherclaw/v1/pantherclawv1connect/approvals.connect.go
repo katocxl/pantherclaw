@@ -48,6 +48,24 @@ const (
 	// ApprovalServiceDeclineApprovalBatchProcedure is the procedure name of the ApprovalService's
 	// DeclineApprovalBatch RPC.
 	ApprovalServiceDeclineApprovalBatchProcedure = "/pantherclaw.v1.ApprovalService/DeclineApprovalBatch"
+	// ApprovalServiceGetApprovalFatigueProcedure is the procedure name of the ApprovalService's
+	// GetApprovalFatigue RPC.
+	ApprovalServiceGetApprovalFatigueProcedure = "/pantherclaw.v1.ApprovalService/GetApprovalFatigue"
+	// ApprovalServiceSetApprovalFatigueRoutingProcedure is the procedure name of the ApprovalService's
+	// SetApprovalFatigueRouting RPC.
+	ApprovalServiceSetApprovalFatigueRoutingProcedure = "/pantherclaw.v1.ApprovalService/SetApprovalFatigueRouting"
+	// ApprovalServiceSetApprovalDeputyProcedure is the procedure name of the ApprovalService's
+	// SetApprovalDeputy RPC.
+	ApprovalServiceSetApprovalDeputyProcedure = "/pantherclaw.v1.ApprovalService/SetApprovalDeputy"
+	// ApprovalServiceCancelApprovalDeputyProcedure is the procedure name of the ApprovalService's
+	// CancelApprovalDeputy RPC.
+	ApprovalServiceCancelApprovalDeputyProcedure = "/pantherclaw.v1.ApprovalService/CancelApprovalDeputy"
+	// ApprovalServiceListApprovalDeputiesProcedure is the procedure name of the ApprovalService's
+	// ListApprovalDeputies RPC.
+	ApprovalServiceListApprovalDeputiesProcedure = "/pantherclaw.v1.ApprovalService/ListApprovalDeputies"
+	// ApprovalServiceListApprovalGroupsProcedure is the procedure name of the ApprovalService's
+	// ListApprovalGroups RPC.
+	ApprovalServiceListApprovalGroupsProcedure = "/pantherclaw.v1.ApprovalService/ListApprovalGroups"
 )
 
 var (
@@ -102,6 +120,51 @@ var (
 			Procedure:  ApprovalServiceDeclineApprovalBatchProcedure,
 		}
 	})
+	approvalServiceGetApprovalFatigueSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_approvals_proto.Services().ByName("ApprovalService").Methods().ByName("GetApprovalFatigue"),
+			Procedure:        ApprovalServiceGetApprovalFatigueProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	approvalServiceSetApprovalFatigueRoutingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_approvals_proto.Services().ByName("ApprovalService").Methods().ByName("SetApprovalFatigueRouting"),
+			Procedure:  ApprovalServiceSetApprovalFatigueRoutingProcedure,
+		}
+	})
+	approvalServiceSetApprovalDeputySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_approvals_proto.Services().ByName("ApprovalService").Methods().ByName("SetApprovalDeputy"),
+			Procedure:  ApprovalServiceSetApprovalDeputyProcedure,
+		}
+	})
+	approvalServiceCancelApprovalDeputySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_approvals_proto.Services().ByName("ApprovalService").Methods().ByName("CancelApprovalDeputy"),
+			Procedure:  ApprovalServiceCancelApprovalDeputyProcedure,
+		}
+	})
+	approvalServiceListApprovalDeputiesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_approvals_proto.Services().ByName("ApprovalService").Methods().ByName("ListApprovalDeputies"),
+			Procedure:        ApprovalServiceListApprovalDeputiesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	approvalServiceListApprovalGroupsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_approvals_proto.Services().ByName("ApprovalService").Methods().ByName("ListApprovalGroups"),
+			Procedure:        ApprovalServiceListApprovalGroupsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // ApprovalServiceClient is a client for the pantherclaw.v1.ApprovalService service.
@@ -143,6 +206,42 @@ type ApprovalServiceClient interface {
 	// (HR-175, Team edition).
 	// permission: approval.respond
 	DeclineApprovalBatch(context.Context, *v1.DeclineApprovalBatchRequest) (*v1.DeclineApprovalBatchResponse, error)
+	// GetApprovalFatigue reports, per decider, how they approved over the
+	// last hour, day or week: approvals per hour at the peak, the median
+	// seconds from the first notice to an approval, the approve share, the
+	// approvals between 22:00 and 06:00 in their time zone and the longest
+	// run of approvals with no decline, with any fatigue flag that has not
+	// cleared and the org's fatigue routing (G0 M36 D1063, Team edition).
+	// It reads; nothing here approves or declines.
+	// permission: waitlist.read
+	GetApprovalFatigue(context.Context, *v1.GetApprovalFatigueRequest) (*v1.GetApprovalFatigueResponse, error)
+	// SetApprovalFatigueRouting sets the org's fatigue routing: ROUTE (the
+	// default) routes and notifies a flagged decider last, OFF routes them
+	// like anyone else. Neither changes who is eligible (G0 M36 D1063, Team
+	// edition). Audited.
+	// permission: waitlist.manage
+	SetApprovalFatigueRouting(context.Context, *v1.SetApprovalFatigueRoutingRequest) (*v1.SetApprovalFatigueRoutingResponse, error)
+	// SetApprovalDeputy names a deputy for a person's absence (at most 30
+	// days): holds routed to the person are also routed to and noticed by the
+	// deputy, only when the deputy is eligible for that request on their own
+	// (G0 M36 D1064, FQ36-3). A person sets their own; waitlist.manage sets
+	// one for someone else. The deputy is an active member holding
+	// approval.respond, never the person. Audited.
+	// permission: approval.respond
+	SetApprovalDeputy(context.Context, *v1.SetApprovalDeputyRequest) (*v1.SetApprovalDeputyResponse, error)
+	// CancelApprovalDeputy ends a deputy window at once. Audited.
+	// permission: approval.respond
+	CancelApprovalDeputy(context.Context, *v1.CancelApprovalDeputyRequest) (*v1.CancelApprovalDeputyResponse, error)
+	// ListApprovalDeputies lists the caller's deputy windows, or with
+	// waitlist.manage anyone's.
+	// permission: authenticated
+	ListApprovalDeputies(context.Context, *v1.ListApprovalDeputiesRequest) (*v1.ListApprovalDeputiesResponse, error)
+	// ListApprovalGroups groups the requests the caller may see by variant,
+	// agent, run or operation, with whether each group could be reviewed as
+	// one batch (G0 M36 D1065). It is read only: approving still happens on
+	// the approval page, one request or one batch at a time (HR-175, HR-176).
+	// permission: authenticated
+	ListApprovalGroups(context.Context, *v1.ListApprovalGroupsRequest) (*v1.ListApprovalGroupsResponse, error)
 }
 
 // NewApprovalServiceClient constructs a client for the pantherclaw.v1.ApprovalService service.
@@ -190,6 +289,42 @@ type ApprovalServiceHandler interface {
 	// (HR-175, Team edition).
 	// permission: approval.respond
 	DeclineApprovalBatch(context.Context, *v1.DeclineApprovalBatchRequest) (*v1.DeclineApprovalBatchResponse, error)
+	// GetApprovalFatigue reports, per decider, how they approved over the
+	// last hour, day or week: approvals per hour at the peak, the median
+	// seconds from the first notice to an approval, the approve share, the
+	// approvals between 22:00 and 06:00 in their time zone and the longest
+	// run of approvals with no decline, with any fatigue flag that has not
+	// cleared and the org's fatigue routing (G0 M36 D1063, Team edition).
+	// It reads; nothing here approves or declines.
+	// permission: waitlist.read
+	GetApprovalFatigue(context.Context, *v1.GetApprovalFatigueRequest) (*v1.GetApprovalFatigueResponse, error)
+	// SetApprovalFatigueRouting sets the org's fatigue routing: ROUTE (the
+	// default) routes and notifies a flagged decider last, OFF routes them
+	// like anyone else. Neither changes who is eligible (G0 M36 D1063, Team
+	// edition). Audited.
+	// permission: waitlist.manage
+	SetApprovalFatigueRouting(context.Context, *v1.SetApprovalFatigueRoutingRequest) (*v1.SetApprovalFatigueRoutingResponse, error)
+	// SetApprovalDeputy names a deputy for a person's absence (at most 30
+	// days): holds routed to the person are also routed to and noticed by the
+	// deputy, only when the deputy is eligible for that request on their own
+	// (G0 M36 D1064, FQ36-3). A person sets their own; waitlist.manage sets
+	// one for someone else. The deputy is an active member holding
+	// approval.respond, never the person. Audited.
+	// permission: approval.respond
+	SetApprovalDeputy(context.Context, *v1.SetApprovalDeputyRequest) (*v1.SetApprovalDeputyResponse, error)
+	// CancelApprovalDeputy ends a deputy window at once. Audited.
+	// permission: approval.respond
+	CancelApprovalDeputy(context.Context, *v1.CancelApprovalDeputyRequest) (*v1.CancelApprovalDeputyResponse, error)
+	// ListApprovalDeputies lists the caller's deputy windows, or with
+	// waitlist.manage anyone's.
+	// permission: authenticated
+	ListApprovalDeputies(context.Context, *v1.ListApprovalDeputiesRequest) (*v1.ListApprovalDeputiesResponse, error)
+	// ListApprovalGroups groups the requests the caller may see by variant,
+	// agent, run or operation, with whether each group could be reviewed as
+	// one batch (G0 M36 D1065). It is read only: approving still happens on
+	// the approval page, one request or one batch at a time (HR-175, HR-176).
+	// permission: authenticated
+	ListApprovalGroups(context.Context, *v1.ListApprovalGroupsRequest) (*v1.ListApprovalGroupsResponse, error)
 }
 
 // RegisterApprovalServiceHandler registers svc as the pantherclaw.v1.ApprovalService implementation
@@ -204,6 +339,12 @@ func RegisterApprovalServiceHandler(server *connect.Server, svc ApprovalServiceH
 		connect.Method{Spec: approvalServiceProposeNarrowerActionSpec(), Handler: adapter.proposeNarrowerAction},
 		connect.Method{Spec: approvalServiceSubmitApprovalEvidenceSpec(), Handler: adapter.submitApprovalEvidence},
 		connect.Method{Spec: approvalServiceDeclineApprovalBatchSpec(), Handler: adapter.declineApprovalBatch},
+		connect.Method{Spec: approvalServiceGetApprovalFatigueSpec(), Handler: adapter.getApprovalFatigue},
+		connect.Method{Spec: approvalServiceSetApprovalFatigueRoutingSpec(), Handler: adapter.setApprovalFatigueRouting},
+		connect.Method{Spec: approvalServiceSetApprovalDeputySpec(), Handler: adapter.setApprovalDeputy},
+		connect.Method{Spec: approvalServiceCancelApprovalDeputySpec(), Handler: adapter.cancelApprovalDeputy},
+		connect.Method{Spec: approvalServiceListApprovalDeputiesSpec(), Handler: adapter.listApprovalDeputies},
+		connect.Method{Spec: approvalServiceListApprovalGroupsSpec(), Handler: adapter.listApprovalGroups},
 	)
 }
 
@@ -236,6 +377,30 @@ func (UnimplementedApprovalServiceHandler) SubmitApprovalEvidence(context.Contex
 
 func (UnimplementedApprovalServiceHandler) DeclineApprovalBatch(context.Context, *v1.DeclineApprovalBatchRequest) (*v1.DeclineApprovalBatchResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ApprovalService.DeclineApprovalBatch is not implemented")
+}
+
+func (UnimplementedApprovalServiceHandler) GetApprovalFatigue(context.Context, *v1.GetApprovalFatigueRequest) (*v1.GetApprovalFatigueResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ApprovalService.GetApprovalFatigue is not implemented")
+}
+
+func (UnimplementedApprovalServiceHandler) SetApprovalFatigueRouting(context.Context, *v1.SetApprovalFatigueRoutingRequest) (*v1.SetApprovalFatigueRoutingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ApprovalService.SetApprovalFatigueRouting is not implemented")
+}
+
+func (UnimplementedApprovalServiceHandler) SetApprovalDeputy(context.Context, *v1.SetApprovalDeputyRequest) (*v1.SetApprovalDeputyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ApprovalService.SetApprovalDeputy is not implemented")
+}
+
+func (UnimplementedApprovalServiceHandler) CancelApprovalDeputy(context.Context, *v1.CancelApprovalDeputyRequest) (*v1.CancelApprovalDeputyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ApprovalService.CancelApprovalDeputy is not implemented")
+}
+
+func (UnimplementedApprovalServiceHandler) ListApprovalDeputies(context.Context, *v1.ListApprovalDeputiesRequest) (*v1.ListApprovalDeputiesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ApprovalService.ListApprovalDeputies is not implemented")
+}
+
+func (UnimplementedApprovalServiceHandler) ListApprovalGroups(context.Context, *v1.ListApprovalGroupsRequest) (*v1.ListApprovalGroupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ApprovalService.ListApprovalGroups is not implemented")
 }
 
 type approvalServiceClient struct {
@@ -293,6 +458,54 @@ func (c *approvalServiceClient) SubmitApprovalEvidence(ctx context.Context, req 
 func (c *approvalServiceClient) DeclineApprovalBatch(ctx context.Context, req *v1.DeclineApprovalBatchRequest) (*v1.DeclineApprovalBatchResponse, error) {
 	var res v1.DeclineApprovalBatchResponse
 	if err := c.client.CallUnary(ctx, approvalServiceDeclineApprovalBatchSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *approvalServiceClient) GetApprovalFatigue(ctx context.Context, req *v1.GetApprovalFatigueRequest) (*v1.GetApprovalFatigueResponse, error) {
+	var res v1.GetApprovalFatigueResponse
+	if err := c.client.CallUnary(ctx, approvalServiceGetApprovalFatigueSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *approvalServiceClient) SetApprovalFatigueRouting(ctx context.Context, req *v1.SetApprovalFatigueRoutingRequest) (*v1.SetApprovalFatigueRoutingResponse, error) {
+	var res v1.SetApprovalFatigueRoutingResponse
+	if err := c.client.CallUnary(ctx, approvalServiceSetApprovalFatigueRoutingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *approvalServiceClient) SetApprovalDeputy(ctx context.Context, req *v1.SetApprovalDeputyRequest) (*v1.SetApprovalDeputyResponse, error) {
+	var res v1.SetApprovalDeputyResponse
+	if err := c.client.CallUnary(ctx, approvalServiceSetApprovalDeputySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *approvalServiceClient) CancelApprovalDeputy(ctx context.Context, req *v1.CancelApprovalDeputyRequest) (*v1.CancelApprovalDeputyResponse, error) {
+	var res v1.CancelApprovalDeputyResponse
+	if err := c.client.CallUnary(ctx, approvalServiceCancelApprovalDeputySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *approvalServiceClient) ListApprovalDeputies(ctx context.Context, req *v1.ListApprovalDeputiesRequest) (*v1.ListApprovalDeputiesResponse, error) {
+	var res v1.ListApprovalDeputiesResponse
+	if err := c.client.CallUnary(ctx, approvalServiceListApprovalDeputiesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *approvalServiceClient) ListApprovalGroups(ctx context.Context, req *v1.ListApprovalGroupsRequest) (*v1.ListApprovalGroupsResponse, error) {
+	var res v1.ListApprovalGroupsResponse
+	if err := c.client.CallUnary(ctx, approvalServiceListApprovalGroupsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -378,6 +591,78 @@ func (h approvalServiceHandler) declineApprovalBatch(ctx context.Context, _ conn
 		return err
 	}
 	res, err := h.svc.DeclineApprovalBatch(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h approvalServiceHandler) getApprovalFatigue(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetApprovalFatigueRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetApprovalFatigue(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h approvalServiceHandler) setApprovalFatigueRouting(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetApprovalFatigueRoutingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetApprovalFatigueRouting(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h approvalServiceHandler) setApprovalDeputy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetApprovalDeputyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetApprovalDeputy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h approvalServiceHandler) cancelApprovalDeputy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CancelApprovalDeputyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelApprovalDeputy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h approvalServiceHandler) listApprovalDeputies(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListApprovalDeputiesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListApprovalDeputies(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h approvalServiceHandler) listApprovalGroups(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListApprovalGroupsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListApprovalGroups(ctx, &req)
 	if err != nil {
 		return err
 	}

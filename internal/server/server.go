@@ -312,7 +312,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		return err
 	}
 	reg := keys.NewRegistry()
-	if err := keystore.LoadSigningKeys(ctx, pool, kp, reg, cfg.evidenceKeyPurposes()...); err != nil {
+	if err := keystore.LoadSigningKeys(ctx, pool, kp, reg, append(cfg.evidenceKeyPurposes(), keys.PurposeWebPush)...); err != nil { // G0 M36 D1066
 		return err
 	}
 
@@ -375,6 +375,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	wireM36Approvals(cfg, reg, m5.notifications) // G0 M36 D1066
 	tickets := newTicketSync(pool, kp, bill)
 	verification, err := newVerification(pool, reg, m5.notifications, tickets)
 	if err != nil {
@@ -722,6 +723,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		if evidenceJobs, err = registerM34DiscoveryJobs(evidenceJobs, jreg, pool, bill, log); err != nil { // G0 M34 D997
+			return err
+		}
+		if evidenceJobs, err = registerM36ApprovalJobs(evidenceJobs, jreg, m5p2.approvals, m5.notifications, log); err != nil { // G0 M36 D1063, D1065
 			return err
 		}
 		rewrapJobs, closeKeystore, err := registerKeyRewrap(ctx, jreg, cfg, pool, kp, log)

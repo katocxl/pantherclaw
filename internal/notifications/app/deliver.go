@@ -259,6 +259,8 @@ func (s *Service) send(ctx context.Context, org ids.OrgID, d dbq.LoadDeliveryRow
 		return s.sendSlackDM(ctx, org, d, link)
 	case domain.KindTeamsApp:
 		return s.sendTeamsApp(ctx, org, d, link)
+	case domain.KindWebPush:
+		return s.sendWebPush(ctx, org, d) // G0 M36 D1066: link-only
 	}
 	return outcome{code: "unknown_kind", permanent: true}
 }

@@ -3516,6 +3516,330 @@
         }
       }
     },
+    "/pantherclaw.v1.ApprovalService/GetApprovalFatigue": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ApprovalService"
+        ],
+        "summary": "GetApprovalFatigue",
+        "description": "GetApprovalFatigue reports, per decider, how they approved over the\n last hour, day or week: approvals per hour at the peak, the median\n seconds from the first notice to an approval, the approve share, the\n approvals between 22:00 and 06:00 in their time zone and the longest\n run of approvals with no decline, with any fatigue flag that has not\n cleared and the org's fatigue routing (G0 M36 D1063, Team edition).\n It reads; nothing here approves or declines.\n permission: waitlist.read",
+        "operationId": "pantherclaw.v1.ApprovalService.GetApprovalFatigue",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetApprovalFatigueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetApprovalFatigueResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ApprovalService/SetApprovalFatigueRouting": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ApprovalService"
+        ],
+        "summary": "SetApprovalFatigueRouting",
+        "description": "SetApprovalFatigueRouting sets the org's fatigue routing: ROUTE (the\n default) routes and notifies a flagged decider last, OFF routes them\n like anyone else. Neither changes who is eligible (G0 M36 D1063, Team\n edition). Audited.\n permission: waitlist.manage",
+        "operationId": "pantherclaw.v1.ApprovalService.SetApprovalFatigueRouting",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetApprovalFatigueRoutingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetApprovalFatigueRoutingResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ApprovalService/SetApprovalDeputy": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ApprovalService"
+        ],
+        "summary": "SetApprovalDeputy",
+        "description": "SetApprovalDeputy names a deputy for a person's absence (at most 30\n days): holds routed to the person are also routed to and noticed by the\n deputy, only when the deputy is eligible for that request on their own\n (G0 M36 D1064, FQ36-3). A person sets their own; waitlist.manage sets\n one for someone else. The deputy is an active member holding\n approval.respond, never the person. Audited.\n permission: approval.respond",
+        "operationId": "pantherclaw.v1.ApprovalService.SetApprovalDeputy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetApprovalDeputyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetApprovalDeputyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ApprovalService/CancelApprovalDeputy": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ApprovalService"
+        ],
+        "summary": "CancelApprovalDeputy",
+        "description": "CancelApprovalDeputy ends a deputy window at once. Audited.\n permission: approval.respond",
+        "operationId": "pantherclaw.v1.ApprovalService.CancelApprovalDeputy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.CancelApprovalDeputyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.CancelApprovalDeputyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ApprovalService/ListApprovalDeputies": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ApprovalService"
+        ],
+        "summary": "ListApprovalDeputies",
+        "description": "ListApprovalDeputies lists the caller's deputy windows, or with\n waitlist.manage anyone's.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.ApprovalService.ListApprovalDeputies",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListApprovalDeputiesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListApprovalDeputiesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.ApprovalService/ListApprovalGroups": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.ApprovalService"
+        ],
+        "summary": "ListApprovalGroups",
+        "description": "ListApprovalGroups groups the requests the caller may see by variant,\n agent, run or operation, with whether each group could be reviewed as\n one batch (G0 M36 D1065). It is read only: approving still happens on\n the approval page, one request or one batch at a time (HR-175, HR-176).\n permission: authenticated",
+        "operationId": "pantherclaw.v1.ApprovalService.ListApprovalGroups",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListApprovalGroupsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListApprovalGroupsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.AssuranceService/SetTestCases": {
       "post": {
         "tags": [
@@ -24741,6 +25065,330 @@
         }
       }
     },
+    "/pantherclaw.v1.NotificationService/GetMyNotificationPreferences": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "GetMyNotificationPreferences",
+        "description": "GetMyNotificationPreferences returns the caller's own preferences: how\n approval notices reach them (at once or as a digest) and their quiet\n hours (G0 M36 D1065).\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.GetMyNotificationPreferences",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetMyNotificationPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetMyNotificationPreferencesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/SetMyNotificationPreferences": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "SetMyNotificationPreferences",
+        "description": "SetMyNotificationPreferences sets them. A digest and quiet hours delay\n only the caller's own emails, direct messages and pushes; routing and\n escalation to other people are unchanged (HR-792). Audited.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.SetMyNotificationPreferences",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetMyNotificationPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetMyNotificationPreferencesResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/GetWebPushKey": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "GetWebPushKey",
+        "description": "GetWebPushKey returns the deployment's VAPID public key, the\n applicationServerKey a browser subscribes with (G0 M36 D1066).\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.GetWebPushKey",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetWebPushKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetWebPushKeyResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/RegisterPushSubscription": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "RegisterPushSubscription",
+        "description": "RegisterPushSubscription registers a browser push subscription of the\n signed-in caller (Team edition). A push carries a title and a link\n only (HR-793). Audited.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.RegisterPushSubscription",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RegisterPushSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RegisterPushSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/RemovePushSubscription": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "RemovePushSubscription",
+        "description": "RemovePushSubscription removes one of the caller's own subscriptions.\n Audited.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.RemovePushSubscription",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RemovePushSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RemovePushSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.NotificationService/ListMyPushSubscriptions": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.NotificationService"
+        ],
+        "summary": "ListMyPushSubscriptions",
+        "description": "ListMyPushSubscriptions lists the caller's own live subscriptions,\n newest first.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.NotificationService.ListMyPushSubscriptions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListMyPushSubscriptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListMyPushSubscriptionsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.OnboardingService/GetProgress": {
       "post": {
         "tags": [
@@ -44622,6 +45270,28 @@
           "htu"
         ]
       },
+      "pantherclaw.v1.ApprovalDeputyState": {
+        "type": "string",
+        "title": "ApprovalDeputyState",
+        "enum": [
+          "APPROVAL_DEPUTY_STATE_UNSPECIFIED",
+          "APPROVAL_DEPUTY_STATE_ACTIVE",
+          "APPROVAL_DEPUTY_STATE_CANCELLED"
+        ],
+        "description": "ApprovalDeputyState is a deputy window's state."
+      },
+      "pantherclaw.v1.ApprovalGroupBy": {
+        "type": "string",
+        "title": "ApprovalGroupBy",
+        "enum": [
+          "APPROVAL_GROUP_BY_UNSPECIFIED",
+          "APPROVAL_GROUP_BY_VARIANT",
+          "APPROVAL_GROUP_BY_AGENT",
+          "APPROVAL_GROUP_BY_RUN",
+          "APPROVAL_GROUP_BY_OPERATION"
+        ],
+        "description": "ApprovalGroupBy is what ListApprovalGroups groups by."
+      },
       "pantherclaw.v1.ApprovalState": {
         "type": "string",
         "title": "ApprovalState",
@@ -44686,6 +45356,27 @@
         ],
         "description": "EvidenceQuestion is what a decider asks the run for."
       },
+      "pantherclaw.v1.FatigueRouting": {
+        "type": "string",
+        "title": "FatigueRouting",
+        "enum": [
+          "FATIGUE_ROUTING_UNSPECIFIED",
+          "FATIGUE_ROUTING_ROUTE",
+          "FATIGUE_ROUTING_OFF"
+        ],
+        "description": "FatigueRouting is the org's fatigue routing (G0 M36 D1063)."
+      },
+      "pantherclaw.v1.FatigueWindow": {
+        "type": "string",
+        "title": "FatigueWindow",
+        "enum": [
+          "FATIGUE_WINDOW_UNSPECIFIED",
+          "FATIGUE_WINDOW_HOUR",
+          "FATIGUE_WINDOW_DAY",
+          "FATIGUE_WINDOW_WEEK"
+        ],
+        "description": "FatigueWindow is the span GetApprovalFatigue measures."
+      },
       "pantherclaw.v1.SaferAlternative": {
         "type": "string",
         "title": "SaferAlternative",
@@ -44697,6 +45388,56 @@
           "SAFER_ALTERNATIVE_ASK_OWNER"
         ],
         "description": "SaferAlternative is an optional pointer a decider gives with a decline."
+      },
+      "pantherclaw.v1.ApprovalDeputy": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "personId": {
+            "type": "string",
+            "title": "person_id",
+            "description": "The person who is away."
+          },
+          "deputyId": {
+            "type": "string",
+            "title": "deputy_id",
+            "description": "Who also gets that person's holds while the window is open."
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/pantherclaw.v1.ApprovalDeputyState"
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "cancelledBy": {
+            "type": "string",
+            "title": "cancelled_by"
+          },
+          "cancelTime": {
+            "title": "cancel_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ApprovalDeputy",
+        "additionalProperties": false,
+        "description": "ApprovalDeputy is a deputy window: routing and notices only (HR-173)."
       },
       "pantherclaw.v1.ApprovalEligibility": {
         "type": "object",
@@ -44772,6 +45513,37 @@
         "title": "ApprovalEvidence",
         "additionalProperties": false,
         "description": "ApprovalEvidence is one UNTRUSTED note from the run (HR-172): shown only\n in the untrusted block, never in notifications, never part of the binding."
+      },
+      "pantherclaw.v1.ApprovalGroup": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key",
+            "description": "The agent, run or variant id, or the operation; empty for requests\n without one."
+          },
+          "count": {
+            "type": "integer",
+            "title": "count",
+            "format": "int32"
+          },
+          "requestIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "request_ids",
+            "description": "Up to 25 request ids, newest first."
+          },
+          "batchEligible": {
+            "type": "boolean",
+            "title": "batch_eligible",
+            "description": "Whether those requests could be reviewed as one batch on the approval\n page: Team edition, held actions of one operation and definition, each\n batchable (HR-175, HR-176). It approves nothing."
+          }
+        },
+        "title": "ApprovalGroup",
+        "additionalProperties": false,
+        "description": "ApprovalGroup is one group of requests the caller may see."
       },
       "pantherclaw.v1.ApprovalRequest": {
         "type": "object",
@@ -44970,6 +45742,109 @@
         "title": "ApprovalVariant",
         "additionalProperties": false,
         "description": "ApprovalVariant is an earlier request for the same grant, operation and\n target (HR-037)."
+      },
+      "pantherclaw.v1.CancelApprovalDeputyRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "CancelApprovalDeputyRequest",
+        "additionalProperties": false,
+        "description": "CancelApprovalDeputyRequest names a window.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.CancelApprovalDeputyResponse": {
+        "type": "object",
+        "properties": {
+          "deputy": {
+            "title": "deputy",
+            "$ref": "#/components/schemas/pantherclaw.v1.ApprovalDeputy"
+          }
+        },
+        "title": "CancelApprovalDeputyResponse",
+        "additionalProperties": false,
+        "description": "CancelApprovalDeputyResponse returns the cancelled window."
+      },
+      "pantherclaw.v1.DeciderFatigue": {
+        "type": "object",
+        "properties": {
+          "deciderId": {
+            "type": "string",
+            "title": "decider_id"
+          },
+          "approvals": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "approvals",
+            "format": "int64"
+          },
+          "declines": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "declines",
+            "format": "int64"
+          },
+          "peakApprovalsPerHour": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "peak_approvals_per_hour",
+            "format": "int64",
+            "description": "The most approvals in one clock hour."
+          },
+          "medianSecondsToApprove": {
+            "type": "number",
+            "title": "median_seconds_to_approve",
+            "format": "double",
+            "description": "Median seconds from the decider's first notice of a request to their\n approval (0 when no approval had a notice)."
+          },
+          "approveShare": {
+            "type": "number",
+            "title": "approve_share",
+            "format": "double",
+            "description": "approvals / (approvals + declines); 0 without either."
+          },
+          "nightApprovals": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "night_approvals",
+            "format": "int64",
+            "description": "Approvals between 22:00 and 06:00 in the decider's time zone (UTC\n without one)."
+          },
+          "longestApprovalStreak": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "longest_approval_streak",
+            "format": "int64",
+            "description": "The longest run of approvals with no decline."
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.FatigueFlag"
+            },
+            "title": "flags",
+            "description": "Flags that have not cleared."
+          }
+        },
+        "title": "DeciderFatigue",
+        "additionalProperties": false,
+        "description": "DeciderFatigue is one decider's measures over the window."
       },
       "pantherclaw.v1.DeciderResponse": {
         "type": "object",
@@ -45180,6 +46055,86 @@
         "additionalProperties": false,
         "description": "DeclineApprovalRequestResponse returns the request."
       },
+      "pantherclaw.v1.FatigueFlag": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "APPROVAL_RATE (30 or more approvals in an hour), FAST_APPROVALS (a\n median under 5 seconds over 10 or more in an hour) or NO_DECLINES (50\n or more in a day with no decline)."
+          },
+          "approvals": {
+            "type": "integer",
+            "title": "approvals",
+            "format": "int32",
+            "description": "The approvals measured when it was raised."
+          },
+          "flagTime": {
+            "title": "flag_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "clearTime": {
+            "title": "clear_time",
+            "description": "4 hours after it was raised.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "FatigueFlag",
+        "additionalProperties": false,
+        "description": "FatigueFlag is a flag that has not cleared."
+      },
+      "pantherclaw.v1.GetApprovalFatigueRequest": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "title": "window",
+            "$ref": "#/components/schemas/pantherclaw.v1.FatigueWindow",
+            "not": {
+              "enum": [
+                "FATIGUE_WINDOW_UNSPECIFIED"
+              ]
+            }
+          },
+          "deciderId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "decider_id",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "title": "GetApprovalFatigueRequest",
+        "additionalProperties": false,
+        "description": "GetApprovalFatigueRequest names the window and, optionally, one decider.",
+        "required": [
+          "window"
+        ]
+      },
+      "pantherclaw.v1.GetApprovalFatigueResponse": {
+        "type": "object",
+        "properties": {
+          "deciders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.DeciderFatigue"
+            },
+            "title": "deciders"
+          },
+          "routing": {
+            "title": "routing",
+            "$ref": "#/components/schemas/pantherclaw.v1.FatigueRouting"
+          },
+          "startTime": {
+            "title": "start_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetApprovalFatigueResponse",
+        "additionalProperties": false,
+        "description": "GetApprovalFatigueResponse lists the deciders with responses in the\n window, most approvals first (at most 200)."
+      },
       "pantherclaw.v1.GetApprovalRequestRequest": {
         "type": "object",
         "properties": {
@@ -45249,6 +46204,108 @@
         "title": "GetApprovalRequestResponse",
         "additionalProperties": false,
         "description": "GetApprovalRequestResponse returns it."
+      },
+      "pantherclaw.v1.ListApprovalDeputiesRequest": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "person_id",
+            "format": "uuid",
+            "description": "Only this person's windows; the caller's when unset, unless all is set.",
+            "nullable": true
+          },
+          "all": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "all",
+            "description": "Everyone's windows (needs waitlist.manage)."
+          },
+          "includeEnded": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "include_ended",
+            "description": "Also cancelled and ended windows."
+          }
+        },
+        "title": "ListApprovalDeputiesRequest",
+        "additionalProperties": false,
+        "description": "ListApprovalDeputiesRequest filters windows."
+      },
+      "pantherclaw.v1.ListApprovalDeputiesResponse": {
+        "type": "object",
+        "properties": {
+          "deputies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ApprovalDeputy"
+            },
+            "title": "deputies"
+          }
+        },
+        "title": "ListApprovalDeputiesResponse",
+        "additionalProperties": false,
+        "description": "ListApprovalDeputiesResponse lists windows, newest first (at most 200)."
+      },
+      "pantherclaw.v1.ListApprovalGroupsRequest": {
+        "type": "object",
+        "properties": {
+          "groupBy": {
+            "title": "group_by",
+            "$ref": "#/components/schemas/pantherclaw.v1.ApprovalGroupBy",
+            "not": {
+              "enum": [
+                "APPROVAL_GROUP_BY_UNSPECIFIED"
+              ]
+            }
+          },
+          "states": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ApprovalState",
+              "not": {
+                "enum": [
+                  "APPROVAL_STATE_UNSPECIFIED"
+                ]
+              }
+            },
+            "title": "states",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "description": "Only requests in these states (PENDING and EVIDENCE_REQUESTED when\n empty)."
+          }
+        },
+        "title": "ListApprovalGroupsRequest",
+        "additionalProperties": false,
+        "description": "ListApprovalGroupsRequest names the grouping.",
+        "required": [
+          "groupBy"
+        ]
+      },
+      "pantherclaw.v1.ListApprovalGroupsResponse": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.ApprovalGroup"
+            },
+            "title": "groups"
+          }
+        },
+        "title": "ListApprovalGroupsResponse",
+        "additionalProperties": false,
+        "description": "ListApprovalGroupsResponse lists groups, largest first."
       },
       "pantherclaw.v1.ListApprovalRequestsRequest": {
         "type": "object",
@@ -45491,6 +46548,94 @@
         "title": "RequestApprovalEvidenceResponse",
         "additionalProperties": false,
         "description": "RequestApprovalEvidenceResponse returns the request."
+      },
+      "pantherclaw.v1.SetApprovalDeputyRequest": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "person_id",
+            "format": "uuid",
+            "description": "The person who will be away; the caller when unset.",
+            "nullable": true
+          },
+          "deputyId": {
+            "type": "string",
+            "title": "deputy_id",
+            "format": "uuid"
+          },
+          "startTime": {
+            "title": "start_time",
+            "description": "When the window opens; now when unset.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/google.protobuf.Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endTime": {
+            "title": "end_time",
+            "description": "When it closes: after the start and at most 30 days later.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "SetApprovalDeputyRequest",
+        "required": [
+          "endTime",
+          "deputyId"
+        ],
+        "additionalProperties": false,
+        "description": "SetApprovalDeputyRequest names the deputy and the window."
+      },
+      "pantherclaw.v1.SetApprovalDeputyResponse": {
+        "type": "object",
+        "properties": {
+          "deputy": {
+            "title": "deputy",
+            "$ref": "#/components/schemas/pantherclaw.v1.ApprovalDeputy"
+          }
+        },
+        "title": "SetApprovalDeputyResponse",
+        "additionalProperties": false,
+        "description": "SetApprovalDeputyResponse returns the window."
+      },
+      "pantherclaw.v1.SetApprovalFatigueRoutingRequest": {
+        "type": "object",
+        "properties": {
+          "routing": {
+            "title": "routing",
+            "$ref": "#/components/schemas/pantherclaw.v1.FatigueRouting",
+            "not": {
+              "enum": [
+                "FATIGUE_ROUTING_UNSPECIFIED"
+              ]
+            }
+          }
+        },
+        "title": "SetApprovalFatigueRoutingRequest",
+        "additionalProperties": false,
+        "description": "SetApprovalFatigueRoutingRequest sets the routing.",
+        "required": [
+          "routing"
+        ]
+      },
+      "pantherclaw.v1.SetApprovalFatigueRoutingResponse": {
+        "type": "object",
+        "properties": {
+          "routing": {
+            "title": "routing",
+            "$ref": "#/components/schemas/pantherclaw.v1.FatigueRouting"
+          }
+        },
+        "title": "SetApprovalFatigueRoutingResponse",
+        "additionalProperties": false,
+        "description": "SetApprovalFatigueRoutingResponse returns the routing now in effect."
       },
       "pantherclaw.v1.SubmitApprovalEvidenceRequest": {
         "type": "object",
@@ -86762,6 +87907,16 @@
         "additionalProperties": false,
         "description": "UpdateModelSettingsResponse carries the settings."
       },
+      "pantherclaw.v1.ApprovalDelivery": {
+        "type": "string",
+        "title": "ApprovalDelivery",
+        "enum": [
+          "APPROVAL_DELIVERY_UNSPECIFIED",
+          "APPROVAL_DELIVERY_IMMEDIATE",
+          "APPROVAL_DELIVERY_DIGEST"
+        ],
+        "description": "ApprovalDelivery is how approval notices reach a person."
+      },
       "pantherclaw.v1.ChannelHealth": {
         "type": "string",
         "title": "ChannelHealth",
@@ -87282,6 +88437,39 @@
         "additionalProperties": false,
         "description": "GetChannelResponse returns the channel and its recent deliveries."
       },
+      "pantherclaw.v1.GetMyNotificationPreferencesRequest": {
+        "type": "object",
+        "title": "GetMyNotificationPreferencesRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetMyNotificationPreferencesResponse": {
+        "type": "object",
+        "properties": {
+          "preferences": {
+            "title": "preferences",
+            "$ref": "#/components/schemas/pantherclaw.v1.NotificationPreferences"
+          }
+        },
+        "title": "GetMyNotificationPreferencesResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetWebPushKeyRequest": {
+        "type": "object",
+        "title": "GetWebPushKeyRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.GetWebPushKeyResponse": {
+        "type": "object",
+        "properties": {
+          "applicationServerKey": {
+            "type": "string",
+            "title": "application_server_key",
+            "description": "The uncompressed P-256 public key, base64url without padding."
+          }
+        },
+        "title": "GetWebPushKeyResponse",
+        "additionalProperties": false
+      },
       "pantherclaw.v1.ListChannelsRequest": {
         "type": "object",
         "properties": {
@@ -87444,6 +88632,61 @@
         "additionalProperties": false,
         "description": "ListDeliveriesResponse is one page of deliveries."
       },
+      "pantherclaw.v1.ListMyPushSubscriptionsRequest": {
+        "type": "object",
+        "title": "ListMyPushSubscriptionsRequest",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.ListMyPushSubscriptionsResponse": {
+        "type": "object",
+        "properties": {
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PushSubscription"
+            },
+            "title": "subscriptions"
+          }
+        },
+        "title": "ListMyPushSubscriptionsResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.NotificationPreferences": {
+        "type": "object",
+        "properties": {
+          "approvalDelivery": {
+            "title": "approval_delivery",
+            "$ref": "#/components/schemas/pantherclaw.v1.ApprovalDelivery"
+          },
+          "digestMinutes": {
+            "type": "integer",
+            "title": "digest_minutes",
+            "format": "int32",
+            "description": "The digest window in minutes: 15, 30 or 60."
+          },
+          "quietStart": {
+            "type": "string",
+            "title": "quiet_start",
+            "description": "Quiet hours as HH:MM, both set or both empty; the end may be before\n the start (overnight)."
+          },
+          "quietEnd": {
+            "type": "string",
+            "title": "quiet_end"
+          },
+          "timeZone": {
+            "type": "string",
+            "title": "time_zone",
+            "description": "The IANA time zone of the quiet hours and of night-time measures; UTC\n when empty."
+          },
+          "updateTime": {
+            "title": "update_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "NotificationPreferences",
+        "additionalProperties": false,
+        "description": "NotificationPreferences are one person's preferences (G0 M36 D1065)."
+      },
       "pantherclaw.v1.ProposeSlackLinkRequest": {
         "type": "object",
         "title": "ProposeSlackLinkRequest",
@@ -87458,6 +88701,112 @@
           }
         },
         "title": "ProposeSlackLinkResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.PushSubscription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "endpointHost": {
+            "type": "string",
+            "title": "endpoint_host",
+            "description": "The push service host the endpoint is on."
+          },
+          "label": {
+            "type": "string",
+            "title": "label"
+          },
+          "createTime": {
+            "title": "create_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "lastSuccessTime": {
+            "title": "last_success_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "failureCount": {
+            "type": "integer",
+            "title": "failure_count",
+            "format": "int32"
+          }
+        },
+        "title": "PushSubscription",
+        "additionalProperties": false,
+        "description": "PushSubscription is a person's browser push subscription; its keys are\n never returned."
+      },
+      "pantherclaw.v1.RegisterPushSubscriptionRequest": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "title": "endpoint",
+            "maxLength": 2048,
+            "minLength": 9,
+            "description": "The subscription's endpoint: https on fcm.googleapis.com,\n updates.push.services.mozilla.com, notify.windows.com or\n web.push.apple.com (or a subdomain)."
+          },
+          "p256dh": {
+            "type": "string",
+            "title": "p256dh",
+            "maxLength": 100,
+            "minLength": 80,
+            "description": "keys.p256dh and keys.auth of the subscription, base64url."
+          },
+          "auth": {
+            "type": "string",
+            "title": "auth",
+            "maxLength": 32,
+            "minLength": 16
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "label",
+            "maxLength": 64,
+            "description": "A name for the browser or device."
+          }
+        },
+        "title": "RegisterPushSubscriptionRequest",
+        "additionalProperties": false,
+        "required": [
+          "endpoint",
+          "p256dh",
+          "auth"
+        ]
+      },
+      "pantherclaw.v1.RegisterPushSubscriptionResponse": {
+        "type": "object",
+        "properties": {
+          "subscription": {
+            "title": "subscription",
+            "$ref": "#/components/schemas/pantherclaw.v1.PushSubscription"
+          }
+        },
+        "title": "RegisterPushSubscriptionResponse",
+        "additionalProperties": false
+      },
+      "pantherclaw.v1.RemovePushSubscriptionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid"
+          }
+        },
+        "title": "RemovePushSubscriptionRequest",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RemovePushSubscriptionResponse": {
+        "type": "object",
+        "title": "RemovePushSubscriptionResponse",
         "additionalProperties": false
       },
       "pantherclaw.v1.RevokeChatLinkRequest": {
@@ -87565,6 +88914,89 @@
         "title": "SetChannelSignatureSchemeResponse",
         "additionalProperties": false,
         "description": "SetChannelSignatureSchemeResponse is the channel and where receivers fetch the\n org's webhook keys."
+      },
+      "pantherclaw.v1.SetMyNotificationPreferencesRequest": {
+        "type": "object",
+        "properties": {
+          "approvalDelivery": {
+            "title": "approval_delivery",
+            "$ref": "#/components/schemas/pantherclaw.v1.ApprovalDelivery",
+            "not": {
+              "enum": [
+                "APPROVAL_DELIVERY_UNSPECIFIED"
+              ]
+            }
+          },
+          "digestMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "digest_minutes",
+            "format": "int32",
+            "enum": [
+              0,
+              15,
+              30,
+              60,
+              null
+            ]
+          },
+          "quietStart": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "quiet_start",
+            "anyOf": [
+              {
+                "pattern": "^(([01][0-9]|2[0-3]):[0-5][0-9])?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "quietEnd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "quiet_end",
+            "anyOf": [
+              {
+                "pattern": "^(([01][0-9]|2[0-3]):[0-5][0-9])?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "timeZone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "time_zone",
+            "maxLength": 64
+          }
+        },
+        "title": "SetMyNotificationPreferencesRequest",
+        "additionalProperties": false,
+        "required": [
+          "approvalDelivery"
+        ]
+      },
+      "pantherclaw.v1.SetMyNotificationPreferencesResponse": {
+        "type": "object",
+        "properties": {
+          "preferences": {
+            "title": "preferences",
+            "$ref": "#/components/schemas/pantherclaw.v1.NotificationPreferences"
+          }
+        },
+        "title": "SetMyNotificationPreferencesResponse",
+        "additionalProperties": false
       },
       "pantherclaw.v1.SlackAppConfig": {
         "type": "object",
