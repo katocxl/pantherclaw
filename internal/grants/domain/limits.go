@@ -487,6 +487,8 @@ func groupingKey(g bdomain.Grouping, task string, a Action, dc DebitContext) (st
 		return dc.TeamID.String(), !dc.TeamID.IsZero()
 	case bdomain.GroupOrg:
 		return "org", true
+	case bdomain.GroupMerchant: // G0 M39 D1124
+		return a.Merchant, a.Merchant != ""
 	}
 	return "", false
 }

@@ -3535,6 +3535,31 @@ type PcPayloadCapture struct {
 	RemoveAt      time.Time
 }
 
+type PcPaymentMandateUse struct {
+	OrgID         ids.OrgID
+	MandateDigest string
+	TransactionID ids.UUID
+	UsedAt        time.Time
+}
+
+type PcPaymentMerchantCap struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	Merchant           string
+	Currency           string
+	MaxPerPaymentMinor int64
+	MaxPerDayMinor     int64
+	State              string
+	CreatedBy          string
+	CreatedAt          time.Time
+	ChangeRequestID    *ids.UUID
+	ApprovedBy         []ids.UUID
+	ActivatedAt        *time.Time
+	RetiredAt          *time.Time
+	RetiredBy          *string
+	UpdatedAt          time.Time
+}
+
 type PcPermit struct {
 	OrgID              ids.OrgID
 	ID                 ids.UUID

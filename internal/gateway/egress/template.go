@@ -425,6 +425,9 @@ func (r refs) value(ref string) (any, error) {
 		return v.List, nil
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeURL:
 		return v.Str, nil
+	case defs.TypeMandate:
+		// The gateway sends a payment's mandate to the merchant (G0 M39 D1124a).
+		return v.Str, nil
 	case defs.TypeText, defs.TypeQueryFilter, defs.TypeFloatArray, defs.TypeStringMap:
 	}
 	return nil, fmt.Errorf("%w: untrusted text, query filters, float arrays and string maps are never sent from a template", ErrBuild)

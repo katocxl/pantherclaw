@@ -1,0 +1,232 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agent payments in a sandbox only (G0 M39 D1124,
+# D1124a; FQ39-1, FQ39-2; Business edition).
+#
+# An agent that holds an AP2 payment mandate, signed for its person by a
+# credentials provider, submits a checkout to a merchant's AP2 endpoint
+# through PantherClaw. PantherClaw verifies the mandate and never signs one
+# for a person; it holds no card, network token or payment credential
+# (HR-830). The connection is kind http to the merchant's sandbox AP2
+# endpoint (the simulator, pantherclaw-sim agentpay, in development and
+# tests); every trust anchor the verification uses must be a sandbox anchor
+# (HR-831).
+#
+# agentpay.checkout.submit is payment-class (its payment block): before it
+# asks for a decision the gateway verifies the mandate (payment_mandate)
+# against the org's ACTIVE trust anchors and reports the fact
+# payments.mandate {mandate_valid, amount_minor, currency, merchant, payee,
+# mandate_digest}. The pipeline refuses a missing mandate
+# (MANDATE_REQUIRED), an invalid or expired one (MANDATE_INVALID) and one
+# whose amount, currency or merchant are not exactly the params
+# (MANDATE_MISMATCH) (HR-833, HR-834), then holds every payment for a person
+# unless an ACTIVE merchant cap allows it (HR-835, HR-836); the approval
+# binds the mandate digest (HR-837). The mandate is gateway-bound: policies
+# never see it, approvals show its verified facts and its size only, and
+# the gateway sends it to the merchant from the dispatch template. A
+# successful submit records payments.effect evidence with digests only
+# (HR-840).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.agentpay
+version: 1.0.0
+publisher: pantherclaw
+summary: >-
+  Agent payments with AP2 mandates to a merchant's sandbox endpoint,
+  verified by PantherClaw and held for a person by default
+
+definitions:
+  - operation: agentpay.checkout.submit
+    summary: Submit a checkout with its payment mandate to the merchant
+    access: write
+    target:
+      type: agentpay.merchant
+      id_pattern: '^[a-z0-9][a-z0-9._:-]{0,127}$'
+      account: none
+    params:
+      merchant:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[a-z0-9][a-z0-9._:-]{0,127}$'
+      amount:
+        type: money
+        material: true
+        required: true
+        currencies: [USD, EUR, GBP]
+        max: "99999.99"
+      currency:
+        type: enum
+        material: true
+        required: true
+        values: [USD, EUR, GBP]
+      # The merchant-signed checkout (AP2 v0.2 checkout_jwt, or the v0.1
+      # CartMandate's merchant_authorization): material, so the permit and
+      # any approval bind it.
+      checkout_jwt:
+        type: content
+        material: true
+        required: true
+        max_length: 8192
+      # The payment mandate the person's credentials provider signed. Not
+      # required here: without one the payment step refuses it
+      # (MANDATE_REQUIRED), never a parse error.
+      payment_mandate:
+        type: mandate
+    payment:
+      amount_param: amount
+      currency_param: currency
+      merchant_param: merchant
+      mandate_param: payment_mandate
+    effects:
+      - kind: funds.transfer
+        description: Pays the merchant from the person's payment instrument
+    reversibility: irreversible
+    # One checkout is one payment: the same checkout submitted twice is one
+    # action (HR-007).
+    dedupe_key: [target.id, params.checkout_jwt]
+    constraints:
+      - kind: amount_max
+        param: amount
+    prerequisites:
+      # Reported by the gateway after it verified the mandate (paymentfacts).
+      - fact: payments.mandate
+        max_age_seconds: 60
+    # An unknown outcome is reconciled by a person; the merchant honours the
+    # Idempotency-Key, so a reconciled retry is not a second payment.
+    retry:
+      safe: false
+      on_unknown: reconcile
+      target_idempotency: true
+    approval:
+      title: Pay {params.amount} to {params.merchant}
+      fields: [params.amount, params.currency, params.merchant, target.id, facts.payments.mandate]
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: http
+        method: POST
+        path: /ap2/checkout
+        route: agentpay-checkout
+        extract:
+          target_id: input.merchant
+          params:
+            merchant: input.merchant
+            amount: minor_money(int(input.amount), input.currency)
+            currency: input.currency
+            checkout_jwt: input.checkout_jwt
+            payment_mandate: "has(input.payment_mandate) ? optional.of(input.payment_mandate) : optional.none()"
+      - channel: mcp
+        tool: submit_checkout
+        route: agentpay-checkout
+        description: >-
+          Pay a merchant for a checkout with the payment mandate your person's
+          credentials provider signed (sandbox only). The amount is an integer
+          in the currency's smallest unit (1250 is 12.50 USD) and must be
+          exactly the mandate's; the payment waits for a person unless the
+          org allows it.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [merchant, amount, currency, checkout_jwt, payment_mandate]
+          properties:
+            merchant:
+              type: string
+              description: The merchant id
+              pattern: '^[a-z0-9][a-z0-9._:-]{0,127}$'
+            amount:
+              type: integer
+              description: The amount in the currency's smallest unit
+              minimum: 1
+              maximum: 9999999
+            currency:
+              type: string
+              description: The currency
+              enum: [USD, EUR, GBP]
+            checkout_jwt:
+              type: string
+              description: The merchant-signed checkout
+              maxLength: 8192
+            payment_mandate:
+              type: string
+              description: >-
+                The AP2 mandate envelope as JSON text: {"checkout_mandate": ..., "payment_mandate": ...}
+                with SD-JWT presentations (v0.2), or the v0.1 CartMandate and PaymentMandate
+        extract:
+          target_id: input.merchant
+          params:
+            merchant: input.merchant
+            amount: minor_money(input.amount, input.currency)
+            currency: input.currency
+            checkout_jwt: input.checkout_jwt
+            payment_mandate: input.payment_mandate
+    dispatch:
+      http:
+        method: POST
+        path: /ap2/checkout
+        body:
+          merchant: params.merchant
+          amount: params.amount.minor
+          currency: params.currency
+          checkout_jwt: params.checkout_jwt
+          payment_mandate: params.payment_mandate
+          pantherclaw_key: transaction.key
+        idempotency_header: Idempotency-Key
+
+  - operation: agentpay.mandate.inspect
+    summary: Read the merchant's record of one mandate's transaction
+    access: read
+    scoping: [classes]
+    target:
+      type: agentpay.transaction
+      id_pattern: '^[A-Za-z0-9_-]{16,128}$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    response:
+      format: json
+      fields: []
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: http
+        method: GET
+        path: /ap2/transactions/{transaction}
+        route: agentpay-inspect
+        extract:
+          target_id: path.transaction
+          params: {}
+      - channel: mcp
+        tool: inspect_mandate
+        route: agentpay-inspect
+        description: >-
+          Read the merchant's record of a payment by its transaction id (the
+          hash of the checkout the mandate pays for).
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [transaction]
+          properties:
+            transaction:
+              type: string
+              description: The transaction id
+              pattern: '^[A-Za-z0-9_-]{16,128}$'
+        extract:
+          target_id: input.transaction
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /ap2/transactions/{target.id}

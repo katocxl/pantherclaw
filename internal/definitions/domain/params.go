@@ -157,6 +157,10 @@ func (p ParamSpec) validate(name string) error {
 		if p.MaxLength != 0 {
 			return invalid("%s: a query filter's limits are fixed (G0 M14 D9)", name)
 		}
+	case TypeMandate:
+		if p.MaxLength != 0 || p.Material || p.Disclosure || p.Share != "" {
+			return invalid("%s: a mandate is gateway-bound, never material, and its limit is fixed at %d bytes (G0 M39 D1124)", name, MaxMandateBytes)
+		}
 	default:
 		return invalid("%s: unknown type %q", name, p.Type)
 	}

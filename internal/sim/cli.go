@@ -65,6 +65,7 @@ Usage:
                       [--latency 0s] [--complete-after 0s] [--stream-delay 0s] [--oversize 0] [--auth-required] [--fail] [--description TEXT]
                       [--require-peer-tokens --jwks-url URL --audience URL]
   pantherclaw-sim openapi --spec FILE [--addr 127.0.0.1:9112]
+  pantherclaw-sim agentpay [--addr 127.0.0.1:9118] [--mismatch] [--expired] [--decline]
   pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
   pantherclaw-sim version
 `
@@ -97,6 +98,7 @@ var defaultAddrs = map[string]string{
 	"agentcore":           "127.0.0.1:9113", // G0 M34 D998
 	"vertex-agent-engine": "127.0.0.1:9114",
 	"azure":               "127.0.0.1:9115",
+	"agentpay":            "127.0.0.1:9118", // G0 M39 D1124
 	"canary":              "127.0.0.1:18433",
 }
 
@@ -161,6 +163,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runA2A(ctx, args[1:], stderr)
 	case "openapi":
 		err = runOpenAPI(ctx, args[1:], stderr)
+	case "agentpay":
+		err = runAgentPay(ctx, args[1:], stderr)
 	case "canary":
 		err = runCanary(ctx, args[1:], stderr)
 	default:

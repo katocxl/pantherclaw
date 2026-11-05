@@ -95,6 +95,10 @@ func (p ParamSpec) decode(name string, raw jsontext.Value) (Value, error) {
 		v.Floats, err = p.decodeFloats(raw)
 	case TypeStringMap:
 		v.Map, err = p.decodeStringMap(raw)
+	case TypeMandate:
+		if err = json.Unmarshal(raw, &v.Str); err == nil {
+			err = p.mandate(v.Str)
+		}
 	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath, TypeURL:
 		if err = json.Unmarshal(raw, &v.Str); err == nil {
 			err = p.str(v.Str)
@@ -178,6 +182,8 @@ func (p ParamSpec) str(s string) error {
 		}
 		return nil
 	case TypeText, TypeCommand, TypeContent:
+	case TypeMandate:
+		return p.mandate(s)
 	case TypeMoney, TypeDecimal, TypeInteger, TypeIdentifierList, TypeBoolean, TypeQueryFilter, TypeFloatArray,
 		TypeStringMap:
 		return fmt.Errorf("not a string type")
@@ -256,7 +262,7 @@ func (v Value) wire() any {
 		return v.Floats
 	case TypeStringMap:
 		return v.Map
-	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath, TypeURL:
+	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath, TypeURL, TypeMandate:
 		return v.Str
 	}
 	return nil

@@ -94,6 +94,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	saas := devSaaSFlags(fs)
 	runtimes := devRuntimesFlags(fs)     // G0 M34 D998
 	federation := devFederationFlags(fs) // G0 M35 D1046
+	agentpay := devAgentPayFlags(fs)     // G0 M39 D1124
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -138,7 +139,8 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 	}
 	if (*targetURL != "" || *shell || *githubURL != "" || *stripeURL != "" || *postgresFile != "" || *slackURL != "" || *a2aURL != "" ||
-		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "" || saas.any() || runtimes.any() || federation.any()) &&
+		*jiraURL != "" || *gitlabURL != "" || *awsECSURL != "" || *modelURL != "" || *googleURL != "" || *m365URL != "" || saas.any() || runtimes.any() || federation.any() ||
+		agentpay.any()) &&
 		*gatewayOut == "" {
 		return errTargetNeedsGateway
 	}
@@ -231,6 +233,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	}
 	pkgs = append(pkgs, saas.packages()...)
 	pkgs = append(pkgs, runtimes.packages()...)
+	pkgs = append(pkgs, agentpay.packages()...)
 	if err := seedPackages(ctx, pool, org, signer, pkgs...); err != nil {
 		return err
 	}
@@ -350,6 +353,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 				"--oauth-scope https://graph.microsoft.com/.default\n", c.ID, c.Name, *m365URL, c.ID, *m365URL)
 		}
 		if err := saas.seed(ctx, cfg, pool, org, gw, stdout); err != nil {
+			return err
+		}
+		if err := agentpay.seed(ctx, cfg, pool, org, gw, stdout); err != nil {
 			return err
 		}
 		if err := runtimes.seed(ctx, cfg, pool, org, gw, stdout); err != nil {

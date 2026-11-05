@@ -889,6 +889,14 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Threat map:** no change (T1621 is outside PantherClaw; the pinned ATLAS catalogue has no approval-fatigue technique).
 - Migrations `00400`–`00405`.
 
+### M39 — Agent payments, sandbox only
+**HR:** HR-830..840 · **F:** F1090–F1099 · **ADR:** 0066 · **G0:** [g0/M39.md](g0/M39.md).
+- **Code first**, like M30–M36: two streams on pushed branches, assembled on `code/m39`; tests come in the testing phase.
+- **Verify only** (FQ39-1): payment trust anchors activated with a security key (Business), AP2 mandate verification (SD-JWT, v0.2 and v0.1) and RFC 9421 agent request signatures; no signing, no stored credentials; sandbox anchors only, with no live switch.
+- **Payment actions** (FQ39-2): a `payment` block and the `mandate` parameter type, gateway mandate facts, a pipeline step (Version 11) that refuses missing, invalid and mismatched mandates and holds every payment for a person unless an ACTIVE merchant cap allows it; caps through two-person `PAYMENT_CAP` change requests and a daily `merchant` budget; `pc.agentpay` and `pantherclaw-sim agentpay`; runbook [agent-payments.md](runbooks/agent-payments.md).
+- **Threat map:** run `task docs:mitre`; mandate refusals are not mapped to a technique.
+- Migrations `00430`–`00432`.
+
 ---
 
 ## 9. CI/CD summary

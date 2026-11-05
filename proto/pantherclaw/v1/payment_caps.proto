@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// PaymentCapService manages an org's merchant caps for agent payments (G0
+// M39 D1124, D1124a; FQ39-2; HR-835, HR-836; Business edition, sandbox
+// only). Every agent payment holds for a person by default. An ACTIVE cap
+// lets payments to one merchant, in one currency, go through without a
+// person while each is at most max_per_payment_minor and the day's total of
+// such payments stays at most max_per_day_minor (UTC days); anything over
+// holds for a person and is never refused for it. A proposed cap is DRAFT
+// and becomes ACTIVE only when two distinct people confirm its change
+// request with their security keys on the policy changes page
+// (change_request_url): creating or raising a cap is a loosening. A
+// request that one person alone could confirm is voided
+// (TWO_PEOPLE_REQUIRED). Activating a cap retires the merchant's earlier
+// ACTIVE cap in that currency.
+service PaymentCapService {
+  // ProposePaymentCap adds a DRAFT cap and its PAYMENT_CAP change request
+  // (a person only).
+  // permission: payments.manage
+  rpc ProposePaymentCap(ProposePaymentCapRequest) returns (ProposePaymentCapResponse);
+  // ListPaymentCaps lists caps.
+  // permission: payments.read
+  rpc ListPaymentCaps(ListPaymentCapsRequest) returns (ListPaymentCapsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RetirePaymentCap retires a cap for good (a person only); its merchant's
+  // payments hold for a person again.
+  // permission: payments.manage
+  rpc RetirePaymentCap(RetirePaymentCapRequest) returns (RetirePaymentCapResponse);
+}
+
+// PaymentCap is one merchant cap.
+message PaymentCap {
+  // Cap id.
+  string id = 1;
+  // The normalized merchant id, as the payment's merchant param spells it.
+  string merchant = 2;
+  // ISO 4217 currency.
+  string currency = 3;
+  // The largest single payment let through without a person, in the
+  // currency's minor units.
+  int64 max_per_payment_minor = 4;
+  // The largest UTC day's total of payments let through without a person,
+  // in minor units.
+  int64 max_per_day_minor = 5;
+  // "DRAFT", "ACTIVE" or "RETIRED".
+  string state = 6;
+  // Who proposed it.
+  string created_by = 7;
+  // When it was proposed.
+  google.protobuf.Timestamp create_time = 8;
+  // The change request that activated it, or that waits for confirmation.
+  string change_request_id = 9;
+  // The page where people confirm the change request.
+  string change_request_url = 10;
+  // The people whose confirmations activated it.
+  repeated string approved_by = 11;
+  // When it was activated.
+  google.protobuf.Timestamp activate_time = 12;
+  // When it was retired.
+  google.protobuf.Timestamp retire_time = 13;
+  // Who retired it, or the change request that replaced it.
+  string retired_by = 14;
+}
+
+// ProposePaymentCapRequest describes a cap.
+message ProposePaymentCapRequest {
+  // The merchant id, lowercase.
+  string merchant = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[a-z0-9][a-z0-9._:-]{0,127}$"
+  }];
+  // ISO 4217 currency.
+  string currency = 2 [(buf.validate.field).string = {pattern: "^[A-Z]{3}$"}];
+  // Per payment, in minor units.
+  int64 max_per_payment_minor = 3 [(buf.validate.field).int64 = {
+    gte: 1
+    lte: 100000000000
+  }];
+  // Per UTC day, in minor units; at least max_per_payment_minor.
+  int64 max_per_day_minor = 4 [(buf.validate.field).int64 = {
+    gte: 1
+    lte: 100000000000
+  }];
+}
+
+// ProposePaymentCapResponse returns the DRAFT cap.
+message ProposePaymentCapResponse {
+  // The cap, DRAFT, with its change request.
+  PaymentCap cap = 1;
+}
+
+// ListPaymentCapsRequest pages caps.
+message ListPaymentCapsRequest {
+  // Only caps in this state ("DRAFT", "ACTIVE" or "RETIRED"); empty: all.
+  string state = 1 [(buf.validate.field).string = {
+    in: [
+      "",
+      "DRAFT",
+      "ACTIVE",
+      "RETIRED"
+    ]
+  }];
+  // Only this merchant's caps; empty: all.
+  string merchant = 2 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^([a-z0-9][a-z0-9._:-]{0,127})?$"
+  }];
+  // Maximum results (default and at most 200).
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 4 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListPaymentCapsResponse is one page.
+message ListPaymentCapsResponse {
+  // Caps, by id.
+  repeated PaymentCap caps = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// RetirePaymentCapRequest names a cap.
+message RetirePaymentCapRequest {
+  // Cap id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RetirePaymentCapResponse returns it.
+message RetirePaymentCapResponse {
+  // The cap, RETIRED.
+  PaymentCap cap = 1;
+}

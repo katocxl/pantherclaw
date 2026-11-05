@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.payments.mandate_mismatch
+version: "1"
+title: Payment mandate does not match the payment
+description: >-
+  An agent submitted a payment whose amount, currency or merchant were not
+  exactly what the person's verified payment mandate allows, and the
+  Authority refused it (G0 M39 D1124, HR-834). The mandate itself verified;
+  the agent asked for something else. Only the mandate's digest and the
+  facts are recorded, never the mandate. An alert only: the payment was
+  already refused and nothing else is held or contained.
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+techniques_none: "An agent asking to pay other than its mandate allows; no technique entry fits a refused payment request."
+edition: business
+on: [audit.payments.mandate_refused]
+match: event.reason == "MANDATE_MISMATCH"
+group: connection
+tests:
+  - name: amount differs from the mandate
+    fires: true
+    events:
+      - kind: audit.payments.mandate_refused
+        actor_type: system
+        actor_id: authority
+        outcome: failure
+        reason: MANDATE_MISMATCH
+        subjects: {connection: 01930000-0000-7000-8000-0000000000c1, run: 01930000-0000-7000-8000-0000000000r1}
+        attrs: {object_type: connection, reason: MANDATE_MISMATCH, merchant: sim-merchant.example, currency: USD, mandate_digest: "sha256:3333333333333333333333333333333333333333333333333333333333333333"}
+  - name: an invalid mandate
+    fires: false
+    events:
+      - kind: audit.payments.mandate_refused
+        actor_type: gateway
+        actor_id: 01930000-0000-7000-8000-0000000000e1
+        outcome: failure
+        reason: MANDATE_INVALID
+        subjects: {connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {object_type: connection, reason: MANDATE_INVALID}
+  - name: a verified mandate
+    fires: false
+    events:
+      - kind: audit.payments.mandate_verified
+        actor_type: gateway
+        actor_id: 01930000-0000-7000-8000-0000000000e1
+        outcome: success
+        subjects: {connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {object_type: connection, merchant: sim-merchant.example, currency: USD}

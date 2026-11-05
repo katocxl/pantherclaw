@@ -26,6 +26,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/policy/scenario"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pca2a "github.com/katocxl/pantherclaw/packages/pc-a2a"
+	pcagentpay "github.com/katocxl/pantherclaw/packages/pc-agentpay"
 	pcanthropic "github.com/katocxl/pantherclaw/packages/pc-anthropic"
 	pcaws "github.com/katocxl/pantherclaw/packages/pc-aws"
 	pcawsagentcore "github.com/katocxl/pantherclaw/packages/pc-aws-agentcore"
@@ -124,6 +125,7 @@ func builtin() [][]byte {
 		pcawsagentcore.Package, pcazurefoundry.Package, pcazurecompute.Package, // G0 M34 D993a
 		pcawsssm.Package,     // G0 M34 D1002
 		pcfederation.Package, // G0 M35 D1024
+		pcagentpay.Package,   // G0 M39 D1124
 	}
 }
 

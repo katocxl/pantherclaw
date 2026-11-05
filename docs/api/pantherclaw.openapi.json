@@ -26739,6 +26739,168 @@
         }
       }
     },
+    "/pantherclaw.v1.PaymentCapService/ProposePaymentCap": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentCapService"
+        ],
+        "summary": "ProposePaymentCap",
+        "description": "ProposePaymentCap adds a DRAFT cap and its PAYMENT_CAP change request\n (a person only).\n permission: payments.manage",
+        "operationId": "pantherclaw.v1.PaymentCapService.ProposePaymentCap",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ProposePaymentCapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ProposePaymentCapResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PaymentCapService/ListPaymentCaps": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentCapService"
+        ],
+        "summary": "ListPaymentCaps",
+        "description": "ListPaymentCaps lists caps.\n permission: payments.read",
+        "operationId": "pantherclaw.v1.PaymentCapService.ListPaymentCaps",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPaymentCapsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPaymentCapsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PaymentCapService/RetirePaymentCap": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentCapService"
+        ],
+        "summary": "RetirePaymentCap",
+        "description": "RetirePaymentCap retires a cap for good (a person only); its merchant's\n payments hold for a person again.\n permission: payments.manage",
+        "operationId": "pantherclaw.v1.PaymentCapService.RetirePaymentCap",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RetirePaymentCapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RetirePaymentCapResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.PolicyService/CreatePolicyVersion": {
       "post": {
         "tags": [
@@ -91291,6 +91453,277 @@
         "additionalProperties": false,
         "description": "PackBaseline is the grant a person may issue an agent from the pack."
       },
+      "pantherclaw.v1.ListPaymentCapsRequest": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "state",
+            "enum": [
+              "",
+              "DRAFT",
+              "ACTIVE",
+              "RETIRED",
+              null
+            ],
+            "description": "Only caps in this state (\"DRAFT\", \"ACTIVE\" or \"RETIRED\"); empty: all."
+          },
+          "merchant": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "merchant",
+            "maxLength": 128,
+            "description": "Only this merchant's caps; empty: all.",
+            "anyOf": [
+              {
+                "pattern": "^([a-z0-9][a-z0-9._:-]{0,127})?$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListPaymentCapsRequest",
+        "additionalProperties": false,
+        "description": "ListPaymentCapsRequest pages caps."
+      },
+      "pantherclaw.v1.ListPaymentCapsResponse": {
+        "type": "object",
+        "properties": {
+          "caps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PaymentCap"
+            },
+            "title": "caps",
+            "description": "Caps, by id."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPaymentCapsResponse",
+        "additionalProperties": false,
+        "description": "ListPaymentCapsResponse is one page."
+      },
+      "pantherclaw.v1.PaymentCap": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Cap id."
+          },
+          "merchant": {
+            "type": "string",
+            "title": "merchant",
+            "description": "The normalized merchant id, as the payment's merchant param spells it."
+          },
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "description": "ISO 4217 currency."
+          },
+          "maxPerPaymentMinor": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_per_payment_minor",
+            "format": "int64",
+            "description": "The largest single payment let through without a person, in the\n currency's minor units."
+          },
+          "maxPerDayMinor": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_per_day_minor",
+            "format": "int64",
+            "description": "The largest UTC day's total of payments let through without a person,\n in minor units."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"DRAFT\", \"ACTIVE\" or \"RETIRED\"."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "created_by",
+            "description": "Who proposed it."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was proposed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "changeRequestId": {
+            "type": "string",
+            "title": "change_request_id",
+            "description": "The change request that activated it, or that waits for confirmation."
+          },
+          "changeRequestUrl": {
+            "type": "string",
+            "title": "change_request_url",
+            "description": "The page where people confirm the change request."
+          },
+          "approvedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "approved_by",
+            "description": "The people whose confirmations activated it."
+          },
+          "activateTime": {
+            "title": "activate_time",
+            "description": "When it was activated.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "retireTime": {
+            "title": "retire_time",
+            "description": "When it was retired.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "retiredBy": {
+            "type": "string",
+            "title": "retired_by",
+            "description": "Who retired it, or the change request that replaced it."
+          }
+        },
+        "title": "PaymentCap",
+        "additionalProperties": false,
+        "description": "PaymentCap is one merchant cap."
+      },
+      "pantherclaw.v1.ProposePaymentCapRequest": {
+        "type": "object",
+        "properties": {
+          "merchant": {
+            "type": "string",
+            "title": "merchant",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+            "description": "The merchant id, lowercase."
+          },
+          "currency": {
+            "type": "string",
+            "title": "currency",
+            "pattern": "^[A-Z]{3}$",
+            "description": "ISO 4217 currency."
+          },
+          "maxPerPaymentMinor": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_per_payment_minor",
+            "maximum": 100000000000,
+            "minimum": 1,
+            "format": "int64",
+            "description": "Per payment, in minor units."
+          },
+          "maxPerDayMinor": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "max_per_day_minor",
+            "maximum": 100000000000,
+            "minimum": 1,
+            "format": "int64",
+            "description": "Per UTC day, in minor units; at least max_per_payment_minor."
+          }
+        },
+        "title": "ProposePaymentCapRequest",
+        "additionalProperties": false,
+        "description": "ProposePaymentCapRequest describes a cap.",
+        "required": [
+          "merchant",
+          "currency",
+          "maxPerPaymentMinor",
+          "maxPerDayMinor"
+        ]
+      },
+      "pantherclaw.v1.ProposePaymentCapResponse": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "title": "cap",
+            "description": "The cap, DRAFT, with its change request.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PaymentCap"
+          }
+        },
+        "title": "ProposePaymentCapResponse",
+        "additionalProperties": false,
+        "description": "ProposePaymentCapResponse returns the DRAFT cap."
+      },
+      "pantherclaw.v1.RetirePaymentCapRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Cap id."
+          }
+        },
+        "title": "RetirePaymentCapRequest",
+        "additionalProperties": false,
+        "description": "RetirePaymentCapRequest names a cap.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RetirePaymentCapResponse": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "title": "cap",
+            "description": "The cap, RETIRED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PaymentCap"
+          }
+        },
+        "title": "RetirePaymentCapResponse",
+        "additionalProperties": false,
+        "description": "RetirePaymentCapResponse returns it."
+      },
       "pantherclaw.v1.CreatePolicyVersionRequest": {
         "type": "object",
         "properties": {
@@ -110853,6 +111286,10 @@
     {
       "name": "pantherclaw.v1.PackService",
       "description": "PackService serves the reference workflow packs (G0 M11 part 2, D41;\n F762, F764, F767, HR-291): coding-to-production (GitHub) and\n read-only-diagnostics (shell). A pack is a policy template with its\n allow, hold and deny scenario tests, a grant baseline per agent and,\n optionally, the automation template that launches its agents.\n\n ApplyPack only drafts: it stores the published policy with the pack's\n rules and tests as a new DRAFT policy version, which then goes through\n validation, tests and the publish gate like any draft. Nothing is\n published, issued or promoted. Needs the Team edition."
+    },
+    {
+      "name": "pantherclaw.v1.PaymentCapService",
+      "description": "PaymentCapService manages an org's merchant caps for agent payments (G0\n M39 D1124, D1124a; FQ39-2; HR-835, HR-836; Business edition, sandbox\n only). Every agent payment holds for a person by default. An ACTIVE cap\n lets payments to one merchant, in one currency, go through without a\n person while each is at most max_per_payment_minor and the day's total of\n such payments stays at most max_per_day_minor (UTC days); anything over\n holds for a person and is never refused for it. A proposed cap is DRAFT\n and becomes ACTIVE only when two distinct people confirm its change\n request with their security keys on the policy changes page\n (change_request_url): creating or raising a cap is a loosening. A\n request that one person alone could confirm is voided\n (TWO_PEOPLE_REQUIRED). Activating a cap retires the merchant's earlier\n ACTIVE cap in that currency."
     },
     {
       "name": "pantherclaw.v1.PolicyService",

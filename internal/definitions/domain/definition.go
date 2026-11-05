@@ -87,6 +87,9 @@ type Definition struct {
 	// it: records, classes or both, only for reads (G0 M14 D9, F101).
 	Response *ResponseSpec `json:"response,omitzero"`
 	Scoping  []string      `json:"scoping,omitzero"`
+	// Payment marks a payment-class operation and names its amount,
+	// currency, merchant and mandate params (G0 M39 D1124).
+	Payment *PaymentSpec `json:"payment,omitzero"`
 
 	// Digest is "sha256:<hex>" of the canonical JSON of this definition,
 	// mappings included. It is what ActionIR pins (definition.digest) and
@@ -354,6 +357,9 @@ func (d *Definition) Validate() error {
 		return err
 	}
 	if err := d.validateDispatch(); err != nil {
+		return err
+	}
+	if err := d.validatePayment(); err != nil { // G0 M39 D1124 (payment_m39.go)
 		return err
 	}
 	return d.validateResponse()

@@ -436,6 +436,10 @@ type Action struct {
 	Destinations    []string
 	Params          defs.Values
 	Time            time.Time
+	// Merchant is a payment's merchant, from its payment block's merchant
+	// param (G0 M39 D1124); empty for every other action. It keys the
+	// merchant budget grouping.
+	Merchant string
 }
 
 // Outcome of checking one bounds document.

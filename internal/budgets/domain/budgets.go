@@ -40,11 +40,16 @@ const (
 	GroupAccount   Grouping = "account"
 	GroupTeam      Grouping = "team"
 	GroupOrg       Grouping = "org"
+	// GroupMerchant groups a payment by its merchant (G0 M39 D1124): the
+	// payment block's merchant param, so a per-day merchant total debits
+	// each payment's amount. An action that is not a payment has no merchant
+	// and cannot be keyed (CANNOT_AUTHORIZE, never a default).
+	GroupMerchant Grouping = "merchant"
 )
 
 // Valid reports whether g is a known grouping.
 func (g Grouping) Valid() bool {
-	return slices.Contains([]Grouping{GroupTask, GroupPrincipal, GroupAccount, GroupTeam, GroupOrg}, g)
+	return slices.Contains([]Grouping{GroupTask, GroupPrincipal, GroupAccount, GroupTeam, GroupOrg, GroupMerchant}, g)
 }
 
 // Period is the window a budget resets on, in UTC.
@@ -141,6 +146,18 @@ const (
 // grant's (grants rank depth + 1, depth at most 4), so it is locked last
 // (G0 M29 D822, HR-048).
 const RunRank = 6
+
+// OwnerPaymentCap owns an ACTIVE merchant cap's per-day total (G0 M39
+// D1124, D1124a Q4): the payments the cap let through without a person,
+// grouped by merchant, period day. Its account is locked last, after a
+// run's token account.
+const OwnerPaymentCap = "payment_cap"
+
+// PaymentCapRank is the rank of a merchant cap's account: one past RunRank.
+const PaymentCapRank = 7
+
+// PaymentCapRule is the rule id of a merchant cap's per-day total.
+const PaymentCapRule = "merchant_day"
 
 // RunTokensRule is the rule id of a run's token cap (G0 M29 D822).
 const RunTokensRule = "run_tokens"

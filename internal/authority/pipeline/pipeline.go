@@ -718,6 +718,9 @@ func (p *Pipeline) meaning(s *state) {
 		Operation: s.a.Operation, Access: d.Access, TargetType: t.Type, TargetID: t.ID, Account: t.Account,
 		AccountDeclared: d.Target.Account != defs.PresenceNone, Destinations: dests, Params: vals, Time: now,
 	}
+	if d.Payment != nil { // G0 M39 D1124: the merchant budget grouping's key
+		s.gAction.Merchant = vals[d.Payment.MerchantParam].Str
+	}
 	if m, err := moneyValue(vals); err == nil {
 		s.ev.Amount = m
 	}

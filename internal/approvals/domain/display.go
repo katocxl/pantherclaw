@@ -414,6 +414,9 @@ func formatValue(v defs.Value, spec defs.ParamSpec) string {
 		return strconv.Itoa(len(v.Floats)) + " numbers"
 	case defs.TypeStringMap:
 		return strconv.Itoa(len(v.Map)) + " keys"
+	case defs.TypeMandate:
+		// Never its text: its verified facts are shown beside it (G0 M39 D1124a).
+		return defs.MandateShown(v.Str)
 	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeURL, defs.TypeText:
 		return Clean("", v.Str, 0).Text
 	}
