@@ -211,6 +211,7 @@ func (s *Service) decideFederated(ctx context.Context, gw Gateway, p actionir.Pa
 	}
 	res, err := s.decider.Authorize(ctx, gw.final(), pipeline.Request{
 		Org: gw.Org, Action: p, PayloadFindings: findings, ContentFindings: content, ContentScan: scan,
+		Trace: traceFrom(ctx),
 		Identity: pipeline.Identity{
 			InstanceID: call.Instance, AgentID: call.Agent, AttestationLevel: call.AttLevel, JKT: call.JKT, Proof: channelFederation,
 		},

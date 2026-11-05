@@ -181,6 +181,7 @@ func (s *Service) authorize(ctx context.Context, gw Gateway, raw []byte, creds *
 	}
 	res, err := s.decider.Authorize(ctx, gw.final(), pipeline.Request{
 		Org: gw.Org, Action: p, PayloadFindings: findings, ContentFindings: content, ContentScan: scan,
+		Trace:    traceFrom(ctx),
 		Identity: pipeline.Identity{InstanceID: id.Instance.Instance, AgentID: id.Instance.Agent, AttestationLevel: id.Level, JKT: id.JKT, Proof: id.Proof},
 	})
 	if err != nil {

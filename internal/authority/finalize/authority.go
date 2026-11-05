@@ -205,7 +205,7 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 		if attempt >= maxAttempts {
 			ev = override(ev, ReasonConcurrentChange, "the authority changed while deciding; try again")
 		}
-		res, err := a.bind(ctx, gw, ev, prev, rec)
+		res, err := a.bind(ctx, gw, ev, prev, rec, req.Trace)
 		switch {
 		case err == nil:
 			a.log(ctx).InfoContext(ctx, "authz.decision", slog.String("txn_id", res.TransactionID.String()),
@@ -232,7 +232,7 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 				code, detail = ReasonBudgetBusy, "a budget is busy with other actions; try again"
 			}
 			ev = override(ev, code, detail)
-			if res, err = a.bind(ctx, gw, ev, prev, rec); err == nil {
+			if res, err = a.bind(ctx, gw, ev, prev, rec, req.Trace); err == nil {
 				return res, nil
 			}
 			if !retryable(err) {
@@ -369,14 +369,16 @@ func monitorView(ev *pipeline.Evaluation) *pipeline.Evaluation {
 // containment passed gets a permit whatever its (hypothetical) decision,
 // with nothing reserved, and closes its transaction so no second permit
 // can follow (HR-184).
-func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluation, prev *Stored, rec *recording.Recorder) (Result, error) {
+func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluation, prev *Stored, rec *recording.Recorder,
+	trace *pipeline.TraceContext,
+) (Result, error) {
 	monitor := ev.MonitorPermit()
 	if monitor {
 		ev = monitorView(ev)
 	}
 	w := Write{
 		Eval: ev, Prev: prev, Final: Final(ev.Decision) || monitor, Reason: ev.Decisive().Code, GatewayID: gw.ID,
-		TransactionID: ids.NewV7(), Evaluation: 1,
+		TransactionID: ids.NewV7(), Evaluation: 1, Trace: trace,
 	}
 	if prev != nil {
 		w.TransactionID, w.Evaluation = prev.TransactionID, prev.Evaluations+1

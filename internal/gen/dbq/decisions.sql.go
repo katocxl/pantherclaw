@@ -125,12 +125,15 @@ func (q *Queries) GetDedupeClaim(ctx context.Context, orgID ids.OrgID, dedupeKey
 const insertDecision = `-- name: InsertDecision :exec
 INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id,
                              state, evaluations, grant_id, grant_revision, basis_digest, effective_hash, dedupe_key, mode,
-                             connection_id, channel, target_type, target_id, read_class, simulated)
+                             connection_id, channel, target_type, target_id, read_class, trace_id, parent_span_id,
+                             trace_flags, simulated)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, 1, $11,
         $12, $13, $14, $15, $16,
         $17, $18, $19, $20,
         $21,
+        -- The agent's trace context: correlation only (G0 M36 D1060, HR-785).
+        $22, $23, $24,
         -- HR-220: a transaction is simulated exactly when its run is.
         coalesce((SELECT r.simulated FROM pc.runs r WHERE r.org_id = $1 AND r.id = $3), false))
 `
@@ -157,6 +160,9 @@ type InsertDecisionParams struct {
 	TargetType    *string
 	TargetID      *string
 	ReadClass     *string
+	TraceID       []byte
+	ParentSpanID  []byte
+	TraceFlags    pgtype.Int2
 }
 
 func (q *Queries) InsertDecision(ctx context.Context, arg InsertDecisionParams) error {
@@ -182,6 +188,9 @@ func (q *Queries) InsertDecision(ctx context.Context, arg InsertDecisionParams) 
 		arg.TargetType,
 		arg.TargetID,
 		arg.ReadClass,
+		arg.TraceID,
+		arg.ParentSpanID,
+		arg.TraceFlags,
 	)
 	return err
 }

@@ -61,6 +61,12 @@ type Config struct {
 	StreamIdle time.Duration
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
+	// TraceContext returns the caller's W3C trace context for a call: the
+	// traceparent and tracestate to forward, so PantherClaw's spans join
+	// the agent's trace (G0 M36 D1060). Nil, or an empty traceparent,
+	// forwards none. With OpenTelemetry, inject the context with a
+	// propagation.TraceContext into a map and return its two values.
+	TraceContext func(ctx context.Context) (traceparent, tracestate string)
 }
 
 // Client is a PAP/1 workload client. It is safe for concurrent use.
@@ -303,4 +309,27 @@ func (c *Client) sendOnce(ctx context.Context, method, target string, body []byt
 	defer func() { _ = res.Body.Close() }()
 	r.body, err = io.ReadAll(io.LimitReader(res.Body, maxResponse))
 	return r, err
+}
+
+// Trace context limits (G0 M36 D1060).
+const (
+	traceparentLen = 55
+	maxTracestate  = 512
+)
+
+// traceHeaders adds the caller's traceparent and tracestate to h when
+// Config.TraceContext gives a version 00 traceparent; the gateway reads
+// them for correlation only and ignores anything it cannot parse.
+func (c *Client) traceHeaders(ctx context.Context, h http.Header) {
+	if c.cfg.TraceContext == nil {
+		return
+	}
+	tp, ts := c.cfg.TraceContext(ctx)
+	if len(tp) != traceparentLen || !strings.HasPrefix(tp, "00-") {
+		return
+	}
+	h.Set("traceparent", tp)
+	if ts != "" && len(ts) <= maxTracestate {
+		h.Set("tracestate", ts)
+	}
 }

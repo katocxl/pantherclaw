@@ -263,6 +263,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	in = metaTrace(in, p.Meta)
 	switch {
 	case req.Method == "tools/call":
 		h.call(w, r, conn, req, p, in)
@@ -717,7 +718,7 @@ func (h *Handler) callTool(w http.ResponseWriter, r *http.Request, conn *control
 		c.result = errorResult(c.res, "The arguments do not match the tool's reviewed input schema.")
 		return c, true
 	}
-	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: parsed, Workload: in.Creds})
+	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: parsed, Workload: in.Creds, Trace: in.Trace})
 	if res.Class == dispatch.AuthenticationFailed {
 		h.refusePAP(w, r, req.ID, res.PAPError, res.Nonce)
 		return called{}, false
@@ -806,7 +807,7 @@ func (h *Handler) resubmit(w http.ResponseWriter, r *http.Request, conn *control
 		}
 		ctx = dispatch.WithInputResponses(ctx, ir)
 	}
-	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: t.action, Workload: in.Creds})
+	res := h.engine.Dispatch(ctx, dispatch.Call{Connection: conn, Action: t.action, Workload: in.Creds, Trace: in.Trace})
 	if res.Class == dispatch.AuthenticationFailed {
 		h.refusePAP(w, r, req.ID, res.PAPError, res.Nonce)
 		return task{}, res, false
@@ -932,4 +933,22 @@ func errorResult(res dispatch.Result, detail string) toolResult {
 		text += " The call is held for approval or step-up; once it is granted, call the tool again with the same arguments."
 	}
 	return toolResult{ResultType: "complete", Content: []content{{Type: "text", Text: text}}, IsError: true, Meta: meta}
+}
+
+// metaTrace takes the agent's trace context from the request's
+// params._meta traceparent and tracestate when its headers carried none
+// (G0 M36 D1060, HR-785). Correlation only; input that does not parse is
+// ignored.
+func metaTrace(in dispatch.Inbound, meta map[string]jsontext.Value) dispatch.Inbound {
+	if in.Trace != nil {
+		return in
+	}
+	var traceparent, tracestate string
+	v, ok := meta[dispatch.HeaderTraceparent]
+	ok = ok && json.Unmarshal(v, &traceparent) == nil
+	if s, has := meta[dispatch.HeaderTracestate]; has && json.Unmarshal(s, &tracestate) != nil {
+		tracestate = ""
+	}
+	in.Trace = dispatch.TraceFromMeta(traceparent, tracestate, ok)
+	return in
 }

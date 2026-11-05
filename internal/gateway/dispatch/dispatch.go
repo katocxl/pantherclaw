@@ -320,6 +320,9 @@ type Call struct {
 	// instead of workload credentials on channel federation (G0 M35
 	// D1024c).
 	FederationCallID string
+	// Trace is the agent's W3C trace context (G0 M36 D1060, HR-785), sent
+	// beside the action for correlation only; nil when the request had none.
+	Trace *pb.TraceContext
 }
 
 // Result is what happened to a call.
@@ -525,6 +528,7 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{
 		ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content, ContentScan: scan,
 		FederationCallId: c.FederationCallID,
+		TraceContext:     c.Trace,
 	})
 	t.lap("authz")
 	if err != nil {

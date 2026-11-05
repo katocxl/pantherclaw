@@ -73,6 +73,8 @@ func (h *Handler) call(ctx context.Context, c *call) answer {
 	}
 	res := h.engine.Dispatch(dispatch.WithFederationBody(ctx, c.body), dispatch.Call{
 		Connection: &fc, Action: parsed, FederationCallID: adm.GetCallId(),
+		// The peer agent's trace context, correlation only (G0 M36 D1060).
+		Trace: dispatch.ParseTraceContext(c.r.Header.Values(dispatch.HeaderTraceparent), c.r.Header.Values(dispatch.HeaderTracestate)),
 	})
 	h.log.InfoContext(ctx, "federation.decided", "listing", c.listing, "class", string(res.Class), "code", res.Code,
 		"transaction", res.TransactionID)
