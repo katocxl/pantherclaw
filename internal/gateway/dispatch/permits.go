@@ -81,6 +81,7 @@ func newPermitVerifier(jwksURL string, client *http.Client, gatewayID, org strin
 
 // verify checks the signature, typ, audience, expiry and every binding,
 // and returns the approval the permit carries, if any.
+//
 //nolint:unparam // since G0 M30 D923a dispatch reads claims; the HR-493 tests still read the approval here
 func (pv *permitVerifier) verify(ctx context.Context, token string, want permitWant) (*proof.Approval, error) {
 	c, err := pv.claims(ctx, token, want)
