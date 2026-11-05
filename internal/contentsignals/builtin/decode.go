@@ -261,41 +261,76 @@ func unescapeEntities(s string) string {
 	})
 }
 
+// minRun is the fewest characters a base64 or hex run is read from.
+const minRun = 16
+
 // decodeBase64Runs decodes every run in s that reads as base64 (standard or
-// URL alphabet, padding optional) into mostly printable text.
+// URL alphabet, padding optional) into mostly printable text. A run that
+// mixes the two alphabets is split at the other alphabet's characters, and
+// each run is also read from offsets 1..3 and cut to whole quanta, so one
+// character glued to either end does not hide it (G0 M30 D1215). Every
+// reading is a candidate, charged to the scan's budget.
 func decodeBase64Runs(s string) []string {
 	var out []string
+	add := func(enc *base64.Encoding, r string) {
+		b, err := enc.DecodeString(r)
+		if err == nil && printable(b) && !slices.Contains(out, string(b)) {
+			out = append(out, string(b))
+		}
+	}
 	for _, run := range base64Re.FindAllString(s, -1) {
 		run = strings.TrimRight(run, "=")
-		enc := base64.RawStdEncoding
-		if strings.ContainsAny(run, "-_") {
-			if strings.ContainsAny(run, "+/") {
-				continue
+		var pieces []piece64
+		switch std, url := strings.ContainsAny(run, "+/"), strings.ContainsAny(run, "-_"); {
+		case std && url:
+			for _, p := range strings.FieldsFunc(run, func(r rune) bool { return r == '-' || r == '_' }) {
+				pieces = append(pieces, piece64{base64.RawStdEncoding, p})
 			}
-			enc = base64.RawURLEncoding
+			for _, p := range strings.FieldsFunc(run, func(r rune) bool { return r == '+' || r == '/' }) {
+				pieces = append(pieces, piece64{base64.RawURLEncoding, p})
+			}
+		case url:
+			pieces = []piece64{{base64.RawURLEncoding, run}}
+		default:
+			pieces = []piece64{{base64.RawStdEncoding, run}}
 		}
-		b, err := enc.DecodeString(run)
-		if err != nil || !printable(b) {
-			continue
+		for _, p := range pieces {
+			for off := 0; off < 4 && len(p.run)-off >= minRun; off++ {
+				r := p.run[off:]
+				if len(r)%4 != 1 {
+					add(p.enc, r)
+				}
+				if whole := r[:len(r)-len(r)%4]; whole != r {
+					add(p.enc, whole)
+				}
+			}
 		}
-		out = append(out, string(b))
 	}
 	return out
 }
 
-// decodeHexRuns decodes every even-length run of 16 or more hex digits into
-// mostly printable text.
+// piece64 is a base64 run in one alphabet.
+type piece64 struct {
+	enc *base64.Encoding
+	run string
+}
+
+// decodeHexRuns decodes every run of 16 or more hex digits into mostly
+// printable text; a run of odd length is read without its first and
+// without its last digit (G0 M30 D1215).
 func decodeHexRuns(s string) []string {
 	var out []string
 	for _, run := range hexRe.FindAllString(s, -1) {
+		reads := []string{run}
 		if len(run)%2 != 0 {
-			continue
+			reads = []string{run[1:], run[:len(run)-1]}
 		}
-		b, err := hex.DecodeString(run)
-		if err != nil || !printable(b) {
-			continue
+		for _, r := range reads {
+			b, err := hex.DecodeString(r)
+			if err == nil && printable(b) && !slices.Contains(out, string(b)) {
+				out = append(out, string(b))
+			}
 		}
-		out = append(out, string(b))
 	}
 	return out
 }

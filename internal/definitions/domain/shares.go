@@ -103,29 +103,36 @@ func (e ShareExtractor) extract(v Value) []actionir.Destination {
 	return []actionir.Destination{public}
 }
 
+// statementElements are the IAM policy elements a statement may hold.
+var statementElements = []string{"Sid", "Effect", "Principal", "NotPrincipal", "Action", "NotAction", "Resource", "NotResource", "Condition"}
+
+// knownElements reports whether every member of a statement is an IAM
+// element, spelled as IAM spells it.
+func knownElements(s map[string]jsontext.Value) bool {
+	for k := range s {
+		if !slices.Contains(statementElements, k) {
+			return false
+		}
+	}
+	return true
+}
+
 // policyPrincipals reads an S3 bucket policy's principals; anything it
 // cannot read is public (fail closed).
 func policyPrincipals(policy string) []actionir.Destination {
 	var doc struct {
 		Statement jsontext.Value `json:"Statement"`
 	}
-	if err := json.Unmarshal([]byte(policy), &doc); err != nil || len(doc.Statement) == 0 {
+	// A missing or null Statement, or one that is not an object or a list,
+	// is something this cannot read: public (G0 M30 D1215).
+	if err := json.Unmarshal([]byte(policy), &doc); err != nil || len(doc.Statement) == 0 ||
+		(doc.Statement.Kind() != '{' && doc.Statement.Kind() != '[') {
 		return []actionir.Destination{public}
 	}
-	// NotPrincipal grants to everyone but the accounts it names, so a
-	// statement with it is public (fail closed, G0 M30 D934).
-	type statement struct {
-		Principal    jsontext.Value `json:"Principal"`
-		NotPrincipal jsontext.Value `json:"NotPrincipal"`
-	}
-	var stmts []statement
+	var raws []jsontext.Value
 	if doc.Statement.Kind() == '{' {
-		var one statement
-		if err := json.Unmarshal(doc.Statement, &one); err != nil {
-			return []actionir.Destination{public}
-		}
-		stmts = append(stmts, one)
-	} else if err := json.Unmarshal(doc.Statement, &stmts); err != nil {
+		raws = []jsontext.Value{doc.Statement}
+	} else if err := json.Unmarshal(doc.Statement, &raws); err != nil {
 		return []actionir.Destination{public}
 	}
 	var out []actionir.Destination
@@ -134,20 +141,35 @@ func policyPrincipals(policy string) []actionir.Destination {
 			out = append(out, d)
 		}
 	}
-	for _, s := range stmts {
-		if len(s.NotPrincipal) != 0 {
+	for _, raw := range raws {
+		// A statement is an object of the IAM elements only: any other
+		// member, a Principal spelled another way among them, is something
+		// this cannot read, so the statement is public (D1215).
+		var s map[string]jsontext.Value
+		if raw.Kind() != '{' || json.Unmarshal(raw, &s) != nil {
 			add(public)
 			continue
 		}
-		if len(s.Principal) == 0 {
+		if !knownElements(s) {
+			add(public)
+			continue
+		}
+		principal, notPrincipal := s["Principal"], s["NotPrincipal"]
+		// NotPrincipal grants to everyone but the accounts it names, so a
+		// statement with it is public (fail closed, G0 M30 D934).
+		if len(notPrincipal) != 0 {
+			add(public)
+			continue
+		}
+		if len(principal) == 0 {
 			continue // no principal: nothing to share to here
 		}
-		if s.Principal.Kind() == '"' {
-			add(public) // "*", or a string that names no account
+		if principal.Kind() != '{' {
+			add(public) // "*", a string that names no account, or not a principal at all
 			continue
 		}
 		var byKind map[string]jsontext.Value
-		if err := json.Unmarshal(s.Principal, &byKind); err != nil {
+		if err := json.Unmarshal(principal, &byKind); err != nil {
 			add(public)
 			continue
 		}

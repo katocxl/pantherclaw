@@ -16,13 +16,15 @@ import (
 
 // protectedWrite says whether a write tool's call writes a protected agent
 // configuration or memory file (G0 M30 D943), and that file's base
-// directory, slash-separated path relative to it, and class. The base is
-// the project in cwd when the file is in it; otherwise the user's home,
-// when the file is under it and Classify marks its home-relative path
-// (D943a: no paths beyond what Classify knows). The target is resolved to
-// its final path first, as far as it exists, so a link or junction into a
-// protected file is the protected file. Anything that cannot be resolved is
-// an error, which blocks the write (fail closed).
+// directory, slash-separated path relative to it, and class. The file is
+// checked against the project entries relative to cwd, the user's
+// configuration directory entries relative to os.UserConfigDir, and the
+// user's home entries relative to the home (HR-712: project and user scope;
+// D1215 supersedes D943a(b)); the first base that marks it is the one
+// returned. The target is resolved to its final path first, as far as it
+// exists, so a link or junction into a protected file is the protected
+// file. Anything that cannot be resolved is an error, which blocks the
+// write (fail closed).
 func protectedWrite(in hookInput, cwd string) (base, rel string, class agentconfig.PathClass, ok bool, err error) {
 	p := in.ToolInput.FilePath
 	if in.Tool == "NotebookEdit" {
@@ -36,21 +38,76 @@ func protectedWrite(in hookInput, cwd string) (base, rel string, class agentconf
 		return "", "", "", false, fmt.Errorf("the file written cannot be resolved to its final path: %w", err)
 	}
 	if rel, ok := under(cwd, target); ok {
-		class, protected := agentconfig.Classify(rel)
-		return cwd, rel, class, protected, nil
+		if class, protected := agentconfig.Classify(rel); protected {
+			return cwd, rel, class, true, nil
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return "", "", "", false, errors.New("the home directory is unknown, so a write outside the project cannot be checked")
+		return "", "", "", false, errors.New("the home directory is unknown, so a write cannot be checked against the user's files")
 	}
-	if home, err = resolveFinal(home); err != nil {
-		return "", "", "", false, fmt.Errorf("the home directory cannot be resolved to its final path: %w", err)
+	config, err := os.UserConfigDir()
+	if err != nil || config == "" {
+		return "", "", "", false, errors.New("the configuration directory is unknown, so a write cannot be checked against the user's files")
 	}
-	if rel, ok := under(home, target); ok {
-		class, protected := agentconfig.Classify(rel)
-		return home, rel, class, protected, nil
+	for _, b := range []struct {
+		dir  string
+		root agentconfig.Root
+	}{{config, agentconfig.RootConfig}, {home, agentconfig.RootHome}} {
+		dir, err := resolveExisting(b.dir)
+		if err != nil {
+			return "", "", "", false, fmt.Errorf("the user's %s directory cannot be resolved to its final path: %w", b.root, err)
+		}
+		if rel, ok := under(dir, target); ok {
+			if e, protected := agentconfig.MatchRoot(b.root, rel); protected {
+				return dir, rel, e.Class, true, nil
+			}
+		}
 	}
 	return "", "", "", false, nil
+}
+
+// resolveExisting is the final path of a directory that may not exist yet
+// (a configuration directory no client has made): its nearest existing
+// ancestor resolved, joined with the rest, as for the target.
+func resolveExisting(dir string) (string, error) {
+	return finalTarget(dir, dir)
+}
+
+// onDiskSpelling respells each name of an absolute path as its directory
+// spells it: the exact name when the directory holds it, else the one name
+// equal to it without case. Past the first name the directory holds in
+// neither form, the rest is kept as given. macOS file systems fold case, so
+// "claude.md" opens CLAUDE.md; this gives the path the file's own spelling
+// (G0 M30 D1215).
+func onDiskSpelling(abs string) string {
+	vol := filepath.VolumeName(abs)
+	names := strings.Split(strings.TrimPrefix(abs[len(vol):], string(filepath.Separator)), string(filepath.Separator))
+	dir := vol + string(filepath.Separator)
+	for i, name := range names {
+		if name == "" {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return filepath.Join(append([]string{dir}, names[i:]...)...)
+		}
+		spelled := ""
+		for _, e := range entries {
+			if e.Name() == name {
+				spelled = name
+				break
+			}
+			if spelled == "" && strings.EqualFold(e.Name(), name) {
+				spelled = e.Name()
+			}
+		}
+		if spelled == "" {
+			return filepath.Join(append([]string{dir}, names[i:]...)...)
+		}
+		dir = filepath.Join(dir, spelled)
+	}
+	return dir
 }
 
 // under is target's slash-separated path relative to dir, ok false when it

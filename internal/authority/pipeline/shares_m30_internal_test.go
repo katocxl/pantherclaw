@@ -140,6 +140,14 @@ func TestHR707_PinnedDefinitionSharesCountWithoutTheMapper(t *testing.T) {
 		"star":          `{"Statement": [{"Effect": "Allow", "Principal": "*"}]}`,
 		"unparseable":   `{"Statement": [`,
 		"not principal": `{"Statement": [{"Effect": "Allow", "NotPrincipal": {"AWS": "111122223333"}}]}`,
+		// D1215: what the extractor cannot read is public.
+		"unknown member":      `{"Statement": [{"Effect": "Allow", "Principal": {"AWS": "111122223333"}, "Grantee": "*"}]}`,
+		"principal lowercase": `{"Statement": [{"Effect": "Allow", "principal": "*", "Action": "s3:GetObject"}]}`,
+		"null principal":      `{"Statement": [{"Effect": "Allow", "Principal": null}]}`,
+		"null statement":      `{"Statement": null}`,
+		"missing statement":   `{"Version": "2012-10-17"}`,
+		"string statement":    `{"Statement": "Allow *"}`,
+		"null in the list":    `{"Statement": [null]}`,
 	} {
 		if got := codes(runShares(r, def, vals(policy))); got[ReasonSharePublic] != adomain.RequireApproval {
 			t.Errorf("%s: %+v", name, got)

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -82,5 +83,88 @@ func TestHR712_ProtectedWritesAskTheGatewayOrdinaryWritesDoNot(t *testing.T) {
 	defer mu.Unlock()
 	if len(bodies) != 1 {
 		t.Fatalf("an ordinary write asked the gateway: %d requests", len(bodies))
+	}
+}
+
+// TestHR712_CaseAndUserScopeWritesAskTheGateway (G0 M30 D1215): a project
+// file named in another case (claude.md, .Claude/Settings.json), the
+// user's memory (~/.claude/CLAUDE.md), the user's Claude Code settings
+// (~/.claude.json) and a configuration-directory entry
+// (Claude/claude_desktop_config.json) each ask the gateway with their path
+// relative to their own base, and the gateway's refusal blocks them.
+func TestHR712_CaseAndUserScopeWritesAskTheGateway(t *testing.T) {
+	var mu sync.Mutex
+	var asked []map[string]any
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &req)
+		in, _ := req["input"].(map[string]any)
+		mu.Lock()
+		asked = append(asked, in)
+		mu.Unlock()
+		_, _ = io.WriteString(w, `{"decision":"deny","reason":"PantherClaw denied this call: not_granted. Transaction t-9.","mode":"enforce"}`)
+	}))
+	t.Cleanup(gw.Close)
+	env := hookEnv(t, gw.URL)
+	home, project := t.TempDir(), t.TempDir()
+	for _, k := range []string{"HOME", "USERPROFILE"} {
+		t.Setenv(k, home)
+	}
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("AppData", filepath.Join(home, "AppData", "Roaming"))
+	config, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "CLAUDE.md"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct{ file, path, class string }{
+		{filepath.Join(project, "claude.md"), "claude.md", "memory"},
+		{filepath.Join(project, ".Claude", "Settings.json"), ".Claude/Settings.json", "settings"},
+		{filepath.Join(home, ".claude", "CLAUDE.md"), ".claude/CLAUDE.md", "memory"},
+		{filepath.Join(home, ".claude.json"), ".claude.json", "settings"},
+		{filepath.Join(config, "Claude", "claude_desktop_config.json"), "Claude/claude_desktop_config.json", "mcp"},
+	}
+	for i, c := range cases {
+		code, out, errs := runHook(t, env, writeEvent("Write", c.file, project, "toolu_2"+itoa(int64(i))))
+		if code != 2 || out != "" || !strings.Contains(errs, "not_granted") {
+			t.Errorf("%s: %d %q %q", c.file, code, out, errs)
+			continue
+		}
+		mu.Lock()
+		in := asked[len(asked)-1]
+		mu.Unlock()
+		if !strings.EqualFold(in["path"].(string), c.path) || in["class"] != c.class {
+			t.Errorf("%s: asked %v, want %s %s", c.file, in, c.path, c.class)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(asked) != len(cases) {
+		t.Fatalf("%d asks for %d writes", len(asked), len(cases))
+	}
+}
+
+// TestHR712_AnExistingFileTakesItsOnDiskSpelling (G0 M30 D1215): the
+// spelling macOS resolution uses takes each existing name as its directory
+// spells it and keeps the names that do not exist yet.
+func TestHR712_AnExistingFileTakesItsOnDiskSpelling(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".claude", "settings.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := onDiskSpelling(filepath.Join(dir, ".Claude", "Settings.json")), filepath.Join(dir, ".claude", "settings.json"); got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	if got, want := onDiskSpelling(filepath.Join(dir, ".Claude", "New", "x.json")), filepath.Join(dir, ".claude", "New", "x.json"); got != want {
+		t.Fatalf("got %s, want %s", got, want)
 	}
 }

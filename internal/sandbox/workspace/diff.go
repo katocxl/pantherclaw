@@ -31,7 +31,8 @@ type Change struct {
 	// patch, and the caller carries its new content another way.
 	Binary bool
 	// Protected is the class of an agent configuration or memory file
-	// (agentconfig.Classify), "" for any other path (G0 M30 D944).
+	// (agentconfig.Classify, which folds case on every host, D1215), "" for
+	// any other path (G0 M30 D944).
 	Protected agentconfig.PathClass
 	// Excluded marks a protected change left out of the patch, and its
 	// binary content out of the copy-out, because it was not included.

@@ -53,6 +53,31 @@ func TestHR703_DecodedHitsAreFindingsWithTheirLayers(t *testing.T) {
 	}
 }
 
+// TestHR703_OneCharacterNextToARunDoesNotHideIt (G0 M30 D1215): a hex run
+// with a hex digit glued before or after it, a base64 run with one glued
+// character, and a run mixing the standard and URL alphabets each still
+// hold injection_phrase.
+func TestHR703_OneCharacterNextToARunDoesNotHideIt(t *testing.T) {
+	hx := hex.EncodeToString([]byte(phrase))
+	b64 := base64.RawStdEncoding.EncodeToString([]byte(phrase))
+	cases := []struct{ name, text, enc string }{
+		{"digit before hex", "id a" + hx, "hex"},
+		{"digit after hex", hx + "7", "hex"},
+		{"char before base64", "note x" + b64, "base64"},
+		{"char after base64", b64 + "Q tail", "base64"},
+		{"mixed alphabets", b64 + "-ab+/cdefghijklmnopq_rs", "base64"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			found := classify(t, c.text)
+			f, ok := findingOf(found, domain.KindInjectionPhrase)
+			if !ok || !strings.Contains(f.Encoding, c.enc) || !f.Valid() {
+				t.Fatalf("want injection_phrase via %s, got %+v", c.enc, found)
+			}
+		})
+	}
+}
+
 // TestHR703_BenignEncodedTextAndThePastBudgetScan: encoded text that reads
 // as nothing listed is no finding, and a scan whose decoding passes the body
 // bound is incomplete with decode_bound, never finished.

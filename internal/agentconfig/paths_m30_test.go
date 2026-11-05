@@ -34,8 +34,38 @@ func TestHR712_ClassifyNamesOnlyListedProjectFiles(t *testing.T) {
 			t.Errorf("%q classified as %q", p, c)
 		}
 	}
-	// Names compare without case only where the file system does.
-	if _, ok := Classify("claude.md"); ok != (runtime.GOOS == "windows") {
-		t.Errorf("claude.md classified %v on %s", ok, runtime.GOOS)
+	// Names compare without case on every host (D1215).
+	for p, want := range map[string]PathClass{"claude.md": ClassMemory, ".Claude/Settings.json": ClassSettings, "Agents.md": ClassMemory} {
+		if got, ok := Classify(p); !ok || got != want {
+			t.Errorf("%s on %s: %q %v, want %q", p, runtime.GOOS, got, ok, want)
+		}
+	}
+}
+
+// TestHR712_UserScopePathsMatchTheirRoot (G0 M30 D1215): home-relative
+// paths match the home entries and configuration-directory paths the
+// configuration entries; neither matches as a project path, and a project
+// path does not match the home table.
+func TestHR712_UserScopePathsMatchTheirRoot(t *testing.T) {
+	for _, c := range []struct {
+		root Root
+		p    string
+		want PathClass
+	}{
+		{RootHome, ".claude/CLAUDE.md", ClassMemory},
+		{RootHome, ".claude.json", ClassSettings},
+		{RootHome, ".Codeium/Windsurf/mcp_config.json", ClassMCP},
+		{RootConfig, "Claude/claude_desktop_config.json", ClassMCP},
+		{RootConfig, "Code/User/mcp.json", ClassMCP},
+	} {
+		if e, ok := MatchRoot(c.root, c.p); !ok || e.Class != c.want || e.Scope != ScopeUser {
+			t.Errorf("%s %s: %+v %v", c.root, c.p, e, ok)
+		}
+		if _, ok := Classify(c.p); ok {
+			t.Errorf("%s matched as a project path", c.p)
+		}
+	}
+	if _, ok := MatchRoot(RootHome, "AGENTS.md"); ok {
+		t.Error("a project path matched the home table")
 	}
 }

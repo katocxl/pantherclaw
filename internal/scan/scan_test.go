@@ -388,9 +388,11 @@ func TestF015_LongAttributesStayValidUTF8(t *testing.T) {
 	if len(got) != 2 || got[1].Kind != scan.KindMCPServer {
 		t.Fatalf("findings %v", got)
 	}
-	for k, v := range got[1].Attributes {
-		if !utf8.ValidString(v) || len(v) > 256 {
-			t.Errorf("attribute %s: %d bytes, valid UTF-8 %v", k, len(v), utf8.ValidString(v))
+	for _, f := range got {
+		for k, v := range f.Attributes {
+			if !utf8.ValidString(v) || len(v) > 256 {
+				t.Errorf("%s attribute %s: %d bytes, valid UTF-8 %v", f.Kind, k, len(v), utf8.ValidString(v))
+			}
 		}
 	}
 }

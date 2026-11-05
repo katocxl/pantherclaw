@@ -6,7 +6,7 @@ An agent's settings, MCP server list, hooks, skills and memory files decide what
 
 ## 1. Which files
 
-Project files (relative to the repository): each client's settings, MCP and hook files that `pclaw scan` already knows, skills directories, and the memory files `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `GEMINI.md`, `.cursorrules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.cursor/rules/**`. User files: the same clients' files under your home directory, and `~/.claude/CLAUDE.md`. Names compare case-insensitively on Windows only.
+Project files (relative to the repository): each client's settings, MCP and hook files that `pclaw scan` already knows, skills directories, and the memory files `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `GEMINI.md`, `.cursorrules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.cursor/rules/**`. User files: the same clients' files under your home directory and your configuration directory (for example `~/.claude.json`, `~/.claude/CLAUDE.md` and Claude Desktop's `claude_desktop_config.json`); the hook asks about these as it does about project files. Names compare case-insensitively on every host.
 
 ## 2. Scans: digests and drift
 
