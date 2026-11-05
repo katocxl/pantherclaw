@@ -838,6 +838,15 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Threat map:** seven new Prevent controls, M29's token caps among them, `NARROWED_TRIGGER`, connector refusals counted.
 - Migrations `00340`–`00345` (`00343` reserved; `00346`–`00349` spare).
 
+### M31 — Connector breadth
+**HR:** HR-720..727 · **F:** F1005–F1019 · **ADR:** 0058 · **G0:** [g0/M31.md](g0/M31.md).
+- **Dispatch contracts** (D950): JSON body keys with indices and `[*]`, fixed GraphQL documents, `rfc5322-raw` mail with header line breaks refused twice, literal fixed headers (HR-723, HR-724).
+- **Credentials** (D951, D952, D962): `oauth_client` token endpoints from a closed list (Microsoft, Salesforce, loopback; HR-722); `google_service_account` and `snowflake_keypair` minted per dispatch, the key never placed (HR-721, HR-726); a call naming another mailbox than the sealed subject is refused before minting (D956a).
+- **OpenAPI importer** (D953, D954): `pclaw package draft openapi` drafts, the decoder refuses `review_required` with `DRAFT_NOT_REVIEWED` (HR-720); `pantherclaw-sim openapi` serves a spec's examples.
+- **Packages** (D956–D962): `pc.gmail`, `pc.google-workspace`, `pc.m365`, `pc.salesforce`, `pc.notion`, `pc.linear`, `pc.bedrock`, `pc.vertex`, `pc.snowflake`, each with a simulator; Drive and Microsoft 365 shares reach M30's share step (HR-725); mail send, Drive share and Microsoft 365 invite and link reconcile unknown outcomes (D1002).
+- **Tests** (Phase B): HR-720..727 and T-330..T-334 unit tests, RT-210..RT-214 on the harness, `TestE2E_M31_ConnectorBreadth`; runbook [connector-breadth.md](runbooks/connector-breadth.md).
+- Migrations `00350`, `00351` (`00352`–`00359` spare).
+
 ---
 
 ## 9. CI/CD summary

@@ -950,11 +950,11 @@ Connectors for the mail, files, CRM, docs, issues, model clouds and warehouse ag
 | F1008 | OpenAPI importer | `pclaw package draft openapi` drafts an unsigned package from an OpenAPI 3 spec; it never loads until a person removes `review_required` and signs it. | Next | Community | M31 | new |
 | F1009 | Spec simulator | `pantherclaw-sim openapi --spec FILE` serves every operation's first example and records calls, for tests and demos. | Next | Community | M31 | new |
 | F1010 | Gmail | `pc.gmail`: send plain-text mail as a disclosure, list and read messages, through a Google service account. | Next | Community | M31 | new |
-| F1011 | Google Drive | `pc.google_workspace`: list and read file metadata, create and delete permissions, with public and domain shares named as share destinations. | Next | Community | M31 | new |
-| F1012 | Google Calendar | `pc.google_workspace`: list events and create events with up to 50 attendees. | Next | Community | M31 | new |
+| F1011 | Google Drive | `pc.google-workspace`: list and read file metadata, create and delete permissions, with public and domain shares named as share destinations. | Next | Community | M31 | new |
+| F1012 | Google Calendar | `pc.google-workspace`: list events and create events with up to 50 attendees. | Next | Community | M31 | new |
 | F1013 | Microsoft 365 mail | `pc.m365`: send and list mail through Microsoft Graph with an app-only OAuth client. | Next | Community | M31 | new |
 | F1014 | Microsoft 365 files | `pc.m365`: list drive items, invite people and create sharing links, with anonymous links and outside domains named as share destinations. | Next | Community | M31 | new |
-| F1015 | Salesforce | `pc.salesforce`: read and update records, run SOQL queries and reports, with customer data classed in answers. | Next | Community | M31 | new |
+| F1015 | Salesforce | `pc.salesforce`: read records, run reports and read API limits, with customer data classed in answers. | Next | Community | M31 | new |
 | F1016 | Notion | `pc.notion`: read and search pages, create pages and append blocks, with a pinned API version. | Next | Community | M31 | new |
 | F1017 | Linear | `pc.linear`: read, create, update and comment on issues through fixed GraphQL documents. | Next | Community | M31 | new |
 | F1018 | Model clouds | `pc.bedrock` and `pc.vertex`: Anthropic models on Amazon Bedrock and Google Vertex, checked like other model connections. | Next | Community | M31 | new |
