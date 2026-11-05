@@ -190,14 +190,14 @@ func (h *Handler) SetSaaSScanSchedule(ctx context.Context, req *pantherclawv1.Se
 	if err != nil {
 		return nil, err
 	}
-	sch, err := h.s.SetSchedule(ctx, req.GetSource(), connection, req.GetDaily())
+	sch, err := h.s.SetSchedule(ctx, req.GetSource(), connection, req.GetTenant(), req.GetDaily())
 	if err != nil {
 		return nil, err
 	}
 	out := &pantherclawv1.SetSaaSScanScheduleResponse{}
 	if sch != nil {
 		out.Schedule = &pantherclawv1.SaaSScanSchedule{
-			Source: sch.Source, ConnectionId: sch.ConnectionID.String(), CreatedBy: sch.CreatedBy,
+			Source: sch.Source, ConnectionId: sch.ConnectionID.String(), Tenant: sch.Tenant, CreatedBy: sch.CreatedBy,
 			CreateTime: timestamppb.New(sch.CreatedAt), LastStartTime: tsp(sch.LastStartedAt),
 		}
 	}

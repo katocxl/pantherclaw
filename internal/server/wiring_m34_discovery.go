@@ -4,10 +4,17 @@
 package server
 
 import (
+	"log/slog"
 	"maps"
 
+	"github.com/riverqueue/river"
+
+	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/entitlements"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	saasapp "github.com/katocxl/pantherclaw/internal/saasdiscovery/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -28,4 +35,18 @@ var m34DiscoveryClasses = map[string]entitlements.Class{
 func init() {
 	maps.Copy(procedurePermissions, m34DiscoveryProcedures)
 	maps.Copy(procedureClasses, m34DiscoveryClasses)
+}
+
+// registerM34DiscoveryJobs registers the daily scheduled-scan workers, next
+// to the GitHub daily scans, and returns periodic with their dispatcher.
+func registerM34DiscoveryJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, bill *billing.Service, log *slog.Logger,
+) ([]*river.PeriodicJob, error) {
+	s := &saasapp.Scheduler{Pool: pool, Log: log}
+	if bill != nil {
+		s.Editions = bill
+	}
+	if err := saasapp.Register(reg, s); err != nil {
+		return nil, err
+	}
+	return append(periodic, saasapp.PeriodicJobs()...), nil
 }
