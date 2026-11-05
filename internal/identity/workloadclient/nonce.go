@@ -6,35 +6,20 @@ package workloadclient
 import (
 	"bytes"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
-	"strings"
-
-	"github.com/katocxl/pantherclaw/internal/identity/pap"
-	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-// issueTokenPath is WorkloadService.IssueToken.
-const issueTokenPath = "/pantherclaw.v1.WorkloadService/IssueToken"
-
-// FetchNonce asks server for org's current nonce before a request whose
-// L3 attestation must bind it (PAP-1 §3.3, G0 M35 D1030). It sends one
-// IssueToken request for an instance that doesn't exist, with a key-only
-// proof and no nonce: the server refuses it with use_nonce before it reads
-// anything else and returns org's nonce in PAP-Nonce. It is never retried,
-// and the Transport keeps the nonce for the request that follows.
-func (t *Transport) FetchNonce(ctx context.Context, server string, org ids.OrgID) (string, error) {
-	if org.IsZero() {
-		return "", errors.New("the org is unknown")
-	}
-	probe := pap.Instance{Org: org, Agent: ids.NewV7(), Instance: ids.NewV7()}
-	body, err := json.Marshal(map[string]string{"identifier": probe.String()})
-	if err != nil {
-		return "", err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(server, "/")+issueTokenPath, bytes.NewReader(body))
+// Challenge sends the request a workload is about to make (its exact URL
+// and Connect JSON body) once with a key-only proof and no nonce, the
+// standard use_nonce pattern of PAP-1 §4: the server refuses it with
+// use_nonce before it reads anything else and returns the org's current
+// nonce in PAP-Nonce. It is never retried. An L3 attestation then binds
+// that nonce, and the Transport keeps it for the real request that follows
+// (PAP-1 §3.3, G0 M35 D1030a).
+func (t *Transport) Challenge(ctx context.Context, url string, body []byte) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}

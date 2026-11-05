@@ -19,8 +19,11 @@ import (
 	"os"
 
 	"github.com/go-jose/go-jose/v4"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/issuers"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
@@ -29,8 +32,9 @@ import (
 
 // L3 attestation sources (PAP-1 §3.3, G0 M35 D1030): the evidence binds
 // the org, the nonce of the request it travels with and the thumbprint of
-// the workload key, so pclaw first asks the server for the org's nonce and
-// then builds the evidence for that one request.
+// the workload key. pclaw first sends that same request without a nonce
+// (the standard use_nonce challenge, D1030a), then builds the evidence for
+// the nonce the server returned and sends the request for real.
 
 // l3Flags declares --attest and the SVID files.
 type l3Flags struct {
@@ -41,10 +45,17 @@ type l3Flags struct {
 	src *l3Source
 }
 
+// l3Request returns the procedure URL and the real request, without the
+// L3 attestation, for the use_nonce challenge.
+// placeholder builds evidence with an empty nonce, for a request whose
+// org only the attestation names (an Enroll without an enrollment token);
+// the server refuses the challenge with use_nonce before it reads it.
+type l3Request func(ctx context.Context, placeholder func() (*pantherclawv1.Attestation, error)) (string, proto.Message, error)
+
 type l3Source struct {
-	t      *workloadclient.Transport
-	server string
-	jkt    string
+	t       *workloadclient.Transport
+	jkt     string
+	request l3Request
 }
 
 func declareL3(fs *flag.FlagSet) l3Flags {
@@ -85,9 +96,9 @@ func (f l3Flags) check() error {
 	return nil
 }
 
-// bindTo names the transport (whose nonce the evidence binds), the server
-// and the workload key of the requests that follow.
-func (f l3Flags) bindTo(t *workloadclient.Transport, server string, kf workloadclient.KeyFile) {
+// bindTo names the transport (whose nonce the evidence binds), the
+// workload key, and the real request the challenge repeats.
+func (f l3Flags) bindTo(t *workloadclient.Transport, kf workloadclient.KeyFile, request l3Request) {
 	if f.src == nil || t == nil {
 		return
 	}
@@ -96,23 +107,35 @@ func (f l3Flags) bindTo(t *workloadclient.Transport, server string, kf workloadc
 		return
 	}
 	pub, _ := key.Public().(ed25519.PublicKey)
-	*f.src = l3Source{t: t, server: server, jkt: jws.Thumbprint(pub)}
+	*f.src = l3Source{t: t, jkt: jws.Thumbprint(pub), request: request}
 }
 
-// attestation fetches org's current nonce and builds the L3 evidence for
-// the request that follows.
+// attestation challenges the real request for org's current nonce and
+// builds the L3 evidence bound to it.
 func (f l3Flags) attestation(ctx context.Context, a *app, org ids.OrgID) (*pantherclawv1.Attestation, error) {
 	if org.IsZero() {
 		return nil, errors.New("the org is unknown: pass --org")
 	}
-	if f.src == nil || f.src.t == nil || f.src.jkt == "" {
+	if f.src == nil || f.src.t == nil || f.src.jkt == "" || f.src.request == nil {
 		return nil, errors.New("internal: the L3 attestation has no request to bind")
 	}
-	nonce, err := f.src.t.FetchNonce(ctx, f.src.server, org)
+	bind := issuers.L3Bind{Org: org, JKT: f.src.jkt}
+	url, msg, err := f.src.request(ctx, func() (*pantherclawv1.Attestation, error) { return f.build(ctx, a, bind) })
 	if err != nil {
-		return nil, fmt.Errorf("fetching the server nonce: %w", err)
+		return nil, err
 	}
-	bind := issuers.L3Bind{Org: org, Nonce: nonce, JKT: f.src.jkt}
+	body, err := protojson.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	if bind.Nonce, err = f.src.t.Challenge(ctx, url, body); err != nil {
+		return nil, fmt.Errorf("asking the server for a nonce: %w", err)
+	}
+	return f.build(ctx, a, bind)
+}
+
+// build makes the evidence for bind.
+func (f l3Flags) build(ctx context.Context, a *app, bind issuers.L3Bind) (*pantherclawv1.Attestation, error) {
 	switch *f.attest {
 	case "spiffe-x509":
 		tok, err := svidSign(*f.svidCert, *f.svidKey, bind.String())
@@ -205,4 +228,19 @@ func parseSVIDKey(raw []byte) (crypto.Signer, error) {
 		return k, nil
 	}
 	return nil, errors.New("unsupported private key")
+}
+
+// issueTokenChallenge is the use_nonce challenge of an IssueToken for the
+// instance: req as it will be sent, without the attestation (G0 M35
+// D1030a). The identifier names the org.
+func issueTokenChallenge(server string, req *pantherclawv1.IssueTokenRequest) l3Request {
+	return func(context.Context, func() (*pantherclawv1.Attestation, error)) (string, proto.Message, error) {
+		base, err := checkServer(server)
+		if err != nil {
+			return "", nil, err
+		}
+		challenge, _ := proto.Clone(req).(*pantherclawv1.IssueTokenRequest)
+		challenge.Attestation = nil
+		return base + pantherclawv1connect.WorkloadServiceIssueTokenProcedure, challenge, nil
+	}
 }

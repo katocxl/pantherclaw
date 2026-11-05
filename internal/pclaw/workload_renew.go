@@ -67,7 +67,8 @@ func workloadRenew(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	att.l3.bindTo(t, kf.Server, kf) // each renewal binds a fresh nonce (G0 M35 D1030)
+	// Each renewal challenges its own IssueToken for a fresh nonce (G0 M35 D1030a).
+	att.l3.bindTo(t, kf, issueTokenChallenge(kf.Server, &pantherclawv1.IssueTokenRequest{Identifier: kf.Identifier, DeclaredReleaseDigest: *declared}))
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	tr := &tokenRenewal{a: a, wc: wc, identifier: kf.Identifier, org: inst.Org, declared: *declared, att: &att, name: "pclaw workload renew"}

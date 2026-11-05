@@ -19,6 +19,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -338,13 +339,6 @@ func workloadEnroll(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	att.l3.bindTo(t, *server, kf)
-	if req.Attestation, err = att.attestation(ctx, a, org); err != nil {
-		return err
-	}
-	if req.EnrollmentToken == "" && req.Attestation == nil {
-		return errors.New("enrolling needs an enrollment token, an attestation, or both")
-	}
 	key, _ := kf.Key()
 	pub, _ := key.Public().(ed25519.PublicKey)
 	jwk, err := json.Marshal(jws.PublicJWK(pub, ""))
@@ -352,6 +346,31 @@ func workloadEnroll(ctx context.Context, a *app, args []string) error {
 		return err
 	}
 	req.PublicJwk = string(jwk)
+	base, err := checkServer(*server)
+	if err != nil {
+		return err
+	}
+	// An L3 attestation binds the nonce of this Enroll: the challenge is
+	// this request without a nonce (G0 M35 D1030a). Without an enrollment
+	// token only the attestation names the org, so the challenge carries
+	// evidence with an empty nonce, which the server never reads.
+	att.l3.bindTo(t, kf, func(_ context.Context, placeholder func() (*pantherclawv1.Attestation, error)) (string, proto.Message, error) {
+		challenge, _ := proto.Clone(req).(*pantherclawv1.EnrollRequest)
+		if challenge.GetEnrollmentToken() == "" {
+			p, err := placeholder()
+			if err != nil {
+				return "", nil, err
+			}
+			challenge.Attestation = p
+		}
+		return base + pantherclawv1connect.WorkloadServiceEnrollProcedure, challenge, nil
+	})
+	if req.Attestation, err = att.attestation(ctx, a, org); err != nil {
+		return err
+	}
+	if req.EnrollmentToken == "" && req.Attestation == nil {
+		return errors.New("enrolling needs an enrollment token, an attestation, or both")
+	}
 	res, err := wc.Enroll(ctx, req)
 	if err != nil {
 		return err
@@ -395,7 +414,7 @@ func workloadToken(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	att.l3.bindTo(t, kf.Server, kf)
+	att.l3.bindTo(t, kf, issueTokenChallenge(kf.Server, req))
 	if req.Attestation, err = att.attestation(ctx, a, inst.Org); err != nil {
 		return err
 	}
