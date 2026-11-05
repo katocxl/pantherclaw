@@ -54,10 +54,6 @@ func bundleCommands() map[string]command {
 	}
 }
 
-// maxUploadBytes is the largest .pcbundle file one InstallBundle request
-// carries under the 1 MiB RPC cap (G0 M37 D1080a).
-const maxUploadBytes = 960 << 10
-
 // bundleInstall uploads a signed bundle (D1082). The server verifies it
 // against the org's ACTIVE pins and drafts its items; nothing is activated
 // (HR-796, HR-798). pclaw decodes it first, which executes nothing.
@@ -68,12 +64,11 @@ func bundleInstall(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	raw, err := readRegular(file, format.MaxBundleBytes)
+	// One InstallBundle request carries at most format.MaxFileBytes (960 KiB,
+	// G0 M37 D1080a), the limit the server applies too.
+	raw, err := readRegular(file, format.MaxFileBytes)
 	if err != nil {
 		return err
-	}
-	if len(raw) > maxUploadBytes {
-		return fmt.Errorf("%s is %d bytes; a bundle upload is at most %d bytes (960 KiB)", file, len(raw), maxUploadBytes)
 	}
 	if _, err := format.Decode(raw); err != nil {
 		return err
@@ -363,7 +358,7 @@ func bundleLint(_ context.Context, a *app, args []string) error {
 			return err
 		}
 	} else {
-		raw, err := readRegular(target, format.MaxBundleBytes)
+		raw, err := readRegular(target, format.MaxFileBytes)
 		if err != nil {
 			return err
 		}
@@ -432,7 +427,7 @@ func bundleSign(_ context.Context, a *app, args []string) error {
 	if *keyFile == "" || *days < 1 || *days > maxSignDays {
 		return errUsage
 	}
-	raw, err := readRegular(file, format.MaxBundleBytes)
+	raw, err := readRegular(file, format.MaxFileBytes)
 	if err != nil {
 		return err
 	}
@@ -545,7 +540,7 @@ func bundleVerify(_ context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	raw, err := readRegular(file, format.MaxBundleBytes)
+	raw, err := readRegular(file, format.MaxFileBytes)
 	if err != nil {
 		return err
 	}
@@ -574,7 +569,7 @@ func bundleInspect(_ context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	raw, err := readRegular(file, format.MaxBundleBytes)
+	raw, err := readRegular(file, format.MaxFileBytes)
 	if err != nil {
 		return err
 	}
