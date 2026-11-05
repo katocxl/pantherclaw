@@ -14,7 +14,8 @@ requires: [gmail.send]
 # On a live range this would send real mail.
 harness_only: true
 steps:
-  # The subject carries CRLF and a Bcc line: the request is refused before
+  # The subject carries a bare LF and a Bcc line (a CR would already fail
+  # the generic control-character check): the request is refused before
   # anything is decided or minted.
   - id: injected-subject
     do: agent.call
@@ -25,7 +26,7 @@ steps:
       args:
         mailbox: "${fixture.mailbox}"
         to: ["bob@example.test"]
-        subject: "Hi\r\nBcc: eve@attacker.example"
+        subject: "Hi\nBcc: eve@attacker.example"
         text: "rt-211-${fixture.nonce}"
     expect:
       outcome: REFUSED

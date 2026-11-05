@@ -46,6 +46,18 @@ func TestHR007_AnAbsentOptionalParamIsNullInTheDedupeKey(t *testing.T) {
 	if again := key(`{` + base + `}`); again != absent {
 		t.Fatal("the same absent param must give the same key")
 	}
+	// An empty optional list is the same action as no list (D1209), and
+	// an empty string is a value.
+	l := d.Params["labels"]
+	l.Material = true
+	d.Params["labels"] = l
+	d.Dedupe = append(d.Dedupe, "params.labels")
+	if none, empty := key(`{`+base+`}`), key(`{`+base+`,"labels":[]}`); none != empty {
+		t.Fatal("an empty optional list must give the key of an absent one")
+	}
+	if key(`{`+base+`,"labels":["a"]}`) == key(`{`+base+`}`) {
+		t.Fatal("a list with an item must give another key")
+	}
 	v, err := decode(t, d, `{`+base+`,"branch":"main"}`)
 	if err != nil {
 		t.Fatal(err)

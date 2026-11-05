@@ -16,7 +16,7 @@ import (
 // CodeTargetNotCredentialSubject refuses a subject_target dispatch whose
 // target is not the user the connection's Google service account acts as,
 // before anything is minted or sent (G0 M31 D956a).
-const CodeTargetNotCredentialSubject = "TARGET_NOT_CREDENTIAL_SUBJECT"
+const CodeTargetNotCredentialSubject = "TARGET_NOT_CREDENTIAL_SUBJECT" //nolint:gosec // G101: a refusal code, not a credential
 
 // ErrNotCredentialSubject is a subject_target dispatch refused: the
 // credential is not a Google service account, names no subject, or names

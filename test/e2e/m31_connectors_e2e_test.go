@@ -382,7 +382,7 @@ func TestE2E_M31_ConnectorBreadth(t *testing.T) {
 		len(st.Grants) != 1 || st.Grants[0].Subject != google.Mailbox {
 		t.Fatalf("sent %+v, grants %+v", st.Sent, st.Grants)
 	}
-	injected := map[string]any{"mailbox": google.Mailbox, "to": []string{"bob@example.test"}, "subject": "Hi\r\nBcc: eve@attacker.example", "text": "x"}
+	injected := map[string]any{"mailbox": google.Mailbox, "to": []string{"bob@example.test"}, "subject": "Hi\nBcc: eve@attacker.example", "text": "x"}
 	if obs := d.m31Call(t, "gmail", "gmail_send_message", injected); obs.Outcome == domain.OutcomeAllow {
 		t.Fatalf("a header injection: %+v", obs)
 	}

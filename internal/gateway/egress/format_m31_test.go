@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
@@ -163,7 +164,8 @@ func TestHR724_AMailMessageIsBuiltFromTheMappedFieldsOnly(t *testing.T) {
 
 // TestHR724_AHeaderLineBreakOrSeparatorIsRefusedTwice: a line break in the
 // subject or a separator in an address is refused when the params are
-// decoded (PARAM_INVALID) and again by the builder, so nothing is sent.
+// decoded (ambiguous, so the agent sees invalid_arguments) and again by
+// the builder (enforcement_failed), so nothing is sent.
 //
 // Covers: HR-724
 func TestHR724_AHeaderLineBreakOrSeparatorIsRefusedTwice(t *testing.T) {
@@ -178,7 +180,7 @@ func TestHR724_AHeaderLineBreakOrSeparatorIsRefusedTwice(t *testing.T) {
 		"address list": {"to": {List: []string{"a@example.test,c@example.test"}}, "subject": {Str: "Hi"}},
 		"address CR":   {"to": {List: []string{"a@example.test\rBcc: c@example.test"}}, "subject": {Str: "Hi"}},
 	} {
-		if err := d.CheckMailHeaders(vals); err == nil || !strings.Contains(err.Error(), "PARAM_INVALID") {
+		if err := d.CheckMailHeaders(vals); !errors.Is(err, actionir.ErrAmbiguous) {
 			t.Errorf("%s: decided: %v", name, err)
 		}
 		obj := map[string]any{"to": vals["to"].List, "subject": vals["subject"].Str, "text": "x"}
