@@ -1018,6 +1018,10 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	mountM39Payments, err := registerM39Payments(rs, d) // G0 M39 D1121, D1123
+	if err != nil {
+		return nil, err
+	}
 	if err := registerAutomationTemplates(rs, d, autos); err != nil {
 		return nil, err
 	}
@@ -1070,6 +1074,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mountM35Federation(mux, federation, d)
 	if mountM36OTel != nil {
 		mountM36OTel(mux)
+	}
+	if mountM39Payments != nil {
+		mountM39Payments(mux)
 	}
 	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})

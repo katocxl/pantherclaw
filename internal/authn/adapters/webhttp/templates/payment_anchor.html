@@ -1,0 +1,20 @@
+{{template "head" .}}
+<h1>Payment trust anchor: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>. Created by <code>{{.CreatedBy}}</code> at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}{{with .RevokedAt}}; revoked {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Anchor</dt><dd><code>{{.ID}}</code></dd>
+<dt>Kind</dt><dd><code>{{.Kind}}</code>{{if eq (print .Kind) "MANDATE_ISSUER"}}: issues AP2 payment and checkout mandates{{else if eq (print .Kind) "MERCHANT"}}: signs AP2 checkouts and carts{{else}}: publishes agents' HTTP message signature keys{{end}}</dd>
+{{if .URL}}<dt>Key URL</dt><dd class="untrusted"><code>{{.URL}}</code></dd>{{else}}<dt>Keys</dt><dd class="untrusted"><pre>{{.JWKS}}</pre></dd>{{end}}
+<dt>Mode</dt><dd>Sandbox only. Live anchors and hosts outside the sandbox list are refused.</dd>
+<dt>What PantherClaw does with it</dt><dd>Checks signatures with these keys. It never signs a mandate and holds no card or payment credential.</dd>
+</dl>
+{{if .CanActivate}}
+<h2>Activate</h2>
+<p class="note">Once activated, mandates and agent signatures made with these keys count as verified for your organization. Check the key source before you go on. Activating needs your security key.</p>
+<p><button type="button" class="danger" id="activate" data-path="/integrations/payment-anchors/{{.ID}}/confirm">Activate with your security key</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot activate this anchor: that needs payments.manage and a security key.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<script src="/static/integrations.js"></script>
+{{template "foot" .}}

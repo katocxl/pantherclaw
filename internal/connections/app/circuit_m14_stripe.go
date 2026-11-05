@@ -20,19 +20,34 @@ import (
 // gateway saw Stripe answer in live mode (G0 M14 D54, HR-303).
 const QuarantineStripeLivemode = "stripe_livemode"
 
+// QuarantinePaymentsLive is the quarantine reason of a connection whose
+// gateway refused an agent payment outside the sandbox (G0 M39 D1120,
+// HR-831).
+const QuarantinePaymentsLive = "payments_live_refused"
+
 // ErrCircuitReason reports a circuit reason the server does not know.
-var ErrCircuitReason = pcerr.New(pcerr.InvalidArgument, "CIRCUIT_REASON_UNKNOWN", "the only circuit reason is stripe_livemode")
+var ErrCircuitReason = pcerr.New(pcerr.InvalidArgument, "CIRCUIT_REASON_UNKNOWN",
+	"the circuit reasons are stripe_livemode and payments_live_refused")
+
+// circuitEvents are the security audit event and reason code of each
+// circuit reason.
+var circuitEvents = map[string][2]string{
+	QuarantineStripeLivemode: {auditkind.SecurityStripeLivemode, "STRIPE_LIVEMODE"},
+	QuarantinePaymentsLive:   {auditkind.SecurityPaymentsLiveRefused, "PAYMENTS_LIVE_REFUSED"},
+}
 
 // OpenCircuitFor records that a gateway opened a connection's circuit for
 // reason, without the outcome thresholds: Stripe answered in live mode
 // through a connection that may hold only a test key (D54). Like
 // OpenCircuit it quarantines the connection with the gateway as actor,
 // raises the epoch and notifies the org admins; it also records the
-// security audit event security.stripe_livemode. A connection of another
+// security audit event of its reason (security.stripe_livemode or
+// security.payments_live_refused, G0 M39 D1120). A connection of another
 // gateway or org is not found. It reports whether the connection is
 // quarantined.
 func (s *Service) OpenCircuitFor(ctx context.Context, org ids.OrgID, gateway, id ids.UUID, reason string) (bool, error) {
-	if reason != QuarantineStripeLivemode {
+	event, known := circuitEvents[reason]
+	if !known {
 		return false, ErrCircuitReason
 	}
 	c := actor{Org: org, By: "gateway:" + gateway.String(), Audit: evdomain.Actor{Type: "gateway", ID: gateway.String()}}
@@ -49,7 +64,7 @@ func (s *Service) OpenCircuitFor(ctx context.Context, org ids.OrgID, gateway, id
 			return err
 		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
-			Name: auditkind.SecurityStripeLivemode, Actor: c.Audit, Outcome: audit.Denied, ReasonCode: "STRIPE_LIVEMODE",
+			Name: event[0], Actor: c.Audit, Outcome: audit.Denied, ReasonCode: event[1],
 			Object:  &audit.Object{Type: "connection", ID: id.String()},
 			Details: map[string]string{"gateway": gateway.String(), "connection": conn.Name},
 		}); err != nil {
