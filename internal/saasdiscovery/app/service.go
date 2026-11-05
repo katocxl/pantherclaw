@@ -98,7 +98,7 @@ func (s *Service) Import(ctx context.Context, r agents.SaaSReport) (Scan, agents
 	if _, err := s.caller(ctx, td.PermAgentManage); err != nil {
 		return Scan{}, agents.ScanResult{}, err
 	}
-	if domain.KindOf(r.Source) == "" || !domain.TenantOK(r.Tenant) {
+	if domain.KindOf(r.Source) == "" || !domain.SourceTenantOK(r.Source, r.Tenant) {
 		return Scan{}, agents.ScanResult{}, errBadRequest
 	}
 	res, err := s.Inventory.ImportSaaS(ctx, r)
@@ -119,7 +119,7 @@ func (s *Service) Start(ctx context.Context, connection ids.UUID, source, tenant
 		return Scan{}, ErrHumanOnly
 	}
 	want, ok := domain.CollectorOf(source)
-	if !ok || !domain.TenantOK(tenant) {
+	if !ok || !domain.SourceTenantOK(source, tenant) {
 		return Scan{}, errBadRequest
 	}
 	run := ids.NewV7()

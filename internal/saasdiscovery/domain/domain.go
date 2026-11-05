@@ -99,6 +99,10 @@ const (
 	ReadBotComponents = "bot_components"
 	ReadGPTs          = "gpts"
 	ReadGPTConfigs    = "gpt_configs"
+	// The runtimes read one list each (G0 M34 D997a).
+	ReadRuntimes         = "runtimes"
+	ReadReasoningEngines = "reasoning_engines"
+	ReadAgents           = "agents"
 )
 
 // Reads are what a scan of source reads.
@@ -108,6 +112,12 @@ func Reads(source string) []string {
 		return []string{ReadBotComponents, ReadBots}
 	case SourceChatGPTEnterprise:
 		return []string{ReadGPTConfigs, ReadGPTs}
+	case SourceAWSAgentCore:
+		return []string{ReadRuntimes}
+	case SourceVertexAgentEngine:
+		return []string{ReadReasoningEngines}
+	case SourceAzureFoundry:
+		return []string{ReadAgents}
 	}
 	return nil
 }
@@ -158,7 +168,7 @@ var attributes = map[string][]string{
 	},
 	// The runtimes keep metadata only: never an agent's code, container,
 	// instructions, environment or role (G0 M34 D997).
-	KindAgentCoreRuntime:      {"tenant", "agent_id", "name", "region", "created_at", "updated_at", "status", "gateway_count", "target_names"},
+	KindAgentCoreRuntime:      {"tenant", "agent_id", "name", "region", "created_at", "updated_at", "status"},
 	KindVertexReasoningEngine: {"tenant", "agent_id", "name", "location", "created_at", "updated_at", "status"},
 	KindFoundryAgent:          {"tenant", "agent_id", "name", "location", "created_at", "updated_at", "status"},
 }
@@ -179,6 +189,10 @@ var sideReads = map[string][]string{KindCopilotAgent: {ReadBotComponents}, KindC
 var materialKeys = map[string][]string{
 	KindCopilotAgent: {"state", "auth_mode", "auth_trigger", "access_policy", "skills", "skill_count", "knowledge_count"},
 	KindCustomGPT:    {"visibility", "tool_kinds", "action_domains", "tools_incomplete"},
+	// A runtime agent's status (G0 M34 D997a).
+	KindAgentCoreRuntime:      {"status"},
+	KindVertexReasoningEngine: {"status"},
+	KindFoundryAgent:          {"status"},
 }
 
 // MaterialKeys are the material attributes of kind.
@@ -270,6 +284,39 @@ var tenantRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 // TenantOK reports whether t can name a tenant: the Dataverse organization or
 // the ChatGPT workspace a report covers.
 func TenantOK(t string) bool { return tenantRe.MatchString(t) }
+
+var (
+	awsAccountRe    = regexp.MustCompile(`^[0-9]{12}$`)
+	gcpProjectRe    = regexp.MustCompile(`^[a-z][a-z0-9-]{5,29}$`)
+	gcpLocationRe   = regexp.MustCompile(`^[a-z]+-[a-z]+[0-9]+$`)
+	foundryProjecRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+)
+
+// SourceTenantOK reports whether t can name a tenant of source (G0 M34
+// D997a): an AWS account for AgentCore, <project>/<location> for Vertex
+// Agent Engine, a project name for Foundry, else TenantOK.
+func SourceTenantOK(source, t string) bool {
+	switch source {
+	case SourceAWSAgentCore:
+		return awsAccountRe.MatchString(t)
+	case SourceVertexAgentEngine:
+		_, _, ok := VertexTenant(t)
+		return ok
+	case SourceAzureFoundry:
+		return foundryProjecRe.MatchString(t)
+	}
+	return TenantOK(t)
+}
+
+// VertexTenant splits a Vertex Agent Engine tenant into its project and
+// location.
+func VertexTenant(t string) (project, location string, ok bool) {
+	project, location, ok = strings.Cut(t, "/")
+	if !ok || !gcpProjectRe.MatchString(project) || !gcpLocationRe.MatchString(location) {
+		return "", "", false
+	}
+	return project, location, true
+}
 
 // Finding is one agent found: a kind, a key stable across imports and scans,
 // and untrusted attributes.
