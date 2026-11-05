@@ -3084,6 +3084,60 @@
         }
       }
     },
+    "/pantherclaw.v1.AuthorityService/StartFederatedCall": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.AuthorityService"
+        ],
+        "summary": "StartFederatedCall",
+        "description": "StartFederatedCall admits a trusted peer org's agent's request to the\n gateway's federation face (G0 M35 D1024c): it verifies the pap-fed+jwt\n against an ACTIVE trust's pinned keys and the exact request (POST, htu,\n body digest), consumes its jti once, needs the peer agent's federated\n agent (issued by a cross-org grant), ensures the day's federation run,\n stores the token as the IN receipt and returns a call valid for 60\n seconds that Authorize uses once. Anything else is\n FEDERATION_NOT_TRUSTED, FEDERATION_TOKEN_INVALID or FEDERATION_REPLAY.\n permission: gateway.authorize",
+        "operationId": "pantherclaw.v1.AuthorityService.StartFederatedCall",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.StartFederatedCallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.StartFederatedCallResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.ApprovalService/ListApprovalRequests": {
       "post": {
         "tags": [
@@ -42295,6 +42349,22 @@
                 "type": "null"
               }
             ]
+          },
+          "federationCallId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "federation_call_id",
+            "description": "Channel federation only (G0 M35 D1024c): the call StartFederatedCall\n admitted, instead of workload credentials. Single use; the action must\n name its run, agent instance and listing, and the call's body digest\n and URL must be the request's.",
+            "anyOf": [
+              {
+                "format": "uuid"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
           }
         },
         "title": "AuthorizeRequest",
@@ -43879,6 +43949,93 @@
         "title": "ReportUnknownWorkloadResponse",
         "additionalProperties": false,
         "description": "ReportUnknownWorkloadResponse says what was recorded."
+      },
+      "pantherclaw.v1.StartFederatedCallRequest": {
+        "type": "object",
+        "properties": {
+          "credential": {
+            "type": "string",
+            "title": "credential",
+            "maxLength": 8192,
+            "minLength": 1,
+            "description": "The token from \"Authorization: PAP-Fed \u003ctoken\u003e\"."
+          },
+          "bodySha256": {
+            "type": "string",
+            "title": "body_sha256",
+            "maxLength": 32,
+            "minLength": 32,
+            "format": "byte",
+            "description": "SHA-256 of the raw request body, computed before any parsing."
+          },
+          "htu": {
+            "type": "string",
+            "title": "htu",
+            "maxLength": 2048,
+            "minLength": 9,
+            "pattern": "^https://",
+            "description": "The request URL from the gateway's configured federation face URL plus\n /fed/a2a/{listing}, never from the Host header."
+          },
+          "listing": {
+            "type": "string",
+            "title": "listing",
+            "pattern": "^[a-z0-9-]{1,63}$",
+            "description": "The listing the URL names."
+          }
+        },
+        "title": "StartFederatedCallRequest",
+        "additionalProperties": false,
+        "description": "StartFederatedCallRequest is the peer's request as the gateway received it.",
+        "required": [
+          "credential",
+          "bodySha256",
+          "htu",
+          "listing"
+        ]
+      },
+      "pantherclaw.v1.StartFederatedCallResponse": {
+        "type": "object",
+        "properties": {
+          "callId": {
+            "type": "string",
+            "title": "call_id"
+          },
+          "runId": {
+            "type": "string",
+            "title": "run_id"
+          },
+          "agentId": {
+            "type": "string",
+            "title": "agent_id",
+            "description": "The peer agent's federated agent and its instance in this org."
+          },
+          "instanceId": {
+            "type": "string",
+            "title": "instance_id"
+          },
+          "env": {
+            "type": "string",
+            "title": "env",
+            "description": "Its environment."
+          },
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "description": "The listing's a2a connection (the action's connection)."
+          },
+          "peerActionId": {
+            "type": "string",
+            "title": "peer_action_id",
+            "description": "The peer's own action id (pap.action), for the receipt."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "StartFederatedCallResponse",
+        "additionalProperties": false,
+        "description": "StartFederatedCallResponse is the admitted call; the gateway maps the\n request with these ids."
       },
       "pantherclaw.v1.VerifyWorkloadRequest": {
         "type": "object",

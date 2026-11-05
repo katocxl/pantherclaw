@@ -52,6 +52,9 @@ const (
 	// AuthorityServiceRecordFederationReceiptProcedure is the procedure name of the AuthorityService's
 	// RecordFederationReceipt RPC.
 	AuthorityServiceRecordFederationReceiptProcedure = "/pantherclaw.v1.AuthorityService/RecordFederationReceipt"
+	// AuthorityServiceStartFederatedCallProcedure is the procedure name of the AuthorityService's
+	// StartFederatedCall RPC.
+	AuthorityServiceStartFederatedCallProcedure = "/pantherclaw.v1.AuthorityService/StartFederatedCall"
 )
 
 var (
@@ -118,6 +121,13 @@ var (
 			Procedure:  AuthorityServiceRecordFederationReceiptProcedure,
 		}
 	})
+	authorityServiceStartFederatedCallSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_authority_proto.Services().ByName("AuthorityService").Methods().ByName("StartFederatedCall"),
+			Procedure:  AuthorityServiceStartFederatedCallProcedure,
+		}
+	})
 )
 
 // AuthorityServiceClient is a client for the pantherclaw.v1.AuthorityService service.
@@ -171,6 +181,16 @@ type AuthorityServiceClient interface {
 	// HELD fails the dispatch's outcome with PEER_DENIED or PEER_HELD.
 	// permission: gateway.dispatch
 	RecordFederationReceipt(context.Context, *v1.RecordFederationReceiptRequest) (*v1.RecordFederationReceiptResponse, error)
+	// StartFederatedCall admits a trusted peer org's agent's request to the
+	// gateway's federation face (G0 M35 D1024c): it verifies the pap-fed+jwt
+	// against an ACTIVE trust's pinned keys and the exact request (POST, htu,
+	// body digest), consumes its jti once, needs the peer agent's federated
+	// agent (issued by a cross-org grant), ensures the day's federation run,
+	// stores the token as the IN receipt and returns a call valid for 60
+	// seconds that Authorize uses once. Anything else is
+	// FEDERATION_NOT_TRUSTED, FEDERATION_TOKEN_INVALID or FEDERATION_REPLAY.
+	// permission: gateway.authorize
+	StartFederatedCall(context.Context, *v1.StartFederatedCallRequest) (*v1.StartFederatedCallResponse, error)
 }
 
 // NewAuthorityServiceClient constructs a client for the pantherclaw.v1.AuthorityService service.
@@ -230,6 +250,16 @@ type AuthorityServiceHandler interface {
 	// HELD fails the dispatch's outcome with PEER_DENIED or PEER_HELD.
 	// permission: gateway.dispatch
 	RecordFederationReceipt(context.Context, *v1.RecordFederationReceiptRequest) (*v1.RecordFederationReceiptResponse, error)
+	// StartFederatedCall admits a trusted peer org's agent's request to the
+	// gateway's federation face (G0 M35 D1024c): it verifies the pap-fed+jwt
+	// against an ACTIVE trust's pinned keys and the exact request (POST, htu,
+	// body digest), consumes its jti once, needs the peer agent's federated
+	// agent (issued by a cross-org grant), ensures the day's federation run,
+	// stores the token as the IN receipt and returns a call valid for 60
+	// seconds that Authorize uses once. Anything else is
+	// FEDERATION_NOT_TRUSTED, FEDERATION_TOKEN_INVALID or FEDERATION_REPLAY.
+	// permission: gateway.authorize
+	StartFederatedCall(context.Context, *v1.StartFederatedCallRequest) (*v1.StartFederatedCallResponse, error)
 }
 
 // RegisterAuthorityServiceHandler registers svc as the pantherclaw.v1.AuthorityService
@@ -246,6 +276,7 @@ func RegisterAuthorityServiceHandler(server *connect.Server, svc AuthorityServic
 		connect.Method{Spec: authorityServiceRecordToolObservationSpec(), Handler: adapter.recordToolObservation},
 		connect.Method{Spec: authorityServiceIssueFederationTokenSpec(), Handler: adapter.issueFederationToken},
 		connect.Method{Spec: authorityServiceRecordFederationReceiptSpec(), Handler: adapter.recordFederationReceipt},
+		connect.Method{Spec: authorityServiceStartFederatedCallSpec(), Handler: adapter.startFederatedCall},
 	)
 }
 
@@ -286,6 +317,10 @@ func (UnimplementedAuthorityServiceHandler) IssueFederationToken(context.Context
 
 func (UnimplementedAuthorityServiceHandler) RecordFederationReceipt(context.Context, *v1.RecordFederationReceiptRequest) (*v1.RecordFederationReceiptResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AuthorityService.RecordFederationReceipt is not implemented")
+}
+
+func (UnimplementedAuthorityServiceHandler) StartFederatedCall(context.Context, *v1.StartFederatedCallRequest) (*v1.StartFederatedCallResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AuthorityService.StartFederatedCall is not implemented")
 }
 
 type authorityServiceClient struct {
@@ -359,6 +394,14 @@ func (c *authorityServiceClient) IssueFederationToken(ctx context.Context, req *
 func (c *authorityServiceClient) RecordFederationReceipt(ctx context.Context, req *v1.RecordFederationReceiptRequest) (*v1.RecordFederationReceiptResponse, error) {
 	var res v1.RecordFederationReceiptResponse
 	if err := c.client.CallUnary(ctx, authorityServiceRecordFederationReceiptSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *authorityServiceClient) StartFederatedCall(ctx context.Context, req *v1.StartFederatedCallRequest) (*v1.StartFederatedCallResponse, error) {
+	var res v1.StartFederatedCallResponse
+	if err := c.client.CallUnary(ctx, authorityServiceStartFederatedCallSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -468,6 +511,18 @@ func (h authorityServiceHandler) recordFederationReceipt(ctx context.Context, _ 
 		return err
 	}
 	res, err := h.svc.RecordFederationReceipt(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h authorityServiceHandler) startFederatedCall(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartFederatedCallRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartFederatedCall(ctx, &req)
 	if err != nil {
 		return err
 	}

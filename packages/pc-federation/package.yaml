@@ -60,7 +60,7 @@ definitions:
         method: SendMessage
     mappings:
       - channel: federation
-        method: message/send
+        method: SendMessage
         route: federation-send
         extract:
           target_id: path.listing
@@ -97,7 +97,7 @@ definitions:
         method: GetTask
     mappings:
       - channel: federation
-        method: tasks/get
+        method: GetTask
         route: federation-task-get
         extract:
           target_id: path.listing
@@ -137,7 +137,7 @@ definitions:
         method: CancelTask
     mappings:
       - channel: federation
-        method: tasks/cancel
+        method: CancelTask
         route: federation-task-cancel
         extract:
           target_id: path.listing

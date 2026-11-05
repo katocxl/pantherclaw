@@ -56,6 +56,19 @@ func (q *Queries) ConfirmFederationTrustLocal(ctx context.Context, arg ConfirmFe
 	return err
 }
 
+const deleteExpiredFederationCalls = `-- name: DeleteExpiredFederationCalls :execrows
+DELETE FROM pc.federation_calls
+WHERE org_id = $1 AND expires_at < now() - interval '1 day'
+`
+
+func (q *Queries) DeleteExpiredFederationCalls(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredFederationCalls, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredFederationReplay = `-- name: DeleteExpiredFederationReplay :execrows
 DELETE FROM pc.federation_replay
 WHERE org_id = $1 AND expires_at < now()
@@ -155,6 +168,70 @@ func (q *Queries) GetActiveFederationRun(ctx context.Context, arg GetActiveFeder
 	)
 	var i GetActiveFederationRunRow
 	err := row.Scan(&i.ID, &i.GrantID, &i.ExpiresAt)
+	return i, err
+}
+
+const getFederationAgent = `-- name: GetFederationAgent :one
+SELECT fa.org_id, fa.trust_id, fa.peer_agent, fa.agent_id, fa.instance_id, fa.created_by, fa.created_at, a.state AS agent_state, a.environment_id AS environment_id
+FROM pc.federation_agents fa
+JOIN pc.agents a ON a.org_id = fa.org_id AND a.id = fa.agent_id
+WHERE fa.org_id = $1 AND fa.trust_id = $2 AND fa.peer_agent = $3
+`
+
+type GetFederationAgentRow struct {
+	OrgID         ids.OrgID
+	TrustID       ids.UUID
+	PeerAgent     string
+	AgentID       ids.UUID
+	InstanceID    ids.UUID
+	CreatedBy     string
+	CreatedAt     time.Time
+	AgentState    string
+	EnvironmentID *ids.UUID
+}
+
+func (q *Queries) GetFederationAgent(ctx context.Context, orgID ids.OrgID, trustID ids.UUID, peerAgent string) (GetFederationAgentRow, error) {
+	row := q.db.QueryRow(ctx, getFederationAgent, orgID, trustID, peerAgent)
+	var i GetFederationAgentRow
+	err := row.Scan(
+		&i.OrgID,
+		&i.TrustID,
+		&i.PeerAgent,
+		&i.AgentID,
+		&i.InstanceID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.AgentState,
+		&i.EnvironmentID,
+	)
+	return i, err
+}
+
+const getFederationCallOfAction = `-- name: GetFederationCallOfAction :one
+SELECT org_id, id, trust_id, peer_agent, run_id, agent_id, instance_id, listing, htu, body_sha256, receipt_id, created_at, expires_at, used_at, action_id FROM pc.federation_calls
+WHERE org_id = $1 AND action_id = $2
+`
+
+func (q *Queries) GetFederationCallOfAction(ctx context.Context, orgID ids.OrgID, actionID *ids.UUID) (PcFederationCall, error) {
+	row := q.db.QueryRow(ctx, getFederationCallOfAction, orgID, actionID)
+	var i PcFederationCall
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.TrustID,
+		&i.PeerAgent,
+		&i.RunID,
+		&i.AgentID,
+		&i.InstanceID,
+		&i.Listing,
+		&i.Htu,
+		&i.BodySha256,
+		&i.ReceiptID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.ActionID,
+	)
 	return i, err
 }
 
@@ -275,6 +352,101 @@ func (q *Queries) GetOrgName(ctx context.Context, orgID ids.OrgID) (string, erro
 	var name string
 	err := row.Scan(&name)
 	return name, err
+}
+
+const insertFederatedInstance = `-- name: InsertFederatedInstance :exec
+INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, decided_by, decided_at)
+VALUES ($1, $2, $3, $4, '\x7b7d'::bytea, 'ADMITTED', 'federation',
+        $5, now())
+`
+
+type InsertFederatedInstanceParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	AgentID   ids.UUID
+	Jkt       string
+	DecidedBy *string
+}
+
+// The federated agent's one instance (D1024c): ADMITTED, no key; its jkt
+// is a synthetic digest no key has, and Identify refuses it for PAP/1.
+func (q *Queries) InsertFederatedInstance(ctx context.Context, arg InsertFederatedInstanceParams) error {
+	_, err := q.db.Exec(ctx, insertFederatedInstance,
+		arg.OrgID,
+		arg.ID,
+		arg.AgentID,
+		arg.Jkt,
+		arg.DecidedBy,
+	)
+	return err
+}
+
+const insertFederationAgent = `-- name: InsertFederationAgent :exec
+INSERT INTO pc.federation_agents (org_id, trust_id, peer_agent, agent_id, instance_id, created_by)
+VALUES ($1, $2, $3, $4, $5,
+        $6)
+`
+
+type InsertFederationAgentParams struct {
+	OrgID      ids.OrgID
+	TrustID    ids.UUID
+	PeerAgent  string
+	AgentID    ids.UUID
+	InstanceID ids.UUID
+	CreatedBy  string
+}
+
+func (q *Queries) InsertFederationAgent(ctx context.Context, arg InsertFederationAgentParams) error {
+	_, err := q.db.Exec(ctx, insertFederationAgent,
+		arg.OrgID,
+		arg.TrustID,
+		arg.PeerAgent,
+		arg.AgentID,
+		arg.InstanceID,
+		arg.CreatedBy,
+	)
+	return err
+}
+
+const insertFederationCall = `-- name: InsertFederationCall :exec
+INSERT INTO pc.federation_calls (org_id, id, trust_id, peer_agent, run_id, agent_id, instance_id, listing, htu,
+                                 body_sha256, receipt_id, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        $12)
+`
+
+type InsertFederationCallParams struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	TrustID    ids.UUID
+	PeerAgent  string
+	RunID      ids.UUID
+	AgentID    ids.UUID
+	InstanceID ids.UUID
+	Listing    string
+	Htu        string
+	BodySha256 []byte
+	ReceiptID  ids.UUID
+	ExpiresAt  time.Time
+}
+
+func (q *Queries) InsertFederationCall(ctx context.Context, arg InsertFederationCallParams) error {
+	_, err := q.db.Exec(ctx, insertFederationCall,
+		arg.OrgID,
+		arg.ID,
+		arg.TrustID,
+		arg.PeerAgent,
+		arg.RunID,
+		arg.AgentID,
+		arg.InstanceID,
+		arg.Listing,
+		arg.Htu,
+		arg.BodySha256,
+		arg.ReceiptID,
+		arg.ExpiresAt,
+	)
+	return err
 }
 
 const insertFederationKey = `-- name: InsertFederationKey :exec
@@ -419,17 +591,18 @@ func (q *Queries) InsertFederationReplay(ctx context.Context, arg InsertFederati
 }
 
 const insertFederationRun = `-- name: InsertFederationRun :exec
-INSERT INTO pc.runs (org_id, id, agent_id, environment_id, principal_source, grant_id, task_ref, expires_at,
+INSERT INTO pc.runs (org_id, id, agent_id, instance_id, environment_id, principal_source, grant_id, task_ref, expires_at,
                      federation_trust_id, peer_org_id, peer_agent, federation_day)
-VALUES ($1, $2, $3, $4, 'federation', $5,
-        $6, $7, $8, $9,
-        $10, $11::date)
+VALUES ($1, $2, $3, $4, $5, 'federation', $6,
+        $7, $8, $9, $10,
+        $11, $12::date)
 `
 
 type InsertFederationRunParams struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
 	AgentID           ids.UUID
+	InstanceID        *ids.UUID
 	EnvironmentID     ids.UUID
 	GrantID           *ids.UUID
 	TaskRef           string
@@ -445,6 +618,7 @@ func (q *Queries) InsertFederationRun(ctx context.Context, arg InsertFederationR
 		arg.OrgID,
 		arg.ID,
 		arg.AgentID,
+		arg.InstanceID,
 		arg.EnvironmentID,
 		arg.GrantID,
 		arg.TaskRef,
@@ -545,6 +719,40 @@ func (q *Queries) ListCrossOrgGrantsOfPeer(ctx context.Context, orgID ids.OrgID,
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFederationAgentsOfTrust = `-- name: ListFederationAgentsOfTrust :many
+SELECT org_id, trust_id, peer_agent, agent_id, instance_id, created_by, created_at FROM pc.federation_agents
+WHERE org_id = $1 AND trust_id = $2
+ORDER BY created_at, peer_agent
+`
+
+func (q *Queries) ListFederationAgentsOfTrust(ctx context.Context, orgID ids.OrgID, trustID ids.UUID) ([]PcFederationAgent, error) {
+	rows, err := q.db.Query(ctx, listFederationAgentsOfTrust, orgID, trustID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcFederationAgent{}
+	for rows.Next() {
+		var i PcFederationAgent
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.TrustID,
+			&i.PeerAgent,
+			&i.AgentID,
+			&i.InstanceID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1103,4 +1311,34 @@ func (q *Queries) UpdateFederationTrustPeer(ctx context.Context, arg UpdateFeder
 		arg.ID,
 	)
 	return err
+}
+
+const useFederationCall = `-- name: UseFederationCall :one
+UPDATE pc.federation_calls SET used_at = now(), action_id = $1
+WHERE org_id = $2 AND id = $3 AND used_at IS NULL AND expires_at > now()
+RETURNING org_id, id, trust_id, peer_agent, run_id, agent_id, instance_id, listing, htu, body_sha256, receipt_id, created_at, expires_at, used_at, action_id
+`
+
+// Authorize's single use of an admitted call (D1024c).
+func (q *Queries) UseFederationCall(ctx context.Context, actionID *ids.UUID, orgID ids.OrgID, iD ids.UUID) (PcFederationCall, error) {
+	row := q.db.QueryRow(ctx, useFederationCall, actionID, orgID, iD)
+	var i PcFederationCall
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.TrustID,
+		&i.PeerAgent,
+		&i.RunID,
+		&i.AgentID,
+		&i.InstanceID,
+		&i.Listing,
+		&i.Htu,
+		&i.BodySha256,
+		&i.ReceiptID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.ActionID,
+	)
+	return i, err
 }
