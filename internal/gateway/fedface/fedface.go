@@ -9,8 +9,9 @@
 //     signed with our org's federation key through the server
 //     (FederationService.SignListingCard). It is public: a peer checks it
 //     against the digest our federation document lists (D1022).
-//   - POST /fed/a2a/{listing} takes JSON-RPC 2.0 message/send, tasks/get
-//     and tasks/cancel; any other method is refused with
+//   - POST /fed/a2a/{listing} takes JSON-RPC 2.0 SendMessage, GetTask and
+//     CancelTask (A2A v1, D1024b), and forwards the body unchanged once
+//     decided; any other method is refused with
 //     FEDERATION_METHOD_NOT_DECIDED (-32601).
 //
 // A browser never calls this face: a request with an Origin header is
@@ -48,11 +49,12 @@ const (
 // prefix is the face's path prefix.
 const prefix = "/fed/a2a/"
 
-// The JSON-RPC methods the face decides (D1024).
+// The JSON-RPC methods the face decides: our A2A v1 names, as internal/a2a
+// and the agent-facing face use (D1024b).
 const (
-	MethodSend   = "message/send"
-	MethodGet    = "tasks/get"
-	MethodCancel = "tasks/cancel"
+	MethodSend   = wire.MethodSendMessage
+	MethodGet    = wire.MethodGetTask
+	MethodCancel = wire.MethodCancelTask
 )
 
 // The pc.federation operations each method maps to (D1024).
@@ -248,7 +250,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case MethodCancel:
 		c.op = OpCancel
 	default:
-		h.fail(w, c, &faceError{status: http.StatusOK, rpc: wire.CodeMethodNotFound, reason: CodeMethodNotDecided, message: "this method is not taken through federation: use message/send, tasks/get or tasks/cancel"})
+		h.fail(w, c, &faceError{status: http.StatusOK, rpc: wire.CodeMethodNotFound, reason: CodeMethodNotDecided, message: "this method is not taken through federation: use SendMessage, GetTask or CancelTask"})
 		return
 	}
 	h.write(w, c, h.decide(ctx, c))
