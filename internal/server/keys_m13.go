@@ -72,7 +72,12 @@ type rotation struct {
 }
 
 var (
-	rotateReceipts = rotation{name: "keys rotate-receipts", purposes: []keys.Purpose{keys.PurposeReceipts}}
+	// The receipts_pq co-signing key rotates with the receipts key when it
+	// has one (G0 M35 D1042).
+	rotateReceipts = rotation{
+		name: "keys rotate-receipts", purposes: []keys.Purpose{keys.PurposeReceipts},
+		optional: []keys.Purpose{keys.PurposeReceiptsPQ},
+	}
 	// The anchored global root is its own ceremony (HR-195), never rotated
 	// here.
 	rotateEvidence = rotation{

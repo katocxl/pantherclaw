@@ -116,6 +116,7 @@ func (s *Service) ListAnchors(ctx context.Context, size int32, token string) (An
 type anchored struct {
 	anchor *bundle.Anchor
 	note   []byte
+	id     ids.UUID // the anchor (G0 M35 D1041: its leaf in the root log)
 }
 
 // latestAnchor returns the org's newest anchor of a checkpoint of at most
@@ -134,7 +135,7 @@ func latestAnchor(ctx context.Context, q *dbq.Queries, org ids.OrgID, maxSize ui
 	for i := 0; i < len(r.Leaves); i += merkle.HashSize {
 		leaves = append(leaves, r.Leaves[i:i+merkle.HashSize])
 	}
-	return &anchored{note: r.Note, anchor: &bundle.Anchor{
+	return &anchored{note: r.Note, id: r.AnchorID, anchor: &bundle.Anchor{
 		Checkpoint: uint64(r.CheckpointSize), Nonce: r.Nonce, Leaves: leaves, //nolint:gosec // G115: > 0
 		Statement: r.Statement, Signature: r.Signature, RekorEntry: jsontext.Value(r.RekorEntry), Timestamp: r.TimestampToken,
 	}}, nil

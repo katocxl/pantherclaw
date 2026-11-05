@@ -75,7 +75,11 @@ func registerEvidenceWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool, key
 	if err := anchoring.Register(reg, anchors); err != nil {
 		return nil, err
 	}
-	return append(periodic, anchoring.PeriodicJobs()...), nil
+	trail, err := registerTrailWorkers(reg, cfg, pool, keyReg, anchors, log) // G0 M35 D1040, D1041
+	if err != nil {
+		return nil, err
+	}
+	return append(append(periodic, anchoring.PeriodicJobs()...), trail...), nil
 }
 
 // Request timeouts of the anchoring clients: Rekor v2 answers once a
@@ -91,6 +95,9 @@ const (
 // configured log key and origin and the authority's chain.
 func newAnchoring(cfg *Config, pool *db.Pool, keyReg *keys.Registry, log *slog.Logger) (*anchoring.Service, error) {
 	a := cfg.Evidence.Anchoring
+	if a.tufTrust() { // G0 M35 D1040
+		return newTUFAnchoring(cfg, pool, keyReg, log)
+	}
 	rawKey, err := os.ReadFile(a.Rekor.PublicKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("evidence.anchoring.rekor.public_key_file: %w", err)

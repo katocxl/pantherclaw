@@ -46,7 +46,8 @@ func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyPro
 	return authority.New(authority.Config{
 		Decider: &finalize.Authority{
 			Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool, cfg.CEL), Limits: cfg.CEL}, Store: store,
-			Receipts: receipts, Permits: permits, ActionTokens: actionTokens, PermitTTL: cfg.Authority.PermitTTL.D(), Log: log,
+			Receipts: receiptsSigner(cfg.Evidence.MLDSACosign, reg, receipts), // G0 M35 D1042
+			Permits:  permits, ActionTokens: actionTokens, PermitTTL: cfg.Authority.PermitTTL.D(), Log: log,
 			Inputs: replayInputs(pool, kp), Coverage: coverageClaims{svc: &covapp.Service{Pool: pool, Verifier: covapp.ConnectionTests{}}},
 			ClaimTimeout: claimTimeoutOf(cfg),
 		},

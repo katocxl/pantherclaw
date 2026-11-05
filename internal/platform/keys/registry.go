@@ -52,7 +52,9 @@ func Purposes() []Purpose {
 }
 
 // AltPurposes lists the purposes whose keys use another algorithm.
-func AltPurposes() []Purpose { return []Purpose{PurposeAnchors, PurposeCheckpointsPQ, PurposeReceiptsPQ} }
+func AltPurposes() []Purpose {
+	return []Purpose{PurposeAnchors, PurposeCheckpointsPQ, PurposeReceiptsPQ}
+}
 
 // OrgPurposes lists the Ed25519 purposes whose keys belong to each
 // organization rather than to the platform: the platform registry never
