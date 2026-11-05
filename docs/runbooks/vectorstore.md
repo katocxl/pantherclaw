@@ -23,6 +23,7 @@ pclaw connection create kb --kind vectorstore --gateway <gw> --package pc.vector
   --writer <agent-id>
 ```
 
+- `--dimensions` is 1 to 12288, the most an embedding can carry (§4); a larger value is refused at create and update.
 - `--sslmode require` is accepted only with `--internal` and `--ca-file`, as for a Postgres connection.
 - **The endpoint is fixed after create.** Host, port, database, user, sslmode, CA and `--internal` cannot change; an update that changes them is refused `VECTORSTORE_ENDPOINT_IMMUTABLE`. To move the store, create a new connection.
 - Schema, table, dimensions, distance and writers can change with `pclaw connection update` (`--clear-writers` empties the list).

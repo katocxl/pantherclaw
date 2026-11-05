@@ -55922,10 +55922,10 @@
           "dimensions": {
             "type": "integer",
             "title": "dimensions",
-            "maximum": 16000,
+            "maximum": 12288,
             "minimum": 1,
             "format": "int32",
-            "description": "The embedding's dimensions (1..16000)."
+            "description": "The embedding's dimensions (1..12288)."
           },
           "distance": {
             "type": "string",
@@ -56030,10 +56030,10 @@
           "dimensions": {
             "type": "integer",
             "title": "dimensions",
-            "maximum": 16000,
+            "maximum": 12288,
             "minimum": 1,
             "format": "int32",
-            "description": "The embedding's dimensions (1..16000)."
+            "description": "The embedding's dimensions (1..12288)."
           },
           "distance": {
             "type": "string",
