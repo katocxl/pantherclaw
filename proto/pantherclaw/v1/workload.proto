@@ -87,9 +87,16 @@ enum AttestationKind {
   // A Microsoft Entra Agent ID access token for the operator-pinned Entra
   // app (identity.entra_apps).
   ATTESTATION_KIND_ENTRA_AGENT_ID = 8;
+  // L3 (G0 M35 D1030): a compact JWS signed by an X.509-SVID's key, with the
+  // SVID chain in x5c and the payload
+  // pantherclaw-l3:v1:<org>:<nonce>:<jkt> (the request's nonce and key).
+  ATTESTATION_KIND_SPIFFE_X509 = 9;
+  // L3 (G0 M35 D1030): a GCE identity token (format=full) with audience
+  // pantherclaw:<org>:l3:<nonce>:<jkt> (the request's nonce and key).
+  ATTESTATION_KIND_GCP_INSTANCE = 10;
 }
 
-// Attestation is a platform token offered as L2 evidence. It is verified,
+// Attestation is a platform token offered as L2 or L3 evidence. It is verified,
 // consumed (single use) and never stored or logged.
 message Attestation {
   // Which preset verifies it.
@@ -211,10 +218,10 @@ message DelegateGrantRequest {
   bytes limits = 7 [(buf.validate.field).bytes.max_len = 65536];
   // Delegation settings; depth below the parent's.
   GrantDelegation delegation = 8;
-  // Lowest attestation level (0-2); at least the parent's.
+  // Lowest attestation level (0-3; L3 since G0 M35 D1030); at least the parent's.
   int32 min_attestation_level = 9 [(buf.validate.field).int32 = {
     gte: 0
-    lte: 2
+    lte: 3
   }];
   // Data flows allowed after a sensitive read (G0 M16 D75, D94); each must
   // be covered by one of the parent grant's, and none allows no flow.

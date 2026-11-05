@@ -60,12 +60,13 @@ func (c ExecutionContext) Valid() bool {
 // MaxAttestationLevel is the highest PAP/1 attestation level an instance of
 // an agent in context c can hold. Desktop workloads keep their keys in an
 // OS key store that same-user malware can read, so they are capped at L1
-// whatever they present (HR-092, ADR-0013).
+// whatever they present (HR-092, ADR-0013). Other contexts reach L3 with an
+// infrastructure attestation (G0 M35 D1030).
 func (c ExecutionContext) MaxAttestationLevel() int {
 	if c == ContextDesktop {
 		return 1
 	}
-	return 2
+	return 3
 }
 
 // Details are the accountable details of a claimed agent (F016, F574).

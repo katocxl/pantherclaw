@@ -111,6 +111,11 @@ enum IssuerKind {
   ISSUER_KIND_AZURE_MI = 7;
   // Microsoft Entra Agent ID (agent identity acting autonomously).
   ISSUER_KIND_ENTRA_AGENT_ID = 8;
+  // L3: an X.509-SVID signing this enrollment's key and nonce (HR-778).
+  ISSUER_KIND_SPIFFE_X509 = 9;
+  // L3: a GCE identity token bound to this enrollment's key and nonce
+  // (HR-779).
+  ISSUER_KIND_GCP_INSTANCE = 10;
 }
 
 // IssuerEntryState is the state of one revision.
@@ -137,7 +142,7 @@ enum GithubJobType {
 
 // Verification is an instance's verification metadata (F031).
 message Verification {
-  // Attestation level now in force (1 or 2).
+  // Attestation level now in force (1, 2 or 3).
   int32 level = 1;
   // How it was verified: "fingerprint" or the preset kind ("github_actions",
   // "kubernetes", "gitlab_ci", …).
@@ -303,6 +308,18 @@ message GcpBinding {
   string instance_id = 3 [(buf.validate.field).string.pattern = "^$|^[1-9][0-9]{0,29}$"];
 }
 
+// GcpInstanceBinding binds GCE identity tokens to one Compute Engine project
+// and optionally one instance and zone (L3, HR-779). The token's audience
+// is pantherclaw:<org>:l3:<nonce>:<jkt> of the request it arrives with.
+message GcpInstanceBinding {
+  // Compute Engine project id (google.compute_engine.project_id).
+  string project_id = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"];
+  // Optional numeric Compute Engine instance id.
+  string instance_id = 2 [(buf.validate.field).string.pattern = "^$|^[1-9][0-9]{0,29}$"];
+  // Optional zone, such as us-central1-a.
+  string zone = 3 [(buf.validate.field).string.pattern = "^$|^[a-z]+-[a-z]+[0-9]+-[a-z]$"];
+}
+
 // AwsBinding binds AWS STS caller identities to one IAM role (HR-464):
 // sessions of that role in that account attest.
 message AwsBinding {
@@ -398,6 +415,10 @@ message IssuerRevision {
     AwsBinding aws = 23;
     AzureMiBinding azure_mi = 24;
     EntraAgentBinding entra_agent = 25;
+    // L3 (G0 M35 D1030): the X.509-SVID's trust domain and SPIFFE ID.
+    SpiffeBinding spiffe_x509 = 27;
+    // L3 (G0 M35 D1030).
+    GcpInstanceBinding gcp_instance = 28;
   }
   // Admits matching instances without an owner.
   bool auto_admit = 11;
@@ -543,8 +564,8 @@ message RevokeInstanceResponse {
 message ProposeIssuerEntryRequest {
   option (buf.validate.message).cel = {
     id: "run_grant_kubernetes_only"
-    message: "run_grant_id is only for a kubernetes, gcp, aws, azure_mi or entra_agent binding"
-    expression: "this.run_grant_id == '' || has(this.kubernetes) || has(this.gcp) || has(this.aws) || has(this.azure_mi) || has(this.entra_agent)"
+    message: "run_grant_id is only for a kubernetes, gcp, aws, azure_mi, entra_agent, spiffe_x509 or gcp_instance binding"
+    expression: "this.run_grant_id == '' || has(this.kubernetes) || has(this.gcp) || has(this.aws) || has(this.azure_mi) || has(this.entra_agent) || has(this.spiffe_x509) || has(this.gcp_instance)"
   };
   // Existing entry to revise; empty for a new entry.
   string entry_id = 1 [(buf.validate.field).string = {
@@ -572,6 +593,11 @@ message ProposeIssuerEntryRequest {
     AzureMiBinding azure_mi = 11;
     // Microsoft Entra Agent ID.
     EntraAgentBinding entra_agent = 12;
+    // L3 SPIFFE X.509-SVID (G0 M35 D1030): a trust domain from the server
+    // configuration (identity.spiffe_trust_domains) and one exact SPIFFE ID.
+    SpiffeBinding spiffe_x509 = 14;
+    // L3 GCE instance identity (G0 M35 D1030).
+    GcpInstanceBinding gcp_instance = 15;
   }
   // Admit matching instances without an owner (a widening when turned on).
   bool auto_admit = 5;

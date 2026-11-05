@@ -349,8 +349,8 @@ func (v *validator) ceiling(c *Ceiling) {
 	if ttl := c.PerGrant.TTL.D(); ttl <= 0 || ttl > MaxGrantTTL {
 		v.err(CodeLimitRange, at+"/per_grant/ttl", "a grant lasts at most 24h")
 	}
-	if c.PerGrant.MinAttestation < 0 || c.PerGrant.MinAttestation > 2 {
-		v.err(CodeLimitRange, at+"/per_grant/min_attestation", "min_attestation is 0, 1 or 2")
+	if c.PerGrant.MinAttestation < 0 || c.PerGrant.MinAttestation > 3 { // L3: G0 M35 D1030
+		v.err(CodeLimitRange, at+"/per_grant/min_attestation", "min_attestation is 0 to 3")
 	}
 	if err := c.PerGrant.Limits.ValidateOnGrant(); err != nil {
 		v.err(CodeLimitInvalid, at+"/per_grant/limits", "%v", err)

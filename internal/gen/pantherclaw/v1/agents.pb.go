@@ -845,7 +845,8 @@ type AgentSummary struct {
 	PendingInstances int32 `protobuf:"varint,4,opt,name=pending_instances,json=pendingInstances,proto3" json:"pending_instances,omitempty"`
 	// Admitted instances.
 	AdmittedInstances int32 `protobuf:"varint,5,opt,name=admitted_instances,json=admittedInstances,proto3" json:"admitted_instances,omitempty"`
-	// Highest attestation level among admitted instances (0 when none).
+	// Highest attestation level among admitted instances (0 when none, at
+	// most 3).
 	HighestAttestationLevel int32 `protobuf:"varint,6,opt,name=highest_attestation_level,json=highestAttestationLevel,proto3" json:"highest_attestation_level,omitempty"`
 	// Last successful verification of any instance.
 	LastVerifyTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_verify_time,json=lastVerifyTime,proto3" json:"last_verify_time,omitempty"`

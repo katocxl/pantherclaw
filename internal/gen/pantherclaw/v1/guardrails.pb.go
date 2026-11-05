@@ -383,7 +383,7 @@ type CreateEnvelopeRequest struct {
 	Limits []byte `protobuf:"bytes,5,opt,name=limits,proto3" json:"limits,omitempty"`
 	// Settings.
 	Settings *GuardrailSettings `protobuf:"bytes,6,opt,name=settings,proto3" json:"settings,omitempty"`
-	// Lowest attestation level (0-2).
+	// Lowest attestation level (0-3; L3 since G0 M35 D1030).
 	MinAttestationLevel int32 `protobuf:"varint,7,opt,name=min_attestation_level,json=minAttestationLevel,proto3" json:"min_attestation_level,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -531,7 +531,7 @@ type ReviseEnvelopeRequest struct {
 	Limits []byte `protobuf:"bytes,6,opt,name=limits,proto3" json:"limits,omitempty"`
 	// Settings.
 	Settings *GuardrailSettings `protobuf:"bytes,7,opt,name=settings,proto3" json:"settings,omitempty"`
-	// Lowest attestation level (0-2).
+	// Lowest attestation level (0-3; L3 since G0 M35 D1030).
 	MinAttestationLevel int32 `protobuf:"varint,8,opt,name=min_attestation_level,json=minAttestationLevel,proto3" json:"min_attestation_level,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -940,7 +940,7 @@ const file_pantherclaw_v1_guardrails_proto_rawDesc = "" +
 	"\frequirements\x18\x04 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x04R\frequirements\x12!\n" +
 	"\x06limits\x18\x05 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x04R\x06limits\x12=\n" +
 	"\bsettings\x18\x06 \x01(\v2!.pantherclaw.v1.GuardrailSettingsR\bsettings\x12=\n" +
-	"\x15min_attestation_level\x18\a \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\"N\n" +
+	"\x15min_attestation_level\x18\a \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x03(\x00R\x13minAttestationLevel\"N\n" +
 	"\x16CreateEnvelopeResponse\x124\n" +
 	"\benvelope\x18\x01 \x01(\v2\x18.pantherclaw.v1.EnvelopeR\benvelope\"\xeb\x02\n" +
 	"\x15ReviseEnvelopeRequest\x12\x18\n" +
@@ -952,7 +952,7 @@ const file_pantherclaw_v1_guardrails_proto_rawDesc = "" +
 	"\frequirements\x18\x05 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x04R\frequirements\x12!\n" +
 	"\x06limits\x18\x06 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x04R\x06limits\x12=\n" +
 	"\bsettings\x18\a \x01(\v2!.pantherclaw.v1.GuardrailSettingsR\bsettings\x12=\n" +
-	"\x15min_attestation_level\x18\b \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x02(\x00R\x13minAttestationLevel\"f\n" +
+	"\x15min_attestation_level\x18\b \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x03(\x00R\x13minAttestationLevel\"f\n" +
 	"\x16ReviseEnvelopeResponse\x124\n" +
 	"\benvelope\x18\x01 \x01(\v2\x18.pantherclaw.v1.EnvelopeR\benvelope\x12\x16\n" +
 	"\x06widens\x18\x02 \x01(\bR\x06widens\"e\n" +

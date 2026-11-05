@@ -36,10 +36,17 @@ const (
 	KindAWS        Kind = "aws_iam"
 	KindAzureMI    Kind = "azure_mi"
 	KindEntraAgent Kind = "entra_agent_id"
+	// The L3 "Infrastructure-attested" presets (G0 M35 D1030): their
+	// evidence is bound to the enrollment's PAP key and a fresh nonce.
+	KindSPIFFEX509  Kind = "spiffe_x509"
+	KindGCPInstance Kind = "gcp_instance"
 )
 
 // kinds are the presets this build implements.
-var kinds = []Kind{KindGitHub, KindKubernetes, KindGitLab, KindSPIFFE, KindGCP, KindAWS, KindAzureMI, KindEntraAgent}
+var kinds = []Kind{
+	KindGitHub, KindKubernetes, KindGitLab, KindSPIFFE, KindGCP, KindAWS, KindAzureMI, KindEntraAgent,
+	KindSPIFFEX509, KindGCPInstance,
+}
 
 // Known reports whether k is a preset this build implements. Anything else
 // is refused, never mapped to a default preset (HR-465).

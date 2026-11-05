@@ -39983,7 +39983,7 @@
             "type": "integer",
             "title": "highest_attestation_level",
             "format": "int32",
-            "description": "Highest attestation level among admitted instances (0 when none)."
+            "description": "Highest attestation level among admitted instances (0 when none, at\n most 3)."
           },
           "lastVerifyTime": {
             "title": "last_verify_time",
@@ -72733,10 +72733,10 @@
               "null"
             ],
             "title": "min_attestation_level",
-            "maximum": 2,
+            "maximum": 3,
             "minimum": 0,
             "format": "int32",
-            "description": "Lowest attestation level (0-2)."
+            "description": "Lowest attestation level (0-3; L3 since G0 M35 D1030)."
           }
         },
         "title": "CreateEnvelopeRequest",
@@ -73182,10 +73182,10 @@
               "null"
             ],
             "title": "min_attestation_level",
-            "maximum": 2,
+            "maximum": 3,
             "minimum": 0,
             "format": "int32",
-            "description": "Lowest attestation level (0-2)."
+            "description": "Lowest attestation level (0-3; L3 since G0 M35 D1030)."
           }
         },
         "title": "ReviseEnvelopeRequest",
@@ -73834,10 +73834,10 @@
               "null"
             ],
             "title": "min_attestation_level",
-            "maximum": 2,
+            "maximum": 3,
             "minimum": 0,
             "format": "int32",
-            "description": "Lowest attestation level (0-2)."
+            "description": "Lowest attestation level (0-3; L3 since G0 M35 D1030)."
           },
           "flows": {
             "type": [
@@ -74047,10 +74047,10 @@
               "null"
             ],
             "title": "min_attestation_level",
-            "maximum": 2,
+            "maximum": 3,
             "minimum": 0,
             "format": "int32",
-            "description": "Lowest attestation level (0-2)."
+            "description": "Lowest attestation level (0-3; L3 since G0 M35 D1030)."
           },
           "accessRequestId": {
             "type": [
@@ -75051,7 +75051,9 @@
           "ISSUER_KIND_GCP_WORKLOAD",
           "ISSUER_KIND_AWS_IAM",
           "ISSUER_KIND_AZURE_MI",
-          "ISSUER_KIND_ENTRA_AGENT_ID"
+          "ISSUER_KIND_ENTRA_AGENT_ID",
+          "ISSUER_KIND_SPIFFE_X509",
+          "ISSUER_KIND_GCP_INSTANCE"
         ],
         "description": "IssuerKind is a preset; only presets can be configured (HR-140)."
       },
@@ -75462,6 +75464,82 @@
         "x-pantherclaw-input-of": "pantherclaw.v1.GcpBinding",
         "required": [
           "serviceAccountId"
+        ]
+      },
+      "pantherclaw.v1.GcpInstanceBinding": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "title": "project_id",
+            "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
+            "description": "Compute Engine project id (google.compute_engine.project_id)."
+          },
+          "instanceId": {
+            "type": "string",
+            "title": "instance_id",
+            "pattern": "^$|^[1-9][0-9]{0,29}$",
+            "description": "Optional numeric Compute Engine instance id."
+          },
+          "zone": {
+            "type": "string",
+            "title": "zone",
+            "pattern": "^$|^[a-z]+-[a-z]+[0-9]+-[a-z]$",
+            "description": "Optional zone, such as us-central1-a."
+          }
+        },
+        "title": "GcpInstanceBinding",
+        "additionalProperties": false,
+        "description": "GcpInstanceBinding binds GCE identity tokens to one Compute Engine project\n and optionally one instance and zone (L3, HR-779). The token's audience\n is pantherclaw:\u003corg\u003e:l3:\u003cnonce\u003e:\u003cjkt\u003e of the request it arrives with."
+      },
+      "pantherclaw.v1.GcpInstanceBindingInput": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "title": "project_id",
+            "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
+            "description": "Compute Engine project id (google.compute_engine.project_id)."
+          },
+          "instanceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "instance_id",
+            "description": "Optional numeric Compute Engine instance id.",
+            "anyOf": [
+              {
+                "pattern": "^$|^[1-9][0-9]{0,29}$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          },
+          "zone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "zone",
+            "description": "Optional zone, such as us-central1-a.",
+            "anyOf": [
+              {
+                "pattern": "^$|^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "GcpInstanceBinding",
+        "additionalProperties": false,
+        "description": "GcpInstanceBinding binds GCE identity tokens to one Compute Engine project\n and optionally one instance and zone (L3, HR-779). The token's audience\n is pantherclaw:\u003corg\u003e:l3:\u003cnonce\u003e:\u003cjkt\u003e of the request it arrives with.",
+        "x-pantherclaw-input-of": "pantherclaw.v1.GcpInstanceBinding",
+        "required": [
+          "projectId"
         ]
       },
       "pantherclaw.v1.GetInstanceRequest": {
@@ -75986,6 +76064,19 @@
           },
           {
             "properties": {
+              "gcpInstance": {
+                "title": "gcp_instance",
+                "description": "L3 (G0 M35 D1030).",
+                "$ref": "#/components/schemas/pantherclaw.v1.GcpInstanceBinding"
+              }
+            },
+            "title": "gcp_instance",
+            "required": [
+              "gcpInstance"
+            ]
+          },
+          {
+            "properties": {
               "github": {
                 "title": "github",
                 "$ref": "#/components/schemas/pantherclaw.v1.GithubBinding"
@@ -76030,6 +76121,19 @@
             "title": "spiffe",
             "required": [
               "spiffe"
+            ]
+          },
+          {
+            "properties": {
+              "spiffeX509": {
+                "title": "spiffe_x509",
+                "description": "L3 (G0 M35 D1030): the X.509-SVID's trust domain and SPIFFE ID.",
+                "$ref": "#/components/schemas/pantherclaw.v1.SpiffeBinding"
+              }
+            },
+            "title": "spiffe_x509",
+            "required": [
+              "spiffeX509"
             ]
           }
         ],
@@ -76475,6 +76579,19 @@
           },
           {
             "properties": {
+              "gcpInstance": {
+                "title": "gcp_instance",
+                "description": "L3 GCE instance identity (G0 M35 D1030).",
+                "$ref": "#/components/schemas/pantherclaw.v1.GcpInstanceBindingInput"
+              }
+            },
+            "title": "gcp_instance",
+            "required": [
+              "gcpInstance"
+            ]
+          },
+          {
+            "properties": {
               "github": {
                 "title": "github",
                 "description": "GitHub Actions.",
@@ -76523,6 +76640,19 @@
             "title": "spiffe",
             "required": [
               "spiffe"
+            ]
+          },
+          {
+            "properties": {
+              "spiffeX509": {
+                "title": "spiffe_x509",
+                "description": "L3 SPIFFE X.509-SVID (G0 M35 D1030): a trust domain from the server\n configuration (identity.spiffe_trust_domains) and one exact SPIFFE ID.",
+                "$ref": "#/components/schemas/pantherclaw.v1.SpiffeBindingInput"
+              }
+            },
+            "title": "spiffe_x509",
+            "required": [
+              "spiffeX509"
             ]
           }
         ],
@@ -76584,7 +76714,7 @@
         },
         "title": "ProposeIssuerEntryRequest",
         "additionalProperties": false,
-        "description": "ProposeIssuerEntryRequest proposes a new entry or a new revision.\nrun_grant_id is only for a kubernetes, gcp, aws, azure_mi or entra_agent binding:\n```\nthis.run_grant_id == '' || has(this.kubernetes) || has(this.gcp) || has(this.aws) || has(this.azure_mi) || has(this.entra_agent)\n```\n\n",
+        "description": "ProposeIssuerEntryRequest proposes a new entry or a new revision.\nrun_grant_id is only for a kubernetes, gcp, aws, azure_mi, entra_agent, spiffe_x509 or gcp_instance binding:\n```\nthis.run_grant_id == '' || has(this.kubernetes) || has(this.gcp) || has(this.aws) || has(this.azure_mi) || has(this.entra_agent) || has(this.spiffe_x509) || has(this.gcp_instance)\n```\n\n",
         "required": [
           "agentId",
           "reason"
@@ -76733,7 +76863,7 @@
             "type": "integer",
             "title": "level",
             "format": "int32",
-            "description": "Attestation level now in force (1 or 2)."
+            "description": "Attestation level now in force (1, 2 or 3)."
           },
           "method": {
             "type": "string",
@@ -105410,7 +105540,9 @@
           "ATTESTATION_KIND_GCP_WORKLOAD",
           "ATTESTATION_KIND_AWS_IAM",
           "ATTESTATION_KIND_AZURE_MI",
-          "ATTESTATION_KIND_ENTRA_AGENT_ID"
+          "ATTESTATION_KIND_ENTRA_AGENT_ID",
+          "ATTESTATION_KIND_SPIFFE_X509",
+          "ATTESTATION_KIND_GCP_INSTANCE"
         ],
         "description": "AttestationKind names the preset an attestation token is for."
       },
@@ -105437,7 +105569,7 @@
         },
         "title": "Attestation",
         "additionalProperties": false,
-        "description": "Attestation is a platform token offered as L2 evidence. It is verified,\n consumed (single use) and never stored or logged.",
+        "description": "Attestation is a platform token offered as L2 or L3 evidence. It is verified,\n consumed (single use) and never stored or logged.",
         "required": [
           "kind",
           "token"
@@ -105525,10 +105657,10 @@
               "null"
             ],
             "title": "min_attestation_level",
-            "maximum": 2,
+            "maximum": 3,
             "minimum": 0,
             "format": "int32",
-            "description": "Lowest attestation level (0-2); at least the parent's."
+            "description": "Lowest attestation level (0-3; L3 since G0 M35 D1030); at least the parent's."
           },
           "flows": {
             "type": [

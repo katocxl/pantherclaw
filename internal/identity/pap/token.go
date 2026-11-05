@@ -31,7 +31,7 @@ type Token struct {
 	Environment ids.UUID
 	// JKT is the RFC 7638 thumbprint of the instance key (cnf.jkt).
 	JKT string
-	// Level is the attestation level in force (1 or 2).
+	// Level is the attestation level in force (1, 2 or 3).
 	Level int
 	// ReleaseState and ReleaseDigest describe the release identity; both
 	// empty when none is known.
@@ -74,7 +74,7 @@ type release struct {
 // Issue signs a workload token for t. It is valid from now until
 // min(now + MaxTokenTTL, notAfter): a token never outlives the attestation
 // behind its level (HR-143), so the caller passes the attestation's expiry
-// for L2 and the zero time otherwise.
+// for L2 and L3 and the zero time otherwise.
 func Issue(signer *jws.Signer, issuer string, t Token, now, notAfter time.Time) (string, Token, error) {
 	now = now.Truncate(time.Second)
 	exp := now.Add(MaxTokenTTL)
@@ -88,7 +88,7 @@ func Issue(signer *jws.Signer, issuer string, t Token, now, notAfter time.Time) 
 		return "", Token{}, fail(CodeInvalidToken, "incomplete instance")
 	case !jktPattern.MatchString(t.JKT):
 		return "", Token{}, fail(CodeInvalidToken, "jkt")
-	case t.Level != 1 && t.Level != 2:
+	case t.Level < 1 || t.Level > 3: // L3: PAP-1 §3.3, G0 M35 D1030
 		return "", Token{}, fail(CodeInvalidToken, "level")
 	case !exp.After(now):
 		return "", Token{}, fail(CodeAttestationLow, "attestation already expired")
@@ -146,7 +146,7 @@ func VerifyToken(v *jws.Verifier, issuer, compact string, now time.Time) (Token,
 		return Token{}, fail(CodeInvalidToken, "lifetime")
 	case !jktPattern.MatchString(c.Cnf.JKT):
 		return Token{}, fail(CodeInvalidToken, "cnf")
-	case c.PAP.Level != 1 && c.PAP.Level != 2:
+	case c.PAP.Level < 1 || c.PAP.Level > 3:
 		return Token{}, fail(CodeInvalidToken, "level")
 	}
 	inst, err := ParseInstance(c.Subject)

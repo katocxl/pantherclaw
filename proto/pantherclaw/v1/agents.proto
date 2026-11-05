@@ -274,7 +274,8 @@ message AgentSummary {
   int32 pending_instances = 4;
   // Admitted instances.
   int32 admitted_instances = 5;
-  // Highest attestation level among admitted instances (0 when none).
+  // Highest attestation level among admitted instances (0 when none, at
+  // most 3).
   int32 highest_attestation_level = 6;
   // Last successful verification of any instance.
   google.protobuf.Timestamp last_verify_time = 7;

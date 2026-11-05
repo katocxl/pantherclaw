@@ -35,10 +35,10 @@ func workloadCommands() map[string]command {
 	return map[string]command{
 		"workload init": {"workload init --key-file FILE", workloadInit},
 		"workload enroll": {
-			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR] [--org ID] [--declared-release sha256:…]",
+			"workload enroll --key-file FILE --server URL [--enrollment-token-file FILE] [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR | --attest spiffe-x509 --svid-cert FILE --svid-key FILE | --attest gcp-instance] [--org ID] [--declared-release sha256:…]",
 			workloadEnroll,
 		},
-		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR] [--declared-release sha256:…] [--out FILE]", workloadToken},
+		"workload token": {"workload token --key-file FILE [--github | --kubernetes-token FILE | --gitlab-token-env VAR | --spiffe-token FILE | --gcp | --aws | --azure-app APP_ID [--azure-client-id ID] | --entra-token-env VAR | --attest spiffe-x509 --svid-cert FILE --svid-key FILE | --attest gcp-instance] [--declared-release sha256:…] [--out FILE]", workloadToken},
 	}
 }
 
@@ -84,6 +84,8 @@ type attestationFlags struct {
 	azureApp   *string
 	azureID    *string
 	entraEnv   *string
+	// l3 are the L3 sources (G0 M35 D1030); see workload_l3.go.
+	l3 l3Flags
 }
 
 func declareAttestation(fs *flag.FlagSet) attestationFlags {
@@ -100,16 +102,17 @@ func declareAttestation(fs *flag.FlagSet) attestationFlags {
 		azureApp: fs.String("azure-app", "", "attest with an Azure managed identity token for this Entra app id (from identity.entra_apps)"),
 		azureID:  fs.String("azure-client-id", "", "with --azure-app: the client id of the user-assigned managed identity to use"),
 		entraEnv: fs.String("entra-token-env", "", "attest with the Entra Agent ID access token (for the pinned Entra app) in this environment variable"),
+		l3:       declareL3(fs),
 	}
 }
 
 // errAttestationSources is returned when more than one source is given.
-var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env, --spiffe-token, --gcp, --aws, --azure-app and --entra-token-env, not both")
+var errAttestationSources = errors.New("use one of --github, --kubernetes-token, --gitlab-token-env, --spiffe-token, --gcp, --aws, --azure-app, --entra-token-env and --attest, not both")
 
 // check refuses more than one attestation source.
 func (f attestationFlags) check() error {
 	n := 0
-	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != "", *f.gcp, *f.aws, *f.azureApp != "", *f.entraEnv != ""} {
+	for _, set := range []bool{*f.github, *f.kubernetes != "", *f.gitlabEnv != "", *f.spiffe != "", *f.gcp, *f.aws, *f.azureApp != "", *f.entraEnv != "", f.l3.set()} {
 		if set {
 			n++
 		}
@@ -117,7 +120,7 @@ func (f attestationFlags) check() error {
 	if n > 1 {
 		return errAttestationSources
 	}
-	return nil
+	return f.l3.check()
 }
 
 // attestation returns the platform token for org's audience, or nil.
@@ -126,6 +129,8 @@ func (f attestationFlags) attestation(ctx context.Context, a *app, org ids.OrgID
 		return nil, err
 	}
 	switch {
+	case f.l3.set():
+		return f.l3.attestation(ctx, a, org)
 	case *f.gitlabEnv != "":
 		tok := strings.TrimSpace(os.Getenv(*f.gitlabEnv))
 		if tok == "" {
@@ -270,20 +275,28 @@ func (a *app) workloadClient(server string, kf workloadclient.KeyFile) (pantherc
 // workloadClientAt is WorkloadService at server, signing with the key file's
 // key and sending token's workload token when token is not nil.
 func (a *app) workloadClientAt(server string, kf workloadclient.KeyFile, token func() string) (pantherclawv1connect.WorkloadServiceClient, error) {
+	wc, _, err := a.workloadClientTransport(server, kf, token)
+	return wc, err
+}
+
+// workloadClientTransport is workloadClientAt that also returns the signing
+// transport, whose nonce an L3 attestation binds (G0 M35 D1030).
+func (a *app) workloadClientTransport(server string, kf workloadclient.KeyFile, token func() string) (pantherclawv1connect.WorkloadServiceClient, *workloadclient.Transport, error) {
 	base, err := checkServer(server)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	key, err := kf.Key()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rt := a.http.Transport
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	hc := &http.Client{Timeout: a.http.Timeout, CheckRedirect: a.http.CheckRedirect, Transport: &workloadclient.Transport{Key: key, Base: rt, Token: token}}
-	return pantherclawv1connect.NewWorkloadServiceClient(connect.NewClient(connecthttp.NewTransport(hc, base))), nil
+	t := &workloadclient.Transport{Key: key, Base: rt, Token: token}
+	hc := &http.Client{Timeout: a.http.Timeout, CheckRedirect: a.http.CheckRedirect, Transport: t}
+	return pantherclawv1connect.NewWorkloadServiceClient(connect.NewClient(connecthttp.NewTransport(hc, base))), t, nil
 }
 
 func workloadEnroll(ctx context.Context, a *app, args []string) error {
@@ -321,6 +334,11 @@ func workloadEnroll(ctx context.Context, a *app, args []string) error {
 		}
 		org = tok.Org()
 	}
+	wc, t, err := a.workloadClientTransport(*server, kf, nil)
+	if err != nil {
+		return err
+	}
+	att.l3.bindTo(t, *server, kf)
 	if req.Attestation, err = att.attestation(ctx, a, org); err != nil {
 		return err
 	}
@@ -334,10 +352,6 @@ func workloadEnroll(ctx context.Context, a *app, args []string) error {
 		return err
 	}
 	req.PublicJwk = string(jwk)
-	wc, err := a.workloadClient(*server, kf)
-	if err != nil {
-		return err
-	}
 	res, err := wc.Enroll(ctx, req)
 	if err != nil {
 		return err
@@ -377,11 +391,12 @@ func workloadToken(ctx context.Context, a *app, args []string) error {
 		return errors.New("the key file is not enrolled yet: run pclaw workload enroll")
 	}
 	req := &pantherclawv1.IssueTokenRequest{Identifier: kf.Identifier, DeclaredReleaseDigest: *declared}
-	if req.Attestation, err = att.attestation(ctx, a, inst.Org); err != nil {
+	wc, t, err := a.workloadClientTransport(kf.Server, kf, nil)
+	if err != nil {
 		return err
 	}
-	wc, err := a.workloadClient(kf.Server, kf)
-	if err != nil {
+	att.l3.bindTo(t, kf.Server, kf)
+	if req.Attestation, err = att.attestation(ctx, a, inst.Org); err != nil {
 		return err
 	}
 	res, err := wc.IssueToken(ctx, req)
