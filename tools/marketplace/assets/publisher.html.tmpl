@@ -14,8 +14,13 @@
 </section>
 <section>
 <h2>1. Pin the publisher's key</h2>
-<p>Check each fingerprint with the publisher through a channel you already trust, not only through this page. Pinning creates a pending pin; an org admin confirms it with a security key on the link <code>pclaw</code> prints.</p>
-{{range .KeyFingerprints}}<pre><code>pclaw publisher pin --publisher {{$.L.Publisher}} --fingerprint {{.}}</code></pre>
+<p>Check each fingerprint with the publisher through a channel you already trust, not only through this page. Download the key file, then pin it: pclaw refuses a key whose fingerprint differs. Pinning creates a pending pin; an org admin confirms it with a security key on the link <code>pclaw</code> prints.</p>
+{{range .Keys}}<dl>
+<dt>Key id</dt><dd><code>{{.KID}}</code></dd>
+<dt>Fingerprint (SHA-256)</dt><dd><code class="digest">{{.Fingerprint}}</code></dd>
+<dt>Key file</dt><dd><a href="{{.PubFile}}" download>{{.PubFile}}</a></dd>
+</dl>
+<pre><code>pclaw publisher pin --publisher {{$.L.Publisher}} --key-file {{.PubFile}} --fingerprint {{.Fingerprint}}</code></pre>
 {{end}}</section>
 <section>
 <h2>2. Install a bundle</h2>
@@ -32,7 +37,7 @@
 {{end}}</tbody>
 </table>
 <p>Download the file, check its SHA-256 against the digest above, then:</p>
-{{range .Bundles}}<pre><code>pclaw bundle verify {{.Name}}-{{.Version}}.pcbundle --fingerprint FINGERPRINT
+{{range .Bundles}}<pre><code>pclaw bundle verify {{.Name}}-{{.Version}}.pcbundle --public-key KEY_FILE.pub --fingerprint FINGERPRINT
 pclaw bundle install {{.Name}}-{{.Version}}.pcbundle</code></pre>
 {{end}}<p>The install is refused unless the bundle is signed by a key your org pinned and confirmed for this publisher. What it installs lands as drafts; nothing runs until your org reviews and signs it.</p>
 {{else}}<p>This publisher lists no bundles yet.</p>

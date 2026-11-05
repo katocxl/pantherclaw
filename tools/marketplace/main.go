@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"embed"
 	"encoding/base64"
@@ -52,21 +53,32 @@ const (
 var (
 	publisherID = regexp.MustCompile(`^[a-z][a-z0-9-]{2,31}$`)
 	hexDigest   = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	semver      = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
-	hubName     = regexp.MustCompile(`^pc\.[a-z0-9-]+(\.[a-z0-9-]+)*$`)
+	// version and slug mirror internal/bundles/format (MAJOR.MINOR.PATCH;
+	// ext.<publisher>.<slug>), which the tools module cannot import.
+	version = regexp.MustCompile(`^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$`)
+	slug    = `[a-z0-9][a-z0-9-]{0,62}`
+	hubName = regexp.MustCompile(`^pc\.[a-z0-9-]+(\.[a-z0-9-]+)*$`)
 )
 
-// segment is one dot-separated part of a bundle name after the publisher.
-const segment = `[a-z0-9][a-z0-9-]*`
-
 // Listing is marketplace/listings/<publisher>.json, written by the
-// publisher and submitted for review (D1085).
+// publisher and submitted for review (D1085, D1084b).
 type Listing struct {
-	Publisher       string         `json:"publisher"`
-	DisplayName     string         `json:"display_name"`
-	Homepage        string         `json:"homepage"`
-	KeyFingerprints []string       `json:"key_fingerprints"`
-	Bundles         []ListedBundle `json:"bundles"`
+	Publisher   string         `json:"publisher"`
+	DisplayName string         `json:"display_name"`
+	Homepage    string         `json:"homepage"`
+	Keys        []ListedKey    `json:"keys"`
+	Bundles     []ListedBundle `json:"bundles"`
+}
+
+// ListedKey is one publisher key, inline: the base64url raw Ed25519 public
+// key and its fingerprint (the hex SHA-256 of the raw key), which must match
+// (D1084b). PubFile and KID are filled in by the build.
+type ListedKey struct {
+	PublicKey   string `json:"public_key"`
+	Fingerprint string `json:"fingerprint"`
+	PubFile     string `json:"-"`
+	KID         string `json:"-"`
+	jwk         []byte
 }
 
 // ListedBundle is one bundle a listing points at.
@@ -146,6 +158,11 @@ func build(root, hubDir, out string) error {
 		return err
 	}
 	for _, l := range listings {
+		for _, k := range l.Keys {
+			if err := os.WriteFile(filepath.Join(out, "publishers", k.PubFile), k.jwk, 0o600); err != nil {
+				return err
+			}
+		}
 		if err := render(tmpl, "publisher.html.tmpl", filepath.Join(out, "publishers", l.Publisher+".html"), map[string]any{
 			"Prefix": "../", "L": l,
 		}); err != nil {
@@ -213,7 +230,32 @@ func readListing(path string) (Listing, error) {
 	if err := json.Unmarshal(b, &l, json.RejectUnknownMembers(true)); err != nil {
 		return Listing{}, err
 	}
-	return l, l.check()
+	if err := l.check(); err != nil {
+		return Listing{}, err
+	}
+	for i := range l.Keys {
+		k := &l.Keys[i]
+		thumb := sha256.Sum256([]byte(`{"crv":"Ed25519","kty":"OKP","x":"` + k.PublicKey + `"}`))
+		k.KID = "publisher-" + l.Publisher + "-" + base64.RawURLEncoding.EncodeToString(thumb[:])[:22]
+		k.PubFile = l.Publisher + "-" + k.Fingerprint[:16] + ".pub"
+		jwk, err := json.Marshal(publicJWK{Kty: "OKP", Crv: "Ed25519", X: k.PublicKey, Kid: k.KID, Alg: "EdDSA", Use: "sig"})
+		if err != nil {
+			return Listing{}, err
+		}
+		k.jwk = append(jwk, '\n')
+	}
+	return l, nil
+}
+
+// publicJWK is the .pub file pclaw publisher key create writes: the
+// public JWK of the key, with its publisher kid (format.KID).
+type publicJWK struct {
+	Kty string `json:"kty"`
+	Crv string `json:"crv"`
+	X   string `json:"x"`
+	Kid string `json:"kid"`
+	Alg string `json:"alg"`
+	Use string `json:"use"`
 }
 
 // check refuses a listing that is malformed. It proves nothing about the
@@ -228,25 +270,33 @@ func (l Listing) check() error {
 	if err := httpsURL("homepage", l.Homepage); err != nil {
 		return err
 	}
-	if len(l.KeyFingerprints) == 0 || len(l.KeyFingerprints) > maxKeys {
-		return fmt.Errorf("key_fingerprints: 1 to %d needed", maxKeys)
+	if len(l.Keys) == 0 || len(l.Keys) > maxKeys {
+		return fmt.Errorf("keys: 1 to %d needed", maxKeys)
 	}
-	for _, f := range l.KeyFingerprints {
-		if !hexDigest.MatchString(f) {
-			return fmt.Errorf("key fingerprint %q must be a lowercase hex SHA-256", f)
+	for _, k := range l.Keys {
+		if !hexDigest.MatchString(k.Fingerprint) {
+			return fmt.Errorf("key fingerprint %q must be a lowercase hex SHA-256", k.Fingerprint)
+		}
+		raw, err := base64.RawURLEncoding.Strict().DecodeString(k.PublicKey)
+		if err != nil || len(raw) != ed25519.PublicKeySize {
+			return fmt.Errorf("key %s: public_key must be the base64url raw 32-byte Ed25519 key", k.Fingerprint)
+		}
+		sum := sha256.Sum256(raw)
+		if hex.EncodeToString(sum[:]) != k.Fingerprint {
+			return fmt.Errorf("key %s: the fingerprint does not match the public key", k.Fingerprint)
 		}
 	}
 	if len(l.Bundles) > maxBundles {
 		return fmt.Errorf("at most %d bundles", maxBundles)
 	}
-	name := regexp.MustCompile(`^ext\.` + regexp.QuoteMeta(l.Publisher) + `\.` + segment + `(\.` + segment + `)*$`)
+	name := regexp.MustCompile(`^ext\.` + regexp.QuoteMeta(l.Publisher) + `\.` + slug + `$`)
 	seen := map[string]bool{}
 	for _, b := range l.Bundles {
 		if len(b.Name) > maxNameBytes || !name.MatchString(b.Name) {
 			return fmt.Errorf("bundle %q must be named ext.%s.<name>", b.Name, l.Publisher)
 		}
-		if !semver.MatchString(b.Version) {
-			return fmt.Errorf("bundle %s: version %q is not semver", b.Name, b.Version)
+		if !version.MatchString(b.Version) {
+			return fmt.Errorf("bundle %s: version %q is not MAJOR.MINOR.PATCH", b.Name, b.Version)
 		}
 		if seen[b.Name+"@"+b.Version] {
 			return fmt.Errorf("bundle %s@%s is listed twice", b.Name, b.Version)

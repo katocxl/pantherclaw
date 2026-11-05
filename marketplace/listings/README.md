@@ -9,7 +9,12 @@ A listing is not an endorsement. The marketplace lists what publishers submit, t
   "publisher": "example",
   "display_name": "Example Publisher",
   "homepage": "https://example.com/pantherclaw",
-  "key_fingerprints": ["<lowercase hex SHA-256 of the raw Ed25519 public key>"],
+  "keys": [
+    {
+      "public_key": "<base64url of the raw 32-byte Ed25519 public key>",
+      "fingerprint": "<lowercase hex SHA-256 of those 32 bytes>"
+    }
+  ],
   "bundles": [
     {
       "name": "ext.example.starter",
@@ -26,7 +31,7 @@ Rules the build checks (unknown fields are refused):
 
 - `publisher` matches `^[a-z][a-z0-9-]{2,31}$` and is the file name.
 - `homepage` and each bundle `url` are https URLs without credentials.
-- `key_fingerprints` holds 1 to 16 lowercase hex SHA-256 values, as `pclaw publisher key create` prints them.
-- Each bundle is named `ext.<publisher>.<name>`, has a semver version and the SHA-256 of the exact `.pcbundle` file, and is listed once per version.
+- `keys` holds 1 to 16 keys, each the raw public key in base64url (the `x` of the `.pub` file `pclaw publisher key create` writes) and its fingerprint as pclaw prints it; the build refuses a fingerprint that does not match its key, and publishes each key as a `.pub` file to download next to the `pclaw publisher pin` command.
+- Each bundle is named `ext.<publisher>.<slug>`, has a `MAJOR.MINOR.PATCH` version and the SHA-256 of the exact `.pcbundle` file, and is listed once per version.
 
-Reviewers check that a new publisher id does not imitate an existing one (T-363) and that the fingerprints match what the publisher's own homepage states. The build proves nothing about a publisher: each org checks the fingerprint itself when it pins the key.
+Reviewers check that a new publisher id does not imitate an existing one (T-363) and that the fingerprints match what the publisher's own homepage states. The build fetches nothing. The build proves nothing about a publisher: each org checks the fingerprint itself when it pins the key.

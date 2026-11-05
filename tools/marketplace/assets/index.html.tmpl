@@ -13,7 +13,7 @@
 <td><a href="publishers/{{.Publisher}}.html"><code>{{.Publisher}}</code></a></td>
 <td>{{.DisplayName}}</td>
 <td>{{len .Bundles}}</td>
-<td>{{range .KeyFingerprints}}<code class="digest">{{.}}</code> {{end}}</td>
+<td>{{range .Keys}}<code class="digest">{{.Fingerprint}}</code> {{end}}</td>
 </tr>
 {{end}}</tbody>
 </table>
