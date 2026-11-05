@@ -99,6 +99,32 @@ func WithA2AStream(ctx context.Context, sink A2ASink) context.Context {
 	return context.WithValue(ctx, a2aStreamKey{}, sink)
 }
 
+// federationBodyKey carries the exact JSON-RPC body a peer org's agent sent
+// to the federation face.
+type federationBodyKey struct{}
+
+// WithFederationBody returns ctx carrying the exact body of a federated
+// call (G0 M35 D1024b): after an allow it is forwarded unchanged to the
+// listed agent through the listing's a2a connection.
+func WithFederationBody(ctx context.Context, body []byte) context.Context {
+	return context.WithValue(ctx, federationBodyKey{}, body)
+}
+
+// buildFederated is a federated call's request: the peer's exact body,
+// over the JSON-RPC binding only (the body is a JSON-RPC request).
+func buildFederated(def *defs.Definition, body []byte, p A2APeer) (a2aRequest, error) {
+	if def.Dispatch == nil || def.Dispatch.A2A == nil {
+		return a2aRequest{}, fmt.Errorf("%w: %s has no A2A dispatch", egress.ErrBuild, def.Operation)
+	}
+	if len(body) == 0 {
+		return a2aRequest{}, fmt.Errorf("%w: a federated call without its body", egress.ErrBuild)
+	}
+	if p.Binding != wire.BindingJSONRPC {
+		return a2aRequest{}, fmt.Errorf("%w: a federated call forwards a JSON-RPC body, and the listing's connection pins %q", egress.ErrBuild, p.Binding)
+	}
+	return a2aRequest{method: def.Dispatch.A2A.Method, httpMethod: http.MethodPost, url: p.URL, body: body}, nil
+}
+
 // a2aRequest is an outbound A2A call, built from the ActionIR.
 type a2aRequest struct {
 	method     string // the A2A method
@@ -335,7 +361,16 @@ func (e *Engine) sendA2A(ctx context.Context, r Result, conn *control.Connection
 		r.Decision = pb.Decision_DECISION_CANNOT_AUTHORIZE
 		return r.fail(CannotAuthorize, CodeA2ACardDrift)
 	}
-	out, buildErr := buildA2A(def, a.Action, want.Txn, peer)
+	var (
+		out      a2aRequest
+		buildErr error
+	)
+	if a.Action.Channel == string(defs.ChannelFederation) {
+		body, _ := ctx.Value(federationBodyKey{}).([]byte)
+		out, buildErr = buildFederated(def, body, peer)
+	} else {
+		out, buildErr = buildA2A(def, a.Action, want.Txn, peer)
+	}
 	begin := &pb.BeginDispatchRequest{PermitId: want.PermitID, Epoch: want.Epoch}
 	if buildErr == nil {
 		sum := sha256.Sum256(out.body)

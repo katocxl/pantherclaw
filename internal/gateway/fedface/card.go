@@ -5,9 +5,12 @@ package fedface
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
+
+	"connectrpc.com/connect/v2"
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -66,14 +69,18 @@ func (s *cardCache) put(listing string, c SignedCard, now time.Time) {
 // card serves the listing's signed card. Unlike the agent-facing A2A face,
 // it is never served unsigned: a peer accepts only a card our federation
 // key signed (D1022), so a card that cannot be had signed is not served.
-func (h *Handler) card(ctx context.Context, w http.ResponseWriter, r *http.Request, l Listing) {
+func (h *Handler) card(ctx context.Context, w http.ResponseWriter, r *http.Request, listing string) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		h.fail(w, nil, &faceError{status: http.StatusMethodNotAllowed, rpc: wire.CodeInvalidRequest, reason: CodeBadRequest, message: "the agent card is read with GET"})
 		return
 	}
-	signed, ok := h.signed(ctx, l.Name)
-	if !ok {
+	signed, err := h.signed(ctx, listing)
+	switch {
+	case connect.CodeOf(err) == connect.CodeNotFound:
+		h.fail(w, nil, &faceError{status: http.StatusNotFound, rpc: wire.CodeInvalidRequest, reason: CodeListingUnknown, message: "unknown listing"})
+		return
+	case err != nil:
 		h.fail(w, nil, &faceError{status: http.StatusServiceUnavailable, rpc: codeUnavailable, reason: CodeUnavailable, message: "the listing's card cannot be served now"})
 		return
 	}
@@ -83,12 +90,12 @@ func (h *Handler) card(ctx context.Context, w http.ResponseWriter, r *http.Reque
 }
 
 // signed returns the listing's signed card, from the cache when it can.
-func (h *Handler) signed(ctx context.Context, listing string) ([]byte, bool) {
+func (h *Handler) signed(ctx context.Context, listing string) ([]byte, error) {
 	if h.sign == nil {
-		return nil, false
+		return nil, errNoSigner
 	}
 	if c, ok := h.cards.get(listing, h.now()); ok {
-		return c, true
+		return c, nil
 	}
 	sctx, cancel := context.WithTimeout(ctx, signTimeout)
 	defer cancel()
@@ -98,8 +105,11 @@ func (h *Handler) signed(ctx context.Context, listing string) ([]byte, bool) {
 	}
 	if err != nil {
 		h.log.WarnContext(ctx, "gateway.federation_card_unavailable", pclog.Err(err))
-		return nil, false
+		return nil, err
 	}
 	h.cards.put(listing, c, h.now())
-	return c.Card, true
+	return c.Card, nil
 }
+
+// errNoSigner: the gateway was built without the server's card signer.
+var errNoSigner = errors.New("fedface: no listing card signer")

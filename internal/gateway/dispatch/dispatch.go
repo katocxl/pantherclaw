@@ -316,6 +316,10 @@ type Call struct {
 	Action actionir.Parsed
 	// Workload is the request's PAP/1 credentials.
 	Workload *pb.WorkloadCredentials
+	// FederationCallID is the call StartFederatedCall admitted, sent
+	// instead of workload credentials on channel federation (G0 M35
+	// D1024c).
+	FederationCallID string
 }
 
 // Result is what happened to a call.
@@ -515,7 +519,10 @@ func (e *Engine) decide(ctx context.Context, c Call, findings []*pb.PayloadFindi
 	t *timer,
 ) (context.Context, decided, Result, bool) {
 	conn := c.Connection
-	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content, ContentScan: scan})
+	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{
+		ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings, ContentFindings: content, ContentScan: scan,
+		FederationCallId: c.FederationCallID,
+	})
 	t.lap("authz")
 	if err != nil {
 		e.log.ErrorContext(ctx, "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))

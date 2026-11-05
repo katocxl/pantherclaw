@@ -368,7 +368,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		runtime: runtimeface.New(engine, d.Configuration, cfg.PublicURL, log),
 		sdk:     sdk.New(engine, d.Configuration, cfg.PublicURL, log),
 		a2a:     a2aface.New(engine, d.Configuration, a2aPeer, cfg.PublicURL, log).WithCardSigner(d.SignAgentCard),
-		fed:     fedface.New(nil, d.SignListingCard, cfg.PublicURL, log),
+		fed:     fedface.New(engine, d.Authority, d.Configuration, d.SignListingCard, cfg.PublicURL, log),
 		model:   modelface.New(engine, d.ModelCalls, d.Configuration, cfg.PublicURL, log),
 		log:     log, reportDrift: d.ReportDrift, reportInventory: d.ReportInventory, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,

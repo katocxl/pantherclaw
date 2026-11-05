@@ -35,8 +35,15 @@ import (
 	"time"
 
 	wire "github.com/katocxl/pantherclaw/internal/a2a"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
+	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
+	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	pcfederation "github.com/katocxl/pantherclaw/packages/pc-federation"
 )
 
 // Limits.
@@ -102,46 +109,58 @@ const (
 // listingName is a listing's name (D1022).
 var listingName = regexp.MustCompile(`^[a-z0-9-]{1,63}$`)
 
-// Listing is what the face needs of one ACTIVE federation listing: its
-// name, the a2a connection to our agent, and the skills it offers.
-type Listing struct {
-	Name       string
-	Connection *control.Connection
-	Skills     []string
-}
-
-// Listings finds an ACTIVE listing by name.
-type Listings interface {
-	Listing(name string) (Listing, bool)
-}
-
 // errCardInvalid is a signed card the server answered that is not a card.
 var errCardInvalid = errors.New("fedface: the signed listing card is not an agent card")
 
+// Admitter admits a peer's call (AuthorityService.StartFederatedCall).
+type Admitter interface {
+	StartFederatedCall(ctx context.Context, req *pb.StartFederatedCallRequest) (*pb.StartFederatedCallResponse, error)
+}
+
+// Configuration is the gateway's current configuration (control.Store).
+type Configuration interface {
+	Current() *control.Config
+}
+
 // Handler serves /fed/a2a/{listing}.
 type Handler struct {
-	listings  Listings
+	engine    *dispatch.Engine
+	admit     Admitter
+	config    Configuration
 	sign      SignListingCard
 	publicURL string
 	log       *slog.Logger
 	cards     cardCache
 	now       func() time.Time
+	// pkg and mapper are the built-in pc.federation package, compiled once:
+	// every federated call is mapped and decided through it (D1024).
+	pkg    *defs.Package
+	mapper *mapping.Mapper
 	// decide authenticates, decides and forwards one call (call.go).
 	decide func(ctx context.Context, c *call) answer
 }
 
 // New returns the federation face. publicURL is the gateway's public base
 // URL: a peer's token names it (htu), and the server's signed card points
-// at it.
-func New(listings Listings, sign SignListingCard, publicURL string, log *slog.Logger) *Handler {
+// at it. Without the built-in package, every call is refused.
+func New(engine *dispatch.Engine, admit Admitter, config Configuration, sign SignListingCard, publicURL string, log *slog.Logger) *Handler {
 	if log == nil {
 		log = pclog.Discard()
 	}
 	h := &Handler{
-		listings: listings, sign: sign,
+		engine: engine, admit: admit, config: config, sign: sign,
 		publicURL: strings.TrimSuffix(publicURL, "/"), log: log, now: time.Now,
 	}
 	h.decide = h.unwired
+	if p, err := manifest.Decode(pcfederation.Package); err == nil {
+		if m, err := mapping.New(p, celenv.DefaultLimits); err == nil && engine != nil && admit != nil && config != nil {
+			h.pkg, h.mapper, h.decide = p, m, h.call
+		} else if err != nil {
+			log.Error("gateway.federation_package", pclog.Err(err))
+		}
+	} else {
+		log.Error("gateway.federation_package", pclog.Err(err))
+	}
 	return h
 }
 
@@ -167,7 +186,7 @@ func (h *Handler) URL(listing string) string {
 // call is one JSON-RPC call as the face read it.
 type call struct {
 	r       *http.Request
-	listing Listing
+	listing string
 	body    []byte
 	id      jsontext.Value
 	method  string
@@ -200,14 +219,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, nil, &faceError{status: http.StatusForbidden, rpc: wire.CodeInvalidRequest, reason: CodeRefused, message: "origin not allowed"})
 		return
 	}
-	var (
-		l     Listing
-		found bool
-	)
-	if listingName.MatchString(name) && h.listings != nil {
-		l, found = h.listings.Listing(name)
-	}
-	if !found || l.Connection == nil {
+	if !listingName.MatchString(name) {
 		h.fail(w, nil, &faceError{status: http.StatusNotFound, rpc: wire.CodeInvalidRequest, reason: CodeListingUnknown, message: "unknown listing"})
 		return
 	}
@@ -218,7 +230,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch rest {
 	case wire.CardPath:
-		h.card(ctx, w, r, l)
+		h.card(ctx, w, r, name)
 		return
 	case "":
 	default:
@@ -230,7 +242,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, nil, &faceError{status: http.StatusMethodNotAllowed, rpc: wire.CodeInvalidRequest, reason: CodeBadRequest, message: "the federation endpoint takes POST only"})
 		return
 	}
-	c := &call{r: r, listing: l, body: body}
+	c := &call{r: r, listing: name, body: body}
 	var ferr *faceError
 	c.id, c.method, c.params, ferr = parseRPC(body)
 	if ferr != nil {
