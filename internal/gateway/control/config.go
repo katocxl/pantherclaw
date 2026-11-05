@@ -16,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway/browsercompare"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	intel "github.com/katocxl/pantherclaw/internal/intel/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
@@ -64,6 +65,28 @@ type Connection struct {
 	// ContentSignals is the org's content signal mode (G0 M27 D507): nothing is
 	// scanned unless it is WATCHING or ACTIVE.
 	ContentSignals pb.ContentSignalMode
+	// Intel is the shared injection_text indicators the content scan matches
+	// while the org consumes the intel feed (G0 M38 D1104); nil matches
+	// nothing.
+	Intel *intel.Set
+}
+
+// intelSet indexes the configuration's injection_text indicators; a
+// malformed one is left out (hashes only, from the server).
+func intelSet(g *pb.GatewayIntel) *intel.Set {
+	if g == nil || len(g.GetTexts()) == 0 {
+		return nil
+	}
+	in := make([]intel.Indicator, 0, len(g.GetTexts()))
+	for _, t := range g.GetTexts() {
+		x := intel.Indicator{
+			ID: t.GetId(), Kind: intel.KindInjectionText, Shingles: t.GetShingles(), Severity: intel.SeverityHigh, FirstSeen: "2000-01-01",
+		}
+		if x.Validate() == nil {
+			in = append(in, x)
+		}
+	}
+	return intel.NewSet(in)
 }
 
 // Mode is a route's mode: its explicit one, or the connection's default.
@@ -236,6 +259,7 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 		cfg.BrowserCompareSites = append(cfg.BrowserCompareSites,
 			browsercompare.Site{Host: site.GetHost(), IncludeSubdomains: site.GetIncludeSubdomains()})
 	}
+	texts := intelSet(res.GetIntel()) // G0 M38 D1104
 	for _, gc := range res.GetConnections() {
 		pkg, ok := pkgs[gc.GetPackage()+"@"+gc.GetPackageVersion()]
 		// A model relay has no package, so no face that maps calls serves it
@@ -245,7 +269,7 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 		}
 		c := &Connection{
 			GatewayConnection: gc, Package: pkg.pkg, Mapper: pkg.mapper, Modes: map[string]string{}, Credential: creds[gc.GetId()],
-			ContentSignals: res.GetContentSignalMode(),
+			ContentSignals: res.GetContentSignalMode(), Intel: texts,
 		}
 		for _, r := range gc.GetRoutes() {
 			c.Modes[r.GetRoute()] = r.GetMode()

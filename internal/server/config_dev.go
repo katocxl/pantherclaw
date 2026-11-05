@@ -27,6 +27,10 @@ type DevConfig struct {
 	// D101). The API then also trusts that key for a Hub index. It is
 	// refused like PackageKeyFile unless the server is local only; file only.
 	HubKeyFile string `json:"hub_key_file"`
+	// IntelKeyFile is the public JWKS of the development intel key (G0 M38
+	// D1103). The server then also trusts that key for an intel feed. It is
+	// refused like HubKeyFile unless the server is local only; file only.
+	IntelKeyFile string `json:"intel_key_file"`
 	// SlackAPIURL points slack_app channels at a simulated Slack Web API
 	// (pantherclaw-sim slack, G0 M14 D22) instead of https://slack.com/api.
 	// Loopback only, and refused unless the server is local only; file only.

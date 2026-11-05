@@ -41,7 +41,9 @@ func (e *Engine) outboundContent(ctx context.Context, c Call) (context.Context, 
 	if scan != pb.ContentScan_CONTENT_SCAN_SCANNED {
 		return ctx, nil, scan
 	}
+	ctx = withIntel(ctx, c.Connection.Intel) // G0 M38 D1104
 	found := e.content.Scan(context.WithoutCancel(ctx), ports.SurfaceOutbound, "arg", c.Action.Action.Params)
+	found = domain.Pick(append(found, intelFindings(c.Connection.Intel, "arg", c.Action.Action.Params)...))
 	return ctx, contentProto(found), scan
 }
 
@@ -56,7 +58,9 @@ func (e *Engine) resultContent(ctx context.Context, r Result) ([]*pb.ContentFind
 	if scan != pb.ContentScan_CONTENT_SCAN_SCANNED || r.Response == nil {
 		return nil, scan
 	}
-	return contentProto(e.content.Scan(context.WithoutCancel(ctx), ports.SurfaceResult, "result", r.Response.Body)), scan
+	found := e.content.Scan(context.WithoutCancel(ctx), ports.SurfaceResult, "result", r.Response.Body)
+	found = domain.Pick(append(found, intelFindings(intelOf(ctx), "result", r.Response.Body)...)) // G0 M38 D1104
+	return contentProto(found), scan
 }
 
 func contentProto(in []domain.Finding) []*pb.ContentFinding {

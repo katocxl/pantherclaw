@@ -100,6 +100,8 @@ type Config struct {
 	// Admission is the M32 Kubernetes admission webhook
 	// (wiring_m32_admission.go).
 	Admission AdmissionConfig `json:"admission"`
+	// Intel is M38 shared threat intel (config_m38_intel.go).
+	Intel IntelConfig `json:"intel"`
 }
 
 // IdentityConfig configures workload identity (M3).
@@ -274,6 +276,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateModel()...)
 	errs = append(errs, c.validateThreatMap()...)
 	errs = append(errs, c.validateAdmission()...)
+	errs = append(errs, c.validateIntel()...)
 	if err := c.CEL.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}

@@ -90,6 +90,12 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 	for _, s := range c.CompareSites { // G0 M33 D986
 		out.BrowserCompareSites = append(out.BrowserCompareSites, &pb.GatewayBrowserCompareSite{Host: s.Host, IncludeSubdomains: s.IncludeSubdomains})
 	}
+	if len(c.IntelTexts) > 0 { // G0 M38 D1104: hashes only (HR-818)
+		out.Intel = &pb.GatewayIntel{}
+		for _, t := range c.IntelTexts {
+			out.Intel.Texts = append(out.Intel.Texts, &pb.GatewayIntelText{Id: t.ID, Shingles: t.Shingles})
+		}
+	}
 	return out, nil
 }
 

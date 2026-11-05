@@ -92,23 +92,27 @@ func (s *state) runContentFlags() []string {
 		out = append(out, f.Kind)
 	}
 	slices.Sort(out)
-	return slices.Compact(out)
+	return withoutIntel(slices.Compact(out)) // G0 M38 D1104: the intel step decides those
 }
 
 // contentHold files the hold content flags call for (step 7, after the
 // data-flow hold). It only adds a requirement.
 func (s *state) contentHold() {
 	var why []string
-	if len(s.ev.ContentFindings) > 0 {
-		var what []string
-		for _, f := range s.ev.ContentFindings {
+	// Shared intel findings are the intel step's, by the org's intel mode
+	// (G0 M38 D1104), never a content hold.
+	var what []string
+	for _, f := range s.ev.ContentFindings {
+		if f.Kind != csdomain.KindIntelInjectionText {
 			what = append(what, f.Kind+" at "+f.Location)
 		}
+	}
+	if len(what) > 0 {
 		why = append(why, "the outbound payload carries content flags ("+strings.Join(what, ", ")+")")
 	}
 	// Reads pass (D512): a later read is held only by its own payload.
-	if len(s.content.Kinds) > 0 && (s.def == nil || s.def.Access != defs.AccessRead) {
-		why = append(why, "the run tree carries content flags ("+strings.Join(s.content.Kinds, ", ")+")")
+	if kinds := withoutIntel(s.content.Kinds); len(kinds) > 0 && (s.def == nil || s.def.Access != defs.AccessRead) {
+		why = append(why, "the run tree carries content flags ("+strings.Join(kinds, ", ")+")")
 	}
 	if len(why) == 0 {
 		return

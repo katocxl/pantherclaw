@@ -42,6 +42,10 @@ type Configuration struct {
 	// CompareSites are the org's browser sites marked for the cloaking
 	// compare (G0 M33 D986).
 	CompareSites []dbq.ListBrowserCompareSitesRow
+	// IntelTexts are the shared injection_text indicators the gateway's
+	// content scan matches, while the org consumes the intel feed (G0 M38
+	// D1104): ids and shingle hashes only.
+	IntelTexts []dbq.IntelTextIndicatorsRow
 }
 
 // Configuration returns the calling gateway's configuration: its
@@ -99,6 +103,9 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 			return err
 		}
 		if out.CompareSites, err = q.ListBrowserCompareSites(ctx, id.Org); err != nil { // G0 M33 D986
+			return err
+		}
+		if out.IntelTexts, err = intelTexts(ctx, q, id.Org); err != nil { // G0 M38 D1104
 			return err
 		}
 		out.McpIssuer, err = s.mcpIssuer(ctx, q, id.Org)

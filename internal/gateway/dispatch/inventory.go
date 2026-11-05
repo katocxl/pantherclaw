@@ -18,6 +18,9 @@ import (
 type Inventory struct {
 	Complete                    bool
 	Tools, Resources, Templates upstream.Listing
+	// Server is what the upstream server said of itself in serverInfo, nil
+	// when it said nothing usable (G0 M38 D1104): UNTRUSTED (HR-822).
+	Server *upstream.ServerInfo
 }
 
 // ListInventory lists a kind-mcp connection's upstream server with the
@@ -48,5 +51,6 @@ func (e *Engine) ListInventory(ctx context.Context, conn *control.Connection) (I
 		return Inventory{}, err
 	}
 	out.Complete = out.Tools.Complete && out.Resources.Complete && out.Templates.Complete
+	out.Server = ce.mcp.ServerInfo() // G0 M38 D1104
 	return out, nil
 }

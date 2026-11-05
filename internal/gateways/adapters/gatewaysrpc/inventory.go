@@ -73,6 +73,9 @@ func (h *GatewayHandler) ReportInventory(ctx context.Context, req *pb.ReportInve
 		return nil, errInvalidID
 	}
 	r := connapp.InventoryReport{Connection: conn, Complete: req.GetComplete()}
+	if si := req.GetServerInfo(); si != nil { // G0 M38 D1104: UNTRUSTED, matching only (HR-822)
+		r.Server = &connapp.ServerInfo{Name: si.GetName(), Version: si.GetVersion()}
+	}
 	for _, t := range req.GetTools() {
 		r.Entries = append(r.Entries, connapp.InventoryEntry{
 			Kind: connapp.InventoryTool, Name: t.GetName(), Digest: t.GetDigest(), Description: t.GetDescription(),

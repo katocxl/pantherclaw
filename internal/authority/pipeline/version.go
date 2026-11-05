@@ -41,13 +41,21 @@ package pipeline
 // 9: step 7 reads the org's browser sites and holds a pc.browser action on
 // a site not listed, and every takeover (G0 M33 D977), which a recording
 // before it does not hold.
-const Version = 9
+//
+// 10: step 7 reads the org's shared intel consume mode and the indicators
+// the action's upstream server and tool match, and holds (HOLD) or notes
+// (ALERT_ONLY) a match, including a shared injection_text match from the
+// content scan, which no longer counts as a content flag (G0 M38 D1104), a
+// read a recording before it does not hold.
+const Version = 10
 
 // Replays reports whether this code replays inputs recorded by pipeline
 // version v (G0 M16 D95, G0 M17 D133, D134): this version, and versions 4,
-// 5, 6, 7 and 8, each in its own mode (Pipeline.ReplayOf), so a recording
+// 5, 6, 7, 8 and 9, each in its own mode (Pipeline.ReplayOf), so a recording
 // decides as it did. Others are incomplete (F507).
-func Replays(v int) bool { return v == 4 || v == 5 || v == 6 || v == 7 || v == 8 || v == Version }
+func Replays(v int) bool {
+	return v == 4 || v == 5 || v == 6 || v == 7 || v == 8 || v == 9 || v == Version
+}
 
 // at reports whether the evaluation runs at least version v: always, except
 // when it replays a recording made under an earlier one.
