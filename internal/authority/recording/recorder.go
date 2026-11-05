@@ -336,6 +336,30 @@ func (r *Recorder) BrowserSites(ctx context.Context, org ids.OrgID) ([]pipeline.
 	return list, err
 }
 
+// IntelMatches implements pipeline.IntelMatches (G0 M38 D1104). A wrapped
+// reader without the port reads nothing, as the pipeline treats one.
+func (r *Recorder) IntelMatches(ctx context.Context, org ids.OrgID, conn ids.UUID, tool string) (pipeline.IntelState, error) {
+	var (
+		st  pipeline.IntelState
+		err error
+	)
+	if port, ok := r.r.(pipeline.IntelMatches); ok {
+		st, err = port.IntelMatches(ctx, org, conn, tool)
+	}
+	r.keep(func(x *Reads) error {
+		in := &Intel{Tool: tool, Mode: st.Mode, Err: errKind(err)}
+		if !conn.IsZero() {
+			in.Connection = conn.String()
+		}
+		for _, h := range st.Hits {
+			in.Hits = append(in.Hits, IntelHit{ID: h.ID, Kind: h.Kind})
+		}
+		x.Intel = in
+		return nil
+	})
+	return st, err
+}
+
 // OwnedAccounts implements pipeline.OwnedAccounts (G0 M30 D935a). A wrapped
 // reader without the port owns nothing, as the pipeline treats one.
 func (r *Recorder) OwnedAccounts(ctx context.Context, org ids.OrgID, kind string) ([]string, error) {

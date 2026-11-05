@@ -646,6 +646,25 @@ message GetConfigurationResponse {
   // The org's browser sites marked for the cloaking compare (G0 M33 D986):
   // only these are compared, and none means the compare is off.
   repeated GatewayBrowserCompareSite browser_compare_sites = 11;
+  // The shared injection_text indicators the gateway's content scan matches
+  // (G0 M38 D1104), set only while the org consumes the intel feed: hashes
+  // only, never text (HR-818).
+  GatewayIntel intel = 12;
+}
+
+// GatewayIntel is what the gateway's content scan matches of the shared
+// intel feed (G0 M38 D1104).
+message GatewayIntel {
+  // The injection_text indicators.
+  repeated GatewayIntelText texts = 1;
+}
+
+// GatewayIntelText is one injection_text indicator: its id and the hex
+// SHA-256 of its normalized 8-word shingles. A body matches when it holds
+// at least min(3, n) of them.
+message GatewayIntelText {
+  string id = 1;
+  repeated string shingles = 2;
 }
 
 // GatewayBrowserCompareSite is one browser site marked for the cloaking
@@ -1372,6 +1391,16 @@ message ReportInventoryRequest {
   repeated InventoryResource resources = 4 [(buf.validate.field).repeated.max_items = 1000];
   // Resource templates.
   repeated InventoryResourceTemplate resource_templates = 5 [(buf.validate.field).repeated.max_items = 1000];
+  // What the upstream server said of itself in serverInfo when the gateway
+  // initialized its session (G0 M38 D1104, HR-822): UNTRUSTED, recorded on
+  // the connection for indicator matching only. Unset: not learned.
+  UpstreamServerInfo server_info = 6;
+}
+
+// UpstreamServerInfo is an upstream MCP server's serverInfo.
+message UpstreamServerInfo {
+  string name = 1 [(buf.validate.field).string.max_len = 256];
+  string version = 2 [(buf.validate.field).string.max_len = 128];
 }
 
 // InventoryTool is one listed tool.

@@ -99,11 +99,14 @@ const (
 	// GlobalLog is the deployment-wide root log and its witness cosignatures
 	// (G0 M35 D1041): global roots and witness lines only, no tenant data.
 	GlobalLog GlobalPurpose = "global_log"
+	// GlobalIntel is the deployment's shared threat-intel feed state and
+	// current indicators (G0 M38 D1103): hashes only, no tenant data.
+	GlobalIntel GlobalPurpose = "intel"
 )
 
 var globalPurposes = []GlobalPurpose{
 	GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors, GlobalAccounts, GlobalRateLimit,
-	GlobalFailover, GlobalHosting, GlobalLog,
+	GlobalFailover, GlobalHosting, GlobalLog, GlobalIntel,
 }
 
 // TxOption customizes a transaction.

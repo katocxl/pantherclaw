@@ -138,6 +138,9 @@ type Service struct {
 	// catalog refuses to activate a connection to an unapproved MCP server
 	// (WithCatalog, G0 M24 D223); nil has no catalog.
 	catalog CatalogGate
+	// intel matches what upstream servers list against the shared intel
+	// indicators (WithIntel, G0 M38 D1104); nil matches nothing.
+	intel IntelMatcher
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are

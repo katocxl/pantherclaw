@@ -48,4 +48,8 @@ var Kinds = map[string]KindMapping{
 	"content.pii_card":        {None: "A data class signal for card numbers; it names no technique."},
 	"content.pii_national_id": {None: "A data class signal for national ids; it names no technique."},
 	"content.classifier_flag": {None: "Whatever an outside classifier flags; it names no technique."},
+	"content.intel_injection_text": {ATLAS: []string{"AML.T0051.001"}, ATTACK: []string{"T1698"}, Why: map[string]string{
+		"AML.T0051.001": "Indirect prompt injection (AML.T0051.001): content carries text a shared indicator lists as known injection.",
+		"T1698":         "Indirect prompt injection (T1698): the matched text arrives in data, not from the person running the agent.",
+	}},
 }

@@ -56,15 +56,27 @@ const (
 	// PurposeDevHub is the development Hub key. It is not a root: only a
 	// server or a source on loopback trusts it (D101).
 	PurposeDevHub Purpose = "hub-dev"
+	// PurposeIntel is the offline root that signs the shared threat-intel
+	// feed (G0 M38 D1103, HR-817). It is separate from the package and Hub
+	// roots: a feed never verifies as another document, or the reverse.
+	PurposeIntel Purpose = "intel"
+	// PurposeDevIntel is the development intel key. It is not a root: only a
+	// server on loopback trusts it (D1103).
+	PurposeDevIntel Purpose = "intel-dev"
 )
 
 // Valid reports whether p is a known purpose.
 func (p Purpose) Valid() bool {
-	return slices.Contains([]Purpose{PurposeLicence, PurposePackages, PurposeOrgPackages, PurposeDevPackages, PurposeHub, PurposeDevHub}, p)
+	return slices.Contains([]Purpose{
+		PurposeLicence, PurposePackages, PurposeOrgPackages, PurposeDevPackages, PurposeHub, PurposeDevHub,
+		PurposeIntel, PurposeDevIntel,
+	}, p)
 }
 
 // Root reports whether p is one of PantherClaw's offline roots.
-func (p Purpose) Root() bool { return p == PurposeLicence || p == PurposePackages || p == PurposeHub }
+func (p Purpose) Root() bool {
+	return p == PurposeLicence || p == PurposePackages || p == PurposeHub || p == PurposeIntel
+}
 
 const (
 	plainType     = "PANTHERCLAW ROOT PRIVATE KEY"
@@ -80,10 +92,10 @@ var ErrKeyFile = errors.New("rootkey: invalid key file")
 // KID derives the kid of a root public key: "<purpose>-root-<thumbprint>",
 // or "org-packages-<thumbprint>" for an org package-signing key (equal to
 // trust.OrgKID), "packages-dev-<thumbprint>" for the development package
-// key (equal to trust.DevKID) and "hub-dev-<thumbprint>" for the development
-// Hub key.
+// key (equal to trust.DevKID), "hub-dev-<thumbprint>" for the development
+// Hub key and "intel-dev-<thumbprint>" for the development intel key.
 func KID(p Purpose, pub ed25519.PublicKey) string {
-	if p == PurposeOrgPackages || p == PurposeDevPackages || p == PurposeDevHub {
+	if p == PurposeOrgPackages || p == PurposeDevPackages || p == PurposeDevHub || p == PurposeDevIntel {
 		return string(p) + "-" + jws.Thumbprint(pub)[:22]
 	}
 	return string(p) + "-root-" + jws.Thumbprint(pub)[:22]

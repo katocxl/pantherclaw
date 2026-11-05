@@ -139,6 +139,10 @@ Usage:
   pantherclaw-server hosting add-host --name N --domain D --capacity N --milli-cpus N --memory-mib N
                              --csr FILE --bundle-out FILE [--config FILE]
                                                      record a shared hosting host and issue its agent certificate
+  pantherclaw-server intel import --in FILE [--config FILE]
+                                                     verify a signed intel feed and import it when its version rises
+  pantherclaw-server intel export-contributions --out FILE [--config FILE]
+                                                     write every org's queued intel contributions, hashes only
   pantherclaw-server secrets stage --from DIR --to DIR
                                                      copy each regular file of DIR as a 0400 secret file
                                                      (Kubernetes init container; symlinks and others refused)
@@ -186,6 +190,8 @@ func RunCommand(ctx context.Context, args []string, stdout, stderr io.Writer, en
 		err = cmdEvidence(ctx, args[1:], stdout, stderr, env)
 	case "hosting":
 		err = cmdHosting(ctx, args[1:], stdout, stderr, env)
+	case "intel":
+		err = cmdIntel(ctx, args[1:], stdout, stderr, env) // G0 M38 D1103, D1105
 	case "dev":
 		err = cmdDev(ctx, args[1:], stdout, stderr, env)
 	case "secrets":
@@ -318,7 +324,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	}
 
 	authorityStore := &pgauthority.Store{
-		Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: contentSink(pool),
+		Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D(), Content: withIntelContent(contentSink(pool), bill),
 		TokenCostReports: tokenCostReports(bill),
 	}
 	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, consoleBaseURL(cfg.Auth.PublicURL, ext), log)
@@ -371,6 +377,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	m6.credentials.OnGitHubInstallation(ghScans.InstallationRecorded)
 	svc.WithToolObservations(m6.connections)
 	m6.connections.WithEntitlements(bill)                                      // the inventory draft is Team and above (G0 M15 D23)
+	m6.connections.WithIntel(intelMatcher(bill))                               // shared intel matches (G0 M38 D1104)
 	m6.hosting = newHosting(cfg, pool, m6.ca, kp, bill).WithFleet(m6.gateways) // hosted gateways (G0 M19 D203)
 	m5p2, err := newM5p2(cfg, pool, bill, m5.notifications, log)
 	if err != nil {
@@ -732,6 +739,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		if evidenceJobs, err = registerM34DiscoveryJobs(evidenceJobs, jreg, pool, bill, log); err != nil { // G0 M34 D997
 			return err
 		}
+		if evidenceJobs, err = registerM38IntelJobs(ctx, evidenceJobs, jreg, cfg, pool, log); err != nil { // G0 M38 D1103
+			return err
+		}
 		if evidenceJobs, err = registerM36ApprovalJobs(evidenceJobs, jreg, m5p2.approvals, m5.notifications, log); err != nil { // G0 M36 D1063, D1065
 			return err
 		}
@@ -1045,6 +1055,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM28ThreatMap(rs, d)
 	registerM30(rs, d)
 	registerM33Browser(rs, d)
+	registerM38Intel(rs, d) // G0 M38 D1103..D1105
 	d.extDeps = registerM26Provisioning(rs, d)
 	registerM26SaaS(rs, d)
 	authzen := registerAuthZEN(rs, d)

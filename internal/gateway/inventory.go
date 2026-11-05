@@ -62,7 +62,7 @@ func (g *Gateway) inventory(ctx context.Context, id string, conn *control.Connec
 // inventoryRequest is the ReportInventory request of a listing. Each
 // description is cut to 8 KiB as drift reports cut it.
 func inventoryRequest(conn string, inv dispatch.Inventory) *pb.ReportInventoryRequest {
-	req := &pb.ReportInventoryRequest{ConnectionId: conn, Complete: inv.Complete}
+	req := &pb.ReportInventoryRequest{ConnectionId: conn, Complete: inv.Complete, ServerInfo: serverInfo(inv.Server)}
 	for _, t := range inv.Tools.Items {
 		var n struct {
 			Name        string         `json:"name"`

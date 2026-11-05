@@ -121,6 +121,26 @@ type Reads struct {
 	// BrowserSites is the read of the org's browser site list (pipeline 9,
 	// G0 M33 D977); earlier recordings have none.
 	BrowserSites *BrowserSites `json:"browser_sites,omitzero"`
+	// Intel is the read of the org's shared intel mode and the matches of
+	// the action's server and tool (pipeline 10, G0 M38 D1104); earlier
+	// recordings have none.
+	Intel *Intel `json:"intel,omitzero"`
+}
+
+// Intel is the shared intel read (G0 M38 D1104): the mode and the matched
+// indicators of one connection and tool, ids only.
+type Intel struct {
+	Connection string     `json:"connection,omitzero"`
+	Tool       string     `json:"tool,omitzero"`
+	Mode       string     `json:"mode,omitzero"`
+	Hits       []IntelHit `json:"hits,omitzero"`
+	Err        string     `json:"err,omitzero"`
+}
+
+// IntelHit is one matched indicator.
+type IntelHit struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
 }
 
 // BrowserSites is the read of the org's browser site list (G0 M33 D977):

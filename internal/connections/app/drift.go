@@ -138,6 +138,11 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 			})
 			return err
 		}
+		if description.Text != nil { // G0 M38 D1104: the observed description, beside the injection scan
+			if err := s.intelTool(ctx, tx, conn.ID, ids.UUID{}, tool, *description.Text, c.Audit); err != nil {
+				return err
+			}
+		}
 		v, err := q.GetPackageVersionState(ctx, org, conn.Package, pin.Version)
 		if err != nil {
 			return err

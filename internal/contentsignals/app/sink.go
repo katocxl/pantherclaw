@@ -12,6 +12,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/contentsignals/domain"
 	"github.com/katocxl/pantherclaw/internal/contentsignals/ports"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -28,6 +29,33 @@ import (
 type Sink struct {
 	Raiser   reflexports.Raiser
 	Failures reflexports.FailureSink
+	// Intel records the shared injection_text matches a body held (G0 M38
+	// D1104); nil records none. Those findings raise no content alert here:
+	// the intel match detection alerts on the recorded match.
+	Intel IntelSink
+}
+
+// IntelSink records shared intel matches of a body (intel/app.Matcher).
+type IntelSink interface {
+	Content(ctx context.Context, tx db.TenantTx, run, txn ids.UUID, indicators []string, by evdomain.Actor) error
+}
+
+// intelActor is who records a content scan's intel match.
+var intelActor = evdomain.Actor{Type: "system", ID: "content_signals"}
+
+// intel records the intel findings' indicators.
+func (s *Sink) intel(ctx context.Context, tx db.TenantTx, o Observed, found []domain.Finding) error {
+	var ind []string
+	for _, f := range found {
+		if id := domain.IntelIndicator(f); id != "" {
+			ind = append(ind, id)
+		}
+	}
+	if s.Intel == nil || len(ind) == 0 {
+		return nil
+	}
+	slices.Sort(ind)
+	return s.Intel.Content(ctx, tx, o.Run, o.Transaction, slices.Compact(ind), intelActor)
 }
 
 // Observed is what one body held.
@@ -76,6 +104,9 @@ func (s *Sink) Observe(ctx context.Context, tx db.TenantTx, o Observed) error {
 		if err := count(ctx, q, o.Org, found); err != nil {
 			return err
 		}
+	}
+	if err := s.intel(ctx, tx, o, found); err != nil { // G0 M38 D1104
+		return err
 	}
 	return s.tell(ctx, tx, o, found, now)
 }
@@ -165,7 +196,7 @@ func (s *Sink) tell(ctx context.Context, tx db.TenantTx, o Observed, found []dom
 			}
 			continue
 		}
-		if s.Raiser == nil || seen[f.Kind] {
+		if s.Raiser == nil || seen[f.Kind] || f.Kind == domain.KindIntelInjectionText {
 			continue
 		}
 		seen[f.Kind] = true

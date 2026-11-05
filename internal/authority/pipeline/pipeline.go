@@ -915,6 +915,9 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	if p.at(9) {
 		p.browser(ctx, s) // G0 M33 D977 (browser.go)
 	}
+	if p.at(10) {
+		p.intel(ctx, s) // G0 M38 D1104 (intel_m38.go)
+	}
 	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	s.contentHold()         // G0 M27 D507, D512 (content.go)
 	s.vectorWriterHold()    // G0 M30 D924 (vectorstore_m30.go)
