@@ -156,6 +156,7 @@ var all = []string{
 	CohortMembersRemoved,
 	CohortUpdated,
 	ConnectionA2aPinConfirmed,
+	ConnectionBrowserSecretFieldRefused,
 	ConnectionCreated,
 	ConnectionDriftReported,
 	ConnectionElicitationRefused,

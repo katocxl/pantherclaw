@@ -70879,7 +70879,8 @@
             "enum": [
               "secret_in_payload",
               "elicitation_refused",
-              "model_server_tool_not_allowed"
+              "model_server_tool_not_allowed",
+              "browser_secret_field"
             ],
             "description": "The refusal code."
           },

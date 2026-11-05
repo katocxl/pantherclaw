@@ -32,6 +32,11 @@ const RefusalElicitationRefused = "elicitation_refused"
 // HR-696).
 const RefusalModelServerTool = "model_server_tool_not_allowed"
 
+// RefusalBrowserSecretField is the gateway's local refusal of a pc.browser
+// form submit with a password, one-time-code or payment field (G0 M33
+// D978, HR-747).
+const RefusalBrowserSecretField = "browser_secret_field"
+
 // ElicitationReasons are the reasons an elicitation refusal may carry.
 var ElicitationReasons = []string{"url_mode", "undeclared_field", "type_mismatch", "duplicate_field", "too_many_fields", "injection_flagged"}
 
@@ -53,6 +58,7 @@ var refusals = map[string][2]string{
 	RefusalSecretInPayload:    {auditkind.ConnectionSecretInPayloadRefused, "SECRET_IN_PAYLOAD"},
 	RefusalElicitationRefused: {auditkind.ConnectionElicitationRefused, "ELICITATION_REFUSED"},
 	RefusalModelServerTool:    {auditkind.ConnectionModelServerToolRefused, "MODEL_SERVER_TOOL_NOT_ALLOWED"},
+	RefusalBrowserSecretField: {auditkind.ConnectionBrowserSecretFieldRefused, "BROWSER_SECRET_FIELD"},
 }
 
 // ReportLocalRefusal records that gateway refused an action through

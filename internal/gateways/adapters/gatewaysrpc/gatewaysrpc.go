@@ -275,6 +275,8 @@ type GatewayHandler struct {
 	cards CardSigner
 	// modelCalls decides the model face's calls (G0 M25 D313).
 	modelCalls ModelCalls
+	// pageCompares records cloaking compare reports (G0 M33 D986).
+	pageCompares PageCompares
 }
 
 // NewGateway returns the GatewayService handler.

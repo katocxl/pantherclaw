@@ -37,13 +37,17 @@ package pipeline
 // 8: step 7 reads the org's owned accounts and holds an action that
 // shares to the public or to an account the org does not own (G0 M30 D935,
 // D935a), which a recording before it does not hold.
-const Version = 8
+//
+// 9: step 7 reads the org's browser sites and holds a pc.browser action on
+// a site not listed, and every takeover (G0 M33 D977), which a recording
+// before it does not hold.
+const Version = 9
 
 // Replays reports whether this code replays inputs recorded by pipeline
 // version v (G0 M16 D95, G0 M17 D133, D134): this version, and versions 4,
-// 5, 6 and 7, each in its own mode (Pipeline.ReplayOf), so a recording decides
-// as it did. Others are incomplete (F507).
-func Replays(v int) bool { return v == 4 || v == 5 || v == 6 || v == 7 || v == Version }
+// 5, 6, 7 and 8, each in its own mode (Pipeline.ReplayOf), so a recording
+// decides as it did. Others are incomplete (F507).
+func Replays(v int) bool { return v == 4 || v == 5 || v == 6 || v == 7 || v == 8 || v == Version }
 
 // at reports whether the evaluation runs at least version v: always, except
 // when it replays a recording made under an earlier one.
