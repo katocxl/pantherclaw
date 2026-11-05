@@ -186,7 +186,9 @@ definitions:
     dedupe_key: [target.id, params.type, params.role, params.email_address, params.domain]
     retry:
       safe: false
-      on_unknown: fail
+      # An irreversible share is never retried: an unknown outcome goes to
+      # reconciliation (HR-007, G0 M34 D1002).
+      on_unknown: reconcile
     approval:
       title: Share Google Drive file {target.id} with {params.type} as {params.role}
       fields:

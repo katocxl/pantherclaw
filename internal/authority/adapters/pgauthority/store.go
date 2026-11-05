@@ -957,3 +957,24 @@ func (s *Store) PermitChannel(ctx context.Context, org ids.OrgID, gateway string
 	})
 	return ch, err
 }
+
+// RuntimeAccount reads what the runtime channel's account check needs (G0
+// M34 D994a, HR-765): the connection's runtime target, and the kind and bound
+// AWS account of the trusted-issuer revision that launched the run. found is
+// false when the run was not launched by a trusted issuer.
+func (s *Store) RuntimeAccount(ctx context.Context, org ids.OrgID, connection, run ids.UUID) (target, issuerKind, issuerAccount string, found bool, err error) {
+	err = s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		row, err := dbq.New(tx).RuntimeAccountFacts(ctx, connection, org, run)
+		if db.IsNoRows(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		if row.RuntimeTarget != nil {
+			target = *row.RuntimeTarget
+		}
+		issuerKind, issuerAccount, found = row.IssuerKind, row.IssuerAccount, true
+		return nil
+	})
+	return target, issuerKind, issuerAccount, found, err
+}

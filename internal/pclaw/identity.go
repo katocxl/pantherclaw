@@ -111,53 +111,57 @@ func identityCommands() map[string]command {
 				})
 			}
 		}),
-		"issuer propose-gcp": rpc("issuer propose-gcp --agent ID --service-account-id N [--project-id P] [--instance-id N] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+		"issuer propose-gcp": rpc("issuer propose-gcp --agent ID --service-account-id N [--project-id P] [--instance-id N] [--run-grant ID] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			sa := fs.String("service-account-id", "", "the service account's numeric unique id (not its email)")
 			project, instance := fs.String("project-id", "", "pin a Compute Engine project"), fs.String("instance-id", "", "pin a numeric Compute Engine instance id")
 			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			runGrant := fs.String("run-grant", "", "grant each run the instance starts goes under (a change needs activation by an Identity Publisher)")
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
 				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
-					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason, RunGrantId: *runGrant,
 					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Gcp{Gcp: &pantherclawv1.GcpBinding{
 						ServiceAccountId: *sa, ProjectId: *project, InstanceId: *instance,
 					}},
 				})
 			}
 		}),
-		"issuer propose-aws": rpc("issuer propose-aws --agent ID --account-id N --role-name NAME [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+		"issuer propose-aws": rpc("issuer propose-aws --agent ID --account-id N --role-name NAME [--run-grant ID] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			account, role := fs.String("account-id", "", "12-digit AWS account id"), fs.String("role-name", "", "IAM role name whose sessions attest")
 			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			runGrant := fs.String("run-grant", "", "grant each run the instance starts goes under (a change needs activation by an Identity Publisher)")
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
 				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
-					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason, RunGrantId: *runGrant,
 					Binding: &pantherclawv1.ProposeIssuerEntryRequest_Aws{Aws: &pantherclawv1.AwsBinding{AccountId: *account, RoleName: *role}},
 				})
 			}
 		}),
-		"issuer propose-azure-mi": rpc("issuer propose-azure-mi --agent ID --tenant-id GUID --app-id GUID --object-id GUID [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+		"issuer propose-azure-mi": rpc("issuer propose-azure-mi --agent ID --tenant-id GUID --app-id GUID --object-id GUID [--run-grant ID] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			tenant, appID := fs.String("tenant-id", "", "Entra tenant id"), fs.String("app-id", "", "Entra app id pinned for this org (identity.entra_apps)")
 			object := fs.String("object-id", "", "the managed identity's object (principal) id")
 			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			runGrant := fs.String("run-grant", "", "grant each run the instance starts goes under (a change needs activation by an Identity Publisher)")
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
 				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
-					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason, RunGrantId: *runGrant,
 					Binding: &pantherclawv1.ProposeIssuerEntryRequest_AzureMi{AzureMi: &pantherclawv1.AzureMiBinding{
 						TenantId: *tenant, AppId: *appID, ObjectId: *object,
 					}},
 				})
 			}
 		}),
-		"issuer propose-entra-agent": rpc("issuer propose-entra-agent --agent ID --tenant-id GUID --app-id GUID --object-id GUID [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
+		"issuer propose-entra-agent": rpc("issuer propose-entra-agent --agent ID --tenant-id GUID --app-id GUID --object-id GUID [--run-grant ID] [--auto-admit] [--entry ID] --reason R", 0, func(fs *flag.FlagSet) call {
 			agent, entry, reason := fs.String("agent", "", "agent the entry binds to"), fs.String("entry", "", "revise this entry"), fs.String("reason", "", "why")
 			tenant, appID := fs.String("tenant-id", "", "Entra tenant id"), fs.String("app-id", "", "Entra app id pinned for this org (identity.entra_apps)")
 			object := fs.String("object-id", "", "the agent identity's service principal object id")
 			auto := fs.Bool("auto-admit", false, "admit matching workloads without an owner (needs activation by an Identity Publisher)")
+			runGrant := fs.String("run-grant", "", "grant each run the instance starts goes under (a change needs activation by an Identity Publisher)")
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
 				return c.identity.ProposeIssuerEntry(ctx, &pantherclawv1.ProposeIssuerEntryRequest{
-					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason,
+					EntryId: *entry, AgentId: *agent, AutoAdmit: *auto, Reason: *reason, RunGrantId: *runGrant,
 					Binding: &pantherclawv1.ProposeIssuerEntryRequest_EntraAgent{EntraAgent: &pantherclawv1.EntraAgentBinding{
 						TenantId: *tenant, AppId: *appID, ObjectId: *object,
 					}},

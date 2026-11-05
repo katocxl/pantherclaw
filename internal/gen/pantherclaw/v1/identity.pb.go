@@ -1272,8 +1272,9 @@ type IssuerRevision struct {
 	ClosedBy string `protobuf:"bytes,18,opt,name=closed_by,json=closedBy,proto3" json:"closed_by,omitempty"`
 	// When.
 	CloseTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	// Kubernetes only: the grant a pod's run is started under (G0 M32
-	// D973); empty: none.
+	// Kubernetes and the cloud presets only: the grant a pod's run (G0 M32
+	// D973) or a cloud agent runtime's run (G0 M34 D992) is started under;
+	// empty: none.
 	RunGrantId    string `protobuf:"bytes,26,opt,name=run_grant_id,json=runGrantId,proto3" json:"run_grant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2230,8 +2231,10 @@ type ProposeIssuerEntryRequest struct {
 	Binding isProposeIssuerEntryRequest_Binding `protobuf_oneof:"binding"`
 	// Admit matching instances without an owner (a widening when turned on).
 	AutoAdmit bool `protobuf:"varint,5,opt,name=auto_admit,json=autoAdmit,proto3" json:"auto_admit,omitempty"`
-	// Kubernetes only: the grant a pod's run is started under
-	// (KubernetesService.StartPodRun, G0 M32 D973). Part of the revision, so
+	// Kubernetes and the cloud presets only: the grant a pod's run
+	// (KubernetesService.StartPodRun, G0 M32 D973) or a cloud agent runtime's
+	// run (RuntimeService.StartRuntimeRun, G0 M34 D992) is started under. Part
+	// of the revision, so
 	// it changes only through a new revision and its approval; empty: the
 	// entry starts no runs.
 	RunGrantId string `protobuf:"bytes,13,opt,name=run_grant_id,json=runGrantId,proto3" json:"run_grant_id,omitempty"`
@@ -3184,7 +3187,7 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"N\n" +
 	"\x16RevokeInstanceResponse\x124\n" +
-	"\binstance\x18\x01 \x01(\v2\x18.pantherclaw.v1.InstanceR\binstance\"\x90\a\n" +
+	"\binstance\x18\x01 \x01(\v2\x18.pantherclaw.v1.InstanceR\binstance\"\x87\b\n" +
 	"\x19ProposeIssuerEntryRequest\x12t\n" +
 	"\bentry_id\x18\x01 \x01(\tBY\xbaHVrT\x18$2P^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$R\aentryId\x12#\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x127\n" +
@@ -3205,8 +3208,8 @@ const file_pantherclaw_v1_identity_proto_rawDesc = "" +
 	"\frun_grant_id\x18\r \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\n" +
 	"runGrantId\x12\"\n" +
 	"\x06reason\x18\x06 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason:\x80\x01\xbaH}\x1a{\n" +
-	"\x19run_grant_kubernetes_only\x12-run_grant_id is only for a kubernetes binding\x1a/this.run_grant_id == '' || has(this.kubernetes)B\x10\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason:\xf7\x01\xbaH\xf3\x01\x1a\xf0\x01\n" +
+	"\x19run_grant_kubernetes_only\x12Prun_grant_id is only for a kubernetes, gcp, aws, azure_mi or entra_agent binding\x1a\x80\x01this.run_grant_id == '' || has(this.kubernetes) || has(this.gcp) || has(this.aws) || has(this.azure_mi) || has(this.entra_agent)B\x10\n" +
 	"\abinding\x12\x05\xbaH\x02\b\x01\"X\n" +
 	"\x1aProposeIssuerEntryResponse\x12:\n" +
 	"\brevision\x18\x01 \x01(\v2\x1e.pantherclaw.v1.IssuerRevisionR\brevision\"\xad\x01\n" +

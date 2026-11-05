@@ -71,9 +71,10 @@ definitions:
     dedupe_key: [target.id, params.to, params.subject, params.text]
     retry:
       safe: false
-      # Graph answers 202 with no message id, so an unknown outcome cannot
-      # be reconciled.
-      on_unknown: fail
+      # Graph answers 202 with no message id, so no read confirms a send;
+      # an irreversible send is never retried, and an unknown outcome goes
+      # to reconciliation by a person (HR-007, G0 M34 D1002).
+      on_unknown: reconcile
     approval:
       title: Send an email as Microsoft 365 user {target.id}
       fields:
@@ -279,7 +280,9 @@ definitions:
     dedupe_key: [target.id, params.recipients, params.role]
     retry:
       safe: false
-      on_unknown: fail
+      # An irreversible share is never retried: an unknown outcome goes to
+      # reconciliation (HR-007, G0 M34 D1002).
+      on_unknown: reconcile
     approval:
       title: Invite people to drive item {target.id}
       fields:
@@ -372,7 +375,9 @@ definitions:
     dedupe_key: [target.id, params.type, params.scope]
     retry:
       safe: false
-      on_unknown: fail
+      # An irreversible share is never retried: an unknown outcome goes to
+      # reconciliation (HR-007, G0 M34 D1002).
+      on_unknown: reconcile
     approval:
       title: Create a {params.scope} {params.type} link to drive item {target.id}
       fields:

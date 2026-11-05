@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that run a script on an Azure virtual
+# machine (G0 M34 D993, D993a; HR-763). It reaches Azure Resource Manager,
+# the connection's base URL https://management.azure.com, through an http
+# connection whose credential is of kind oauth_client: PantherClaw holds an
+# Entra application's client secret and mints a token for every dispatch
+# (scope https://management.azure.com/.default) at the tenant's v2.0 token
+# endpoint; the token, never the secret, is placed on the request, and the
+# agent holds neither.
+#
+# A run command executes a script on the machine with its agent's
+# privileges: an irreversible code.execute. No template grants it. The
+# script is a command param, so an approval shows it in full beside the
+# machine and the command id (HR-034).
+#
+# UNCONFIRMED: the API shape (virtualMachines/runCommand, api-version
+# 2024-07-01) is taken from Microsoft's published reference and checked only
+# against the simulator, until a real tenant check (R-85).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.azure-compute
+version: 1.0.0
+publisher: pantherclaw
+summary: Run a script on an Azure virtual machine (API shape unconfirmed)
+
+definitions:
+  - operation: azure.vm.run_command
+    summary: Run a shell or PowerShell script on an Azure virtual machine
+    access: write
+    target:
+      type: azure_vm
+      id_pattern: '^(?P<subscription>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/(?P<group>[A-Za-z0-9._()-]{1,90})/(?P<vm>[A-Za-z0-9][A-Za-z0-9._-]{0,63})$'
+      account: none
+    params:
+      command_id:
+        type: enum
+        material: true
+        required: true
+        values: [RunShellScript, RunPowerShellScript]
+      script:
+        type: command
+        material: true
+        required: true
+        max_length: 8192
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: code.execute
+        description: Runs a script on the virtual machine with its agent's privileges
+    reversibility: irreversible
+    dedupe_key: [target.id, params.command_id, params.script]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Run a {params.command_id} script on Azure virtual machine {target.id}
+      fields:
+        - target.id
+        - params.command_id
+        - params.script
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: azure_vm_run_command
+        route: azure-vm-run-command
+        description: >-
+          Run a shell (RunShellScript) or PowerShell (RunPowerShellScript)
+          script on an Azure virtual machine, named by its subscription id,
+          resource group and name. Every run holds for a person unless a
+          grant names it.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [subscription_id, resource_group, vm_name, command_id, script]
+          properties:
+            subscription_id:
+              type: string
+              description: The subscription's id
+              pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+            resource_group:
+              type: string
+              description: The resource group's name
+              pattern: '^[A-Za-z0-9._()-]{1,90}$'
+            vm_name:
+              type: string
+              description: The virtual machine's name
+              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+            command_id:
+              type: string
+              enum: [RunShellScript, RunPowerShellScript]
+            script:
+              type: string
+              description: The script to run
+              maxLength: 8192
+        extract:
+          target_id: input.subscription_id + '/' + input.resource_group + '/' + input.vm_name
+          params:
+            command_id: input.command_id
+            script: input.script
+    dispatch:
+      http:
+        method: POST
+        path: /subscriptions/{target.id.subscription}/resourceGroups/{target.id.group}/providers/Microsoft.Compute/virtualMachines/{target.id.vm}/runCommand
+        query:
+          api-version: literal.2024-07-01
+        body:
+          commandId: params.command_id
+          script[0]: params.script

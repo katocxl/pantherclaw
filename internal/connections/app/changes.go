@@ -298,6 +298,11 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 			set("gateway_id", conn.GatewayID.String(), p.GatewayID.String(), true)
 		}
 		if in.AccessMode != nil {
+			// A runtime target needs an agent-held credential (G0 M34 D991,
+			// HR-762): clear the target before changing the access mode.
+			if conn.RuntimeTarget != nil && *in.AccessMode != AccessAgentHeld {
+				return ErrRuntimeTargetKind
+			}
 			p.AccessMode = *in.AccessMode
 			set("access_mode", conn.AccessMode, p.AccessMode, true)
 		}

@@ -59,11 +59,12 @@ func (e *Engine) awsSession(ctx context.Context, conn *control.Connection, def *
 			return nil, err
 		}
 	} else {
-		resource, err := def.AWSResourceARN(target, a.Account(), a.Region, a.Partition())
+		// The resource and up to 3 more exact ARNs (G0 M34 D993a item 3).
+		resources, err := def.AWSResourceARNs(target, a.Account(), a.Region, a.Partition())
 		if err != nil {
 			return nil, err
 		}
-		if policy, err = broker.SessionPolicy(a.Service, action, resource); err != nil {
+		if policy, err = broker.SessionPolicyResources(a.Service, action, resources); err != nil {
 			return nil, err
 		}
 	}

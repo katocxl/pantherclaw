@@ -1,0 +1,251 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for agents that deploy agents to Azure AI Foundry
+# Agent Service (G0 M34 D993, D993a; HR-763). It reaches one Foundry
+# project's endpoint, the connection's base URL
+# https://<resource>.services.ai.azure.com/api/projects/<project>, through
+# an http connection whose credential is of kind oauth_client: PantherClaw
+# holds an Entra application's client secret and mints a token for every
+# dispatch (scope https://ai.azure.com/.default) at the tenant's v2.0 token
+# endpoint; the token, never the secret, is placed on the request, and the
+# agent holds neither. Every path is relative to the base URL's project, so
+# the connection names the one project; the target "project" stands for it.
+#
+# Creating or changing an agent changes what it is told and which model
+# runs it: an irreversible agent.deploy. No template grants it.
+#
+# The name, instructions and description are content: shown only in the
+# untrusted block of an approval (HR-023). The model deployment is what an
+# approval shows.
+#
+# UNCONFIRMED: the API shape (assistants, api-version v1) is taken from
+# Microsoft's published reference and checked only against the simulator,
+# until a real tenant check (R-85).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124).
+format: 1
+name: pc.azure-foundry
+version: 1.0.0
+publisher: pantherclaw
+summary: List, create and update agents in an Azure AI Foundry project (API shape unconfirmed)
+
+definitions:
+  - operation: foundry.agents.list
+    summary: List the agents of the connection's Azure AI Foundry project
+    access: read
+    target:
+      type: foundry_project
+      id_pattern: '^project$'
+      account: none
+    params: {}
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: foundry_list_agents
+        route: foundry-agents-list
+        description: >-
+          List the agents of the Azure AI Foundry project this connection
+          reaches.
+        input_schema:
+          type: object
+          additionalProperties: false
+          properties: {}
+        extract:
+          target_id: "'project'"
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /assistants
+        query:
+          api-version: literal.v1
+
+  - operation: foundry.agent.create
+    summary: Create an agent in the connection's Azure AI Foundry project
+    access: write
+    target:
+      type: foundry_project
+      id_pattern: '^project$'
+      account: none
+    params:
+      model:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+      name:
+        type: content
+        material: true
+        required: true
+        max_length: 256
+      instructions:
+        type: content
+        material: true
+        max_length: 8192
+      description:
+        type: content
+        material: true
+        max_length: 512
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: agent.deploy
+        description: Creates an agent that runs with the project's tools and model
+    reversibility: irreversible
+    dedupe_key: [target.id, params.name, params.model, params.instructions]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Create an Azure AI Foundry agent on model {params.model}
+      fields:
+        - params.model
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: foundry_create_agent
+        route: foundry-agent-create
+        description: >-
+          Create an agent in the Azure AI Foundry project this connection
+          reaches, on one of the project's model deployments. Every create
+          holds for a person unless a grant names it.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [model, name]
+          properties:
+            model:
+              type: string
+              description: The model deployment's name
+              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+            name:
+              type: string
+              description: The agent's name
+              maxLength: 256
+            instructions:
+              type: string
+              description: The agent's instructions
+              maxLength: 8192
+            description:
+              type: string
+              description: What the agent does
+              maxLength: 512
+        extract:
+          target_id: "'project'"
+          params:
+            model: input.model
+            name: input.name
+            instructions: input.instructions
+            description: input.description
+    dispatch:
+      http:
+        method: POST
+        path: /assistants
+        query:
+          api-version: literal.v1
+        body:
+          model: params.model
+          name: params.name
+          instructions: params.instructions
+          description: params.description
+
+  - operation: foundry.agent.update
+    summary: Change an agent in the connection's Azure AI Foundry project
+    access: write
+    target:
+      type: foundry_agent
+      id_pattern: '^asst_[A-Za-z0-9]{1,64}$'
+      account: none
+    params:
+      model:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+      instructions:
+        type: content
+        material: true
+        max_length: 8192
+      description:
+        type: content
+        material: true
+        max_length: 512
+    constraints:
+      - kind: target_set
+    effects:
+      - kind: agent.deploy
+        description: Changes what an agent is told and which model runs it
+    reversibility: irreversible
+    dedupe_key: [target.id, params.model, params.instructions]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Change Azure AI Foundry agent {target.id} to run on model {params.model}
+      fields:
+        - target.id
+        - params.model
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-11-05
+    mappings:
+      - channel: mcp
+        tool: foundry_update_agent
+        route: foundry-agent-update
+        description: >-
+          Change an agent of the Azure AI Foundry project this connection
+          reaches: its model deployment, instructions and description.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [agent_id, model]
+          properties:
+            agent_id:
+              type: string
+              description: The agent's id (asst_...)
+              pattern: '^asst_[A-Za-z0-9]{1,64}$'
+            model:
+              type: string
+              description: The model deployment's name
+              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+            instructions:
+              type: string
+              description: The agent's instructions
+              maxLength: 8192
+            description:
+              type: string
+              description: What the agent does
+              maxLength: 512
+        extract:
+          target_id: input.agent_id
+          params:
+            model: input.model
+            instructions: input.instructions
+            description: input.description
+    dispatch:
+      http:
+        method: POST
+        path: /assistants/{target.id}
+        query:
+          api-version: literal.v1
+        body:
+          model: params.model
+          instructions: params.instructions
+          description: params.description

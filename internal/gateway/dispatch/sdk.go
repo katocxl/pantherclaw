@@ -35,6 +35,10 @@ type Delegated struct {
 // /sdk face), whose agent performs the action itself (HR-186).
 func cooperative(c Call) bool { return c.Action.Action.Channel == string(defs.ChannelSDK) }
 
+// runtimeChannel reports whether c came from a cloud agent runtime's gateway
+// (G0 M34 D990): delegated always, never sent upstream.
+func runtimeChannel(c Call) bool { return c.Action.Action.Channel == string(defs.ChannelRuntime) }
+
 // delegateSDK commits and records an SDK call the agent performs itself
 // (HR-186, HR-201). On a target-enforced connection the gateway builds the
 // outbound request from the action and the definition's template, reports
