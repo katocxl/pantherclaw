@@ -16,6 +16,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/contentsignals/adapters/outofprocess"
@@ -80,6 +81,14 @@ type Config struct {
 		// ClassifierTimeout bounds one call: at most 5s, default 250ms.
 		ClassifierTimeout config.Duration `json:"classifier_timeout" env:"PC_GW_CONTENT_CLASSIFIER_TIMEOUT"`
 	} `json:"content_signals"`
+	// BrowserCompare is the gateway's cloaking compare for browser sites an
+	// admin marked (G0 M33 D986, HR-759): alert only, PARTIAL.
+	BrowserCompare struct {
+		// PlainUserAgent is the user agent of the plain fetch the agent's
+		// page is compared with; the compare is off while it is unset. At
+		// most 512 printable ASCII characters.
+		PlainUserAgent string `json:"plain_user_agent" env:"PC_GW_BROWSER_COMPARE_PLAIN_USER_AGENT"`
+	} `json:"browser_compare"`
 	// Egress is what the gateway may reach (HR-071, HR-077). The targets
 	// themselves are the connections the server configures.
 	Egress struct {
@@ -214,6 +223,9 @@ func (c *Config) Validate() error {
 		if err := outofprocess.CheckURL(u); err != nil {
 			errs = append(errs, fmt.Errorf("content_signals.classifier_url: %w", err))
 		}
+	}
+	if ua := c.BrowserCompare.PlainUserAgent; len(ua) > 512 || strings.IndexFunc(ua, func(r rune) bool { return r < 0x20 || r > 0x7e }) >= 0 {
+		errs = append(errs, errors.New("browser_compare.plain_user_agent must be at most 512 printable ASCII characters"))
 	}
 	if d := c.ContentSignals.ClassifierTimeout.D(); d < 0 || d > 5*time.Second {
 		errs = append(errs, errors.New("content_signals.classifier_timeout must be at most 5s"))

@@ -14,6 +14,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
+	"github.com/katocxl/pantherclaw/internal/gateway/browsercompare"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -38,6 +39,10 @@ type Config struct {
 	// authorization is on (G0 M26 D402); "" keeps the MCP face's OAuth
 	// route closed.
 	McpIssuer string
+	// BrowserCompareSites are the org's browser sites marked for the
+	// cloaking compare (G0 M33 D986); none turns the compare off for every
+	// host.
+	BrowserCompareSites []browsercompare.Site
 }
 
 // Connection is one connection with its package and credential.
@@ -226,6 +231,10 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 	cfg := &Config{
 		Version: res.GetVersion(), Org: s.org, ByName: map[string]*Connection{}, ByID: map[string]*Connection{},
 		McpIssuer: res.GetMcpAccess().GetIssuer(),
+	}
+	for _, site := range res.GetBrowserCompareSites() {
+		cfg.BrowserCompareSites = append(cfg.BrowserCompareSites,
+			browsercompare.Site{Host: site.GetHost(), IncludeSubdomains: site.GetIncludeSubdomains()})
 	}
 	for _, gc := range res.GetConnections() {
 		pkg, ok := pkgs[gc.GetPackage()+"@"+gc.GetPackageVersion()]
