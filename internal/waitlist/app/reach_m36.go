@@ -23,8 +23,9 @@ import (
 // decides anything (HR-789).
 
 // fatigueLast drops the deciders with a live fatigue flag from a step's
-// reach unless it is the chain's final step, when the org routes on
-// fatigue (the default). They stay eligible throughout (HR-790).
+// reach unless it is the chain's final step or every decider at the step
+// is flagged, when the org routes on fatigue (the default). They stay
+// eligible throughout (HR-791).
 func fatigueLast(ctx context.Context, q *dbq.Queries, org ids.OrgID, reached []wdomain.Candidate, final bool) ([]wdomain.Candidate, error) {
 	if final || len(reached) == 0 {
 		return reached, nil
@@ -44,9 +45,15 @@ func fatigueLast(ctx context.Context, q *dbq.Queries, org ids.OrgID, reached []w
 	if err != nil || len(flags) == 0 {
 		return reached, err
 	}
-	return slices.DeleteFunc(slices.Clone(reached), func(c wdomain.Candidate) bool {
+	rest := slices.DeleteFunc(slices.Clone(reached), func(c wdomain.Candidate) bool {
 		return slices.ContainsFunc(flags, func(f dbq.ActiveFatigueFlagsRow) bool { return f.UserID == c.User })
-	}), nil
+	})
+	if len(rest) == 0 {
+		// "Last" means after the others: a step where every decider is
+		// flagged still reaches them, so no step goes untold (D1063a).
+		return reached, nil
+	}
+	return rest, nil
 }
 
 // deputiesOf returns the deputies to route a hold to alongside persons,
@@ -54,7 +61,7 @@ func fatigueLast(ctx context.Context, q *dbq.Queries, org ids.OrgID, reached []w
 // open now and whom apdomain.Check makes eligible for one of the hold's
 // requirements. A deputy who is not eligible is skipped and audited
 // (approval.deputy_not_eligible); deputies never widen eligibility
-// (HR-791).
+// (HR-790).
 func deputiesOf(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, e dbq.EntryForRoutingRow,
 	persons, told []ids.UUID,
 ) ([]ids.UUID, error) {

@@ -38,7 +38,7 @@ import (
 // deputies and read-only approval groups. None of them approves anything,
 // changes who is eligible (HR-173) or writes an approval response
 // (HR-789): fatigue flags and deputies change only who is routed and told
-// first (HR-790, HR-791); an unanswered hold stays held, then expires.
+// first (HR-791, HR-790); an unanswered hold stays held, then expires.
 
 // Errors of approval reach.
 var (
