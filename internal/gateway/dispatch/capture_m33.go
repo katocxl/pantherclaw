@@ -28,6 +28,30 @@ var omittedTypes = map[string]bool{"image": true, "document": true, "image_url":
 // never kept.
 const computerOutputType = "computer_call_output"
 
+// bedrockMedia are the Bedrock Converse content blocks a capture never
+// keeps (G0 M33 D985a): an object whose only member is one of these, with
+// an object value holding source, at any depth (toolResult content
+// included).
+var bedrockMedia = map[string]bool{"image": true, "document": true, "video": true}
+
+// bedrockBlock reports whether ms are a Bedrock Converse image, document
+// or video block, and its member's name.
+func bedrockBlock(ms []member) (string, bool) {
+	if len(ms) != 1 || !bedrockMedia[ms[0].name] || ms[0].value.Kind() != '{' {
+		return "", false
+	}
+	inner, err := members(ms[0].value)
+	if err != nil {
+		return "", false
+	}
+	for _, m := range inner {
+		if m.name == "source" {
+			return ms[0].name, true
+		}
+	}
+	return "", false
+}
+
 // withoutImages returns body with every omitted block replaced, or false
 // when body is not one JSON value.
 func withoutImages(body []byte) ([]byte, bool) {
@@ -120,6 +144,9 @@ func omitBlocks(v jsontext.Value) (jsontext.Value, error) {
 		typ := typeOf(ms)
 		if omittedTypes[typ] {
 			return placeholder(typ, v)
+		}
+		if name, ok := bedrockBlock(ms); ok {
+			return placeholder(name, v)
 		}
 		for i := range ms {
 			if typ == computerOutputType && ms[i].name == "output" {
