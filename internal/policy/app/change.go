@@ -336,6 +336,17 @@ func (c *Changes) Request(ctx context.Context, kind ChangeKind, subjectID, baseV
 		if len(people) >= 2 {
 			required = 2
 		}
+		// A version that came from an MSSP partner's proposal always needs
+		// two distinct customer people (G0 M38 D1102, HR-815): the
+		// fewer-than-two fallback never applies, and with fewer than two
+		// eligible people the request waits (NEEDS_SECOND_PERSON).
+		partner, err := partnerOrigin(ctx, q, caller.Org, kind, subjectID)
+		if err != nil {
+			return err
+		}
+		if partner != "" {
+			required = 2
+		}
 		if err := q.InsertPolicyChangeRequest(ctx, dbq.InsertPolicyChangeRequestParams{
 			OrgID: caller.Org, ID: id, Kind: string(kind), SubjectID: subjectID, BaseVersionID: base, Binding: binding[:],
 			Summary: raw, Required: required, RequestedBy: caller.Principal.String(),
@@ -348,6 +359,12 @@ func (c *Changes) Request(ctx context.Context, kind ChangeKind, subjectID, baseV
 		}
 		if base != nil {
 			details["base_version"] = base.String()
+		}
+		if partner != "" {
+			details["origin"] = partner
+			if len(people) < 2 {
+				details["waiting"] = NeedsSecondPerson
+			}
 		}
 		if err := record(ctx, tx, caller, auditkind.PolicyChangeRequested, id, details); err != nil {
 			return err

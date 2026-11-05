@@ -69,6 +69,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/notifications/adapters/notificationsrpc"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/partners"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
@@ -481,6 +482,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		}
 		web.WithPlanGate(entitlements.NewGate(entsSvc, cfg.Billing.RequirePlan, procedureClass))
 		sup := newSupport(cfg, pool, entsSvc, m5.notifications, log)
+		partnerSvc := newPartners(pool, entsSvc, cfg.Auth.PublicURL, log) // G0 M38 D1101
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			scanLimits: cfg.Limits.Scan,
@@ -491,8 +493,10 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 				rpcauth.WithBrowserSessions(sessions, log),
 				rpcauth.WithAlternatePermissions(m24AlternatePermissions),
 				ui.accountSessions(web, sessions.PublicOrigin()),
-				supportSessions(sup)),
+				supportSessions(sup),
+				partnerSessions(partnerSvc)),
 			support:   sup,
+			partners:  partnerSvc,
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			model:     cfg.Model,
@@ -579,6 +583,9 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 		defer closeData()
 		accountJobs, err := registerAccountDeletion(jreg, ui.deletion)
 		if err != nil {
+			return err
+		}
+		if err := newPartners(pool, entsSvc, cfg.Auth.PublicURL, log).Register(jreg); err != nil { // G0 M38 D1100
 			return err
 		}
 		if err := newSupport(cfg, pool, entsSvc, m5.notifications, log).Register(jreg); err != nil {
@@ -744,6 +751,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 			return err
 		}
 		client.PeriodicJobs().AddMany(supportPeriodicJobs())
+		client.PeriodicJobs().AddMany(m38PartnerPeriodicJobs())
 		client.PeriodicJobs().AddMany(evidenceJobs)
 		observeJobs(ctx, client)
 		client.PeriodicJobs().AddMany(dataJobs)
@@ -884,6 +892,9 @@ type apiDeps struct {
 	// support is customer-approved support access (wiring_m13_support.go);
 	// nil or off when not configured.
 	support supportService
+	// partners is MSSP partner access (wiring_m38_partners.go); nil when
+	// not built.
+	partners *partners.Service
 	// tickets is ticket sync (wiring_m20_tickets.go); nil: apiHandler builds
 	// one.
 	tickets *tsapp.Service
@@ -1043,6 +1054,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerM20Webhooks(rs, d)
 	registerM20Tickets(rs, d)
 	registerSupport(rs, d)
+	mountM38Partners := registerM38Partners(rs, d) // G0 M38 D1100
 	registerM16External(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
@@ -1070,6 +1082,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	mountM35Federation(mux, federation, d)
 	if mountM36OTel != nil {
 		mountM36OTel(mux)
+	}
+	if mountM38Partners != nil {
+		mountM38Partners(mux)
 	}
 	mux.HandleFunc("GET /livez", livez(pool))
 	mux.Handle("GET /readyz", readiness{pool: pool, workers: d.workers, held: d.hold, log: log})

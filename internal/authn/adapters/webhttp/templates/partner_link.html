@@ -1,0 +1,22 @@
+{{template "head" .}}
+<h1>MSSP partner link request</h1>
+<p>State: <strong>{{.Link.State}}</strong>. Asked at {{.Link.RequestedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{if eq .Link.State "REQUESTED"}}; expires unanswered at {{.Link.RequestExpiresAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Link</dt><dd><code>{{.Link.ID}}</code></dd>
+<dt>Partner</dt><dd class="untrusted">{{.Link.PartnerName}} (organization <code>{{.Link.PartnerOrg}}</code>)</dd>
+<dt>Asked by</dt><dd>Person <code>{{.Link.RequestedBy}}</code> of the partner organization</dd>
+{{with .Link.Reason}}<dt>Reason</dt><dd class="untrusted">{{.}}</dd>{{end}}
+<dt>Scope</dt><dd>Read: what a support session reads, never restricted evidence, credentials, sealed material or captured payloads.{{if .Propose}} Propose: policy versions and reference packs, which only ever become drafts that your people review, publish and roll out.{{end}}</dd>
+<dt>Duration</dt><dd>{{.Link.DurationDays}} days from the approval</dd>
+{{with .Link.EndsAt}}<dt>Window</dt><dd>Until {{.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>{{end}}
+</dl>
+<p class="note">Approving lets the partner's people with partner.operate open partner sessions in your organization for the duration. Every call of a partner session is recorded in your audit log first. A partner can never approve, step up or act as one of your people, and a loosening proposed by a partner always needs two of your people. Any person with partner.approve can revoke the link at any time. Nobody can approve a link their own account asked for.</p>
+{{if .CanDecide}}
+<p><button type="button" class="danger" data-action="approve" data-path="/partners/links/{{.Link.ID}}/approve">Approve with your security key</button>
+<button type="button" data-action="deny" data-path="/partners/links/{{.Link.ID}}/deny">Deny with your security key</button></p>
+{{else if eq .Link.State "REQUESTED"}}
+<p class="note">You cannot decide this: that needs partner.approve and a security key.</p>
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/support_access.js"></script>
+{{template "foot" .}}

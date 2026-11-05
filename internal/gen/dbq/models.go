@@ -3521,6 +3521,67 @@ type PcPackageVersion struct {
 	SigningKeyID *ids.UUID
 }
 
+type PcPartnerLink struct {
+	ID                ids.UUID
+	PartnerOrg        ids.UUID
+	CustomerOrg       ids.UUID
+	PartnerName       string
+	State             string
+	Scopes            []string
+	DurationDays      int32
+	Reason            string
+	Renews            *ids.UUID
+	RequestedBy       ids.UUID
+	RequestedAccount  *ids.UUID
+	RequestedAt       time.Time
+	RequestExpiresAt  time.Time
+	DecidedBy         *ids.UUID
+	DecidedCredential *ids.UUID
+	DecidedAt         *time.Time
+	StartsAt          *time.Time
+	EndsAt            *time.Time
+	RevokedBy         *string
+	RevokedAt         *time.Time
+	EndReason         *string
+}
+
+type PcPartnerProposal struct {
+	ID            ids.UUID
+	LinkID        ids.UUID
+	PartnerOrg    ids.UUID
+	CustomerOrg   ids.UUID
+	Kind          string
+	Title         string
+	Body          []byte
+	TemplateID    *ids.UUID
+	State         string
+	ProposedBy    string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedBy     *string
+	DecidedAt     *time.Time
+	DeclineReason *string
+	DraftRef      *ids.UUID
+}
+
+type PcPartnerSession struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	LinkID            ids.UUID
+	PartnerOrg        ids.UUID
+	PartnerUser       ids.UUID
+	PartnerCredential ids.UUID
+	SecretHash        []byte
+	State             string
+	EndReason         *string
+	UserAgent         string
+	ClientIp          string
+	CreatedAt         time.Time
+	LastSeenAt        time.Time
+	ExpiresAt         time.Time
+	EndedAt           *time.Time
+}
+
 type PcPayloadCapture struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID

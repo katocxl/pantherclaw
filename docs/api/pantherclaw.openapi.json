@@ -26739,6 +26739,816 @@
         }
       }
     },
+    "/pantherclaw.v1.PartnerService/RequestPartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "RequestPartnerLink",
+        "description": "RequestPartnerLink asks a customer org for a link (partner side, a\n person only).\n permission: partner.manage",
+        "operationId": "pantherclaw.v1.PartnerService.RequestPartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RequestPartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RequestPartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/RenewPartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "RenewPartnerLink",
+        "description": "RenewPartnerLink asks again with the scopes of an earlier link of the\n same customer: a new REQUESTED link (partner side, a person only).\n permission: partner.manage",
+        "operationId": "pantherclaw.v1.PartnerService.RenewPartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RenewPartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RenewPartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/ListPartnerLinks": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "ListPartnerLinks",
+        "description": "ListPartnerLinks lists the org's links, as partner and as customer.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.ListPartnerLinks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerLinksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerLinksResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/GetPartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "GetPartnerLink",
+        "description": "GetPartnerLink returns one link of the org's.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.GetPartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/DecidePartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "DecidePartnerLink",
+        "description": "DecidePartnerLink is refused over the API (STEP_UP_REQUIRED): a\n customer person decides a link on its page with a security key.\n permission: partner.approve",
+        "operationId": "pantherclaw.v1.PartnerService.DecidePartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DecidePartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DecidePartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/RevokePartnerLink": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "RevokePartnerLink",
+        "description": "RevokePartnerLink ends a requested or active link at once (customer\n side, a person only) and ends its partner sessions.\n permission: partner.approve",
+        "operationId": "pantherclaw.v1.PartnerService.RevokePartnerLink",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.RevokePartnerLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.RevokePartnerLinkResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/ListPartnerCustomers": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "ListPartnerCustomers",
+        "description": "ListPartnerCustomers lists the customers of the partner's active links\n with counts only (partner side). Each customer records the read.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.ListPartnerCustomers",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerCustomersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerCustomersResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/OpenPartnerSession": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "OpenPartnerSession",
+        "description": "OpenPartnerSession is refused over the API (STEP_UP_REQUIRED): a\n partner person opens a partner session on the customer's open page\n with a security key.\n permission: partner.operate",
+        "operationId": "pantherclaw.v1.PartnerService.OpenPartnerSession",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.OpenPartnerSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.OpenPartnerSessionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/GetCurrentPartnerSession": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "GetCurrentPartnerSession",
+        "description": "GetCurrentPartnerSession describes the caller's partner session.\n permission: authenticated",
+        "operationId": "pantherclaw.v1.PartnerService.GetCurrentPartnerSession",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetCurrentPartnerSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetCurrentPartnerSessionResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/ProposeRollout": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "ProposeRollout",
+        "description": "ProposeRollout proposes a policy version or a reference pack to\n customers over links with the PROPOSE scope: from a partner session\n (its own customer only), or from the partner org by a person holding\n partner.manage (one proposal per named customer).\n permission: authenticated",
+        "operationId": "pantherclaw.v1.PartnerService.ProposeRollout",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ProposeRolloutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ProposeRolloutResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/ListPartnerProposals": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "ListPartnerProposals",
+        "description": "ListPartnerProposals lists the org's proposals, as partner and as\n customer.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.ListPartnerProposals",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerProposalsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.ListPartnerProposalsResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/GetPartnerProposal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "GetPartnerProposal",
+        "description": "GetPartnerProposal returns one proposal with its body.\n permission: partner.read",
+        "operationId": "pantherclaw.v1.PartnerService.GetPartnerProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.GetPartnerProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.GetPartnerProposalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/AcceptPartnerProposal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "AcceptPartnerProposal",
+        "description": "AcceptPartnerProposal makes the proposal a DRAFT policy version\n (customer side, a person holding policy.author). Nothing is published.\n permission: policy.author",
+        "operationId": "pantherclaw.v1.PartnerService.AcceptPartnerProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.AcceptPartnerProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.AcceptPartnerProposalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/DeclinePartnerProposal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "DeclinePartnerProposal",
+        "description": "DeclinePartnerProposal declines a proposal (customer side).\n permission: policy.author",
+        "operationId": "pantherclaw.v1.PartnerService.DeclinePartnerProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.DeclinePartnerProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.DeclinePartnerProposalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
+    "/pantherclaw.v1.PartnerService/WithdrawPartnerProposal": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PartnerService"
+        ],
+        "summary": "WithdrawPartnerProposal",
+        "description": "WithdrawPartnerProposal withdraws a proposal (partner side).\n permission: partner.manage",
+        "operationId": "pantherclaw.v1.PartnerService.WithdrawPartnerProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.WithdrawPartnerProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.WithdrawPartnerProposalResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.PolicyService/CreatePolicyVersion": {
       "post": {
         "tags": [
@@ -91291,6 +92101,919 @@
         "additionalProperties": false,
         "description": "PackBaseline is the grant a person may issue an agent from the pack."
       },
+      "pantherclaw.v1.PartnerLinkScope": {
+        "type": "string",
+        "title": "PartnerLinkScope",
+        "enum": [
+          "PARTNER_LINK_SCOPE_UNSPECIFIED",
+          "PARTNER_LINK_SCOPE_READ",
+          "PARTNER_LINK_SCOPE_PROPOSE"
+        ],
+        "description": "PartnerLinkScope is what a link allows."
+      },
+      "pantherclaw.v1.PartnerProposalKind": {
+        "type": "string",
+        "title": "PartnerProposalKind",
+        "enum": [
+          "PARTNER_PROPOSAL_KIND_UNSPECIFIED",
+          "PARTNER_PROPOSAL_KIND_POLICY_VERSION",
+          "PARTNER_PROPOSAL_KIND_PACK"
+        ],
+        "description": "PartnerProposalKind is what a proposal would draft."
+      },
+      "pantherclaw.v1.AcceptPartnerProposalRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Proposal id."
+          }
+        },
+        "title": "AcceptPartnerProposalRequest",
+        "additionalProperties": false,
+        "description": "AcceptPartnerProposalRequest names a proposal.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.AcceptPartnerProposalResponse": {
+        "type": "object",
+        "properties": {
+          "proposal": {
+            "title": "proposal",
+            "description": "The proposal, ACCEPTED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+          }
+        },
+        "title": "AcceptPartnerProposalResponse",
+        "additionalProperties": false,
+        "description": "AcceptPartnerProposalResponse returns it with its draft."
+      },
+      "pantherclaw.v1.DecidePartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Link id."
+          },
+          "approve": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "title": "approve",
+            "description": "True approves, false denies."
+          }
+        },
+        "title": "DecidePartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "DecidePartnerLinkRequest names a link and the decision.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DecidePartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The link.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "DecidePartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "DecidePartnerLinkResponse is never returned over the API."
+      },
+      "pantherclaw.v1.DeclinePartnerProposalRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Proposal id."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "reason",
+            "maxLength": 500,
+            "description": "Why, shown to the partner."
+          }
+        },
+        "title": "DeclinePartnerProposalRequest",
+        "additionalProperties": false,
+        "description": "DeclinePartnerProposalRequest names a proposal.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.DeclinePartnerProposalResponse": {
+        "type": "object",
+        "properties": {
+          "proposal": {
+            "title": "proposal",
+            "description": "The proposal, DECLINED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+          }
+        },
+        "title": "DeclinePartnerProposalResponse",
+        "additionalProperties": false,
+        "description": "DeclinePartnerProposalResponse returns it."
+      },
+      "pantherclaw.v1.GetCurrentPartnerSessionRequest": {
+        "type": "object",
+        "title": "GetCurrentPartnerSessionRequest",
+        "additionalProperties": false,
+        "description": "GetCurrentPartnerSessionRequest asks about the caller's partner session."
+      },
+      "pantherclaw.v1.GetCurrentPartnerSessionResponse": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "session_id",
+            "description": "Session id."
+          },
+          "linkId": {
+            "type": "string",
+            "title": "link_id",
+            "description": "The link it runs under."
+          },
+          "partnerOrgId": {
+            "type": "string",
+            "title": "partner_org_id",
+            "description": "The partner org."
+          },
+          "partnerUserId": {
+            "type": "string",
+            "title": "partner_user_id",
+            "description": "The partner person."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerLinkScope"
+            },
+            "title": "scopes",
+            "description": "What the link allows."
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When the session ends at the latest.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "GetCurrentPartnerSessionResponse",
+        "additionalProperties": false,
+        "description": "GetCurrentPartnerSessionResponse describes it."
+      },
+      "pantherclaw.v1.GetPartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Link id."
+          }
+        },
+        "title": "GetPartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "GetPartnerLinkRequest names a link.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The link.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "GetPartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "GetPartnerLinkResponse returns it."
+      },
+      "pantherclaw.v1.GetPartnerProposalRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Proposal id."
+          }
+        },
+        "title": "GetPartnerProposalRequest",
+        "additionalProperties": false,
+        "description": "GetPartnerProposalRequest names a proposal.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.GetPartnerProposalResponse": {
+        "type": "object",
+        "properties": {
+          "proposal": {
+            "title": "proposal",
+            "description": "The proposal.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+          }
+        },
+        "title": "GetPartnerProposalResponse",
+        "additionalProperties": false,
+        "description": "GetPartnerProposalResponse returns it with its body."
+      },
+      "pantherclaw.v1.ListPartnerCustomersRequest": {
+        "type": "object",
+        "title": "ListPartnerCustomersRequest",
+        "additionalProperties": false,
+        "description": "ListPartnerCustomersRequest lists the partner's customers."
+      },
+      "pantherclaw.v1.ListPartnerCustomersResponse": {
+        "type": "object",
+        "properties": {
+          "customers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerCustomer"
+            },
+            "title": "customers",
+            "description": "Customers, by org id."
+          }
+        },
+        "title": "ListPartnerCustomersResponse",
+        "additionalProperties": false,
+        "description": "ListPartnerCustomersResponse lists them."
+      },
+      "pantherclaw.v1.ListPartnerLinksRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListPartnerLinksRequest",
+        "additionalProperties": false,
+        "description": "ListPartnerLinksRequest pages links."
+      },
+      "pantherclaw.v1.ListPartnerLinksResponse": {
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+            },
+            "title": "links",
+            "description": "Links, by id."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPartnerLinksResponse",
+        "additionalProperties": false,
+        "description": "ListPartnerLinksResponse is one page."
+      },
+      "pantherclaw.v1.ListPartnerProposalsRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "title": "page_size",
+            "maximum": 200,
+            "minimum": 0,
+            "format": "int32",
+            "description": "Maximum results (default and at most 200)."
+          },
+          "pageToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "page_token",
+            "maxLength": 64,
+            "description": "Token from a previous response.",
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]*$"
+              },
+              {
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "title": "ListPartnerProposalsRequest",
+        "additionalProperties": false,
+        "description": "ListPartnerProposalsRequest pages proposals."
+      },
+      "pantherclaw.v1.ListPartnerProposalsResponse": {
+        "type": "object",
+        "properties": {
+          "proposals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+            },
+            "title": "proposals",
+            "description": "Proposals, by id, without bodies."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token",
+            "description": "Token for the next page; empty at the end."
+          }
+        },
+        "title": "ListPartnerProposalsResponse",
+        "additionalProperties": false,
+        "description": "ListPartnerProposalsResponse is one page."
+      },
+      "pantherclaw.v1.OpenPartnerSessionRequest": {
+        "type": "object",
+        "properties": {
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "format": "uuid",
+            "description": "The customer org."
+          }
+        },
+        "title": "OpenPartnerSessionRequest",
+        "additionalProperties": false,
+        "description": "OpenPartnerSessionRequest names a customer.",
+        "required": [
+          "customerOrgId"
+        ]
+      },
+      "pantherclaw.v1.OpenPartnerSessionResponse": {
+        "type": "object",
+        "title": "OpenPartnerSessionResponse",
+        "additionalProperties": false,
+        "description": "OpenPartnerSessionResponse is never returned over the API."
+      },
+      "pantherclaw.v1.PartnerCustomer": {
+        "type": "object",
+        "properties": {
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "description": "The customer org."
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Its name."
+          },
+          "linkId": {
+            "type": "string",
+            "title": "link_id",
+            "description": "The link in force."
+          },
+          "linkEndTime": {
+            "title": "link_end_time",
+            "description": "When the link ends.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "waitingApprovals": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "waiting_approvals",
+            "format": "int64",
+            "description": "Approvals waiting for a person."
+          },
+          "openAlerts": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "open_alerts",
+            "format": "int64",
+            "description": "Open alerts."
+          },
+          "lastDecisionTime": {
+            "title": "last_decision_time",
+            "description": "When the last decision was recorded; unset when none was.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "openUrl": {
+            "type": "string",
+            "title": "open_url",
+            "description": "The partner's page where a person opens a partner session."
+          }
+        },
+        "title": "PartnerCustomer",
+        "additionalProperties": false,
+        "description": "PartnerCustomer is one customer of an active link, with counts only."
+      },
+      "pantherclaw.v1.PartnerLink": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Link id."
+          },
+          "partnerOrgId": {
+            "type": "string",
+            "title": "partner_org_id",
+            "description": "The partner org."
+          },
+          "partnerName": {
+            "type": "string",
+            "title": "partner_name",
+            "description": "The partner org's name when it asked."
+          },
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "description": "The customer org."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"REQUESTED\", \"ACTIVE\", \"DENIED\", \"REVOKED\" or \"EXPIRED\"."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerLinkScope"
+            },
+            "title": "scopes",
+            "description": "What the link allows."
+          },
+          "durationDays": {
+            "type": "integer",
+            "title": "duration_days",
+            "format": "int32",
+            "description": "The window asked for, in days (1 to 90)."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why the partner asks (untrusted text)."
+          },
+          "renews": {
+            "type": "string",
+            "title": "renews",
+            "description": "The earlier link this one renews, if any."
+          },
+          "requestedBy": {
+            "type": "string",
+            "title": "requested_by",
+            "description": "The partner person who asked."
+          },
+          "requestTime": {
+            "title": "request_time",
+            "description": "When it was asked.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "requestExpireTime": {
+            "title": "request_expire_time",
+            "description": "When an undecided request expires.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "decidedBy": {
+            "type": "string",
+            "title": "decided_by",
+            "description": "The customer person who decided it."
+          },
+          "decideTime": {
+            "title": "decide_time",
+            "description": "When it was decided.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "startTime": {
+            "title": "start_time",
+            "description": "The window in force: from the approval, at most 90 days.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endTime": {
+            "title": "end_time",
+            "description": "The end of the window.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "revokedBy": {
+            "type": "string",
+            "title": "revoked_by",
+            "description": "Who revoked it."
+          },
+          "revokeTime": {
+            "title": "revoke_time",
+            "description": "When it was revoked.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "endReason": {
+            "type": "string",
+            "title": "end_reason",
+            "description": "Why it was revoked (untrusted text)."
+          },
+          "decideUrl": {
+            "type": "string",
+            "title": "decide_url",
+            "description": "The customer's page where a person decides it."
+          },
+          "openUrl": {
+            "type": "string",
+            "title": "open_url",
+            "description": "The partner's page where a person opens a partner session."
+          }
+        },
+        "title": "PartnerLink",
+        "additionalProperties": false,
+        "description": "PartnerLink is one link between a partner org and a customer org."
+      },
+      "pantherclaw.v1.PartnerProposal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Proposal id."
+          },
+          "linkId": {
+            "type": "string",
+            "title": "link_id",
+            "description": "The link it was sent over."
+          },
+          "partnerOrgId": {
+            "type": "string",
+            "title": "partner_org_id",
+            "description": "The partner org."
+          },
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "description": "The customer org."
+          },
+          "kind": {
+            "title": "kind",
+            "description": "What it would draft.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposalKind"
+          },
+          "title": {
+            "type": "string",
+            "title": "title",
+            "description": "Its title (untrusted text)."
+          },
+          "body": {
+            "type": "string",
+            "title": "body",
+            "format": "byte",
+            "description": "The body: a policy document, or {pack, environment, agents, cohort,\n parameters} as JSON. Only in GetPartnerProposal."
+          },
+          "templateId": {
+            "type": "string",
+            "title": "template_id",
+            "description": "Groups the proposals of one send to many customers."
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "\"PROPOSED\", \"ACCEPTED\", \"DECLINED\", \"WITHDRAWN\" or \"EXPIRED\"."
+          },
+          "proposedBy": {
+            "type": "string",
+            "title": "proposed_by",
+            "description": "partner/\u003cpartner org\u003e/\u003cuser\u003e."
+          },
+          "createTime": {
+            "title": "create_time",
+            "description": "When it was proposed.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "expireTime": {
+            "title": "expire_time",
+            "description": "When an undecided proposal expires (30 days).",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "decidedBy": {
+            "type": "string",
+            "title": "decided_by",
+            "description": "Who decided it."
+          },
+          "decideTime": {
+            "title": "decide_time",
+            "description": "When it was decided.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "declineReason": {
+            "type": "string",
+            "title": "decline_reason",
+            "description": "Why it was declined (untrusted text)."
+          },
+          "draftVersionId": {
+            "type": "string",
+            "title": "draft_version_id",
+            "description": "The DRAFT policy version an acceptance made."
+          }
+        },
+        "title": "PartnerProposal",
+        "additionalProperties": false,
+        "description": "PartnerProposal is one proposal to one customer."
+      },
+      "pantherclaw.v1.ProposeRolloutRequest": {
+        "type": "object",
+        "properties": {
+          "customerOrgIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "maxItems": 100,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "title": "customer_org_ids",
+            "maxItems": 100,
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "The customer orgs. From a partner session, only its own customer."
+          },
+          "kind": {
+            "title": "kind",
+            "description": "What it would draft.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposalKind",
+            "not": {
+              "enum": [
+                "PARTNER_PROPOSAL_KIND_UNSPECIFIED"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "title": "title",
+            "maxLength": 200,
+            "minLength": 1,
+            "description": "A title shown to the customer."
+          },
+          "body": {
+            "type": "string",
+            "title": "body",
+            "maxLength": 262144,
+            "minLength": 2,
+            "format": "byte",
+            "description": "The body: a policy document (POLICY_VERSION) or {pack, environment,\n agents, cohort, parameters} (PACK), as JSON, at most 256 KiB."
+          }
+        },
+        "title": "ProposeRolloutRequest",
+        "additionalProperties": false,
+        "description": "ProposeRolloutRequest proposes one change to customers.",
+        "required": [
+          "customerOrgIds",
+          "kind",
+          "title",
+          "body"
+        ]
+      },
+      "pantherclaw.v1.ProposeRolloutResponse": {
+        "type": "object",
+        "properties": {
+          "proposals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+            },
+            "title": "proposals",
+            "description": "The proposals, PROPOSED."
+          },
+          "templateId": {
+            "type": "string",
+            "title": "template_id",
+            "description": "Groups them."
+          }
+        },
+        "title": "ProposeRolloutResponse",
+        "additionalProperties": false,
+        "description": "ProposeRolloutResponse returns one proposal per customer."
+      },
+      "pantherclaw.v1.RenewPartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Link id."
+          },
+          "durationDays": {
+            "type": "integer",
+            "title": "duration_days",
+            "maximum": 90,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The new window, in days."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "reason",
+            "maxLength": 500,
+            "description": "Why the partner asks again."
+          }
+        },
+        "title": "RenewPartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "RenewPartnerLinkRequest names the earlier link.",
+        "required": [
+          "id",
+          "durationDays"
+        ]
+      },
+      "pantherclaw.v1.RenewPartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The new link, REQUESTED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "RenewPartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "RenewPartnerLinkResponse returns the new link."
+      },
+      "pantherclaw.v1.RequestPartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "customerOrgId": {
+            "type": "string",
+            "title": "customer_org_id",
+            "format": "uuid",
+            "description": "The customer org."
+          },
+          "scopes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/pantherclaw.v1.PartnerLinkScope",
+              "not": {
+                "enum": [
+                  "PARTNER_LINK_SCOPE_UNSPECIFIED"
+                ]
+              }
+            },
+            "title": "scopes",
+            "maxItems": 2,
+            "uniqueItems": true,
+            "description": "What the link allows; READ is always included."
+          },
+          "durationDays": {
+            "type": "integer",
+            "title": "duration_days",
+            "maximum": 90,
+            "minimum": 1,
+            "format": "int32",
+            "description": "The window, in days, from the approval."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "reason",
+            "maxLength": 500,
+            "description": "Why the partner asks, shown to the customer."
+          }
+        },
+        "title": "RequestPartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "RequestPartnerLinkRequest asks a customer for a link.",
+        "required": [
+          "customerOrgId",
+          "durationDays"
+        ]
+      },
+      "pantherclaw.v1.RequestPartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The link, REQUESTED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "RequestPartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "RequestPartnerLinkResponse returns the new link."
+      },
+      "pantherclaw.v1.RevokePartnerLinkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Link id."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "reason",
+            "maxLength": 500,
+            "description": "Why, kept with the link."
+          }
+        },
+        "title": "RevokePartnerLinkRequest",
+        "additionalProperties": false,
+        "description": "RevokePartnerLinkRequest names a link.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.RevokePartnerLinkResponse": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "title": "link",
+            "description": "The link, REVOKED.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerLink"
+          }
+        },
+        "title": "RevokePartnerLinkResponse",
+        "additionalProperties": false,
+        "description": "RevokePartnerLinkResponse returns it."
+      },
+      "pantherclaw.v1.WithdrawPartnerProposalRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "format": "uuid",
+            "description": "Proposal id."
+          }
+        },
+        "title": "WithdrawPartnerProposalRequest",
+        "additionalProperties": false,
+        "description": "WithdrawPartnerProposalRequest names a proposal.",
+        "required": [
+          "id"
+        ]
+      },
+      "pantherclaw.v1.WithdrawPartnerProposalResponse": {
+        "type": "object",
+        "properties": {
+          "proposal": {
+            "title": "proposal",
+            "description": "The proposal, WITHDRAWN.",
+            "$ref": "#/components/schemas/pantherclaw.v1.PartnerProposal"
+          }
+        },
+        "title": "WithdrawPartnerProposalResponse",
+        "additionalProperties": false,
+        "description": "WithdrawPartnerProposalResponse returns it."
+      },
       "pantherclaw.v1.CreatePolicyVersionRequest": {
         "type": "object",
         "properties": {
@@ -110853,6 +112576,10 @@
     {
       "name": "pantherclaw.v1.PackService",
       "description": "PackService serves the reference workflow packs (G0 M11 part 2, D41;\n F762, F764, F767, HR-291): coding-to-production (GitHub) and\n read-only-diagnostics (shell). A pack is a policy template with its\n allow, hold and deny scenario tests, a grant baseline per agent and,\n optionally, the automation template that launches its agents.\n\n ApplyPack only drafts: it stores the published policy with the pack's\n rules and tests as a new DRAFT policy version, which then goes through\n validation, tests and the publish gate like any draft. Nothing is\n published, issued or promoted. Needs the Team edition."
+    },
+    {
+      "name": "pantherclaw.v1.PartnerService",
+      "description": "PartnerService links an MSSP partner org to its customer orgs on the\n same deployment (G0 M38 D1100–D1102; FQ38-1; HR-810..816). The partner\n org needs the Enterprise edition (PartnerAccess); the customer org needs\n none.\n\n A partner person holding partner.manage asks a customer for a link: READ\n always, PROPOSE optionally, for 1 to 90 days. A customer person holding\n partner.approve decides it only on its page (decide_url) with a security\n key; the API refuses (STEP_UP_REQUIRED). The customer revokes a link at\n any time. Under an ACTIVE link a partner person holding partner.operate\n opens a partner session in the customer org on its page (open_url), with\n a security key: it reads what a support session reads, and may propose\n rollouts, nothing else. Every call of a partner session is recorded in\n the customer's audit log first. A proposal only ever becomes a DRAFT, by\n a customer person's acceptance; a loosening that came from a partner\n always needs two customer people."
     },
     {
       "name": "pantherclaw.v1.PolicyService",
