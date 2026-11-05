@@ -9,7 +9,7 @@ PantherClaw verifies the AP2 mandates an agent presents and decides each payment
 1. The agent calls `agentpay.checkout.submit` (HTTP `POST /ap2/checkout` or the MCP tool `submit_checkout`) with `merchant`, `amount` (minor units), `currency`, `checkout_jwt` and `payment_mandate`, the AP2 envelope as JSON text:
    - v0.2: `{"checkout_mandate": <SD-JWT or [open, closed]>, "payment_mandate": <SD-JWT or [open, closed]>}`;
    - v0.1: `{"ap2.mandates.CartMandate": {...}, "ap2.mandates.PaymentMandate": {...}}`.
-2. The gateway verifies the mandate against the org's ACTIVE trust anchors and reports the fact `payments.mandate {mandate_valid, amount_minor, currency, merchant, payee, mandate_digest}`. Policies never see the mandate itself.
+2. The server verifies the mandate itself, against the org's ACTIVE trust anchors and the connection's merchant audience (the KB-JWT `aud`); a gateway never vouches for a mandate. The gateway only refuses, and quarantines the connection, when the merchant endpoint is not an https URL on a sandbox host. Policies never see the mandate itself.
 3. The Authority's payment step refuses:
 
 | Reason | When |
@@ -33,6 +33,8 @@ A Security Admin (`payments.manage`) adds each anchor with `PaymentsService.Crea
 - `MERCHANT`: each merchant whose `checkout_jwt` is accepted, named by its merchant id;
 - `AGENT_DIRECTORY`: a Web Bot Auth directory or Visa key service, for agent request signatures.
 
+Then set the audience the connection's mandates must name with `PaymentCapService.SetMerchantAudience {connection_id, merchant_audience}` (`payments.manage`, a person; audited `payments.audience_set`). Without one every mandate on the connection is `MANDATE_INVALID`.
+
 Each anchor is a static JWKS or an https URL, must be marked sandbox, and starts PENDING. Activate it on `/integrations/payment-anchors/{id}/confirm` with a security key; the RPC Activate always answers `STEP_UP_REQUIRED` (HR-832). Revoke an anchor with `RevokePaymentTrustAnchor`; mandates from it then fail as `MANDATE_INVALID`.
 
 ## 3. Try it with the simulator
@@ -49,7 +51,7 @@ The simulator's credentials provider (`POST /cp/mandates`) returns a mandate env
 - `--expired`: mandates that expired a minute ago (expect `MANDATE_INVALID`);
 - `--decline`: every checkout answered as declined.
 
-The simulator serves https on loopback with a development certificate that only the dev gateway trusts. The connection carries `merchant_audience`, the audience the mandate's KB-JWT must name. The simulator's keys are fixed development keys; everything it signs is SIMULATED.
+The simulator serves https on loopback with a fixed development certificate. Trust it only in development: `"dev": {"agentpay_sim_roots": true}` in the server configuration (refused unless the server is local only) and `"agentpay_sim_roots": true` in the gateway configuration (refused unless the gateway listens on loopback without TLS). The seed sets the connection's merchant audience to `sim-merchant.example`; ask `POST /cp/mandates` with that `aud`. The simulator's keys are fixed development keys; everything it signs is SIMULATED.
 
 ## 4. Merchant caps
 

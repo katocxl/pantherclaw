@@ -99,6 +99,10 @@ type Pipeline struct {
 	// ReplayOf is the version of the recording a replay decides (Replays);
 	// 0 is Version. A replay of an earlier version makes none of the later ones' reads.
 	ReplayOf int
+	// Payments verifies payment mandates on the server, with no snapshot
+	// open (G0 M39 D1124d; payment.go). Unset (replay, simulation), a
+	// payment cannot be decided: CANNOT_AUTHORIZE.
+	Payments PaymentVerifier
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).
@@ -117,6 +121,13 @@ type Evaluation struct {
 	// Simulated is the run's flag (HR-220, HR-120): the decision receipt
 	// carries it.
 	Simulated bool
+	// Payment is the verified payment of a payment-class action (G0 M39
+	// D1124): the finalization records its single use with the permit
+	// (D1124b). Nil otherwise.
+	Payment *Payment
+	// payments are the mandates the first pass needs verified with no
+	// snapshot open (VerifyPayments).
+	payments []pendingPayment
 	// PayloadFindings are the gateway's findings (HR-225), sorted; the
 	// decision receipt carries them.
 	PayloadFindings []PayloadFinding
@@ -292,6 +303,9 @@ type state struct {
 	// rules are the consequence rules step 6 evaluates: the package
 	// version's, then the org's customer rules (G0 M17 D108).
 	rules []consequences.Rule
+	// payDebit is the day debit of the merchant cap that allows a payment
+	// without a person (G0 M39 D1124a; payment.go); budgets reserves it.
+	payDebit *bdomain.Debit
 }
 
 // Snapshot calls fn with a Reader whose reads all come from one snapshot
@@ -325,7 +339,10 @@ func (p *Pipeline) Evaluate(ctx context.Context, req Request) (*Evaluation, erro
 	if err != nil {
 		return nil, err
 	}
-	if answered, again := p.AskExternal(ctx, req.Org, ev); again {
+	// The payment mandates and external checks pass 1 found are verified and
+	// asked with no snapshot open; pass 2 decides with them (G0 M39 D1124d).
+	paid, verified := p.VerifyPayments(ctx, req.Org, ev)
+	if answered, again := p.AskExternal(paid, req.Org, ev); again || verified {
 		return once(answered)
 	}
 	return ev, nil
@@ -894,7 +911,7 @@ func (s *state) boundFacts() []apdomain.BoundFact {
 			})
 		}
 	}
-	return out
+	return append(out, s.paymentBoundFacts()...) // G0 M39 D1124, HR-837
 }
 
 // Step 7: every level's limits), FORBID rules, counters and budgets (a
@@ -917,6 +934,9 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	}
 	if p.at(9) {
 		p.browser(ctx, s) // G0 M33 D977 (browser.go)
+	}
+	if p.at(11) {
+		p.payment(ctx, s) // G0 M39 D1124 (payment.go)
 	}
 	p.dataFlow(ctx, s)      // G0 M16 D76 (dataflow.go)
 	s.contentHold()         // G0 M27 D507, D512 (content.go)
@@ -1089,6 +1109,9 @@ func (p *Pipeline) budgets(ctx context.Context, s *state) {
 	if f != nil {
 		s.cl.add(StepBoundaries, effectOf(*f), f.Reason(), f.Finding.Detail, f.Level.String())
 		return
+	}
+	if s.payDebit != nil {
+		plan.Budgets = append(plan.Budgets, *s.payDebit) // G0 M39 D1124a
 	}
 	s.ev.Plan = plan
 	if len(plan.Budgets)+len(plan.Counters) == 0 {

@@ -35,7 +35,29 @@ service PaymentCapService {
   // payments hold for a person again.
   // permission: payments.manage
   rpc RetirePaymentCap(RetirePaymentCapRequest) returns (RetirePaymentCapResponse);
+  // SetMerchantAudience sets the audience a pc.agentpay connection's
+  // mandates must name (G0 M39 D1124c): the KB-JWT aud the server pins when
+  // it verifies them. Without one every mandate on the connection is
+  // refused. A person only; audited payments.audience_set.
+  // permission: payments.manage
+  rpc SetMerchantAudience(SetMerchantAudienceRequest) returns (SetMerchantAudienceResponse);
 }
+
+// SetMerchantAudienceRequest names a pc.agentpay connection and its
+// merchant audience.
+message SetMerchantAudienceRequest {
+  // Connection id (a pc.agentpay connection).
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // The audience, an identifier or an https origin.
+  string merchant_audience = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+    pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+  }];
+}
+
+// SetMerchantAudienceResponse is empty.
+message SetMerchantAudienceResponse {}
 
 // PaymentCap is one merchant cap.
 message PaymentCap {

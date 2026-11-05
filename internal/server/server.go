@@ -352,6 +352,7 @@ func runServe(ctx context.Context, cfg *Config, stderr io.Writer, onStart starte
 	if err != nil {
 		return err
 	}
+	bindPaymentCircuits(pool, m6.connections) // G0 M39 D1124d
 	m6.fleet = newM18Fleet(m6, bill, m5.notifications)
 	m6.hold = cfg.Maintenance.Hold
 	m14core := wireM14Core(m6)
@@ -1357,5 +1358,6 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 		Ents: d.billing, Checks: activationChecks(d.pool, d.cel), Pool: d.pool, Catalog: packageCatalogCheck(),
 	}, d)))
 	registerPolicyGate(rs, d)
+	registerM39Pay(rs, d) // G0 M39 D1124a: after the gate built the caps service
 	return nil
 }

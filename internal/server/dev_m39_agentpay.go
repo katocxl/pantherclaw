@@ -10,6 +10,7 @@ import (
 	"io"
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	apsim "github.com/katocxl/pantherclaw/internal/sim/agentpay"
@@ -30,7 +31,7 @@ type devAgentPay struct {
 func devAgentPayFlags(fs *flag.FlagSet) devAgentPay {
 	return devAgentPay{
 		url: fs.String("agentpay-url", "", "with --gateway-out: also seed pc.agentpay and the connection \"agentpay\" to this simulated AP2 "+
-			"merchant (pantherclaw-sim agentpay: http://127.0.0.1:9118), sandbox only"),
+			"merchant (pantherclaw-sim agentpay: https://127.0.0.1:9118), sandbox only"),
 	}
 }
 
@@ -58,9 +59,19 @@ func (a devAgentPay) seed(ctx context.Context, cfg *Config, pool *db.Pool, org i
 	if err != nil {
 		return fmt.Errorf("dev: agentpay connection: %w", err)
 	}
-	_, _ = fmt.Fprintf(stdout, "seeded agentpay connection %s (%s) to %s (SIMULATED, sandbox only); add the sandbox trust anchors "+
-		"MANDATE_ISSUER with the JWKS at %s/cp/.well-known/jwks.json and MERCHANT %s with the JWKS at %s/merchant/.well-known/jwks.json, "+
-		"and activate each with a security key; every payment then holds for a person unless an ACTIVE merchant cap allows it\n",
-		c.ID, c.Name, u, u, apsim.Merchant, u)
+	// The merchant audience the simulated mandates' KB-JWTs name (D1124c).
+	if err := pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		return dbq.New(tx).SetConnectionMerchantAudience(ctx, dbq.SetConnectionMerchantAudienceParams{
+			OrgID: org, ConnectionID: c.ID, MerchantAudience: apsim.Merchant, UpdatedBy: "operator:dev-seed",
+		})
+	}); err != nil {
+		return fmt.Errorf("dev: agentpay audience: %w", err)
+	}
+	_, _ = fmt.Fprintf(stdout, "seeded agentpay connection %s (%s) to %s (SIMULATED, sandbox only) with merchant audience %s; "+
+		"set dev.agentpay_sim_roots in the server configuration and agentpay_sim_roots in the gateway's to trust the simulator's "+
+		"development certificate; add the sandbox trust anchors MANDATE_ISSUER with the JWKS at %s/cp/.well-known/jwks.json and "+
+		"MERCHANT %s with the JWKS at %s/merchant/.well-known/jwks.json, and activate each with a security key; ask the simulator "+
+		"for mandates with aud %s; every payment then holds for a person unless an ACTIVE merchant cap allows it\n",
+		c.ID, c.Name, u, apsim.Merchant, u, apsim.Merchant, u, apsim.Merchant)
 	return nil
 }

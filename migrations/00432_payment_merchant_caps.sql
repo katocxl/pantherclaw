@@ -125,11 +125,17 @@ GRANT SELECT ON pc.payment_merchant_caps TO pc_audit_ro;
 -- dispatched at most once per org. The row is written in the transaction
 -- that records the payment's permit; a second use is MANDATE_REPLAYED,
 -- whether or not a person approved it. Rows are never updated or deleted.
+-- The verified facts kept beside the digest feed the payments.effect
+-- evidence when the dispatch is settled (HR-840): never the mandate.
 CREATE TABLE pc.payment_mandate_uses (
-    org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
-    mandate_digest text        NOT NULL CHECK (mandate_digest ~ '^sha256:[0-9a-f]{64}$'),
-    transaction_id uuid        NOT NULL,
-    used_at        timestamptz NOT NULL DEFAULT now(),
+    org_id             uuid        NOT NULL REFERENCES pc.orgs (id),
+    mandate_digest     text        NOT NULL CHECK (mandate_digest ~ '^sha256:[0-9a-f]{64}$'),
+    transaction_id     uuid        NOT NULL,
+    merchant           text        NOT NULL CHECK (char_length(merchant) BETWEEN 1 AND 256),
+    currency           text        NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    amount_minor       bigint      NOT NULL CHECK (amount_minor >= 0),
+    ap2_transaction_id text        NOT NULL CHECK (char_length(ap2_transaction_id) BETWEEN 1 AND 256),
+    used_at            timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, mandate_digest),
     FOREIGN KEY (org_id, transaction_id) REFERENCES pc.transactions (org_id, id)
 );
@@ -143,6 +149,30 @@ CREATE POLICY tenant_isolation ON pc.payment_mandate_uses
 
 GRANT SELECT, INSERT ON pc.payment_mandate_uses TO pc_app;
 GRANT SELECT ON pc.payment_mandate_uses TO pc_audit_ro;
+
+-- The audience a pc.agentpay connection's mandates must name (D1124c,
+-- D1124d): the KB-JWT aud the server pins with ap2.WithAudiences. No row
+-- means no audience, so every mandate on the connection is refused (fail
+-- closed). Set by a person with payments.manage (payments.audience_set).
+CREATE TABLE pc.connection_agentpay (
+    org_id            uuid        NOT NULL,
+    connection_id     uuid        NOT NULL,
+    merchant_audience text        NOT NULL CHECK (merchant_audience ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$'),
+    updated_by        text        NOT NULL CHECK (char_length(updated_by) BETWEEN 1 AND 128),
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, connection_id),
+    FOREIGN KEY (org_id, connection_id) REFERENCES pc.connections (org_id, id)
+);
+
+ALTER TABLE pc.connection_agentpay ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.connection_agentpay FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.connection_agentpay
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+
+GRANT SELECT, INSERT ON pc.connection_agentpay TO pc_app;
+GRANT UPDATE (merchant_audience, updated_by, updated_at) ON pc.connection_agentpay TO pc_app;
+GRANT SELECT ON pc.connection_agentpay TO pc_audit_ro;
 
 -- squawk: each CHECK only widens a value list; goose runs each migration in
 -- one transaction, and NOT VALID then VALIDATE keeps the lock short.
@@ -183,6 +213,7 @@ DELETE FROM pc.policy_change_requests WHERE kind = 'PAYMENT_CAP';
 ALTER TABLE pc.policy_change_requests
     DROP CONSTRAINT policy_change_requests_kind_check,
     ADD CONSTRAINT policy_change_requests_kind_check CHECK (kind IN ('PUBLISH', 'ROLLOUT', 'EXCEPTION'));
+DROP TABLE pc.connection_agentpay;
 DROP TABLE pc.payment_mandate_uses;
 DROP TABLE pc.payment_merchant_caps;
 DROP FUNCTION pc.payment_merchant_cap_guard();

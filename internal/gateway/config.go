@@ -40,7 +40,12 @@ type Config struct {
 	// loopback only (`pclaw up`, G0 M13 D39). public_url must then be on a
 	// loopback host, so agents reach the gateway only from this machine.
 	PlaintextPublishedLoopback bool `json:"plaintext_published_loopback" env:"PC_GW_PLAINTEXT_PUBLISHED_LOOPBACK"`
-	TLS                        struct {
+	// AgentPaySimRoots trusts the agent payments simulator's fixed
+	// development certificate for pc.agentpay merchant calls (G0 M39
+	// D1124c). Development only: refused unless listen is a loopback
+	// address without TLS; file only.
+	AgentPaySimRoots bool `json:"agentpay_sim_roots"`
+	TLS              struct {
 		CertFile string `json:"cert_file" env:"PC_GW_TLS_CERT_FILE"`
 		KeyFile  string `json:"key_file" env:"PC_GW_TLS_KEY_FILE"`
 	} `json:"tls"`
@@ -168,6 +173,9 @@ func (c *Config) Validate() error {
 	}
 	if c.TLS.CertFile == "" && !loopback(c.Listen) && !c.PlaintextPublishedLoopback {
 		errs = append(errs, errors.New("listen must be a loopback address unless tls.cert_file and tls.key_file are set"))
+	}
+	if c.AgentPaySimRoots && (c.TLS.CertFile != "" || !loopback(c.Listen)) {
+		errs = append(errs, errors.New("agentpay_sim_roots is development-only: listen must be a loopback address without TLS"))
 	}
 	if c.PlaintextPublishedLoopback {
 		if c.TLS.CertFile != "" {

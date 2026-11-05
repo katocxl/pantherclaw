@@ -292,9 +292,11 @@ func (a *Authority) evaluate(ctx context.Context, req pipeline.Request, run, act
 	if err := snapshot(ctx); err != nil {
 		return nil, nil, nil, err
 	}
-	// The external checks pass 1 found are asked with no snapshot open, and
-	// pass 2 decides with their answers (G0 M16 D96).
-	if answered, again := a.Pipeline.AskExternal(ctx, req.Org, ev); again {
+	// The external checks pass 1 found are asked, and its payment mandates
+	// verified, with no snapshot open, and pass 2 decides with their answers
+	// (G0 M16 D96, G0 M39 D1124d).
+	paid, verified := a.Pipeline.VerifyPayments(ctx, req.Org, ev)
+	if answered, again := a.Pipeline.AskExternal(paid, req.Org, ev); again || verified {
 		if err := snapshot(answered); err != nil {
 			return nil, nil, nil, err
 		}

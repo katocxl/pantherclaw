@@ -38,6 +38,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
+	apsim "github.com/katocxl/pantherclaw/internal/sim/agentpay"
 )
 
 // PAP/1 request headers, for clients of the gateway (dispatch).
@@ -333,6 +334,11 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
 		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation, ReportLocalRefusal: d.ReportLocalRefusal,
 		GitHubAPIURL: cfg.GitHub.APIURL,
+	}
+	if cfg.AgentPaySimRoots { // development only (Config.validate)
+		if o.PaymentRoots, err = apsim.DevRoots(); err != nil {
+			return nil, err
+		}
 	}
 	if d.Connectors != nil {
 		o.Connectors = d.Connectors

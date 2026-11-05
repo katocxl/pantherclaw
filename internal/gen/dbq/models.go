@@ -1296,6 +1296,14 @@ type PcConnection struct {
 	RuntimeTarget    *string
 }
 
+type PcConnectionAgentpay struct {
+	OrgID            ids.OrgID
+	ConnectionID     ids.UUID
+	MerchantAudience string
+	UpdatedBy        string
+	UpdatedAt        time.Time
+}
+
 type PcConnectionCapability struct {
 	OrgID              ids.OrgID
 	ID                 ids.UUID
@@ -3536,10 +3544,14 @@ type PcPayloadCapture struct {
 }
 
 type PcPaymentMandateUse struct {
-	OrgID         ids.OrgID
-	MandateDigest string
-	TransactionID ids.UUID
-	UsedAt        time.Time
+	OrgID            ids.OrgID
+	MandateDigest    string
+	TransactionID    ids.UUID
+	Merchant         string
+	Currency         string
+	AmountMinor      int64
+	Ap2TransactionID string
+	UsedAt           time.Time
 }
 
 type PcPaymentMerchantCap struct {

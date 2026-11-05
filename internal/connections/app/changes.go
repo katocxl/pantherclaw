@@ -261,6 +261,11 @@ func (s *Service) update(ctx context.Context, tx db.TenantTx, c actor, in Update
 		if conn.Revision != in.Revision {
 			return ErrStale
 		}
+		if in.BaseURL != nil {
+			if err := checkAgentPayEndpoint(conn.Package, *in.BaseURL); err != nil { // G0 M39 D1124c
+				return err
+			}
+		}
 		// A model relay keeps the shape it was created with: its access mode
 		// (none), no agent hosts, its destination class (D313, D525 L3).
 		if conn.ModelRelay && ((in.AccessMode != nil && *in.AccessMode != conn.AccessMode) ||

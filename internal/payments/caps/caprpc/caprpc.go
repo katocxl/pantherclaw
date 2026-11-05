@@ -80,6 +80,20 @@ func (h *Handler) RetirePaymentCap(ctx context.Context, req *pantherclawv1.Retir
 	return &pantherclawv1.RetirePaymentCapResponse{Cap: proto(c)}, nil
 }
 
+// SetMerchantAudience implements PaymentCapServiceHandler (G0 M39 D1124c).
+func (h *Handler) SetMerchantAudience(ctx context.Context, req *pantherclawv1.SetMerchantAudienceRequest) (
+	*pantherclawv1.SetMerchantAudienceResponse, error,
+) {
+	id, err := ids.ParseUUID(req.GetConnectionId())
+	if err != nil {
+		return nil, errInvalidID
+	}
+	if err := h.svc.SetMerchantAudience(ctx, id, req.GetMerchantAudience()); err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SetMerchantAudienceResponse{}, nil
+}
+
 func ts(t *time.Time) *timestamppb.Timestamp {
 	if t == nil {
 		return nil

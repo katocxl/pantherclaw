@@ -29,6 +29,7 @@ package dispatch
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -161,7 +162,11 @@ type Opener interface {
 type Options struct {
 	// Org and GatewayID come from the gateway's certificate.
 	Org, GatewayID string
-	Authority      pantherclawv1connect.AuthorityServiceClient
+	// PaymentRoots, development only, are the roots pc.agentpay merchant
+	// calls trust instead of the system's (the simulator's certificate,
+	// G0 M39 D1124c); nil uses the system roots.
+	PaymentRoots *x509.CertPool
+	Authority    pantherclawv1connect.AuthorityServiceClient
 	// JWKSURL and JWKSClient fetch the permit keys.
 	JWKSURL     string
 	JWKSClient  *http.Client
@@ -236,6 +241,7 @@ type RefusalDetail struct {
 
 // Engine dispatches mapped actions.
 type Engine struct {
+	paymentRoots  *x509.CertPool // G0 M39 D1124c, development only
 	org           string
 	authority     pantherclawv1connect.AuthorityServiceClient
 	permits       *permitVerifier
@@ -299,7 +305,7 @@ func New(o Options) (*Engine, error) {
 	}
 	return &Engine{
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
-		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log).withReason(o.ReportCircuitReason),
+		paymentRoots: o.PaymentRoots, containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log).withReason(o.ReportCircuitReason),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 		connectors:  o.Connectors,
 		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation, localRefusals: o.ReportLocalRefusal,
@@ -443,6 +449,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	}
 	if e.browserSecretField(ctx, conn, c.Action.Action) { // G0 M33 D978 (browser_m33.go)
 		return Result{Class: CannotAuthorize, Code: CodeBrowserSecretField, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
+	if e.paymentsEndpointRefused(ctx, conn, c.Action.Action) { // G0 M39 D1124c (payments_m39_pay.go)
+		return Result{Class: CannotAuthorize, Code: CodePaymentsLiveRefused, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
 	ctx, content, scan := e.outboundContent(ctx, c) // G0 M27 D507, D533
 	refusedPayload, findings := e.outboundCheck(ctx, conn, c.Action.Action)
@@ -783,6 +792,10 @@ func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
 		timeout = ModelCallTimeout // a client's timeout spans the whole stream
 	}
 	newClient := func() (*egress.Client, error) {
+		if e.paymentRoots != nil && conn.GetPackage() == agentPayPackage {
+			// Development only: the simulator's certificate (G0 M39 D1124c).
+			return egress.NewClientRoots(conn.GetBaseUrl(), timeout, conn.GetMaxResponseBytes(), e.allowed, e.paymentRoots)
+		}
 		return egress.NewClient(conn.GetBaseUrl(), timeout, conn.GetMaxResponseBytes(), e.allowed)
 	}
 	if conn.GetKind() == KindModel {

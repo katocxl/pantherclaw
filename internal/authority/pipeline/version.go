@@ -41,13 +41,20 @@ package pipeline
 // 9: step 7 reads the org's browser sites and holds a pc.browser action on
 // a site not listed, and every takeover (G0 M33 D977), which a recording
 // before it does not hold.
-const Version = 9
+//
+// 11: step 7 decides a payment-class action (G0 M39 D1124, D1124d): the
+// server verifies its mandate with no snapshot open, reads the mandate's
+// earlier uses and the merchant's ACTIVE cap, and holds every payment for
+// a person unless the cap allows it. A recording does not hold the
+// mandate's verification, so a replay of a payment is CANNOT_AUTHORIZE.
+// (10 is M38's.)
+const Version = 11
 
 // Replays reports whether this code replays inputs recorded by pipeline
-// version v (G0 M16 D95, G0 M17 D133, D134): this version, and versions 4,
-// 5, 6, 7 and 8, each in its own mode (Pipeline.ReplayOf), so a recording
-// decides as it did. Others are incomplete (F507).
-func Replays(v int) bool { return v == 4 || v == 5 || v == 6 || v == 7 || v == 8 || v == Version }
+// version v (G0 M16 D95, G0 M17 D133, D134): this version, and versions 4
+// to 10, each in its own mode (Pipeline.ReplayOf), so a recording decides
+// as it did. Others are incomplete (F507).
+func Replays(v int) bool { return (v >= 4 && v <= 10) || v == Version }
 
 // at reports whether the evaluation runs at least version v: always, except
 // when it replays a recording made under an earlier one.

@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"compress/gzip"
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -65,6 +66,13 @@ type Client struct {
 // certificate; HR-070..074) with the operator's allowed prefixes, pinned to
 // the base URL's scheme, host and port.
 func NewClient(baseURL string, timeout time.Duration, maxBytes int32, allowed []netip.Prefix) (*Client, error) {
+	return NewClientRoots(baseURL, timeout, maxBytes, allowed, nil)
+}
+
+// NewClientRoots is NewClient trusting roots instead of the system roots
+// when roots is set: development only, for the agent payments simulator's
+// certificate (G0 M39 D1124c).
+func NewClientRoots(baseURL string, timeout time.Duration, maxBytes int32, allowed []netip.Prefix, roots *x509.CertPool) (*Client, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
 		return nil, fmt.Errorf("egress: base URL %q", baseURL)
@@ -73,7 +81,7 @@ func NewClient(baseURL string, timeout time.Duration, maxBytes int32, allowed []
 		maxBytes = DefaultMaxResponse
 	}
 	return &Client{
-		http:   httpx.NewEgressClient(httpx.EgressConfig{Timeout: timeout, AllowedPrefixes: allowed}),
+		http:   httpx.NewEgressClient(httpx.EgressConfig{Timeout: timeout, AllowedPrefixes: allowed, RootCAs: roots}),
 		scheme: u.Scheme, host: u.Host, maxBytes: int64(min(maxBytes, MaxResponse)),
 	}, nil
 }

@@ -209,6 +209,9 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			if err := q.InsertPermitForTransaction(ctx, ins); err != nil {
 				return err
 			}
+			if err := useMandate(ctx, q, org, w); err != nil { // G0 M39 D1124b
+				return err
+			}
 			if err := requireLevel(ctx, q, org, w.TransactionID, ev.Verify); err != nil {
 				return err
 			}
@@ -785,6 +788,9 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		}
 		receipt = r.JWS
 		if err := s.modelUsage(ctx, tx, pc, txn, o, e.ModelUsage, now); err != nil {
+			return err
+		}
+		if err := paymentEffect(ctx, tx, q, org, gatewayID, txn, o); err != nil { // G0 M39 D1124, HR-840
 			return err
 		}
 		switch o {

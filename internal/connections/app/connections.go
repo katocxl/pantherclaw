@@ -460,6 +460,10 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	if err := checkSnowflakeCreate(&in); err != nil {
 		return Connection{}, err
 	}
+	// A pc.agentpay merchant endpoint is a sandbox endpoint (G0 M39 D1124c).
+	if err := checkAgentPayEndpoint(in.Package, in.BaseURL); err != nil {
+		return Connection{}, err
+	}
 	in.DestinationClass = orDefault(in.DestinationClass, ClassPublic)
 	in.DefaultMode = orDefault(in.DefaultMode, ModeMonitor)
 	in.MaxResponseBytes = orDefault(in.MaxResponseBytes, DefaultMaxResponseBytes)

@@ -14,7 +14,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -25,6 +24,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/payments/ap2"
 	"github.com/katocxl/pantherclaw/internal/payments/httpsig"
+	"github.com/katocxl/pantherclaw/internal/payments/sandbox"
 	"github.com/katocxl/pantherclaw/internal/payments/sdjwt"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
@@ -50,38 +50,28 @@ const (
 // URL with another path is a key service queried as ?keyID= (Visa TAP).
 const DirectoryPath = "/.well-known/http-message-signatures-directory"
 
-// sandboxHosts is the sandbox host allow-list (D1120): the only hosts an
-// anchor URL may name besides loopback. It is empty: adding a sandbox
-// host is a code change, and there is no live switch.
-var sandboxHosts = []string{}
+// The sandbox host allow-list (D1120) lives in internal/payments/sandbox,
+// shared with the connections and the gateway's merchant endpoint check
+// (D1124c): empty, plus loopback for the simulator.
 
 // loopback are the ranges the simulator's anchors reach (D1120).
-var loopback = []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}
+var loopback = sandbox.Loopback
 
 // isLoopbackHost reports whether h is localhost or a loopback literal.
-func isLoopbackHost(h string) bool {
-	if strings.EqualFold(h, "localhost") {
-		return true
-	}
-	a, err := netip.ParseAddr(strings.Trim(h, "[]"))
-	return err == nil && a.IsLoopback()
-}
+func isLoopbackHost(h string) bool { return sandbox.IsLoopbackHost(h) }
 
 // SandboxHost reports whether host may be named by an anchor URL.
-func SandboxHost(host string) bool {
-	h := strings.ToLower(host)
-	return isLoopbackHost(h) || slices.Contains(sandboxHosts, h)
-}
+func SandboxHost(host string) bool { return sandbox.Host(host) }
 
 // CheckURL accepts an https URL without credentials or fragment on a
 // sandbox host; ErrInvalid for a malformed URL and ap2.ErrLiveRefused for
 // any other host.
 func CheckURL(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" {
+	ok, isSandbox := sandbox.URL(raw)
+	if !ok {
 		return ErrInvalid
 	}
-	if !SandboxHost(u.Hostname()) {
+	if !isSandbox {
 		return ap2.ErrLiveRefused
 	}
 	return nil

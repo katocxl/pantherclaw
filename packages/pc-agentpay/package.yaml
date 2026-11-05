@@ -13,14 +13,14 @@
 # tests); every trust anchor the verification uses must be a sandbox anchor
 # (HR-831).
 #
-# agentpay.checkout.submit is payment-class (its payment block): before it
-# asks for a decision the gateway verifies the mandate (payment_mandate)
-# against the org's ACTIVE trust anchors and reports the fact
-# payments.mandate {mandate_valid, amount_minor, currency, merchant, payee,
-# mandate_digest}. The pipeline refuses a missing mandate
-# (MANDATE_REQUIRED), an invalid or expired one (MANDATE_INVALID) and one
-# whose amount, currency or merchant are not exactly the params
-# (MANDATE_MISMATCH) (HR-833, HR-834), then holds every payment for a person
+# agentpay.checkout.submit is payment-class (its payment block): the
+# server verifies the mandate (payment_mandate) itself, against the org's
+# ACTIVE sandbox trust anchors and the connection's merchant audience
+# (D1124d); a gateway never vouches for a mandate. The Authority refuses a
+# missing mandate (MANDATE_REQUIRED), an invalid or expired one
+# (MANDATE_INVALID), one whose amount, currency or merchant are not exactly
+# the params (MANDATE_MISMATCH) and one already used in the org
+# (MANDATE_REPLAYED) (HR-833, HR-834), then holds every payment for a person
 # unless an ACTIVE merchant cap allows it (HR-835, HR-836); the approval
 # binds the mandate digest (HR-837). The mandate is gateway-bound: policies
 # never see it, approvals show its verified facts and its size only, and
@@ -90,10 +90,6 @@ definitions:
     constraints:
       - kind: amount_max
         param: amount
-    prerequisites:
-      # Reported by the gateway after it verified the mandate (paymentfacts).
-      - fact: payments.mandate
-        max_age_seconds: 60
     # An unknown outcome is reconciled by a person; the merchant honours the
     # Idempotency-Key, so a reconciled retry is not a second payment.
     retry:
@@ -102,7 +98,7 @@ definitions:
       target_idempotency: true
     approval:
       title: Pay {params.amount} to {params.merchant}
-      fields: [params.amount, params.currency, params.merchant, target.id, facts.payments.mandate]
+      fields: [params.amount, params.currency, params.merchant, target.id]
     assurance:
       basis: declared
       reviewed_by: [pantherclaw-maintainers]

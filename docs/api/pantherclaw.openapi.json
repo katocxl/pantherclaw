@@ -26901,6 +26901,60 @@
         }
       }
     },
+    "/pantherclaw.v1.PaymentCapService/SetMerchantAudience": {
+      "post": {
+        "tags": [
+          "pantherclaw.v1.PaymentCapService"
+        ],
+        "summary": "SetMerchantAudience",
+        "description": "SetMerchantAudience sets the audience a pc.agentpay connection's\n mandates must name (G0 M39 D1124c): the KB-JWT aud the server pins when\n it verifies them. Without one every mandate on the connection is\n refused. A person only; audited payments.audience_set.\n permission: payments.manage",
+        "operationId": "pantherclaw.v1.PaymentCapService.SetMerchantAudience",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pantherclaw.v1.SetMerchantAudienceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pantherclaw.v1.SetMerchantAudienceResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported media type, no body"
+          }
+        }
+      }
+    },
     "/pantherclaw.v1.PaymentsService/CreatePaymentTrustAnchor": {
       "post": {
         "tags": [
@@ -92047,6 +92101,38 @@
         "title": "RetirePaymentCapResponse",
         "additionalProperties": false,
         "description": "RetirePaymentCapResponse returns it."
+      },
+      "pantherclaw.v1.SetMerchantAudienceRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "connection_id",
+            "format": "uuid",
+            "description": "Connection id (a pc.agentpay connection)."
+          },
+          "merchantAudience": {
+            "type": "string",
+            "title": "merchant_audience",
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$",
+            "description": "The audience, an identifier or an https origin."
+          }
+        },
+        "title": "SetMerchantAudienceRequest",
+        "additionalProperties": false,
+        "description": "SetMerchantAudienceRequest names a pc.agentpay connection and its\n merchant audience.",
+        "required": [
+          "connectionId",
+          "merchantAudience"
+        ]
+      },
+      "pantherclaw.v1.SetMerchantAudienceResponse": {
+        "type": "object",
+        "title": "SetMerchantAudienceResponse",
+        "additionalProperties": false,
+        "description": "SetMerchantAudienceResponse is empty."
       },
       "pantherclaw.v1.ActivatePaymentTrustAnchorRequest": {
         "type": "object",

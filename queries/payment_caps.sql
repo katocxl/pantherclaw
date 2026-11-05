@@ -60,10 +60,27 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'RETIRED';
 -- name: UsePaymentMandate :execrows
 -- Records a verified mandate's single use (G0 M39 D1124b, HR-834): no row
 -- when the digest was already used in this org.
-INSERT INTO pc.payment_mandate_uses (org_id, mandate_digest, transaction_id)
-VALUES (@org_id, @mandate_digest, @transaction_id)
+INSERT INTO pc.payment_mandate_uses (org_id, mandate_digest, transaction_id, merchant, currency, amount_minor, ap2_transaction_id)
+VALUES (@org_id, @mandate_digest, @transaction_id, @merchant, @currency, @amount_minor, @ap2_transaction_id)
 ON CONFLICT (org_id, mandate_digest) DO NOTHING;
 
--- name: PaymentMandateUsed :one
-SELECT EXISTS (SELECT 1 FROM pc.payment_mandate_uses
-               WHERE org_id = @org_id AND mandate_digest = @mandate_digest)::boolean AS used;
+-- name: PaymentMandateUse :one
+-- The transaction that used a mandate digest, which the payment step reads.
+SELECT transaction_id FROM pc.payment_mandate_uses
+WHERE org_id = @org_id AND mandate_digest = @mandate_digest;
+
+-- name: PaymentMandateUseOfTransaction :one
+-- The use a settled transaction recorded, for payments.effect.
+SELECT mandate_digest, merchant, currency, amount_minor, ap2_transaction_id FROM pc.payment_mandate_uses
+WHERE org_id = @org_id AND transaction_id = @transaction_id
+LIMIT 1;
+
+-- name: ConnectionMerchantAudience :one
+SELECT merchant_audience FROM pc.connection_agentpay
+WHERE org_id = @org_id AND connection_id = @connection_id;
+
+-- name: SetConnectionMerchantAudience :exec
+INSERT INTO pc.connection_agentpay (org_id, connection_id, merchant_audience, updated_by)
+VALUES (@org_id, @connection_id, @merchant_audience, @updated_by)
+ON CONFLICT (org_id, connection_id) DO UPDATE
+SET merchant_audience = EXCLUDED.merchant_audience, updated_by = EXCLUDED.updated_by, updated_at = now();

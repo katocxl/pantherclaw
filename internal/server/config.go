@@ -271,6 +271,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateObservability()...)
 	errs = append(errs, c.validateLimits()...)
 	errs = append(errs, c.validateExternalChecks()...)
+	errs = append(errs, c.validateAgentPay()...) // G0 M39 D1124c
 	errs = append(errs, c.validateModel()...)
 	errs = append(errs, c.validateThreatMap()...)
 	errs = append(errs, c.validateAdmission()...)

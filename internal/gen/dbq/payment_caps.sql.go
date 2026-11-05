@@ -63,6 +63,18 @@ func (q *Queries) ActivePaymentMerchantCap(ctx context.Context, orgID ids.OrgID,
 	return i, err
 }
 
+const connectionMerchantAudience = `-- name: ConnectionMerchantAudience :one
+SELECT merchant_audience FROM pc.connection_agentpay
+WHERE org_id = $1 AND connection_id = $2
+`
+
+func (q *Queries) ConnectionMerchantAudience(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, connectionMerchantAudience, orgID, connectionID)
+	var merchant_audience string
+	err := row.Scan(&merchant_audience)
+	return merchant_audience, err
+}
+
 const getPaymentMerchantCap = `-- name: GetPaymentMerchantCap :one
 SELECT id, merchant, currency, max_per_payment_minor, max_per_day_minor, state, created_by, created_at, change_request_id,
        approved_by, activated_at, retired_at, retired_by
@@ -250,16 +262,45 @@ func (q *Queries) LockPaymentMerchantCap(ctx context.Context, orgID ids.OrgID, i
 	return i, err
 }
 
-const paymentMandateUsed = `-- name: PaymentMandateUsed :one
-SELECT EXISTS (SELECT 1 FROM pc.payment_mandate_uses
-               WHERE org_id = $1 AND mandate_digest = $2)::boolean AS used
+const paymentMandateUse = `-- name: PaymentMandateUse :one
+SELECT transaction_id FROM pc.payment_mandate_uses
+WHERE org_id = $1 AND mandate_digest = $2
 `
 
-func (q *Queries) PaymentMandateUsed(ctx context.Context, orgID ids.OrgID, mandateDigest string) (bool, error) {
-	row := q.db.QueryRow(ctx, paymentMandateUsed, orgID, mandateDigest)
-	var used bool
-	err := row.Scan(&used)
-	return used, err
+// The transaction that used a mandate digest, which the payment step reads.
+func (q *Queries) PaymentMandateUse(ctx context.Context, orgID ids.OrgID, mandateDigest string) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, paymentMandateUse, orgID, mandateDigest)
+	var transaction_id ids.UUID
+	err := row.Scan(&transaction_id)
+	return transaction_id, err
+}
+
+const paymentMandateUseOfTransaction = `-- name: PaymentMandateUseOfTransaction :one
+SELECT mandate_digest, merchant, currency, amount_minor, ap2_transaction_id FROM pc.payment_mandate_uses
+WHERE org_id = $1 AND transaction_id = $2
+LIMIT 1
+`
+
+type PaymentMandateUseOfTransactionRow struct {
+	MandateDigest    string
+	Merchant         string
+	Currency         string
+	AmountMinor      int64
+	Ap2TransactionID string
+}
+
+// The use a settled transaction recorded, for payments.effect.
+func (q *Queries) PaymentMandateUseOfTransaction(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) (PaymentMandateUseOfTransactionRow, error) {
+	row := q.db.QueryRow(ctx, paymentMandateUseOfTransaction, orgID, transactionID)
+	var i PaymentMandateUseOfTransactionRow
+	err := row.Scan(
+		&i.MandateDigest,
+		&i.Merchant,
+		&i.Currency,
+		&i.AmountMinor,
+		&i.Ap2TransactionID,
+	)
+	return i, err
 }
 
 const retireActivePaymentMerchantCaps = `-- name: RetireActivePaymentMerchantCaps :execrows
@@ -302,16 +343,58 @@ func (q *Queries) RetirePaymentMerchantCap(ctx context.Context, retiredBy *strin
 	return result.RowsAffected(), nil
 }
 
+const setConnectionMerchantAudience = `-- name: SetConnectionMerchantAudience :exec
+INSERT INTO pc.connection_agentpay (org_id, connection_id, merchant_audience, updated_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (org_id, connection_id) DO UPDATE
+SET merchant_audience = EXCLUDED.merchant_audience, updated_by = EXCLUDED.updated_by, updated_at = now()
+`
+
+type SetConnectionMerchantAudienceParams struct {
+	OrgID            ids.OrgID
+	ConnectionID     ids.UUID
+	MerchantAudience string
+	UpdatedBy        string
+}
+
+func (q *Queries) SetConnectionMerchantAudience(ctx context.Context, arg SetConnectionMerchantAudienceParams) error {
+	_, err := q.db.Exec(ctx, setConnectionMerchantAudience,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.MerchantAudience,
+		arg.UpdatedBy,
+	)
+	return err
+}
+
 const usePaymentMandate = `-- name: UsePaymentMandate :execrows
-INSERT INTO pc.payment_mandate_uses (org_id, mandate_digest, transaction_id)
-VALUES ($1, $2, $3)
+INSERT INTO pc.payment_mandate_uses (org_id, mandate_digest, transaction_id, merchant, currency, amount_minor, ap2_transaction_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (org_id, mandate_digest) DO NOTHING
 `
 
+type UsePaymentMandateParams struct {
+	OrgID            ids.OrgID
+	MandateDigest    string
+	TransactionID    ids.UUID
+	Merchant         string
+	Currency         string
+	AmountMinor      int64
+	Ap2TransactionID string
+}
+
 // Records a verified mandate's single use (G0 M39 D1124b, HR-834): no row
 // when the digest was already used in this org.
-func (q *Queries) UsePaymentMandate(ctx context.Context, orgID ids.OrgID, mandateDigest string, transactionID ids.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, usePaymentMandate, orgID, mandateDigest, transactionID)
+func (q *Queries) UsePaymentMandate(ctx context.Context, arg UsePaymentMandateParams) (int64, error) {
+	result, err := q.db.Exec(ctx, usePaymentMandate,
+		arg.OrgID,
+		arg.MandateDigest,
+		arg.TransactionID,
+		arg.Merchant,
+		arg.Currency,
+		arg.AmountMinor,
+		arg.Ap2TransactionID,
+	)
 	if err != nil {
 		return 0, err
 	}

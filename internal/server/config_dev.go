@@ -36,6 +36,11 @@ type DevConfig struct {
 	// can answer (G0 M16 D93b). Refused unless the server is local only;
 	// file only.
 	ExternalChecksLoopback bool `json:"external_checks_loopback"`
+	// AgentPaySimRoots trusts the agent payments simulator's fixed
+	// development certificate (pantherclaw-sim agentpay) for payment trust
+	// anchor key fetches (G0 M39 D1124c). Refused unless the server is
+	// local only; file only.
+	AgentPaySimRoots bool `json:"agentpay_sim_roots"`
 }
 
 const (

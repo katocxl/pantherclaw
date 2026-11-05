@@ -36,6 +36,9 @@ const (
 	// PaymentCapServiceRetirePaymentCapProcedure is the procedure name of the PaymentCapService's
 	// RetirePaymentCap RPC.
 	PaymentCapServiceRetirePaymentCapProcedure = "/pantherclaw.v1.PaymentCapService/RetirePaymentCap"
+	// PaymentCapServiceSetMerchantAudienceProcedure is the procedure name of the PaymentCapService's
+	// SetMerchantAudience RPC.
+	PaymentCapServiceSetMerchantAudienceProcedure = "/pantherclaw.v1.PaymentCapService/SetMerchantAudience"
 )
 
 var (
@@ -61,6 +64,13 @@ var (
 			Procedure:  PaymentCapServiceRetirePaymentCapProcedure,
 		}
 	})
+	paymentCapServiceSetMerchantAudienceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_payment_caps_proto.Services().ByName("PaymentCapService").Methods().ByName("SetMerchantAudience"),
+			Procedure:  PaymentCapServiceSetMerchantAudienceProcedure,
+		}
+	})
 )
 
 // PaymentCapServiceClient is a client for the pantherclaw.v1.PaymentCapService service.
@@ -76,6 +86,12 @@ type PaymentCapServiceClient interface {
 	// payments hold for a person again.
 	// permission: payments.manage
 	RetirePaymentCap(context.Context, *v1.RetirePaymentCapRequest) (*v1.RetirePaymentCapResponse, error)
+	// SetMerchantAudience sets the audience a pc.agentpay connection's
+	// mandates must name (G0 M39 D1124c): the KB-JWT aud the server pins when
+	// it verifies them. Without one every mandate on the connection is
+	// refused. A person only; audited payments.audience_set.
+	// permission: payments.manage
+	SetMerchantAudience(context.Context, *v1.SetMerchantAudienceRequest) (*v1.SetMerchantAudienceResponse, error)
 }
 
 // NewPaymentCapServiceClient constructs a client for the pantherclaw.v1.PaymentCapService service.
@@ -97,6 +113,12 @@ type PaymentCapServiceHandler interface {
 	// payments hold for a person again.
 	// permission: payments.manage
 	RetirePaymentCap(context.Context, *v1.RetirePaymentCapRequest) (*v1.RetirePaymentCapResponse, error)
+	// SetMerchantAudience sets the audience a pc.agentpay connection's
+	// mandates must name (G0 M39 D1124c): the KB-JWT aud the server pins when
+	// it verifies them. Without one every mandate on the connection is
+	// refused. A person only; audited payments.audience_set.
+	// permission: payments.manage
+	SetMerchantAudience(context.Context, *v1.SetMerchantAudienceRequest) (*v1.SetMerchantAudienceResponse, error)
 }
 
 // RegisterPaymentCapServiceHandler registers svc as the pantherclaw.v1.PaymentCapService
@@ -107,6 +129,7 @@ func RegisterPaymentCapServiceHandler(server *connect.Server, svc PaymentCapServ
 		connect.Method{Spec: paymentCapServiceProposePaymentCapSpec(), Handler: adapter.proposePaymentCap},
 		connect.Method{Spec: paymentCapServiceListPaymentCapsSpec(), Handler: adapter.listPaymentCaps},
 		connect.Method{Spec: paymentCapServiceRetirePaymentCapSpec(), Handler: adapter.retirePaymentCap},
+		connect.Method{Spec: paymentCapServiceSetMerchantAudienceSpec(), Handler: adapter.setMerchantAudience},
 	)
 }
 
@@ -123,6 +146,10 @@ func (UnimplementedPaymentCapServiceHandler) ListPaymentCaps(context.Context, *v
 
 func (UnimplementedPaymentCapServiceHandler) RetirePaymentCap(context.Context, *v1.RetirePaymentCapRequest) (*v1.RetirePaymentCapResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PaymentCapService.RetirePaymentCap is not implemented")
+}
+
+func (UnimplementedPaymentCapServiceHandler) SetMerchantAudience(context.Context, *v1.SetMerchantAudienceRequest) (*v1.SetMerchantAudienceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PaymentCapService.SetMerchantAudience is not implemented")
 }
 
 type paymentCapServiceClient struct {
@@ -148,6 +175,14 @@ func (c *paymentCapServiceClient) ListPaymentCaps(ctx context.Context, req *v1.L
 func (c *paymentCapServiceClient) RetirePaymentCap(ctx context.Context, req *v1.RetirePaymentCapRequest) (*v1.RetirePaymentCapResponse, error) {
 	var res v1.RetirePaymentCapResponse
 	if err := c.client.CallUnary(ctx, paymentCapServiceRetirePaymentCapSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *paymentCapServiceClient) SetMerchantAudience(ctx context.Context, req *v1.SetMerchantAudienceRequest) (*v1.SetMerchantAudienceResponse, error) {
+	var res v1.SetMerchantAudienceResponse
+	if err := c.client.CallUnary(ctx, paymentCapServiceSetMerchantAudienceSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -185,6 +220,18 @@ func (h paymentCapServiceHandler) retirePaymentCap(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.RetirePaymentCap(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h paymentCapServiceHandler) setMerchantAudience(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetMerchantAudienceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetMerchantAudience(ctx, &req)
 	if err != nil {
 		return err
 	}

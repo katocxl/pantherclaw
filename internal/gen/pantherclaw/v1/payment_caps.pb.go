@@ -26,6 +26,99 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// SetMerchantAudienceRequest names a pc.agentpay connection and its
+// merchant audience.
+type SetMerchantAudienceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id (a pc.agentpay connection).
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// The audience, an identifier or an https origin.
+	MerchantAudience string `protobuf:"bytes,2,opt,name=merchant_audience,json=merchantAudience,proto3" json:"merchant_audience,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SetMerchantAudienceRequest) Reset() {
+	*x = SetMerchantAudienceRequest{}
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetMerchantAudienceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetMerchantAudienceRequest) ProtoMessage() {}
+
+func (x *SetMerchantAudienceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetMerchantAudienceRequest.ProtoReflect.Descriptor instead.
+func (*SetMerchantAudienceRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *SetMerchantAudienceRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *SetMerchantAudienceRequest) GetMerchantAudience() string {
+	if x != nil {
+		return x.MerchantAudience
+	}
+	return ""
+}
+
+// SetMerchantAudienceResponse is empty.
+type SetMerchantAudienceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetMerchantAudienceResponse) Reset() {
+	*x = SetMerchantAudienceResponse{}
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetMerchantAudienceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetMerchantAudienceResponse) ProtoMessage() {}
+
+func (x *SetMerchantAudienceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetMerchantAudienceResponse.ProtoReflect.Descriptor instead.
+func (*SetMerchantAudienceResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{1}
+}
+
 // PaymentCap is one merchant cap.
 type PaymentCap struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -65,7 +158,7 @@ type PaymentCap struct {
 
 func (x *PaymentCap) Reset() {
 	*x = PaymentCap{}
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[0]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -77,7 +170,7 @@ func (x *PaymentCap) String() string {
 func (*PaymentCap) ProtoMessage() {}
 
 func (x *PaymentCap) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[0]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -90,7 +183,7 @@ func (x *PaymentCap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PaymentCap.ProtoReflect.Descriptor instead.
 func (*PaymentCap) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{0}
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *PaymentCap) GetId() string {
@@ -208,7 +301,7 @@ type ProposePaymentCapRequest struct {
 
 func (x *ProposePaymentCapRequest) Reset() {
 	*x = ProposePaymentCapRequest{}
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -220,7 +313,7 @@ func (x *ProposePaymentCapRequest) String() string {
 func (*ProposePaymentCapRequest) ProtoMessage() {}
 
 func (x *ProposePaymentCapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -233,7 +326,7 @@ func (x *ProposePaymentCapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProposePaymentCapRequest.ProtoReflect.Descriptor instead.
 func (*ProposePaymentCapRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{1}
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProposePaymentCapRequest) GetMerchant() string {
@@ -275,7 +368,7 @@ type ProposePaymentCapResponse struct {
 
 func (x *ProposePaymentCapResponse) Reset() {
 	*x = ProposePaymentCapResponse{}
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -287,7 +380,7 @@ func (x *ProposePaymentCapResponse) String() string {
 func (*ProposePaymentCapResponse) ProtoMessage() {}
 
 func (x *ProposePaymentCapResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -300,7 +393,7 @@ func (x *ProposePaymentCapResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProposePaymentCapResponse.ProtoReflect.Descriptor instead.
 func (*ProposePaymentCapResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProposePaymentCapResponse) GetCap() *PaymentCap {
@@ -327,7 +420,7 @@ type ListPaymentCapsRequest struct {
 
 func (x *ListPaymentCapsRequest) Reset() {
 	*x = ListPaymentCapsRequest{}
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -339,7 +432,7 @@ func (x *ListPaymentCapsRequest) String() string {
 func (*ListPaymentCapsRequest) ProtoMessage() {}
 
 func (x *ListPaymentCapsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -352,7 +445,7 @@ func (x *ListPaymentCapsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPaymentCapsRequest.ProtoReflect.Descriptor instead.
 func (*ListPaymentCapsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListPaymentCapsRequest) GetState() string {
@@ -396,7 +489,7 @@ type ListPaymentCapsResponse struct {
 
 func (x *ListPaymentCapsResponse) Reset() {
 	*x = ListPaymentCapsResponse{}
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -408,7 +501,7 @@ func (x *ListPaymentCapsResponse) String() string {
 func (*ListPaymentCapsResponse) ProtoMessage() {}
 
 func (x *ListPaymentCapsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -421,7 +514,7 @@ func (x *ListPaymentCapsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPaymentCapsResponse.ProtoReflect.Descriptor instead.
 func (*ListPaymentCapsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListPaymentCapsResponse) GetCaps() []*PaymentCap {
@@ -449,7 +542,7 @@ type RetirePaymentCapRequest struct {
 
 func (x *RetirePaymentCapRequest) Reset() {
 	*x = RetirePaymentCapRequest{}
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -461,7 +554,7 @@ func (x *RetirePaymentCapRequest) String() string {
 func (*RetirePaymentCapRequest) ProtoMessage() {}
 
 func (x *RetirePaymentCapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -474,7 +567,7 @@ func (x *RetirePaymentCapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetirePaymentCapRequest.ProtoReflect.Descriptor instead.
 func (*RetirePaymentCapRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RetirePaymentCapRequest) GetId() string {
@@ -495,7 +588,7 @@ type RetirePaymentCapResponse struct {
 
 func (x *RetirePaymentCapResponse) Reset() {
 	*x = RetirePaymentCapResponse{}
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +600,7 @@ func (x *RetirePaymentCapResponse) String() string {
 func (*RetirePaymentCapResponse) ProtoMessage() {}
 
 func (x *RetirePaymentCapResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_payment_caps_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,7 +613,7 @@ func (x *RetirePaymentCapResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetirePaymentCapResponse.ProtoReflect.Descriptor instead.
 func (*RetirePaymentCapResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_payment_caps_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RetirePaymentCapResponse) GetCap() *PaymentCap {
@@ -534,7 +627,11 @@ var File_pantherclaw_v1_payment_caps_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_payment_caps_proto_rawDesc = "" +
 	"\n" +
-	"!pantherclaw/v1/payment_caps.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbc\x04\n" +
+	"!pantherclaw/v1/payment_caps.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaa\x01\n" +
+	"\x1aSetMerchantAudienceRequest\x12-\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12]\n" +
+	"\x11merchant_audience\x18\x02 \x01(\tB0\xbaH-r+\x10\x01\x18\x80\x022$^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$R\x10merchantAudience\"\x1d\n" +
+	"\x1bSetMerchantAudienceResponse\"\xbc\x04\n" +
 	"\n" +
 	"PaymentCap\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
@@ -578,11 +675,12 @@ const file_pantherclaw_v1_payment_caps_proto_rawDesc = "" +
 	"\x17RetirePaymentCapRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"H\n" +
 	"\x18RetirePaymentCapResponse\x12,\n" +
-	"\x03cap\x18\x01 \x01(\v2\x1a.pantherclaw.v1.PaymentCapR\x03cap2\xcd\x02\n" +
+	"\x03cap\x18\x01 \x01(\v2\x1a.pantherclaw.v1.PaymentCapR\x03cap2\xbd\x03\n" +
 	"\x11PaymentCapService\x12h\n" +
 	"\x11ProposePaymentCap\x12(.pantherclaw.v1.ProposePaymentCapRequest\x1a).pantherclaw.v1.ProposePaymentCapResponse\x12g\n" +
 	"\x0fListPaymentCaps\x12&.pantherclaw.v1.ListPaymentCapsRequest\x1a'.pantherclaw.v1.ListPaymentCapsResponse\"\x03\x90\x02\x01\x12e\n" +
-	"\x10RetirePaymentCap\x12'.pantherclaw.v1.RetirePaymentCapRequest\x1a(.pantherclaw.v1.RetirePaymentCapResponseB\xc9\x01\n" +
+	"\x10RetirePaymentCap\x12'.pantherclaw.v1.RetirePaymentCapRequest\x1a(.pantherclaw.v1.RetirePaymentCapResponse\x12n\n" +
+	"\x13SetMerchantAudience\x12*.pantherclaw.v1.SetMerchantAudienceRequest\x1a+.pantherclaw.v1.SetMerchantAudienceResponseB\xc9\x01\n" +
 	"\x12com.pantherclaw.v1B\x10PaymentCapsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -597,35 +695,39 @@ func file_pantherclaw_v1_payment_caps_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_payment_caps_proto_rawDescData
 }
 
-var file_pantherclaw_v1_payment_caps_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_pantherclaw_v1_payment_caps_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_pantherclaw_v1_payment_caps_proto_goTypes = []any{
-	(*PaymentCap)(nil),                // 0: pantherclaw.v1.PaymentCap
-	(*ProposePaymentCapRequest)(nil),  // 1: pantherclaw.v1.ProposePaymentCapRequest
-	(*ProposePaymentCapResponse)(nil), // 2: pantherclaw.v1.ProposePaymentCapResponse
-	(*ListPaymentCapsRequest)(nil),    // 3: pantherclaw.v1.ListPaymentCapsRequest
-	(*ListPaymentCapsResponse)(nil),   // 4: pantherclaw.v1.ListPaymentCapsResponse
-	(*RetirePaymentCapRequest)(nil),   // 5: pantherclaw.v1.RetirePaymentCapRequest
-	(*RetirePaymentCapResponse)(nil),  // 6: pantherclaw.v1.RetirePaymentCapResponse
-	(*timestamppb.Timestamp)(nil),     // 7: google.protobuf.Timestamp
+	(*SetMerchantAudienceRequest)(nil),  // 0: pantherclaw.v1.SetMerchantAudienceRequest
+	(*SetMerchantAudienceResponse)(nil), // 1: pantherclaw.v1.SetMerchantAudienceResponse
+	(*PaymentCap)(nil),                  // 2: pantherclaw.v1.PaymentCap
+	(*ProposePaymentCapRequest)(nil),    // 3: pantherclaw.v1.ProposePaymentCapRequest
+	(*ProposePaymentCapResponse)(nil),   // 4: pantherclaw.v1.ProposePaymentCapResponse
+	(*ListPaymentCapsRequest)(nil),      // 5: pantherclaw.v1.ListPaymentCapsRequest
+	(*ListPaymentCapsResponse)(nil),     // 6: pantherclaw.v1.ListPaymentCapsResponse
+	(*RetirePaymentCapRequest)(nil),     // 7: pantherclaw.v1.RetirePaymentCapRequest
+	(*RetirePaymentCapResponse)(nil),    // 8: pantherclaw.v1.RetirePaymentCapResponse
+	(*timestamppb.Timestamp)(nil),       // 9: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_payment_caps_proto_depIdxs = []int32{
-	7, // 0: pantherclaw.v1.PaymentCap.create_time:type_name -> google.protobuf.Timestamp
-	7, // 1: pantherclaw.v1.PaymentCap.activate_time:type_name -> google.protobuf.Timestamp
-	7, // 2: pantherclaw.v1.PaymentCap.retire_time:type_name -> google.protobuf.Timestamp
-	0, // 3: pantherclaw.v1.ProposePaymentCapResponse.cap:type_name -> pantherclaw.v1.PaymentCap
-	0, // 4: pantherclaw.v1.ListPaymentCapsResponse.caps:type_name -> pantherclaw.v1.PaymentCap
-	0, // 5: pantherclaw.v1.RetirePaymentCapResponse.cap:type_name -> pantherclaw.v1.PaymentCap
-	1, // 6: pantherclaw.v1.PaymentCapService.ProposePaymentCap:input_type -> pantherclaw.v1.ProposePaymentCapRequest
-	3, // 7: pantherclaw.v1.PaymentCapService.ListPaymentCaps:input_type -> pantherclaw.v1.ListPaymentCapsRequest
-	5, // 8: pantherclaw.v1.PaymentCapService.RetirePaymentCap:input_type -> pantherclaw.v1.RetirePaymentCapRequest
-	2, // 9: pantherclaw.v1.PaymentCapService.ProposePaymentCap:output_type -> pantherclaw.v1.ProposePaymentCapResponse
-	4, // 10: pantherclaw.v1.PaymentCapService.ListPaymentCaps:output_type -> pantherclaw.v1.ListPaymentCapsResponse
-	6, // 11: pantherclaw.v1.PaymentCapService.RetirePaymentCap:output_type -> pantherclaw.v1.RetirePaymentCapResponse
-	9, // [9:12] is the sub-list for method output_type
-	6, // [6:9] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	9,  // 0: pantherclaw.v1.PaymentCap.create_time:type_name -> google.protobuf.Timestamp
+	9,  // 1: pantherclaw.v1.PaymentCap.activate_time:type_name -> google.protobuf.Timestamp
+	9,  // 2: pantherclaw.v1.PaymentCap.retire_time:type_name -> google.protobuf.Timestamp
+	2,  // 3: pantherclaw.v1.ProposePaymentCapResponse.cap:type_name -> pantherclaw.v1.PaymentCap
+	2,  // 4: pantherclaw.v1.ListPaymentCapsResponse.caps:type_name -> pantherclaw.v1.PaymentCap
+	2,  // 5: pantherclaw.v1.RetirePaymentCapResponse.cap:type_name -> pantherclaw.v1.PaymentCap
+	3,  // 6: pantherclaw.v1.PaymentCapService.ProposePaymentCap:input_type -> pantherclaw.v1.ProposePaymentCapRequest
+	5,  // 7: pantherclaw.v1.PaymentCapService.ListPaymentCaps:input_type -> pantherclaw.v1.ListPaymentCapsRequest
+	7,  // 8: pantherclaw.v1.PaymentCapService.RetirePaymentCap:input_type -> pantherclaw.v1.RetirePaymentCapRequest
+	0,  // 9: pantherclaw.v1.PaymentCapService.SetMerchantAudience:input_type -> pantherclaw.v1.SetMerchantAudienceRequest
+	4,  // 10: pantherclaw.v1.PaymentCapService.ProposePaymentCap:output_type -> pantherclaw.v1.ProposePaymentCapResponse
+	6,  // 11: pantherclaw.v1.PaymentCapService.ListPaymentCaps:output_type -> pantherclaw.v1.ListPaymentCapsResponse
+	8,  // 12: pantherclaw.v1.PaymentCapService.RetirePaymentCap:output_type -> pantherclaw.v1.RetirePaymentCapResponse
+	1,  // 13: pantherclaw.v1.PaymentCapService.SetMerchantAudience:output_type -> pantherclaw.v1.SetMerchantAudienceResponse
+	10, // [10:14] is the sub-list for method output_type
+	6,  // [6:10] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_payment_caps_proto_init() }
@@ -639,7 +741,7 @@ func file_pantherclaw_v1_payment_caps_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_payment_caps_proto_rawDesc), len(file_pantherclaw_v1_payment_caps_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
