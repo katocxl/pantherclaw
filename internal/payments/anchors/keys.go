@@ -143,7 +143,8 @@ func NewKeySource(cfg KeyConfig, clk clock.Clock, log *slog.Logger) *KeySource {
 }
 
 // Resolver returns the verifier view of the given ACTIVE anchors. aud are
-// the KB-JWT audiences accepted (empty: any non-empty aud).
+// the KB-JWT audiences accepted; with none ap2.Verify refuses every mandate
+// (D1122b): wrap with ap2.WithAudiences.
 func (s *KeySource) Resolver(active []Anchor, aud []string) *Resolver {
 	return &Resolver{src: s, anchors: slices.Clone(active), aud: slices.Clone(aud)}
 }

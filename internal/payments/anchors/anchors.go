@@ -414,7 +414,9 @@ func (s *Service) List(ctx context.Context, size int32, token string) ([]TrustAn
 
 // ForOrg returns the verifier view of org's ACTIVE anchors, for mandate
 // verification (ap2.Verify) and agent signatures. It checks no caller: the
-// server's own use cases call it for the org they act in.
+// server's own use cases call it for the org they act in. It pins no
+// audience, so ap2.Verify refuses every mandate with it alone: callers wrap
+// it with ap2.WithAudiences (D1122b).
 func (s *Service) ForOrg(ctx context.Context, org ids.OrgID) (*Resolver, error) {
 	var active []Anchor
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {

@@ -60,6 +60,9 @@ func Verify(ctx context.Context, raw string, anchors Anchors, now time.Time) (Ve
 	if anchors == nil {
 		return Verified{}, fail(errors.New("no trust anchors"))
 	}
+	if len(anchors.Audiences()) == 0 {
+		return Verified{}, fail(errors.New("no expected audience")) // D1122b: never any aud
+	}
 	if len(raw) == 0 || len(raw) > MaxEnvelope {
 		return Verified{}, fail(errors.New("envelope size"))
 	}
@@ -289,7 +292,7 @@ func (v *verifier) delegated(ctx context.Context, openS, closedS, closedVCT, ope
 	v.expiry(at.Add(sdjwt.KBMaxAge))
 	aud, _ := closed["aud"].(string)
 	nonce, _ := closed["nonce"].(string)
-	if aud == "" || nonce == "" || (len(v.anchors.Audiences()) > 0 && !slices.Contains(v.anchors.Audiences(), aud)) {
+	if aud == "" || nonce == "" || !slices.Contains(v.anchors.Audiences(), aud) {
 		return chain{}, errors.New("closed mandate aud or nonce")
 	}
 	if err := v.checkTimes(closed); err != nil {

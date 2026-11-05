@@ -64,10 +64,33 @@ type Anchors interface {
 	// is not an error. A live (non-sandbox) anchor fails with
 	// ErrLiveRefused.
 	Keys(ctx context.Context, kind Kind, kid string) ([]AnchorKey, error)
-	// Audiences are the aud values a KB-JWT may name for this verifier;
-	// empty accepts any non-empty aud.
+	// Audiences are the aud values a KB-JWT or a delegated closed mandate
+	// must name (D1122b); empty makes Verify refuse every mandate.
 	Audiences() []string
 }
+
+// WithAudiences returns a with the expected audiences aud (D1122b): the
+// caller pins the audience, such as the agentpay connection's merchant
+// audience; empty values are dropped.
+func WithAudiences(a Anchors, aud ...string) Anchors {
+	if a == nil {
+		return nil
+	}
+	var keep []string
+	for _, s := range aud {
+		if s != "" {
+			keep = append(keep, s)
+		}
+	}
+	return audienced{Anchors: a, aud: keep}
+}
+
+type audienced struct {
+	Anchors
+	aud []string
+}
+
+func (a audienced) Audiences() []string { return a.aud }
 
 // Constraint types evaluated (D1122). Any other type fails.
 const (

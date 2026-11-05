@@ -455,8 +455,8 @@ type KBClaims struct {
 }
 
 // VerifyKB verifies the presentation's KB-JWT with the holder key (RFC
-// 9901 §7.3): typ kb+jwt, aud and nonce present (aud one of audiences when
-// any are set), iat within KBMaxAge of now, and sd_hash over the
+// 9901 §7.3): typ kb+jwt, aud one of audiences (none: refused, D1122b),
+// a nonce, iat within KBMaxAge of now, and sd_hash over the
 // presentation.
 func (p *Presentation) VerifyKB(holder crypto.PublicKey, audiences []string, now time.Time) (KBClaims, error) {
 	if p.KB == "" {
@@ -483,7 +483,7 @@ func (p *Presentation) VerifyKB(holder crypto.PublicKey, audiences []string, now
 	if c.Aud == "" || c.Nonce == "" {
 		return KBClaims{}, invalid("KB-JWT aud or nonce empty")
 	}
-	if len(audiences) > 0 && !slices.Contains(audiences, c.Aud) {
+	if !slices.Contains(audiences, c.Aud) {
 		return KBClaims{}, invalid("KB-JWT aud")
 	}
 	if sdHash != Digest(p.WithoutKB()) {
