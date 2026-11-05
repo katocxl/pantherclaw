@@ -115,7 +115,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-029 | Evidence tampering; insider re-signing a rewritten chain | A7 | TB5 | Lost accountability | HR-055, HR-110..112, HR-194..196, HR-198 | M7 |
 | T-030 | SaaS operator forges approvals in the DB | A7 | TB5 | Unapproved execution | HR-038 | M6 |
 | T-031 | Revocation/kill-switch bypass (stale gateway) or abuse (DoS engage, silent lift) | A1, A7 | TB3 | Uncontained agent / outage | HR-002, HR-010, HR-113; engage also pauses automations (HR-283) | M6 |
-| T-032 | Token/proof replay, alg confusion, token substitution | A4, A9 | TB1 | Impersonation | HR-090, HR-091, HR-095 | M2/M3 |
+| T-032 | Token/proof replay, alg confusion, token substitution | A4, A9 | TB1 | Impersonation | HR-090, HR-091, HR-095; refused proofs are recorded and alerted (HR-850) | M2/M3 |
 | T-033 | Local workload key theft from desktop key store | A1, malware | Host | Impersonation from elsewhere | HR-092; hardware keys preferred | M3 |
 | T-034 | Licence-key forgery or check removal | A12 | Code | Revenue loss | Offline Ed25519 root (HR-063); legal (BSL) | M1 |
 | T-035 | GitHub OIDC mis-binding (name reuse, forks, same-repository pull-request runs, `pull_request_target`) | A4 | Attestation | Impersonation | HR-093 | M3 |
