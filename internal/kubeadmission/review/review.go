@@ -8,7 +8,8 @@
 package review
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 )
 
@@ -63,8 +64,8 @@ type Request struct {
 	Namespace   string               `json:"namespace"`
 	Operation   string               `json:"operation"`
 	UserInfo    UserInfo             `json:"userInfo"`
-	Object      json.RawMessage      `json:"object"`
-	OldObject   json.RawMessage      `json:"oldObject"`
+	Object      jsontext.Value       `json:"object"`
+	OldObject   jsontext.Value       `json:"oldObject"`
 	DryRun      *bool                `json:"dryRun"`
 }
 
@@ -74,7 +75,7 @@ func (r *Request) IsDryRun() bool { return r.DryRun != nil && *r.DryRun }
 
 // Status is the reason a request was denied (a metav1.Status subset).
 type Status struct {
-	Code    int32  `json:"code,omitempty"`
+	Code    int32  `json:"code,omitzero"`
 	Message string `json:"message,omitempty"`
 	// Reason carries the webhook's refusal code (K8S_*).
 	Reason string `json:"reason,omitempty"`
@@ -197,7 +198,7 @@ type ServiceAccountTokenProjection struct {
 }
 
 // ParsePod decodes a review's object as a pod.
-func ParsePod(raw json.RawMessage) (*Pod, error) {
+func ParsePod(raw jsontext.Value) (*Pod, error) {
 	if len(raw) == 0 {
 		return nil, ErrMalformed
 	}

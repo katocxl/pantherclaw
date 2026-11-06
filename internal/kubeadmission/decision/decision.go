@@ -38,7 +38,7 @@ const (
 	// CodeTokenExposed: the pod automounts its service-account token, or a
 	// projected token reaches a container other than the edge, names
 	// another audience or lives longer than an hour.
-	CodeTokenExposed = "K8S_TOKEN_EXPOSED"
+	CodeTokenExposed = "K8S_TOKEN_EXPOSED" //nolint:gosec // G101: a reason code, not a credential
 	// CodeEphemeral: an ephemeral container (always refused).
 	CodeEphemeral = "K8S_EPHEMERAL"
 	// CodeUnavailable: the webhook could not decide (fail closed).

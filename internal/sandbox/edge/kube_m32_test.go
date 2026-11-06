@@ -429,8 +429,10 @@ func TestHR737_OneRunPerPodNamedAfterThePod(t *testing.T) {
 // TestHR737_ARefusedRunServesNothing: when StartPodRun is refused (no run
 // grant), the edge keeps no run.
 func TestHR737_ARefusedRunServesNothing(t *testing.T) {
-	f := &fakeServer{state: pantherclawv1.InstanceState_INSTANCE_STATE_ADMITTED,
-		refuseAt: connect.NewError(connect.CodeFailedPrecondition, "K8S_NO_RUN_GRANT")}
+	f := &fakeServer{
+		state:    pantherclawv1.InstanceState_INSTANCE_STATE_ADMITTED,
+		refuseAt: connect.NewError(connect.CodeFailedPrecondition, "K8S_NO_RUN_GRANT"),
+	}
 	w, _ := podWorkload(t, f)
 	w.token = "workload-token"
 	if run, err := w.startPodRun(t.Context(), "coder-1"); err == nil || run != "" {

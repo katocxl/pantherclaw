@@ -4,7 +4,7 @@
 // Package kubeadmission is the Kubernetes validating admission webhook (G0
 // M32 D967, D967a, HR-735): POST /admission/v1/{cluster}/{org}/{secret}. A
 // configured cluster's API server calls it for every pod CREATE and
-// pods/ephemeralcontainers UPDATE in a namespace labelled
+// pods/ephemeralcontainers UPDATE in a namespace labeled
 // pantherclaw.dev/protect=enforce for the org. It fails closed: anything it
 // cannot decide is refused (K8S_UNAVAILABLE), and the webhook
 // configuration's failurePolicy is Fail.
@@ -14,7 +14,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"io"
 	"log/slog"
@@ -160,7 +160,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(out)
+	_, _ = w.Write(out) //nolint:gosec // G705: a JSON AdmissionReview served as application/json, not HTML
 }
 
 // decide returns "" to allow or the refusal code, and records the decision.

@@ -267,7 +267,7 @@ func (s *kubeClosures) submit(ctx context.Context, tx db.TenantTx, in pap.Instan
 	probes := slices.Clone(results)
 	var checks []covdomain.ConfigCheck
 	var verdict covdomain.Verdict
-	passed := false
+	var passed bool
 	if r.Kind == report.KindControl {
 		// The control twin, in the release namespace: every twin reachable.
 		passed = len(results) > 0 && !slices.ContainsFunc(results, func(p covdomain.ProbeResult) bool {
