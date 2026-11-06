@@ -13,7 +13,8 @@
 
 import { Host, cannotDecide } from "./host.js";
 import {
-  addTakeoverRule, allowNavigationOnce, installHoldRule, re2Escape, removeNavigationRules, removeNavigationRulesFor, removeTakeoverRule,
+  addTakeoverRule, allowNavigationOnce, installHoldRule, re2Escape, removeAllNavigationRules, removeNavigationRules, removeNavigationRulesFor,
+  removeTakeoverRule,
 } from "./rules.js";
 
 /** @typedef {import("./host.js").Answer} Answer */
@@ -354,4 +355,5 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.runtime.onInstalled.addListener(() => void installHoldRule());
 chrome.runtime.onStartup.addListener(() => void installHoldRule());
 void installHoldRule();
+void removeAllNavigationRules();
 void host.connect();

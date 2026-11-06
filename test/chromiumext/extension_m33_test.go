@@ -166,7 +166,8 @@ func TestHR751_TheExtensionFailsClosed(t *testing.T) {
 // another tab is asked and, without an answer, canceled and erased; a
 // decided navigation's or submit's rule lasts 10 s and goes once a request
 // it matches on its tab completes or fails, and not for another address or
-// tab.
+// tab; when the worker starts, every one-navigation rule a stopped worker
+// left goes, and the takeover rules stay (D1221a R4).
 func TestHR751_TakeoverDownloadsAndDecidedRulesStayNarrow(t *testing.T) {
 	if !haveNode() {
 		t.Skip("node not found")
@@ -174,7 +175,7 @@ func TestHR751_TakeoverDownloadsAndDecidedRulesStayNarrow(t *testing.T) {
 	out := runNode(t, backgroundScript)
 	for _, want := range []string{
 		"download only-tab resume 1", "download shared-page cancel 2,erase 2", "download other-page cancel 3,erase 3",
-		"rule ttl 10000", "rules other-address 7,8", "rules completed 8", "rules errored none",
+		"worker start rules 901", "rule ttl 10000", "rules other-address 7,8", "rules completed 8", "rules errored none",
 	} {
 		if !strings.Contains(out, want+"\n") {
 			t.Errorf("background.js run lacks %q:\n%s", want, out)
@@ -354,6 +355,11 @@ func secretFields(s sources) []string {
 		`(r.oldValue || "").toLowerCase() === "password"`, "seenSecret.add(r.target);", `attributeFilter: ["type"], attributeOldValue: true`) {
 		bad = append(bad, "fields.js lets a field stop being secret when its type changes")
 	}
+	// A field that replaces a removed secret input is secret (D1221a R3).
+	if !ordered(f, "const replaced = [];", "replaced.push({", "if (replaced.some((d) => takesPlace(el, d))) {", "seenSecret.add(el);",
+		"childList: true,") {
+		bad = append(bad, "fields.js lets a script swap a secret input for a plain one")
+	}
 	if !ordered(f, "el instanceof HTMLTextAreaElement", "isContentEditable", `[el.getAttribute("name"), el.id, el.getAttribute("aria-label")]`) {
 		bad = append(bad, "fields.js does not refuse secret text areas and contenteditable fields")
 	}
@@ -420,6 +426,7 @@ func TestHR752_SecretAndChallengeFieldsAreRefused(t *testing.T) {
 		"secret submit": s.with("content.js", "if (info.secret_fields) {", "if (false) {"),
 		"not sticky":    s.with("fields.js", "if (seenSecret.has(field)) {", "if (false) {"),
 		"inputs only":   s.with("fields.js", "el instanceof HTMLTextAreaElement", "false"),
+		"no swaps":      s.with("fields.js", "childList: true, ", ""),
 	} {
 		if len(secretFields(mutated)) == 0 {
 			t.Errorf("%s: the check passes a source that lets secret input through", name)
@@ -436,7 +443,8 @@ func TestHR752_SecretAndChallengeFieldsAreRefused(t *testing.T) {
 			"shop.example.com beforeinput-secret prevented", "shop.example.com beforeinput-email allowed", "shop.example.com input-secret cleared",
 			"shop.example.com input-email kept", "shop.example.com tab-key allowed", "shop.example.com lifted allowed",
 			"shop.example.com show-password prevented", "shop.example.com show-password-input cleared", "shop.example.com pwd_field-was-password prevented",
-			"shop.example.com pwd_field-text false", "shop.example.com textarea-cvv true", "shop.example.com textarea-notes false",
+			"shop.example.com pwd_field-text false", "shop.example.com swapped-same-name true", "shop.example.com swapped-same-place true",
+			"shop.example.com swapped-elsewhere false", "shop.example.com textarea-cvv true", "shop.example.com textarea-notes false",
 			"shop.example.com contenteditable-text-node true", "shop.example.com contenteditable-input cleared",
 			"shop.example.com contenteditable-message false", "shop.example.com element-not-editable false",
 			"js.stripe.com email true", "x.paypal.com email true", "paypal.com email true", "pay.example.test email true",
@@ -646,6 +654,24 @@ const unseen = new HTMLInputElement({ type: "text", name: "pwd_field", attrs: { 
 for (const cb of shop.observers) cb([{ target: unseen, attributeName: "type", oldValue: "password" }]);
 console.log("shop.example.com pwd_field-was-password", verdict(shop.fire("beforeinput", unseen)));
 console.log("shop.example.com pwd_field-text", shop.f.isSecret(new HTMLInputElement({ name: "pwd_field", attrs: { autocomplete: "off" } })));
+// A script swaps a password input for a text one: a field in its place is
+// secret, by form and name or by parent and neighbor; others are not.
+const form = new HTMLElement({});
+const box = new HTMLElement({});
+box.closest = (s) => (s === "form" ? form : null);
+const before = new HTMLElement({});
+const gone = new HTMLInputElement({ type: "password", name: "pw" });
+const sameName = new HTMLInputElement({ name: "pw" });
+sameName.closest = box.closest;
+for (const cb of shop.observers) cb([{ type: "childList", target: box, removedNodes: [gone], addedNodes: [sameName], previousSibling: before, nextSibling: null }]);
+const samePlace = new HTMLInputElement({ name: "x" });
+samePlace.parentNode = box; samePlace.previousSibling = before;
+const elsewhere = new HTMLInputElement({ name: "q" });
+elsewhere.parentNode = new HTMLElement({});
+for (const cb of shop.observers) cb([{ type: "childList", target: box, removedNodes: [], addedNodes: [samePlace, elsewhere] }]);
+console.log("shop.example.com swapped-same-name", shop.f.isSecret(sameName));
+console.log("shop.example.com swapped-same-place", shop.f.isSecret(samePlace));
+console.log("shop.example.com swapped-elsewhere", shop.f.isSecret(elsewhere));
 console.log("shop.example.com textarea-cvv", shop.f.isSecret(new HTMLTextAreaElement({ attrs: { name: "cvv" } })));
 console.log("shop.example.com textarea-notes", shop.f.isSecret(new HTMLTextAreaElement({ attrs: { name: "notes" } })));
 const editHost = new HTMLElement({ editable: true, attrs: { "aria-label": "Password" }, text: "hunter2" });
@@ -678,7 +704,12 @@ const ev = () => { const fs = []; return { fs, addListener: (f) => fs.push(f) };
 const settle = () => new Promise((r) => setTimeout(r, 50));
 const log = [];
 const session = {};
-let sessionRules = [];
+// What a stopped worker left: a one-navigation rule (priority 2) whose
+// timer is gone, and a takeover rule (priority 3).
+let sessionRules = [
+  { id: 900, priority: 2, action: { type: "allow" }, condition: { regexFilter: "^https://left\\\\.example\\\\.com/", resourceTypes: ["main_frame"], tabIds: [3] } },
+  { id: 901, priority: 3, action: { type: "allow" }, condition: { tabIds: [4] } },
+];
 let openTabs = [];
 globalThis.chrome = {
   runtime: { id: "ext", lastError: undefined, connectNative() { throw new Error("no host"); }, onMessage: ev(), onInstalled: ev(), onStartup: ev() },
@@ -712,6 +743,8 @@ globalThis.chrome = {
 await import(pathToFileURL(path.join(dir, "background.js")).href);
 const rules = await import(pathToFileURL(path.join(dir, "rules.js")).href);
 await settle();
+console.log("worker start rules", sessionRules.map((r) => r.id).join(",") || "none");
+sessionRules = [];
 
 const page = "https://docs.example.com/report";
 session["takeover:5"] = Date.now() + 60_000;

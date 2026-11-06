@@ -41,48 +41,69 @@ class _Calls:
     """The call each action is asked with. The Agents SDK calls a Computer's
     methods with the action's arguments only: the computer_call's call_id
     never reaches them, and one call_id can carry several actions. So the
-    call is a digest of this wrapper's random salt, the action and how many
-    identical actions were allowed before it. An action that was held or
-    refused and is asked again is the same call, so its approval releases
-    it; the same action after an allow is a new call."""
+    call is a digest of this wrapper's random salt, the action and its slot:
+    the lowest number not used by an allowed identical action and not
+    reserved by one still being decided. The slot is reserved under the
+    lock when the call is made, so two identical actions decided at once
+    (an async computer) are two calls (D1221a R2). An action that was held
+    or refused gives its slot back and, asked again, is the same call, so
+    its approval releases it; the same action after an allow is a new
+    call."""
 
     def __init__(self) -> None:
         self._salt = secrets.token_hex(16)
-        self._allowed: dict[str, int] = {}
+        self._used: dict[str, set[int]] = {}
+        self._reserved: dict[str, set[int]] = {}
         self._lock = threading.Lock()
 
-    def call(self, action: dict[str, Any]) -> tuple[str, str]:
+    def call(self, action: dict[str, Any]) -> tuple[str, int, str]:
         key = json.dumps(action, sort_keys=True, separators=(",", ":"))
         with self._lock:
-            n = self._allowed.get(key, 0)
+            used = self._used.setdefault(key, set())
+            reserved = self._reserved.setdefault(key, set())
+            n = 0
+            while n in used or n in reserved:
+                n += 1
+            reserved.add(n)
         digest = hashlib.sha256(f"{self._salt}\n{n}\n{key}".encode()).hexdigest()
-        return key, "oa-" + digest[:32]
+        return key, n, "oa-" + digest[:32]
 
-    def allowed(self, key: str) -> None:
+    def done(self, key: str, n: int, allowed: bool) -> None:
         with self._lock:
-            self._allowed[key] = self._allowed.get(key, 0) + 1
+            self._reserved.get(key, set()).discard(n)
+            if allowed:
+                self._used.setdefault(key, set()).add(n)
 
 
 def _decide(guard: ComputerUseGuard, calls: _Calls, action: dict[str, Any]) -> None:
     try:
-        key, call = calls.call(action)
+        key, n, call = calls.call(action)
+    except Exception:  # noqa: BLE001 - any failure refuses
+        _check(ComputerDecision(False, code="wrapper_error"))
+        return
+    try:
         d = guard.decide_openai({"call_id": call, "action": action})
     except Exception:  # noqa: BLE001 - any failure refuses
         d = ComputerDecision(False, code="wrapper_error")
+    calls.done(key, n, d.allowed)
     _check(d)
-    calls.allowed(key)
 
 
 async def _adecide(guard: ComputerUseGuard, calls: _Calls, action: dict[str, Any]) -> None:
     try:
-        key, call = calls.call(action)
+        key, n, call = calls.call(action)
+    except Exception:  # noqa: BLE001 - any failure refuses
+        _check(ComputerDecision(False, code="wrapper_error"))
+        return
+    try:
         d = await asyncio.to_thread(guard.decide_openai, {"call_id": call, "action": action})
     except asyncio.CancelledError:
+        calls.done(key, n, False)
         raise
     except Exception:  # noqa: BLE001 - any failure refuses
         d = ComputerDecision(False, code="wrapper_error")
+    calls.done(key, n, d.allowed)
     _check(d)
-    calls.allowed(key)
 
 
 def _path(path: Any) -> list[dict[str, int]]:

@@ -129,14 +129,91 @@
     return false;
   }
 
-  // An input whose type leaves "password" stays secret, seen or not.
+  /**
+   * Secret inputs a script removed lately. A field that takes one's place
+   * (the same form and name, or the same parent and a same neighbor) is
+   * secret too, so swapping a password input for a text one does not make
+   * it plain (D1221a R3). At most MAX_REPLACED are kept, newest last.
+   * @type {{form: HTMLElement | null, name: string, parent: Node | null, prev: Node | null, next: Node | null}[]}
+   */
+  const replaced = [];
+  const MAX_REPLACED = 32;
+
+  /**
+   * The inputs and text areas node is or holds.
+   * @param {Node} node
+   * @returns {HTMLElement[]}
+   */
+  function fieldsIn(node) {
+    if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) {
+      return [node];
+    }
+    if (node instanceof HTMLElement && typeof node.querySelectorAll === "function") {
+      return [...node.querySelectorAll("input, textarea")];
+    }
+    return [];
+  }
+
+  /** @param {any} node @returns {HTMLElement | null} */
+  function formOf(node) {
+    return node && typeof node.closest === "function" ? node.closest("form") : null;
+  }
+
+  /**
+   * Whether field el takes the place of the removed secret input d.
+   * @param {any} el
+   * @param {{form: HTMLElement | null, name: string, parent: Node | null, prev: Node | null, next: Node | null}} d
+   */
+  function takesPlace(el, d) {
+    if (d.form && d.name && el.name === d.name && (el.form || formOf(el)) === d.form) {
+      return true;
+    }
+    if (!d.parent || el.parentNode !== d.parent) {
+      return false;
+    }
+    return (d.prev !== null && el.previousSibling === d.prev) || (d.next !== null && el.nextSibling === d.next) ||
+      (d.prev === null && d.next === null);
+  }
+
+  // An input whose type leaves "password" stays secret, seen or not; a
+  // field that replaces a removed secret input is secret.
   new MutationObserver((records) => {
     for (const r of records) {
-      if (r.target instanceof HTMLInputElement && (r.oldValue || "").toLowerCase() === "password") {
-        seenSecret.add(r.target);
+      if (r.type !== "childList") {
+        if (r.target instanceof HTMLInputElement && (r.oldValue || "").toLowerCase() === "password") {
+          seenSecret.add(r.target);
+        }
+        continue;
+      }
+      for (const node of r.removedNodes || []) {
+        for (const old of fieldsIn(node)) {
+          if (!(seenSecret.has(old) || secretNow(old))) {
+            continue;
+          }
+          const direct = old === node;
+          replaced.push({
+            form: /** @type {any} */ (old).form || formOf(r.target), name: /** @type {any} */ (old).name || "",
+            parent: direct ? r.target : null, prev: direct ? r.previousSibling : null, next: direct ? r.nextSibling : null,
+          });
+          if (replaced.length > MAX_REPLACED) {
+            replaced.shift();
+          }
+        }
       }
     }
-  }).observe(document, { subtree: true, attributes: true, attributeFilter: ["type"], attributeOldValue: true });
+    for (const r of records) {
+      if (r.type !== "childList") {
+        continue;
+      }
+      for (const node of r.addedNodes || []) {
+        for (const el of fieldsIn(node)) {
+          if (replaced.some((d) => takesPlace(el, d))) {
+            seenSecret.add(el);
+          }
+        }
+      }
+    }
+  }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ["type"], attributeOldValue: true });
 
   /**
    * Whether a form holds a secret input with a value.

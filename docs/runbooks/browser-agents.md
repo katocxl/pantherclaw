@@ -27,6 +27,7 @@ pclaw browser install-host --gateway URL --connection NAME --key-file FILE \
 
 - `--gateway` is the gateway's base URL (https; http only for localhost). `--connection` is the local connection. `--run` defaults to the key file's run.
 - `--browser` defaults to `all` (Chrome and Chromium). `--system` installs for every user of the machine.
+- Install per user (without `--system`) wherever you can. A `--system` install names one configuration and so one key file: on unix every user's browser then asks with the same workload key, and their actions are one agent's. Use `--system` only on a single-user or kiosk machine.
 - Only the given extension ids may start the host: the manifest's `allowed_origins` lists `chrome-extension://<id>/` for each.
 
 It writes three things and prints their paths:
@@ -94,7 +95,7 @@ Open the toolbar popup. It says "Connected to PantherClaw (connection â€¦, run â
 
 No screenshots, DOM, field values or page text leave the browser.
 
-An allowed navigation or submit is let through by a session rule for that one tab and address. The rule goes when the tab commits or fails a navigation, when a request it matches redirects, completes or fails (the `webRequest` permission is for this; the extension only observes, it never blocks or changes a request there), or after 10 seconds, whichever is first. A service-worker restart loses the 10-second timer; the tab's next commit or failure still removes the rule.
+An allowed navigation or submit is let through by a session rule for that one tab and address. The rule goes when the tab commits or fails a navigation, when a request it matches redirects, completes or fails (the `webRequest` permission is for this; the extension only observes, it never blocks or changes a request there), or after 10 seconds, whichever is first. A service-worker restart loses the 10-second timer, so a worker removes every such rule when it starts; a navigation still waiting for its rule is asked again.
 
 Not decided (PARTIAL): navigations inside a frame (only the top-level page is asked), and `file:` pages.
 
@@ -104,7 +105,8 @@ An agent never types into or submits password, one-time-code or payment fields, 
 
 - A field is secret by `type=password`, by an `autocomplete` token (`current-password`, `new-password`, `one-time-code`, the `cc-*` tokens), by a name, id, aria-label or placeholder that looks like a password, PIN, code, card, IBAN, routing or account number or SSN, or because its frame is on a payment host (Stripe, Braintree, Adyen, PayPal, Google Pay, or an `extra_secret_hosts` entry).
 - In a challenge frame (reCAPTCHA, hCaptcha, Cloudflare challenges, Arkose) every pointer, key and input event is refused.
-- A field inside a closed shadow root is not seen, so it is not treated as secret (PARTIAL).
+- A field stays secret once seen as one, and an input whose type leaves `password` stays secret. A field a script puts in place of a removed secret input (same form and name, or same parent and neighbor) is secret too.
+- Not seen (PARTIAL): a field inside a closed shadow root; a swap inside any shadow root; a replacement in another form, under another name and in another place; a secret input replaced by a contenteditable; and more than 32 swaps on one page, beyond which the oldest are forgotten.
 - Typing, pasting and dropping are prevented, and a value that still arrives is cleared. The page shows "PantherClaw refuses agent input into password, one-time-code, payment and challenge fields. A person can take over this tab from the PantherClaw toolbar button."
 - A submit holding a non-empty secret field is refused in the page and still asked with `secret_fields: true`. The gateway refuses it before the Authority is asked (`BROWSER_SECRET_FIELD`, HR-747), so the refusal is recorded. The agent is told to ask a person to take over the tab and continue after.
 
@@ -150,7 +152,7 @@ Only the takeover request is recorded. During a takeover nothing on that tab is 
 
 ## 4. Computer use
 
-Computer use is decided only through the SDK wrappers (R-81). Each action becomes a `pc.computer` `computer.input` call on a local connection pinning `pc.computer` (hook tool `computer`): its kind, button, text or keys. Coordinates are sent but are not material.
+Computer use is decided only through the SDK wrappers (R-81). Each action becomes a `pc.computer` `computer.input` call on a local connection pinning `pc.computer` (hook tool `computer`): its kind, button, text or keys. Coordinates are sent but are not material: an approval of a `computer.input` binds its kind, button, text and keys, not where on the screen it happens (D984).
 
 ### Python and TypeScript SDKs
 
@@ -167,7 +169,7 @@ Computer use is decided only through the SDK wrappers (R-81). Each action become
 
 `guard_computer(computer, guard)` from `pantherclaw_openai_agents` returns a `Computer` or `AsyncComputer` subclass that asks before click, double click, drag, keypress, move, scroll and type, and raises the integration's refusal error on a hold or a refusal. Screenshot and wait pass through.
 
-The Agents SDK calls a `Computer` with each action's arguments only: the `computer_call`'s `call_id` never reaches it, and one `call_id` can carry several actions. So the wrapper makes each call from the action itself, a random value per wrapped computer and the number of identical actions allowed before it. A held action asked again through the same wrapped computer is the same call, so it runs once released; the same action after an allow is a new call. A new wrapped computer (a restarted process) makes new calls, so an action held before the restart is asked as a new one. Modifier keys the SDK passes with a click, drag, move or scroll are not passed through.
+The Agents SDK calls a `Computer` with each action's arguments only: the `computer_call`'s `call_id` never reaches it, and one `call_id` can carry several actions. So the wrapper makes each call from the action itself, a random value per wrapped computer and a slot: the lowest number no allowed identical action used and none still being decided holds. The slot is taken when the action is asked, so identical actions an async computer decides at once are separate calls; a held or refused action gives its slot back. A held action asked again through the same wrapped computer is the same call, so it runs once released; the same action after an allow is a new call. A new wrapped computer (a restarted process) makes new calls, so an action held before the restart is asked as a new one. Modifier keys the SDK passes with a click, drag, move or scroll are not passed through.
 
 ### The model connection
 

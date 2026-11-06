@@ -213,6 +213,37 @@ class GuardComputerTest(unittest.TestCase):
         a = asyncio.run(go())
         self.assertEqual(a[0], a[1])
 
+    def test_HR758_identical_async_actions_decided_at_once_are_two_calls(self) -> None:
+        # The slot is reserved when the call is made (D1221a R2): two
+        # identical actions in flight together never share a call, and a
+        # held one gives its slot back, so asked again it is the same call.
+        import threading
+
+        gate = threading.Barrier(2, timeout=5)
+
+        class _Both(_Guard):
+            def decide_openai(self, computer_call: Any) -> ComputerDecision:
+                d = super().decide_openai(computer_call)
+                gate.wait()
+                return d
+
+        async def go() -> tuple[list[str], list[str]]:
+            g = _Both(ComputerDecision(True))
+            c = guard_computer(_AsyncScreen(), g)
+            await asyncio.gather(c.type("x"), c.type("x"))
+            first = list(g.calls)
+            h = _Guard(ComputerDecision(False, held=True))
+            ch = guard_computer(_AsyncScreen(), h)
+            for _ in range(2):
+                with self.assertRaises(PantherClawRefused):
+                    await ch.type("y")
+            return first, h.calls
+
+        both, held = asyncio.run(go())
+        self.assertEqual(len(both), 2)
+        self.assertNotEqual(both[0], both[1])
+        self.assertEqual(held[0], held[1])
+
 
 if __name__ == "__main__":
     unittest.main()

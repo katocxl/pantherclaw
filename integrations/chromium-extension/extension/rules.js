@@ -80,6 +80,21 @@ export function allowNavigationOnce(tabId, regex) {
   });
 }
 
+/**
+ * Removes every one-navigation rule, of any tab. The worker calls it when
+ * it starts: a rule a stopped worker left has lost its 10-second timer
+ * (D1221a R4); an allowed navigation still waiting is asked again.
+ */
+export function removeAllNavigationRules() {
+  return serial(async () => {
+    const rules = await chrome.declarativeNetRequest.getSessionRules();
+    const ids = rules.filter((r) => r.priority === PRIORITY_NAVIGATION).map((r) => r.id);
+    if (ids.length > 0) {
+      await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: ids });
+    }
+  });
+}
+
 /** Removes the one-navigation rules of a tab (not its takeover rule). @param {number} tabId */
 export function removeNavigationRules(tabId) {
   return serial(async () => {

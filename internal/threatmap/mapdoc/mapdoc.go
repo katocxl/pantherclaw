@@ -68,6 +68,7 @@ func Render(s *mapset.Set, threats map[string][]string) []byte {
 	fmt.Fprintf(&b, "> %s\n\n", Statement)
 	b.WriteString("Every technique of both matrices has exactly one place:\n\n")
 	b.WriteString("- **Mapped:** PantherClaw controls, detection rules, signal kinds, Hub content or range scenarios are mapped to the technique or one of its sub-techniques. What the organization's map shows for it depends on that organization's evidence ([runbook](../runbooks/threat-map.md)).\n")
+	b.WriteString("- **Mapped (partly):** mapped, but some of its sub-techniques have nothing mapped and no other place; they are named as not covered.\n")
 	b.WriteString("- **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.\n")
 	b.WriteString("- **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.\n\n")
 	fmt.Fprintf(&b, "Mapping digest: `%s`.\n\n", s.Digest())
@@ -180,7 +181,7 @@ func placeOf(c *catalog.Catalog, t catalog.Technique, m map[string]mapset.Techni
 	case own.Unaddressed != nil:
 		return "No PantherClaw control yet", cell(own.Unaddressed.Why)
 	}
-	var parts []string
+	var parts, uncovered []string
 	if s := listed(own); s != "" {
 		parts = append(parts, s)
 	}
@@ -194,11 +195,22 @@ func placeOf(c *catalog.Catalog, t catalog.Technique, m map[string]mapset.Techni
 		default:
 			if s := listed(sm); s != "" {
 				parts = append(parts, sub.ID+": "+s)
+			} else {
+				uncovered = append(uncovered, sub.ID)
 			}
 		}
 	}
 	if len(parts) == 0 {
 		return "Not placed", "—"
+	}
+	// A parent counts as mapped when one of its sub-techniques is (D712);
+	// the sub-techniques nothing maps to are named, so the row never reads
+	// as covering them (D1221a R1).
+	if len(uncovered) > 0 {
+		for _, id := range uncovered {
+			parts = append(parts, id+" not covered")
+		}
+		return "Mapped (partly)", strings.Join(parts, "<br>")
 	}
 	return "Mapped", strings.Join(parts, "<br>")
 }
