@@ -1,0 +1,16 @@
+apiVersion: pantherclaw.range/v1
+id: RT-225
+title: A runtime tool call without workload proof is refused before it can be decided
+category: boundary
+suite: platform
+tier: business
+attacker: A5
+threats: [T-345]
+rules: [HR-760, HR-764, HR-766]
+requires: [payments]
+harness_only: true
+steps:
+  - id: no-proof
+    do: runtime.probe
+    with: {attack: missing_proof}
+    expect: {outcome: REFUSED, reason: NO_WORKLOAD_PROOF, decisive_control: HR-764}

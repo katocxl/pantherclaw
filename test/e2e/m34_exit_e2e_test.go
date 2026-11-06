@@ -53,11 +53,12 @@ func TestE2E_M34_CloudAgentRuntimes(t *testing.T) {
 		t.Fatalf("the runtime run's grant %q, want the issuer entry's %s", g, rt.grant)
 	}
 	// A run name the server does not accept starts nothing.
-	if _, err := rt.startRun(s.apiURL, "agentcore:bad name with spaces"); err == nil || !strings.Contains(err.Error(), "RUNTIME_RUN_NAME") {
+	if _, err := rt.startRun(s.apiURL, "agentcore:bad name with spaces"); err == nil || !strings.Contains(err.Error(), "invalid_argument") {
 		t.Fatalf("StartRuntimeRun with a bad name: %v", err)
 	}
 
 	// FQ34-1: decisions through the customer's gateway.
+	refundableMore(t, s, "ch_m34exit")
 	s.runtimeConnection(t, "agentcore-payments", agentcore.GatewayARN, agentcore.Target)
 	read := toolEvent(t, agentcore.Target, "get_refund", map[string]any{"refund": "re_m34exit"})
 	act := ids.NewV7()
@@ -77,7 +78,7 @@ func TestE2E_M34_CloudAgentRuntimes(t *testing.T) {
 	a = s.face(t, rt, agentcore.GatewayARN, act, toolEvent(t, agentcore.Target, "create_refund",
 		map[string]any{"charge": "ch_m34exit", "amount": "40.00", "currency": "USD", "reason": "requested_by_customer"}))
 	txn, decision, _, _ = s.txnOf(t, rt.run, act)
-	if !a.IsError || !strings.HasPrefix(a.Text, "held for a person's approval in PantherClaw") || txn == "" || !strings.Contains(a.Text, txn) || decision != "HOLD" {
+	if !a.IsError || !strings.HasPrefix(a.Text, "held for a person's approval in PantherClaw") || txn == "" || !strings.Contains(a.Text, txn) || decision != "REQUIRE_APPROVAL" {
 		t.Fatalf("a refund the grant holds: %s (transaction %s %s)", a.Raw, txn, decision)
 	}
 	if n := s.delegatedOf(t, txn); n != "0" {
@@ -106,8 +107,8 @@ func TestE2E_M34_CloudAgentRuntimes(t *testing.T) {
 		t.Fatalf("another account's gateway: %s (transaction %q)", a.Raw, txn)
 	}
 
-	// HR-766: the real interceptor, whose attestation the server cannot
-	// check here (its STS host is not allowed), lets nothing through.
+	// HR-766: the real interceptor, whose enrolment proof the server
+	// refuses here, lets nothing through.
 	ic := s.runInterceptor(t, f.awsSession(t, m34Function, "sts:GetCallerIdentity"))
 	a = s.invoke(t, ic, "get_refund", map[string]any{"refund": "re_m34exit"})
 	if a.Pass || !a.IsError || !strings.Contains(a.Text, "PantherClaw cannot decide this tool call") {
@@ -116,9 +117,12 @@ func TestE2E_M34_CloudAgentRuntimes(t *testing.T) {
 
 	// FQ34-3, FQ34-5: the daily scan and the deployed-agent alert.
 	s.scheduleAgentCore(t)
-	if state, notScanned := s.dailyScan(t, 1); state != "DONE" {
+	if state, notScanned := s.dailyScan(t, 1); state != "DONE" || notScanned != "{}" {
 		t.Fatalf("the first daily scan: %s, not scanned %s", state, notScanned)
 	}
+	eventually(t, time.Minute, "the baseline runtime alert", func() (bool, error) {
+		return s.alertsOf(t, m34Rule) > 0, nil
+	})
 	first := s.alertsOf(t, m34Rule)
 	if n := s.row(t, "SELECT count(*)::text FROM pc.discoveries WHERE org_id = $1 AND source = 'aws_agentcore'", s.org); n == "0" || first == 0 {
 		t.Fatalf("the first daily scan: %s discoveries, %d %s alerts", n, first, m34Rule)

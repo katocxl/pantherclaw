@@ -1035,5 +1035,37 @@
     "digest": "1a67293366eecbb9a52ab60351d4fd18f970af0c565ff270c43509805ff56fb1",
     "tier": "business",
     "techniques_none": "Tests PantherClaw's own permissions: a caller with no permission gets a refusal, not data."
+  },
+  "RT-225": {
+    "digest": "b9aff30b5fe3e5ffadd0b62c33f07d1b55d8ecccd797bf2ad47c6e4f561ed8be",
+    "tier": "business"
+  },
+  "RT-226": {
+    "digest": "d65208d5bcb1ddf7aab657062b8c29045229252b383ee3c87a99b4566f9fa87c",
+    "tier": "business"
+  },
+  "RT-227": {
+    "digest": "172b14654fb4bc4f09cd16d9b28234b8941bacf15351f5b27e5edd107365f818",
+    "tier": "business",
+    "atlas": [
+      "AML.T0103"
+    ],
+    "technique_why": {
+      "AML.T0103": "Deploy AI agent (AML.T0103): a runtime deployed outside PantherClaw is found by the next scheduled scan."
+    }
+  },
+  "RT-228": {
+    "digest": "97076b387993703453a7cedfbea58678fcb06f049b2d81f8956956933c3866df",
+    "tier": "business",
+    "attack": [
+      "T1651"
+    ],
+    "technique_why": {
+      "T1651": "Cloud administration command (T1651): a command targets a different instance from the one in the grant."
+    }
+  },
+  "RT-229": {
+    "digest": "105a6e76cfeb1db7e42a2b1351d0f90227043ceebd1b48d5de9d5a016d716cd1",
+    "tier": "business"
   }
 }

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	runtimeface "github.com/katocxl/pantherclaw/internal/gateway/runtime"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -22,7 +23,6 @@ import (
 	saas "github.com/katocxl/pantherclaw/internal/saasdiscovery/domain"
 	"github.com/katocxl/pantherclaw/internal/sim/agentcore"
 	"github.com/katocxl/pantherclaw/internal/sim/aws"
-	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -131,6 +131,9 @@ func TestT347_AnAgentDeployedOutsidePantherClawIsSeen(t *testing.T) {
 	if state, notScanned := s.dailyScan(t, 1); state != "DONE" {
 		t.Fatalf("the first daily scan: %s, not scanned %s", state, notScanned)
 	}
+	eventually(t, time.Minute, "the baseline runtime alert", func() (bool, error) {
+		return s.alertsOf(t, m34Rule) > 0, nil
+	})
 	first := s.alertsOf(t, m34Rule)
 	s.m34.deployRuntime(t, "shadow_t347")
 	s.dueAgain(t)
@@ -140,7 +143,7 @@ func TestT347_AnAgentDeployedOutsidePantherClawIsSeen(t *testing.T) {
 	eventually(t, time.Minute, "an alert for the runtime deployed outside PantherClaw", func() (bool, error) {
 		return s.alertsOf(t, m34Rule) == first+1, nil
 	})
-	if n := s.row(t, "SELECT count(*)::text FROM pc.discoveries WHERE org_id = $1 AND source = 'aws_agentcore' AND convert_to(external_id, 'UTF8')::text LIKE '%shadow_t347%'", s.org); n != "1" {
+	if n := s.row(t, "SELECT count(*)::text FROM pc.discoveries WHERE org_id = $1 AND source = 'aws_agentcore' AND observed->>'name' = 'shadow_t347'", s.org); n != "1" {
 		t.Fatalf("%s discoveries of the new runtime, want 1", n)
 	}
 }
@@ -177,8 +180,8 @@ func TestT349_AScheduleScansOnlyAsItsPerson(t *testing.T) {
 	_, s := newRuntimeDriver(t, "T-349", true)
 	f := s.m34
 	machine := tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
-		Org: s.org, Principal: td.PrincipalRef{Kind: td.KindAgent, ID: ids.NewV7()},
-		Bindings: []td.Binding{{Role: td.RoleOrgAdmin, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}}},
+		Org: s.org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleAgentOwner, Scope: td.Scope{Type: td.ScopeOrg, ID: s.org.UUID()}}},
 	}, Credential: tapp.CredAccessToken})
 	svc := &saasapp.Service{Pool: s.pool, Inventory: aapp.NewInventory(s.pool, nil), Editions: m34Business{}}
 	if _, err := svc.SetSchedule(machine, saas.SourceAWSAgentCore, f.agentcoreConn, aws.Account, true); !errors.Is(err, saasapp.ErrScheduleHumanOnly) {

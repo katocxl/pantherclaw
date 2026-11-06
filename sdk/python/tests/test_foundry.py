@@ -37,7 +37,7 @@ def request(**over: Any) -> dict[str, Any]:
 
 
 class TestHR767FoundryApprovals(unittest.TestCase):
-    def test_an_allow_approves(self) -> None:
+    def test_HR767_an_allow_approves(self) -> None:
         client = FakeClient(Result("allow", answer={"transaction_id": "t1"}))
         got = FoundryApprovals(client, {"payments": "payments-conn"}).answer(request())
         self.assertEqual(got, {"type": "mcp_approval_response", "approval_request_id": "mcpr_1", "approve": True})
@@ -50,7 +50,7 @@ class TestHR767FoundryApprovals(unittest.TestCase):
         item = SimpleNamespace(id="mcpr_2", server_label="payments", name="get_refund", arguments={"refund": "re_1"})
         self.assertTrue(FoundryApprovals(client, {"payments": "c"}).answer(item)["approve"])
 
-    def test_everything_but_an_allow_refuses(self) -> None:
+    def test_HR767_everything_but_an_allow_refuses(self) -> None:
         cases = {
             "deny": (Result("deny", "GRANT_AMOUNT_EXCEEDED"), request()),
             "hold": (Result("hold", "held"), request()),

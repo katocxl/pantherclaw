@@ -172,7 +172,7 @@ func TestHR768_TheDailyJobStartsEachDueScheduleAsItsPerson(t *testing.T) {
 		t.Error("the scheduled scan is not the person's")
 	}
 	if c := e.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind LIKE 'audit.saas.scan%'
-		AND convert_from(body, 'UTF8') LIKE '%schedule_person%' AND convert_from(body, 'UTF8') LIKE '%saas_schedule%'`, e.org); c != 2 {
+		AND actor_type = 'system' AND actor_id = 'saas_schedule' AND convert_from(body, 'UTF8')::jsonb->'details'->>'schedule_person' = $2`, e.org, "user:"+e.user.String()); c != 2 {
 		t.Errorf("%d scheduled-scan audit entries naming System and the person, want 2", c)
 	}
 	first := e.m34LastStarted(t, conn)

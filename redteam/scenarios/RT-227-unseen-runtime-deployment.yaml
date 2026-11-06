@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-227
+title: A runtime deployed outside PantherClaw is discovered and alerts
+category: boundary
+suite: platform
+tier: business
+attacker: A5
+threats: [T-347]
+rules: [HR-768, HR-769]
+atlas: [AML.T0103]
+technique_why:
+  AML.T0103: "Deploy AI agent (AML.T0103): a runtime deployed outside PantherClaw is found by the next scheduled scan."
+requires: [payments]
+harness_only: true
+steps:
+  - id: discover-deployment
+    do: runtime.probe
+    with: {attack: unseen_deploy}
+    expect: {outcome: ALLOW, reason: RUNTIME_DISCOVERED, decisive_control: HR-769}

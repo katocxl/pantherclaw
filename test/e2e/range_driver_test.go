@@ -153,12 +153,17 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.postgres = pgtargettest.New(t)
 	}
 	var p idp
+	isM34 := strings.HasPrefix(sc.ID, "RT-22") && sc.ID >= "RT-225" && sc.ID <= "RT-229"
 	// CX-90002 is the Hub seed's customer-authored form of RT-009.
 	ownGrant := sc.ID == "RT-009" || sc.ID == "CX-90002"
-	if requires(sc, "person") || ownGrant || slackScenario(sc) || needsBrowser(sc) ||
+	if isM34 || requires(sc, "person") || ownGrant || slackScenario(sc) || needsBrowser(sc) ||
 		requires(sc, string(capJiraComment)) || requires(sc, string(capGitLabMerge)) || requires(sc, string(capAWSECS)) {
 		p = inProcessIdP(t)
 		o.people = &p
+	}
+	var runtimeFixture *m34Fixture
+	if isM34 {
+		o, runtimeFixture = m34Options(t, o)
 	}
 	o.github = requires(sc, "github") || requires(sc, "sandbox")
 	o.slack = slackScenario(sc)
@@ -172,7 +177,10 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	} else {
 		d.s = start(t, o)
 	}
-	if d.business {
+	if runtimeFixture != nil {
+		d.s.setupM34(t, runtimeFixture, sc.ID == "RT-229")
+	}
+	if d.business || isM34 {
 		activePlan(t, d.s.pool, d.s.org) //nolint:contextcheck // test setup: the plan is applied before the scenario's context is used
 	}
 	d.fix = app.Fixture{}
@@ -207,7 +215,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	d.setupM20Connectors()
 	d.setupAWSECS()
-	if requires(sc, "mcp") {
+	if requires(sc, "mcp") || sc.ID == "RT-226" {
 		d.setupMCPUpstream()
 	}
 	if sc.ID == "RT-031" {

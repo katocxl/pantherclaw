@@ -4,16 +4,47 @@
 package pack
 
 import (
+	"context"
 	"io/fs"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/katocxl/pantherclaw/internal/detection/engine"
 	"github.com/katocxl/pantherclaw/internal/detection/rules"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 )
 
 const runtimeDeployed = "pc.runtime.agent_deployed"
+
+func TestRuntimeDetectionMatchesTheRecordedAudit(t *testing.T) {
+	event, err := feed.Normalize("audit.agent.discovered", "gateway", "gateway-1", time.Now(), []byte(`{"details":{"discovery_id":"01a1b2fb-d89f-730e-8c06-12a3ab8340cf","source":"aws_agentcore"},"name":"agent.discovered","object":{"id":"01a1b2fb-d89d-73bb-a7d9-864d58248943","type":"agent"},"outcome":"success"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	event.Org = ids.New[ids.Org]()
+	event.ID = ids.NewV7()
+	p, err := Load(env(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range p.Rules {
+		if c.Rule.ID == runtimeDeployed {
+			result, err := engine.Evaluate(context.Background(), engine.NewMemory(), c, event)
+			if err != nil || result.Fired == nil {
+				t.Fatalf("recorded audit did not match: %+v, %v; event %+v", result, err, event)
+			}
+			if err := engine.Signal(c, event, *result.Fired).Validate(); err != nil {
+				t.Fatalf("matched audit produced an invalid alert: %v", err)
+			}
+			return
+		}
+	}
+	t.Fatal("runtime rule missing")
+}
 
 // TestHR769_TheDeployedAgentDetectionAlertsOnly: pc.runtime.agent_deployed
 // is attention ALERT (never an incident or a page), LOW, mapped to

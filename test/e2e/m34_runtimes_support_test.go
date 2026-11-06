@@ -92,9 +92,10 @@ import (
 // over the stack's database with that STS; every later step (the workload
 // token, StartRuntimeRun, the gateway's face, the Authority's account
 // check) goes through the running server and gateway. The stack's server
-// allows only the STS host sts.e2e.invalid, so the real interceptor, which
-// signs for sts.<region>.amazonaws.com, is refused at enrolment without a
-// request leaving the machine: that is the fail-closed path (HR-766).
+// allows only the STS host sts.e2e.invalid. The real interceptor uses a
+// literal loopback URL while the server advertises localhost, so its
+// enrolment proof is refused before any STS request leaves the machine;
+// that exercises the fail-closed path (HR-766).
 
 const (
 	// m34STSHost is the only STS host the stack's server allows.
@@ -187,11 +188,13 @@ func m34Options(t *testing.T, o options) (options, *m34Fixture) {
 	t.Cleanup(coreSrv.Close)
 	f.awsURL, f.coreURL = awsSrv.URL, coreSrv.URL
 	o.brokerKey = true
+	o.logGateways = true
 	o.seedArgs = append(o.seedArgs, "--agentcore-url", f.coreURL, "--aws-ssm-url", f.awsURL)
 	if o.serverSections == nil {
 		o.serverSections = map[string]any{}
 	}
 	o.serverSections["identity"] = map[string]any{"aws_sts_hosts": []string{m34STSHost}}
+	o.serverSections["billing"] = map[string]any{"mode": "external"}
 	return o, f
 }
 
@@ -203,11 +206,13 @@ func newRuntimeDriver(t *testing.T, id string, staleAgentCore bool) (*rangeDrive
 	p := inProcessIdP(t)
 	o, f := m34Options(t, options{budget: "1000.00", people: &p})
 	s := start(t, o)
+	activePlan(t, s.pool, s.org)
 	s.setupM34(t, f, staleAgentCore)
 	d := newRangeDriver(t)
 	d.s, d.people = s, &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p}
 	d.sc = domain.Scenario{ID: id}
 	d.fix = app.Fixture{}
+	d.setupMCPUpstream()
 	return d, s
 }
 
@@ -266,7 +271,7 @@ func (s *stack) setupM34(t *testing.T, f *m34Fixture, staleAgentCore bool) {
 	}
 	// The daily scan's person must still be an active member holding
 	// agent.manage (D997a item 6): a binding in the database.
-	s.db.AdminExec(t, "INSERT INTO pc.role_bindings(org_id,id,role,user_id,scope_type,created_by) VALUES($1,$2,'org_admin',$3,'ORG','e2e')",
+	s.db.AdminExec(t, "INSERT INTO pc.role_bindings(org_id,id,role,user_id,scope_type,created_by) VALUES($1,$2,'agent_owner',$3,'ORG','e2e')",
 		s.org, ids.NewV7(), f.owner)
 }
 
@@ -468,7 +473,7 @@ func (s *stack) setupRuntimeAgent(t *testing.T) *runtimeAgent {
 	}
 	rt.grant = g.ID.UUID()
 
-	svc := iapp.New(s.pool, keys.NewRegistry(), s.apiURL, clock.System{}).WithAttestors(iapp.Attestors{AWS: simSTS{url: f.awsURL}})
+	svc := iapp.New(s.pool, keys.NewRegistry(), s.apiURL, clock.System{}).WithAttestors(iapp.Attestors{AWS: simSTS{url: f.awsURL}}).WithEntitlements(enterprise{})
 	rev, err := svc.ProposeIssuer(s.m34person(td.RoleOrgAdmin, td.Scope{}), iapp.ProposeInput{
 		AgentID: rt.agent, AutoAdmit: true, Reason: "the AgentCore gateway's interceptor Lambda", RunGrantID: &rt.grant,
 		Binding: iapp.Binding{AWS: &issuers.AWSBinding{AccountID: aws.Account, RoleName: aws.RoleName}},
@@ -564,14 +569,15 @@ func (rt *runtimeAgent) client() *http.Client {
 func (s *stack) runtimeConnection(t *testing.T, name, arn, target string) ids.UUID {
 	t.Helper()
 	svc := capp.New(s.pool, nil, s.apiURL, "")
+	baseURL := s.row(t, "SELECT base_url FROM pc.connections WHERE id = $1", s.conn)
 	c, err := svc.Seed(context.Background(), s.org, "e2e", capp.CreateInput{
-		Name: name, Kind: capp.KindMCP, Package: mockpayments.Name, BaseURL: s.simURL + "/mcp", Gateway: s.gatewayID(t),
+		Name: name, Kind: capp.KindMCP, Package: mockpayments.Name, BaseURL: baseURL, Gateway: s.gatewayID(t),
 		DestinationClass: capp.ClassInternal, AccessMode: capp.AccessAgentHeld, DefaultMode: capp.ModeEnforce,
 	})
 	if err != nil {
 		t.Fatalf("runtime connection %s: %v", name, err)
 	}
-	if _, err := svc.SetRuntimeTarget(s.m34person(td.RoleOrgAdmin, td.Scope{}), c.ID, runtimeface.TargetPrefix+arn+"/"+target); err != nil {
+	if _, err := svc.SetRuntimeTarget(s.m34person(td.RoleGatewayAdmin, td.Scope{}), c.ID, runtimeface.TargetPrefix+arn+"/"+target); err != nil {
 		t.Fatalf("runtime target of %s: %v", name, err)
 	}
 	s.waitConfig(t, s.configVersion(t, s.gatewayID(t)))
@@ -736,12 +742,17 @@ func (s *stack) runInterceptor(t *testing.T, creds workloadclient.AWSCredentials
 	addr := freeAddr(t)
 	cmd := exec.Command(bin, "--local", addr)
 	cmd.Env = append(os.Environ(),
-		"PC_SERVER_URL="+s.apiURL, "PC_GATEWAY_URL="+s.gateway, "PC_ORG="+s.org.String(),
+		"PC_SERVER_URL="+strings.Replace(s.apiURL, "http://localhost:", "http://127.0.0.1:", 1), "PC_GATEWAY_URL="+s.gateway, "PC_ORG="+s.org.String(),
 		"AWS_ACCESS_KEY_ID="+creds.AccessKey, "AWS_SECRET_ACCESS_KEY="+creds.SecretKey, "AWS_SESSION_TOKEN="+creds.SessionToken,
 		"AWS_REGION="+creds.Region, "AWS_LAMBDA_FUNCTION_NAME="+m34Function, "AWS_LAMBDA_LOG_STREAM_NAME="+m34Stream,
 	)
 	logs := &syncBuffer{}
 	cmd.Stdout, cmd.Stderr = logs, logs
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("interceptor logs:\n%s", logs.String())
+		}
+	})
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -831,8 +842,13 @@ type m34Business = rangeBusiness
 // connection for the simulated account (FQ34-3, HR-768).
 func (s *stack) scheduleAgentCore(t *testing.T) {
 	t.Helper()
+	// Detection starts at the ledger head on first use; initialize it
+	// before the scan so the new discovery is not treated as old history.
+	eventually(t, time.Minute, "the detection cursor initializes", func() (bool, error) {
+		return s.row(t, "SELECT count(*)::text FROM pc.detection_cursors WHERE org_id = $1", s.org) == "1", nil
+	})
 	svc := &saasapp.Service{Pool: s.pool, Inventory: aapp.NewInventory(s.pool, nil), Editions: m34Business{}}
-	if _, err := svc.SetSchedule(s.m34person(td.RoleOrgAdmin, td.Scope{}), saas.SourceAWSAgentCore, s.m34.agentcoreConn, aws.Account, true); err != nil {
+	if _, err := svc.SetSchedule(s.m34person(td.RoleAgentOwner, td.Scope{}), saas.SourceAWSAgentCore, s.m34.agentcoreConn, aws.Account, true); err != nil {
 		t.Fatalf("SetSchedule: %v", err)
 	}
 }
@@ -844,6 +860,11 @@ func (s *stack) scheduleAgentCore(t *testing.T) {
 // state and not_scanned.
 func (s *stack) dailyScan(t *testing.T, n int) (string, string) {
 	t.Helper()
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("server logs after scheduled scan:\n%s\ngateway logs:\n%s", s.logs.String(), s.gatewayLogs.String())
+		}
+	})
 	s.stopServer(t)
 	s.serve(t)
 	const done = `SELECT count(*)::text FROM pc.saas_scan_runs WHERE org_id = $1 AND origin = 'schedule' AND state IN ('DONE', 'FAILED')`

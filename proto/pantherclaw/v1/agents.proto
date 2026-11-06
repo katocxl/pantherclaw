@@ -638,7 +638,9 @@ message ScanFinding {
   // local scan (env_secret carries the credential's kind and nothing of its
   // value, G0 M24 D233, D238); from a gateway's organization scan (G0 M8,
   // HR-209), "github_app", "github_workflow" or "github_mcp_config"; from a
-  // gateway's SaaS scan (G0 M26 D407), "copilot_studio_agent" or "chatgpt_gpt".
+  // gateway's SaaS or runtime scan (G0 M26 D407, M34 D997),
+  // "copilot_studio_agent", "chatgpt_gpt", "agentcore_runtime",
+  // "vertex_reasoning_engine" or "foundry_agent".
   string kind = 1 [(buf.validate.field).string = {
     in: [
       "mcp_server",
@@ -650,7 +652,10 @@ message ScanFinding {
       "github_workflow",
       "github_mcp_config",
       "copilot_studio_agent",
-      "chatgpt_gpt"
+      "chatgpt_gpt",
+      "agentcore_runtime",
+      "vertex_reasoning_engine",
+      "foundry_agent"
     ]
   }];
   // Stable key of the finding on the scanning machine (hex SHA-256), so a

@@ -44,7 +44,7 @@ def ctx(call_id: str = "adk-call-1") -> Any:
 
 
 class TestHR767ADKCallback(unittest.TestCase):
-    def test_an_allow_lets_the_tool_run(self) -> None:
+    def test_HR767_an_allow_lets_the_tool_run(self) -> None:
         client = FakeClient(Result("allow", answer={"transaction_id": "t1"}))
         cb = before_tool_callback(client, "payments")
         self.assertIsNone(cb(tool(), dict(REFUND), ctx()))
@@ -53,7 +53,7 @@ class TestHR767ADKCallback(unittest.TestCase):
                          ("payments", "mcp__payments__create_refund", "payments", "adk-call-1"))
         self.assertEqual(c["input"], REFUND)
 
-    def test_everything_but_an_allow_refuses(self) -> None:
+    def test_HR767_everything_but_an_allow_refuses(self) -> None:
         enforced = Result("allow", send=Outbound(method="POST", url="https://x", headers={}, body=b""))
         cases = {
             "deny": (Result("deny", "over the grant", {"code": "GRANT_AMOUNT_EXCEEDED", "transaction_id": "t2"}), "GRANT_AMOUNT_EXCEEDED"),

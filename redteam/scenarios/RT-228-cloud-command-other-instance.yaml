@@ -1,0 +1,19 @@
+apiVersion: pantherclaw.range/v1
+id: RT-228
+title: A cloud command cannot reach an instance outside its grant
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-348]
+rules: [HR-525, HR-763]
+attack: [T1651]
+technique_why:
+  T1651: "Cloud administration command (T1651): a command targets a different instance from the one in the grant."
+requires: [payments]
+harness_only: true
+steps:
+  - id: other-instance
+    do: runtime.probe
+    with: {attack: other_instance}
+    expect: {outcome: REFUSED, reason: OTHER_INSTANCE_DENIED, decisive_control: HR-763}
