@@ -30,9 +30,9 @@ This runbook has three parts: [admission](#1-admission), [gateway enrolment in t
 3. `helm upgrade`. The chart refuses to render agent namespaces without the admission listener, the gateway or the fixed addresses.
 4. For each agent, propose its issuer entry and have an Identity Publisher activate it:
    `pclaw issuer propose-kubernetes --agent <id> --cluster <name> --namespace <ns> --service-account <sa> --service-account-uid <uid> --image-digest <sha256:…> --run-grant <grant> --auto-admit --reason "…"`, then `pclaw issuer activate <entry> <revision>`.
-5. Start a pod from `deploy/helm/pantherclaw/examples/agent-pod.yaml` with your values. It should be admitted; one without the edge should be denied `K8S_EDGE_MISSING`.
+5. Start a pod from `deploy/helm/pantherclaw/examples/agent-pod.yaml` with your values. Every container but the edge must set a non-root `runAsUser` other than the edge's (65532); the example's agent runs as 10001. It should be admitted; one without the edge should be denied `K8S_EDGE_MISSING`.
 
-The listener is off by default (HR-731) and fails closed (HR-730): with the server down or the webhook unreachable, no pod starts in an enforced namespace. That is the intended trade (FQ32-1).
+The listener is off by default (HR-731) and fails closed (HR-730): with the server down or the webhook unreachable, no pod starts in an enforced namespace. Because the webhook also decides pod updates, while it is down every update to a pod in an enforced namespace is refused too, including label changes and finalizer removal; a pod held by a finalizer stays until the webhook is back. That is the intended trade (FQ32-1).
 
 ### Read a deny
 

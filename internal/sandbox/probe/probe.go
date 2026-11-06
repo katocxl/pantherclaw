@@ -117,16 +117,22 @@ func runProbes(ctx context.Context, ps []probe) []report.Result {
 			defer func() { <-sem }()
 			pctx, cancel := context.WithTimeout(ctx, 2*dialTimeout)
 			defer cancel()
-			err := p.run(pctx)
-			r := report.Result{Name: p.name, Role: p.role, Expect: p.expect, Observed: observe(err), Detail: bounded(p.target)}
-			if err != nil {
-				r.Detail = bounded(p.target + ": " + err.Error())
-			}
-			out[i] = r
+			out[i] = Result(p.name, p.role, p.expect, p.target, p.run(pctx))
 		})
 	}
 	wg.Wait()
 	return out
+}
+
+// Result is the probe's result for one catalog probe that tried target
+// and returned err: what it observed, the target as the catalog names it,
+// and the target with the error as its detail.
+func Result(name, role, expect, target string, err error) report.Result {
+	r := report.Result{Name: name, Role: role, Expect: expect, Observed: observe(err), Target: bounded(target), Detail: bounded(target)}
+	if err != nil {
+		r.Detail = bounded(target + ": " + err.Error())
+	}
+	return r
 }
 
 func bounded(s string) string {

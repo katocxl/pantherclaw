@@ -233,7 +233,9 @@ func escapes(p *review.Pod, probeDigests []string) bool {
 	if edgeUser == nil || *edgeUser == 0 {
 		return true
 	}
-	check := func(c review.Container) bool {
+	// check refuses c's escalation, procMount and added capabilities, and,
+	// when uid is set, an effective user that is unset or the edge's.
+	check := func(c review.Container, uid bool) bool {
 		if sc := c.SecurityContext; sc != nil {
 			if sc.AllowPrivilegeEscalation != nil && *sc.AllowPrivilegeEscalation {
 				return true
@@ -247,21 +249,25 @@ func escapes(p *review.Pod, probeDigests []string) bool {
 				return true
 			}
 		}
+		if !uid {
+			return false
+		}
 		u := p.RunAsUser(c)
 		return u == nil || *u == *edgeUser
 	}
+	// The pinned probe shares the edge's user (the chart's pod-level
+	// runAsUser); only that check is waived for it (D1218a R2).
 	app := p.Spec.Containers[0]
-	if _, digest, ok := splitImage(app.Image); !ok || !slices.Contains(probeDigests, digest) {
-		if check(app) {
-			return true
-		}
+	_, digest, ok := splitImage(app.Image)
+	if check(app, !ok || !slices.Contains(probeDigests, digest)) {
+		return true
 	}
 	for i, c := range p.Spec.InitContainers {
-		if i != edge && check(c) {
+		if i != edge && check(c, true) {
 			return true
 		}
 	}
-	return slices.ContainsFunc(p.Spec.EphemeralContainers, check)
+	return slices.ContainsFunc(p.Spec.EphemeralContainers, func(c review.Container) bool { return check(c, true) })
 }
 
 // ImageChanged reports an UPDATE that changes the image of a container,

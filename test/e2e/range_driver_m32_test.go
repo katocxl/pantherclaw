@@ -29,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
+	"github.com/katocxl/pantherclaw/internal/sandbox/probe"
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 )
 
@@ -145,7 +146,8 @@ func (d *rangeDriver) kubeProbe(st domain.Step) (domain.Observation, error) {
 	case "gateway_token_reused", "gateway_other_service_account":
 		return f.gatewayAttack(d.t, w.Attack)
 	case "report_other_key", "report_nonce_replayed", "nonce_other_namespace", "probe_image_off_list",
-		"edge_image_off_list", "report_other_pod", "nonce_expired", "nonce_flood", "closure_not_kubernetes", "control_from_agent_pod", "sandbox_from_release_namespace":
+		"edge_image_off_list", "report_other_pod", "nonce_expired", "nonce_flood", "closure_not_kubernetes", "control_from_agent_pod", "sandbox_from_release_namespace",
+		"result_without_target":
 		return f.forgeAttack(d.t, w.Attack)
 	case "probe_target_forged":
 		return f.forgedTarget(d.t)
@@ -322,6 +324,10 @@ func (f *kubeFixture) forgeAttack(t *testing.T, attack string) (domain.Observati
 		kc := pantherclawv1connect.NewKubernetesServiceClient(connect.NewClient(connecthttp.NewTransport(
 			&http.Client{Timeout: 10 * time.Second, Transport: &workloadclient.Transport{Key: f.s.key, Token: func() string { return f.s.token }}}, f.s.apiURL)))
 		_, err = kc.IssueClosureNonce(context.Background(), &pb.IssueClosureNonceRequest{Namespace: f.agentPod.namespace})
+	case "result_without_target":
+		// A result that names no target (D1218a N1).
+		results[0].Target = ""
+		res, err = w.closure(f.agentPod, report.KindSandbox, results)
 	case "control_from_agent_pod":
 		// The agent pod claims to be the unenforced control (D1218 item 5).
 		res, err = w.closure(f.agentPod, report.KindControl, controlResults())
@@ -378,16 +384,16 @@ func (f *kubeFixture) forgedTarget(t *testing.T) (domain.Observation, error) {
 		return domain.Observation{}, err
 	}
 	var obs domain.Observation
-	for probe, target := range map[string]string{covdomain.ProbeKubeAPI: "10.96.0.99:443", covdomain.ProbeKubelet: "10.0.0.6:10250"} {
+	for name, target := range map[string]string{covdomain.ProbeKubeAPI: "10.96.0.99:443", covdomain.ProbeKubelet: "10.0.0.6:10250"} {
 		results := sandboxResults(report.Blocked)
 		for i := range results {
-			if results[i].Name == probe {
-				results[i].Detail = target
+			if results[i].Name == name {
+				results[i] = probe.Result(name, report.RoleProbe, report.Blocked, target, context.DeadlineExceeded)
 			}
 		}
 		res, err := w.closure(f.agentPod, report.KindSandbox, results)
 		if err == nil {
-			return domain.Observation{Outcome: domain.OutcomeAllow, Detail: fmt.Sprintf("a forged %s target: closure %s passed=%v", probe, res.GetKubeClosureId(), res.GetPassed())}, nil
+			return domain.Observation{Outcome: domain.OutcomeAllow, Detail: fmt.Sprintf("a forged %s target: closure %s passed=%v", name, res.GetKubeClosureId(), res.GetPassed())}, nil
 		}
 		if obs = refused(err); obs.Reason != "K8S_CLOSURE_REJECTED" {
 			return obs, nil

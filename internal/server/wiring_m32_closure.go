@@ -275,6 +275,10 @@ func (s *kubeClosures) submit(ctx context.Context, tx db.TenantTx, in pap.Instan
 	if err := s.kindAllowed(ctx, q, sg, r.Kind); err != nil {
 		return nil, err
 	}
+	if slices.ContainsFunc(r.Results, func(x report.Result) bool { return x.Target == "" }) {
+		// Every kubernetes catalog result names its target (D1218a N1).
+		return nil, rejectReport("a result without its target")
+	}
 	pod, err := s.podDigests(ctx, sg)
 	if err != nil {
 		return nil, err
@@ -499,7 +503,7 @@ var (
 func targetsMatch(results []covdomain.ProbeResult, hostIP string, twins []covdomain.ProbeResult) error {
 	control := map[string][]string{}
 	for _, t := range twins {
-		control[t.Name] = append(control[t.Name], t.Detail)
+		control[t.Name] = append(control[t.Name], t.Target)
 	}
 	for _, r := range results {
 		if r.Role != covdomain.RoleProbe || !r.Passed() {
@@ -524,7 +528,7 @@ func targetsMatch(results []covdomain.ProbeResult, hostIP string, twins []covdom
 		default:
 			continue
 		}
-		if !slices.Contains(allowed, r.Detail) {
+		if !slices.Contains(allowed, r.Target) {
 			return rejectReport("the " + r.Name + " probe's target is not the pod's node, the control's or the catalog's")
 		}
 	}
@@ -534,7 +538,7 @@ func targetsMatch(results []covdomain.ProbeResult, hostIP string, twins []covdom
 func probeResults(rs []report.Result) []covdomain.ProbeResult {
 	out := make([]covdomain.ProbeResult, 0, len(rs))
 	for _, r := range rs {
-		out = append(out, covdomain.ProbeResult{Name: r.Name, Role: r.Role, Expect: r.Expect, Observed: r.Observed, Detail: r.Detail})
+		out = append(out, covdomain.ProbeResult{Name: r.Name, Role: r.Role, Expect: r.Expect, Observed: r.Observed, Target: r.Target, Detail: r.Detail})
 	}
 	return out
 }
@@ -691,7 +695,7 @@ func mappedHosts(rs []report.Result) []string {
 		if r.Name != covdomain.ProbeEdgeMediated || r.Role != report.RolePositive || !r.Passed() {
 			continue
 		}
-		rest, ok := strings.CutPrefix(r.Detail, "https://")
+		rest, ok := strings.CutPrefix(r.Target, "https://")
 		host, _, _ := strings.Cut(rest, " ")
 		host = strings.ToLower(host)
 		if ok && host != "" && !strings.ContainsAny(host, "/:@") && !slices.Contains(out, host) {

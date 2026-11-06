@@ -4,12 +4,14 @@
 package server
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
 
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/kube"
+	"github.com/katocxl/pantherclaw/internal/sandbox/probe"
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 )
 
@@ -142,11 +144,13 @@ func TestHR742_TheNetworkPolicyCheckAcceptsOnlyTheGatewayShape(t *testing.T) {
 // M2, T-339). A failed result and, with no control closure, the
 // twin-checked probes are not checked: they close nothing.
 func TestHR742_ProbeTargetsAreThePodsNodeTheControlsAndTheCatalogs(t *testing.T) {
+	// Results as the probe writes them (D1218a N1): a timed-out probe's
+	// detail is "<target>: context deadline exceeded".
 	blocked := func(name, target string) covdomain.ProbeResult {
-		return covdomain.ProbeResult{Name: name, Role: covdomain.RoleProbe, Expect: report.Blocked, Observed: report.Blocked, Detail: target}
+		return probeResults([]report.Result{probe.Result(name, report.RoleProbe, report.Blocked, target, context.DeadlineExceeded)})[0]
 	}
 	twin := func(name, target string) covdomain.ProbeResult {
-		return covdomain.ProbeResult{Name: name, Role: covdomain.RolePositiveControl, Expect: report.Reachable, Observed: report.Reachable, Detail: target}
+		return probeResults([]report.Result{probe.Result(name, report.RolePositive, report.Reachable, target, nil)})[0]
 	}
 	twins := []covdomain.ProbeResult{
 		twin(covdomain.ProbeKubeAPI, "10.96.0.1:443"), twin(covdomain.ProbeServiceOther, "10.96.200.20:8080"),
@@ -164,6 +168,9 @@ func TestHR742_ProbeTargetsAreThePodsNodeTheControlsAndTheCatalogs(t *testing.T)
 	}
 	if err := targetsMatch(honest, "10.0.0.5", twins); err != nil {
 		t.Fatalf("honest targets: %v", err)
+	}
+	if d := honest[0].Detail; d != "10.96.0.1:443: context deadline exceeded" {
+		t.Fatalf("the probe's detail is %q", d)
 	}
 	forged := map[string]covdomain.ProbeResult{
 		"a forged node IP for the kubelet":   blocked(covdomain.ProbeKubelet, "192.0.2.1:10250"),
@@ -214,8 +221,8 @@ func TestHR741_ImageDigestsComeFromThePodsImageIDs(t *testing.T) {
 // edge_mediated controls name a host, once, lower-cased; a failed one, a
 // probe of that name or a detail that is not a plain host names nothing.
 func TestHR743_TheMappedConnectionsAreTheHostsTheEdgeMediated(t *testing.T) {
-	ok := func(detail string) report.Result {
-		return report.Result{Name: covdomain.ProbeEdgeMediated, Role: report.RolePositive, Expect: report.Reachable, Observed: report.Reachable, Detail: detail}
+	ok := func(target string) report.Result {
+		return probe.Result(covdomain.ProbeEdgeMediated, report.RolePositive, report.Reachable, target, nil)
 	}
 	failed := ok("https://payments.example through the edge")
 	failed.Observed = report.Blocked

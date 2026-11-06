@@ -4,6 +4,7 @@
 package probe
 
 import (
+	"context"
 	"slices"
 	"testing"
 
@@ -100,6 +101,32 @@ func TestHR742_TheKubernetesCatalogIsTheProfilesContract(t *testing.T) {
 	for _, p := range kubeCatalog(c, "m") {
 		if p.name == covdomain.ProbeDNSCluster && observe(p.run(t.Context())) != report.Error {
 			t.Error("dns_cluster without a resolver is not an error")
+		}
+	}
+}
+
+// TestHR742_EveryKubernetesResultNamesItsTarget: the probe's writer puts
+// each probe's catalog target in Target and the target with its error in
+// Detail, for every result of both kinds (D1218a N1).
+func TestHR742_EveryKubernetesResultNamesItsTarget(t *testing.T) {
+	for _, kind := range []string{report.KindSandbox, report.KindControl} {
+		c, err := KubeConfigFromEnv(kind, kubeEnv(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Nameservers = []string{"10.96.0.10"}
+		ps := kubeCatalog(c, "m")
+		for i := range ps {
+			ps[i].run = func(context.Context) error { return context.DeadlineExceeded }
+		}
+		rs := runProbes(t.Context(), ps)
+		for i, r := range rs {
+			if r.Target == "" || r.Target != ps[i].target || r.Detail != ps[i].target+": "+context.DeadlineExceeded.Error() {
+				t.Errorf("%s %s: target %q detail %q", kind, r.Name, r.Target, r.Detail)
+			}
+		}
+		if kind == report.KindSandbox && !slices.ContainsFunc(rs, func(r report.Result) bool { return r.Target == "10.0.0.7:10250" }) {
+			t.Errorf("no kubelet target on the node: %+v", rs)
 		}
 	}
 }

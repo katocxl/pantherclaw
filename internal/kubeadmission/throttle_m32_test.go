@@ -71,4 +71,12 @@ func TestHR735_TheThrottleNeverDropsADenyAuditAndStaysBounded(t *testing.T) {
 	if pass, _ := th.take("ns|K8S_NO_ISSUER", at.Add(time.Second)); !pass {
 		t.Error("a released key was throttled")
 	}
+	// A key taken before a rotation is in the previous generation when its
+	// write fails; releasing it frees it there too (D1218a R1).
+	th.take("ns|K8S_POD_ESCAPE", at.Add(50*time.Second))
+	th.take("ns|other", at.Add(61*time.Second)) // rotates
+	th.release("ns|K8S_POD_ESCAPE", at.Add(50*time.Second))
+	if pass, _ := th.take("ns|K8S_POD_ESCAPE", at.Add(62*time.Second)); !pass {
+		t.Error("a key released after a rotation was throttled")
+	}
 }

@@ -463,7 +463,11 @@ func (t *throttle) size() int {
 func (t *throttle) release(key string, at time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.cur[key].Equal(at) {
-		delete(t.cur, key)
+	// The key may have been taken before a rotation moved it to prev
+	// (D1218a R1).
+	for _, m := range []map[string]time.Time{t.cur, t.prev} {
+		if m[key].Equal(at) {
+			delete(m, key)
+		}
 	}
 }

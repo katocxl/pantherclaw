@@ -134,7 +134,11 @@ type Result struct {
 	Role     string `json:"role"`
 	Expect   string `json:"expect"`
 	Observed string `json:"observed"`
-	Detail   string `json:"detail,omitempty"`
+	// Target is what the probe tried to reach, as its catalog names it
+	// ("10.0.0.5:10250", "udp 8.8.8.8:53"); Detail adds the error. The
+	// server compares Target, never Detail (D1218a N1).
+	Target string `json:"target,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }
 
 // Passed reports whether the observation is what was expected; an error
@@ -192,7 +196,7 @@ func (r Report) Validate() error {
 	}
 	for _, x := range r.Results {
 		switch {
-		case !nameRE.MatchString(x.Name) || !bounded(x.Detail):
+		case !nameRE.MatchString(x.Name) || !bounded(x.Detail) || !bounded(x.Target):
 			return bad("result name or detail")
 		case !slices.Contains([]string{RoleProbe, RolePositive, RoleNegative, RoleCanary}, x.Role):
 			return bad("role")

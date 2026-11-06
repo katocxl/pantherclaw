@@ -147,7 +147,7 @@ func TestHR741_AClosureIsTheSignerPodsOwnOfItsKind(t *testing.T) {
 	for attack, reason := range map[string]string{
 		"closure_not_kubernetes": "K8S_NOT_KUBERNETES_INSTANCE", "report_other_pod": "K8S_CLOSURE_REJECTED",
 		"nonce_expired": "K8S_CLOSURE_REJECTED", "nonce_flood": "K8S_CLOSURE_REJECTED", "control_from_agent_pod": "K8S_CLOSURE_REJECTED",
-		"sandbox_from_release_namespace": "K8S_CLOSURE_REJECTED",
+		"sandbox_from_release_namespace": "K8S_CLOSURE_REJECTED", "result_without_target": "K8S_CLOSURE_REJECTED",
 	} {
 		obs, err := f.forgeAttack(t, attack)
 		wantRefused(t, attack, obs, err, reason)

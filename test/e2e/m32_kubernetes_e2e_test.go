@@ -52,6 +52,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/sandbox/edge"
+	"github.com/katocxl/pantherclaw/internal/sandbox/probe"
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -556,21 +557,32 @@ var (
 	}
 )
 
+// probeErr is what a probe that observed observed returned: silence (a
+// timeout) for blocked, nothing for reachable.
+func probeErr(observed string) error {
+	if observed == report.Blocked {
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
+// sandboxResults and controlResults are written by the probe's own
+// writer (D1218a N1), so their details carry the probe's error text.
 func sandboxResults(observed string) []report.Result {
 	var rs []report.Result
 	for _, n := range m32Blocked {
-		rs = append(rs, report.Result{Name: n, Role: report.RoleProbe, Expect: report.Blocked, Observed: observed, Detail: m32Targets[n]})
+		rs = append(rs, probe.Result(n, report.RoleProbe, report.Blocked, m32Targets[n], probeErr(observed)))
 	}
 	return append(rs,
-		report.Result{Name: covdomain.ProbeEdgeMediated, Role: report.RolePositive, Expect: report.Reachable, Observed: report.Reachable, Detail: "https://payments.example through the edge"},
-		report.Result{Name: covdomain.ProbeEdgeUnmappedRefused, Role: report.RoleNegative, Expect: report.Blocked, Observed: report.Blocked},
+		probe.Result(covdomain.ProbeEdgeMediated, report.RolePositive, report.Reachable, "https://payments.example through the edge", nil),
+		probe.Result(covdomain.ProbeEdgeUnmappedRefused, report.RoleNegative, report.Blocked, "CONNECT unmapped.invalid:443", context.DeadlineExceeded),
 	)
 }
 
 func controlResults() []report.Result {
 	var rs []report.Result
 	for _, n := range m32Twins {
-		rs = append(rs, report.Result{Name: n, Role: report.RolePositive, Expect: report.Reachable, Observed: report.Reachable, Detail: m32Targets[n]})
+		rs = append(rs, probe.Result(n, report.RolePositive, report.Reachable, m32Targets[n], nil))
 	}
 	return rs
 }
@@ -692,7 +704,7 @@ func TestE2E_M32_KubernetesEnforcement(t *testing.T) {
 
 	// The probe pod: its run, launched by its instance under the grant.
 	f.s.db.AdminExec(t, "UPDATE pc.connections SET agent_hosts = '{payments.example}' WHERE org_id = $1 AND id = $2", f.s.org, f.s.conn)
-	probe, _, _ := f.runEdge(t, f.agentPod)
+	probeEdge, _, _ := f.runEdge(t, f.agentPod)
 	f.waitCount(t, 1, `SELECT count(*)::int FROM pc.runs r JOIN pc.agent_instances i ON i.org_id = r.org_id AND i.id = r.instance_id
 		WHERE r.org_id = $1 AND r.agent_id = $2 AND r.grant_id = $3 AND r.task_ref = 'probe-1' AND r.launcher_instance_id = r.instance_id
 		AND r.launcher_issuer_id = i.issuer_revision_id`, f.podAgent, f.grant)
@@ -701,7 +713,7 @@ func TestE2E_M32_KubernetesEnforcement(t *testing.T) {
 	}
 
 	// T-338: the probe pod's signed report closes every kind.
-	code, a := postReport(t, probe, kubeReport(report.KindSandbox, sandboxResults(report.Blocked)))
+	code, a := postReport(t, probeEdge, kubeReport(report.KindSandbox, sandboxResults(report.Blocked)))
 	if code != http.StatusOK || !a.Passed || a.Kind != report.KindSandbox || len(a.Failed) != 0 {
 		t.Fatalf("the kube closure: %d %+v", code, a)
 	}
@@ -715,13 +727,13 @@ func TestE2E_M32_KubernetesEnforcement(t *testing.T) {
 	// T-339: the namespace opened to everything: the server's own check
 	// fails, whatever the probes saw.
 	f.cluster.setOpen(true)
-	code, a = postReport(t, probe, kubeReport(report.KindSandbox, sandboxResults(report.Blocked)))
+	code, a = postReport(t, probeEdge, kubeReport(report.KindSandbox, sandboxResults(report.Blocked)))
 	if code != http.StatusOK || a.Passed {
 		t.Errorf("a closure with an open NetworkPolicy: %d %+v", code, a)
 	}
 	f.cluster.setOpen(false)
 	// A probe that got through fails the closure too.
-	code, a = postReport(t, probe, kubeReport(report.KindSandbox, sandboxResults(report.Reachable)))
+	code, a = postReport(t, probeEdge, kubeReport(report.KindSandbox, sandboxResults(report.Reachable)))
 	if code != http.StatusOK || a.Passed {
 		t.Errorf("a closure with reachable probes: %d %+v", code, a)
 	}

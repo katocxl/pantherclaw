@@ -34,7 +34,7 @@ var KubeAttacks = []string{
 	// T-338: forged or replayed closures.
 	"report_other_key", "report_nonce_replayed", "nonce_other_namespace", "probe_image_off_list",
 	"edge_image_off_list", "report_other_pod", "nonce_expired", "nonce_flood", "closure_not_kubernetes",
-	"control_from_agent_pod", "sandbox_from_release_namespace",
+	"control_from_agent_pod", "sandbox_from_release_namespace", "result_without_target",
 	// T-339: closures that overstate containment.
 	"network_policy_open", "admission_not_seen", "probe_reached", "probe_target_forged",
 }

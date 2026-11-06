@@ -257,6 +257,19 @@ func TestHR734_HostAccessAndExposedTokensAreRefused(t *testing.T) {
 				"securityContext": map[string]any{"runAsUser": 10002, "capabilities": map[string]any{"add": []any{"SYS_PTRACE"}}},
 			})
 		},
+		// The pinned probe is waived only the user check (D1218a R2).
+		"the pinned probe with SYS_PTRACE": func(p map[string]any) {
+			container(p, "containers", 0)["image"] = "ghcr.io/katocxl/pantherclaw-probe@" + probeDigest
+			agentSC(p)["capabilities"] = map[string]any{"add": []any{"SYS_PTRACE"}}
+		},
+		"the pinned probe escalating": func(p map[string]any) {
+			container(p, "containers", 0)["image"] = "ghcr.io/katocxl/pantherclaw-probe@" + probeDigest
+			agentSC(p)["allowPrivilegeEscalation"] = true
+		},
+		"the pinned probe with an unmasked /proc": func(p map[string]any) {
+			container(p, "containers", 0)["image"] = "ghcr.io/katocxl/pantherclaw-probe@" + probeDigest
+			agentSC(p)["procMount"] = "Unmasked"
+		},
 	}
 	for name, edit := range reach {
 		p := agentPod(org)
