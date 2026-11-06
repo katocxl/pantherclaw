@@ -4,6 +4,11 @@ An AgentCore gateway runs MCP tools for agents in AgentCore. With the PantherCla
 
 Every decision is **PARTIAL**: AgentCore runs the tool, and a gateway without the interceptor is not asked about (R-82). Each AgentCore gateway is one PantherClaw agent, so its callers are not told apart (R-83). The AgentCore API shapes are unconfirmed until live checks (R-85).
 
+The setup has two halves (D1205):
+
+- **Agent identity protection.** The AgentCore gateway is one PantherClaw agent, proven by its interceptor function's AWS role (`aws_iam` attestation, founder decision FQ34-2). The workload key is made in the Lambda's memory, tokens are bound to it, and the Authority checks that the target gateway's AWS account is the account the role proved (`RUNTIME_ACCOUNT_MISMATCH`). This answers "is this really that AgentCore gateway?"
+- **Runtime firewall.** Each `tools/call` is decided through the connection bound to its target: allowed, held for a person or refused. This answers "may this agent run this tool, here, now?"
+
 ## What you set up
 
 - **One Lambda per AgentCore gateway**, running `pc-agentcore-interceptor`, set as that gateway's request interceptor.
@@ -64,4 +69,34 @@ The Lambda logs enrolment, run starts and refusal reasons, never tool arguments.
 
 ## Runs
 
-Each Lambda execution environment starts one run named `agentcore:<function name>:<log stream>`. Characters outside `[A-Za-z0-9._:/-]` become `-`, so `[$LATEST]` reads `--LATEST-`. When the gateway reports that the run ended, the Lambda starts a new one.
+Each Lambda execution environment starts one run named `agentcore:<function name>:<log stream>`. Characters outside `[A-Za-z0-9._:/-]` become `-`, so `[$LATEST]` reads `--LATEST-`. A name over 200 characters loses the end of its function part, so the log stream's unique suffix is kept. When the gateway reports that the run ended (response header `PC-Run-Ended: 1`), the Lambda starts a new one. Each start is audited as `runtime.run_started` with the instance, the run and the name.
+
+`RuntimeService.StartRuntimeRun` (`workload.run`) starts a run only for an L2 instance enrolled by `aws_iam`, `gcp_workload`, `azure_mi` or `entra_agent_id` attestation through an active issuer entry. Its refusals:
+
+| Code | Meaning |
+|---|---|
+| `RUNTIME_NOT_CLOUD_INSTANCE` | The caller is not such an instance, or its attestation lapsed |
+| `RUNTIME_NO_RUN_GRANT` | The issuer entry has no run grant |
+| `RUNTIME_RUN_GRANT_PRINCIPAL` | The run grant does not name a user or a service account |
+| `RUNTIME_RUN_NAME` | The name is not 1 to 200 letters, digits and `. _ : / -` |
+
+## Refusal codes
+
+| Where | Code | What to check |
+|---|---|---|
+| Face, before any answer (the Lambda turns it into its deny) | `RUNTIME_GATEWAY_ARN_INVALID` | The Lambda client context's `GATEWAY_ARN` is an AgentCore gateway ARN |
+| Face | `RUNTIME_EVENT_INVALID` | The event is an MCP interceptor event with a JSON-RPC body |
+| Face | `RUNTIME_HTTP_NOT_SUPPORTED` | The target is an MCP target, not an HTTP or Runtime target |
+| Face, 401 | a PAP/1 code | Enrolment, token and nonce; the Lambda retries with a fresh nonce |
+| Tool error | `RUNTIME_TARGET_UNKNOWN` | Exactly one connection served by this gateway has `runtime_target` `agentcore:<ARN>/<target>`; the tool name is `<target>___<tool>` |
+| JSON-RPC -32601 | `RUNTIME_METHOD_NOT_DECIDED` | Only `tools/call` is decided; `initialize`, `ping`, `tools/list` and `notifications/*` pass |
+| Tool error | `RUNTIME_ACCOUNT_MISMATCH` | The ARN's account equals the issuer entry's `account_id`, and the run was started under that `aws_iam` entry |
+| Binding | `RUNTIME_TARGET_INVALID`, `RUNTIME_TARGET_CONNECTION`, `RUNTIME_TARGET_TAKEN` | The target's format; the connection is `mcp` with custody `agent_held`; no other connection of the org has the target |
+
+A runtime action never carries obligations: the AgentCore gateway runs the call as it asked, so an allow with obligations is refused (`obligation_unsupported`), as for the other cooperative faces.
+
+## Limits
+
+- Coverage is PARTIAL (R-82). Daily discovery of AgentCore runtimes ([runtime-discovery.md](runtime-discovery.md)) shows runtimes the org did not expect; it does not show whether a gateway has the interceptor configured.
+- One agent per AgentCore gateway (R-83): grants and policies apply per connection and target, not per caller.
+- AgentCore deploys are not decided in M34: `pc.aws-agentcore` is reads only (D993a), and a new runtime is seen by the daily scan and the `pc.runtime.agent_deployed` alert.

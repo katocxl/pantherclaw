@@ -862,12 +862,14 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 
 ### M34 — Cloud agent runtimes
 **HR:** HR-760..769 · **F:** F1040–F1049 · **ADR:** 0061 · **G0:** [g0/M34.md](g0/M34.md).
-- **Code first**, like M30–M33: three streams on pushed branches, assembled on `code/m34` from `code/m33`; tests come in the testing phase.
-- **Channel `runtime`:** cooperative (PARTIAL), DELEGATED, never forwarded; content signals scan it.
-- **AgentCore** (FQ34-1, FQ34-2): the gateway's `/runtime/agentcore` face and the `pc-agentcore-interceptor` Lambda, one per AgentCore gateway, which asks the customer's own gateway and fails closed; connections bound by `runtime_target`; runs under the issuer entry's run grant.
-- **ADK and Foundry:** `pantherclaw_adk.before_tool_callback` (Vertex AI Agent Engine too) and `pantherclaw.foundry.FoundryApprovals`, both failing closed.
-- **Packages:** `pc.vertex-agent-engine` and `pc.azure-foundry` (`agent.deploy`), `pc.aws-ssm` and `pc.azure-compute` (`code.execute`), and `pc.aws-agentcore` (reads only; AgentCore deploys are seen by discovery).
-- **Discovery** (FQ34-3): AgentCore, Vertex and Foundry agents, daily scan schedules, the `pc.runtime.agent_deployed` alert.
+- **Code first**, like M30–M33: three streams on pushed branches, assembled on `code/m34` from `code/m33`; tests in Phase B (land/m34), with RT-225..RT-229 and the `TestE2E_M34` exit test. Runbooks: [agentcore.md](runbooks/agentcore.md), [runtime-discovery.md](runbooks/runtime-discovery.md), [aws-ssm.md](runbooks/aws-ssm.md).
+- **Agent identity protection** (D1205): each AgentCore gateway is one agent, proven by its interceptor function's AWS role (FQ34-2): `aws_iam` attestation with an in-memory Ed25519 key, `RuntimeService.StartRuntimeRun` under the issuer entry's run grant (`runtime.run_started`), and the Authority's account match before the pipeline (`RUNTIME_ACCOUNT_MISMATCH`, D994a).
+- **Runtime firewall** (D1205): every tool call is decided per call.
+  - Channel `runtime`: cooperative (PARTIAL, R-82), DELEGATED, never forwarded; content signals scan it.
+  - AgentCore (FQ34-1): the gateway's `/runtime/agentcore` face and the `pc-agentcore-interceptor` Lambda, one per AgentCore gateway, which asks the customer's own gateway and fails closed; connections bound by `runtime_target` (`agentcore:<gateway ARN>/<target>`); one agent per gateway (R-83).
+  - ADK and Foundry: `pantherclaw_adk.before_tool_callback` (Vertex AI Agent Engine too) and `pantherclaw.foundry.FoundryApprovals`, both failing closed (R-84).
+  - Packages: `pc.vertex-agent-engine` and `pc.azure-foundry` (`agent.deploy`), `pc.aws-ssm` and `pc.azure-compute` (`code.execute`), and `pc.aws-agentcore` (reads only; AgentCore deploys are seen by discovery, FQ34-5). An AWS package may name up to 3 more exact ARNs in `aws_extra_resources`: one action, never a wildcard (FQ34-4, HR-525). API shapes unconfirmed (R-85).
+- **Discovery** (FQ34-3): AgentCore, Vertex and Foundry agents through the gateway with read-only collector credentials; daily schedules set by a person (`pclaw discover scan`, `pclaw discover schedule set|clear`), at most one start per 20 hours, skipped (`pc_saas_schedule_skipped_total`) once the person leaves; the `pc.runtime.agent_deployed` alert (alert only).
 - **Threat map:** `prevent.agent_deploy` (AML.T0103) and `prevent.cloud_admin_command` (T1651); both leave Unaddressed.
 - Migrations `00380`–`00382`.
 

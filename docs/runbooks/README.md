@@ -63,5 +63,7 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [siem-packs.md](siem-packs.md) | M27 | SIEM content packs for Splunk, Sentinel, Chronicle, Elastic, Wazuh and Sigma: ingest, what was not checked, acting on exported alerts |
 | [pclaw-mcp-self.md](pclaw-mcp-self.md) | M27 | `pclaw mcp self`: a read-only MCP server for a SOC agent, the Investigator role and the server's audit of each read (Team) |
 | [siem-forwarder.md](siem-forwarder.md) | M27 | `pclaw siem forward`: verify SIEM export batches and write one OCSF event per line for Sentinel's Azure Monitor Agent or Wazuh (Business) |
-| [agentcore.md](agentcore.md) | M34 | Connect an AgentCore gateway: the interceptor Lambda, its issuer entry and run grant, a connection per target with its runtime target (`PARTIAL`) |
+| [agentcore.md](agentcore.md) | M34 | Connect an AgentCore gateway: the interceptor Lambda, its issuer entry and run grant, a connection per target with its runtime target, refusal codes (`PARTIAL`) |
+| [runtime-discovery.md](runtime-discovery.md) | M34 | Discovery of AgentCore runtimes, Vertex reasoning engines and Foundry agents: daily scan schedules, skipped schedules, the `pc.runtime.agent_deployed` alert (Business) |
+| [aws-ssm.md](aws-ssm.md) | M34 | Commands on cloud machines: `pc.aws-ssm` with `aws_extra_resources` (one action on up to 3 more exact ARNs) and `pc.azure-compute` Run Command |
 | [threat-map.md](threat-map.md) | M28 | The threat map: MITRE ATLAS and ATT&CK Enterprise lanes, gaps and fixes, `pclaw threats`, the signed report, the Navigator layer and history |
