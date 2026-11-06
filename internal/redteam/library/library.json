@@ -1145,26 +1145,6 @@
       "T1027": "Obfuscated files or information (T1027): the duplicate member hides the real value from one of two readers."
     }
   },
-  "RT-260": {
-    "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
-    "tier": "community",
-    "asi": [
-      "ASI03"
-    ],
-    "asi_why": {
-      "ASI03": "Identity and privilege abuse (ASI03): a stolen token is replayed again and again with a used proof and with another key."
-    },
-    "atlas": [
-      "AML.T0091.000"
-    ],
-    "attack": [
-      "T1550.001"
-    ],
-    "technique_why": {
-      "AML.T0091.000": "Application access token (AML.T0091.000): a stolen token is replayed in a burst with a used proof and without its key.",
-      "T1550.001": "Application access token (T1550.001): the replayed token and proofs stand in for the agent's own sign-in."
-    }
-  },
   "RT-200": {
     "digest": "650410b363ac93b059108772ace94131289136d18ec2b0abc462e5a70effae00",
     "tier": "business",
@@ -1182,7 +1162,7 @@
     }
   },
   "RT-201": {
-    "digest": "486b3c4675a3ff334fba53989633265c2615187b2d5bdc34d784de5e1f48cb62",
+    "digest": "764a1677a99c898c50e680dbcf2de478275fa3fad1a1a8656b0eb2e943bc12c0",
     "tier": "community",
     "attack": [
       "T1537"
@@ -1206,13 +1186,33 @@
     }
   },
   "RT-203": {
-    "digest": "f0f521162a569922024ac138699f9cc68945a3f7731f1841b79f10c9dac09655",
+    "digest": "882c29221c21641a40f85bc10e3f8c45164c4cef82bfa3960f6198bbda520cd6",
     "tier": "community",
     "atlas": [
       "AML.T0081"
     ],
     "technique_why": {
       "AML.T0081": "Modify AI agent configuration (AML.T0081): the agent rewrites its own memory file to persist instructions."
+    }
+  },
+  "RT-260": {
+    "digest": "c917e88f00ab7079bb682ed8910c4fc428f9679cdc487522fa9c7a1d2a957105",
+    "tier": "community",
+    "asi": [
+      "ASI03"
+    ],
+    "asi_why": {
+      "ASI03": "Identity and privilege abuse (ASI03): a stolen token is replayed again and again with a used proof and with another key."
+    },
+    "atlas": [
+      "AML.T0091.000"
+    ],
+    "attack": [
+      "T1550.001"
+    ],
+    "technique_why": {
+      "AML.T0091.000": "Application access token (AML.T0091.000): a stolen token is replayed in a burst with a used proof and without its key.",
+      "T1550.001": "Application access token (T1550.001): the replayed token and proofs stand in for the agent's own sign-in."
     }
   }
 }

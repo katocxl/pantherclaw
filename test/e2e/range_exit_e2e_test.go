@@ -162,6 +162,8 @@ func TestE2E_M12_CodingAgentSuite(t *testing.T) {
 		// sandboxed range runs them (SANDBOX=1 task range).
 		"RT-190": sandbox, "RT-191": sandbox, "RT-192": model, "RT-193": model, "RT-194": model, "RT-195": model,
 		"RT-196": model, "RT-197": model,
+		// M30: the CLI range here seeds neither the share grant nor the shell hook connection.
+		"RT-201": "driver lacks capability share", "RT-203": "driver lacks capability agent_config",
 	}
 	if !maps.Equal(skipped, wantSkip) {
 		t.Errorf("SKIPPED set %v, want %v", skipped, wantSkip)

@@ -10,7 +10,7 @@ rules: [HR-712]
 atlas: [AML.T0081]
 technique_why:
   AML.T0081: "Modify AI agent configuration (AML.T0081): the agent rewrites its own memory file to persist instructions."
-requires: []
+requires: [agent_config]
 harness_only: false
 steps:
   # No grant names agent_config.write, so the gateway refuses and the hook

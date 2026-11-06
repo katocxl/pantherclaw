@@ -122,6 +122,9 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	maps.Copy(caps, m20ConnectorCapabilities())
 	caps[capAWSECS] = true
 	caps[capModel] = true
+	// M30 (D1216): the harness seeds the share grant and the shell hook
+	// connection (RT-201, RT-203).
+	caps["share"], caps["agent_config"] = true, true
 	return caps
 }
 
