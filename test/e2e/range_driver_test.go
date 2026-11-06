@@ -121,6 +121,9 @@ func (d *rangeDriver) Capabilities() map[app.Capability]bool {
 	maps.Copy(caps, pgCapabilities())
 	maps.Copy(caps, m20ConnectorCapabilities())
 	caps[capAWSECS] = true
+	// M33 (D1216): the browser and computer hook connections, the browser
+	// grant and the site list (RT-220..RT-224).
+	caps[capBrowserAgent] = true
 	return caps
 }
 
@@ -164,6 +167,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	o.slack = slackScenario(sc)
 	o.jira, o.gitlab = requires(sc, string(capJiraComment)), requires(sc, string(capGitLabMerge))
 	o.awsECS = requires(sc, string(capAWSECS))
+	o.browser = requires(sc, string(capBrowserAgent))
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
@@ -207,6 +211,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	d.setupM20Connectors()
 	d.setupAWSECS()
+	d.setupBrowserAgent(sc)
 	if requires(sc, "mcp") {
 		d.setupMCPUpstream()
 	}
@@ -444,6 +449,9 @@ func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation,
 	case "sdk":
 		return d.callSDK(conn, w, act)
 	case "hook":
+		if browserTool(w.Tool) {
+			return d.callBrowserHook(conn, w, act)
+		}
 		return d.callHook(w)
 	case "authzen":
 		return d.callAuthZEN(conn, w, act)

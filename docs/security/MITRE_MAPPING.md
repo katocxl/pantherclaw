@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `1ddd45f6ff89d0db2724c4e0d1c2faa5c9c39204191164bd37cf382c34185621`.
+Mapping digest: `7ecdc7995a95f7143e2da1e930cb325f8d8ede427c5c518f3447f69f179138aa`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|
@@ -69,7 +69,7 @@ Mapping digest: `1ddd45f6ff89d0db2724c4e0d1c2faa5c9c39204191164bd37cf382c3418562
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0131](https://atlas.mitre.org/techniques/AML.T0131) | Crafted AI Assistant Links | Mapped | prevent `prevent.browser_sites` |
+| [AML.T0131](https://atlas.mitre.org/techniques/AML.T0131) | Crafted AI Assistant Links | Mapped | prevent `prevent.browser_sites`; scenarios `RT-220` |
 | [AML.T0078](https://atlas.mitre.org/techniques/AML.T0078) | Drive-by Compromise | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [AML.T0015](https://atlas.mitre.org/techniques/AML.T0015) | Evade AI Model | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0119](https://atlas.mitre.org/techniques/AML.T0119) | Exploit Automated Artifact Processing Pipeline | No PantherClaw control yet | Exploit automated artifact processing pipeline (AML.T0119): pipelines that process artifacts have no PantherClaw control. |
@@ -93,8 +93,8 @@ Mapping digest: `1ddd45f6ff89d0db2724c4e0d1c2faa5c9c39204191164bd37cf382c3418562
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0100](https://atlas.mitre.org/techniques/AML.T0100) | AI Agent Clickbait | Mapped | prevent `prevent.browser_sites` |
-| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
+| [AML.T0100](https://atlas.mitre.org/techniques/AML.T0100) | AI Agent Clickbait | Mapped | prevent `prevent.browser_sites`; scenarios `RT-220` |
+| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121`, `RT-223` |
 | [AML.T0050](https://atlas.mitre.org/techniques/AML.T0050) | Command and Scripting Interpreter | Mapped | Hub rules `org.hub.held_merge_then_shell`, `org.hub.shell_merge_attempt`; scenarios `RT-003` |
 | [AML.T0103](https://atlas.mitre.org/techniques/AML.T0103) | Deploy AI Agent | No PantherClaw control yet | Deploy AI agent (AML.T0103): an agent launched apart from PantherClaw is only found by discovery; it has no PantherClaw control. |
 | [AML.T0051](https://atlas.mitre.org/techniques/AML.T0051) | LLM Prompt Injection | Mapped | AML.T0051.001: prevent `prevent.content_hold`; rules `pc.tools.description_injection`; kinds `content.injection_phrase`; Hub playbooks `pc.playbook.poisoned-mcp-server`; scenarios `RT-154`, `RT-158`, `RT-159`, `RT-163`; campaigns `RT-140`, `RT-141`, `RT-142`, `RT-143`, `RT-144`, `RT-145`, `RT-146`, `RT-147` |
@@ -122,7 +122,7 @@ Mapping digest: `1ddd45f6ff89d0db2724c4e0d1c2faa5c9c39204191164bd37cf382c3418562
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
+| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121`, `RT-223` |
 | [AML.T0105](https://atlas.mitre.org/techniques/AML.T0105) | Escape to Host | Mapped | prevent `prevent.sandbox_closure`; scenarios `RT-015` |
 | [AML.T0054](https://atlas.mitre.org/techniques/AML.T0054) | LLM Jailbreak | No PantherClaw control yet | LLM jailbreak (AML.T0054): it happens inside the model's conversation; PantherClaw decides on the actions that follow, not on the prompt. |
 | [AML.T0012](https://atlas.mitre.org/techniques/AML.T0012) | Valid Accounts | Outside PantherClaw: covered by the identity provider | It happens at the identity provider. |
@@ -134,7 +134,7 @@ Mapping digest: `1ddd45f6ff89d0db2724c4e0d1c2faa5c9c39204191164bd37cf382c3418562
 | [AML.T0141](https://atlas.mitre.org/techniques/AML.T0141) | AI Service Request Metadata Sanitization | Outside PantherClaw: covered by threat intelligence | It happens before compromise. |
 | [AML.T0111](https://atlas.mitre.org/techniques/AML.T0111) | AI Supply Chain Reputation Inflation | Outside PantherClaw: covered by threat intelligence | It happens before compromise. Inflated stars and downloads live on public registries; the MCP catalog approves by exact match, not by reputation. |
 | [AML.T0109](https://atlas.mitre.org/techniques/AML.T0109) | AI Supply Chain Rug Pull | Mapped | prevent `prevent.tool_package_review`; rules `pc.tools.drift`; Hub playbooks `pc.playbook.poisoned-mcp-server`, `pc.playbook.poisoned-mcp-server-contain`; scenarios `RT-029` |
-| [AML.T0134](https://atlas.mitre.org/techniques/AML.T0134) | AI Targeted Cloaking | Mapped | rules `pc.browser.cloaking` |
+| [AML.T0134](https://atlas.mitre.org/techniques/AML.T0134) | AI Targeted Cloaking | Mapped | rules `pc.browser.cloaking`; scenarios `RT-224` |
 | [AML.T0140](https://atlas.mitre.org/techniques/AML.T0140) | Centralized AI Service Request Routing | Outside PantherClaw: covered by threat intelligence | It happens before compromise. |
 | [AML.T0076](https://atlas.mitre.org/techniques/AML.T0076) | Corrupt AI Model | Outside PantherClaw: covered by model security | It happens in model development. |
 | [AML.T0094](https://atlas.mitre.org/techniques/AML.T0094) | Delay Execution of LLM Instructions | No PantherClaw control yet | Delay execution of LLM instructions (AML.T0094): a delayed instruction is only seen when it turns into an action. |
@@ -157,7 +157,7 @@ Mapping digest: `1ddd45f6ff89d0db2724c4e0d1c2faa5c9c39204191164bd37cf382c3418562
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0098](https://atlas.mitre.org/techniques/AML.T0098) | AI Agent Tool Credential Harvesting | Mapped | kinds `content.secret_format` |
+| [AML.T0098](https://atlas.mitre.org/techniques/AML.T0098) | AI Agent Tool Credential Harvesting | Mapped | kinds `content.secret_format`; scenarios `RT-221` |
 | [AML.T0083](https://atlas.mitre.org/techniques/AML.T0083) | Credentials from AI Agent Configuration | Mapped | prevent `prevent.agent_config` |
 | [AML.T0106](https://atlas.mitre.org/techniques/AML.T0106) | Exploitation for Credential Access | Outside PantherClaw: covered by EDR | It needs an endpoint. |
 | [AML.T0090](https://atlas.mitre.org/techniques/AML.T0090) | OS Credential Dumping | Outside PantherClaw: covered by EDR | It needs an endpoint. |
@@ -185,7 +185,7 @@ Mapping digest: `1ddd45f6ff89d0db2724c4e0d1c2faa5c9c39204191164bd37cf382c3418562
 
 | Technique | Name | Place | Mapped to it |
 |---|---|---|---|
-| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121` |
+| [AML.T0053](https://atlas.mitre.org/techniques/AML.T0053) | AI Agent Tool Invocation | Mapped | prevent `prevent.grant_scope`, `prevent.mapped_routes`; rules `pc.authority.self_issue`; kinds `behavior.NEW_TOOL`; Hub playbooks `pc.playbook.rogue-sub-agent`, `pc.playbook.rogue-sub-agent-contain`; scenarios `RT-001`, `RT-002`, `RT-019`, `RT-121`, `RT-223` |
 | [AML.T0122](https://atlas.mitre.org/techniques/AML.T0122) | Exploitation of Remote Services | Outside PantherClaw: covered by network security | It needs a network. |
 | [AML.T0143](https://atlas.mitre.org/techniques/AML.T0143) | LLM Prompt Propagation | No PantherClaw control yet | LLM prompt propagation (AML.T0143): instructions carried onward between stores and agents have no control of their own yet. |
 | [AML.T0052](https://atlas.mitre.org/techniques/AML.T0052) | Phishing | Outside PantherClaw: covered by email security | It needs a mailbox. |
@@ -622,3 +622,7 @@ Abuse cases from [THREAT_MODEL](THREAT_MODEL.md) that no library range scenario 
 | T-273 | AML.T0051.001, AML.T0093 | — |
 | T-276 | AML.T0051.001 | T1698 |
 | T-281 | AML.T0051.001, AML.T0099 | T1698 |
+| T-340 | AML.T0100, AML.T0131 | — |
+| T-341 | AML.T0098 | — |
+| T-343 | AML.T0053 | — |
+| T-344 | AML.T0134 | — |

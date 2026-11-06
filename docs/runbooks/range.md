@@ -50,6 +50,8 @@ pclaw redteam run --suite coding-agent \
   [--grant <grant id>] [--interactive] [--baseline <pack.zip>] [--out <dir>]
 ```
 
+- `--provides browser_agent` (M33, RT-220..RT-224): the range has the hook connections for the roles `browser` (`pc.browser`) and `computer` (`pc.computer`) on its gateway (bind them with `--role browser=CONNECTION --role computer=CONNECTION`), the range grant names every `pc.browser` and `pc.computer` operation, and the range's browser site list has `docs.example.com` and `shop.example.com` with its subdomains, marked for the cloaking compare. Without it those scenarios are `SKIPPED` ("driver lacks capability browser_agent").
+
 - `--suite` is `coding-agent`, `platform` or `all`. The platform suite needs Business (`EDITION_REQUIRED` otherwise).
 - `--grant <id>` picks the range root grant. Without it the command fails (exit 2) when the range agent has more than one active root grant. The summary prints the grant id and its delegation depth. There is no `--run` flag: the command starts its own runs. A CI gate needs no grant re-issue between runs, only when the grant expires.
 - The command always starts a range first, runs each scenario through the live driver, records each result with the server, finishes the range and writes `summary.json` and a text table to `--out`.
