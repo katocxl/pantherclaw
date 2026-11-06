@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package decision is what the Kubernetes admission webhook decides about
-// a pod of a protected namespace (G0 M32 D967, HR-735). It is pure: the
+// a pod of an enforced namespace (G0 M32 D967, HR-735). It is pure: the
 // caller looks up the active trusted-issuer entries for the pod's service
 // account and passes them in. Every check must pass; the first that fails
 // names the refusal code.

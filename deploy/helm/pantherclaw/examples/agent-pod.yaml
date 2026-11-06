@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 #
-# An agent pod in a protected namespace (G0 M32 D966, D967, D969). Not a
+# An agent pod in an enforced namespace (G0 M32 D966, D967, D969). Not a
 # template: copy it and replace the values marked REPLACE. The admission
 # webhook admits it only in this shape:
 #

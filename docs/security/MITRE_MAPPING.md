@@ -10,7 +10,7 @@ Every technique of both matrices has exactly one place:
 - **Outside PantherClaw:** the technique needs something PantherClaw does not see; the kind of tool that covers it is named.
 - **No PantherClaw control yet:** the technique is within an agent platform's reach and PantherClaw ships no control for it; why is given.
 
-Mapping digest: `ebfa1843a5fd3905417b08b013e3944abbfa74effe869d57f5973f121ca49bf0`.
+Mapping digest: `f2e73ba571b82c6273ca48e76d04358b7b1b742c1cd38ce7fe8a103978543a75`.
 
 | Framework | Catalogue version | Catalogue digest |
 |---|---|---|

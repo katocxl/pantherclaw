@@ -5,7 +5,7 @@
 **Context.** Agents run as pods in customers' clusters, where the Docker sandbox's closure (G0 M9) does not reach: there is no `pclaw` host to create the network, no per-session probe key made outside the containers, and the pod's network is the cluster's. Coverage can only read ENFORCED for such an agent when something shows its only route is the gateway.
 
 **Decision.**
-1. **Protected namespaces and a fail-closed admission webhook** (HR-730..735; founder decision FQ32-1). A labelled namespace's pods are agent pods; the webhook admits one only with an issuer entry, one app container, pinned images and the edge as its native sidecar holding the only projected token.
+1. **Enforced namespaces and a fail-closed admission webhook** (HR-730..735; founder decision FQ32-1). A labelled namespace's pods are agent pods; the webhook admits one only with an issuer entry, one app container, pinned images and the edge as its native sidecar holding the only projected token.
 2. **The edge as a native sidecar** (HR-736..738; FQ32-2). Loopback only, keys in memory, enrolled by kubernetes attestation; it signs the pod's probe reports with the pod's workload key.
 3. **Egress only to the gateway** (HR-740; FQ32-3). The chart's NetworkPolicy allows only the gateway pods and the api, with no DNS (D965a); the gateway enrols from its own projected token (HR-739).
 4. **Kube closures** (HR-741..743). A daily probe run, with a control twin in the release namespace, is checked by the server against the signer's attested namespace, the admission digest lists and a fresh nonce; the server adds its own admission and NetworkPolicy checks and evaluates it under the `ContainmentKubernetes` profile.

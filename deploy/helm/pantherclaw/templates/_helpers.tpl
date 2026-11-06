@@ -233,7 +233,7 @@ spec:
 {{- printf "https://%s:%d" .Values.gateway.hostname (int .Values.gateway.port) -}}
 {{- end -}}
 
-{{/* G0 M32 D964: the label keys of a protected namespace. */}}
+{{/* G0 M32 D964: the label keys of an enforced namespace. */}}
 {{- define "pantherclaw.protectLabel" -}}pantherclaw.dev/protect{{- end -}}
 {{- define "pantherclaw.orgLabel" -}}pantherclaw.dev/org{{- end -}}
 

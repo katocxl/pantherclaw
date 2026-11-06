@@ -362,12 +362,12 @@ var Prevent = []PreventControl{
 	{
 		// G0 M32 D967, D970: no reason code; the admission webhook's refusal
 		// is an AdmissionReview deny, audited as kubernetes.admission_denied.
-		ID: "prevent.kubernetes_admission", Title: "A pod in a protected namespace runs only with its edge sidecar and an issuer entry", Surface: SurfaceSandbox,
+		ID: "prevent.kubernetes_admission", Title: "A pod in an enforced namespace runs only with its edge sidecar and an issuer entry", Surface: SurfaceSandbox,
 		HR:         []string{"HR-730", "HR-732", "HR-733", "HR-734"},
 		Requires:   RequiresAlways,
 		Techniques: []string{"T1610"},
 		Why: map[string]string{
-			"T1610": "Deploy container (T1610): the admission webhook denies a pod in a protected namespace without an issuer entry, the edge sidecar or pinned images, and every ephemeral container.",
+			"T1610": "Deploy container (T1610): the admission webhook denies a pod in an enforced namespace without an issuer entry, the edge sidecar or pinned images, and every ephemeral container.",
 		},
 	},
 }

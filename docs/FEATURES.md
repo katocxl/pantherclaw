@@ -966,7 +966,7 @@ Agent pods in a customer's own cluster get one route out, through the edge as a 
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| F1020 | Protected namespaces | Namespaces labelled `pantherclaw.dev/protect: enforce` and `pantherclaw.dev/org`; every pod in one is an agent pod. | Next | Community | M32 | PN-002.2 |
+| F1020 | Enforced namespaces | Namespaces labelled `pantherclaw.dev/protect: enforce` and `pantherclaw.dev/org`; every pod in one is an agent pod. | Next | Community | M32 | PN-002.2 |
 | F1021 | Admission webhook | A fail-closed webhook that admits a pod only with an issuer entry, one app container, pinned images, the edge sidecar and its token mounted only there, and denies every ephemeral container; denies are audited. | Next | Community | M32 | PN-002.2 |
 | F1022 | Edge as a native sidecar | The edge's `kubernetes` mode: loopback only, a workload key in memory enrolled from the projected token, one run per pod, the CA certificate shared with the agent. | Next | Community | M32 | PN-008.2 |
 | F1023 | Agent NetworkPolicy | Per agent namespace, egress only to the gateway pods and the api, no DNS, no ingress unless allowed. | Next | Community | M32 | PN-008.2 |

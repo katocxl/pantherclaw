@@ -22,7 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 )
 
-// ProfileKubernetes is the probe's catalog for an agent pod in a protected
+// ProfileKubernetes is the probe's catalog for an agent pod in an enforced
 // namespace (G0 M32 D970): `pantherclaw-probe --profile kubernetes`. It
 // runs in a pod of its own with the edge as its native sidecar, reads what
 // it probes from the environment, and POSTs its unsigned report to the

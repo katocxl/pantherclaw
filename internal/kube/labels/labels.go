@@ -17,7 +17,7 @@ const (
 	ProtectLabel = "pantherclaw.dev/protect"
 	// ProtectEnforce is ProtectLabel's only value.
 	ProtectEnforce = "enforce"
-	// OrgLabel names the org (its UUID) a protected namespace belongs to.
+	// OrgLabel names the org (its UUID) an enforced namespace belongs to.
 	OrgLabel = "pantherclaw.dev/org"
 )
 
