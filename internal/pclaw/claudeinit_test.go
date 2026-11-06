@@ -192,7 +192,7 @@ func TestHR208_InitBacksUpShowsTheDiffAndOnlyAdds(t *testing.T) {
 		"hook", "claude-code", "--gateway", "https://gw.example.test", "--connection", "shell", "--key-file", f.key,
 		"--run", "01920000-0000-7000-8000-0000000000f1",
 	}
-	if mine["matcher"] != "Bash|PowerShell|Monitor" || entry["command"] != "pclaw" || entry["onFailure"] != "block" || len(args) != len(want) {
+	if mine["matcher"] != m30Matcher || entry["command"] != "pclaw" || entry["onFailure"] != "block" || len(args) != len(want) {
 		t.Fatalf("hook %v", mine)
 	}
 	for i := range want {
@@ -254,7 +254,7 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 		"all hooks off":      {managed: `{"disableAllHooks": true}`, code: 1, want: "disable every hook"},
 		"local hooks off":    {local: `{"disableAllHooks": true}`, code: 1, want: "never changes that setting"},
 		"managed runs it": {
-			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell|Monitor",
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell|Monitor|Write|Edit|MultiEdit|NotebookEdit",
 				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]}]}}`,
 			want: "already installed",
 		},
@@ -338,7 +338,7 @@ func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
 	} {
 		f := newInitFixture(t)
 		if tc.matcher == "" {
-			tc.matcher = "Bash|PowerShell|Monitor"
+			tc.matcher = m30Matcher
 		}
 		local := `{"hooks": {"PreToolUse": [{"matcher": "` + tc.matcher + `", "hooks": [` + tc.hook + `]}]}}`
 		f.write(t, f.local(), local)
@@ -386,11 +386,15 @@ func TestHR208_TheHookCoversEachShellToolByItsExactName(t *testing.T) {
 		"no matcher":       {[]string{group(``, closed)}, true},
 		"an empty matcher": {[]string{group(`"matcher": "", `, closed)}, true},
 		"every tool":       {[]string{group(`"matcher": "*", `, closed)}, true},
-		"the three":        {[]string{group(`"matcher": "Monitor|Bash|PowerShell", `, closed)}, true},
-		"in two groups":    {[]string{group(`"matcher": "Bash|PowerShell", `, closed), group(`"matcher": "Monitor", `, closed)}, true},
-		"BashOutput":       {[]string{group(`"matcher": "BashOutput|PowerShell|Monitor", `, closed)}, false},
-		"MonitorX":         {[]string{group(`"matcher": "Bash|PowerShell|MonitorX", `, closed)}, false},
-		"spaces":           {[]string{group(`"matcher": "Bash | PowerShell | Monitor", `, closed)}, false},
+		"the seven":        {[]string{group(`"matcher": "Monitor|Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit", `, closed)}, true},
+		// The shell tools alone leave the writes unasked (G0 M30 D943a a).
+		"the shell three": {[]string{group(`"matcher": "Monitor|Bash|PowerShell", `, closed)}, false},
+		"in two groups": {
+			[]string{group(`"matcher": "Bash|PowerShell", `, closed), group(`"matcher": "Monitor|Write|Edit|MultiEdit|NotebookEdit", `, closed)}, true,
+		},
+		"BashOutput": {[]string{group(`"matcher": "BashOutput|PowerShell|Monitor", `, closed)}, false},
+		"MonitorX":   {[]string{group(`"matcher": "Bash|PowerShell|MonitorX", `, closed)}, false},
+		"spaces":     {[]string{group(`"matcher": "Bash | PowerShell | Monitor", `, closed)}, false},
 		"a regular expression": {
 			[]string{group(`"matcher": "Bash|PowerShell|Monitor|mcp__.*", `, closed)}, false,
 		},
@@ -573,3 +577,7 @@ func TestT084_InitRefusesFlagsThatWouldWriteSecretsOrNonsense(t *testing.T) {
 		t.Fatal("a refused init created settings")
 	}
 }
+
+// m30Matcher is the matcher pclaw init writes: the shell tools and, since
+// G0 M30 D943a (a), the write tools.
+const m30Matcher = "Bash|PowerShell|Monitor|Write|Edit|MultiEdit|NotebookEdit"

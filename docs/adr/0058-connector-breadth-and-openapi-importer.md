@@ -1,6 +1,6 @@
 # ADR-0058 — Connector breadth and the OpenAPI importer
 
-**Status:** Proposed (2026-11-04; the [G0 M31](../g0/M31.md) brief records the coordinator decisions D950–D963). Body completed 2026-11-05, when M31's code was tested (HR-720..727, T-330..T-334, RT-210..RT-214).
+**Status:** Accepted (2026-11-06; the [G0 M31](../g0/M31.md) brief records the coordinator decisions D950–D963, D1208 and D1209). Body completed 2026-11-05, when M31's code was tested (HR-720..727, T-330..T-334, RT-210..RT-214).
 
 **Context.** Teams want PantherClaw in front of the services their agents already reach: Google Workspace, Microsoft 365, Salesforce, Notion, Linear, Anthropic models on Bedrock and Vertex, and Snowflake. Writing each package by hand from a provider's docs is slow, and several of these services need request shapes the HTTP dispatch could not build: a list of objects, array items, GraphQL, a raw mail message, a Google service account's token.
 

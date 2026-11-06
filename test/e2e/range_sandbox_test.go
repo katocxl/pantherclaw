@@ -29,11 +29,13 @@ type sandboxRig struct {
 	revoked bool
 	// closure is the probe report of the sandbox's own run, once it ran.
 	closure string
+	// model is the agent's model calls, once they ran (G0 M29 RT-190, RT-191).
+	model *modelRun
 }
 
 // sandboxStart starts the stack of a sandbox scenario: the M9 exit's.
 func sandboxStart(d *rangeDriver) *stack {
-	m := startM9(d.t)
+	m := startM9(d.t, func(o *options) { o.model = requires(d.sc, string(capModel)) })
 	d.extra.sandbox = &sandboxRig{m: m}
 	return m.stack
 }
@@ -60,6 +62,9 @@ func sandboxProbe(d *rangeDriver, st domain.Step, vars map[string]string) (domai
 	r := d.extra.sandbox
 	if r == nil {
 		return domain.Observation{}, fmt.Errorf("the scenario has no sandbox")
+	}
+	if strings.HasPrefix(w.Probe, "model_") {
+		return modelProbe(d, w.Probe)
 	}
 	switch w.Probe {
 	case "raw_curl_merge":

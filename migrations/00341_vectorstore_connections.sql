@@ -42,7 +42,7 @@ CREATE TABLE pc.vectorstore_connections (
     internal         boolean     NOT NULL DEFAULT false,
     schema_name      text        NOT NULL CHECK (schema_name ~ '^[a-z_][a-z0-9_]{0,62}$'),
     table_name       text        NOT NULL CHECK (table_name ~ '^[a-z_][a-z0-9_]{0,62}$'),
-    dimensions       int         NOT NULL CHECK (dimensions BETWEEN 1 AND 16000),
+    dimensions       int         NOT NULL CHECK (dimensions BETWEEN 1 AND 12288),
     distance         text        NOT NULL CHECK (distance IN ('cosine', 'l2', 'inner_product')),
     writer_agent_ids uuid[]      NOT NULL DEFAULT '{}' CHECK (cardinality(writer_agent_ids) <= 64),
     updated_at       timestamptz NOT NULL DEFAULT now(),
@@ -57,6 +57,8 @@ ALTER TABLE pc.vectorstore_connections FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.vectorstore_connections
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+CREATE TRIGGER org_write_guard BEFORE INSERT OR UPDATE ON pc.vectorstore_connections
+    FOR EACH ROW EXECUTE FUNCTION pc.org_write_guard();
 
 -- The endpoint columns are fixed (D925a): pc_app may update only the
 -- table's shape and the writer list.
@@ -64,6 +66,13 @@ GRANT SELECT, INSERT ON pc.vectorstore_connections TO pc_app;
 GRANT UPDATE (schema_name, table_name, dimensions, distance, writer_agent_ids, updated_at)
     ON pc.vectorstore_connections TO pc_app;
 GRANT SELECT ON pc.vectorstore_connections TO pc_audit_ro;
+-- +goose StatementBegin
+DO $$ BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_deleter') THEN
+        GRANT SELECT, DELETE ON pc.vectorstore_connections TO pc_deleter;
+    END IF;
+END $$;
+-- +goose StatementEnd
 
 -- +goose Down
 -- The rollback refuses while a vectorstore connection exists, and never

@@ -64,7 +64,7 @@ func (s *Service) checkModelCapture(ctx context.Context, before, after *ModelCon
 // recordModelCapture records prompt capture turned on or off on a
 // connection, in the transaction that applies it.
 func recordModelCapture(ctx context.Context, tx db.TenantTx, c actor, conn ids.UUID, before, after *ModelConfig) error {
-	name := ""
+	var name string
 	switch {
 	case captureTurnsOn(before, after):
 		name = auditkind.ModelCaptureEnabled

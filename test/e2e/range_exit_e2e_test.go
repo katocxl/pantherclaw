@@ -149,14 +149,21 @@ func TestE2E_M12_CodingAgentSuite(t *testing.T) {
 	// changes them (D42).
 	wantPass := []string{
 		"RT-001", "RT-002", "RT-006", "RT-007", "RT-009", "RT-010", "RT-011", "RT-012", "RT-013", "RT-016", "RT-019", "RT-020", "RT-022", "RT-023",
+		"RT-260", // HR-850: refused proofs stay refused and the agent's own calls go through.
 	}
 	if got := slices.Sorted(maps.Keys(passed)); !slices.Equal(got, wantPass) {
 		t.Errorf("PASS set %v, want %v\n%s", got, wantPass, out)
 	}
-	const sandbox, person = "driver lacks capability sandbox", "driver lacks capability person"
+	const sandbox, person, model = "driver lacks capability sandbox", "driver lacks capability person", "driver lacks capability model"
 	wantSkip := map[string]string{
 		"RT-003": sandbox, "RT-004": sandbox, "RT-005": sandbox, "RT-014": sandbox, "RT-015": sandbox,
 		"RT-008": person, "RT-018": person, "RT-021": person, "RT-017": "driver lacks sim.mutate",
+		// M29: the model route needs the sandbox or the model capability; the
+		// sandboxed range runs them (SANDBOX=1 task range).
+		"RT-190": sandbox, "RT-191": sandbox, "RT-192": model, "RT-193": model, "RT-194": model, "RT-195": model,
+		"RT-196": model, "RT-197": model,
+		// M30: the CLI range here seeds neither the share grant nor the shell hook connection.
+		"RT-201": "driver lacks capability share", "RT-203": "driver lacks capability agent_config",
 	}
 	if !maps.Equal(skipped, wantSkip) {
 		t.Errorf("SKIPPED set %v, want %v", skipped, wantSkip)

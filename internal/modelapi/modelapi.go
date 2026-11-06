@@ -474,6 +474,19 @@ func (r *Request) serverTools(top map[string]jsontext.Value) error {
 				names["background"] = true
 			}
 		}
+		// State the provider keeps can carry tools and input the gateway
+		// never sees (G0 M29 D1214): a stored prompt, a stored conversation.
+		if present("prompt") {
+			names[StoredPrompt] = true
+		}
+		if present("previous_response_id") || present("conversation") {
+			names[StoredContext] = true
+		}
+	}
+	if !r.API.Anthropic() && searchModel(r.Model) {
+		// OpenAI's search and deep-research models search the web with no
+		// tool field (G0 M29 D1214).
+		names[WebSearch] = true
 	}
 	r.ServerTools = make([]string, 0, len(names))
 	for n := range names {
@@ -481,6 +494,25 @@ func (r *Request) serverTools(top map[string]jsontext.Value) error {
 	}
 	slices.Sort(r.ServerTools)
 	return nil
+}
+
+// Provider-side items named by the request's model or stored state rather
+// than a tool (G0 M29 D1214, HR-696).
+const (
+	// WebSearch: a model that searches the web on its own.
+	WebSearch = "web_search"
+	// StoredPrompt: a Responses prompt template the provider stores.
+	StoredPrompt = "stored_prompt"
+	// StoredContext: a stored response or conversation the provider adds as
+	// input.
+	StoredContext = "stored_context"
+)
+
+// searchModel reports whether an OpenAI model id names a search or
+// deep-research model (case-insensitive).
+func searchModel(id string) bool {
+	id = strings.ToLower(id)
+	return strings.Contains(id, "search") || strings.Contains(id, "deep-research")
 }
 
 // providerSide reports whether a tool of type name (set: the tool has a

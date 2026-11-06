@@ -1,6 +1,6 @@
 # PantherClaw — Product Features (revised)
 
-PantherClaw is an AI Agent Identity & Runtime Authorization Firewall. It gives every agent workload a verifiable identity and binds each consequential action to an explicit task grant and a deterministic policy decision. It routes that action through a gateway that dispatches only what was authorized, and keeps signed, independently verifiable evidence of what was decided, what was dispatched and what actually happened. This document turns all 802 catalog requirements (F001–F802) into consolidated, testable backend capabilities grouped into 20 commercially framed pillars, which roll up into seven product components ([PRODUCT.md](PRODUCT.md)). It also adds new PantherClaw features (PN-001–PN-026) and the web console, hosted-account and plan rows F803–F830 of milestone UI, and the rows F831–F889 of milestones M22–M24. Version 1.0 is a Go backend with a Connect-RPC API and the `pclaw` CLI, plus the web console of milestone UI. Each backend row states what the backend must deliver, and the console exposes it. Everything here is planned scope, not a claim that the behaviour is built. Behaviour detail lives in the catalog ([`reference/PantherClaw_Feature_Catalog_F001-F802.md`](reference/PantherClaw_Feature_Catalog_F001-F802.md)), [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`protocol/PAP-1.md`](protocol/PAP-1.md); where they are more specific, they take precedence.
+PantherClaw is agent identity protection and a runtime firewall for AI agents. It gives every agent workload a verifiable identity and binds each consequential action to an explicit task grant and a deterministic policy decision. It routes that action through a gateway that dispatches only what was authorized, and keeps signed, independently verifiable evidence of what was decided, what was dispatched and what actually happened. This document turns all 802 catalog requirements (F001–F802) into consolidated, testable backend capabilities grouped into 20 commercially framed pillars, which roll up into seven product components ([PRODUCT.md](PRODUCT.md)). It also adds new PantherClaw features (PN-001–PN-026) and the web console, hosted-account and plan rows F803–F830 of milestone UI, and the rows F831–F889 of milestones M22–M24. Version 1.0 is a Go backend with a Connect-RPC API and the `pclaw` CLI, plus the web console of milestone UI. Each backend row states what the backend must deliver, and the console exposes it. Everything here is planned scope, not a claim that the behaviour is built. Behaviour detail lives in the catalog ([`reference/PantherClaw_Feature_Catalog_F001-F802.md`](reference/PantherClaw_Feature_Catalog_F001-F802.md)), [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`protocol/PAP-1.md`](protocol/PAP-1.md); where they are more specific, they take precedence.
 
 ## How to read this
 
@@ -46,7 +46,8 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M26 | Enterprise identity: IdP access, MCP client authorization, SCIM, SAML, SaaS agent discovery |
 | M27 | Agent Detection & Response: behaviour profiles, content signals, playbooks, SIEM packs, the read-only MCP server |
 | M28 | Threat map: MITRE ATLAS and ATT&CK Enterprise lanes from evidence, labels on signals and exports, signed report, Navigator export, history |
-| M30 | Firewall gaps from the threat map: DPoP-bound MCP tokens, read limits and share checks, agent configuration and memory, decoding before content signals, a vector-store connector |
+| M29 | Model connections and token budgets: the agent reaches its model through the gateway, token caps on grants, envelopes and runs, a fake model, estimates and the monthly token report |
+| M30 | Gaps from the threat map. Agent identity protection: DPoP-bound MCP tokens. Runtime firewall: read limits and share checks, agent configuration and memory, decoding before content signals, a vector-store connector |
 | post-1.0 | Not yet scheduled to a milestone |
 
 Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, UI, M13 and v1.0 (UI moved ahead of M13 by the founder on 2026-10-20).
@@ -901,7 +902,7 @@ The map shows PantherClaw's controls per MITRE technique and the evidence for th
 
 ### M29 rows: Model connections and token budgets
 
-An agent reaches its model through the gateway, which holds the key, checks each call and counts tokens against caps. Estimates come only from prices the organization sets and are never a bill ([G0 M29](g0/M29.md)).
+An agent reaches its model through the gateway, which holds the key, checks each call and counts tokens against caps. Estimates come only from prices the organization sets and are never a bill ([G0 M29](g0/M29.md), [ADR-0056](adr/0056-model-connections.md), [model connections runbook](runbooks/model-connections.md)). The gateway checks the prompt as strict JSON and forwards exactly what it checked, a written exception to HR-075 for model connections only (HR-691). PantherClaw captures no prompt or reply; records keep metadata and token counts. Caps are counted in tokens, reserved by estimate before a call and settled at the usage the provider reported. Model connections, token caps, the run cap, `--env`, the fake model and every token view are on every edition; cost estimates and the monthly token report need Team. The console rows (F989, and the console parts of F987 and F988) come in a private stream after the API is on `main`.
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -916,9 +917,14 @@ An agent reaches its model through the gateway, which holds the key, checks each
 | F988 | Monthly token report | `GetTokenReport` and `pclaw tokens report`: one UTC month's calls and tokens by team, agent, connection or model, with estimates and the fixed statement. | Next | Team | M29 | new |
 | F989 | Console token views | Console run and approval token lines, model connection settings (max output tokens, provider-side tools, prices on Team) and the monthly token report page on Team. | Next | Community | M29 | new |
 
-### M30 rows: Firewall gaps from the threat map
+### M30 rows: Gaps from the threat map
 
-M30 closes gaps the threat map named: MCP tokens bound to a client's key, read limits and share checks, agent configuration and memory, decoding before content signals and a vector-store connector ([G0 M30](g0/M30.md), [ADR-0057](adr/0057-firewall-gaps-from-the-threat-map.md)). Bound tokens and decoding are on every edition; the rest takes its parent feature's edition (founder answer E).
+M30 closes gaps the threat map named, in two groups ([G0 M30](g0/M30.md), [ADR-0057](adr/0057-firewall-gaps-from-the-threat-map.md)):
+
+- **Agent identity protection** (Badge) keeps a client's MCP token from working for anyone else: tokens bound to the client's own key with DPoP (F990, F991).
+- **Runtime firewall** decides more of what an agent does: read limits and share checks (F995–F999), agent configuration and memory (F1000, F1001), decoding before content signals (F992) and a vector-store connector (F993, F994).
+
+The follow-ups to M29's model connections (F1002, F1003) and the threat-map updates (F1004) complete the milestone. Bound tokens and decoding are on every edition; the rest takes its parent feature's edition (founder answer E). Campaigns through a model connection are deferred (G0 M30 D945d).
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -928,14 +934,14 @@ M30 closes gaps the threat map named: MCP tokens bound to a client's key, read l
 | F993 | `pc.vectorstore` connector | A pgvector connection kind with `vector_query`, `vector_upsert` and `vector_delete`, and `pclaw connections vectorstore ddl` printing the table for an admin to create. | Next | Community | M30 | F759 |
 | F994 | Vector-store writers and provenance | A writer list per connection; other agents' writes wait for a person; every entry carries the run, agent and transaction that wrote it. | Next | Community | M30 | new |
 | F995 | Read limits | A count rule can count reads or writes only; the `read-limits` grant template, off until a grant uses it. | Next | Community | M30 | F113 |
-| F996 | Enumeration alert | Built-in rule `pc.reads.enumeration`: one run reading 200 distinct targets in 10 minutes raises an INFERRED alert. | Next | Business | M30 | F932 |
+| F996 | Enumeration alert | Built-in rule `pc.reads.enumeration`: one run reading 60 distinct targets in 10 minutes raises an INFERRED alert. | Next | Business | M30 | F932 |
 | F997 | Scheduled-send alert | Built-in rule `pc.exfil.scheduled_sends`: one agent writing to one public connection from 12 runs in 24 hours raises an INFERRED alert. | Next | Business | M30 | F932 |
 | F998 | Owned accounts | `OwnedAccountService` and `pclaw org accounts`: the AWS accounts, GitHub organizations, email domains, GCP projects and Azure tenants the organization owns; adding one is a protected change. | Next | Community | M30 | F123 |
 | F999 | Share checks | New AWS and GitHub operations (bucket policy and ACL, repository visibility and transfer) whose shares to the public or an unlisted account wait for a person. | Next | Community | M30 | F123 |
 | F1000 | Agent config digests and drift | Scans report agent configuration and memory files by digest, credential formats found in them by format, and a changed digest writes `agent.config_changed` and raises `pc.agent.config_changed`. | Next | Community | M30 | F883 |
 | F1001 | Configuration writes asked and fenced | `pclaw hook` asks the gateway before writing a listed configuration or memory file (`agent_config.write`); the sandbox binds them read-only and copy-out lists their changes apart. | Next | Community | M30 | PN-008.2 |
 | F1002 | Opt-in prompt capture | Per model connection, off by default; turning it on is a protected change with a security key; bodies kept per the capture profile. | Next | Business | M30 | new |
-| F1003 | Resume an approved hold | An identical request through the edge after approval reuses its action id, so the approved hold releases it; campaigns can send model traffic through a model connection. | Next | Community | M30 | new |
+| F1003 | Resume an approved hold | An identical request through the edge after approval within 24 hours reuses its action id, so the approved hold releases it and no other request. | Next | Community | M30 | new |
 | F1004 | Threat-map updates | Seven Prevent controls for the M30 checks and M29's token caps, decoded content in the content hold, `prevent.query_scope` counting connector refusals, and `NARROWED_TRIGGER` for automations whose trigger tests more than the rule. | Next | Community | M30 | F960 |
 
 ### M31 rows: Connector breadth

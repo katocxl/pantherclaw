@@ -151,8 +151,8 @@ func TestHR208_InitSaysHowToActivatePcShell(t *testing.T) {
 		want     []string
 	}{
 		"not imported": {want: []string{
-			"pclaw package import --name pc.shell --version 1.0.0 --targets-file TARGETS_FILE --file packages/pc-shell/package.yaml\n",
-			"pclaw package transition pc.shell 1.0.0 --to active",
+			"pclaw package import --name pc.shell --version 1.1.0 --targets-file TARGETS_FILE --file packages/pc-shell/package.yaml\n",
+			"pclaw package transition pc.shell 1.1.0 --to active",
 		}},
 		"imported, not active": {
 			versions: []*pantherclawv1.PackageVersion{{Name: "pc.shell", Version: "1.0.0", State: pantherclawv1.PackageState_PACKAGE_STATE_REVIEWED, Pinned: true}},

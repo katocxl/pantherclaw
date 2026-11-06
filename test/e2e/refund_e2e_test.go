@@ -126,6 +126,9 @@ type stack struct {
 	// pg is the fixture database and the seeded connection "warehouse" to it
 	// (G0 M14, options.postgres).
 	pg *pgSeed
+	// model is the fake model and the seeded model connections "anthropic"
+	// and "openai" to it (G0 M29, options.model; m29_model_support_test.go).
+	model *modelSim
 }
 
 type options struct {
@@ -214,6 +217,11 @@ type options struct {
 	externalChecks []string
 	// hubKey is dev.hub_key_file: the public JWKS of the development Hub key.
 	hubKey string
+	// model also starts the fake model (pantherclaw-sim model, in process)
+	// and seeds pc.anthropic, pc.openai and the model connections
+	// "anthropic" and "openai" to it, the simulator's key sealed for the
+	// gateway (dev seed --model-url, G0 M29 D811, D826).
+	model bool
 }
 
 // freePorts are the ports freeAddr has handed out in this test binary.
@@ -384,6 +392,10 @@ func start(t *testing.T, o options) *stack {
 	if o.postgres != nil {
 		args = append(args, "--postgres", s.postgresSeedFile(t, dir, o.postgres))
 	}
+	if o.model {
+		s.model = startModelSim(t)
+		args = append(args, "--model-url", s.model.url)
+	}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), args, &out, &errb, noEnv); code != 0 {
 		t.Fatalf("dev seed: %d %s", code, errb.String())
@@ -429,6 +441,9 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.postgres != nil {
 		s.postgresSeeded(t, out.String(), o.postgres)
+	}
+	if o.model {
+		s.model.seeded(t, out.String())
 	}
 	s.pool = s.db.AppPool(t)
 
@@ -491,7 +506,7 @@ func start(t *testing.T, o options) *stack {
 		gc.GitHub.APIURL = s.gh.url
 	}
 	if o.access == "pantherclaw_held" || o.github || o.stripe || o.slack || o.jira || o.gitlab || o.awsECS || o.google || o.linear ||
-		o.postgres != nil || o.brokerKey {
+		o.postgres != nil || o.brokerKey || o.model {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -547,6 +562,9 @@ func start(t *testing.T, o options) *stack {
 	}
 	if o.postgres != nil {
 		s.postgresReady(t)
+	}
+	if o.model {
+		s.sealModel(t)
 	}
 	return s
 }

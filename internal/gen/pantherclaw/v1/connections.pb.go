@@ -1166,7 +1166,7 @@ type VectorstoreConfig struct {
 	SchemaName string `protobuf:"bytes,8,opt,name=schema_name,json=schemaName,proto3" json:"schema_name,omitempty"`
 	// The table's name.
 	TableName string `protobuf:"bytes,9,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
-	// The embedding's dimensions (1..16000).
+	// The embedding's dimensions (1..12288).
 	Dimensions int32 `protobuf:"varint,10,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
 	// The distance metric: cosine, l2 or inner_product.
 	Distance string `protobuf:"bytes,11,opt,name=distance,proto3" json:"distance,omitempty"`
@@ -6258,7 +6258,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\n" +
 	"dimensions\x18\n" +
 	" \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\x80}(\x01R\n" +
+	"\xbaH\a\x1a\x05\x18\x80`(\x01R\n" +
 	"dimensions\x12<\n" +
 	"\bdistance\x18\v \x01(\tB \xbaH\x1dr\x1bR\x06cosineR\x02l2R\rinner_productR\bdistance\x12;\n" +
 	"\x10writer_agent_ids\x18\f \x03(\tB\x11\xbaH\x0e\x92\x01\v\x10@\x18\x01\"\x05r\x03\xb0\x01\x01R\x0ewriterAgentIds\"\xfd\x01\n" +

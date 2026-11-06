@@ -3,7 +3,7 @@
 **The authoritative guide for building PantherClaw from an empty repository to a production-ready v1.0 backend.**
 Version 1.1 · 2026-10-09 · Owner: Joshua Kato · Approved at G0 (M0); delivery order and first market revised by ADR-0017, M3 identity scope by ADR-0018.
 
-> PantherClaw is the identity and runtime firewall for AI agents. It gives agents useful authority, makes every consequential action explainable, and stops that authority when it is no longer appropriate.
+> PantherClaw is agent identity protection and a runtime firewall for AI agents. It gives agents useful authority, makes every consequential action explainable, and stops that authority when it is no longer appropriate.
 
 ---
 
@@ -234,6 +234,8 @@ The body is the raw call: `{"tool": "mcp__{server}__{name}", "server", "input", 
 Every answer is labelled `PARTIAL` and carries the action's id, hash and canonical form (`action_ir`). On a `target_enforced` connection, an allowed call also carries `dispatch`: the request the gateway re-serialized, with the action token that binds its body. The SDK sends it unchanged. A tool the agent SDK has built in is answered `allow`, labelled `OBSERVE_ONLY` (G0 M8 decision 2).
 
 `GET /sdk/{connection}`, PAP/1-signed over the empty body, lists exactly the tools the connection's package maps, each with its operation: `{"v":1,"connection":…,"coverage":"PARTIAL","tools":[{"tool":…,"operation":…}]}`. An integration that cannot read it treats every tool it has not seen observed as mapped, so it fails closed.
+
+**Model connections (M29):** `go run ./cmd/pantherclaw-sim model --addr 127.0.0.1:9103` is the fake model: Anthropic and OpenAI shapes, streams, usage numbers and faults by model id, every answer SIMULATED; its default key is `sim-model-key`. `dev seed … --gateway-out … --model-url http://127.0.0.1:9103/v1` also activates `pc.anthropic` and `pc.openai` and creates the simulated model connections `anthropic` and `openai`, held by the gateway; it prints the `pclaw seal` command for the simulator's key. No test or local run calls a real model provider (HR-699). The [model connections runbook](runbooks/model-connections.md) has the details.
 
 Operator procedures are in the runbooks: [gateways](runbooks/gateway.md), [the kill switch](runbooks/kill-switch.md) and [broker keys and credentials](runbooks/key-rotation.md).
 
@@ -510,7 +512,7 @@ M21 is a post-1.0 milestone that lands after M20, in migration-number order ([G0
 M22, M23 and M24 are post-1.0 milestones built in parallel as one wave (founder, 2026-10-31: all coding comes before live testing and founder steps); they land in migration-number order.
 M25, M26 and M27 are the second such wave: they build in parallel after M24 has landed, and land in migration-number order.
 M28 is a post-1.0 milestone that lands after M27 ([G0 M28](g0/M28.md)); its streams build in parallel and land as one exit pull request.
-M30 is a post-1.0 milestone coded beside M29 and assembled on M29's exit branch ([G0 M30](g0/M30.md)); it is tested and lands after all coding (founder, 2026-11-04).
+M30 is a post-1.0 milestone coded beside M29 and assembled on M29's exit branch ([G0 M30](g0/M30.md)); it is tested after all coding (founder, 2026-11-04) and lands right after M29.
 
 M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
@@ -828,10 +830,21 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - **Console** (private stream): Evidence › Threat map and technique chips.
 - Migrations `00320`–`00322` (`00323`–`00329` spare); new permission `threatmap.read` (Go only).
 
-### M30 — Firewall gaps from the threat map
-**HR:** HR-700..717 · **F:** F990–F1004 · **ADR:** 0057 · **G0:** [g0/M30.md](g0/M30.md).
-- **Code first** (founder, 2026-11-04): every stream codes on a pushed branch with no tests and no pull requests; `code/m30` assembles them on M29's exit branch; tests and landing come in the testing phase.
-- **Bound MCP tokens** (FD4): DPoP at the token endpoint and at use for clients with a registered key; standard clients keep the 5-minute bearer.
+### M29 — Model connections and token budgets
+**HR:** HR-690..699 · **F:** F980–F989 · **ADR:** 0056 · **G0:** [g0/M29.md](g0/M29.md).
+- **Model connections** (founder decision Q1, [ADR-0056](adr/0056-model-connections.md)): kind `model` with `pc.anthropic` and `pc.openai`. The gateway holds and places the key; the agent never holds one. The gateway parses the prompt strictly, decides on its metadata and the re-encoded body's hash, and sends exactly that body, a written exception to HR-075 (FQ-A). Provider-side tools are refused unless allowed (FQ-B); nothing is captured (Q4); a secret in a prompt is held (Q3).
+- **Limits:** 16 MiB each way, streaming and 10 minutes, on model connections only, on the edge and the gateway. Other connections and the M25 campaign route are unchanged.
+- **Token budgets** (Q2): `max_tokens` rules on grants and guardrail envelopes and a run cap (`--max-tokens`, shared by the run's child runs), reserved by estimate and settled by reported usage; `TOKEN_BUDGET_EXHAUSTED`. `pclaw sandbox run --env` with refused names and values. Estimates from the organization's own prices and the monthly token report (`pclaw tokens report`) on Team; no price list.
+- **Held calls from the sandbox** (FQ-C): stopped and shown; resuming through the edge is a follow-up.
+- **Fake model:** `pantherclaw-sim model` on 127.0.0.1:9103, RT-190..RT-197; no test calls a real provider (HR-699).
+- **Console** (private stream): token lines, model connection settings and the monthly report page.
+- Migrations `00330`–`00332` (`00333`–`00339` spare); `pc.model_usage` is append-only.
+
+### M30 — Gaps from the threat map
+**HR:** HR-700..717 · **T:** T-320..326 · **RT:** RT-200..203 · **F:** F990–F1004 · **ADR:** 0057 · **G0:** [g0/M30.md](g0/M30.md).
+- **Code first** (founder, 2026-11-04): every stream coded on a pushed branch with no tests and no pull requests; `code/m30` assembled them on M29's exit branch. The testing phase added the tests, RT-200..203 and the exit e2e (`TestE2E_M30_GapsFromTheThreatMapHoldWhatTheyShould`), and M30 lands as one pull request after M29.
+- **Two groups** (founder, 2026-11-05): agent identity protection is the bound MCP tokens; every other item below is runtime firewall.
+- **Bound MCP tokens** (FD4, agent identity protection): DPoP at the token endpoint and at use for clients with a registered key; standard clients keep the 5-minute bearer.
 - **Reads and shares** (FD6, answer S): read limits on count rules, off by default; enumeration and scheduled-send alerts; owned accounts and holds for shares to the public or unlisted accounts.
 - **Agent configuration** (FD5, answer C): digests and a drift alert from scans, a hook route and read-only sandbox binds; never contents or values.
 - **Content and retrieval** (FD7): decoding before content signals; `pc.vectorstore` on pgvector with a writer list and provenance.
